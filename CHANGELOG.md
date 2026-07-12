@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.1.4] — 2026-07-12
+
+Pin turnstyle recommendation cards to the exact recommended work when year or `tmdb_id` is known.
+
+### Fixed
+- `search_tmdb` no longer expands one specific recommendation (e.g. **Mandy (2018)** / `tmdb_id` 460885) into every same-name TMDB hit in turnstyle cards
+- Prefer exact `tmdb_id` lookup; with `title`+`year`, filter to that year only
+
+### Changed
+- `search_tmdb` accepts optional `tmdb_id` (title optional when set); system prompt asks for `tmdb_id` or title+year when recommending a single title
+
 ## [1.1.3] — 2026-07-12
 
 Chat composer: **Enter** sends the message; a trailing send button mirrors that action.

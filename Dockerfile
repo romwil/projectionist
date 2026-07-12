@@ -9,7 +9,7 @@ FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="CuratorX" \
       org.opencontainers.image.description="Chat-first Plex collection curator for self-hosted homelabs" \
-      org.opencontainers.image.version="1.1.3" \
+      org.opencontainers.image.version="1.1.4" \
       org.opencontainers.image.source="https://github.com/romwil/curatorx" \
       org.opencontainers.image.licenses="MIT"
 
