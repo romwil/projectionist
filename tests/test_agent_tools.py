@@ -76,6 +76,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             "query_tv_episodes",
             "summarize_tv_progress",
             "search_tmdb",
+            "set_recommendation_reasons",
             "get_title_detail",
             "explore_genre",
             "what_to_watch_tonight",
@@ -608,6 +609,83 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["items"][0]["year"], 1999)
             self.assertIn("simulation", payload["items"][0]["overview"])
             self.assertNotIn("tvdb_id", payload["items"][0])
+            self.assertEqual(registry.cards[0].recommendation_reason, "")
+            self.assertNotIn("recommendation_reason", payload["items"][0])
+
+    @patch("curatorx.agent.tools.TMDBClient")
+    async def test_search_tmdb_accepts_curator_reason(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.search_movie_page.return_value = {
+            "total_results": 1,
+            "results": [
+                {
+                    "id": 603,
+                    "title": "The Matrix",
+                    "release_date": "1999-03-31",
+                    "overview": "A hacker discovers reality is a simulation.",
+                    "vote_average": 8.2,
+                }
+            ],
+        }
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            result = await registry.execute(
+                "search_tmdb",
+                {
+                    "title": "The Matrix",
+                    "media_type": "movie",
+                    "reason": "Mind-bending sci-fi that fits your unwatched cyberpunk streak",
+                },
+            )
+            payload = json.loads(result)
+            self.assertEqual(
+                payload["items"][0]["recommendation_reason"],
+                "Mind-bending sci-fi that fits your unwatched cyberpunk streak",
+            )
+            self.assertEqual(
+                registry.cards[0].recommendation_reason,
+                "Mind-bending sci-fi that fits your unwatched cyberpunk streak",
+            )
+
+    @patch("curatorx.agent.tools.TMDBClient")
+    async def test_set_recommendation_reasons_updates_cards(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.search_movie_page.return_value = {
+            "total_results": 1,
+            "results": [
+                {
+                    "id": 603,
+                    "title": "The Matrix",
+                    "release_date": "1999-03-31",
+                    "overview": "A hacker discovers reality is a simulation.",
+                    "vote_average": 8.2,
+                }
+            ],
+        }
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            await registry.execute("search_tmdb", {"title": "The Matrix", "media_type": "movie"})
+            self.assertEqual(registry.cards[0].recommendation_reason, "")
+            result = await registry.execute(
+                "set_recommendation_reasons",
+                {
+                    "reasons": [
+                        {"tmdb_id": 603, "reason": "British Quatermass energy"},
+                        {"tmdb_id": 603, "reason": "TMDB title match"},
+                    ]
+                },
+            )
+            payload = json.loads(result)
+            self.assertEqual(payload["updated"], 1)
+            self.assertEqual(registry.cards[0].recommendation_reason, "British Quatermass energy")
 
     @patch("curatorx.agent.tools.TMDBClient")
     async def test_search_tmdb_show_enriches_tvdb_id(self, mock_tmdb_cls) -> None:

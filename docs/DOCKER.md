@@ -103,7 +103,7 @@ Install from the Community Applications template (`templates/curatorx.xml` or `u
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/curatorx/config` → `/config` |
-| **Image** | `romwil/curatorx:1.0` (also `:1.0.11`, `:latest`) — multi-arch amd64+arm64 |
+| **Image** | `romwil/curatorx:1.0` (also `:1.0.12`, `:latest`) — multi-arch amd64+arm64 |
 
 ### Ollama on the Unraid host
 

@@ -543,7 +543,7 @@ async def sync_library(
 
     clock.begin("finishing")
     _emit(progress, "finishing", 0, 1, "Building recommendations…")
-    embedded = await rebuild_embeddings(db, settings)
+    embedded = await rebuild_embeddings(db, settings, progress=progress)
     refresh_library_overview_cache(db)
     rating_prompts = scan_for_rating_prompts(db, settings)
     _emit(progress, "finishing", 1, 1, "Wrapping up…")

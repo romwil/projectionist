@@ -41,6 +41,7 @@ from curatorx.library.query import (
 )
 from curatorx.library.search import row_to_title_card, search_library
 from curatorx.library.titles import get_title_detail
+from curatorx.models.recommendation import sanitize_recommendation_reason
 from curatorx.models.schemas import TitleCard
 from curatorx.preferences.purge import suggest_purge_candidates
 from curatorx.preferences.store import preference_context, remember_preference
@@ -241,7 +242,9 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "description": (
                 "Exact title search on TMDB for movies or shows not in the library. "
                 "Use before add_to_radarr/add_to_sonarr to resolve tmdb_id and tvdb_id. "
-                "Returns best match first with honest total_matched."
+                "Returns best match first with honest total_matched. "
+                "Pass reason with a specific curator rationale for why this title fits "
+                "(taste/context — never pipeline labels like 'TMDB title match')."
             ),
             "parameters": {
                 "type": "object",
@@ -250,8 +253,44 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     "year": {"type": "integer", "description": "Optional release/air year to narrow results"},
                     "media_type": {"type": "string", "enum": ["movie", "show"]},
                     "limit": {"type": "integer", "description": "Max results to return (default 10)"},
+                    "reason": {
+                        "type": "string",
+                        "description": (
+                            "Optional curator rationale shown on the title card Why this? — "
+                            "specific to taste/context, not an internal search source label."
+                        ),
+                    },
                 },
                 "required": ["title", "media_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_recommendation_reasons",
+            "description": (
+                "Attach curator rationale to title cards already returned this turn. "
+                "Use after search_tmdb / gap tools so Why this? shows taste-based reasons, "
+                "not pipeline labels. One short sentence per title."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "reasons": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "tmdb_id": {"type": "integer"},
+                                "reason": {"type": "string"},
+                            },
+                            "required": ["tmdb_id", "reason"],
+                        },
+                        "description": "List of {tmdb_id, reason} pairs for cards already attached",
+                    },
+                },
+                "required": ["reasons"],
             },
         },
     },
@@ -824,7 +863,7 @@ def _tmdb_card(item: Mapping[str, Any], media_type: str, tmdb: TMDBClient, *, re
         backdrop_url=backdrop,
         overview=str(item.get("overview") or ""),
         rating=float(item.get("vote_average") or 0) or None,
-        recommendation_reason=reason,
+        recommendation_reason=sanitize_recommendation_reason(reason),
         in_library=False,
     )
 
@@ -848,6 +887,9 @@ def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
         item["in_radarr"] = True
     if card.in_sonarr:
         item["in_sonarr"] = True
+    reason = sanitize_recommendation_reason(card.recommendation_reason)
+    if reason:
+        item["recommendation_reason"] = reason
     return item
 
 
@@ -1383,6 +1425,9 @@ class ToolRegistry:
         year = args.get("year")
         year_int = int(year) if year is not None else None
         limit = min(int(args.get("limit") or 10), 20)
+        reason = sanitize_recommendation_reason(
+            str(args.get("reason") or args.get("recommendation_reason") or "")
+        )
 
         tmdb = TMDBClient(self.settings.tmdb_api_key)
         if media_type == "movie":
@@ -1406,11 +1451,13 @@ class ToolRegistry:
                 continue
             if media_type == "show":
                 item = _enrich_show_external_ids(item, tmdb)
-            card = _tmdb_card(item, media_type, tmdb, reason="TMDB title match")
+            card = _tmdb_card(item, media_type, tmdb, reason=reason)
             card.in_library = tmdb_id in owned
             cards.append(card)
             tool_item = _tmdb_search_item_to_tool_item(item, media_type)
             tool_item["in_library"] = card.in_library
+            if reason:
+                tool_item["recommendation_reason"] = reason
             items.append(tool_item)
             if len(items) >= limit:
                 break
@@ -1425,10 +1472,34 @@ class ToolRegistry:
                 "items": items,
                 "note": (
                     "Best match first. Items include in_library flag — only propose adds for "
-                    "in_library=false. Use tmdb_id for add_to_radarr; tvdb_id for add_to_sonarr."
+                    "in_library=false. Use tmdb_id for add_to_radarr; tvdb_id for add_to_sonarr. "
+                    "Pass reason on search_tmdb or call set_recommendation_reasons so Why this? "
+                    "shows curator rationale (never pipeline labels)."
                 ),
             }
         )
+
+    async def _tool_set_recommendation_reasons(self, args: Mapping[str, Any]) -> str:
+        raw_reasons = args.get("reasons") or []
+        if not isinstance(raw_reasons, list):
+            return json.dumps({"error": "reasons must be a list"})
+        updated = 0
+        by_tmdb: Dict[int, str] = {}
+        for entry in raw_reasons:
+            if not isinstance(entry, Mapping):
+                continue
+            tmdb_id = int(entry.get("tmdb_id") or 0)
+            reason = sanitize_recommendation_reason(str(entry.get("reason") or ""))
+            if tmdb_id <= 0 or not reason:
+                continue
+            by_tmdb[tmdb_id] = reason
+        if not by_tmdb:
+            return json.dumps({"updated": 0, "note": "No usable reasons provided."})
+        for card in self._cards:
+            if card.tmdb_id and int(card.tmdb_id) in by_tmdb:
+                card.recommendation_reason = by_tmdb[int(card.tmdb_id)]
+                updated += 1
+        return json.dumps({"updated": updated, "requested": len(by_tmdb)})
 
     async def _tool_get_title_detail(self, args: Mapping[str, Any]) -> str:
         media_type = str(args.get("media_type") or "movie")
@@ -2220,6 +2291,8 @@ def build_system_prompt(db: Database, lens_id: Optional[str] = None) -> str:
         "never query_library or search_library (those only return owned titles). "
         "Never present in_library=true titles as recommendations to add; title cards for adds exclude owned titles. "
         "For exact external title lookup before add_to_radarr or add_to_sonarr, use search_tmdb — not search_library. "
+        "When recommending external titles, set a specific taste-based reason via search_tmdb(reason=…) "
+        "or set_recommendation_reasons — never leave Why this? as a pipeline label. "
         "For movies use tmdb_id with add_to_radarr; for shows use tvdb_id with add_to_sonarr.\n"
         "When Seerr is enabled for household members, use request_via_seerr instead of add_to_radarr/add_to_sonarr.\n"
         f"{overview_block}\n"

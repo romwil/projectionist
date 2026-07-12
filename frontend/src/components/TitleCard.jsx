@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { setTitleCardDragData } from "../lib/easterEggs.js";
+import { displayRecommendationReason } from "../lib/recommendationReason.js";
 
 function ShowProgressRing({ total, unwatched }) {
   if (!total || total <= 0) return null;
@@ -53,7 +54,8 @@ export default function TitleCard({
     (item.total_episode_count > 0 || item.unwatched_episode_count != null);
   const isPinned = Boolean(pinRecord);
   const facetMatches = item.facet_matches || [];
-  const hasWhyDetail = Boolean(item.recommendation_reason || facetMatches.length);
+  const whyReason = displayRecommendationReason(item.recommendation_reason);
+  const hasWhyDetail = Boolean(whyReason || facetMatches.length);
 
   function handleDragStart(event) {
     if (!draggableToDock) return;
@@ -156,9 +158,7 @@ export default function TitleCard({
         {userStars ? <p className="user-review-stars" data-testid="user-review-stars">Your rating: {"★".repeat(userStars)}</p> : null}
         {item.genres?.length ? <p className="genres">{item.genres.slice(0, 3).join(" · ")}</p> : null}
         {!compact && item.overview ? <p className="overview">{item.overview.slice(0, 160)}…</p> : null}
-        {item.recommendation_reason && !whyOpen ? (
-          <p className="reason">{item.recommendation_reason}</p>
-        ) : null}
+        {whyReason && !whyOpen ? <p className="reason">{whyReason}</p> : null}
         {hasWhyDetail ? (
           <div className="title-card-why">
             <button
@@ -174,7 +174,7 @@ export default function TitleCard({
             </button>
             {whyOpen ? (
               <div className="title-card-why-detail" data-testid="title-card-why-detail">
-                {item.recommendation_reason ? <p>{item.recommendation_reason}</p> : null}
+                {whyReason ? <p>{whyReason}</p> : null}
                 {facetMatches.length ? (
                   <ul>
                     {facetMatches.map((match) => (

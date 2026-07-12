@@ -234,14 +234,59 @@ test.describe("Title cards in chat", () => {
     expect(confirmRequests).toHaveLength(2);
   });
 
-  test("success feedback can be dismissed manually", async ({ page }) => {
-    await sendMockChat(page);
-    await page.getByTestId("chat-message-assistant").getByTestId("add-radarr-button").first().click();
-    await page.getByTestId("add-action-confirm").click();
+  test("Why this expands human rationale and hides pipeline labels", async ({ page }) => {
+    await page.route("**/api/chat", async (route) => {
+      if (route.request().method() !== "POST") {
+        await route.continue();
+        return;
+      }
+      let sessionId = crypto.randomUUID().replace(/-/g, "");
+      try {
+        const body = route.request().postDataJSON() as { session_id?: string };
+        sessionId = body.session_id || sessionId;
+      } catch {
+        // ignore
+      }
+      const cards = [
+        {
+          ...MOCK_CARDS[0],
+          recommendation_reason: "Neo-noir classic that fits your unwatched streak",
+        },
+        {
+          ...MOCK_CARDS[1],
+          recommendation_reason: "TMDB title match",
+        },
+      ];
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          session_id: sessionId,
+          message: {
+            id: "assistant-why",
+            role: "assistant",
+            blocks: [
+              { type: "text", content: "Here are some picks." },
+              { type: "title_cards", items: cards },
+            ],
+            created_at: Math.floor(Date.now() / 1000),
+            lens_id: "general",
+          },
+        }),
+      });
+    });
 
-    const feedback = page.getByTestId("add-action-feedback");
-    await expect(feedback).toContainText('Added "Blade Runner" to Radarr');
-    await feedback.getByTestId("add-action-feedback-dismiss").click();
-    await expect(feedback).not.toBeVisible();
+    await sendMockChat(page);
+
+    const humanCard = page.getByTestId("chat-message-assistant").getByTestId("title-card").first();
+    await expect(humanCard.getByTestId("title-card-why-toggle")).toBeVisible();
+    await humanCard.getByTestId("title-card-why-toggle").click();
+    await expect(humanCard.getByTestId("title-card-why-detail")).toContainText(
+      "Neo-noir classic that fits your unwatched streak",
+    );
+
+    const pipelineCard = page.getByTestId("chat-message-assistant").getByTestId("title-card").nth(1);
+    await expect(pipelineCard.getByTestId("title-card-why-toggle")).toHaveCount(0);
+    await expect(pipelineCard).not.toContainText("TMDB title match");
   });
 });

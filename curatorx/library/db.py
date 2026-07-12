@@ -1039,11 +1039,21 @@ class Database:
         return run_with_db_lock_retry(_write, label="upsert_library_items")
 
     def set_embedding(self, item_id: int, vector: Sequence[float]) -> None:
-        with self.connect() as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO embeddings (item_id, vector) VALUES (?, ?)",
-                (item_id, json.dumps(list(vector))),
-            )
+        self.set_embeddings([(item_id, vector)])
+
+    def set_embeddings(self, items: Sequence[Tuple[int, Sequence[float]]]) -> None:
+        """Write many embedding vectors in a single transaction."""
+        if not items:
+            return
+
+        def _write() -> None:
+            with self.connect() as conn:
+                conn.executemany(
+                    "INSERT OR REPLACE INTO embeddings (item_id, vector) VALUES (?, ?)",
+                    [(int(item_id), json.dumps(list(vector))) for item_id, vector in items],
+                )
+
+        run_with_db_lock_retry(_write, label="set_embeddings")
 
     def all_library_items(self) -> List[sqlite3.Row]:
         with self.connect() as conn:

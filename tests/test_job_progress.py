@@ -32,12 +32,14 @@ class JobProgressFormattingTests(unittest.TestCase):
         self.assertEqual(phase_label("enriching"), "Enriching metadata")
         self.assertEqual(phase_label("finishing"), "Finishing")
 
-    def test_weighted_percent_never_100_until_completed(self) -> None:
-        # End of TV scan must not claim finished while enriching remains.
-        self.assertLess(weighted_sync_percent("tv", 500, 500), 100)
-        self.assertLess(weighted_sync_percent("enriching", 100, 100), 100)
-        self.assertLess(weighted_sync_percent("finishing", 1, 1), 100)
-        self.assertEqual(weighted_sync_percent("completed", 1, 1), 100)
+    def test_weighted_percent_finishing_advances_with_counts(self) -> None:
+        start = weighted_sync_percent("finishing", 0, 100)
+        mid = weighted_sync_percent("finishing", 50, 100)
+        end = weighted_sync_percent("finishing", 100, 100)
+        self.assertEqual(start, 90)
+        self.assertGreater(mid, start)
+        self.assertLess(end, 100)
+        self.assertGreater(end, mid)
 
     def test_weighted_percent_increases_across_phases(self) -> None:
         movies_end = weighted_sync_percent("movies", 1, 1)

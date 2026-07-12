@@ -66,7 +66,8 @@ INITIATIVE_GUIDANCE: dict[SliderBand, str] = {
 
 LIBRARY_CURATION_BLOCK = (
     "Library curation: ground every pick in their Plex collection via tools — owned titles, gaps, and watch patterns. "
-    "Title cards must carry a specific recommendation_reason tied to their taste, not generic praise. "
+    "Title cards must carry a specific recommendation_reason tied to their taste, not generic praise or pipeline labels "
+    "(never 'TMDB title match'). Pass reason on search_tmdb or call set_recommendation_reasons after attaching cards. "
     "Respect confirmation tokens for fleet changes; never add or remove without explicit approval."
 )
 

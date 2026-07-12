@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.12] — 2026-07-12
+
+Make “Why this?” useful and keep library sync finishing visible.
+
+### Fixed
+- Title card **Why this?** no longer shows internal pipeline labels like **TMDB title match**; prefers curator rationale from `search_tmdb(reason=…)` / `set_recommendation_reasons`
+- Library sync **Finishing · Building recommendations…** reports N of M title progress (and advances the 90–99% band) instead of freezing at 90% with no logs
+
+### Changed
+- Embedding rebuild batches provider API calls and SQLite writes for faster finishing on large libraries
+
 ## [1.0.11] — 2026-07-12
 
 Stop duplicating bulk “Confirm all” between chat and StatusDock.

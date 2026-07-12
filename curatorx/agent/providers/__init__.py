@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Protocol
+from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Protocol, Sequence
 
 import httpx
 
@@ -201,6 +201,8 @@ def _format_anthropic_error(response: httpx.Response) -> str:
 class EmbeddingProvider(Protocol):
     async def embed(self, text: str) -> List[float]: ...
 
+    async def embed_many(self, texts: Sequence[str]) -> List[List[float]]: ...
+
 
 class ChatProvider(Protocol):
     async def chat(
@@ -280,18 +282,30 @@ class OpenAIEmbeddingProvider:
         self.model = model
 
     async def embed(self, text: str) -> List[float]:
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        vectors = await self.embed_many([text])
+        return vectors[0]
+
+    async def embed_many(self, texts: Sequence[str]) -> List[List[float]]:
+        if not texts:
+            return []
+        async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 f"{self.base_url}/embeddings",
                 headers={
                     "Authorization": f"Bearer {self.api_key}",
                     "Content-Type": "application/json",
                 },
-                json={"model": self.model, "input": text},
+                json={"model": self.model, "input": list(texts)},
             )
             response.raise_for_status()
             payload = response.json()
-            return payload["data"][0]["embedding"]
+            rows = payload.get("data") or []
+            ordered = sorted(rows, key=lambda row: int(row.get("index", 0)))
+            if len(ordered) != len(texts):
+                raise LLMProviderError(
+                    f"Embedding API returned {len(ordered)} vectors for {len(texts)} inputs"
+                )
+            return [list(row["embedding"]) for row in ordered]
 
 
 class AnthropicProvider:
