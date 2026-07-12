@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.1] — 2026-07-12
+
+Resume interrupted library syncs without redoing finished work, and skip unchanged recommendation embeddings.
+
+### Added
+- Phase checkpoints after movies / TV / enrich / index / episodes (valid ≤72h) so a restart mid-sync resumes from the next phase
+- Embedding content-hash skip: unchanged titles are not re-embedded on finishing
+
+### Fixed
+- Restarting during **Building recommendations…** no longer forces a full rescan/enrich when earlier phases already completed
+- Empty-library first sync no longer double-fetches Plex movie/TV lists before enrich
+
 ## [1.1.0] — 2026-07-12
 
 Cinema-dark UI/UX refactor: Fraunces + DM Sans, amber accent (no violet gradients), brand-first top bar, wider sidebar with in-rail status dock, poster-forward title cards, and Config/Login aligned to the same visual system.

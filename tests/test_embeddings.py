@@ -79,6 +79,57 @@ class RebuildEmbeddingsTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(count, 0)
             self.assertEqual(events, [("finishing", 1, 1, "Building recommendations…")])
 
+    async def test_rebuild_embeddings_skips_unchanged_content_hash(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            for index in range(4):
+                db.upsert_library_item(
+                    {
+                        "rating_key": f"rk-{index}",
+                        "media_type": "movie",
+                        "title": f"Title {index}",
+                        "year": 1980 + index,
+                        "summary": "A film.",
+                        "genres": ["Sci-Fi"],
+                    }
+                )
+
+            embed_calls: list[int] = []
+
+            async def tracking_embed(texts, settings):
+                embed_calls.append(len(texts))
+                return [[0.1] * 8 for _ in texts]
+
+            with patch(
+                "curatorx.library.embeddings.embed_texts",
+                new=AsyncMock(side_effect=tracking_embed),
+            ):
+                first = await rebuild_embeddings(db, Settings(), batch_size=2)
+                self.assertEqual(first, 4)
+                self.assertEqual(sum(embed_calls), 4)
+                self.assertEqual(len(db.embedding_content_hashes()), 4)
+
+                embed_calls.clear()
+                second = await rebuild_embeddings(db, Settings(), batch_size=2)
+                self.assertEqual(second, 4)
+                self.assertEqual(sum(embed_calls), 0)
+
+                # Change one title so only that item re-embeds.
+                item = db.all_library_items()[0]
+                db.upsert_library_item(
+                    {
+                        "rating_key": item["rating_key"],
+                        "media_type": item["media_type"],
+                        "title": "Changed Title",
+                        "year": item["year"],
+                        "summary": item["summary"],
+                        "genres": ["Sci-Fi"],
+                    }
+                )
+                third = await rebuild_embeddings(db, Settings(), batch_size=2)
+                self.assertEqual(third, 4)
+                self.assertEqual(sum(embed_calls), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

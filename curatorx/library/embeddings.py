@@ -34,6 +34,10 @@ def _hash_embed(text: str, dims: int = 384) -> List[float]:
     return vector.tolist()
 
 
+def content_hash_for_text(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 async def embed_text(text: str, settings: Settings) -> List[float]:
     vectors = await embed_texts([text], settings)
     return vectors[0] if vectors else _hash_embed(text)
@@ -85,7 +89,7 @@ async def build_item_embedding_text(row) -> str:
     )
 
 
-def _embedding_progress_message(current: int, total: int) -> str:
+def _embedding_progress_message(current: int, total: int, *, skipped: int = 0) -> str:
     current = max(int(current or 0), 0)
     total_n = max(int(total or 0), 0)
     if total_n <= 0:
@@ -93,7 +97,11 @@ def _embedding_progress_message(current: int, total: int) -> str:
     if current <= 0:
         return "Building recommendations…"
     if current < total_n:
+        if skipped:
+            return f"Building recommendations… {current} of ~{total_n} ({skipped} unchanged)"
         return f"Building recommendations… {current} of ~{total_n}"
+    if skipped:
+        return f"Built recommendations for {current} titles ({skipped} unchanged)"
     return f"Built recommendations for {current} titles"
 
 
@@ -111,35 +119,77 @@ async def rebuild_embeddings(
             progress("finishing", 1, 1, "Building recommendations…")
         return 0
 
+    existing_hashes = db.embedding_content_hashes()
     batch = max(1, int(batch_size or DEFAULT_EMBED_BATCH_SIZE))
-    count = 0
+    skipped = 0
+    embedded = 0
     last_log = 0.0
     if progress is not None:
         progress("finishing", 0, total, _embedding_progress_message(0, total))
 
-    for start in range(0, total, batch):
-        chunk = rows[start : start + batch]
-        texts = [await build_item_embedding_text(row) for row in chunk]
-        vectors = await embed_texts(texts, settings)
+    pending_rows: list[Any] = []
+    pending_texts: list[str] = []
+    pending_hashes: list[str] = []
+
+    async def _flush_pending() -> None:
+        nonlocal embedded
+        if not pending_rows:
+            return
+        vectors = await embed_texts(pending_texts, settings)
         pairs = [
-            (int(row["id"]), vector)
-            for row, vector in zip(chunk, vectors)
+            (int(row["id"]), vector, content_hash)
+            for row, vector, content_hash in zip(pending_rows, vectors, pending_hashes)
         ]
         db.set_embeddings(pairs)
-        count += len(chunk)
+        embedded += len(pending_rows)
+        pending_rows.clear()
+        pending_texts.clear()
+        pending_hashes.clear()
 
-        message = _embedding_progress_message(count, total)
-        if progress is not None:
-            progress("finishing", count, total, message)
+    for index, row in enumerate(rows, start=1):
+        text = await build_item_embedding_text(row)
+        digest = content_hash_for_text(text)
+        item_id = int(row["id"])
+        if existing_hashes.get(item_id) == digest:
+            skipped += 1
+        else:
+            pending_rows.append(row)
+            pending_texts.append(text)
+            pending_hashes.append(digest)
+            if len(pending_rows) >= batch:
+                await _flush_pending()
+
+        message = _embedding_progress_message(index, total, skipped=skipped)
         now = time.time()
-        if now - last_log >= 3.0 or count >= total:
-            logger.info(
-                "Library sync: building recommendations — %s of %s titles",
-                count,
-                total,
-            )
-            last_log = now
+        should_emit = index == 1 or index >= total or index % 25 == 0 or (now - last_log) >= 3.0
+        if should_emit:
+            if progress is not None:
+                progress("finishing", index, total, message)
+            if now - last_log >= 3.0 or index >= total:
+                logger.info(
+                    "Library sync: building recommendations — %s of %s titles (%s unchanged)",
+                    index,
+                    total,
+                    skipped,
+                )
+                last_log = now
 
+    await _flush_pending()
+    count = embedded + skipped
+    if progress is not None:
+        progress(
+            "finishing",
+            max(total, 1),
+            max(total, 1),
+            _embedding_progress_message(total, total, skipped=skipped),
+        )
+    if skipped:
+        logger.info(
+            "Library sync: recommendations reuse — embedded=%s skipped_unchanged=%s total=%s",
+            embedded,
+            skipped,
+            total,
+        )
     return count
 
 

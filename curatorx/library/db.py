@@ -64,6 +64,7 @@ CREATE INDEX IF NOT EXISTS idx_library_media_year ON library_items(media_type, y
 CREATE TABLE IF NOT EXISTS embeddings (
     item_id INTEGER PRIMARY KEY,
     vector TEXT NOT NULL,
+    content_hash TEXT,
     FOREIGN KEY(item_id) REFERENCES library_items(id) ON DELETE CASCADE
 );
 
@@ -261,6 +262,7 @@ class Database:
             self._migrate_phase0_tables(conn)
             self._migrate_multi_user_columns(conn)
             self._migrate_phase4_tables(conn)
+            self._migrate_embeddings_content_hash(conn)
             self._seed_defaults(conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
@@ -441,6 +443,11 @@ class Database:
         session_cols = self._table_columns(conn, "chat_sessions")
         if "user_id" not in session_cols:
             conn.execute("ALTER TABLE chat_sessions ADD COLUMN user_id TEXT REFERENCES users(id)")
+
+    def _migrate_embeddings_content_hash(self, conn: sqlite3.Connection) -> None:
+        cols = self._table_columns(conn, "embeddings")
+        if "content_hash" not in cols:
+            conn.execute("ALTER TABLE embeddings ADD COLUMN content_hash TEXT")
 
     def _migrate_phase4_tables(self, conn: sqlite3.Connection) -> None:
         item_cols = self._table_columns(conn, "library_items")
@@ -1060,19 +1067,66 @@ class Database:
     def set_embedding(self, item_id: int, vector: Sequence[float]) -> None:
         self.set_embeddings([(item_id, vector)])
 
-    def set_embeddings(self, items: Sequence[Tuple[int, Sequence[float]]]) -> None:
-        """Write many embedding vectors in a single transaction."""
+    def set_embeddings(
+        self,
+        items: Sequence[Tuple[int, Sequence[float]]] | Sequence[Tuple[int, Sequence[float], str]],
+    ) -> None:
+        """Write many embedding vectors in a single transaction.
+
+        Each item is ``(item_id, vector)`` or ``(item_id, vector, content_hash)``.
+        """
         if not items:
             return
+
+        normalized: list[Tuple[int, str, Optional[str]]] = []
+        for entry in items:
+            if len(entry) == 3:
+                item_id, vector, content_hash = entry  # type: ignore[misc]
+                normalized.append(
+                    (int(item_id), json.dumps(list(vector)), str(content_hash or "") or None)
+                )
+            else:
+                item_id, vector = entry  # type: ignore[misc]
+                normalized.append((int(item_id), json.dumps(list(vector)), None))
 
         def _write() -> None:
             with self.connect() as conn:
                 conn.executemany(
-                    "INSERT OR REPLACE INTO embeddings (item_id, vector) VALUES (?, ?)",
-                    [(int(item_id), json.dumps(list(vector))) for item_id, vector in items],
+                    """
+                    INSERT INTO embeddings (item_id, vector, content_hash) VALUES (?, ?, ?)
+                    ON CONFLICT(item_id) DO UPDATE SET
+                        vector = excluded.vector,
+                        content_hash = COALESCE(excluded.content_hash, embeddings.content_hash)
+                    """,
+                    normalized,
                 )
 
         run_with_db_lock_retry(_write, label="set_embeddings")
+
+    def embedding_content_hashes(self) -> Dict[int, str]:
+        """Return item_id → content_hash for rows that have a stored hash."""
+        with self.connect() as conn:
+            cols = self._table_columns(conn, "embeddings")
+            if "content_hash" not in cols:
+                return {}
+            rows = conn.execute(
+                """
+                SELECT item_id, content_hash FROM embeddings
+                WHERE content_hash IS NOT NULL AND content_hash != ''
+                """
+            ).fetchall()
+            return {int(row["item_id"]): str(row["content_hash"]) for row in rows}
+
+    def library_counts(self) -> Dict[str, int]:
+        with self.connect() as conn:
+            movies = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM library_items WHERE media_type = 'movie'"
+            ).fetchone()["cnt"]
+            shows = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM library_items WHERE media_type = 'show'"
+            ).fetchone()["cnt"]
+            total = conn.execute("SELECT COUNT(*) AS cnt FROM library_items").fetchone()["cnt"]
+            return {"movies": int(movies), "shows": int(shows), "items": int(total)}
 
     def all_library_items(self) -> List[sqlite3.Row]:
         with self.connect() as conn:

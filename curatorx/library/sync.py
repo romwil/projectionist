@@ -31,6 +31,18 @@ MAX_LIBRARY_ENRICH_WORKERS = 16
 # Commit enriched rows in batches to cut SQLite write contention with the HTTP API.
 DEFAULT_LIBRARY_UPSERT_BATCH_SIZE = 50
 
+SYNC_CHECKPOINT_KEY = "sync_checkpoint"
+SYNC_CHECKPOINT_MAX_AGE_SECONDS = 72 * 3600
+SYNC_PHASE_ORDER = (
+    "preparing",
+    "movies",
+    "tv",
+    "enriching",
+    "indexing",
+    "episodes",
+    "finishing",
+)
+
 
 class _EnrichOutcome(NamedTuple):
     status: str  # ok | skip | error
@@ -47,6 +59,76 @@ def _resolve_enrich_workers(settings: Settings) -> int:
     except (TypeError, ValueError):
         workers = DEFAULT_LIBRARY_ENRICH_WORKERS
     return max(1, min(workers, MAX_LIBRARY_ENRICH_WORKERS))
+
+
+def _phase_index(phase: str) -> int:
+    try:
+        return SYNC_PHASE_ORDER.index(phase)
+    except ValueError:
+        return -1
+
+
+def _load_sync_checkpoint(db: Database) -> Optional[dict]:
+    raw = db.get_sync_state(SYNC_CHECKPOINT_KEY)
+    if not raw:
+        return None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    phase = str(data.get("phase_completed") or "")
+    if phase not in SYNC_PHASE_ORDER or phase == "finishing":
+        return None
+    try:
+        stamped = float(data.get("timestamp") or 0)
+    except (TypeError, ValueError):
+        return None
+    if stamped <= 0 or (time.time() - stamped) > SYNC_CHECKPOINT_MAX_AGE_SECONDS:
+        return None
+    counts = db.library_counts()
+    checkpoint_items = int(data.get("items") or 0)
+    # After enrich, items must still match the DB (including empty-DB mismatch).
+    if checkpoint_items > 0:
+        if abs(counts["items"] - checkpoint_items) > max(5, int(checkpoint_items * 0.02)):
+            logger.info(
+                "Library sync: ignoring stale checkpoint (db items=%s checkpoint items=%s)",
+                counts["items"],
+                checkpoint_items,
+            )
+            return None
+    return data
+
+
+def _save_sync_checkpoint(
+    db: Database,
+    phase_completed: str,
+    *,
+    movies: int,
+    shows: int,
+    items: int,
+) -> None:
+    payload = {
+        "phase_completed": phase_completed,
+        "movies": int(movies),
+        "shows": int(shows),
+        "items": int(items),
+        "timestamp": time.time(),
+    }
+    db.set_sync_state(SYNC_CHECKPOINT_KEY, json.dumps(payload))
+    logger.info("Library sync: checkpoint saved after %s", phase_completed)
+
+
+def _clear_sync_checkpoint(db: Database) -> None:
+    db.set_sync_state(SYNC_CHECKPOINT_KEY, "")
+
+
+def _should_run_phase(resume_after: Optional[str], phase: str) -> bool:
+    """Return True if ``phase`` still needs to run given last completed ``resume_after``."""
+    if not resume_after:
+        return True
+    return _phase_index(phase) > _phase_index(resume_after)
 
 
 def _enrich_plex_item(
@@ -363,183 +445,249 @@ async def sync_library(
     _emit(progress, "preparing", 1, 1, "Ready to scan Plex")
     clock.finish()
 
+    checkpoint = _load_sync_checkpoint(db)
+    resume_after = str(checkpoint.get("phase_completed")) if checkpoint else None
+    if resume_after:
+        logger.info(
+            "Library sync: resuming after checkpoint phase=%s items=%s",
+            resume_after,
+            checkpoint.get("items"),
+        )
+        _emit(
+            progress,
+            "preparing",
+            1,
+            1,
+            f"Resuming after {resume_after.replace('_', ' ')}…",
+        )
+
     page_size = max(50, int(settings.tv_page_size or 500))
-
-    clock.begin("scanning movies")
-    _emit(progress, "movies", 0, 1, "Scanning Plex movies…")
-
-    def movie_progress(current: int, total: int, message: str) -> None:
-        _emit(progress, "movies", current, total, message)
-
-    movies = plex.movie_items(page_size=page_size, progress_callback=movie_progress)
-    _emit(
-        progress,
-        "movies",
-        max(len(movies), 1),
-        max(len(movies), 1),
-        format_count_message("Scanning movies", len(movies), len(movies), unit="movies", done=True),
-    )
-    clock.finish(extra=f"{len(movies)} movies")
-
-    clock.begin("scanning TV")
-    _emit(progress, "tv", 0, 1, "Scanning Plex TV shows…")
-
-    def tv_progress(current: int, total: int, message: str) -> None:
-        _emit(progress, "tv", current, total, message)
-
-    shows = plex.show_items(page_size=page_size, progress_callback=tv_progress)
-    _emit(
-        progress,
-        "tv",
-        max(len(shows), 1),
-        max(len(shows), 1),
-        format_count_message("Scanning shows", len(shows), len(shows), unit="shows", done=True),
-    )
-    clock.finish(extra=f"{len(shows)} shows")
-
-    plex_items = movies + shows
-    enrich_total = max(len(plex_items), 1)
-    enrich_workers = _resolve_enrich_workers(settings)
-    clock.begin("enriching metadata")
-    logger.info("Library sync: enriching metadata with %s workers", enrich_workers)
-    _emit(progress, "enriching", 0, enrich_total, "Enriching metadata…")
-
-    count = 0
+    movies: list = []
+    shows: list = []
+    count = int(checkpoint.get("items") or 0) if checkpoint else 0
+    movie_count = int(checkpoint.get("movies") or 0) if checkpoint else 0
+    show_count = int(checkpoint.get("shows") or 0) if checkpoint else 0
     skipped_no_rating_key = 0
-    last_enrich_log = 0.0
-    completed = 0
-    pending_rows: list[dict] = []
+    facet_count = 0
+    fts_count = 0
+    episode_stats: dict = {}
+    enrich_workers = _resolve_enrich_workers(settings)
 
-    def _emit_enrich_progress(index: int) -> None:
-        nonlocal last_enrich_log
-        now = time.time()
-        should_emit = index == 1 or index == enrich_total or index % 25 == 0 or (now - last_enrich_log) >= 3.0
-        if not should_emit:
-            return
-        message = format_count_message("Enriching metadata", index, enrich_total, unit="titles")
-        _emit(progress, "enriching", index, enrich_total, message)
-        if now - last_enrich_log >= 3.0 or index == enrich_total:
-            logger.info(
-                "Library sync: enriching metadata — %s of %s titles",
-                index,
-                enrich_total,
-            )
-            last_enrich_log = now
+    if _should_run_phase(resume_after, "movies"):
+        clock.begin("scanning movies")
+        _emit(progress, "movies", 0, 1, "Scanning Plex movies…")
 
-    def _flush_pending_rows() -> None:
-        if not pending_rows:
-            return
-        db.upsert_library_items(pending_rows)
-        pending_rows.clear()
+        def movie_progress(current: int, total: int, message: str) -> None:
+            _emit(progress, "movies", current, total, message)
 
-    with ThreadPoolExecutor(max_workers=enrich_workers) as pool:
-        futures = [
-            pool.submit(
-                _enrich_plex_item,
-                item,
-                plex,
-                tmdb,
-                fanart,
-                radarr_tmdb,
-                sonarr_tvdb,
-            )
-            for item in plex_items
-        ]
-        for future in as_completed(futures):
-            completed += 1
-            try:
-                outcome = future.result()
-            except Exception as error:  # noqa: BLE001 — keep sync alive
-                logger.exception("Library sync: unexpected enrich worker failure: %s", error)
+        movies = plex.movie_items(page_size=page_size, progress_callback=movie_progress)
+        movie_count = len(movies)
+        _emit(
+            progress,
+            "movies",
+            max(movie_count, 1),
+            max(movie_count, 1),
+            format_count_message("Scanning movies", movie_count, movie_count, unit="movies", done=True),
+        )
+        clock.finish(extra=f"{movie_count} movies")
+        _save_sync_checkpoint(db, "movies", movies=movie_count, shows=show_count, items=count)
+    else:
+        _emit(progress, "movies", 1, 1, "Movies already scanned — skipped")
+        logger.info("Library sync: skipping movies (checkpoint)")
+
+    if _should_run_phase(resume_after, "tv"):
+        clock.begin("scanning TV")
+        _emit(progress, "tv", 0, 1, "Scanning Plex TV shows…")
+
+        def tv_progress(current: int, total: int, message: str) -> None:
+            _emit(progress, "tv", current, total, message)
+
+        shows = plex.show_items(page_size=page_size, progress_callback=tv_progress)
+        show_count = len(shows)
+        _emit(
+            progress,
+            "tv",
+            max(show_count, 1),
+            max(show_count, 1),
+            format_count_message("Scanning shows", show_count, show_count, unit="shows", done=True),
+        )
+        clock.finish(extra=f"{show_count} shows")
+        _save_sync_checkpoint(db, "tv", movies=movie_count, shows=show_count, items=count)
+    else:
+        _emit(progress, "tv", 1, 1, "TV already scanned — skipped")
+        logger.info("Library sync: skipping TV scan (checkpoint)")
+
+    if _should_run_phase(resume_after, "enriching"):
+        # After a resume, skipped scan phases leave movies/shows empty in memory.
+        # Only re-fetch when those phases were skipped — not when they returned [].
+        if not _should_run_phase(resume_after, "movies") and not movies:
+            movies = plex.movie_items(page_size=page_size)
+            movie_count = len(movies)
+        if not _should_run_phase(resume_after, "tv") and not shows:
+            shows = plex.show_items(page_size=page_size)
+            show_count = len(shows)
+
+        plex_items = movies + shows
+        enrich_total = max(len(plex_items), 1)
+        clock.begin("enriching metadata")
+        logger.info("Library sync: enriching metadata with %s workers", enrich_workers)
+        _emit(progress, "enriching", 0, enrich_total, "Enriching metadata…")
+
+        count = 0
+        skipped_no_rating_key = 0
+        last_enrich_log = 0.0
+        completed = 0
+        pending_rows: list[dict] = []
+
+        def _emit_enrich_progress(index: int) -> None:
+            nonlocal last_enrich_log
+            now = time.time()
+            should_emit = index == 1 or index == enrich_total or index % 25 == 0 or (now - last_enrich_log) >= 3.0
+            if not should_emit:
+                return
+            message = format_count_message("Enriching metadata", index, enrich_total, unit="titles")
+            _emit(progress, "enriching", index, enrich_total, message)
+            if now - last_enrich_log >= 3.0 or index == enrich_total:
+                logger.info(
+                    "Library sync: enriching metadata — %s of %s titles",
+                    index,
+                    enrich_total,
+                )
+                last_enrich_log = now
+
+        def _flush_pending_rows() -> None:
+            if not pending_rows:
+                return
+            db.upsert_library_items(pending_rows)
+            pending_rows.clear()
+
+        with ThreadPoolExecutor(max_workers=enrich_workers) as pool:
+            futures = [
+                pool.submit(
+                    _enrich_plex_item,
+                    item,
+                    plex,
+                    tmdb,
+                    fanart,
+                    radarr_tmdb,
+                    sonarr_tvdb,
+                )
+                for item in plex_items
+            ]
+            for future in as_completed(futures):
+                completed += 1
+                try:
+                    outcome = future.result()
+                except Exception as error:  # noqa: BLE001 — keep sync alive
+                    logger.exception("Library sync: unexpected enrich worker failure: %s", error)
+                    _emit_enrich_progress(completed)
+                    continue
+
+                if outcome.status == "skip":
+                    skipped_no_rating_key += 1
+                    logger.debug(
+                        "Skipping Plex item without rating_key title=%r media_type=%s",
+                        outcome.title,
+                        outcome.media_type,
+                    )
+                elif outcome.status == "error":
+                    logger.warning(
+                        "Library sync: enrichment failed title=%r media_type=%s: %s",
+                        outcome.title,
+                        outcome.media_type,
+                        outcome.error,
+                    )
+                elif outcome.row is not None:
+                    pending_rows.append(outcome.row)
+                    count += 1
+                    if len(pending_rows) >= DEFAULT_LIBRARY_UPSERT_BATCH_SIZE:
+                        _flush_pending_rows()
+
                 _emit_enrich_progress(completed)
-                continue
 
-            if outcome.status == "skip":
-                skipped_no_rating_key += 1
-                logger.debug(
-                    "Skipping Plex item without rating_key title=%r media_type=%s",
-                    outcome.title,
-                    outcome.media_type,
-                )
-            elif outcome.status == "error":
-                logger.warning(
-                    "Library sync: enrichment failed title=%r media_type=%s: %s",
-                    outcome.title,
-                    outcome.media_type,
-                    outcome.error,
-                )
-            elif outcome.row is not None:
-                pending_rows.append(outcome.row)
-                count += 1
-                if len(pending_rows) >= DEFAULT_LIBRARY_UPSERT_BATCH_SIZE:
-                    _flush_pending_rows()
-
-            _emit_enrich_progress(completed)
-
-    _flush_pending_rows()
-    clock.finish(extra=f"{count} titles saved")
-    with db.connect() as conn:
-        items_with_tmdb = conn.execute(
-            "SELECT COUNT(*) AS cnt FROM library_items WHERE tmdb_id IS NOT NULL"
-        ).fetchone()["cnt"]
-        items_with_countries = conn.execute(
-            """
-            SELECT COUNT(*) AS cnt FROM library_items
-            WHERE countries IS NOT NULL AND countries != '' AND countries != '[]'
-            """
-        ).fetchone()["cnt"]
-        items_with_language = conn.execute(
-            """
-            SELECT COUNT(*) AS cnt FROM library_items
-            WHERE original_language IS NOT NULL AND original_language != ''
-            """
-        ).fetchone()["cnt"]
-    logger.info(
-        "Library metadata coverage after sync: tmdb_id=%s countries=%s original_language=%s (of %s items)",
-        items_with_tmdb,
-        items_with_countries,
-        items_with_language,
-        count,
-    )
-    if count and items_with_tmdb == 0:
-        logger.warning(
-            "No library items have tmdb_id — country/language enrichment requires Plex includeGuids "
-            "and a TMDB API key; verify Plex metadata is matched (not local:// only)."
+        _flush_pending_rows()
+        clock.finish(extra=f"{count} titles saved")
+        with db.connect() as conn:
+            items_with_tmdb = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM library_items WHERE tmdb_id IS NOT NULL"
+            ).fetchone()["cnt"]
+            items_with_countries = conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM library_items
+                WHERE countries IS NOT NULL AND countries != '' AND countries != '[]'
+                """
+            ).fetchone()["cnt"]
+            items_with_language = conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM library_items
+                WHERE original_language IS NOT NULL AND original_language != ''
+                """
+            ).fetchone()["cnt"]
+        logger.info(
+            "Library metadata coverage after sync: tmdb_id=%s countries=%s original_language=%s (of %s items)",
+            items_with_tmdb,
+            items_with_countries,
+            items_with_language,
+            count,
         )
-    elif count and items_with_countries == 0 and tmdb is not None:
-        logger.warning(
-            "No library items have countries after sync despite TMDB client — check TMDB API key and enrichment errors."
-        )
-    if skipped_no_rating_key:
-        logger.warning(
-            "Skipped %s Plex items without rating_key during library sync",
-            skipped_no_rating_key,
-        )
+        if count and items_with_tmdb == 0:
+            logger.warning(
+                "No library items have tmdb_id — country/language enrichment requires Plex includeGuids "
+                "and a TMDB API key; verify Plex metadata is matched (not local:// only)."
+            )
+        elif count and items_with_countries == 0 and tmdb is not None:
+            logger.warning(
+                "No library items have countries after sync despite TMDB client — check TMDB API key and enrichment errors."
+            )
+        if skipped_no_rating_key:
+            logger.warning(
+                "Skipped %s Plex items without rating_key during library sync",
+                skipped_no_rating_key,
+            )
+        _save_sync_checkpoint(db, "enriching", movies=movie_count, shows=show_count, items=count)
+    else:
+        counts = db.library_counts()
+        count = counts["items"]
+        movie_count = counts["movies"]
+        show_count = counts["shows"]
+        _emit(progress, "enriching", 1, 1, "Metadata already enriched — skipped")
+        logger.info("Library sync: skipping enriching (checkpoint)")
 
-    clock.begin("building indexes")
-    _emit(progress, "indexing", 0, 1, "Building search facets…")
-    facet_count = rebuild_library_facets(db, progress=progress)
-    _emit(progress, "indexing", 0, 1, "Building search index…")
-    fts_count = rebuild_library_fts(db, progress=progress)
-    _emit(progress, "indexing", 1, 1, "Search indexes ready")
-    clock.finish(extra=f"facets={facet_count} fts={fts_count}")
+    if _should_run_phase(resume_after, "indexing"):
+        clock.begin("building indexes")
+        _emit(progress, "indexing", 0, 1, "Building search facets…")
+        facet_count = rebuild_library_facets(db, progress=progress)
+        _emit(progress, "indexing", 0, 1, "Building search index…")
+        fts_count = rebuild_library_fts(db, progress=progress)
+        _emit(progress, "indexing", 1, 1, "Search indexes ready")
+        clock.finish(extra=f"facets={facet_count} fts={fts_count}")
+        _save_sync_checkpoint(db, "indexing", movies=movie_count, shows=show_count, items=count)
+    else:
+        _emit(progress, "indexing", 1, 1, "Search indexes already built — skipped")
+        logger.info("Library sync: skipping indexing (checkpoint)")
 
-    clock.begin("syncing episodes")
-    _emit(progress, "episodes", 0, 1, "Syncing TV episodes…")
-    episode_stats = sync_tv_episodes(
-        db,
-        plex,
-        progress=progress,
-        plex_shows=shows,
-        workers=enrich_workers,
-    )
-    clock.finish(
-        extra=(
-            f"shows={episode_stats.get('shows_synced')} "
-            f"skipped_unchanged={episode_stats.get('shows_skipped_unchanged', 0)} "
-            f"episodes={episode_stats.get('episodes_synced')}"
+    if _should_run_phase(resume_after, "episodes"):
+        clock.begin("syncing episodes")
+        _emit(progress, "episodes", 0, 1, "Syncing TV episodes…")
+        episode_stats = sync_tv_episodes(
+            db,
+            plex,
+            progress=progress,
+            plex_shows=shows or None,
+            workers=enrich_workers,
         )
-    )
+        clock.finish(
+            extra=(
+                f"shows={episode_stats.get('shows_synced')} "
+                f"skipped_unchanged={episode_stats.get('shows_skipped_unchanged', 0)} "
+                f"episodes={episode_stats.get('episodes_synced')}"
+            )
+        )
+        _save_sync_checkpoint(db, "episodes", movies=movie_count, shows=show_count, items=count)
+    else:
+        _emit(progress, "episodes", 1, 1, "Episodes already synced — skipped")
+        logger.info("Library sync: skipping episodes (checkpoint)")
+        episode_stats = {"resumed": True}
 
     clock.begin("finishing")
     _emit(progress, "finishing", 0, 1, "Building recommendations…")
@@ -554,31 +702,34 @@ async def sync_library(
         json.dumps(
             {
                 "items": count,
-                "movies": len(movies),
-                "shows": len(shows),
+                "movies": movie_count,
+                "shows": show_count,
                 "embeddings": embedded,
                 "facets": facet_count,
                 "fts": fts_count,
                 "episodes": episode_stats,
                 "rating_prompts": rating_prompts,
+                "resumed_after": resume_after,
                 "timestamp": time.time(),
             }
         ),
     )
+    _clear_sync_checkpoint(db)
 
     logger.info(
         "Library sync complete — %s movies, %s shows, %s titles indexed",
-        len(movies),
-        len(shows),
+        movie_count,
+        show_count,
         count,
     )
     return {
         "items_synced": count,
-        "movies": len(movies),
-        "shows": len(shows),
+        "movies": movie_count,
+        "shows": show_count,
         "embeddings": embedded,
         "facets": facet_count,
         "fts": fts_count,
         "episodes": episode_stats,
         "rating_prompts": rating_prompts,
+        "resumed_after": resume_after,
     }
