@@ -59,6 +59,38 @@ test("formatStatsMessage renders library counts", () => {
   assert.match(text, /Last sync: never/);
 });
 
+test("formatStatsMessage parses last_sync JSON timestamp", () => {
+  const recent = JSON.stringify({ items: 15, timestamp: Date.now() / 1000 });
+  const text = formatStatsMessage({ movies: 10, shows: 5, total: 15, last_sync: recent });
+  assert.match(text, /Last sync: just now/);
+  assert.doesNotMatch(text, /Invalid Date/);
+
+  const objectForm = formatStatsMessage({
+    movies: 1,
+    shows: 0,
+    total: 1,
+    last_sync: { timestamp: Date.now() / 1000 - 120 },
+  });
+  assert.match(objectForm, /Last sync: 2 min ago/);
+
+  const bareEpoch = formatStatsMessage({
+    movies: 1,
+    shows: 0,
+    total: 1,
+    last_sync: String(Date.now() / 1000 - 7200),
+  });
+  assert.match(bareEpoch, /Last sync: 2 h ago/);
+
+  const garbage = formatStatsMessage({
+    movies: 0,
+    shows: 0,
+    total: 0,
+    last_sync: "{not-json",
+  });
+  assert.match(garbage, /Last sync: Unknown/);
+  assert.doesNotMatch(garbage, /Invalid Date/);
+});
+
 test("formatSyncDeniedMessage explains owner-only sync", () => {
   const text = formatSyncDeniedMessage();
   assert.match(text, /owner-only/i);

@@ -4,9 +4,11 @@ import test from "node:test";
 import {
   displayJobPercent,
   formatCountHint,
+  formatLastSyncRelative,
   formatSyncJobDetails,
   formatSyncJobStatus,
   friendlyProgressMessage,
+  parseLastSyncTimestamp,
   phaseLabel,
 } from "./jobProgress.js";
 
@@ -82,4 +84,31 @@ test("formatSyncJobDetails for Config card", () => {
   assert.equal(done.state, "completed");
   assert.match(done.headline, /Last synced just now/);
   assert.match(done.headline, /146 movies/);
+});
+
+test("parseLastSyncTimestamp reads sync_state JSON and bare epochs", () => {
+  assert.equal(parseLastSyncTimestamp(null), null);
+  assert.equal(parseLastSyncTimestamp(""), null);
+  assert.equal(parseLastSyncTimestamp(1710000000), 1710000000);
+  assert.equal(parseLastSyncTimestamp("1710000000.5"), 1710000000.5);
+  assert.equal(
+    parseLastSyncTimestamp(JSON.stringify({ items: 10, timestamp: 1710000000 })),
+    1710000000,
+  );
+  assert.equal(parseLastSyncTimestamp({ finished_at: 1710000001 }), 1710000001);
+  assert.equal(parseLastSyncTimestamp("{bad"), null);
+});
+
+test("formatLastSyncRelative never returns Invalid Date", () => {
+  assert.equal(formatLastSyncRelative(null), "Never synced");
+  assert.equal(formatLastSyncRelative(""), "Never synced");
+  assert.equal(formatLastSyncRelative("{bad"), "Unknown");
+  assert.equal(
+    formatLastSyncRelative(JSON.stringify({ timestamp: Date.now() / 1000 })),
+    "just now",
+  );
+  assert.doesNotMatch(
+    formatLastSyncRelative(JSON.stringify({ timestamp: Date.now() / 1000 - 90 })),
+    /Invalid Date/,
+  );
 });

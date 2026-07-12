@@ -1,4 +1,5 @@
 import { createId } from "./id.js";
+import { formatLastSyncRelative } from "./jobProgress.js";
 
 function reviewPromptBlock(prompt, options = {}) {
   return {
@@ -56,9 +57,8 @@ export function formatStatsMessage(stats) {
   if (!stats) {
     return "Library stats are not available yet. Try again after setup completes.";
   }
-  const lastSync = stats.last_sync
-    ? new Date(Number(stats.last_sync) * 1000).toLocaleString()
-    : "never";
+  // last_sync is sync_state JSON (`{"timestamp": <unix seconds>, ...}`), not a bare epoch.
+  const lastSync = stats.last_sync ? formatLastSyncRelative(stats.last_sync) : "never";
   return [
     "**Library stats**",
     "",

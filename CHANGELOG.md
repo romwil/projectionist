@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.2] — 2026-07-12
+
+Fix `/stats` showing **Last sync: Invalid Date**.
+
+### Fixed
+- `/stats` Library stats parses `last_sync` JSON (`timestamp` Unix seconds) instead of treating the whole blob as an epoch
+- Missing or malformed last sync shows **never** / **Unknown**, never Invalid Date
+
 ## [1.1.1] — 2026-07-12
 
 Resume interrupted library syncs without redoing finished work, and skip unchanged recommendation embeddings.

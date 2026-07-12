@@ -164,19 +164,50 @@ export function formatSyncJobDetails(job, libraryStats = null) {
   };
 }
 
-export function formatLastSyncRelative(lastSync) {
-  if (!lastSync) return "Never synced";
+/**
+ * Extract Unix seconds from sync_state `last_sync` values.
+ * Accepts a bare number/string, or JSON with timestamp/finished_at/etc.
+ */
+export function parseLastSyncTimestamp(lastSync) {
+  if (lastSync == null || lastSync === "") return null;
   try {
-    const parsed = typeof lastSync === "string" ? JSON.parse(lastSync) : lastSync;
-    const timestamp = parsed?.timestamp || parsed?.finished_at || parsed?.started_at || parsed?.updated_at;
-    if (!timestamp) return "Unknown";
-    const ms = Number(timestamp) * 1000;
-    const deltaSec = Math.max(0, Math.round((Date.now() - ms) / 1000));
-    if (deltaSec < 45) return "just now";
-    if (deltaSec < 3600) return `${Math.round(deltaSec / 60)} min ago`;
-    if (deltaSec < 86400) return `${Math.round(deltaSec / 3600)} h ago`;
-    return new Date(ms).toLocaleString();
+    if (typeof lastSync === "number") {
+      return Number.isFinite(lastSync) ? lastSync : null;
+    }
+    if (typeof lastSync === "string") {
+      const trimmed = lastSync.trim();
+      if (!trimmed) return null;
+      if (/^\d+(\.\d+)?$/.test(trimmed)) {
+        const n = Number(trimmed);
+        return Number.isFinite(n) ? n : null;
+      }
+      return parseLastSyncTimestamp(JSON.parse(trimmed));
+    }
+    if (typeof lastSync === "object") {
+      const raw =
+        lastSync.timestamp ??
+        lastSync.finished_at ??
+        lastSync.started_at ??
+        lastSync.updated_at;
+      if (raw == null || raw === "") return null;
+      const n = Number(raw);
+      return Number.isFinite(n) ? n : null;
+    }
   } catch {
-    return String(lastSync);
+    return null;
   }
+  return null;
+}
+
+export function formatLastSyncRelative(lastSync) {
+  if (lastSync == null || lastSync === "") return "Never synced";
+  const timestamp = parseLastSyncTimestamp(lastSync);
+  if (timestamp == null) return "Unknown";
+  const ms = Number(timestamp) * 1000;
+  if (!Number.isFinite(ms) || ms <= 0) return "Unknown";
+  const deltaSec = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (deltaSec < 45) return "just now";
+  if (deltaSec < 3600) return `${Math.round(deltaSec / 60)} min ago`;
+  if (deltaSec < 86400) return `${Math.round(deltaSec / 3600)} h ago`;
+  return new Date(ms).toLocaleString();
 }
