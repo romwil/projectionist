@@ -21,7 +21,7 @@ flowchart LR
 | 2 | Infrastructure Matrix | Verify LLM, Plex, Radarr, and Sonarr (certified badges) |
 | 3 | Dropdown Mapping | Select movie and TV Plex libraries from dropdowns (unlocked after Plex verified) |
 
-**Finish** sets `onboarding_complete` when all four services are certified and both Plex sections are selected. Persona sliders, optional metadata services, and legacy lenses are available in the **maintenance dashboard** after onboarding — they no longer block first-run setup.
+**Finish** sets `onboarding_complete` when all four services are certified and both Plex sections are selected. Persona sliders, optional metadata services, and legacy lenses are available in the **maintenance dashboard** after onboarding.
 
 ### Plex library mapping
 
