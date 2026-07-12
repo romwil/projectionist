@@ -13,7 +13,7 @@ No. **1.0 is a single workspace**: sidebar conversations + full-width chat + sta
 ## Which Docker image should I use?
 
 - Unraid / everyday: `romwil/curatorx:1.0`
-- Pin exact: `romwil/curatorx:1.0.6`
+- Pin exact: `romwil/curatorx:1.0.7`
 - Newest stable: `romwil/curatorx:latest`
 
 Images are multi-arch (amd64 + arm64).

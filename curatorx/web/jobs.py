@@ -11,6 +11,7 @@ import time
 import traceback
 import uuid
 from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Literal, Optional
 
@@ -20,6 +21,7 @@ from curatorx.library.query import refresh_library_overview_cache
 from curatorx.library.sync import sync_library
 from curatorx.logging_config import configure_logging
 from curatorx.web.job_progress import format_job_progress, friendly_job_error
+from curatorx.web.sync_schedule import should_run_scheduled_library_sync
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,8 @@ JOBS_STATE_FILENAME = "jobs_state.json"
 JOBS_STATE_MAX_BYTES = 5 * 1024 * 1024
 # Give FastAPI time to finish binding HTTP before the first scheduled sync.
 SCHEDULER_INITIAL_DELAY_SECONDS = 30
+# How often the scheduler re-evaluates due syncs (hour-of-day windows need sub-day ticks).
+SCHEDULER_POLL_SECONDS = 900
 
 _manager: Optional["JobManager"] = None
 _lock = threading.Lock()
@@ -361,25 +365,32 @@ class SyncScheduler:
                 settings = load_merged_settings(self.data_dir)
                 if settings.plex_url and settings.plex_token:
                     interval_hours = max(1, int(settings.library_sync_interval_hours))
+                    preferred_hour = settings.library_sync_hour
+                    last_ts: Optional[float] = None
                     last_raw = get_job_manager().db.get_sync_state("last_sync")
-                    should_run = last_raw is None
                     if last_raw:
                         try:
                             last_data = json.loads(last_raw)
                             last_ts = float(last_data.get("timestamp") or 0)
-                            should_run = (time.time() - last_ts) >= interval_hours * 3600
                         except (json.JSONDecodeError, TypeError, ValueError):
-                            should_run = True
+                            last_ts = None
+                    should_run = should_run_scheduled_library_sync(
+                        now=datetime.now().astimezone(),
+                        last_sync_ts=last_ts,
+                        interval_hours=interval_hours,
+                        preferred_hour=preferred_hour,
+                    )
                     running = any(j.status in ("queued", "running") for j in get_job_manager().list_jobs())
                     if should_run and not running:
                         logger.info(
-                            "Scheduler triggering library sync interval_hours=%s",
+                            "Scheduler triggering library sync interval_hours=%s preferred_hour=%s",
                             interval_hours,
+                            preferred_hour,
                         )
                         get_job_manager().start_sync(settings)
             except Exception as error:  # noqa: BLE001
                 logger.exception("Sync scheduler loop error: %s", error)
-            self._stop.wait(timeout=3600)
+            self._stop.wait(timeout=SCHEDULER_POLL_SECONDS)
 
 
 _scheduler: Optional[SyncScheduler] = None

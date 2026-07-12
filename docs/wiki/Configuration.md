@@ -24,7 +24,8 @@ Supported LLM presets include OpenAI, Anthropic, Gemini, Groq, Mistral, Together
 ## Optional
 
 - Fanart.tv, TVDB, Tautulli
-- `library_sync_interval_hours` (auto re-sync, default 24)
+- `library_sync_interval_hours` (minimum hours between auto-syncs, default 24)
+- `library_sync_hour` (optional `0–23` preferred local hour; omit/`null` for interval-only). Uses container local time — set `TZ` on Unraid if needed.
 - `CURATORX_LOG_LEVEL` (`INFO` default; `DEBUG` for sync tracing)
 
 ## Feature flags (off by default)

@@ -8,7 +8,7 @@ import os
 import re
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Type
+from typing import Any, Dict, List, Mapping, Optional, Type
 
 NESTED_SETTINGS_TYPES: Dict[str, Type[Any]] = {}
 
@@ -536,6 +536,8 @@ class Settings:
     onboarding_complete: bool = False
     setup_wizard_pending: bool = False
     library_sync_interval_hours: int = 24
+    # Preferred local hour (0–23) for daily sync; None = interval-only scheduling.
+    library_sync_hour: Optional[int] = None
     tv_page_size: int = 500
     library_enrich_workers: int = 6
     sync_reviews_to_plex: bool = True
@@ -565,6 +567,12 @@ class Settings:
                 filtered[key] = nested_cls(**nested_filtered)
             elif key.endswith("_id") and value is not None:
                 filtered[key] = int(value)
+            elif key == "library_sync_hour":
+                if value is None or value == "":
+                    filtered[key] = None
+                else:
+                    hour = int(value)
+                    filtered[key] = hour if 0 <= hour <= 23 else None
             elif key.endswith("_hours") or key in {"tv_page_size", "library_enrich_workers"}:
                 filtered[key] = int(value) if value is not None else value
             else:

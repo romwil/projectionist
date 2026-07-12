@@ -316,6 +316,7 @@ class SettingsPayload(BaseModel):
     llm_embedding_base_url: str = ""
     onboarding_complete: bool = False
     library_sync_interval_hours: int = Field(default=24, ge=1, le=168)
+    library_sync_hour: Optional[int] = Field(default=None, ge=0, le=23)
     tv_page_size: int = Field(default=500, ge=50, le=2000)
     library_enrich_workers: int = Field(default=6, ge=1, le=16)
     sync_reviews_to_plex: bool = True

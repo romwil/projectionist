@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.7] — 2026-07-12
+
+Preferred time-of-day scheduling for automatic library sync.
+
+### Added
+- Optional `library_sync_hour` (`0–23`, null = interval-only) so daily sync prefers a clock hour in container local time
+- Advanced Config → Paths and sync hour selector (“Any / interval only” or `00:00`–`23:00`)
+- Unraid template `TZ` variable so preferred hour matches wall-clock time
+- Unit tests for scheduler decision logic (`should_run_scheduled_library_sync`)
+
+### Changed
+- `library_sync_interval_hours` remains the minimum gap between auto-syncs; with a preferred hour the scheduler waits for that hour (and catch-up if already past it and stale) instead of firing ~N hours after the last sync / shortly after startup
+
 ## [1.0.6] — 2026-07-12
 
 Hotfix: keep the sync/job status dock inside the conversation sidebar.

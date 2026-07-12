@@ -39,7 +39,8 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 | Radarr root folder | `RADARR_ROOT_FOLDER` | Default path for movie adds |
 | Sonarr root folder | `SONARR_ROOT_FOLDER` | Default path for series adds |
 | Quality profile IDs | `RADARR_QUALITY_PROFILE_ID`, `SONARR_QUALITY_PROFILE_ID` | *arr quality profiles |
-| Library sync interval | `library_sync_interval_hours` in settings | Auto-sync cadence (1–168 h, default 24) |
+| Library sync interval | `library_sync_interval_hours` in settings | Minimum hours between auto-syncs (1–168, default 24) |
+| Library sync hour | `library_sync_hour` in settings | Optional preferred local hour `0–23` for daily sync; `null` = interval-only. Uses container local time — set `TZ` (e.g. `America/New_York`) on Unraid if needed. |
 | TV page size | `tv_page_size` in settings | Plex TV fetch batch size (50–2000, default 500) |
 | Library enrich workers | `library_enrich_workers` in settings | Parallel TMDB/Fanart enrichment threads during library sync (1–16, default 6). SQLite upserts stay serial. |
 | Sync reviews to Plex | `sync_reviews_to_plex` in settings | When `true`, saving a 1–5 star review writes the matching Plex user rating (2/4/6/8/10) via `PUT /:/rate` |
@@ -124,7 +125,7 @@ After onboarding, open **Config** to reach the maintenance dashboard. The **Libr
 | Last sync | When the most recent sync finished (or "Never" if you have not synced yet) |
 | Status line | Polls `/api/jobs` every few seconds while a sync is running |
 
-**When to use it:** after adding new movies or shows in Plex, when title cards look stale, or when `/stats` in chat shows an old last-sync time. Automatic sync also runs on a schedule (`library_sync_interval_hours`, default 24 h).
+**When to use it:** after adding new movies or shows in Plex, when title cards look stale, or when `/stats` in chat shows an old last-sync time. Automatic sync also runs on a schedule (`library_sync_interval_hours`, default 24 h). Optionally set `library_sync_hour` (0–23) so daily sync prefers a clock hour in the container’s local timezone (`TZ` env) instead of firing purely on elapsed time after the last run.
 
 **If sync fails:** check Plex URL/token and library section keys in Config, then read container logs (`docker compose logs -f curatorx`). The status line shows the error when the job fails.
 

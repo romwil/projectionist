@@ -27,6 +27,7 @@
   "onboarding_complete": false,
   "setup_wizard_pending": false,
   "library_sync_interval_hours": 24,
+  "library_sync_hour": null,
   "tv_page_size": 500,
   "library_enrich_workers": 6,
   "sync_reviews_to_plex": true,

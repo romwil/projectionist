@@ -1787,7 +1787,36 @@ export default function ConfigPage() {
                       />
                     </label>
                   ))}
+                  <label>
+                    <span>library_sync_hour</span>
+                    <select
+                      data-testid="library-sync-hour"
+                      value={
+                        settings.library_sync_hour === null ||
+                        settings.library_sync_hour === undefined
+                          ? ""
+                          : String(settings.library_sync_hour)
+                      }
+                      onChange={(event) => {
+                        const raw = event.target.value;
+                        updateSettings({
+                          library_sync_hour: raw === "" ? null : Number(raw),
+                        });
+                      }}
+                    >
+                      <option value="">Any / interval only</option>
+                      {Array.from({ length: 24 }, (_, hour) => (
+                        <option key={hour} value={hour}>
+                          {String(hour).padStart(2, "0")}:00 (local)
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
+                <p className="slider-help-text" style={{ marginTop: "0.5rem" }}>
+                  Preferred sync hour uses the container local timezone. On Unraid, set the{" "}
+                  <code>TZ</code> env (e.g. <code>America/New_York</code>) if the clock is wrong.
+                </p>
                 <div className="config-actions">
                   <button type="button" onClick={handleSaveSettings}>
                     Save settings

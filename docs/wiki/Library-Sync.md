@@ -7,7 +7,20 @@ Library sync indexes your Plex movie and TV libraries into CuratorX’s SQLite d
 - **Config page** — maintenance dashboard → **Sync library**
 - **Chat** — `/sync` (single-user mode; owner-only when multi-user is on)
 - **API** — `POST /api/library/sync`
-- **Scheduler** — automatic re-sync on `library_sync_interval_hours` (default 24)
+- **Scheduler** — automatic re-sync using `library_sync_interval_hours` (minimum gap, default 24) and optional `library_sync_hour` (`0–23` preferred local hour; unset = interval-only)
+
+## Schedule behavior
+
+| Setting | Role |
+|---------|------|
+| `library_sync_interval_hours` | Minimum hours between automatic syncs (1–168) |
+| `library_sync_hour` | When set, wait for that clock hour each day (container local TZ) instead of firing ~N hours after the last sync / shortly after startup |
+
+Notes:
+
+- With a preferred hour, startup does **not** sync after the initial delay unless the library is already stale beyond the interval **and** local time is at/past that hour (catch-up).
+- A recent sync still blocks a duplicate run (interval gate), including after container restarts.
+- Set the container `TZ` environment variable (e.g. `America/New_York`) so “3am” matches your wall clock on Unraid.
 
 ## Progress UI
 
