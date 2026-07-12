@@ -1,5 +1,7 @@
 const SHORTCUTS = [
   { keys: "/", description: "Focus the composer" },
+  { keys: "Enter", description: "Send the message" },
+  { keys: "Shift + Enter", description: "Insert a newline" },
   { keys: "⌘/Ctrl + N", description: "Start a new conversation" },
   { keys: "Esc", description: "Close the title results overlay" },
   { keys: "?", description: "Show this keyboard shortcut help" },

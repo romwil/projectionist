@@ -39,6 +39,7 @@ import {
   tokenConfirmSuccessMessage,
 } from "./lib/addActions.js";
 import { blendAmbientAccent } from "./lib/ambientAccent.js";
+import { shouldSubmitComposerOnEnter } from "./lib/composerKeyboard.js";
 import { createId } from "./lib/id.js";
 import { executeSlashCommand, parseSlashCommand } from "./lib/slashCommands.js";
 import {
@@ -1005,34 +1006,65 @@ export default function App() {
               ⧉ {contextLabel}
             </span>
             <InlineAlert type="error" message={chatError} />
-            <textarea
-              ref={composerRef}
-              data-testid="composer-input"
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-              onKeyDown={(event) => {
-                if (!konamiTrackerRef.current) {
-                  konamiTrackerRef.current = createKonamiTracker((kind) => {
-                    const name = persona?.curator_name || "Curator";
-                    setMessages((prev) => [
-                      ...prev,
-                      {
-                        id: createId(),
-                        role: "assistant",
-                        blocks: [{ type: "text", content: easterEggResponse(kind, name) }],
-                      },
-                    ]);
-                  });
-                }
-                konamiTrackerRef.current(event);
-              }}
-              placeholder={composerPlaceholder || "Describe what you're hunting for…"}
-              rows={2}
-              disabled={loading || !threadsReady}
-            />
-            <button type="submit" data-testid="send-button" disabled={loading || !threadsReady || !input.trim()}>
-              {loading ? "Thinking…" : "Send"}
-            </button>
+            <div className="composer-row">
+              <textarea
+                ref={composerRef}
+                data-testid="composer-input"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (!konamiTrackerRef.current) {
+                    konamiTrackerRef.current = createKonamiTracker((kind) => {
+                      const name = persona?.curator_name || "Curator";
+                      setMessages((prev) => [
+                        ...prev,
+                        {
+                          id: createId(),
+                          role: "assistant",
+                          blocks: [{ type: "text", content: easterEggResponse(kind, name) }],
+                        },
+                      ]);
+                    });
+                  }
+                  konamiTrackerRef.current(event);
+
+                  const canSubmit = Boolean(input.trim()) && !loading && threadsReady;
+                  if (shouldSubmitComposerOnEnter(event, { canSubmit })) {
+                    event.preventDefault();
+                    sendMessage(input);
+                    return;
+                  }
+                  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+                    event.preventDefault();
+                  }
+                }}
+                placeholder={composerPlaceholder || "Describe what you're hunting for…"}
+                rows={2}
+                disabled={loading || !threadsReady}
+              />
+              <button
+                type="submit"
+                className="composer-send"
+                data-testid="send-button"
+                disabled={loading || !threadsReady || !input.trim()}
+                aria-label="Send"
+                title="Send"
+              >
+                <svg
+                  className="composer-send-icon"
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  aria-hidden="true"
+                >
+                  <path
+                    d="M3.4 20.4 21 12 3.4 3.6v6.6L15 12 3.4 13.8v6.6Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </button>
+            </div>
           </form>
         </main>
       </div>
