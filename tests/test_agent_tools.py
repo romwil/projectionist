@@ -13,6 +13,7 @@ from curatorx.agent.tools import (
     ToolRegistry,
     _append_recommendation_cards,
     _card_to_tool_item,
+    _rank_tmdb_search_results,
     build_system_prompt,
     build_tool_definitions,
 )
@@ -659,6 +660,24 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(registry.cards), 1)
             self.assertEqual(registry.cards[0].tmdb_id, 2)
 
+    def test_rank_tmdb_search_results_year_filters_out_other_years(self) -> None:
+        results = [
+            {"id": 460885, "title": "Mandy", "release_date": "2018-09-14"},
+            {"id": 111, "title": "Mandy", "release_date": "1952-01-01"},
+            {"id": 222, "title": "Mandy", "release_date": "2016-06-01"},
+        ]
+        ranked = _rank_tmdb_search_results(results, year=2018)
+        self.assertEqual(len(ranked), 1)
+        self.assertEqual(ranked[0]["id"], 460885)
+
+    def test_rank_tmdb_search_results_without_year_keeps_all(self) -> None:
+        results = [
+            {"id": 1, "title": "Mandy", "release_date": "2018-09-14"},
+            {"id": 2, "title": "Mandy", "release_date": "1952-01-01"},
+        ]
+        ranked = _rank_tmdb_search_results(results, year=None)
+        self.assertEqual(len(ranked), 2)
+
     @patch("curatorx.agent.tools.TMDBClient")
     async def test_search_tmdb_movie_returns_structured_matches(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
@@ -692,16 +711,133 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 {"title": "The Matrix", "media_type": "movie", "year": 1999},
             )
             payload = json.loads(result)
-            self.assertEqual(payload["total_matched"], 42)
-            self.assertEqual(payload["returned"], 2)
-            self.assertTrue(payload["has_more"])
+            # Year pin filters Reloaded (2003) out of cards and items.
+            self.assertEqual(payload["total_matched"], 1)
+            self.assertEqual(payload["returned"], 1)
+            self.assertFalse(payload["has_more"])
             self.assertEqual(payload["items"][0]["tmdb_id"], 603)
             self.assertEqual(payload["items"][0]["title"], "The Matrix")
             self.assertEqual(payload["items"][0]["year"], 1999)
             self.assertIn("simulation", payload["items"][0]["overview"])
             self.assertNotIn("tvdb_id", payload["items"][0])
+            self.assertEqual(len(registry.cards), 1)
+            self.assertEqual(registry.cards[0].tmdb_id, 603)
             self.assertEqual(registry.cards[0].recommendation_reason, "")
             self.assertNotIn("recommendation_reason", payload["items"][0])
+
+    @patch("curatorx.agent.tools.TMDBClient")
+    async def test_search_tmdb_year_does_not_expand_ambiguous_title(self, mock_tmdb_cls) -> None:
+        """Mandy + year=2018 must pin Cosmatos 2018, not every same-name hit."""
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.search_movie_page.return_value = {
+            "total_results": 5,
+            "results": [
+                {
+                    "id": 111,
+                    "title": "Mandy",
+                    "release_date": "1952-07-29",
+                    "overview": "British drama.",
+                    "vote_average": 6.8,
+                },
+                {
+                    "id": 460885,
+                    "title": "Mandy",
+                    "release_date": "2018-09-14",
+                    "overview": "A psychedelic revenge nightmare.",
+                    "vote_average": 6.5,
+                },
+                {
+                    "id": 222,
+                    "title": "Mandy",
+                    "release_date": "2016-01-01",
+                    "overview": "Unrelated Mandy.",
+                    "vote_average": 5.0,
+                },
+            ],
+        }
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            result = await registry.execute(
+                "search_tmdb",
+                {
+                    "title": "Mandy",
+                    "media_type": "movie",
+                    "year": 2018,
+                    "reason": "Cosmic neon revenge for your B-movie streak",
+                },
+            )
+            payload = json.loads(result)
+            self.assertEqual(payload["returned"], 1)
+            self.assertEqual(payload["items"][0]["tmdb_id"], 460885)
+            self.assertEqual(payload["items"][0]["year"], 2018)
+            self.assertEqual(len(registry.cards), 1)
+            self.assertEqual(registry.cards[0].tmdb_id, 460885)
+            self.assertEqual(registry.cards[0].year, 2018)
+            self.assertIn("Cosmic neon", registry.cards[0].recommendation_reason)
+
+    @patch("curatorx.agent.tools.TMDBClient")
+    async def test_search_tmdb_by_tmdb_id_pins_exact_work(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.movie_details.return_value = {
+            "id": 460885,
+            "title": "Mandy",
+            "release_date": "2018-09-14",
+            "overview": "A psychedelic revenge nightmare.",
+            "vote_average": 6.5,
+            "poster_path": "/mandy.jpg",
+        }
+        mock_tmdb.poster_url.return_value = "https://image.tmdb.org/t/p/w500/mandy.jpg"
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            result = await registry.execute(
+                "search_tmdb",
+                {"tmdb_id": 460885, "media_type": "movie", "reason": "Panos Cosmatos fever dream"},
+            )
+            payload = json.loads(result)
+            mock_tmdb.search_movie_page.assert_not_called()
+            mock_tmdb.movie_details.assert_called_once_with(460885)
+            self.assertEqual(payload["total_matched"], 1)
+            self.assertEqual(payload["returned"], 1)
+            self.assertEqual(payload["items"][0]["tmdb_id"], 460885)
+            self.assertEqual(payload["items"][0]["title"], "Mandy")
+            self.assertEqual(len(registry.cards), 1)
+            self.assertEqual(registry.cards[0].tmdb_id, 460885)
+            self.assertEqual(registry.cards[0].title, "Mandy")
+            self.assertEqual(registry.cards[0].year, 2018)
+
+    @patch("curatorx.agent.tools.TMDBClient")
+    async def test_search_tmdb_title_only_may_return_multiple_same_name(self, mock_tmdb_cls) -> None:
+        """Without year/tmdb_id, disambiguation candidates are still allowed."""
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.search_movie_page.return_value = {
+            "total_results": 3,
+            "results": [
+                {"id": 460885, "title": "Mandy", "release_date": "2018-09-14", "vote_average": 6.5},
+                {"id": 111, "title": "Mandy", "release_date": "1952-07-29", "vote_average": 6.8},
+                {"id": 222, "title": "Mandy", "release_date": "2016-01-01", "vote_average": 5.0},
+            ],
+        }
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            result = await registry.execute(
+                "search_tmdb",
+                {"title": "Mandy", "media_type": "movie"},
+            )
+            payload = json.loads(result)
+            self.assertEqual(payload["returned"], 3)
+            self.assertEqual(len(registry.cards), 3)
+            self.assertEqual({c.tmdb_id for c in registry.cards}, {460885, 111, 222})
 
     @patch("curatorx.agent.tools.TMDBClient")
     async def test_search_tmdb_accepts_curator_reason(self, mock_tmdb_cls) -> None:

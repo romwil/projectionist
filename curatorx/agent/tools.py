@@ -240,17 +240,34 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "search_tmdb",
             "description": (
-                "Exact title search on TMDB for movies or shows not in the library. "
-                "Use before add_to_radarr/add_to_sonarr to resolve tmdb_id and tvdb_id. "
-                "Returns best match first with honest total_matched. "
+                "Resolve an external movie/show on TMDB before add_to_radarr/add_to_sonarr. "
+                "Prefer tmdb_id when known (exact one title card). Otherwise pass title+year "
+                "so same-name hits are not expanded into multiple turnstyle cards. "
+                "Title-only search may return several candidates for disambiguation. "
                 "Pass reason with a specific curator rationale for why this title fits "
                 "(taste/context — never pipeline labels like 'TMDB title match')."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "title": {"type": "string", "description": "Title to look up on TMDB"},
-                    "year": {"type": "integer", "description": "Optional release/air year to narrow results"},
+                    "title": {
+                        "type": "string",
+                        "description": "Title to look up on TMDB (required unless tmdb_id is set)",
+                    },
+                    "tmdb_id": {
+                        "type": "integer",
+                        "description": (
+                            "Exact TMDB id when already known — returns that single work only "
+                            "(preferred over title search for recommendations)."
+                        ),
+                    },
+                    "year": {
+                        "type": "integer",
+                        "description": (
+                            "Release/air year — when set, only that year is returned as cards "
+                            "(does not expand to other years with the same title)."
+                        ),
+                    },
                     "media_type": {"type": "string", "enum": ["movie", "show"]},
                     "limit": {"type": "integer", "description": "Max results to return (default 10)"},
                     "reason": {
@@ -261,7 +278,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                         ),
                     },
                 },
-                "required": ["title", "media_type"],
+                "required": ["media_type"],
             },
         },
     },
@@ -799,11 +816,16 @@ def _tmdb_result_year(item: Mapping[str, Any]) -> Optional[int]:
 
 
 def _rank_tmdb_search_results(results: List[Mapping[str, Any]], *, year: Optional[int]) -> List[Mapping[str, Any]]:
+    """Order/filter TMDB search hits.
+
+    When ``year`` is set, keep only that release year so one recommendation
+    (e.g. Mandy 2018) does not expand into every same-name hit.
+    """
+    ordered = list(results)
     if year is None:
-        return list(results)
-    exact = [item for item in results if _tmdb_result_year(item) == year]
-    rest = [item for item in results if _tmdb_result_year(item) != year]
-    return exact + rest
+        return ordered
+    exact = [item for item in ordered if _tmdb_result_year(item) == year]
+    return exact
 
 
 def _tmdb_search_item_to_tool_item(item: Mapping[str, Any], media_type: str) -> Dict[str, Any]:
@@ -1473,10 +1495,14 @@ class ToolRegistry:
     async def _tool_search_tmdb(self, args: Mapping[str, Any]) -> str:
         if not self.settings.tmdb_api_key:
             return json.dumps({"error": "TMDB API key not configured"})
-        title = str(args.get("title") or "").strip()
-        if not title:
-            return json.dumps({"error": "title is required"})
         media_type = str(args.get("media_type") or "movie")
+        title = str(args.get("title") or "").strip()
+        raw_tmdb_id = args.get("tmdb_id")
+        pinned_tmdb_id = int(raw_tmdb_id) if raw_tmdb_id is not None else None
+        if pinned_tmdb_id is not None and pinned_tmdb_id <= 0:
+            return json.dumps({"error": "tmdb_id must be a positive integer"})
+        if not title and pinned_tmdb_id is None:
+            return json.dumps({"error": "title or tmdb_id is required"})
         year = args.get("year")
         year_int = int(year) if year is not None else None
         limit = min(int(args.get("limit") or 10), 20)
@@ -1485,15 +1511,34 @@ class ToolRegistry:
         )
 
         tmdb = TMDBClient(self.settings.tmdb_api_key)
-        if media_type == "movie":
-            page = tmdb.search_movie_page(title, year=year_int)
+        results: List[Mapping[str, Any]] = []
+        total_matched = 0
+        if pinned_tmdb_id is not None:
+            try:
+                details = (
+                    tmdb.movie_details(pinned_tmdb_id)
+                    if media_type == "movie"
+                    else tmdb.tv_details(pinned_tmdb_id)
+                )
+            except RuntimeError as error:
+                return json.dumps({"error": str(error)})
+            if not isinstance(details, Mapping) or not int(details.get("id") or 0):
+                return json.dumps({"error": f"TMDB {media_type} {pinned_tmdb_id} not found"})
+            results = [details]
+            total_matched = 1
         else:
-            page = tmdb.search_tv_page(title)
-        results = page.get("results", [])
-        if not isinstance(results, list):
-            results = []
-        total_matched = int(page.get("total_results") or len(results))
-        results = _rank_tmdb_search_results(results, year=year_int)
+            if media_type == "movie":
+                page = tmdb.search_movie_page(title, year=year_int)
+            else:
+                page = tmdb.search_tv_page(title)
+            raw_results = page.get("results", [])
+            if not isinstance(raw_results, list):
+                raw_results = []
+            total_matched = int(page.get("total_results") or len(raw_results))
+            results = _rank_tmdb_search_results(raw_results, year=year_int)
+            if year_int is not None:
+                # Year pin: honest count is filtered matches, not unscoped TMDB total.
+                total_matched = len(results)
 
         owned = self.db.owned_tmdb_ids(media_type)
         queued = self.db.queued_tmdb_ids(media_type)
@@ -1532,7 +1577,8 @@ class ToolRegistry:
                 "has_more": total_matched > len(items),
                 "items": items,
                 "note": (
-                    "Best match first. Only propose adds for in_library=false AND already_queued=false "
+                    "Prefer tmdb_id (exact) or title+year so turnstyle cards pin one work. "
+                    "Only propose adds for in_library=false AND already_queued=false "
                     "(also respect in_radarr/in_sonarr). Use tmdb_id for add_to_radarr; tvdb_id for add_to_sonarr. "
                     "Pass reason on search_tmdb or call set_recommendation_reasons so Why this? "
                     "shows curator rationale (never pipeline labels)."
@@ -2381,6 +2427,8 @@ def build_system_prompt(db: Database, lens_id: Optional[str] = None) -> str:
         "Never present in_library=true or already_queued/in_radarr/in_sonarr titles as recommendations to add; "
         "title cards for adds exclude owned and already-queued titles. "
         "For exact external title lookup before add_to_radarr or add_to_sonarr, use search_tmdb — not search_library. "
+        "When you already know a specific work, call search_tmdb with tmdb_id (and media_type), or title+year — "
+        "never title-only when recommending one film/show, or turnstyle cards may list every same-name TMDB hit. "
         "When recommending external titles, set a specific taste-based reason via search_tmdb(reason=…) "
         "or set_recommendation_reasons — never leave Why this? as a pipeline label. "
         "For movies use tmdb_id with add_to_radarr; for shows use tvdb_id with add_to_sonarr.\n"
