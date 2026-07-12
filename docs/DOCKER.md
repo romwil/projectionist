@@ -103,7 +103,7 @@ Install from the Community Applications template (`templates/curatorx.xml` or `u
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/curatorx/config` → `/config` |
-| **Image** | `romwil/curatorx:1.0` (also `:1.0.3`, `:latest`) — multi-arch amd64+arm64 |
+| **Image** | `romwil/curatorx:1.0` (also `:1.0.4`, `:latest`) — multi-arch amd64+arm64 |
 
 ### Ollama on the Unraid host
 
@@ -125,6 +125,8 @@ Or use the host LAN IP if `host.docker.internal` is unavailable.
 | `/config/settings.json` | Connection settings, LLM config, onboarding flags |
 | `/config/curatorx.db` | Library index, embeddings, chat (with `lens_id`), persona, lenses |
 | `/config/jobs_state.json` | Durable background job history (library sync) |
+
+SQLite uses **WAL** + `busy_timeout=30s` + `synchronous=NORMAL` so the UI can read while library sync writes (especially on Unraid appdata). NORMAL is a durability tradeoff vs FULL: less fsync cost under concurrent load; a crash mid-commit could lose the last transaction.
 
 Back up the entire `/config` directory before upgrades.
 

@@ -75,8 +75,11 @@ def row_to_current_user(row) -> CurrentUser:
 
 def bootstrap_owner(db: Optional[Database] = None) -> CurrentUser:
     if db is not None:
-        db.ensure_bootstrap_owner()
+        # Read first — avoid a write on every /api/features hit once owner exists.
         row = db.get_user(BOOTSTRAP_OWNER_ID)
+        if row is None:
+            db.ensure_bootstrap_owner()
+            row = db.get_user(BOOTSTRAP_OWNER_ID)
         if row is not None:
             return row_to_current_user(row)
     return CurrentUser(id=BOOTSTRAP_OWNER_ID, display_name="Owner", role="owner")

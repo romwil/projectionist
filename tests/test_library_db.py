@@ -3,9 +3,18 @@
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
-from curatorx.library.db import CURATOR_NAME_CONFIG_KEY, DEFAULT_LENS_ID, Database
+from curatorx.library.db import (
+    BOOTSTRAP_OWNER_ID,
+    CURATOR_NAME_CONFIG_KEY,
+    DEFAULT_LENS_ID,
+    SQLITE_BUSY_TIMEOUT_MS,
+    Database,
+    run_with_db_lock_retry,
+)
 from curatorx.library.embeddings import semantic_search
+import sqlite3
 
 
 class DatabaseTests(unittest.TestCase):
@@ -30,6 +39,75 @@ class DatabaseTests(unittest.TestCase):
             rows = db.search_keyword("blade")
             self.assertEqual(len(rows), 1)
             self.assertIn(78, db.owned_tmdb_ids("movie"))
+
+    def test_connection_uses_wal_and_busy_timeout(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            with db.connect() as conn:
+                journal = conn.execute("PRAGMA journal_mode").fetchone()[0]
+                busy = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+                sync = conn.execute("PRAGMA synchronous").fetchone()[0]
+            self.assertEqual(str(journal).lower(), "wal")
+            self.assertEqual(int(busy), SQLITE_BUSY_TIMEOUT_MS)
+            # NORMAL == 1
+            self.assertEqual(int(sync), 1)
+
+    def test_upsert_library_items_batches_one_commit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            connect_enters = {"n": 0}
+            real_connect = db.connect
+
+            from contextlib import contextmanager
+
+            @contextmanager
+            def counting_connect():
+                connect_enters["n"] += 1
+                with real_connect() as conn:
+                    yield conn
+
+            db.connect = counting_connect  # type: ignore[method-assign]
+            ids = db.upsert_library_items(
+                [
+                    {
+                        "rating_key": f"rk-{i}",
+                        "media_type": "movie",
+                        "title": f"Title {i}",
+                        "year": 2000 + i,
+                    }
+                    for i in range(5)
+                ]
+            )
+            self.assertEqual(len(ids), 5)
+            self.assertEqual(connect_enters["n"], 1)
+            self.assertEqual(len(db.all_library_items()), 5)
+
+    def test_ensure_bootstrap_owner_is_idempotent_and_cached(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            self.assertIsNotNone(db.get_user(BOOTSTRAP_OWNER_ID))
+            self.assertTrue(db._bootstrap_owner_ready)
+            db.ensure_bootstrap_owner()
+            db.ensure_bootstrap_owner()
+            with db.connect() as conn:
+                count = conn.execute(
+                    "SELECT COUNT(*) AS c FROM users WHERE id = ?",
+                    (BOOTSTRAP_OWNER_ID,),
+                ).fetchone()["c"]
+            self.assertEqual(int(count), 1)
+
+    def test_run_with_db_lock_retry_retries_then_succeeds(self) -> None:
+        calls = {"n": 0}
+
+        def flaky() -> str:
+            calls["n"] += 1
+            if calls["n"] < 3:
+                raise sqlite3.OperationalError("database is locked")
+            return "ok"
+
+        with patch("curatorx.library.db.time.sleep"):
+            self.assertEqual(run_with_db_lock_retry(flaky, label="test"), "ok")
+        self.assertEqual(calls["n"], 3)
 
     def test_pending_action(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

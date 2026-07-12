@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import time
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Generator, Iterable, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Generator, Iterable, List, Mapping, Optional, Sequence, Tuple, TypeVar
 
 DEFAULT_LENS_ID = "general"
 DEFAULT_CONTEXT_HASH = "general"
@@ -16,6 +17,16 @@ BOOTSTRAP_OWNER_ID = "bootstrap-owner"
 ACTIVE_LENS_CONFIG_KEY = "active_lens_id"
 ACTIVE_CONTEXT_CONFIG_KEY = "active_context_hash"
 CURATOR_NAME_CONFIG_KEY = "curator_name"
+
+# Busy wait before OperationalError on contended locks (Unraid volume latency).
+SQLITE_BUSY_TIMEOUT_MS = 30_000
+# WAL + NORMAL is durable enough for this app and much kinder under concurrent readers.
+SQLITE_SYNCHRONOUS = "NORMAL"
+SQLITE_LOCK_RETRIES = 6
+SQLITE_LOCK_RETRY_BASE_DELAY_S = 0.05
+
+logger = logging.getLogger(__name__)
+T = TypeVar("T")
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS library_items (
@@ -197,10 +208,43 @@ FROM service_integrations;
 """
 
 
+def _is_db_locked(exc: BaseException) -> bool:
+    if not isinstance(exc, sqlite3.OperationalError):
+        return False
+    message = str(exc).lower()
+    return "locked" in message or "busy" in message
+
+
+def run_with_db_lock_retry(operation: Callable[[], T], *, label: str = "db") -> T:
+    """Retry transient SQLite lock/busy errors with exponential backoff."""
+    delay = SQLITE_LOCK_RETRY_BASE_DELAY_S
+    last_exc: Optional[BaseException] = None
+    for attempt in range(SQLITE_LOCK_RETRIES):
+        try:
+            return operation()
+        except sqlite3.OperationalError as exc:
+            last_exc = exc
+            if not _is_db_locked(exc) or attempt >= SQLITE_LOCK_RETRIES - 1:
+                raise
+            logger.warning(
+                "SQLite %s locked (attempt %s/%s); retrying in %.2fs: %s",
+                label,
+                attempt + 1,
+                SQLITE_LOCK_RETRIES,
+                delay,
+                exc,
+            )
+            time.sleep(delay)
+            delay = min(delay * 2, 1.5)
+    assert last_exc is not None
+    raise last_exc
+
+
 class Database:
     def __init__(self, path: Path) -> None:
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self._bootstrap_owner_ready = False
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -553,22 +597,49 @@ class Database:
         self.ensure_bootstrap_owner(conn)
 
     def ensure_bootstrap_owner(self, conn: Optional[sqlite3.Connection] = None) -> None:
-        now = time.time()
-        if conn is not None:
-            conn.execute(
+        """Ensure the bootstrap owner row exists.
+
+        When ``conn`` is omitted this opens a managed connection (one-level
+        re-entry into the ``conn``-provided path — not unbounded recursion).
+        After the owner is known to exist, subsequent no-arg calls are no-ops.
+        """
+        if conn is None and self._bootstrap_owner_ready:
+            return
+
+        def _ensure(active: sqlite3.Connection) -> None:
+            existing = active.execute(
+                "SELECT 1 AS ok FROM users WHERE id = ? LIMIT 1",
+                (BOOTSTRAP_OWNER_ID,),
+            ).fetchone()
+            if existing is not None:
+                return
+            now = time.time()
+            active.execute(
                 """
                 INSERT OR IGNORE INTO users (id, display_name, email, role, created_at)
                 VALUES (?, 'Owner', NULL, 'owner', ?)
                 """,
                 (BOOTSTRAP_OWNER_ID, now),
             )
+
+        if conn is not None:
+            _ensure(conn)
+            self._bootstrap_owner_ready = True
             return
-        with self.connect() as managed:
-            self.ensure_bootstrap_owner(managed)
+
+        def _managed() -> None:
+            with self.connect() as managed:
+                _ensure(managed)
+
+        run_with_db_lock_retry(_managed, label="ensure_bootstrap_owner")
+        self._bootstrap_owner_ready = True
 
     def get_user(self, user_id: str) -> Optional[sqlite3.Row]:
-        with self.connect() as conn:
-            return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        def _read() -> Optional[sqlite3.Row]:
+            with self.connect() as conn:
+                return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+
+        return run_with_db_lock_retry(_read, label="get_user")
 
     def get_user_by_plex_id(self, plex_user_id: str) -> Optional[sqlite3.Row]:
         with self.connect() as conn:
@@ -807,21 +878,79 @@ class Database:
         with self.connect() as conn:
             self._seed_defaults(conn)
 
+    def _open_connection(self) -> sqlite3.Connection:
+        # timeout is seconds; check_same_thread=False allows FastAPI worker threads
+        # to share Database instances (each call still gets its own connection).
+        conn = sqlite3.connect(
+            self.path,
+            timeout=SQLITE_BUSY_TIMEOUT_MS / 1000.0,
+            check_same_thread=False,
+        )
+        conn.row_factory = sqlite3.Row
+        conn.execute(f"PRAGMA busy_timeout = {int(SQLITE_BUSY_TIMEOUT_MS)}")
+        # WAL lets readers proceed while a writer commits; persistent on the DB file.
+        conn.execute("PRAGMA journal_mode=WAL")
+        # NORMAL with WAL is a common Unraid/NAS tradeoff: much less fsync cost than
+        # FULL, with only a small window of loss on abrupt power failure mid-commit.
+        conn.execute(f"PRAGMA synchronous={SQLITE_SYNCHRONOUS}")
+        return conn
+
     @contextmanager
     def connect(self) -> Generator[sqlite3.Connection, None, None]:
-        conn = sqlite3.connect(self.path)
-        conn.row_factory = sqlite3.Row
+        conn = self._open_connection()
         try:
             yield conn
             conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except sqlite3.Error:
+                pass
+            raise
         finally:
             conn.close()
 
-    def upsert_library_item(self, item: Mapping[str, Any]) -> int:
-        now = time.time()
-        with self.connect() as conn:
-            conn.execute(
-                """
+    def _library_item_params(self, item: Mapping[str, Any], now: float) -> tuple:
+        return (
+            item.get("rating_key"),
+            item["media_type"],
+            item["title"],
+            item.get("year"),
+            item.get("summary", ""),
+            json.dumps(item.get("genres", [])),
+            json.dumps(item.get("cast", [])),
+            json.dumps(item.get("directors", [])),
+            json.dumps(item.get("keywords", [])),
+            item.get("tmdb_id"),
+            item.get("tvdb_id"),
+            item.get("imdb_id"),
+            item.get("poster_url", ""),
+            item.get("backdrop_url", ""),
+            item.get("view_count", 0),
+            item.get("added_at"),
+            item.get("last_viewed_at"),
+            item.get("file_size", 0),
+            int(bool(item.get("in_radarr"))),
+            int(bool(item.get("in_sonarr"))),
+            item.get("runtime_minutes"),
+            item.get("content_rating", ""),
+            item.get("vote_average"),
+            item.get("original_language", ""),
+            json.dumps(item.get("countries", [])),
+            item.get("season_count"),
+            item.get("leaf_count"),
+            item.get("viewed_leaf_count"),
+            item.get("unwatched_episode_count", 0),
+            item.get("total_episode_count", 0),
+            item.get("last_episode_watched_at"),
+            item.get("last_episode_sync_at"),
+            item.get("view_offset_ms"),
+            item.get("duration_ms"),
+            item.get("plex_user_rating_stars"),
+            now,
+        )
+
+    _UPSERT_LIBRARY_ITEM_SQL = """
                 INSERT INTO library_items (
                     rating_key, media_type, title, year, summary, genres, cast, directors,
                     keywords, tmdb_id, tvdb_id, imdb_id, poster_url, backdrop_url,
@@ -874,51 +1003,40 @@ class Database:
                     duration_ms=excluded.duration_ms,
                     plex_user_rating_stars=excluded.plex_user_rating_stars,
                     updated_at=excluded.updated_at
-                """,
-                (
-                    item.get("rating_key"),
-                    item["media_type"],
-                    item["title"],
-                    item.get("year"),
-                    item.get("summary", ""),
-                    json.dumps(item.get("genres", [])),
-                    json.dumps(item.get("cast", [])),
-                    json.dumps(item.get("directors", [])),
-                    json.dumps(item.get("keywords", [])),
-                    item.get("tmdb_id"),
-                    item.get("tvdb_id"),
-                    item.get("imdb_id"),
-                    item.get("poster_url", ""),
-                    item.get("backdrop_url", ""),
-                    item.get("view_count", 0),
-                    item.get("added_at"),
-                    item.get("last_viewed_at"),
-                    item.get("file_size", 0),
-                    int(bool(item.get("in_radarr"))),
-                    int(bool(item.get("in_sonarr"))),
-                    item.get("runtime_minutes"),
-                    item.get("content_rating", ""),
-                    item.get("vote_average"),
-                    item.get("original_language", ""),
-                    json.dumps(item.get("countries", [])),
-                    item.get("season_count"),
-                    item.get("leaf_count"),
-                    item.get("viewed_leaf_count"),
-                    item.get("unwatched_episode_count", 0),
-                    item.get("total_episode_count", 0),
-                    item.get("last_episode_watched_at"),
-                    item.get("last_episode_sync_at"),
-                    item.get("view_offset_ms"),
-                    item.get("duration_ms"),
-                    item.get("plex_user_rating_stars"),
-                    now,
-                ),
-            )
-            row = conn.execute(
-                "SELECT id FROM library_items WHERE rating_key = ?",
-                (item.get("rating_key"),),
-            ).fetchone()
-            return int(row["id"]) if row else 0
+                """
+
+    def _upsert_library_item_on_conn(
+        self, conn: sqlite3.Connection, item: Mapping[str, Any], *, now: Optional[float] = None
+    ) -> int:
+        stamp = time.time() if now is None else now
+        conn.execute(self._UPSERT_LIBRARY_ITEM_SQL, self._library_item_params(item, stamp))
+        row = conn.execute(
+            "SELECT id FROM library_items WHERE rating_key = ?",
+            (item.get("rating_key"),),
+        ).fetchone()
+        return int(row["id"]) if row else 0
+
+    def upsert_library_item(self, item: Mapping[str, Any]) -> int:
+        def _write() -> int:
+            with self.connect() as conn:
+                return self._upsert_library_item_on_conn(conn, item)
+
+        return run_with_db_lock_retry(_write, label="upsert_library_item")
+
+    def upsert_library_items(self, items: Sequence[Mapping[str, Any]]) -> List[int]:
+        """Upsert many library rows in a single transaction (one commit)."""
+        if not items:
+            return []
+
+        def _write() -> List[int]:
+            now = time.time()
+            ids: List[int] = []
+            with self.connect() as conn:
+                for item in items:
+                    ids.append(self._upsert_library_item_on_conn(conn, item, now=now))
+            return ids
+
+        return run_with_db_lock_retry(_write, label="upsert_library_items")
 
     def set_embedding(self, item_id: int, vector: Sequence[float]) -> None:
         with self.connect() as conn:
@@ -1368,19 +1486,25 @@ class Database:
             )
 
     def get_service_integration(self, service_name: str) -> Optional[sqlite3.Row]:
-        with self.connect() as conn:
-            return conn.execute(
-                "SELECT * FROM service_integrations WHERE service_name = ?",
-                (service_name,),
-            ).fetchone()
+        def _read() -> Optional[sqlite3.Row]:
+            with self.connect() as conn:
+                return conn.execute(
+                    "SELECT * FROM service_integrations WHERE service_name = ?",
+                    (service_name,),
+                ).fetchone()
+
+        return run_with_db_lock_retry(_read, label="get_service_integration")
 
     def get_service_integrations(self) -> List[sqlite3.Row]:
-        with self.connect() as conn:
-            return list(
-                conn.execute(
-                    "SELECT * FROM service_integrations ORDER BY service_name ASC"
-                ).fetchall()
-            )
+        def _read() -> List[sqlite3.Row]:
+            with self.connect() as conn:
+                return list(
+                    conn.execute(
+                        "SELECT * FROM service_integrations ORDER BY service_name ASC"
+                    ).fetchall()
+                )
+
+        return run_with_db_lock_retry(_read, label="get_service_integrations")
 
     def get_active_lens_id(self) -> str:
         return self.get_config(ACTIVE_LENS_CONFIG_KEY, DEFAULT_LENS_ID) or DEFAULT_LENS_ID

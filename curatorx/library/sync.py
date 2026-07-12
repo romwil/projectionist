@@ -28,6 +28,8 @@ ProgressCallback = Optional[Callable[[str, int, int, str], None]]
 
 DEFAULT_LIBRARY_ENRICH_WORKERS = 6
 MAX_LIBRARY_ENRICH_WORKERS = 16
+# Commit enriched rows in batches to cut SQLite write contention with the HTTP API.
+DEFAULT_LIBRARY_UPSERT_BATCH_SIZE = 50
 
 
 class _EnrichOutcome(NamedTuple):
@@ -406,6 +408,7 @@ async def sync_library(
     skipped_no_rating_key = 0
     last_enrich_log = 0.0
     completed = 0
+    pending_rows: list[dict] = []
 
     def _emit_enrich_progress(index: int) -> None:
         nonlocal last_enrich_log
@@ -422,6 +425,12 @@ async def sync_library(
                 enrich_total,
             )
             last_enrich_log = now
+
+    def _flush_pending_rows() -> None:
+        if not pending_rows:
+            return
+        db.upsert_library_items(pending_rows)
+        pending_rows.clear()
 
     with ThreadPoolExecutor(max_workers=enrich_workers) as pool:
         futures = [
@@ -460,11 +469,14 @@ async def sync_library(
                     outcome.error,
                 )
             elif outcome.row is not None:
-                db.upsert_library_item(outcome.row)
+                pending_rows.append(outcome.row)
                 count += 1
+                if len(pending_rows) >= DEFAULT_LIBRARY_UPSERT_BATCH_SIZE:
+                    _flush_pending_rows()
 
             _emit_enrich_progress(completed)
 
+    _flush_pending_rows()
     clock.finish(extra=f"{count} titles saved")
     with db.connect() as conn:
         items_with_tmdb = conn.execute(

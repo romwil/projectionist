@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.4] — 2026-07-12
+
+Hotfix: stop SQLite `database is locked` API failures during large parallel library enrich on Unraid.
+
+### Fixed
+- Enable WAL mode, 30s `busy_timeout`, and `synchronous=NORMAL` on every SQLite connection (better concurrent reads under Unraid volume latency; NORMAL trades a small abrupt-power-loss window vs FULL)
+- Batch enrich upserts (50 rows per commit) so parallel network enrich no longer commits once per title
+- Retry transient lock/busy errors on critical reads/writes (`get_user`, service integrations, upserts, bootstrap)
+- `/api/features` no longer writes bootstrap owner on every request — read-first + in-memory cache after owner exists
+
+### Notes
+- The `ensure_bootstrap_owner` traceback “recursion” was one-level re-entry (open connection → call with `conn`), not unbounded recursion; still tightened with read-first/caching
+
 ## [1.0.3] — 2026-07-12
 
 Faster library sync metadata enrichment via bounded parallel network fetches.

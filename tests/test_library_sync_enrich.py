@@ -14,6 +14,7 @@ from curatorx.connectors.plex import PlexClient, PlexLibraryItem
 from curatorx.library.db import Database
 from curatorx.library.sync import (
     DEFAULT_LIBRARY_ENRICH_WORKERS,
+    DEFAULT_LIBRARY_UPSERT_BATCH_SIZE,
     _enrich_plex_item,
     _resolve_enrich_workers,
     sync_library,
@@ -65,6 +66,7 @@ class ParallelEnrichSyncTests(unittest.IsolatedAsyncioTestCase):
         peak = 0
         lock = threading.Lock()
         upsert_thread_ids: set[int] = set()
+        batch_calls: list[int] = []
 
         def slow_row(item, *_args, **_kwargs):
             nonlocal active, peak
@@ -84,13 +86,14 @@ class ParallelEnrichSyncTests(unittest.IsolatedAsyncioTestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "lib.db")
-            real_upsert = db.upsert_library_item
+            real_batch = db.upsert_library_items
 
-            def tracking_upsert(row):
+            def tracking_batch(rows):
                 upsert_thread_ids.add(threading.get_ident())
-                return real_upsert(row)
+                batch_calls.append(len(rows))
+                return real_batch(rows)
 
-            db.upsert_library_item = tracking_upsert  # type: ignore[method-assign]
+            db.upsert_library_items = tracking_batch  # type: ignore[method-assign]
             settings = Settings(
                 plex_url="http://plex.test:32400",
                 plex_token="token",
@@ -123,8 +126,61 @@ class ParallelEnrichSyncTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(db.all_library_items()), 8)
             self.assertGreaterEqual(peak, 2)
             self.assertEqual(len(upsert_thread_ids), 1)
+            self.assertEqual(sum(batch_calls), 8)
+            self.assertLessEqual(len(batch_calls), 8)
+            self.assertLessEqual(max(batch_calls), DEFAULT_LIBRARY_UPSERT_BATCH_SIZE)
             self.assertTrue(progress_events)
             self.assertEqual(progress_events[-1][1], progress_events[-1][2])
+
+    async def test_sync_batches_upserts_above_threshold(self) -> None:
+        n = DEFAULT_LIBRARY_UPSERT_BATCH_SIZE + 7
+        items = [_movie(f"rk-{i}", f"Title {i}", tmdb_id=str(i)) for i in range(n)]
+        batch_calls: list[int] = []
+
+        def instant_row(item, *_args, **_kwargs):
+            return {
+                "rating_key": item.rating_key,
+                "media_type": item.media_type,
+                "title": item.title,
+                "year": item.year,
+                "tmdb_id": int(item.tmdb_id) if item.tmdb_id else None,
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "lib.db")
+            real_batch = db.upsert_library_items
+
+            def tracking_batch(rows):
+                batch_calls.append(len(rows))
+                return real_batch(rows)
+
+            db.upsert_library_items = tracking_batch  # type: ignore[method-assign]
+            settings = Settings(
+                plex_url="http://plex.test:32400",
+                plex_token="token",
+                library_enrich_workers=2,
+            )
+            with patch.object(PlexClient, "movie_items", return_value=items), patch.object(
+                PlexClient, "show_items", return_value=[]
+            ), patch(
+                "curatorx.library.sync._row_from_plex_item",
+                side_effect=instant_row,
+            ), patch(
+                "curatorx.library.sync.rebuild_embeddings",
+                new=AsyncMock(return_value=0),
+            ), patch(
+                "curatorx.library.sync.sync_tv_episodes",
+                return_value={"shows_synced": 0, "episodes_synced": 0},
+            ), patch(
+                "curatorx.library.sync.scan_for_rating_prompts",
+                return_value=0,
+            ):
+                result = await sync_library(db, settings)
+
+            self.assertEqual(result["items_synced"], n)
+            self.assertEqual(sum(batch_calls), n)
+            self.assertGreaterEqual(len(batch_calls), 2)
+            self.assertIn(DEFAULT_LIBRARY_UPSERT_BATCH_SIZE, batch_calls)
 
     async def test_sync_continues_when_one_item_fails(self) -> None:
         items = [
