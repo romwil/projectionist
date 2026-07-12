@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.1.0] — 2026-07-12
+
+Cinema-dark UI/UX refactor: Fraunces + DM Sans, amber accent (no violet gradients), brand-first top bar, wider sidebar with in-rail status dock, poster-forward title cards, and Config/Login aligned to the same visual system.
+
 ## [1.0.13] — 2026-07-12
 
 Track confirmed adds, simplify batch rating, and accept half-star reviews.

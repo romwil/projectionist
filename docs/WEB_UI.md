@@ -8,14 +8,14 @@ This guide describes what you see after opening CuratorX in a browser — whethe
 
 ## First visit (self-hosted)
 
-1. **Open the app** — In your browser, go to the host and port where CuratorX is running (for example `http://your-unraid-ip:8765` or the URL in your compose file).
-2. **Setup banner** — If Plex, TMDB, or your LLM provider are not configured yet, a blue banner appears under the top bar: *Finish setup in Settings…* Click **Settings** (or **Config** in the top bar) to open the wizard.
-3. **Top bar** — You always see **CuratorX**, a small **agent pulse** dot (idle / running / error), library counts like `142 movies · 38 shows` when stats are loaded, and a **Config** link.
-4. **Conversation sidebar** — On the left, past chats are listed. Use **New** to start a fresh thread. On smaller screens, collapse the sidebar with the `«` / `»` toggle.
-5. **Main chat** — The center area is full-width chat: thread title, ambient context tag (e.g. `⧉ Neo-noir exploration`), scrollable messages, and a composer at the bottom.
-6. **Status dock** — Bottom-left (in the chat column) shows background jobs (library sync, etc.) and add-to-Radarr/Sonarr confirmations. Drop a title card onto the dock while dragging to queue an add — the drop hint appears only during drag.
+1. **Open the app** — In your browser, go to the host and port where CuratorX is running (for example `http://your-unraid-ip:8788` or the URL in your compose file).
+2. **Setup banner** — If Plex, TMDB, or your LLM provider are not configured yet, a banner appears under the top bar: *Finish setup in Settings…* Click **Config** in the top bar to open the wizard.
+3. **Top bar** — **CuratorX** (display brand), your curator name, a small **agent pulse** (chat idle / thinking / error), quiet library counts, and a **Config** text link.
+4. **Conversation sidebar** — On the left, past chats and **New**. Collapse with `«` / `»` on smaller screens. The **status dock** (sync jobs, confirmations) lives at the bottom of this sidebar.
+5. **Main chat** — Full-width reading column: messages, title cards, ambient context tag, composer.
+6. **Status dock** — In the sidebar bottom: background jobs (library sync, etc.) and single-title Radarr/Sonarr confirms. Drop a title card onto the dock while dragging to queue an add — the drop hint appears only during drag.
 
-There is **one workspace layout**. The old Turnstyle compact view and Immersive split view are removed.
+There is **one workspace layout**. Visual language is **cinema dark** (near-black surfaces, amber accent, Fraunces + DM Sans). The old Turnstyle compact view and Immersive split view are removed.
 
 ---
 
@@ -23,28 +23,26 @@ There is **one workspace layout**. The old Turnstyle compact view and Immersive 
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ CuratorX ●  142 movies · 38 shows              [ Config ]   │  ← top bar
+│ CuratorX          curator · 142 movies · 38 shows   Config  │  ← top bar
 ├──────────────┬──────────────────────────────────────────────┤
-│ Conversations│  Conversation                                │
-│  [ New ]     │  Neo-noir thread                             │
-│  • Thread 1  │  ⧉ Neo-noir exploration                      │
-│  • Thread 2  │  ┌────────────────────────────────────────┐  │
-│              │  │ chat messages + title cards            │  │  ← chat-scroll-region
-│              │  └────────────────────────────────────────┘  │
-│              │  [ composer textarea ]          [ Send ]     │
+│ Conversations│  chat + title cards                          │
+│  [ New ]     │                                              │
+│  • Thread 1  │                                              │
+│  • Thread 2  │                                              │
+│──────────────│  [ composer ]                     [ Send ]   │
+│ status dock  │                                              │
 └──────────────┴──────────────────────────────────────────────┘
-  ▲ status dock (jobs, add confirmations) — bottom-left
 ```
 
 | Area | What it does |
 |------|----------------|
-| **Top bar** | Branding, agent pulse after logo, indexed movie/show counts, link to Config |
-| **Sidebar** | Thread list only — switch or create conversations |
+| **Top bar** | Brand-first CuratorX + curator name, chat pulse, library counts, Config |
+| **Sidebar** | Thread list + pinned status dock |
 | **Chat workspace** | Full-width thread, scroll region, composer |
-| **Status dock** | Running jobs, bulk-add progress, Radarr/Sonarr confirm prompts, drag-to-queue drop target |
-| **Results overlay** | Optional expand-in-overlay for large title-card result sets |
+| **Status dock** | Running jobs, add progress, drag-to-queue (sidebar bottom) |
+| **Results overlay** | Optional expand for large title-card sets |
 
-**Sync library** lives on the **Config** page (not the main chat sidebar). After onboarding, the maintenance dashboard shows a **Library sync** card with movie/show counts, last sync time, and live progress (phase name, friendly detail, percent, and counts) while a sync runs.
+**Sync library** lives on the **Config** page (not the main chat sidebar). After onboarding, the maintenance dashboard shows a **Library sync** section with movie/show counts, last sync time, and live progress while a sync runs.
 
 ### Single workspace (default)
 

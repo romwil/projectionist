@@ -1,17 +1,18 @@
+/** Cinema-dark ambient washes — cool slate + warm undertones; avoid violet brand clash. */
 const AMBIENT_ACCENT_MAP = {
-  general: "hsl(220 22% 42%)",
-  "neo-noir": "hsl(258 35% 38%)",
-  documentary: "hsl(145 28% 36%)",
-  horror: "hsl(0 42% 34%)",
-  comedy: "hsl(42 55% 42%)",
-  "sci-fi": "hsl(195 45% 38%)",
-  "1970s": "hsl(32 58% 42%)",
-  "1980s": "hsl(280 38% 40%)",
-  "1990s": "hsl(210 40% 38%)",
-  family: "hsl(168 32% 38%)",
+  general: "hsl(210 18% 32%)",
+  "neo-noir": "hsl(220 22% 28%)",
+  documentary: "hsl(150 22% 30%)",
+  horror: "hsl(8 28% 28%)",
+  comedy: "hsl(38 40% 34%)",
+  "sci-fi": "hsl(195 28% 30%)",
+  "1970s": "hsl(28 42% 34%)",
+  "1980s": "hsl(200 20% 30%)",
+  "1990s": "hsl(215 24% 32%)",
+  family: "hsl(165 24% 30%)",
 };
 
-const NEUTRAL_ACCENT = "hsl(220 14% 28%)";
+const NEUTRAL_ACCENT = "hsl(210 12% 24%)";
 
 export function resolveAmbientAccent(contextHash) {
   const key = String(contextHash || "general")
@@ -24,5 +25,5 @@ export function resolveAmbientAccent(contextHash) {
 export function blendAmbientAccent(contextHash, personaAccent) {
   const contextAccent = resolveAmbientAccent(contextHash);
   if (!personaAccent) return contextAccent;
-  return `color-mix(in srgb, ${contextAccent} 68%, ${personaAccent} 32%)`;
+  return `color-mix(in srgb, ${contextAccent} 72%, ${personaAccent} 28%)`;
 }

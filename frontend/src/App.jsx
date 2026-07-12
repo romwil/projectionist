@@ -856,14 +856,14 @@ export default function App() {
       <header className={`app-topbar ${nightOwl ? "night-owl" : ""}`}>
         <div className="app-topbar-brand">
           <div className="app-topbar-titles">
+            <h1>CuratorX</h1>
             <p
-              className="eyebrow app-topbar-eyebrow"
+              className="app-topbar-eyebrow"
               title={presetTagline || undefined}
               data-testid="curator-name-eyebrow"
             >
               {curatorName}
             </p>
-            <h1>CuratorX</h1>
           </div>
           <span
             className={`agent-pulse ${agentPulse}`}

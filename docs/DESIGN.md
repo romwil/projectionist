@@ -1,6 +1,6 @@
 # CuratorX — Design Document
 
-Product principles, single-workspace UX, lens isolation, agent behavior, and API design for CuratorX **1.0**. Items marked **Future** are planned but not fully shipped.
+Product principles, single-workspace UX, lens isolation, agent behavior, and API design for CuratorX **1.1**. Items marked **Future** are planned but not fully shipped.
 
 ---
 
@@ -24,24 +24,36 @@ Product principles, single-workspace UX, lens isolation, agent behavior, and API
 
 ---
 
+## Visual language (1.1)
+
+**Cinema dark** — near-black chamber surfaces, warm paper text, a single **amber/gold** accent (no blue→violet gradients). Display type (**Fraunces**) for brand and empty-state headlines; body UI (**DM Sans**). Atmosphere comes from subtle ambient washes (persona/context), not glow stacks or pill chrome.
+
+| Token role | Intent |
+|------------|--------|
+| Surfaces | Layered `--bg` / `--surface` / `--surface-raised` |
+| Accent | Warm gold primary CTAs and focus |
+| Type | Display for brand; body for chat and forms |
+
+---
+
 ## Single workspace layout
 
 CuratorX serves one React application (`frontend/src/App.jsx`):
 
 | Region | Contents |
 |--------|----------|
-| **Top bar** | Brand, agent pulse, library counts, Config link, optional avatar menu |
-| **Sidebar** | Conversation list + New thread |
+| **Top bar** | CuratorX brand, curator name, agent pulse, library counts, Config link, optional avatar menu |
+| **Sidebar** | Conversation list + New thread + **status dock** (bottom of rail) |
 | **Chat column** | Thread, ambient context tag, title cards, composer |
-| **Status dock** | Live job progress, *arr confirmations, drag-to-add target |
 | **Results overlay** | Optional horizontal expand for large card sets (“Cinema mode”) |
 
 ### Visual state tokens
 
 | Token | Meaning |
 |-------|---------|
-| `.agent-pulse` | Background job / agent state: idle / running / error |
+| `.agent-pulse` | **Chat** agent state only: idle / thinking / error (not library sync) |
 | Ambient tint | Subtle background shift from conversation context + persona accent |
+| Status dock | Operational sync / add progress — lives in the **sidebar**, not the chat column |
 
 ---
 
