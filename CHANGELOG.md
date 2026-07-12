@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.6] — 2026-07-12
+
+Hotfix: keep the sync/job status dock inside the conversation sidebar.
+
+### Fixed
+- Mount StatusDock in the sidebar column and constrain its width so sync notifications no longer float across the sidebar/chat divider
+
 ## [1.0.5] — 2026-07-12
 
 Hotfix: library sync no longer hangs silently on **Building search facets…** for multi-thousand-title libraries.

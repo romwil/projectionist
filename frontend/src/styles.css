@@ -128,11 +128,6 @@ a.app-topbar-link:focus-visible,
   min-height: 0;
   display: flex;
   overflow: hidden;
-  --workspace-sidebar-offset: clamp(200px, 18vw, 240px);
-}
-
-.workspace-body:has(.workspace-sidebar.sidebar-collapsed) {
-  --workspace-sidebar-offset: 48px;
 }
 
 .workspace-sidebar {
@@ -148,6 +143,8 @@ a.app-topbar-link:focus-visible,
   border-right: 1px solid var(--border);
   background: rgba(20, 25, 37, 0.95);
   transition: width 0.22s ease, padding 0.22s ease;
+  position: relative;
+  overflow: hidden;
 }
 
 .workspace-sidebar.sidebar-collapsed {
@@ -412,20 +409,25 @@ a.app-topbar-link:focus-visible,
 }
 
 .status-dock {
-  position: fixed;
-  /* Sit in the chat column, clear of the sidebar rail */
-  left: max(12px, calc(var(--workspace-sidebar-offset, 220px) + 12px));
-  bottom: max(16px, env(safe-area-inset-bottom, 0px));
-  z-index: 50;
+  /* Anchored to sidebar bottom — width matches the sidebar column */
+  flex-shrink: 0;
+  position: relative;
+  z-index: 2;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 8px;
-  width: min(360px, calc(100vw - var(--workspace-sidebar-offset, 220px) - 28px));
-  max-height: min(42vh, calc(100vh - 140px));
+  width: 100%;
+  max-width: 100%;
+  max-height: min(42vh, 280px);
   overflow-x: hidden;
   overflow-y: auto;
   pointer-events: none;
+  box-sizing: border-box;
+}
+
+.workspace-sidebar.sidebar-collapsed .status-dock {
+  display: none;
 }
 
 .status-dock > * {
@@ -2257,13 +2259,6 @@ button.ghost.inline-link {
 
   .composer {
     padding: clamp(12px, 1.8vw, 16px);
-  }
-
-  .status-dock {
-    --workspace-sidebar-offset: 0px;
-    width: min(340px, calc(100vw - 24px));
-    left: 12px;
-    bottom: 12px;
   }
 }
 

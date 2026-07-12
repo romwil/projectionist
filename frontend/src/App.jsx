@@ -922,6 +922,22 @@ export default function App() {
               hideHeader
             />
           </div>
+          <StatusDock
+            jobs={jobs}
+            jobStatusPhrases={personaUi?.job_status_phrases}
+            pendingAdd={pendingAdd}
+            pendingBulk={pendingBulk}
+            pendingTokens={pendingTokens.length >= 2 ? pendingTokens : null}
+            addInProgress={addInProgress}
+            addProgress={addProgress}
+            addFeedback={addFeedback}
+            onConfirm={confirmActiveAction}
+            onCancel={cancelActiveAction}
+            onDismissFeedback={dismissAddFeedback}
+            onDropTitle={dockDropEnabled ? handleDockDrop : undefined}
+            radarrConnected={radarrConnected}
+            sonarrConnected={sonarrConnected}
+          />
         </aside>
 
         <main className="workspace-main" data-testid="workspace-main">
@@ -1025,23 +1041,6 @@ export default function App() {
         open={keyboardHelpOpen}
         onClose={() => setKeyboardHelpOpen(false)}
         plexCollectionsEnabled={Boolean(features?.features?.plex_collections_enabled)}
-      />
-
-      <StatusDock
-        jobs={jobs}
-        jobStatusPhrases={personaUi?.job_status_phrases}
-        pendingAdd={pendingAdd}
-        pendingBulk={pendingBulk}
-        pendingTokens={pendingTokens.length >= 2 ? pendingTokens : null}
-        addInProgress={addInProgress}
-        addProgress={addProgress}
-        addFeedback={addFeedback}
-        onConfirm={confirmActiveAction}
-        onCancel={cancelActiveAction}
-        onDismissFeedback={dismissAddFeedback}
-        onDropTitle={dockDropEnabled ? handleDockDrop : undefined}
-        radarrConnected={radarrConnected}
-        sonarrConnected={sonarrConnected}
       />
     </div>
   );
