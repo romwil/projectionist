@@ -1767,6 +1767,7 @@ export default function ConfigPage() {
                     "sonarr_root_folder",
                     "library_sync_interval_hours",
                     "tv_page_size",
+                    "library_enrich_workers",
                   ].map((key) => (
                     <label key={key}>
                       <span>{key}</span>
@@ -1776,7 +1777,9 @@ export default function ConfigPage() {
                         onChange={(event) =>
                           updateSettings({
                             [key]:
-                              key.endsWith("_hours") || key === "tv_page_size"
+                              key.endsWith("_hours") ||
+                              key === "tv_page_size" ||
+                              key === "library_enrich_workers"
                                 ? Number(event.target.value || 0)
                                 : event.target.value,
                           })

@@ -41,6 +41,7 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 | Quality profile IDs | `RADARR_QUALITY_PROFILE_ID`, `SONARR_QUALITY_PROFILE_ID` | *arr quality profiles |
 | Library sync interval | `library_sync_interval_hours` in settings | Auto-sync cadence (1–168 h, default 24) |
 | TV page size | `tv_page_size` in settings | Plex TV fetch batch size (50–2000, default 500) |
+| Library enrich workers | `library_enrich_workers` in settings | Parallel TMDB/Fanart enrichment threads during library sync (1–16, default 6). SQLite upserts stay serial. |
 | Sync reviews to Plex | `sync_reviews_to_plex` in settings | When `true`, saving a 1–5 star review writes the matching Plex user rating (2/4/6/8/10) via `PUT /:/rate` |
 | Log level | `CURATORX_LOG_LEVEL` or `LOG_LEVEL` | `ERROR`, `WARNING`, `INFO` (default), or `DEBUG` |
 | Log format | `LOG_FORMAT` or `CURATORX_LOG_FORMAT` | `text` (default) or `json` |

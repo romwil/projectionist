@@ -12,7 +12,7 @@ CuratorX is packaged for Unraid Community Applications as a single container wit
 
 | Field | Value |
 |-------|-------|
-| Repository | `romwil/curatorx:1.0` (or `:1.0.2` / `:latest`) |
+| Repository | `romwil/curatorx:1.0` (or `:1.0.3` / `:latest`) |
 | Host port | `8788` (or map freely) |
 | Config | `/mnt/user/appdata/curatorx/config` → `/config` |
 

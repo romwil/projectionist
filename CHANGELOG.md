@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.3] — 2026-07-12
+
+Faster library sync metadata enrichment via bounded parallel network fetches.
+
+### Changed
+- Enrich TMDB/Fanart metadata with a bounded thread pool (default 6 workers, configurable via `library_enrich_workers`); SQLite upserts remain serial on the main thread
+- Progress callbacks for the enriching phase still emit periodically with title counts
+
+### Added
+- `library_enrich_workers` setting (1–16) in Configuration → Advanced and `settings.json`
+
 ## [1.0.2] — 2026-07-12
 
 Hotfix: Unraid containers hung after the startup log and never finished FastAPI lifespan / never served HTTP.

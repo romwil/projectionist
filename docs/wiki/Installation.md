@@ -17,7 +17,7 @@ docker run -d --name curatorx --restart unless-stopped \
 
 | Tag | Meaning |
 |-----|---------|
-| `romwil/curatorx:1.0.2` | Exact release |
+| `romwil/curatorx:1.0.3` | Exact release |
 | `romwil/curatorx:1.0` | 1.0 line |
 | `romwil/curatorx:latest` | Newest stable |
 

@@ -32,7 +32,7 @@ Job state is written to `/config/jobs_state.json` (under `DATA_DIR`).
 
 ## Tips
 
-- First sync on a large library can take a while (network + TMDB enrichment)
+- First sync on a large library can take a while (network + TMDB enrichment). Metadata enrichment runs with a bounded thread pool (`library_enrich_workers`, default 6; SQLite writes stay serial)
 - Keep `/config` on persistent storage so the index and job history are not lost
 - Use `CURATORX_LOG_LEVEL=DEBUG` to trace sync phases in container logs
 

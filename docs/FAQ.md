@@ -11,7 +11,7 @@ A chat-first curation companion for self-hosted **Plex** libraries. It indexes w
 | Tag | When |
 |-----|------|
 | `romwil/curatorx:1.0` | Everyday Unraid / Compose |
-| `romwil/curatorx:1.0.2` | Pin an exact release |
+| `romwil/curatorx:1.0.3` | Pin an exact release |
 | `romwil/curatorx:latest` | Newest stable |
 
 Images are multi-arch (**amd64 + arm64**). See [wiki/Installation.md](wiki/Installation.md).

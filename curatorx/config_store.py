@@ -537,6 +537,7 @@ class Settings:
     setup_wizard_pending: bool = False
     library_sync_interval_hours: int = 24
     tv_page_size: int = 500
+    library_enrich_workers: int = 6
     sync_reviews_to_plex: bool = True
     webhook_secret: str = ""
     features: FeatureFlags = field(default_factory=FeatureFlags)
@@ -564,7 +565,7 @@ class Settings:
                 filtered[key] = nested_cls(**nested_filtered)
             elif key.endswith("_id") and value is not None:
                 filtered[key] = int(value)
-            elif key.endswith("_hours") or key == "tv_page_size":
+            elif key.endswith("_hours") or key in {"tv_page_size", "library_enrich_workers"}:
                 filtered[key] = int(value) if value is not None else value
             else:
                 filtered[key] = value
@@ -581,6 +582,7 @@ class Settings:
             "sonarr_quality_profile_id",
             "library_sync_interval_hours",
             "tv_page_size",
+            "library_enrich_workers",
         ):
             env_key = FIELD_TO_ENV.get(int_field, "")
             if env_key in os.environ:
@@ -646,6 +648,7 @@ def load_merged_settings(data_dir: Path) -> Settings:
         "sonarr_quality_profile_id",
         "library_sync_interval_hours",
         "tv_page_size",
+        "library_enrich_workers",
     ):
         env_key = FIELD_TO_ENV.get(int_field, "")
         if env_key not in os.environ or str(os.environ[env_key]).strip() == "":

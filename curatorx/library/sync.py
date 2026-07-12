@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Callable, List, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable, List, NamedTuple, Optional, Set
 
 from curatorx.config_store import Settings
 from curatorx.connectors.fanart import FanartClient
@@ -24,6 +25,64 @@ from curatorx.web.job_progress import format_count_message
 logger = logging.getLogger(__name__)
 
 ProgressCallback = Optional[Callable[[str, int, int, str], None]]
+
+DEFAULT_LIBRARY_ENRICH_WORKERS = 6
+MAX_LIBRARY_ENRICH_WORKERS = 16
+
+
+class _EnrichOutcome(NamedTuple):
+    status: str  # ok | skip | error
+    row: Optional[dict] = None
+    title: str = ""
+    media_type: str = ""
+    error: Optional[Exception] = None
+
+
+def _resolve_enrich_workers(settings: Settings) -> int:
+    try:
+        raw = getattr(settings, "library_enrich_workers", None)
+        workers = int(raw if raw is not None else DEFAULT_LIBRARY_ENRICH_WORKERS)
+    except (TypeError, ValueError):
+        workers = DEFAULT_LIBRARY_ENRICH_WORKERS
+    return max(1, min(workers, MAX_LIBRARY_ENRICH_WORKERS))
+
+
+def _enrich_plex_item(
+    item: Any,
+    plex: PlexClient,
+    tmdb: Optional[TMDBClient],
+    fanart: Optional[FanartClient],
+    radarr_tmdb: Set[int],
+    sonarr_tvdb: Set[int],
+) -> _EnrichOutcome:
+    """Build an enriched library row for one Plex item (network I/O only)."""
+    title = str(getattr(item, "title", "") or "")
+    media_type = str(getattr(item, "media_type", "") or "")
+    rating_key = str(getattr(item, "rating_key", None) or "").strip()
+    if not rating_key:
+        return _EnrichOutcome(status="skip", title=title, media_type=media_type)
+    try:
+        tmdb_id = getattr(item, "tmdb_id", None)
+        tvdb_id = getattr(item, "tvdb_id", None)
+        in_radarr = bool(tmdb_id and int(tmdb_id) in radarr_tmdb)
+        in_sonarr = bool(tvdb_id and int(tvdb_id) in sonarr_tvdb)
+        row = _row_from_plex_item(
+            item,
+            plex,
+            tmdb,
+            fanart,
+            in_radarr=in_radarr,
+            in_sonarr=in_sonarr,
+        )
+        row["rating_key"] = rating_key
+        return _EnrichOutcome(status="ok", row=row, title=title, media_type=media_type)
+    except Exception as error:  # noqa: BLE001 — per-item isolation for sync
+        return _EnrichOutcome(
+            status="error",
+            title=title,
+            media_type=media_type,
+            error=error,
+        )
 
 
 class _PhaseClock:
@@ -338,42 +397,73 @@ async def sync_library(
 
     plex_items = movies + shows
     enrich_total = max(len(plex_items), 1)
+    enrich_workers = _resolve_enrich_workers(settings)
     clock.begin("enriching metadata")
+    logger.info("Library sync: enriching metadata with %s workers", enrich_workers)
     _emit(progress, "enriching", 0, enrich_total, "Enriching metadata…")
 
     count = 0
     skipped_no_rating_key = 0
     last_enrich_log = 0.0
-    for index, item in enumerate(plex_items, start=1):
-        rating_key = str(item.rating_key or "").strip()
-        if not rating_key:
-            skipped_no_rating_key += 1
-            logger.debug(
-                "Skipping Plex item without rating_key title=%r media_type=%s",
-                item.title,
-                item.media_type,
-            )
-        else:
-            in_radarr = bool(item.tmdb_id and int(item.tmdb_id) in radarr_tmdb)
-            in_sonarr = bool(item.tvdb_id and int(item.tvdb_id) in sonarr_tvdb)
-            row = _row_from_plex_item(item, plex, tmdb, fanart, in_radarr=in_radarr, in_sonarr=in_sonarr)
-            row["rating_key"] = rating_key
-            db.upsert_library_item(row)
-            count += 1
+    completed = 0
 
+    def _emit_enrich_progress(index: int) -> None:
+        nonlocal last_enrich_log
         now = time.time()
         should_emit = index == 1 or index == enrich_total or index % 25 == 0 or (now - last_enrich_log) >= 3.0
-        if should_emit:
-            unit = "titles"
-            message = format_count_message("Enriching metadata", index, enrich_total, unit=unit)
-            _emit(progress, "enriching", index, enrich_total, message)
-            if now - last_enrich_log >= 3.0 or index == enrich_total:
-                logger.info(
-                    "Library sync: enriching metadata — %s of %s titles",
-                    index,
-                    enrich_total,
+        if not should_emit:
+            return
+        message = format_count_message("Enriching metadata", index, enrich_total, unit="titles")
+        _emit(progress, "enriching", index, enrich_total, message)
+        if now - last_enrich_log >= 3.0 or index == enrich_total:
+            logger.info(
+                "Library sync: enriching metadata — %s of %s titles",
+                index,
+                enrich_total,
+            )
+            last_enrich_log = now
+
+    with ThreadPoolExecutor(max_workers=enrich_workers) as pool:
+        futures = [
+            pool.submit(
+                _enrich_plex_item,
+                item,
+                plex,
+                tmdb,
+                fanart,
+                radarr_tmdb,
+                sonarr_tvdb,
+            )
+            for item in plex_items
+        ]
+        for future in as_completed(futures):
+            completed += 1
+            try:
+                outcome = future.result()
+            except Exception as error:  # noqa: BLE001 — keep sync alive
+                logger.exception("Library sync: unexpected enrich worker failure: %s", error)
+                _emit_enrich_progress(completed)
+                continue
+
+            if outcome.status == "skip":
+                skipped_no_rating_key += 1
+                logger.debug(
+                    "Skipping Plex item without rating_key title=%r media_type=%s",
+                    outcome.title,
+                    outcome.media_type,
                 )
-                last_enrich_log = now
+            elif outcome.status == "error":
+                logger.warning(
+                    "Library sync: enrichment failed title=%r media_type=%s: %s",
+                    outcome.title,
+                    outcome.media_type,
+                    outcome.error,
+                )
+            elif outcome.row is not None:
+                db.upsert_library_item(outcome.row)
+                count += 1
+
+            _emit_enrich_progress(completed)
 
     clock.finish(extra=f"{count} titles saved")
     with db.connect() as conn:
