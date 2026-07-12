@@ -6,10 +6,6 @@ Common questions for CuratorX **1.0**. Also mirrored under [wiki/FAQ.md](wiki/FA
 
 A chat-first curation companion for self-hosted **Plex** libraries. It indexes what you own, recommends with explainable reasons, and only writes to Radarr/Sonarr after you confirm.
 
-## Is there still a dual UI (Turnstyle / Immersive)?
-
-No. **1.0 is a single workspace**: sidebar conversations + full-width chat + status dock. An optional overlay can expand large title-card result sets.
-
 ## Which Docker image should I use?
 
 | Tag | When |
