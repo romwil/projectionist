@@ -3,9 +3,15 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Dict, List, Mapping
+import logging
+import time
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from curatorx.library.db import Database
+
+logger = logging.getLogger(__name__)
+
+ProgressCallback = Optional[Callable[[str, int, int, str], None]]
 
 
 def _parse_json_list(raw: Any) -> List[str]:
@@ -80,46 +86,135 @@ def ensure_library_facet_index(db: Database) -> int:
     return rebuild_library_facets(db)
 
 
-def rebuild_library_facets(db: Database) -> int:
-    db.clear_library_facets()
-    count = 0
-    for row in db.all_library_items():
-        item_id = int(row["id"])
-        for director in _parse_json_list(row["directors"]):
-            db.add_library_facet(item_id, "director", director)
-            count += 1
-        for actor in _parse_json_list(row["cast"]):
-            db.add_library_facet(item_id, "actor", actor)
-            count += 1
-        for keyword in _parse_json_list(row["keywords"]):
-            db.add_library_facet(item_id, "keyword", keyword)
-            count += 1
-        for country in _country_values_from_row(row):
-            db.add_library_facet(item_id, "country", country)
-            count += 1
-        language = _language_value_from_row(row)
-        if language:
-            db.add_library_facet(item_id, "language", language)
-            count += 1
+def _emit_rebuild_progress(
+    progress: ProgressCallback,
+    *,
+    message: str,
+    current: int,
+    total: int,
+    last_log: list[float],
+    log_label: str,
+    force: bool = False,
+) -> None:
+    now = time.time()
+    should_emit = force or current <= 1 or current >= total or current % 50 == 0 or (now - last_log[0]) >= 3.0
+    if not should_emit:
+        return
+    if progress:
+        progress("indexing", current, max(total, 1), message)
+    if force or now - last_log[0] >= 3.0 or current <= 1 or current >= total:
+        logger.info("Library sync: %s — %s", log_label, message)
+        last_log[0] = now
+
+
+def _collect_facet_rows(row: Mapping[str, Any]) -> List[Tuple[int, str, str]]:
+    item_id = int(row["id"])
+    collected: List[Tuple[int, str, str]] = []
+    for director in _parse_json_list(row["directors"]):
+        collected.append((item_id, "director", director))
+    for actor in _parse_json_list(row["cast"]):
+        collected.append((item_id, "actor", actor))
+    for keyword in _parse_json_list(row["keywords"]):
+        collected.append((item_id, "keyword", keyword))
+    for country in _country_values_from_row(row):
+        collected.append((item_id, "country", country))
+    language = _language_value_from_row(row)
+    if language:
+        collected.append((item_id, "language", language))
+    return collected
+
+
+def rebuild_library_facets(db: Database, *, progress: ProgressCallback = None) -> int:
+    """Rebuild the facet index with a single bulk transaction."""
+    items = db.all_library_items()
+    total_items = len(items)
+    facet_rows: List[Tuple[int, str, str]] = []
+    last_log = [0.0]
+
+    _emit_rebuild_progress(
+        progress,
+        message="Building search facets…",
+        current=0,
+        total=max(total_items, 1),
+        last_log=last_log,
+        log_label="building search facets",
+        force=True,
+    )
+
+    for index, row in enumerate(items, start=1):
+        facet_rows.extend(_collect_facet_rows(row))
+        _emit_rebuild_progress(
+            progress,
+            message=f"Building search facets… {len(facet_rows):,} rows",
+            current=index,
+            total=max(total_items, 1),
+            last_log=last_log,
+            log_label="building search facets",
+        )
+
+    count = db.replace_library_facets(facet_rows)
+    _emit_rebuild_progress(
+        progress,
+        message=f"Building search facets… {count:,} rows",
+        current=max(total_items, 1),
+        total=max(total_items, 1),
+        last_log=last_log,
+        log_label="building search facets",
+        force=True,
+    )
     return count
 
 
-def rebuild_library_fts(db: Database) -> int:
-    db.clear_library_fts()
-    count = 0
-    for row in db.all_library_items():
+def rebuild_library_fts(db: Database, *, progress: ProgressCallback = None) -> int:
+    """Rebuild the FTS index with a single bulk transaction."""
+    items = db.all_library_items()
+    total_items = len(items)
+    fts_rows: List[Tuple[int, str, str, str, str, str]] = []
+    last_log = [0.0]
+
+    _emit_rebuild_progress(
+        progress,
+        message="Building search index…",
+        current=0,
+        total=max(total_items, 1),
+        last_log=last_log,
+        log_label="building search index",
+        force=True,
+    )
+
+    for index, row in enumerate(items, start=1):
         cast_text = " ".join(_parse_json_list(row["cast"]))
         directors_text = " ".join(_parse_json_list(row["directors"]))
         keywords_text = " ".join(_parse_json_list(row["keywords"]))
-        db.upsert_library_fts_row(
-            int(row["id"]),
-            str(row["title"] or ""),
-            str(row["summary"] or ""),
-            cast_text,
-            directors_text,
-            keywords_text,
+        fts_rows.append(
+            (
+                int(row["id"]),
+                str(row["title"] or ""),
+                str(row["summary"] or ""),
+                cast_text,
+                directors_text,
+                keywords_text,
+            )
         )
-        count += 1
+        _emit_rebuild_progress(
+            progress,
+            message=f"Building search index… {index:,} of {total_items:,} titles",
+            current=index,
+            total=max(total_items, 1),
+            last_log=last_log,
+            log_label="building search index",
+        )
+
+    count = db.replace_library_fts(fts_rows)
+    _emit_rebuild_progress(
+        progress,
+        message=f"Building search index… {count:,} titles",
+        current=max(total_items, 1),
+        total=max(total_items, 1),
+        last_log=last_log,
+        log_label="building search index",
+        force=True,
+    )
     return count
 
 

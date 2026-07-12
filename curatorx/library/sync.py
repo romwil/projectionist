@@ -517,11 +517,11 @@ async def sync_library(
         )
 
     clock.begin("building indexes")
-    _emit(progress, "indexing", 0, 2, "Building search facets…")
-    facet_count = rebuild_library_facets(db)
-    _emit(progress, "indexing", 1, 2, "Building search index…")
-    fts_count = rebuild_library_fts(db)
-    _emit(progress, "indexing", 2, 2, "Search indexes ready")
+    _emit(progress, "indexing", 0, 1, "Building search facets…")
+    facet_count = rebuild_library_facets(db, progress=progress)
+    _emit(progress, "indexing", 0, 1, "Building search index…")
+    fts_count = rebuild_library_fts(db, progress=progress)
+    _emit(progress, "indexing", 1, 1, "Search indexes ready")
     clock.finish(extra=f"facets={facet_count} fts={fts_count}")
 
     clock.begin("syncing episodes")

@@ -1176,6 +1176,24 @@ class Database:
                 (item_id, facet_type, cleaned),
             )
 
+    def replace_library_facets(self, rows: Sequence[Tuple[int, str, str]]) -> int:
+        """Delete all facets and bulk-insert ``rows`` in a single transaction."""
+
+        def _write() -> int:
+            with self.connect() as conn:
+                conn.execute("DELETE FROM library_facets")
+                if rows:
+                    conn.executemany(
+                        """
+                        INSERT INTO library_facets (item_id, facet_type, facet_value)
+                        VALUES (?, ?, ?)
+                        """,
+                        rows,
+                    )
+            return len(rows)
+
+        return run_with_db_lock_retry(_write, label="replace_library_facets")
+
     def clear_library_fts(self) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM library_fts")
@@ -1198,6 +1216,25 @@ class Database:
                 """,
                 (item_id, title, summary, cast_text, directors_text, keywords_text),
             )
+
+    def replace_library_fts(self, rows: Sequence[Tuple[int, str, str, str, str, str]]) -> int:
+        """Delete all FTS rows and bulk-insert ``rows`` in a single transaction."""
+
+        def _write() -> int:
+            with self.connect() as conn:
+                conn.execute("DELETE FROM library_fts")
+                if rows:
+                    conn.executemany(
+                        """
+                        INSERT INTO library_fts (
+                            item_id, title, summary, cast_text, directors_text, keywords_text
+                        ) VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        rows,
+                    )
+            return len(rows)
+
+        return run_with_db_lock_retry(_write, label="replace_library_fts")
 
     def delete_episodes_for_show(self, show_item_id: int) -> None:
         with self.connect() as conn:

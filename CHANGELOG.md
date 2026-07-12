@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.0.5] — 2026-07-12
+
+Hotfix: library sync no longer hangs silently on **Building search facets…** for multi-thousand-title libraries.
+
+### Fixed
+- Rebuild search facets and FTS with a single bulk transaction (`executemany`) instead of one commit per facet/FTS row
+- Emit indexing-phase progress and periodic INFO logs while facets/FTS rebuild (row/title counts)
+
+### Notes
+- On ~5k titles, facet rebuild should finish in seconds to low minutes (not tens of minutes)
+
 ## [1.0.4] — 2026-07-12
 
 Hotfix: stop SQLite `database is locked` API failures during large parallel library enrich on Unraid.
