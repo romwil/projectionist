@@ -1236,14 +1236,7 @@ class Database:
 
         return run_with_db_lock_retry(_write, label="replace_library_fts")
 
-    def delete_episodes_for_show(self, show_item_id: int) -> None:
-        with self.connect() as conn:
-            conn.execute("DELETE FROM library_episodes WHERE show_item_id = ?", (show_item_id,))
-
-    def upsert_library_episode(self, episode: Mapping[str, Any]) -> int:
-        with self.connect() as conn:
-            conn.execute(
-                """
+    _UPSERT_LIBRARY_EPISODE_SQL = """
                 INSERT INTO library_episodes (
                     show_item_id, rating_key, season_number, episode_number, title,
                     runtime_minutes, view_count, last_viewed_at, file_size, aired_at,
@@ -1262,59 +1255,127 @@ class Database:
                     view_offset_ms=excluded.view_offset_ms,
                     duration_ms=excluded.duration_ms,
                     plex_user_rating_stars=excluded.plex_user_rating_stars
-                """,
-                (
-                    episode["show_item_id"],
-                    episode.get("rating_key"),
-                    episode.get("season_number"),
-                    episode.get("episode_number"),
-                    episode.get("title", ""),
-                    episode.get("runtime_minutes"),
-                    episode.get("view_count", 0),
-                    episode.get("last_viewed_at"),
-                    episode.get("file_size", 0),
-                    episode.get("aired_at"),
-                    episode.get("view_offset_ms"),
-                    episode.get("duration_ms"),
-                    episode.get("plex_user_rating_stars"),
-                ),
-            )
+                """
+
+    @staticmethod
+    def _library_episode_params(episode: Mapping[str, Any]) -> tuple:
+        return (
+            episode["show_item_id"],
+            episode.get("rating_key"),
+            episode.get("season_number"),
+            episode.get("episode_number"),
+            episode.get("title", ""),
+            episode.get("runtime_minutes"),
+            episode.get("view_count", 0),
+            episode.get("last_viewed_at"),
+            episode.get("file_size", 0),
+            episode.get("aired_at"),
+            episode.get("view_offset_ms"),
+            episode.get("duration_ms"),
+            episode.get("plex_user_rating_stars"),
+        )
+
+    def delete_episodes_for_show(self, show_item_id: int) -> None:
+        with self.connect() as conn:
+            conn.execute("DELETE FROM library_episodes WHERE show_item_id = ?", (show_item_id,))
+
+    def upsert_library_episode(self, episode: Mapping[str, Any]) -> int:
+        with self.connect() as conn:
+            conn.execute(self._UPSERT_LIBRARY_EPISODE_SQL, self._library_episode_params(episode))
             row = conn.execute(
                 "SELECT id FROM library_episodes WHERE rating_key = ?",
                 (episode.get("rating_key"),),
             ).fetchone()
             return int(row["id"]) if row else 0
 
-    def update_show_episode_rollups(self, show_item_id: int) -> None:
+    def upsert_library_episodes(self, episodes: Sequence[Mapping[str, Any]]) -> int:
+        """Upsert many episode rows in a single transaction (one commit)."""
+        if not episodes:
+            return 0
+
+        def _write() -> int:
+            with self.connect() as conn:
+                conn.executemany(
+                    self._UPSERT_LIBRARY_EPISODE_SQL,
+                    [self._library_episode_params(episode) for episode in episodes],
+                )
+            return len(episodes)
+
+        return run_with_db_lock_retry(_write, label="upsert_library_episodes")
+
+    def replace_library_episodes_for_show(
+        self,
+        show_item_id: int,
+        episodes: Sequence[Mapping[str, Any]],
+    ) -> int:
+        """Delete a show's episodes, upsert replacements, and refresh rollups in one commit."""
+
+        def _write() -> int:
+            with self.connect() as conn:
+                conn.execute(
+                    "DELETE FROM library_episodes WHERE show_item_id = ?",
+                    (show_item_id,),
+                )
+                if episodes:
+                    conn.executemany(
+                        self._UPSERT_LIBRARY_EPISODE_SQL,
+                        [self._library_episode_params(episode) for episode in episodes],
+                    )
+                self._update_show_episode_rollups_on_conn(conn, show_item_id)
+            return len(episodes)
+
+        return run_with_db_lock_retry(_write, label="replace_library_episodes_for_show")
+
+    def show_episode_view_counts(self, show_item_id: int) -> Tuple[int, int]:
+        """Return (total_episodes, viewed_episodes) for incremental sync checks."""
         with self.connect() as conn:
             row = conn.execute(
                 """
                 SELECT
                     COUNT(*) AS total,
-                    SUM(CASE WHEN view_count IS NULL OR view_count = 0 THEN 1 ELSE 0 END) AS unwatched,
-                    MAX(last_viewed_at) AS last_watched
+                    SUM(CASE WHEN COALESCE(view_count, 0) > 0 THEN 1 ELSE 0 END) AS viewed
                 FROM library_episodes
                 WHERE show_item_id = ?
                 """,
                 (show_item_id,),
             ).fetchone()
-            conn.execute(
-                """
-                UPDATE library_items
-                SET total_episode_count = ?,
-                    unwatched_episode_count = ?,
-                    last_episode_watched_at = ?,
-                    last_episode_sync_at = ?
-                WHERE id = ?
-                """,
-                (
-                    int(row["total"] or 0),
-                    int(row["unwatched"] or 0),
-                    row["last_watched"],
-                    time.time(),
-                    show_item_id,
-                ),
-            )
+        return int(row["total"] or 0), int(row["viewed"] or 0)
+
+    def _update_show_episode_rollups_on_conn(
+        self, conn: sqlite3.Connection, show_item_id: int
+    ) -> None:
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN view_count IS NULL OR view_count = 0 THEN 1 ELSE 0 END) AS unwatched,
+                MAX(last_viewed_at) AS last_watched
+            FROM library_episodes
+            WHERE show_item_id = ?
+            """,
+            (show_item_id,),
+        ).fetchone()
+        conn.execute(
+            """
+            UPDATE library_items
+            SET total_episode_count = ?,
+                unwatched_episode_count = ?,
+                last_episode_watched_at = ?,
+                last_episode_sync_at = ?
+            WHERE id = ?
+            """,
+            (
+                int(row["total"] or 0),
+                int(row["unwatched"] or 0),
+                row["last_watched"],
+                time.time(),
+                show_item_id,
+            ),
+        )
+
+    def update_show_episode_rollups(self, show_item_id: int) -> None:
+        with self.connect() as conn:
+            self._update_show_episode_rollups_on_conn(conn, show_item_id)
 
     def owned_tmdb_ids(self, media_type: str) -> set[int]:
         with self.connect() as conn:

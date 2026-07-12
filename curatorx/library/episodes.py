@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import logging
 import re
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence, Tuple
 
 from curatorx.connectors.plex import PlexClient, PlexEpisode, PlexLibraryItem, PlexSeason
 from curatorx.library.db import Database
@@ -12,6 +14,17 @@ from curatorx.library.db import Database
 logger = logging.getLogger(__name__)
 
 ProgressCallback = Optional[Callable[[str, int, int, str], None]]
+
+DEFAULT_EPISODE_WORKERS = 6
+MAX_EPISODE_WORKERS = 16
+
+
+def _resolve_episode_workers(workers: Optional[int]) -> int:
+    try:
+        value = int(workers if workers is not None else DEFAULT_EPISODE_WORKERS)
+    except (TypeError, ValueError):
+        value = DEFAULT_EPISODE_WORKERS
+    return max(1, min(value, MAX_EPISODE_WORKERS))
 
 
 def _normalize_show_title(title: str) -> str:
@@ -203,6 +216,48 @@ def _log_episode_sync_sample(shows: Sequence[Mapping[str, Any]]) -> None:
     )
 
 
+def _episode_row(
+    show_id: int,
+    episode: PlexEpisode,
+    *,
+    default_season_number: Optional[int] = None,
+) -> Optional[Dict[str, Any]]:
+    episode_key = str(episode.rating_key or "").strip()
+    if not episode_key:
+        return None
+    return {
+        "show_item_id": show_id,
+        "rating_key": episode_key,
+        "season_number": episode.season_number
+        if episode.season_number is not None
+        else default_season_number,
+        "episode_number": episode.episode_number,
+        "title": episode.title,
+        "runtime_minutes": episode.runtime_minutes,
+        "view_count": episode.view_count,
+        "last_viewed_at": episode.last_viewed_at,
+        "file_size": episode.file_size,
+        "aired_at": episode.aired_at,
+        "view_offset_ms": episode.view_offset_ms,
+        "duration_ms": episode.duration_ms,
+        "plex_user_rating_stars": episode.user_rating_stars,
+    }
+
+
+def _rows_from_plex_episodes(
+    show_id: int,
+    episodes: Sequence[PlexEpisode],
+    *,
+    default_season_number: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    rows: List[Dict[str, Any]] = []
+    for episode in episodes:
+        row = _episode_row(show_id, episode, default_season_number=default_season_number)
+        if row is not None:
+            rows.append(row)
+    return rows
+
+
 def _upsert_episodes_for_show(
     db: Database,
     show_id: int,
@@ -210,30 +265,169 @@ def _upsert_episodes_for_show(
     *,
     default_season_number: Optional[int] = None,
 ) -> int:
-    synced = 0
-    for episode in episodes:
-        episode_key = str(episode.rating_key or "").strip()
-        if not episode_key:
-            continue
-        db.upsert_library_episode(
-            {
-                "show_item_id": show_id,
-                "rating_key": episode_key,
-                "season_number": episode.season_number if episode.season_number is not None else default_season_number,
-                "episode_number": episode.episode_number,
-                "title": episode.title,
-                "runtime_minutes": episode.runtime_minutes,
-                "view_count": episode.view_count,
-                "last_viewed_at": episode.last_viewed_at,
-                "file_size": episode.file_size,
-                "aired_at": episode.aired_at,
-                "view_offset_ms": episode.view_offset_ms,
-                "duration_ms": episode.duration_ms,
-                "plex_user_rating_stars": episode.user_rating_stars,
-            }
+    rows = _rows_from_plex_episodes(
+        show_id,
+        episodes,
+        default_season_number=default_season_number,
+    )
+    if not rows:
+        return 0
+    return db.upsert_library_episodes(rows)
+
+
+def _show_episodes_unchanged(db: Database, show: Mapping[str, Any]) -> bool:
+    """Skip re-fetch when stored episode/view counts match Plex leaf counts."""
+    leaf_raw = _show_field(show, "leaf_count")
+    if leaf_raw is None:
+        return False
+    try:
+        leaf_count = int(leaf_raw)
+    except (TypeError, ValueError):
+        return False
+
+    viewed_raw = _show_field(show, "viewed_leaf_count")
+    viewed_leaf: Optional[int]
+    if viewed_raw is None:
+        viewed_leaf = None
+    else:
+        try:
+            viewed_leaf = int(viewed_raw)
+        except (TypeError, ValueError):
+            viewed_leaf = None
+
+    total, viewed = db.show_episode_view_counts(int(show["id"]))
+    if leaf_count == 0 and total == 0:
+        return True
+    if total == 0 or total != leaf_count:
+        return False
+    if viewed_leaf is None:
+        return True
+    return viewed == viewed_leaf
+
+
+class _ShowEpisodeFetch(NamedTuple):
+    show_id: int
+    title: str
+    rating_key: str
+    rows: List[Dict[str, Any]]
+    skipped_empty_seasons: int = 0
+    failed_season_fetches: int = 0
+    failed_show_fetch: bool = False
+    used_all_leaves: bool = False
+
+
+def _fetch_show_episodes(
+    plex: PlexClient,
+    *,
+    show_id: int,
+    title: str,
+    rating_key: str,
+) -> _ShowEpisodeFetch:
+    """Network I/O only: prefer one allLeaves request, fall back to seasons."""
+    skipped_empty_seasons = 0
+    failed_season_fetches = 0
+    all_leaves_error: Optional[str] = None
+
+    try:
+        all_leaves = plex.show_all_episodes(rating_key)
+    except (RuntimeError, ValueError) as error:
+        all_leaves = []
+        all_leaves_error = str(error)
+        logger.debug(
+            "Failed allLeaves fetch show_id=%s title=%r rating_key=%s: %s",
+            show_id,
+            title,
+            rating_key,
+            error,
         )
-        synced += 1
-    return synced
+    else:
+        rows = _rows_from_plex_episodes(show_id, all_leaves)
+        if rows:
+            return _ShowEpisodeFetch(
+                show_id=show_id,
+                title=title,
+                rating_key=rating_key,
+                rows=rows,
+                used_all_leaves=True,
+            )
+
+    seasons: List[PlexSeason] = []
+    seasons_fetch_error: Optional[str] = None
+    try:
+        seasons = plex.show_seasons(rating_key)
+    except (RuntimeError, ValueError) as error:
+        seasons_fetch_error = str(error)
+        logger.debug(
+            "Failed to fetch seasons show_id=%s title=%r rating_key=%s: %s",
+            show_id,
+            title,
+            rating_key,
+            error,
+        )
+
+    rows: List[Dict[str, Any]] = []
+    for season in seasons:
+        season_key = str(season.rating_key or "").strip()
+        if not season_key:
+            skipped_empty_seasons += 1
+            logger.debug(
+                "Skipping season without Plex rating_key show_id=%s season=%s title=%r",
+                show_id,
+                season.season_number,
+                season.title,
+            )
+            continue
+        try:
+            episodes = plex.season_episodes(season_key)
+        except (RuntimeError, ValueError) as error:
+            failed_season_fetches += 1
+            logger.debug(
+                "Failed to fetch episodes show_id=%s season=%s rating_key=%s: %s",
+                show_id,
+                season.season_number,
+                season_key,
+                error,
+            )
+            continue
+        rows.extend(
+            _rows_from_plex_episodes(
+                show_id,
+                episodes,
+                default_season_number=season.season_number,
+            )
+        )
+
+    failed_show_fetch = False
+    if not rows and (seasons_fetch_error or all_leaves_error):
+        failed_show_fetch = True
+        logger.debug(
+            "Failed to fetch episodes for show show_id=%s title=%r rating_key=%s "
+            "seasons_error=%s allLeaves_error=%s",
+            show_id,
+            title,
+            rating_key,
+            seasons_fetch_error,
+            all_leaves_error,
+        )
+    elif not rows and not seasons:
+        logger.info(
+            "No Plex seasons or episodes for show_id=%s title=%r rating_key=%s "
+            "(empty show or check Plex flattenSeasons setting)",
+            show_id,
+            title,
+            rating_key,
+        )
+
+    return _ShowEpisodeFetch(
+        show_id=show_id,
+        title=title,
+        rating_key=rating_key,
+        rows=rows,
+        skipped_empty_seasons=skipped_empty_seasons,
+        failed_season_fetches=failed_season_fetches,
+        failed_show_fetch=failed_show_fetch,
+        used_all_leaves=False,
+    )
 
 
 def sync_tv_episodes(
@@ -242,130 +436,120 @@ def sync_tv_episodes(
     *,
     progress: ProgressCallback = None,
     plex_shows: Optional[Sequence[PlexLibraryItem]] = None,
+    workers: Optional[int] = None,
 ) -> Dict[str, int]:
     backfill_stats = backfill_show_rating_keys(db, plex, plex_shows=plex_shows)
     shows = db.library_shows()
     total = len(shows)
+    episode_workers = _resolve_episode_workers(workers)
     episodes_synced = 0
     shows_synced = 0
+    shows_skipped_unchanged = 0
     unmatchable_shows = int(backfill_stats["unmatchable"]) + int(backfill_stats["conflicts"])
     skipped_empty_seasons = 0
     failed_show_fetches = 0
     failed_season_fetches = 0
     all_leaves_fallbacks = 0
-    logger.info("Episode sync starting show_count=%s", total)
+    logger.info(
+        "Episode sync starting show_count=%s workers=%s",
+        total,
+        episode_workers,
+    )
     _log_episode_sync_sample(shows)
 
-    for index, show in enumerate(shows, start=1):
+    completed = 0
+    last_progress_log = 0.0
+
+    def _emit_progress(message: str) -> None:
+        nonlocal last_progress_log
+        if not progress:
+            return
+        now = time.time()
+        should_emit = (
+            completed == 1
+            or completed == total
+            or completed % 25 == 0
+            or (now - last_progress_log) >= 3.0
+        )
+        if not should_emit:
+            return
+        progress("episodes", completed, max(total, 1), message)
+        if now - last_progress_log >= 3.0 or completed == total:
+            logger.info(
+                "Episode sync: %s of %s shows (%s)",
+                completed,
+                total,
+                message,
+            )
+            last_progress_log = now
+
+    fetch_jobs: List[Tuple[int, str, str]] = []
+    for show in shows:
         show_id = int(show["id"])
+        title = str(show["title"])
         rating_key = _show_rating_key(show)
         if not rating_key:
             logger.debug(
                 "Skipping episode sync for unmatchable show show_id=%s title=%r",
                 show_id,
-                show["title"],
+                title,
             )
+            completed += 1
+            _emit_progress(f"Skipping {title}")
             continue
-        if progress:
-            progress("episodes", index, max(total, 1), f"Syncing {show['title']}")
 
-        db.delete_episodes_for_show(show_id)
-        episodes_synced_for_show = 0
-        seasons: List[PlexSeason] = []
-        seasons_fetch_error: Optional[str] = None
-        try:
-            seasons = plex.show_seasons(rating_key)
-        except (RuntimeError, ValueError) as error:
-            seasons_fetch_error = str(error)
-            logger.debug(
-                "Failed to fetch seasons show_id=%s title=%r rating_key=%s: %s",
-                show_id,
-                show["title"],
-                rating_key,
-                error,
+        if _show_episodes_unchanged(db, show):
+            shows_skipped_unchanged += 1
+            shows_synced += 1
+            completed += 1
+            _emit_progress(f"Unchanged {title}")
+            continue
+
+        fetch_jobs.append((show_id, title, rating_key))
+
+    with ThreadPoolExecutor(max_workers=episode_workers) as pool:
+        futures = [
+            pool.submit(
+                _fetch_show_episodes,
+                plex,
+                show_id=show_id,
+                title=title,
+                rating_key=rating_key,
             )
-
-        for season in seasons:
-            season_key = str(season.rating_key or "").strip()
-            if not season_key:
-                skipped_empty_seasons += 1
-                logger.debug(
-                    "Skipping season without Plex rating_key show_id=%s season=%s title=%r",
-                    show_id,
-                    season.season_number,
-                    season.title,
-                )
-                continue
+            for show_id, title, rating_key in fetch_jobs
+        ]
+        for future in as_completed(futures):
             try:
-                episodes = plex.season_episodes(season_key)
-            except (RuntimeError, ValueError) as error:
-                failed_season_fetches += 1
-                logger.debug(
-                    "Failed to fetch episodes show_id=%s season=%s rating_key=%s: %s",
-                    show_id,
-                    season.season_number,
-                    season_key,
-                    error,
-                )
-                continue
-            episodes_synced_for_show += _upsert_episodes_for_show(
-                db,
-                show_id,
-                episodes,
-                default_season_number=season.season_number,
-            )
-
-        if episodes_synced_for_show == 0:
-            try:
-                fallback_episodes = plex.show_all_episodes(rating_key)
-            except (RuntimeError, ValueError) as error:
+                result = future.result()
+            except Exception as error:  # noqa: BLE001 — keep sync alive
                 failed_show_fetches += 1
-                logger.debug(
-                    "Failed to fetch episodes for show show_id=%s title=%r rating_key=%s "
-                    "seasons_error=%s allLeaves_error=%s",
-                    show_id,
-                    show["title"],
-                    rating_key,
-                    seasons_fetch_error,
-                    error,
-                )
-            else:
-                if fallback_episodes:
-                    all_leaves_fallbacks += 1
-                    episodes_synced_for_show = _upsert_episodes_for_show(
-                        db,
-                        show_id,
-                        fallback_episodes,
-                    )
-                    logger.info(
-                        "Synced %s episodes via Plex allLeaves for show_id=%s title=%r "
-                        "rating_key=%s (seasons=%s; hidden/flattened season libraries use allLeaves)",
-                        episodes_synced_for_show,
-                        show_id,
-                        show["title"],
-                        rating_key,
-                        len(seasons),
-                    )
-                elif seasons_fetch_error:
-                    failed_show_fetches += 1
-                elif not seasons:
-                    logger.info(
-                        "No Plex seasons or episodes for show_id=%s title=%r rating_key=%s "
-                        "leaf_count=%s (empty show or check Plex flattenSeasons setting)",
-                        show_id,
-                        show["title"],
-                        rating_key,
-                        _show_field(show, "leaf_count"),
-                    )
+                completed += 1
+                logger.exception("Episode sync: unexpected worker failure: %s", error)
+                _emit_progress("Episode fetch failed")
+                continue
 
-        episodes_synced += episodes_synced_for_show
-        db.update_show_episode_rollups(show_id)
-        shows_synced += 1
+            # Serial writer: one show delete+upsert+rollup per commit.
+            synced = db.replace_library_episodes_for_show(result.show_id, result.rows)
+            episodes_synced += synced
+            shows_synced += 1
+            skipped_empty_seasons += result.skipped_empty_seasons
+            failed_season_fetches += result.failed_season_fetches
+            if result.failed_show_fetch:
+                failed_show_fetches += 1
+            if result.used_all_leaves:
+                all_leaves_fallbacks += 1
+            completed += 1
+            _emit_progress(f"Syncing {result.title}")
 
     if unmatchable_shows:
         logger.info(
             "Skipped episode sync for %s unmatchable shows without Plex rating_key",
             unmatchable_shows,
+        )
+    if shows_skipped_unchanged:
+        logger.info(
+            "Skipped episode re-fetch for %s unchanged shows (leaf/view counts match)",
+            shows_skipped_unchanged,
         )
     if skipped_empty_seasons:
         logger.info(
@@ -384,12 +568,13 @@ def sync_tv_episodes(
         )
     if all_leaves_fallbacks:
         logger.info(
-            "Used Plex allLeaves fallback for %s shows (flattened/hidden seasons)",
+            "Fetched episodes via Plex allLeaves for %s shows",
             all_leaves_fallbacks,
         )
 
     return {
         "shows_synced": shows_synced,
+        "shows_skipped_unchanged": shows_skipped_unchanged,
         "episodes_synced": episodes_synced,
         "backfilled_rating_key": int(backfill_stats["backfilled"]),
         "unmatchable_shows": unmatchable_shows,

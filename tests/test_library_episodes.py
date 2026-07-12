@@ -251,6 +251,11 @@ class LibraryEpisodeTests(unittest.TestCase):
                 [call for call in plex.calls if call[0] == "show_all_episodes"],
                 [("show_all_episodes", "show-flat")],
             )
+            # allLeaves-first: seasons are not needed when leaves succeed
+            self.assertEqual(
+                [call for call in plex.calls if call[0] == "show_seasons"],
+                [],
+            )
 
     def test_sync_logs_sample_shows_at_start(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -450,6 +455,192 @@ class LibraryEpisodeTests(unittest.TestCase):
 
             self.assertEqual(stats["unmatchable_shows"], 3)
             warning.assert_not_called()
+
+    def test_sync_prefers_all_leaves_then_falls_back_to_seasons(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "show-season",
+                    "media_type": "show",
+                    "title": "Season Path",
+                }
+            )
+            plex = MockPlexClient(
+                seasons_by_show={
+                    "show-season": [PlexSeason(rating_key="season-1", season_number=1, title="Season 1")]
+                },
+                episodes_by_season={
+                    "season-1": [
+                        PlexEpisode(
+                            rating_key="ep-1",
+                            title="Pilot",
+                            season_number=1,
+                            episode_number=1,
+                        )
+                    ]
+                },
+            )
+
+            stats = sync_tv_episodes(db, plex, workers=1)
+
+            self.assertEqual(stats["episodes_synced"], 1)
+            self.assertEqual(stats["all_leaves_fallbacks"], 0)
+            self.assertEqual(
+                [call for call in plex.calls if call[0] == "show_all_episodes"],
+                [("show_all_episodes", "show-season")],
+            )
+            self.assertEqual(
+                [call for call in plex.calls if call[0] == "show_seasons"],
+                [("show_seasons", "show-season")],
+            )
+
+    def test_sync_skips_unchanged_shows_using_leaf_counts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = db.upsert_library_item(
+                {
+                    "rating_key": "show-stable",
+                    "media_type": "show",
+                    "title": "Stable Show",
+                    "leaf_count": 2,
+                    "viewed_leaf_count": 1,
+                }
+            )
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "ep-1",
+                    "season_number": 1,
+                    "episode_number": 1,
+                    "title": "One",
+                    "view_count": 1,
+                }
+            )
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "ep-2",
+                    "season_number": 1,
+                    "episode_number": 2,
+                    "title": "Two",
+                    "view_count": 0,
+                }
+            )
+            plex = MockPlexClient(
+                seasons_by_show={"show-stable": []},
+                episodes_by_season={},
+                episodes_by_show={
+                    "show-stable": [
+                        PlexEpisode(rating_key="ep-1", title="One", season_number=1, episode_number=1),
+                        PlexEpisode(rating_key="ep-2", title="Two", season_number=1, episode_number=2),
+                    ]
+                },
+            )
+
+            stats = sync_tv_episodes(db, plex, workers=2)
+
+            self.assertEqual(stats["shows_skipped_unchanged"], 1)
+            self.assertEqual(stats["shows_synced"], 1)
+            self.assertEqual(stats["episodes_synced"], 0)
+            self.assertEqual(
+                [call for call in plex.calls if call[0] == "show_all_episodes"],
+                [],
+            )
+
+    def test_sync_refetches_when_viewed_leaf_count_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = db.upsert_library_item(
+                {
+                    "rating_key": "show-watched",
+                    "media_type": "show",
+                    "title": "Watched Show",
+                    "leaf_count": 1,
+                    "viewed_leaf_count": 1,
+                }
+            )
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "ep-1",
+                    "season_number": 1,
+                    "episode_number": 1,
+                    "title": "Pilot",
+                    "view_count": 0,
+                }
+            )
+            plex = MockPlexClient(
+                seasons_by_show={},
+                episodes_by_season={},
+                episodes_by_show={
+                    "show-watched": [
+                        PlexEpisode(
+                            rating_key="ep-1",
+                            title="Pilot",
+                            season_number=1,
+                            episode_number=1,
+                            view_count=1,
+                        )
+                    ]
+                },
+            )
+
+            stats = sync_tv_episodes(db, plex, workers=2)
+
+            self.assertEqual(stats["shows_skipped_unchanged"], 0)
+            self.assertEqual(stats["episodes_synced"], 1)
+            show = db.library_item_by_id(show_id)
+            self.assertEqual(int(show["unwatched_episode_count"]), 0)
+
+    def test_parallel_fetch_serial_batched_writes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            for index in range(8):
+                db.upsert_library_item(
+                    {
+                        "rating_key": f"show-{index}",
+                        "media_type": "show",
+                        "title": f"Show {index}",
+                        "leaf_count": 1,
+                        "viewed_leaf_count": 0,
+                    }
+                )
+            plex = MockPlexClient(
+                seasons_by_show={},
+                episodes_by_season={},
+                episodes_by_show={
+                    f"show-{index}": [
+                        PlexEpisode(
+                            rating_key=f"ep-{index}",
+                            title="Pilot",
+                            season_number=1,
+                            episode_number=1,
+                        )
+                    ]
+                    for index in range(8)
+                },
+            )
+
+            replace_calls: List[tuple[int, int]] = []
+            real_replace = db.replace_library_episodes_for_show
+
+            def tracking_replace(show_item_id: int, episodes):
+                replace_calls.append((show_item_id, len(list(episodes))))
+                return real_replace(show_item_id, episodes)
+
+            db.replace_library_episodes_for_show = tracking_replace  # type: ignore[method-assign]
+
+            stats = sync_tv_episodes(db, plex, workers=4)
+
+            self.assertEqual(stats["shows_synced"], 8)
+            self.assertEqual(stats["episodes_synced"], 8)
+            self.assertEqual(len(replace_calls), 8)
+            self.assertEqual(sum(count for _, count in replace_calls), 8)
+            self.assertEqual(
+                len([call for call in plex.calls if call[0] == "show_all_episodes"]),
+                8,
+            )
 
 
 if __name__ == "__main__":

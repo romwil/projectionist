@@ -42,7 +42,7 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 | Library sync interval | `library_sync_interval_hours` in settings | Minimum hours between auto-syncs (1–168, default 24) |
 | Library sync hour | `library_sync_hour` in settings | Optional preferred local hour `0–23` for daily sync; `null` = interval-only. Uses container local time — set `TZ` (e.g. `America/New_York`) on Unraid if needed. |
 | TV page size | `tv_page_size` in settings | Plex TV fetch batch size (50–2000, default 500) |
-| Library enrich workers | `library_enrich_workers` in settings | Parallel TMDB/Fanart enrichment threads during library sync (1–16, default 6). SQLite upserts stay serial. |
+| Library enrich workers | `library_enrich_workers` in settings | Parallel workers for TMDB/Fanart enrichment **and** TV episode Plex fetches during library sync (1–16, default 6). SQLite upserts stay serial. |
 | Sync reviews to Plex | `sync_reviews_to_plex` in settings | When `true`, saving a 1–5 star review writes the matching Plex user rating (2/4/6/8/10) via `PUT /:/rate` |
 | Log level | `CURATORX_LOG_LEVEL` or `LOG_LEVEL` | `ERROR`, `WARNING`, `INFO` (default), or `DEBUG` |
 | Log format | `LOG_FORMAT` or `CURATORX_LOG_FORMAT` | `text` (default) or `json` |

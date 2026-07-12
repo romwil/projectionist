@@ -526,10 +526,17 @@ async def sync_library(
 
     clock.begin("syncing episodes")
     _emit(progress, "episodes", 0, 1, "Syncing TV episodes…")
-    episode_stats = sync_tv_episodes(db, plex, progress=progress, plex_shows=shows)
+    episode_stats = sync_tv_episodes(
+        db,
+        plex,
+        progress=progress,
+        plex_shows=shows,
+        workers=enrich_workers,
+    )
     clock.finish(
         extra=(
             f"shows={episode_stats.get('shows_synced')} "
+            f"skipped_unchanged={episode_stats.get('shows_skipped_unchanged', 0)} "
             f"episodes={episode_stats.get('episodes_synced')}"
         )
     )

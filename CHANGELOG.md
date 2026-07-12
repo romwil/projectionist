@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.8] — 2026-07-12
+
+Speed up TV episode sync for large libraries (~800 shows).
+
+### Changed
+- Fetch show episodes via Plex `allLeaves` first (one request per show), falling back to seasons only when needed
+- Parallel episode fetches with a bounded thread pool (reuses `library_enrich_workers`, default 6, clamp 1–16); SQLite writes stay serial
+- Batch episode replace (delete + upsert + rollups) in a single commit per show
+- Skip re-fetch when stored episode/view counts already match Plex `leafCount` / `viewedLeafCount` (large win on daily resyncs)
+- Progress callbacks remain show N of total during the episodes phase
+
+### Notes
+- First sync after upgrade still fetches every show; subsequent syncs should skip most unchanged titles
+- On ~800 shows, expect roughly worker-count speedup on the network phase (~4–8× with default workers), plus near-instant skips on quiet resyncs
+
 ## [1.0.7] — 2026-07-12
 
 Preferred time-of-day scheduling for automatic library sync.
