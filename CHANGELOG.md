@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.3] — 2026-07-12
+
+Chat composer: **Enter** sends the message; a trailing send button mirrors that action.
+
+### Added
+- Enter-to-send in the chat composer (Shift+Enter still inserts a newline)
+- Trailing send button next to the composer
+
 ## [1.1.2] — 2026-07-12
 
 Fix `/stats` showing **Last sync: Invalid Date**.
