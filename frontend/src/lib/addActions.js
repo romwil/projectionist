@@ -87,6 +87,12 @@ export function collectAddableFromMessage(message, options = {}) {
   return groupAddableItems(collectTitleCardItems(message.blocks), options);
 }
 
+/** True when the latest assistant turn already hosts in-chat bulk confirm UI. */
+export function lastAssistantHasTitleCards(messages = []) {
+  const last = [...messages].reverse().find((message) => message.role === "assistant");
+  return Boolean(last?.blocks?.some((block) => block.type === "title_cards"));
+}
+
 export function normalizePendingTokens(pendingTokens) {
   if (!Array.isArray(pendingTokens)) return [];
   return pendingTokens

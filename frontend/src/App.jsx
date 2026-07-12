@@ -31,6 +31,7 @@ import {
   alreadyInArrMessage,
   buildProposeActionBody,
   isAlreadyInArr,
+  lastAssistantHasTitleCards,
   normalizePendingTokens,
   requestPathFromFeatures,
   serviceLabelForTarget,
@@ -541,7 +542,10 @@ export default function App() {
     setAddFeedback(null);
     setPendingAdd(null);
     setPendingTokens([]);
-    setPendingBulk({ items, target });
+    // Chat / turnstyle "Confirm all" is the confirmation — do not enqueue a
+    // second StatusDock bulk prompt that mirrors the in-message button.
+    setPendingBulk(null);
+    executeBulkAdd(items, target);
   }
 
   function handleConfirmAllTokens() {
@@ -933,7 +937,11 @@ export default function App() {
             jobStatusPhrases={personaUi?.job_status_phrases}
             pendingAdd={pendingAdd}
             pendingBulk={pendingBulk}
-            pendingTokens={pendingTokens.length >= 2 ? pendingTokens : null}
+            pendingTokens={
+              pendingTokens.length >= 2 && !lastAssistantHasTitleCards(messages)
+                ? pendingTokens
+                : null
+            }
             addInProgress={addInProgress}
             addProgress={addProgress}
             addFeedback={addFeedback}

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  lastAssistantHasTitleCards,
   normalizePendingTokens,
   summarizePendingTokenActions,
   tokenConfirmButtonLabel,
@@ -9,6 +10,29 @@ import {
   tokenConfirmPrompt,
   tokenConfirmSuccessMessage,
 } from "./addActions.js";
+
+test("lastAssistantHasTitleCards detects in-chat bulk confirm host", () => {
+  assert.equal(lastAssistantHasTitleCards([]), false);
+  assert.equal(
+    lastAssistantHasTitleCards([
+      { role: "user", blocks: [{ type: "text", content: "hi" }] },
+      { role: "assistant", blocks: [{ type: "text", content: "hello" }] },
+    ]),
+    false,
+  );
+  assert.equal(
+    lastAssistantHasTitleCards([
+      {
+        role: "assistant",
+        blocks: [
+          { type: "text", content: "picks" },
+          { type: "title_cards", items: [{ title: "Dumbo" }] },
+        ],
+      },
+    ]),
+    true,
+  );
+});
 
 test("normalizePendingTokens accepts legacy string tokens", () => {
   assert.deepEqual(normalizePendingTokens(["abc", "def"]), [

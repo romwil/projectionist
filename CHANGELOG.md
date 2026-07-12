@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.11] — 2026-07-12
+
+Stop duplicating bulk “Confirm all” between chat and StatusDock.
+
+### Fixed
+- In-chat / turnstyle **Confirm all N to Radarr|Sonarr|Seerr** runs the bulk add immediately instead of enqueueing a second StatusDock “Add all N titles?” prompt
+- Agent pending-token bulk confirms stay in chat when title cards already host the Confirm all button; dock still shows token confirm when there is no in-message host
+- StatusDock remains for single-title drag/add confirms, running jobs, and add progress
+
 ## [1.0.10] — 2026-07-12
 
 Show the running CuratorX version on the Config screen.

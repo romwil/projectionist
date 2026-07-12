@@ -227,8 +227,8 @@ test.describe("Title cards in chat", () => {
 
     await sendMockChat(page);
     await page.getByTestId("confirm-all-radarr").click();
-    await page.getByTestId("bulk-add-confirm").click();
 
+    await expect(page.getByTestId("bulk-add-banner")).toHaveCount(0);
     await expect(page.getByTestId("add-action-feedback")).toContainText("Added 2 titles to Radarr");
     expect(proposeRequests).toHaveLength(2);
     expect(confirmRequests).toHaveLength(2);
