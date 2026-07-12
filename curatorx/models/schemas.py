@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+from curatorx.connectors.plex import normalize_stars
 
 
 MediaType = Literal["movie", "show"]
@@ -203,7 +205,7 @@ class UserReviewCreate(BaseModel):
     tvdb_id: Optional[int] = None
     media_type: MediaType
     title: str = Field(..., min_length=1)
-    stars: int = Field(..., ge=1, le=5)
+    stars: float = Field(..., ge=0.5, le=5)
     review_text: str = ""
     review_tags: List[str] = Field(default_factory=list)
     prompted_by: str = "user"
@@ -211,6 +213,11 @@ class UserReviewCreate(BaseModel):
     lens_id: Optional[str] = None
     prompt_id: Optional[str] = None
     replace_plex_rating: bool = False
+
+    @field_validator("stars")
+    @classmethod
+    def _normalize_half_stars(cls, value: float) -> float:
+        return normalize_stars(value)
 
 
 class UserReview(BaseModel):
@@ -220,7 +227,7 @@ class UserReview(BaseModel):
     tvdb_id: Optional[int] = None
     media_type: MediaType
     title: str
-    stars: int
+    stars: float
     review_text: str = ""
     review_tags: List[str] = Field(default_factory=list)
     prompted_by: str = "user"
@@ -230,6 +237,11 @@ class UserReview(BaseModel):
     plex_synced_at: Optional[float] = None
     created_at: float
     updated_at: float
+
+    @field_validator("stars")
+    @classmethod
+    def _normalize_half_stars(cls, value: float) -> float:
+        return normalize_stars(value)
 
 
 class RatingPrompt(BaseModel):

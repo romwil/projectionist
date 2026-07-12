@@ -26,10 +26,14 @@ def _displayable_cards(cards: List[TitleCard]) -> List[TitleCard]:
 
 
 def _cards_for_response(registry: ToolRegistry) -> List[TitleCard]:
-    """Cards shown in title_cards blocks — drop owned titles during add/recommend flows."""
+    """Cards shown in title_cards blocks — drop owned/queued titles during add/recommend flows."""
     cards = registry.cards
     if registry.recommendation_context:
-        cards = [card for card in cards if not card.in_library]
+        cards = [
+            card
+            for card in cards
+            if not card.in_library and not card.in_radarr and not card.in_sonarr
+        ]
     return _displayable_cards(cards)
 
 
@@ -85,6 +89,16 @@ def _extract_text(response: Mapping[str, Any]) -> str:
 MAX_TOOL_ROUNDS = 8
 
 
+def _append_review_prompt_blocks(blocks: List[Dict[str, Any]], registry: ToolRegistry) -> None:
+    prompts = registry.review_prompts
+    if not prompts:
+        return
+    if len(prompts) == 1:
+        blocks.append({"type": "review_prompt", "content": "", "payload": {"prompt": prompts[0]}})
+        return
+    blocks.append({"type": "review_batch", "content": "", "payload": {"prompts": prompts}})
+
+
 def _append_review_conflict_blocks(blocks: List[Dict[str, Any]], registry: ToolRegistry) -> None:
     for conflict in registry.review_conflicts:
         blocks.append({"type": "plex_rating_conflict", "payload": conflict})
@@ -132,6 +146,7 @@ class CuratorAgent:
                             "payload": {"title": "Results", "items": [c.model_dump() for c in cards]},
                         }
                     )
+            _append_review_prompt_blocks(blocks, registry)
             _append_review_conflict_blocks(blocks, registry)
             user_id = uuid.uuid4().hex
             assistant_id = uuid.uuid4().hex
@@ -222,6 +237,7 @@ class CuratorAgent:
                         "payload": {"title": viewport_title, "items": [c.model_dump() for c in cards]},
                     }
                 )
+        _append_review_prompt_blocks(blocks, registry)
         _append_review_conflict_blocks(blocks, registry)
 
         user_id = uuid.uuid4().hex

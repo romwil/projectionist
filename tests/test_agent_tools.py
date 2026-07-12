@@ -427,6 +427,96 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(registry.cards[0].tmdb_id, 604)
 
     @patch("curatorx.agent.tools.TMDBClient")
+    async def test_find_collection_gaps_excludes_queued_tmdb_id(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.genre_list_movies.return_value = []
+        mock_tmdb.discover_movies.return_value = [
+            {
+                "id": 603,
+                "title": "The Matrix",
+                "release_date": "1999-03-31",
+                "vote_average": 8.2,
+            },
+            {
+                "id": 604,
+                "title": "The Matrix Reloaded",
+                "release_date": "2003-05-15",
+                "vote_average": 7.0,
+            },
+        ]
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.record_arr_queue(
+                media_type="movie",
+                source="radarr",
+                tmdb_id=603,
+                title="The Matrix",
+            )
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            result = await registry.execute("find_collection_gaps", {"media_type": "movie"})
+            payload = json.loads(result)
+            self.assertEqual(len(payload["items"]), 1)
+            self.assertEqual(payload["items"][0]["tmdb_id"], 604)
+            prompt = build_system_prompt(db, lens_id=DEFAULT_LENS_ID)
+            self.assertIn("Already queued", prompt)
+            self.assertIn("The Matrix", prompt)
+
+    async def test_save_user_review_accepts_half_stars(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(
+                db,
+                Settings(sync_reviews_to_plex=False),
+                DEFAULT_LENS_ID,
+            )
+            result = await registry.execute(
+                "save_user_review",
+                {
+                    "title": "Ghost in the Shell 2.0",
+                    "media_type": "movie",
+                    "stars": 4.5,
+                    "rating_key": "gits-2",
+                },
+            )
+            payload = json.loads(result)
+            self.assertTrue(payload["saved"])
+            self.assertEqual(payload["review"]["stars"], 4.5)
+
+    async def test_suggest_titles_to_rate_attaches_review_prompts(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "viewed-1",
+                    "media_type": "movie",
+                    "title": "Heat",
+                    "view_count": 1,
+                    "last_viewed_at": 1_700_000_000,
+                    "poster_url": "http://example/heat.jpg",
+                }
+            )
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            result = await registry.execute("suggest_titles_to_rate", {"limit": 5})
+            payload = json.loads(result)
+            self.assertEqual(payload["count"], 1)
+            self.assertEqual(len(registry.review_prompts), 1)
+            self.assertEqual(registry.review_prompts[0]["title"], "Heat")
+
+    def test_append_recommendation_cards_skips_queued(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.record_arr_queue(media_type="movie", source="radarr", tmdb_id=99, title="Queued")
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            queued = TitleCard(media_type="movie", title="Queued", tmdb_id=99, in_library=False)
+            missing = TitleCard(media_type="movie", title="Missing", tmdb_id=2, in_library=False)
+            _append_recommendation_cards(registry, [queued, missing])
+            self.assertEqual(len(registry.cards), 1)
+            self.assertEqual(registry.cards[0].tmdb_id, 2)
+
+    @patch("curatorx.agent.tools.TMDBClient")
     async def test_recommend_hidden_gems_excludes_owned_tmdb_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.discover_movies.return_value = [
@@ -554,8 +644,9 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             prompt = build_system_prompt(db, lens_id=DEFAULT_LENS_ID)
-            self.assertIn("Never present in_library=true titles as recommendations to add", prompt)
+            self.assertIn("Never present in_library=true or already_queued", prompt)
             self.assertIn("find_collection_gaps", prompt)
+            self.assertIn("half-stars", prompt)
 
     def test_append_recommendation_cards_skips_owned(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

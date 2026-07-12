@@ -8,6 +8,7 @@ import uuid
 from typing import Any, Dict, List, Mapping, Optional
 
 from curatorx.config_store import Settings
+from curatorx.connectors.plex import normalize_stars
 from curatorx.library.db import Database
 from curatorx.models.schemas import PreferenceSignal
 from curatorx.preferences.store import remember_preference
@@ -37,7 +38,7 @@ def _row_to_review(row: Mapping[str, Any]) -> Dict[str, Any]:
         "tvdb_id": int(row["tvdb_id"]) if row["tvdb_id"] is not None else None,
         "media_type": str(row["media_type"]),
         "title": str(row["title"]),
-        "stars": int(row["stars"]) if row["stars"] is not None else None,
+        "stars": float(row["stars"]) if row["stars"] is not None else None,
         "review_text": str(row["review_text"] or ""),
         "review_tags": [str(tag) for tag in tags],
         "prompted_by": str(row["prompted_by"] or "user"),
@@ -315,7 +316,7 @@ def scan_for_rating_prompts(db: Database, settings: Optional[Settings] = None) -
 def save_review(
     db: Database,
     *,
-    stars: int,
+    stars: float | int,
     title: str,
     media_type: str,
     rating_key: Optional[str] = None,
@@ -328,8 +329,7 @@ def save_review(
     lens_id: Optional[str] = None,
     prompt_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    if stars < 1 or stars > 5:
-        raise ValueError("stars must be between 1 and 5")
+    stars = normalize_stars(stars)
 
     now = time.time()
     tags = review_tags or []
@@ -513,6 +513,69 @@ def list_pending_prompts(db: Database, *, limit: int = 10) -> List[Dict[str, Any
             (max(1, min(limit, 50)),),
         ).fetchall()
     return [_row_to_prompt(row) for row in rows]
+
+
+def list_titles_to_rate(db: Database, *, limit: int = 10) -> List[Dict[str, Any]]:
+    """Return near-complete prompts plus recently viewed unrated library titles."""
+    capped = max(1, min(int(limit or 10), 50))
+    suggestions: List[Dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    for prompt in list_pending_prompts(db, limit=capped):
+        rating_key = str(prompt["rating_key"])
+        seen_keys.add(rating_key)
+        suggestions.append(
+            {
+                "id": str(prompt["id"]),
+                "title": prompt["title"],
+                "rating_key": rating_key,
+                "media_type": prompt["media_type"],
+                "completion_pct": prompt.get("completion_pct"),
+                "poster_url": None,
+                "reason": "near_complete",
+            }
+        )
+
+    if len(suggestions) >= capped:
+        return suggestions[:capped]
+
+    with db.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT rating_key, media_type, title, view_count, last_viewed_at, poster_url
+            FROM library_items
+            WHERE view_count > 0
+              AND rating_key IS NOT NULL AND rating_key != ''
+              AND rating_key NOT IN (
+                  SELECT rating_key FROM user_title_reviews
+                  WHERE rating_key IS NOT NULL
+              )
+            ORDER BY last_viewed_at DESC
+            LIMIT ?
+            """,
+            (capped,),
+        ).fetchall()
+
+    for row in rows:
+        rating_key = str(row["rating_key"])
+        if rating_key in seen_keys:
+            continue
+        seen_keys.add(rating_key)
+        suggestions.append(
+            {
+                "id": f"viewed-unrated-{rating_key}",
+                "title": str(row["title"]),
+                "rating_key": rating_key,
+                "media_type": str(row["media_type"]),
+                "completion_pct": 100.0,
+                "poster_url": str(row["poster_url"]) if row["poster_url"] else None,
+                "view_count": int(row["view_count"] or 0),
+                "reason": "watched_no_review",
+            }
+        )
+        if len(suggestions) >= capped:
+            break
+    return suggestions[:capped]
 
 
 def dismiss_prompt(db: Database, prompt_id: str) -> Dict[str, Any]:

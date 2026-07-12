@@ -192,7 +192,7 @@ CuratorX can mirror your **personal 1–5 star reviews** back to Plex so they ap
 |---------|---------|--------------|
 | `sync_reviews_to_plex` | `true` | When enabled, every saved review with a Plex `rating_key` triggers `PUT /:/rate` |
 
-**Star mapping:** CuratorX uses 1–5 stars internally. Plex stores ratings on a 0–10 scale, so CuratorX maps `1→2`, `2→4`, `3→6`, `4→8`, `5→10`.
+**Star mapping:** CuratorX uses 0.5–5 stars internally (half-star steps). Plex stores ratings on a 0–10 scale, so CuratorX maps `stars × 2` (e.g. `4.5→9`, `5→10`).
 
 **Where to turn it on:** Configuration → **Plex library mapping** → check **Sync personal reviews to Plex star ratings**, then save (the toggle saves immediately).
 

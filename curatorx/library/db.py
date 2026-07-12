@@ -6,6 +6,7 @@ import json
 import logging
 import sqlite3
 import time
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Generator, Iterable, List, Mapping, Optional, Sequence, Tuple, TypeVar
@@ -494,6 +495,24 @@ class Database:
                 dismissed_at REAL,
                 review_id TEXT,
                 UNIQUE(rating_key)
+            );
+
+            CREATE TABLE IF NOT EXISTS arr_queued_titles (
+                id TEXT PRIMARY KEY,
+                media_type TEXT NOT NULL,
+                tmdb_id INTEGER,
+                tvdb_id INTEGER,
+                title TEXT DEFAULT '',
+                source TEXT NOT NULL,
+                session_id TEXT,
+                queued_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_arr_queued_tmdb ON arr_queued_titles(tmdb_id, media_type);
+            CREATE INDEX IF NOT EXISTS idx_arr_queued_tvdb ON arr_queued_titles(tvdb_id, media_type);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_arr_queued_identity ON arr_queued_titles(
+                media_type,
+                COALESCE(tmdb_id, -1),
+                COALESCE(tvdb_id, -1)
             );
             """
         )
@@ -1168,6 +1187,134 @@ class Database:
                 )
                 return int(cursor.rowcount)
         return 0
+
+    def record_arr_queue(
+        self,
+        *,
+        media_type: str,
+        source: str,
+        title: str = "",
+        tmdb_id: Optional[int] = None,
+        tvdb_id: Optional[int] = None,
+        session_id: Optional[str] = None,
+    ) -> None:
+        """Remember a confirmed Radarr/Sonarr/Seerr add so gap tools won't re-pitch it."""
+        if tmdb_id is None and tvdb_id is None:
+            return
+        now = time.time()
+        with self.connect() as conn:
+            existing = conn.execute(
+                """
+                SELECT id FROM arr_queued_titles
+                WHERE media_type = ?
+                  AND COALESCE(tmdb_id, -1) = COALESCE(?, -1)
+                  AND COALESCE(tvdb_id, -1) = COALESCE(?, -1)
+                """,
+                (
+                    media_type,
+                    int(tmdb_id) if tmdb_id is not None else None,
+                    int(tvdb_id) if tvdb_id is not None else None,
+                ),
+            ).fetchone()
+            if existing is not None:
+                conn.execute(
+                    """
+                    UPDATE arr_queued_titles
+                    SET title = COALESCE(NULLIF(?, ''), title),
+                        source = ?,
+                        session_id = COALESCE(?, session_id),
+                        queued_at = ?
+                    WHERE id = ?
+                    """,
+                    (str(title or ""), str(source or ""), session_id, now, str(existing["id"])),
+                )
+                return
+            conn.execute(
+                """
+                INSERT INTO arr_queued_titles (
+                    id, media_type, tmdb_id, tvdb_id, title, source, session_id, queued_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    uuid.uuid4().hex,
+                    media_type,
+                    int(tmdb_id) if tmdb_id is not None else None,
+                    int(tvdb_id) if tvdb_id is not None else None,
+                    str(title or ""),
+                    str(source or ""),
+                    session_id,
+                    now,
+                ),
+            )
+
+    def queued_tmdb_ids(self, media_type: str = "movie") -> set[int]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT tmdb_id FROM arr_queued_titles
+                WHERE media_type = ? AND tmdb_id IS NOT NULL
+                """,
+                (media_type,),
+            ).fetchall()
+            return {int(row["tmdb_id"]) for row in rows}
+
+    def queued_tvdb_ids(self) -> set[int]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT tvdb_id FROM arr_queued_titles
+                WHERE media_type = 'show' AND tvdb_id IS NOT NULL
+                """
+            ).fetchall()
+            return {int(row["tvdb_id"]) for row in rows}
+
+    def list_recent_arr_queue(self, *, limit: int = 40) -> List[Dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT media_type, tmdb_id, tvdb_id, title, source, session_id, queued_at
+                FROM arr_queued_titles
+                ORDER BY queued_at DESC
+                LIMIT ?
+                """,
+                (max(1, min(int(limit or 40), 100)),),
+            ).fetchall()
+        return [
+            {
+                "media_type": str(row["media_type"]),
+                "tmdb_id": int(row["tmdb_id"]) if row["tmdb_id"] is not None else None,
+                "tvdb_id": int(row["tvdb_id"]) if row["tvdb_id"] is not None else None,
+                "title": str(row["title"] or ""),
+                "source": str(row["source"] or ""),
+                "session_id": str(row["session_id"]) if row["session_id"] is not None else None,
+                "queued_at": float(row["queued_at"]),
+            }
+            for row in rows
+        ]
+
+    def is_arr_queued(
+        self,
+        *,
+        media_type: str,
+        tmdb_id: Optional[int] = None,
+        tvdb_id: Optional[int] = None,
+    ) -> bool:
+        clauses: List[str] = ["media_type = ?"]
+        params: List[Any] = [media_type]
+        if tmdb_id is not None:
+            clauses.append("tmdb_id = ?")
+            params.append(int(tmdb_id))
+        elif tvdb_id is not None:
+            clauses.append("tvdb_id = ?")
+            params.append(int(tvdb_id))
+        else:
+            return False
+        with self.connect() as conn:
+            row = conn.execute(
+                f"SELECT 1 FROM arr_queued_titles WHERE {' AND '.join(clauses)} LIMIT 1",
+                params,
+            ).fetchone()
+        return row is not None
 
     def clear_library_facets(self) -> None:
         with self.connect() as conn:

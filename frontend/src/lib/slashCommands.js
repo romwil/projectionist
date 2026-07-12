@@ -1,10 +1,18 @@
 import { createId } from "./id.js";
 
-function reviewPromptBlock(prompt) {
+function reviewPromptBlock(prompt, options = {}) {
   return {
     type: "review_prompt",
     content: "",
-    payload: { prompt },
+    payload: { prompt, compact: Boolean(options.compact) },
+  };
+}
+
+function reviewBatchBlock(prompts) {
+  return {
+    type: "review_batch",
+    content: "",
+    payload: { prompts },
   };
 }
 
@@ -33,7 +41,8 @@ export function formatHelpMessage(curatorName = "Curator", { plexCollectionsEnab
     "- `/help` — show this command list",
     "- `/stats` — library item counts and last sync time",
     "- `/sync` — start a Plex library index job (owner only when multi-user mode is on)",
-    "- `/rate <title>` — rate a library title you have watched (1–5 stars)",
+    "- `/rate` — rate your last ~10 viewed & unrated titles (card strip with half-stars)",
+    "- `/rate <title>` — rate a specific library title (0.5–5 stars)",
     "- `/purge` — summarize top drive-space purge candidates",
   ];
   if (plexCollectionsEnabled) {
@@ -139,10 +148,11 @@ export function formatCollectionsDeniedMessage() {
 }
 
 function assistantBlock(content, blocks = null) {
+  const textBlock = { type: "text", content };
   return {
     id: createId(),
     role: "assistant",
-    blocks: blocks || [{ type: "text", content }],
+    blocks: blocks ? [textBlock, ...blocks] : [textBlock],
   };
 }
 
@@ -198,6 +208,17 @@ export async function executeSlashCommand(parsed, { api, getFeatures, curatorNam
     }
 
     case "rate": {
+      if (!parsed.args) {
+        const data = await api("/reviews/to-rate?limit=10");
+        const prompts = data.items || [];
+        if (!prompts.length) {
+          return assistantBlock("Nothing recent to rate — your viewed titles already have reviews.");
+        }
+        return assistantBlock(
+          `${curatorName} — tap stars on anything you've watched (half-stars welcome):`,
+          [reviewBatchBlock(prompts)],
+        );
+      }
       const resolved = await resolveRateTarget(api, parsed.args);
       if (resolved.error) {
         return assistantBlock(resolved.error);

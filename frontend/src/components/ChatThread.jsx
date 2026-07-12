@@ -112,6 +112,25 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
       </>
     );
   }
+  if (block.type === "review_batch" && Array.isArray(block.payload?.prompts)) {
+    return (
+      <div className="review-batch-strip" data-testid="review-batch-strip">
+        {block.payload.prompts.map((prompt) => (
+          <ReviewPromptCard
+            key={prompt.id || prompt.rating_key}
+            prompt={prompt}
+            curatorName={handlers.curatorName}
+            reviewPromptTemplates={handlers.reviewPromptTemplates}
+            sessionId={handlers.sessionId}
+            onSaved={handlers.onReviewSave}
+            onDismissed={handlers.onReviewDismiss}
+            disabled={handlers.actionsDisabled}
+            compact
+          />
+        ))}
+      </div>
+    );
+  }
   if (block.type === "review_prompt" && block.payload?.prompt) {
     return (
       <ReviewPromptCard
@@ -122,6 +141,7 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
         onSaved={handlers.onReviewSave}
         onDismissed={handlers.onReviewDismiss}
         disabled={handlers.actionsDisabled}
+        compact={Boolean(block.payload?.compact)}
       />
     );
   }

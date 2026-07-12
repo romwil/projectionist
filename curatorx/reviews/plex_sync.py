@@ -26,7 +26,7 @@ def _plex_client(settings: Settings) -> PlexClient:
     )
 
 
-def get_stored_plex_user_rating_stars(db: Database, rating_key: str) -> Optional[int]:
+def get_stored_plex_user_rating_stars(db: Database, rating_key: str) -> Optional[float]:
     key = str(rating_key or "").strip()
     if not key:
         return None
@@ -38,7 +38,7 @@ def get_stored_plex_user_rating_stars(db: Database, rating_key: str) -> Optional
                 (key,),
             ).fetchone()
             if row is not None and row["plex_user_rating_stars"] is not None:
-                return int(row["plex_user_rating_stars"])
+                return float(row["plex_user_rating_stars"])
         episode_cols = {row[1] for row in conn.execute("PRAGMA table_info(library_episodes)")}
         if "plex_user_rating_stars" in episode_cols:
             row = conn.execute(
@@ -46,16 +46,17 @@ def get_stored_plex_user_rating_stars(db: Database, rating_key: str) -> Optional
                 (key,),
             ).fetchone()
             if row is not None and row["plex_user_rating_stars"] is not None:
-                return int(row["plex_user_rating_stars"])
+                return float(row["plex_user_rating_stars"])
     return None
 
 
-def cache_plex_user_rating_stars(db: Database, rating_key: str, stars: int) -> None:
+def cache_plex_user_rating_stars(db: Database, rating_key: str, stars: float | int) -> None:
     """Update local library cache immediately after a successful Plex rating write."""
     key = str(rating_key or "").strip()
     if not key:
         return
     now = time.time()
+    stars_value = float(stars)
     with db.connect() as conn:
         item_cols = {row[1] for row in conn.execute("PRAGMA table_info(library_items)")}
         if "plex_user_rating_stars" in item_cols:
@@ -65,7 +66,7 @@ def cache_plex_user_rating_stars(db: Database, rating_key: str, stars: int) -> N
                 SET plex_user_rating_stars = ?, updated_at = ?
                 WHERE rating_key = ?
                 """,
-                (int(stars), now, key),
+                (stars_value, now, key),
             )
         episode_cols = {row[1] for row in conn.execute("PRAGMA table_info(library_episodes)")}
         if "plex_user_rating_stars" in episode_cols:
@@ -75,7 +76,7 @@ def cache_plex_user_rating_stars(db: Database, rating_key: str, stars: int) -> N
                 SET plex_user_rating_stars = ?
                 WHERE rating_key = ?
                 """,
-                (int(stars), key),
+                (stars_value, key),
             )
 
 
@@ -83,7 +84,7 @@ def lookup_plex_user_rating_stars(
     db: Database,
     settings: Settings,
     rating_key: str,
-) -> Optional[int]:
+) -> Optional[float]:
     stored = get_stored_plex_user_rating_stars(db, rating_key)
     if stored is not None:
         return stored
@@ -138,7 +139,7 @@ def sync_review_rating_to_plex(
         payload["reason"] = "plex_not_configured"
         return payload
 
-    submitted_stars = int(stars)
+    submitted_stars = float(stars)
     if not replace_plex_rating:
         plex_stars = lookup_plex_user_rating_stars(db, settings, rating_key)
         if plex_stars is not None and plex_stars != submitted_stars:

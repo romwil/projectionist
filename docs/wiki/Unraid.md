@@ -12,7 +12,7 @@ CuratorX is packaged for Unraid Community Applications as a single container wit
 
 | Field | Value |
 |-------|-------|
-| Repository | `romwil/curatorx:1.0` (or `:1.0.12` / `:latest`) |
+| Repository | `romwil/curatorx:1.0` (or `:1.0.13` / `:latest`) |
 | Host port | `8788` (or map freely) |
 | Config | `/mnt/user/appdata/curatorx/config` → `/config` |
 | TZ (advanced) | e.g. `America/New_York` — needed so preferred `library_sync_hour` matches wall clock |

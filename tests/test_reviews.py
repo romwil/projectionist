@@ -65,6 +65,36 @@ class ReviewStoreTests(unittest.TestCase):
         self.assertEqual(items[0]["review_text"], "Mind-bending and rewatchable")
         self.assertEqual(items[0]["review_tags"], ["great-score"])
 
+    def test_save_review_accepts_half_stars(self) -> None:
+        saved = save_review(
+            self.db,
+            stars=4.5,
+            title="Ghost in the Shell 2.0",
+            media_type="movie",
+            rating_key="gits-2",
+        )
+        self.assertEqual(saved["stars"], 4.5)
+        items = get_reviews(self.db, rating_key="gits-2")
+        self.assertEqual(items[0]["stars"], 4.5)
+
+    def test_list_titles_to_rate_prefers_viewed_unrated(self) -> None:
+        from curatorx.reviews.store import list_titles_to_rate
+
+        now = time.time()
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO library_items (
+                    rating_key, media_type, title, view_count, last_viewed_at, updated_at
+                ) VALUES ('viewed-1', 'movie', 'Heat', 2, ?, ?)
+                """,
+                (now, now),
+            )
+        items = list_titles_to_rate(self.db, limit=5)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["title"], "Heat")
+        self.assertEqual(items[0]["reason"], "watched_no_review")
+
     def test_scan_queues_near_complete_without_review(self) -> None:
         self._seed_near_complete_movie()
         queued = scan_for_rating_prompts(self.db)

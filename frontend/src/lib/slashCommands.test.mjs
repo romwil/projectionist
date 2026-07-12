@@ -165,3 +165,33 @@ test("SLASH_COMMANDS includes core novice commands", () => {
     assert.equal(SLASH_COMMANDS.includes(name), true);
   }
 });
+
+test("/rate without args returns a review batch strip", async () => {
+  const calls = [];
+  const api = async (path, options) => {
+    calls.push({ path, options });
+    if (path.startsWith("/reviews/to-rate")) {
+      return {
+        items: [
+          {
+            id: "viewed-unrated-1",
+            rating_key: "rk-1",
+            media_type: "movie",
+            title: "Heat",
+            completion_pct: 100,
+          },
+        ],
+        count: 1,
+      };
+    }
+    throw new Error(`unexpected ${path}`);
+  };
+  const message = await executeSlashCommand(
+    { command: "rate", args: "", raw: "/rate" },
+    { api, curatorName: "Jefferson" },
+  );
+  assert.match(message.blocks[0].content, /half-stars/i);
+  assert.equal(message.blocks[1].type, "review_batch");
+  assert.equal(message.blocks[1].payload.prompts[0].title, "Heat");
+  assert.equal(calls[0].path.includes("/reviews/to-rate"), true);
+});

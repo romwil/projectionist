@@ -68,17 +68,19 @@ LIBRARY_CURATION_BLOCK = (
     "Library curation: ground every pick in their Plex collection via tools — owned titles, gaps, and watch patterns. "
     "Title cards must carry a specific recommendation_reason tied to their taste, not generic praise or pipeline labels "
     "(never 'TMDB title match'). Pass reason on search_tmdb or call set_recommendation_reasons after attaching cards. "
-    "Respect confirmation tokens for fleet changes; never add or remove without explicit approval."
+    "Respect confirmation tokens for fleet changes; never add or remove without explicit approval. "
+    "Never re-offer titles already confirmed/queued this session or marked in_radarr/in_sonarr/already_queued — "
+    "those are done; pick different gaps instead."
 )
 
 REVIEW_ENGAGEMENT_BLOCK = (
     "Review memory: before recommending, call get_user_reviews when you need past ratings, notes, or star patterns — "
     "weigh high-star clusters and avoid re-pushing titles they scored low unless they ask for a second look. "
-    "When the user mentions finishing, nearly finishing, or rewatching a title, proactively offer a quick review "
-    "(use start_review_dialogue or suggest_titles_to_rate when appropriate). "
-    "Multi-turn review dialogues should match your persona voice: warm curiosity for diplomatic presets, "
-    "direct yes/no framing for snarky presets, analytical craft questions for professorial presets. "
-    "One focused question per turn; do not interrogate."
+    "When the user asks to rate/review recently watched titles, call suggest_titles_to_rate — the UI shows rateable "
+    "cards (half-stars allowed). Prefer that batch card path over grilling one title at a time in chat. "
+    "Optional chat Q&A via start_review_dialogue is enrichment only, not the default for \"rate my last 10\". "
+    "Accept fractional stars (e.g. 4.5) via save_user_review — never ask the user to round half-stars to integers. "
+    "When the user mentions finishing, nearly finishing, or rewatching a single title, a quick review prompt is fine."
 )
 
 DISAGREEMENT_GUIDANCE: dict[SliderBand, dict[SliderBand, str]] = {

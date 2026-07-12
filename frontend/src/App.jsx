@@ -780,25 +780,26 @@ export default function App() {
 
   async function handleReviewSave({ prompt, stars, review_text: reviewText, session_id: reviewSessionId, replace_plex_rating: replacePlexRating }) {
     const slashRate = String(prompt.id || "").startsWith("slash-rate-");
+    const viewedUnrated = String(prompt.id || "").startsWith("viewed-unrated-");
     await saveReview({
       stars,
       title: prompt.title,
       media_type: prompt.media_type,
       rating_key: prompt.rating_key,
       review_text: reviewText,
-      prompted_by: slashRate ? "slash_rate" : "near_complete",
+      prompted_by: slashRate ? "slash_rate" : viewedUnrated ? "batch_rate" : "near_complete",
       session_id: reviewSessionId || activeSessionId,
-      prompt_id: slashRate ? undefined : prompt.id,
+      prompt_id: slashRate || viewedUnrated ? undefined : prompt.id,
       replace_plex_rating: Boolean(replacePlexRating),
     });
-    if (!slashRate) {
+    if (!slashRate && !viewedUnrated) {
       setReviewPrompts((current) => current.filter((entry) => entry.id !== prompt.id));
     }
     refreshReviewData();
   }
 
   async function handleReviewDismiss(prompt) {
-    if (!String(prompt.id || "").startsWith("slash-rate-")) {
+    if (!String(prompt.id || "").startsWith("slash-rate-") && !String(prompt.id || "").startsWith("viewed-unrated-")) {
       await dismissReviewPrompt(prompt.id);
       setReviewPrompts((current) => current.filter((entry) => entry.id !== prompt.id));
     }

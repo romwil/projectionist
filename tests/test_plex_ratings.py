@@ -41,15 +41,20 @@ class PlexRatingMappingTests(unittest.TestCase):
         self.assertEqual(stars_to_plex_rating(1), 2)
         self.assertEqual(stars_to_plex_rating(3), 6)
         self.assertEqual(stars_to_plex_rating(5), 10)
+        self.assertEqual(stars_to_plex_rating(4.5), 9)
+        self.assertEqual(stars_to_plex_rating(0.5), 1)
 
     def test_plex_rating_to_stars(self) -> None:
         self.assertEqual(plex_rating_to_stars(8), 4)
+        self.assertEqual(plex_rating_to_stars(9), 4.5)
         self.assertEqual(plex_rating_to_stars(0), None)
         self.assertIsNone(plex_rating_to_stars(None))
 
     def test_invalid_stars_rejected(self) -> None:
         with self.assertRaises(ValueError):
             stars_to_plex_rating(0)
+        with self.assertRaises(ValueError):
+            stars_to_plex_rating(5.5)
 
 
 class PlexClientRatingTests(unittest.TestCase):
@@ -90,8 +95,8 @@ class PlexClientRatingTests(unittest.TestCase):
             '<Video ratingKey="42" title="Arrival" type="movie" userRating="9.0" />'
         )
         item = client._parse_video(element, "movie")
-        # 9.0 coerces to 9, then snaps to closest even Plex scale value (8 → 4★).
-        self.assertEqual(item.user_rating_stars, 4)
+        # 9.0 → 4.5★ (half-star scale: plex_rating / 2)
+        self.assertEqual(item.user_rating_stars, 4.5)
 
         element_ten = ET.fromstring(
             '<Video ratingKey="43" title="Dune" type="movie" userRating="10.0" />'

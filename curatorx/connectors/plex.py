@@ -8,25 +8,37 @@ from typing import Callable, List, Optional
 
 from curatorx.connectors.http import merge_plex_provider_ids, optional_int, request_empty, request_xml
 
-STARS_TO_PLEX_RATING = {1: 2, 2: 4, 3: 6, 4: 8, 5: 10}
-PLEX_RATING_TO_STARS = {rating: stars for stars, rating in STARS_TO_PLEX_RATING.items()}
 PLEX_LIBRARY_IDENTIFIER = "com.plexapp.plugins.library"
 
 
-def stars_to_plex_rating(stars: int) -> int:
-    if stars not in STARS_TO_PLEX_RATING:
-        raise ValueError("stars must be between 1 and 5")
-    return STARS_TO_PLEX_RATING[stars]
+def normalize_stars(stars: float | int) -> float:
+    """Normalize CuratorX star ratings to 0.5–5.0 in half-star steps (Plex-compatible)."""
+    try:
+        value = float(stars)
+    except (TypeError, ValueError) as error:
+        raise ValueError("stars must be a number between 0.5 and 5") from error
+    half = round(value * 2) / 2.0
+    if half < 0.5 or half > 5.0:
+        raise ValueError("stars must be between 0.5 and 5 in 0.5 increments")
+    return half
 
 
-def plex_rating_to_stars(plex_rating: Optional[int]) -> Optional[int]:
-    if plex_rating is None or int(plex_rating) <= 0:
+def stars_to_plex_rating(stars: float | int) -> int:
+    """Map CuratorX stars (0.5–5) to Plex's 1–10 userRating scale (2× stars)."""
+    return int(normalize_stars(stars) * 2)
+
+
+def plex_rating_to_stars(plex_rating: Optional[float | int]) -> Optional[float]:
+    """Map Plex userRating (1–10) back to CuratorX half-stars (0.5–5)."""
+    if plex_rating is None:
         return None
-    rating = int(plex_rating)
-    if rating in PLEX_RATING_TO_STARS:
-        return PLEX_RATING_TO_STARS[rating]
-    closest = min(PLEX_RATING_TO_STARS.keys(), key=lambda value: abs(value - rating))
-    return PLEX_RATING_TO_STARS[closest]
+    try:
+        rating = float(plex_rating)
+    except (TypeError, ValueError):
+        return None
+    if rating <= 0:
+        return None
+    return normalize_stars(rating / 2.0)
 
 
 @dataclass
@@ -62,7 +74,7 @@ class PlexLibraryItem:
     season_count: Optional[int] = None
     leaf_count: Optional[int] = None
     viewed_leaf_count: Optional[int] = None
-    user_rating_stars: Optional[int] = None
+    user_rating_stars: Optional[float] = None
 
 
 @dataclass
@@ -87,7 +99,7 @@ class PlexEpisode:
     last_viewed_at: Optional[int] = None
     file_size: int = 0
     aired_at: str = ""
-    user_rating_stars: Optional[int] = None
+    user_rating_stars: Optional[float] = None
 
 
 class PlexClient:
@@ -209,7 +221,7 @@ class PlexClient:
         self._machine_identifier = machine_id
         return machine_id
 
-    def set_user_rating(self, rating_key: str, stars: int) -> None:
+    def set_user_rating(self, rating_key: str, stars: float | int) -> None:
         key = str(rating_key or "").strip()
         if not key:
             raise ValueError("rating_key is required")

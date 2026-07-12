@@ -124,7 +124,7 @@ export default function TitleCard({
         <span className="badge">{badge}</span>
         {userStars ? (
           <span className="user-review-badge" data-testid="user-review-badge" title={`You rated ${userStars}/5`}>
-            {"★".repeat(userStars)}
+            {Number(userStars) % 1 === 0 ? "★".repeat(userStars) : `${userStars}★`}
           </span>
         ) : null}
         {showRing ? (
@@ -155,7 +155,7 @@ export default function TitleCard({
           {item.year ? <span className="year"> ({item.year})</span> : null}
         </h3>
         {item.rating ? <p className="rating">★ {item.rating.toFixed(1)}</p> : null}
-        {userStars ? <p className="user-review-stars" data-testid="user-review-stars">Your rating: {"★".repeat(userStars)}</p> : null}
+        {userStars ? <p className="user-review-stars" data-testid="user-review-stars">Your rating: {Number(userStars) % 1 === 0 ? "★".repeat(userStars) : `${userStars}★`}</p> : null}
         {item.genres?.length ? <p className="genres">{item.genres.slice(0, 3).join(" · ")}</p> : null}
         {!compact && item.overview ? <p className="overview">{item.overview.slice(0, 160)}…</p> : null}
         {whyReason && !whyOpen ? <p className="reason">{whyReason}</p> : null}

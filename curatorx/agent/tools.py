@@ -45,7 +45,7 @@ from curatorx.models.recommendation import sanitize_recommendation_reason
 from curatorx.models.schemas import TitleCard
 from curatorx.preferences.purge import suggest_purge_candidates
 from curatorx.preferences.store import preference_context, remember_preference
-from curatorx.reviews.store import get_reviews, list_pending_prompts, mark_prompts_surfaced, save_review
+from curatorx.reviews.store import get_reviews, list_pending_prompts, list_titles_to_rate, mark_prompts_surfaced, save_review
 from curatorx.reviews.plex_sync import sync_review_rating_to_plex
 
 logger = logging.getLogger(__name__)
@@ -577,13 +577,21 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "save_user_review",
-            "description": "Save or update a 1-5 star personal review for a watched title.",
+            "description": (
+                "Save or update a personal review for a watched title. "
+                "Stars accept half-star values (0.5–5 in 0.5 steps, e.g. 4.5). Never ask the user to round."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "title": {"type": "string"},
                     "media_type": {"type": "string", "enum": ["movie", "show"]},
-                    "stars": {"type": "integer", "minimum": 1, "maximum": 5},
+                    "stars": {
+                        "type": "number",
+                        "minimum": 0.5,
+                        "maximum": 5,
+                        "description": "Star rating from 0.5 to 5 in 0.5 increments (half-stars allowed).",
+                    },
                     "review_text": {"type": "string"},
                     "review_tags": {
                         "type": "array",
@@ -609,7 +617,11 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "suggest_titles_to_rate",
-            "description": "List watched or near-complete titles that do not have a personal review yet.",
+            "description": (
+                "List ~10 recently viewed or near-complete titles without a personal review. "
+                "Surfaces rateable cards in the UI — prefer this when the user asks to rate/review "
+                "recently watched titles instead of multi-turn Q&A."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"limit": {"type": "integer"}},
@@ -621,7 +633,8 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "start_review_dialogue",
             "description": (
-                "Start a persona-voiced multi-turn review dialogue for a title. "
+                "Optional persona-voiced multi-turn review dialogue for a single title. "
+                "Prefer suggest_titles_to_rate for batch \"rate recently watched\" requests. "
                 "Returns an opener from review_prompt_templates plus follow-up questions."
             ),
             "parameters": {
@@ -973,9 +986,35 @@ def _attach_query_cards(
 
 
 def _append_recommendation_cards(registry: "ToolRegistry", cards: List[TitleCard]) -> None:
-    """Attach title cards for titles the user may want to add (never owned)."""
+    """Attach title cards for titles the user may want to add (never owned or already queued)."""
     registry._recommendation_context = True
-    registry._cards.extend(card for card in cards if not card.in_library)
+    for card in cards:
+        if card.in_library or card.in_radarr or card.in_sonarr:
+            continue
+        if card.tmdb_id and registry.db.is_arr_queued(media_type=card.media_type, tmdb_id=card.tmdb_id):
+            card.in_radarr = card.media_type == "movie"
+            card.in_sonarr = card.media_type == "show"
+            continue
+        if card.tvdb_id and registry.db.is_arr_queued(media_type="show", tvdb_id=card.tvdb_id):
+            card.in_sonarr = True
+            continue
+        registry._cards.append(card)
+
+
+def _excluded_add_tmdb_ids(db: Database, media_type: str) -> set[int]:
+    return db.owned_tmdb_ids(media_type) | db.queued_tmdb_ids(media_type)
+
+
+def _apply_queue_flags(db: Database, card: TitleCard) -> TitleCard:
+    if card.media_type == "movie" and card.tmdb_id:
+        if db.is_arr_queued(media_type="movie", tmdb_id=card.tmdb_id):
+            card.in_radarr = True
+    if card.media_type == "show":
+        if card.tvdb_id and db.is_arr_queued(media_type="show", tvdb_id=card.tvdb_id):
+            card.in_sonarr = True
+        elif card.tmdb_id and db.is_arr_queued(media_type="show", tmdb_id=card.tmdb_id):
+            card.in_sonarr = True
+    return card
 
 
 class ToolRegistry:
@@ -995,6 +1034,7 @@ class ToolRegistry:
         self._pending_token_entries: List[Dict[str, str]] = []
         self._recommendation_context = False
         self._review_conflicts: List[Dict[str, Any]] = []
+        self._review_prompts: List[Dict[str, Any]] = []
 
     def _register_pending_token(self, token: str, action: str) -> None:
         self._pending_token_entries.append({"token": token, "action": action})
@@ -1014,6 +1054,10 @@ class ToolRegistry:
     @property
     def review_conflicts(self) -> List[Dict[str, Any]]:
         return list(self._review_conflicts)
+
+    @property
+    def review_prompts(self) -> List[Dict[str, Any]]:
+        return list(self._review_prompts)
 
     async def execute(self, name: str, arguments: Mapping[str, Any]) -> str:
         handler: Optional[Callable] = getattr(self, f"_tool_{name}", None)
@@ -1104,7 +1148,7 @@ class ToolRegistry:
         if not self.settings.tmdb_api_key:
             return json.dumps({"error": "TMDB API key not configured"})
         tmdb = TMDBClient(self.settings.tmdb_api_key)
-        owned = self.db.owned_tmdb_ids(media_type)
+        owned = _excluded_add_tmdb_ids(self.db, media_type)
         genres = str(args.get("genres") or "")
         genre_ids = ""
         if genres:
@@ -1134,7 +1178,9 @@ class ToolRegistry:
                 continue
             if media_type == "show":
                 item = _enrich_show_external_ids(item, tmdb)
-            card = _tmdb_card(item, media_type, tmdb, reason="Missing from your collection")
+            card = _apply_queue_flags(self.db, _tmdb_card(item, media_type, tmdb, reason="Missing from your collection"))
+            if card.in_radarr or card.in_sonarr:
+                continue
             cards.append(card)
             if len(cards) >= 12:
                 break
@@ -1146,7 +1192,10 @@ class ToolRegistry:
                 "offset": 0,
                 "has_more": False,
                 "items": [_card_to_tool_item(c) for c in cards],
-                "note": "These are TMDB titles missing from the library, not owned titles.",
+                "note": (
+                    "TMDB titles missing from the library and not already queued in Radarr/Sonarr. "
+                    "Do not re-propose already_queued / in_radarr / in_sonarr titles."
+                ),
             }
         )
 
@@ -1164,7 +1213,7 @@ class ToolRegistry:
             results = tmdb.discover_tv(sort_by="vote_average.desc", page=1)
             if query:
                 results = tmdb.search_tv(query)
-        owned = self.db.owned_tmdb_ids(media_type)
+        owned = _excluded_add_tmdb_ids(self.db, media_type)
         cards = []
         for item in results:
             tmdb_id = int(item.get("id") or 0)
@@ -1175,7 +1224,13 @@ class ToolRegistry:
                 continue
             if media_type == "show":
                 item = _enrich_show_external_ids(item, tmdb)
-            cards.append(_tmdb_card(item, media_type, tmdb, reason=f"Hidden gem ({rating:.1f}/10)"))
+            card = _apply_queue_flags(
+                self.db,
+                _tmdb_card(item, media_type, tmdb, reason=f"Hidden gem ({rating:.1f}/10)"),
+            )
+            if card.in_radarr or card.in_sonarr:
+                continue
+            cards.append(card)
             if len(cards) >= 10:
                 break
         _append_recommendation_cards(self, cards)
@@ -1186,7 +1241,7 @@ class ToolRegistry:
                 "offset": 0,
                 "has_more": False,
                 "items": [_card_to_tool_item(c) for c in cards],
-                "note": "Highly rated TMDB titles not in the library.",
+                "note": "Highly rated TMDB titles not in the library and not already queued.",
             }
         )
 
@@ -1235,7 +1290,7 @@ class ToolRegistry:
             title=str(args.get("title") or ""),
         )
         if existing:
-            mark_in_radarr(self.db, tmdb_id)
+            mark_in_radarr(self.db, tmdb_id, title=str(args.get("title") or ""))
             return json.dumps(existing)
         token = uuid.uuid4().hex
         payload = {
@@ -1266,7 +1321,7 @@ class ToolRegistry:
             title=str(args.get("title") or ""),
         )
         if existing:
-            mark_in_sonarr(self.db, tvdb_id)
+            mark_in_sonarr(self.db, tvdb_id, title=str(args.get("title") or ""))
             return json.dumps(existing)
         token = uuid.uuid4().hex
         payload = {
@@ -1441,6 +1496,7 @@ class ToolRegistry:
         results = _rank_tmdb_search_results(results, year=year_int)
 
         owned = self.db.owned_tmdb_ids(media_type)
+        queued = self.db.queued_tmdb_ids(media_type)
         cards: List[TitleCard] = []
         items: List[Dict[str, Any]] = []
         for item in results:
@@ -1451,11 +1507,16 @@ class ToolRegistry:
                 continue
             if media_type == "show":
                 item = _enrich_show_external_ids(item, tmdb)
-            card = _tmdb_card(item, media_type, tmdb, reason=reason)
+            card = _apply_queue_flags(self.db, _tmdb_card(item, media_type, tmdb, reason=reason))
             card.in_library = tmdb_id in owned
+            if tmdb_id in queued and media_type == "movie":
+                card.in_radarr = True
             cards.append(card)
             tool_item = _tmdb_search_item_to_tool_item(item, media_type)
             tool_item["in_library"] = card.in_library
+            tool_item["in_radarr"] = bool(card.in_radarr)
+            tool_item["in_sonarr"] = bool(card.in_sonarr)
+            tool_item["already_queued"] = bool(card.in_radarr or card.in_sonarr or tmdb_id in queued)
             if reason:
                 tool_item["recommendation_reason"] = reason
             items.append(tool_item)
@@ -1471,8 +1532,8 @@ class ToolRegistry:
                 "has_more": total_matched > len(items),
                 "items": items,
                 "note": (
-                    "Best match first. Items include in_library flag — only propose adds for "
-                    "in_library=false. Use tmdb_id for add_to_radarr; tvdb_id for add_to_sonarr. "
+                    "Best match first. Only propose adds for in_library=false AND already_queued=false "
+                    "(also respect in_radarr/in_sonarr). Use tmdb_id for add_to_radarr; tvdb_id for add_to_sonarr. "
                     "Pass reason on search_tmdb or call set_recommendation_reasons so Why this? "
                     "shows curator rationale (never pipeline labels)."
                 ),
@@ -1540,7 +1601,7 @@ class ToolRegistry:
 
         if include_missing and self.settings.tmdb_api_key:
             tmdb = TMDBClient(self.settings.tmdb_api_key)
-            owned = self.db.owned_tmdb_ids(media_type)
+            owned = _excluded_add_tmdb_ids(self.db, media_type)
             genre_list = tmdb.genre_list_movies() if media_type == "movie" else tmdb.genre_list_tv()
             genre_ids = [str(g["id"]) for g in genre_list if genre.lower() in str(g.get("name", "")).lower()]
             if genre_ids:
@@ -1554,9 +1615,13 @@ class ToolRegistry:
                         continue
                     if media_type == "show":
                         item = _enrich_show_external_ids(item, tmdb)
-                    missing_cards.append(
-                        _tmdb_card(item, media_type, tmdb, reason=f"Not in library · {genre.title()}")
+                    card = _apply_queue_flags(
+                        self.db,
+                        _tmdb_card(item, media_type, tmdb, reason=f"Not in library · {genre.title()}"),
                     )
+                    if card.in_radarr or card.in_sonarr:
+                        continue
+                    missing_cards.append(card)
                     if len(missing_cards) >= page_limit:
                         break
 
@@ -1577,7 +1642,7 @@ class ToolRegistry:
                 "items": response_items,
                 "note": (
                     "items mix owned (in_library=true) and TMDB gaps (in_library=false). "
-                    "Only propose adds for in_library=false."
+                    "Only propose adds for in_library=false and already_queued/in_radarr/in_sonarr=false."
                     if include_missing
                     else "Owned library titles only."
                 ),
@@ -1672,7 +1737,7 @@ class ToolRegistry:
         return json.dumps({"items": items, "count": len(items)})
 
     async def _tool_save_user_review(self, args: Mapping[str, Any]) -> str:
-        stars = int(args["stars"])
+        stars = float(args["stars"])
         review = save_review(
             self.db,
             stars=stars,
@@ -1696,8 +1761,8 @@ class ToolRegistry:
         )
         payload: Dict[str, Any] = {"saved": True, "review": review}
         if review.get("reason") == "plex_rating_conflict":
-            plex_stars = int(review.get("plex_stars") or 0)
-            submitted_stars = int(review.get("submitted_stars") or stars)
+            plex_stars = float(review.get("plex_stars") or 0)
+            submitted_stars = float(review.get("submitted_stars") or stars)
             payload["plex_rating_conflict"] = True
             payload["code"] = "plex_rating_conflict"
             payload["plex_stars"] = plex_stars
@@ -1844,50 +1909,31 @@ class ToolRegistry:
 
     async def _tool_suggest_titles_to_rate(self, args: Mapping[str, Any]) -> str:
         limit = int(args.get("limit") or 10)
-        prompts = list_pending_prompts(self.db, limit=limit)
-        suggestions = [
-            {
-                "title": prompt["title"],
-                "rating_key": prompt["rating_key"],
-                "media_type": prompt["media_type"],
-                "completion_pct": prompt["completion_pct"],
-                "reason": "near_complete",
+        suggestions = list_titles_to_rate(self.db, limit=limit)
+        prompts: List[Dict[str, Any]] = []
+        for item in suggestions:
+            prompt = {
+                "id": str(item.get("id") or f"rate-{item.get('rating_key')}"),
+                "rating_key": str(item["rating_key"]),
+                "media_type": str(item["media_type"]),
+                "title": str(item["title"]),
+                "completion_pct": float(item.get("completion_pct") or 100),
+                "poster_url": item.get("poster_url") or "",
             }
-            for prompt in prompts
-        ]
-        if len(suggestions) < limit:
-            with self.db.connect() as conn:
-                rows = conn.execute(
-                    """
-                    SELECT rating_key, media_type, title, view_count, last_viewed_at
-                    FROM library_items
-                    WHERE view_count > 0
-                      AND rating_key IS NOT NULL AND rating_key != ''
-                      AND rating_key NOT IN (
-                          SELECT rating_key FROM user_title_reviews
-                          WHERE rating_key IS NOT NULL
-                      )
-                    ORDER BY last_viewed_at DESC
-                    LIMIT ?
-                    """,
-                    (limit - len(suggestions),),
-                ).fetchall()
-            for row in rows:
-                rating_key = str(row["rating_key"])
-                if any(item["rating_key"] == rating_key for item in suggestions):
-                    continue
-                suggestions.append(
-                    {
-                        "title": str(row["title"]),
-                        "rating_key": rating_key,
-                        "media_type": str(row["media_type"]),
-                        "view_count": int(row["view_count"] or 0),
-                        "reason": "watched_no_review",
-                    }
-                )
-                if len(suggestions) >= limit:
-                    break
-        return json.dumps({"items": suggestions[:limit], "count": len(suggestions[:limit])})
+            prompts.append(prompt)
+            if str(item.get("reason")) == "near_complete" and not str(prompt["id"]).startswith("viewed-"):
+                mark_prompts_surfaced(self.db, [prompt["id"]])
+        self._review_prompts.extend(prompts)
+        return json.dumps(
+            {
+                "items": suggestions[:limit],
+                "count": len(suggestions[:limit]),
+                "note": (
+                    "Rateable cards are shown in the UI. Summarize briefly; do not grill one-by-one in chat "
+                    "unless the user asks for discussion. Half-stars (e.g. 4.5) are valid."
+                ),
+            }
+        )
 
     async def _tool_query_watchlist(self, args: Mapping[str, Any]) -> str:
         limit = int(args.get("limit") or 50)
@@ -2000,12 +2046,26 @@ def _build_where_for_patterns(filters: LibraryFilters) -> tuple[str, List[Any]]:
     return _build_where(filters)
 
 
-def mark_in_radarr(db: Database, tmdb_id: int) -> None:
+def mark_in_radarr(db: Database, tmdb_id: int, *, title: str = "", session_id: Optional[str] = None) -> None:
     db.set_arr_presence(tmdb_id=tmdb_id, in_radarr=True)
+    db.record_arr_queue(
+        media_type="movie",
+        source="radarr",
+        tmdb_id=tmdb_id,
+        title=title,
+        session_id=session_id,
+    )
 
 
-def mark_in_sonarr(db: Database, tvdb_id: int) -> None:
+def mark_in_sonarr(db: Database, tvdb_id: int, *, title: str = "", session_id: Optional[str] = None) -> None:
     db.set_arr_presence(tvdb_id=tvdb_id, in_sonarr=True)
+    db.record_arr_queue(
+        media_type="show",
+        source="sonarr",
+        tvdb_id=tvdb_id,
+        title=title,
+        session_id=session_id,
+    )
 
 
 def _already_exists_response(action: str, error: ArrTitleExistsError) -> dict:
@@ -2121,6 +2181,7 @@ async def execute_confirmed_action(db: Database, settings: Settings, token: str)
             raise RuntimeError(config_error)
         client = RadarrClient(settings.radarr_url, settings.radarr_api_key)
         tmdb_id = int(payload["tmdb_id"])
+        title = str(payload.get("title") or "")
         try:
             result = client.add_movie(
                 tmdb_id,
@@ -2128,9 +2189,9 @@ async def execute_confirmed_action(db: Database, settings: Settings, token: str)
                 quality_profile_id=settings.radarr_quality_profile_id,
             )
         except ArrTitleExistsError as error:
-            mark_in_radarr(db, tmdb_id)
+            mark_in_radarr(db, tmdb_id, title=title or error.title)
             return _already_exists_response(action, error)
-        mark_in_radarr(db, tmdb_id)
+        mark_in_radarr(db, tmdb_id, title=title)
         return {"action": action, "result": result}
     if action == "add_sonarr":
         config_error = sonarr_add_configuration_error(settings)
@@ -2138,6 +2199,7 @@ async def execute_confirmed_action(db: Database, settings: Settings, token: str)
             raise RuntimeError(config_error)
         client = SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
         tvdb_id = int(payload["tvdb_id"])
+        title = str(payload.get("title") or "")
         try:
             result = client.add_series(
                 tvdb_id,
@@ -2145,9 +2207,9 @@ async def execute_confirmed_action(db: Database, settings: Settings, token: str)
                 quality_profile_id=settings.sonarr_quality_profile_id,
             )
         except ArrTitleExistsError as error:
-            mark_in_sonarr(db, tvdb_id)
+            mark_in_sonarr(db, tvdb_id, title=title or error.title)
             return _already_exists_response(action, error)
-        mark_in_sonarr(db, tvdb_id)
+        mark_in_sonarr(db, tvdb_id, title=title)
         return {"action": action, "result": result}
     if action == "request_seerr":
         config_error = seerr_configuration_error(settings)
@@ -2157,17 +2219,25 @@ async def execute_confirmed_action(db: Database, settings: Settings, token: str)
         media_type = str(payload.get("media_type") or "movie")
         tmdb_id = int(payload["tmdb_id"])
         tvdb_id = payload.get("tvdb_id")
+        title = str(payload.get("title") or "")
         result = client.create_request(
             media_type,
             tmdb_id,
             tvdb_id=int(tvdb_id) if tvdb_id is not None else None,
+        )
+        db.record_arr_queue(
+            media_type=media_type,
+            source="seerr",
+            tmdb_id=tmdb_id,
+            tvdb_id=int(tvdb_id) if tvdb_id is not None else None,
+            title=title,
         )
         return {
             "action": action,
             "result": {
                 "id": result.get("id"),
                 "status": result.get("status"),
-                "title": payload.get("title", ""),
+                "title": title,
             },
         }
     if action == "remove_arr":
@@ -2280,6 +2350,25 @@ def build_system_prompt(db: Database, lens_id: Optional[str] = None) -> str:
     persona = db.get_persona()
     curator_name = str(persona["curator_name"]) if persona else "Curator"
     overview_block = format_overview_for_prompt(library_overview(db))
+    queued = db.list_recent_arr_queue(limit=30)
+    if queued:
+        queued_bits = []
+        for entry in queued:
+            label = entry.get("title") or "Untitled"
+            ids = []
+            if entry.get("tmdb_id") is not None:
+                ids.append(f"tmdb:{entry['tmdb_id']}")
+            if entry.get("tvdb_id") is not None:
+                ids.append(f"tvdb:{entry['tvdb_id']}")
+            source = entry.get("source") or "arr"
+            queued_bits.append(f"{label} ({source}{', ' + ', '.join(ids) if ids else ''})")
+        queued_block = (
+            "Already queued / confirmed adds — do NOT re-propose these for Radarr/Sonarr/Seerr: "
+            + "; ".join(queued_bits)
+            + ".\n"
+        )
+    else:
+        queued_block = ""
     return (
         f"You are {curator_name}, an expert movie and TV collection curator for CuratorX. "
         "You know the user's Plex library and help them discover what to add, what to watch tonight, "
@@ -2289,12 +2378,15 @@ def build_system_prompt(db: Database, lens_id: Optional[str] = None) -> str:
         "When proposing adds, always use the exact tmdb_id or tvdb_id from tool item responses — never guess or invent external IDs. "
         "For titles to add, use find_collection_gaps, recommend_hidden_gems, search_tmdb, or explore_genre(include_missing=true) — "
         "never query_library or search_library (those only return owned titles). "
-        "Never present in_library=true titles as recommendations to add; title cards for adds exclude owned titles. "
+        "Never present in_library=true or already_queued/in_radarr/in_sonarr titles as recommendations to add; "
+        "title cards for adds exclude owned and already-queued titles. "
         "For exact external title lookup before add_to_radarr or add_to_sonarr, use search_tmdb — not search_library. "
         "When recommending external titles, set a specific taste-based reason via search_tmdb(reason=…) "
         "or set_recommendation_reasons — never leave Why this? as a pipeline label. "
         "For movies use tmdb_id with add_to_radarr; for shows use tvdb_id with add_to_sonarr.\n"
         "When Seerr is enabled for household members, use request_via_seerr instead of add_to_radarr/add_to_sonarr.\n"
+        "Star ratings accept half-stars (e.g. 4.5); never ask users to round fractional ratings.\n"
+        f"{queued_block}"
         f"{overview_block}\n"
         f"{_persona_prompt_block(db)}"
         f"{lens_block}\n\n"

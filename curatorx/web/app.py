@@ -106,7 +106,14 @@ from curatorx.persona import (
 from curatorx.persona.presets import persona_ui_for, typing_phrases_for
 from curatorx.preferences.purge import suggest_purge_candidates
 from curatorx.preferences.store import remember_preference
-from curatorx.reviews.store import dismiss_prompt, get_reviews, list_pending_prompts, mark_prompts_surfaced, save_review
+from curatorx.reviews.store import (
+    dismiss_prompt,
+    get_reviews,
+    list_pending_prompts,
+    list_titles_to_rate,
+    mark_prompts_surfaced,
+    save_review,
+)
 from curatorx.reviews.plex_sync import sync_review_rating_to_plex
 from curatorx.web.auth import (
     authenticate_plex_user,
@@ -1376,7 +1383,7 @@ def propose_action(payload: Dict[str, Any]) -> Dict[str, Any]:
             title=str(payload.get("title") or ""),
         )
         if existing:
-            mark_in_radarr(_db(), tmdb_id)
+            mark_in_radarr(_db(), tmdb_id, title=str(payload.get("title") or ""))
             logger.info(
                 "Skipped add_radarr tmdb_id=%s title=%r — already in Radarr",
                 tmdb_id,
@@ -1416,7 +1423,7 @@ def propose_action(payload: Dict[str, Any]) -> Dict[str, Any]:
             title=str(payload.get("title") or ""),
         )
         if existing:
-            mark_in_sonarr(_db(), tvdb_id)
+            mark_in_sonarr(_db(), tvdb_id, title=str(payload.get("title") or ""))
             logger.info(
                 "Skipped add_sonarr tvdb_id=%s title=%r — already in Sonarr",
                 tvdb_id,
@@ -1759,6 +1766,20 @@ def list_review_prompts(limit: int = 10) -> Dict[str, Any]:
         "items": [RatingPrompt(**item) for item in items],
         "count": len(items),
     }
+
+
+@app.get("/api/reviews/to-rate")
+def list_titles_for_rating(limit: int = 10) -> Dict[str, Any]:
+    """Last ~N viewed/near-complete titles without a personal review (batch rate UI)."""
+    items = list_titles_to_rate(_db(), limit=limit)
+    near_complete_ids = [
+        str(item["id"])
+        for item in items
+        if item.get("reason") == "near_complete" and not str(item.get("id", "")).startswith("viewed-")
+    ]
+    if near_complete_ids:
+        mark_prompts_surfaced(_db(), near_complete_ids)
+    return {"items": items, "count": len(items)}
 
 
 @app.post("/api/reviews/prompts/{prompt_id}/dismiss", response_model=RatingPrompt)

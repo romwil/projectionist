@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.0.13] — 2026-07-12
+
+Track confirmed adds, simplify batch rating, and accept half-star reviews.
+
+### Fixed
+- Confirmed Radarr/Sonarr/Seerr adds are remembered (`arr_queued_titles`) so gap/recommend tools and the system prompt no longer re-pitch the same titles
+- Half-star ratings (e.g. 4.5) save and sync to Plex (`stars × 2`) without asking the user to round
+
+### Added
+- `/rate` with no title shows a compact strip of the last ~10 viewed & unrated titles
+- `GET /api/reviews/to-rate` and agent `suggest_titles_to_rate` surface rateable cards (batch UI) instead of one-by-one chat grilling
+
+### Changed
+- Review prompts and star pickers support 0.5 increments; persona guidance prefers batch cards for “rate recently watched”
+
 ## [1.0.12] — 2026-07-12
 
 Make “Why this?” useful and keep library sync finishing visible.
