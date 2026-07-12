@@ -20,13 +20,13 @@ import {
   listWatchlist,
   proposeAction,
   removeWatchlistPin,
-  resolveAgentPulse,
   saveReview,
   sendChat,
   sessionId,
   setActiveSession,
   submitMessageFeedback,
 } from "./api/client";
+import { agentPulseTitle, resolveAgentPulse } from "./lib/agentPulse.js";
 import {
   alreadyInArrMessage,
   buildProposeActionBody,
@@ -813,7 +813,8 @@ export default function App() {
     handleAdd(item, target);
   }
 
-  const agentPulse = resolveAgentPulse(jobs);
+  const agentPulse = resolveAgentPulse({ loading, chatError });
+  const agentPulseLabel = agentPulseTitle(agentPulse, chatError);
   const curatorName = persona?.curator_name || "Curator";
   const presetTagline = personaUi?.preset_tagline || "";
   const radarrConnected = Boolean(setup?.checks?.radarr?.ok);
@@ -859,7 +860,12 @@ export default function App() {
             </p>
             <h1>CuratorX</h1>
           </div>
-          <span className={`agent-pulse ${agentPulse}`} title={`Agent ${agentPulse}`} data-testid="agent-pulse" />
+          <span
+            className={`agent-pulse ${agentPulse}`}
+            title={agentPulseLabel}
+            aria-label={agentPulseLabel}
+            data-testid="agent-pulse"
+          />
         </div>
         <div className="app-topbar-actions">
           {stats ? (

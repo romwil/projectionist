@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.0.9] — 2026-07-12
+
+Hotfix: top-bar agent pulse no longer shows **Agent error** during healthy library sync.
+
+### Fixed
+- Agent pulse is driven only by chat/LLM state (`loading` / `chatError`), not by background jobs
+- Historical or concurrent failed sync jobs no longer sticky-paint the pulse red while StatusDock shows a successful running sync
+- Error clears when a new chat send starts; tooltips report idle / thinking / error with a brief reason
+
 ## [1.0.8] — 2026-07-12
 
 Speed up TV episode sync for large libraries (~800 shows).

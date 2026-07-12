@@ -1472,7 +1472,8 @@ button.watchlist-chip {
   flex-shrink: 0;
 }
 
-.agent-pulse.running {
+.agent-pulse.running,
+.agent-pulse.thinking {
   background: #38bdf8;
   animation: pulse-glow 1.5s ease-in-out infinite;
 }

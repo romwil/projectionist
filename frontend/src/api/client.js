@@ -355,11 +355,7 @@ export function relativeTime(timestamp) {
   return `${days}d ago`;
 }
 
-export function resolveAgentPulse(jobs = []) {
-  if (jobs.some((job) => job.status === "failed")) return "error";
-  if (jobs.some((job) => job.status === "running" || job.status === "queued")) return "running";
-  return "idle";
-}
+export { agentPulseTitle, resolveAgentPulse } from "../lib/agentPulse.js";
 
 export const LLM_PROVIDER_DEFAULTS = {
   openai: "https://api.openai.com/v1",
