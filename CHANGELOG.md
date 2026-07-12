@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.10] — 2026-07-12
+
+Show the running CuratorX version on the Config screen.
+
+### Added
+- Config maintenance footer (and onboarding footer) displays `CuratorX {version}` from `GET /api/health`
+
 ## [1.0.9] — 2026-07-12
 
 Hotfix: top-bar agent pulse no longer shows **Agent error** during healthy library sync.

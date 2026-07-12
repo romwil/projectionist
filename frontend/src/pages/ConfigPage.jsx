@@ -10,6 +10,7 @@ import {
   api,
   getAuthMe,
   getFeatures,
+  getHealth,
   getPersona,
   getSettings,
   getWizardStatus,
@@ -271,6 +272,7 @@ export default function ConfigPage() {
   const [syncingLibrary, setSyncingLibrary] = useState(false);
   const [activeSyncJob, setActiveSyncJob] = useState(null);
   const [featureFlags, setFeatureFlags] = useState(null);
+  const [appVersion, setAppVersion] = useState("");
   const [managedUsers, setManagedUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const trackedSyncJobIdRef = useRef(null);
@@ -360,6 +362,9 @@ export default function ConfigPage() {
     getFeatures()
       .then((data) => setFeatureFlags(data))
       .catch(() => setFeatureFlags(null));
+    getHealth()
+      .then((data) => setAppVersion(data?.version || ""))
+      .catch(() => setAppVersion(""));
   }, []);
 
   useEffect(() => {
@@ -1827,6 +1832,12 @@ export default function ConfigPage() {
             </div>
           ) : null}
         </section>
+
+        {appVersion ? (
+          <p className="status status-secondary" data-testid="app-version">
+            CuratorX {appVersion}
+          </p>
+        ) : null}
       </>
     );
   }
@@ -1908,6 +1919,12 @@ export default function ConfigPage() {
       ) : (
         renderMaintenanceDashboard()
       )}
+
+      {showWizard && appVersion ? (
+        <p className="status status-secondary" data-testid="app-version">
+          CuratorX {appVersion}
+        </p>
+      ) : null}
 
       {status ? <p className="status status-secondary">{status}</p> : null}
     </div>

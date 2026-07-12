@@ -84,6 +84,10 @@ export async function getFeatures() {
   return api("/features");
 }
 
+export async function getHealth() {
+  return api("/health");
+}
+
 export async function getAuthMe() {
   const response = await fetch(`${API}/auth/me`, {
     credentials: "include",
