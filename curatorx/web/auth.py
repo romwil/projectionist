@@ -149,6 +149,13 @@ def is_public_api_path(path: str) -> bool:
     return any(cleaned.startswith(prefix) for prefix in _API_AUTH_ALLOWLIST_PREFIXES)
 
 
+def _user_is_disabled(row) -> bool:
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
+    if "disabled" not in keys or row["disabled"] is None:
+        return False
+    return bool(int(row["disabled"]))
+
+
 def _user_from_session(request: Request, db: Database) -> Optional[CurrentUser]:
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if not token:
@@ -158,6 +165,8 @@ def _user_from_session(request: Request, db: Database) -> Optional[CurrentUser]:
         return None
     row = db.get_user(user_id)
     if row is None:
+        return None
+    if _user_is_disabled(row):
         return None
     return row_to_current_user(row)
 
@@ -370,6 +379,8 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
     plex_user_id, display_name, email, avatar_url = _plex_profile_fields(profile)
     existing = db.get_user_by_plex_id(plex_user_id)
     if existing is not None:
+        if _user_is_disabled(existing):
+            raise HTTPException(status_code=403, detail="This account has been disabled")
         user_id = str(existing["id"])
         role = str(existing["role"])
     else:

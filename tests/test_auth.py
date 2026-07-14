@@ -245,6 +245,110 @@ class AuthTests(unittest.TestCase):
         updated = self.client.patch(f"/api/users/{member_id}", json={"role": "guest"})
         self.assertEqual(updated.status_code, 200)
         self.assertEqual(updated.json()["user"]["role"], "guest")
+        listed_after = self.client.get("/api/users")
+        self.assertEqual(listed_after.status_code, 200)
+        member_item = next(item for item in listed_after.json()["items"] if item["id"] == member_id)
+        self.assertIn("disabled", member_item)
+        self.assertIn("seerr_linked", member_item)
+        self.assertFalse(member_item["disabled"])
+        self.assertFalse(member_item["seerr_linked"])
+
+    def test_owner_can_disable_and_remove_users(self) -> None:
+        self._enable_multi_user()
+        with patch(
+            "curatorx.web.auth.fetch_plex_account",
+            return_value={"id": 40, "title": "Owner"},
+        ):
+            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+
+        import curatorx.web.jobs as jobs
+
+        member_id = "plex-41"
+        jobs.get_job_manager().db.upsert_plex_user(
+            user_id=member_id,
+            display_name="Member",
+            email="member@example.com",
+            plex_user_id="41",
+            role="member",
+        )
+
+        disabled = self.client.patch(f"/api/users/{member_id}", json={"disabled": True})
+        self.assertEqual(disabled.status_code, 200)
+        self.assertTrue(disabled.json()["user"]["disabled"])
+
+        removed = self.client.delete(f"/api/users/{member_id}")
+        self.assertEqual(removed.status_code, 200)
+        self.assertTrue(removed.json()["deleted"])
+
+        listed = self.client.get("/api/users")
+        self.assertEqual(listed.status_code, 200)
+        self.assertFalse(any(item["id"] == member_id for item in listed.json()["items"]))
+
+    def test_cannot_disable_or_remove_self_or_last_owner(self) -> None:
+        self._enable_multi_user()
+        with patch(
+            "curatorx.web.auth.fetch_plex_account",
+            return_value={"id": 50, "title": "Solo Owner"},
+        ):
+            login = self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+        owner_id = login.json()["user"]["id"]
+
+        self_disable = self.client.patch(f"/api/users/{owner_id}", json={"disabled": True})
+        self.assertEqual(self_disable.status_code, 400)
+
+        self_delete = self.client.delete(f"/api/users/{owner_id}")
+        self.assertEqual(self_delete.status_code, 400)
+
+        import curatorx.web.jobs as jobs
+
+        other_owner = "plex-51"
+        jobs.get_job_manager().db.upsert_plex_user(
+            user_id=other_owner,
+            display_name="Other Owner",
+            email="other@example.com",
+            plex_user_id="51",
+            role="owner",
+        )
+        # After promoting a second owner, demoting/removing that account is fine;
+        # removing the caller's own remaining owner row still blocked as self.
+        other_delete = self.client.delete(f"/api/users/{other_owner}")
+        self.assertEqual(other_delete.status_code, 200)
+
+    def test_disabled_user_rejected_for_login_and_session(self) -> None:
+        self._enable_multi_user()
+        with patch(
+            "curatorx.web.auth.fetch_plex_account",
+            return_value={"id": 60, "title": "Owner"},
+        ):
+            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+
+        import curatorx.web.jobs as jobs
+
+        member_id = "plex-61"
+        jobs.get_job_manager().db.upsert_plex_user(
+            user_id=member_id,
+            display_name="Member",
+            email="member@example.com",
+            plex_user_id="61",
+            role="member",
+        )
+        jobs.get_job_manager().db.set_user_disabled(member_id, True)
+
+        with patch(
+            "curatorx.web.auth.fetch_plex_account",
+            return_value={"id": 61, "title": "Member"},
+        ):
+            denied = self.client.post("/api/auth/plex", json={"auth_token": "member-token"})
+        self.assertEqual(denied.status_code, 403)
+        self.assertIn("disabled", denied.json()["detail"].lower())
+
+        # Session cookie for a disabled account must not authenticate.
+        from curatorx.web.session_tokens import create_session_token
+        from curatorx.web.auth import SESSION_COOKIE_NAME
+
+        self.client.cookies.set(SESSION_COOKIE_NAME, create_session_token(member_id))
+        me = self.client.get("/api/auth/me")
+        self.assertEqual(me.status_code, 401)
 
     def test_member_requests_filtered_by_seerr_user(self) -> None:
         self._enable_multi_user(seerr=True)

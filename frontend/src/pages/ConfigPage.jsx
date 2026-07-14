@@ -16,11 +16,14 @@ import {
   getWizardStatus,
   getPlexSections,
   listJobs,
+  deleteUser,
   listUsers,
+  patchUserDisabled,
   putPersona,
   putSystemConfig,
   resolveModelForProvider,
   saveSettings,
+  syncUserSeerr,
   testService,
   updateUserRole,
 } from "../api/client";
@@ -617,6 +620,56 @@ export default function ConfigPage() {
       await updateUserRole(userId, role);
       await refreshManagedUsers();
       setActionFeedback("users", "success", "User role updated.");
+    } catch (error) {
+      setActionFeedback("users", "error", error.message);
+    }
+  }
+
+  async function handleUserDisableToggle(entry) {
+    const nextDisabled = !entry.disabled;
+    const label = entry.display_name || entry.email || entry.id;
+    if (
+      nextDisabled &&
+      !window.confirm(`Disable ${label}? They will not be able to sign in until re-enabled.`)
+    ) {
+      return;
+    }
+    try {
+      await patchUserDisabled(entry.id, nextDisabled);
+      await refreshManagedUsers();
+      setActionFeedback(
+        "users",
+        "success",
+        nextDisabled ? "User disabled." : "User re-enabled.",
+      );
+    } catch (error) {
+      setActionFeedback("users", "error", error.message);
+    }
+  }
+
+  async function handleUserRemove(entry) {
+    const label = entry.display_name || entry.email || entry.id;
+    if (!window.confirm(`Remove ${label} from this household? This cannot be undone.`)) {
+      return;
+    }
+    try {
+      await deleteUser(entry.id);
+      await refreshManagedUsers();
+      setActionFeedback("users", "success", "User removed.");
+    } catch (error) {
+      setActionFeedback("users", "error", error.message);
+    }
+  }
+
+  async function handleUserSyncSeerr(entry) {
+    const authToken = window.prompt(
+      `Paste a Plex auth token for ${entry.display_name || "this user"} to sync their Seerr account.`,
+    );
+    if (!authToken || !String(authToken).trim()) return;
+    try {
+      await syncUserSeerr(entry.id, String(authToken).trim());
+      await refreshManagedUsers();
+      setActionFeedback("users", "success", "Seerr account linked.");
     } catch (error) {
       setActionFeedback("users", "error", error.message);
     }
@@ -1673,38 +1726,106 @@ export default function ConfigPage() {
                 </div>
                 {featureFlags?.user?.role === "owner" || !featureFlags?.features?.multi_user_enabled ? (
                   <div className="user-management" data-testid="user-management">
-                    <h3>Users</h3>
+                    <h3>Household users</h3>
                     {usersLoading ? <p className="wizard-note">Loading users…</p> : null}
                     {!usersLoading && managedUsers.length === 0 ? (
-                      <p className="wizard-note">
-                        No one has signed in yet. Have household members use Sign in with Plex on the login page.
+                      <p className="wizard-note" data-testid="users-empty-state">
+                        Household members appear after Sign in with Plex
                       </p>
                     ) : null}
                     {managedUsers.length ? (
-                      <ul className="user-management-list">
-                        {managedUsers.map((entry) => (
-                          <li key={entry.id} className="user-management-row" data-testid={`user-row-${entry.id}`}>
-                            <div>
-                              <strong>{entry.display_name}</strong>
-                              <span>{entry.email || entry.plex_user_id || entry.id}</span>
-                              {entry.seerr_user_id ? (
-                                <span className="user-management-meta">Seerr #{entry.seerr_user_id}</span>
-                              ) : (
-                                <span className="user-management-meta">Seerr not linked</span>
-                              )}
-                            </div>
-                            <select
-                              value={entry.role}
-                              disabled={entry.id === featureFlags?.user?.id && entry.role === "owner"}
-                              onChange={(event) => handleUserRoleChange(entry.id, event.target.value)}
-                            >
-                              <option value="owner">Owner</option>
-                              <option value="member">Member</option>
-                              <option value="guest">Guest</option>
-                            </select>
-                          </li>
-                        ))}
-                      </ul>
+                      <div className="user-management-table-wrap">
+                        <table className="user-management-table" data-testid="users-table">
+                          <thead>
+                            <tr>
+                              <th scope="col">Name</th>
+                              <th scope="col">Email</th>
+                              <th scope="col">Role</th>
+                              <th scope="col">Seerr</th>
+                              <th scope="col">Status</th>
+                              <th scope="col">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {managedUsers.map((entry) => {
+                              const isSelf = entry.id === featureFlags?.user?.id;
+                              const seerrLinked = Boolean(entry.seerr_linked ?? entry.seerr_user_id);
+                              return (
+                                <tr
+                                  key={entry.id}
+                                  className={entry.disabled ? "user-row-disabled" : undefined}
+                                  data-testid={`user-row-${entry.id}`}
+                                >
+                                  <td>
+                                    <strong>{entry.display_name || "—"}</strong>
+                                  </td>
+                                  <td>{entry.email || "—"}</td>
+                                  <td>
+                                    <select
+                                      aria-label={`Role for ${entry.display_name || entry.id}`}
+                                      value={entry.role}
+                                      disabled={isSelf && entry.role === "owner"}
+                                      onChange={(event) =>
+                                        handleUserRoleChange(entry.id, event.target.value)
+                                      }
+                                    >
+                                      <option value="owner">Owner</option>
+                                      <option value="member">Member</option>
+                                      <option value="guest">Guest</option>
+                                    </select>
+                                  </td>
+                                  <td>
+                                    {seerrLinked ? (
+                                      <span className="user-status-pill linked">
+                                        Linked{entry.seerr_user_id ? ` #${entry.seerr_user_id}` : ""}
+                                      </span>
+                                    ) : (
+                                      <span className="user-status-pill">Not linked</span>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <span
+                                      className={`user-status-pill ${entry.disabled ? "disabled" : "active"}`}
+                                    >
+                                      {entry.disabled ? "Disabled" : "Active"}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="user-management-actions">
+                                      <button
+                                        type="button"
+                                        className="ghost"
+                                        data-testid={`user-disable-${entry.id}`}
+                                        disabled={isSelf}
+                                        onClick={() => handleUserDisableToggle(entry)}
+                                      >
+                                        {entry.disabled ? "Enable" : "Disable"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ghost"
+                                        data-testid={`user-sync-seerr-${entry.id}`}
+                                        onClick={() => handleUserSyncSeerr(entry)}
+                                      >
+                                        Sync Seerr
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="ghost danger"
+                                        data-testid={`user-remove-${entry.id}`}
+                                        disabled={isSelf}
+                                        onClick={() => handleUserRemove(entry)}
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     ) : null}
                     {actionAlert?.area === "users" || actionAlert?.area === "multi-user" ? (
                       <InlineAlert

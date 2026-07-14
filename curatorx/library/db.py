@@ -336,6 +336,7 @@ class Database:
                 seerr_permissions INTEGER,
                 oidc_sub TEXT UNIQUE,
                 avatar_url TEXT,
+                disabled INTEGER NOT NULL DEFAULT 0,
                 created_at REAL NOT NULL,
                 last_login_at REAL
             );
@@ -456,6 +457,8 @@ class Database:
         user_cols = self._table_columns(conn, "users")
         if user_cols and "preferred_name" not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN preferred_name TEXT")
+        if user_cols and "disabled" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
 
     def _migrate_embeddings_content_hash(self, conn: sqlite3.Connection) -> None:
         cols = self._table_columns(conn, "embeddings")
@@ -766,6 +769,26 @@ class Database:
         assert row is not None
         return self._row_to_user(row)
 
+    def set_user_disabled(self, user_id: str, disabled: bool) -> Dict[str, Any]:
+        with self.connect() as conn:
+            existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+            if existing is None:
+                raise ValueError("User not found")
+            conn.execute(
+                "UPDATE users SET disabled = ? WHERE id = ?",
+                (1 if disabled else 0, user_id),
+            )
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        assert row is not None
+        return self._row_to_user(row)
+
+    def delete_user(self, user_id: str) -> None:
+        with self.connect() as conn:
+            existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+            if existing is None:
+                raise ValueError("User not found")
+            conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
+
     def update_user_seerr(
         self,
         user_id: str,
@@ -813,14 +836,20 @@ class Database:
         preferred_name = None
         if "preferred_name" in keys and row["preferred_name"] is not None:
             preferred_name = str(row["preferred_name"])
+        disabled = False
+        if "disabled" in keys and row["disabled"] is not None:
+            disabled = bool(int(row["disabled"]))
+        seerr_user_id = int(row["seerr_user_id"]) if row["seerr_user_id"] is not None else None
         return {
             "id": str(row["id"]),
             "display_name": str(row["display_name"]),
             "preferred_name": preferred_name,
             "email": str(row["email"]) if row["email"] is not None else None,
             "role": str(row["role"]),
+            "disabled": disabled,
             "plex_user_id": str(row["plex_user_id"]) if row["plex_user_id"] is not None else None,
-            "seerr_user_id": int(row["seerr_user_id"]) if row["seerr_user_id"] is not None else None,
+            "seerr_user_id": seerr_user_id,
+            "seerr_linked": seerr_user_id is not None,
             "seerr_permissions": int(row["seerr_permissions"]) if row["seerr_permissions"] is not None else None,
             "avatar_url": str(row["avatar_url"]) if row["avatar_url"] is not None else None,
             "created_at": float(row["created_at"]),

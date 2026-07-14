@@ -2779,6 +2779,62 @@ button.ghost.inline-link {
   font-size: 12px !important;
 }
 
+.user-management-table-wrap {
+  margin-top: 12px;
+  overflow-x: auto;
+}
+
+.user-management-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.user-management-table th,
+.user-management-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.user-management-table th {
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.user-management-table tr.user-row-disabled td {
+  opacity: 0.72;
+}
+
+.user-management-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.user-management-actions .danger {
+  color: #c45c5c;
+}
+
+.user-status-pill {
+  display: inline-block;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.user-status-pill.active,
+.user-status-pill.linked {
+  color: var(--text);
+}
+
+.user-status-pill.disabled {
+  color: #c45c5c;
+}
+
 .app-loading {
   display: grid;
   place-items: center;
@@ -3255,6 +3311,11 @@ button.ghost.inline-link {
   }
 
   .user-management-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .user-management-actions {
     flex-direction: column;
     align-items: stretch;
   }

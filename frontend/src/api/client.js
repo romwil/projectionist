@@ -140,6 +140,19 @@ export async function updateUserRole(userId, role) {
   });
 }
 
+export async function patchUserDisabled(userId, disabled) {
+  return api(`/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ disabled: Boolean(disabled) }),
+  });
+}
+
+export async function deleteUser(userId) {
+  return api(`/users/${encodeURIComponent(userId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function syncUserSeerr(userId, authToken) {
   return api(`/users/${encodeURIComponent(userId)}/sync-seerr`, {
     method: "POST",

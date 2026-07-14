@@ -304,8 +304,9 @@ class PlexLoginPayload(BaseModel):
     auth_token: str = Field(min_length=1)
 
 
-class UserRoleUpdatePayload(BaseModel):
-    role: str = Field(pattern="^(owner|member|guest)$")
+class UserUpdatePayload(BaseModel):
+    role: Optional[str] = Field(default=None, pattern="^(owner|member|guest)$")
+    disabled: Optional[bool] = None
 
 
 class AuthMeUpdatePayload(BaseModel):
@@ -625,18 +626,60 @@ def list_users(user=Depends(require_role("owner"))) -> Dict[str, Any]:
 
 
 @app.patch("/api/users/{user_id}")
-def patch_user_role(
+def patch_user(
     user_id: str,
-    payload: UserRoleUpdatePayload,
+    payload: UserUpdatePayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    if user_id == user.id and payload.role != "owner":
-        raise HTTPException(status_code=400, detail="Cannot demote your own owner account")
+    if payload.role is None and payload.disabled is None:
+        raise HTTPException(status_code=400, detail="Provide role and/or disabled")
+    db = _db()
+    target = db.get_user(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    updated: Optional[Dict[str, Any]] = None
+    if payload.role is not None:
+        if user_id == user.id and payload.role != "owner":
+            raise HTTPException(status_code=400, detail="Cannot demote your own owner account")
+        if str(target["role"]) == "owner" and payload.role != "owner":
+            if db.count_users_with_role("owner") <= 1:
+                raise HTTPException(status_code=400, detail="Cannot demote the last owner")
+        try:
+            updated = db.update_user_role(user_id, payload.role)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+    if payload.disabled is not None:
+        if user_id == user.id and payload.disabled:
+            raise HTTPException(status_code=400, detail="Cannot disable your own account")
+        if payload.disabled and str(target["role"]) == "owner":
+            if db.count_users_with_role("owner") <= 1:
+                raise HTTPException(status_code=400, detail="Cannot disable the last owner")
+        try:
+            updated = db.set_user_disabled(user_id, payload.disabled)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=str(error)) from error
+    assert updated is not None
+    return {"user": updated}
+
+
+@app.delete("/api/users/{user_id}")
+def delete_user(
+    user_id: str,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    if user_id == user.id:
+        raise HTTPException(status_code=400, detail="Cannot remove your own account")
+    db = _db()
+    target = db.get_user(user_id)
+    if target is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    if str(target["role"]) == "owner" and db.count_users_with_role("owner") <= 1:
+        raise HTTPException(status_code=400, detail="Cannot remove the last owner")
     try:
-        updated = _db().update_user_role(user_id, payload.role)
+        db.delete_user(user_id)
     except ValueError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
-    return {"user": updated}
+    return {"deleted": True, "id": user_id}
 
 
 @app.post("/api/users/{user_id}/sync-seerr")
