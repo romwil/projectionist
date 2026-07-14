@@ -42,6 +42,51 @@ const SECRET_FIELDS = [
   "seerr_api_key",
 ];
 
+/** User-facing labels for settings keys (never show raw snake_case in the UI). */
+const FIELD_LABELS = {
+  plex_url: "Plex server URL",
+  plex_token: "Plex server token",
+  radarr_url: "Radarr URL",
+  radarr_api_key: "API key",
+  sonarr_url: "Sonarr URL",
+  sonarr_api_key: "API key",
+  tmdb_api_key: "API key",
+  fanart_api_key: "API key",
+  tautulli_url: "Tautulli URL",
+  tautulli_api_key: "API key",
+  movies_root: "Movies folder path",
+  tv_root: "TV folder path",
+  radarr_root_folder: "Radarr root folder",
+  sonarr_root_folder: "Sonarr root folder",
+  library_sync_interval_hours: "Auto-sync every (hours)",
+  tv_page_size: "TV titles per sync page",
+  library_enrich_workers: "Parallel enrich workers",
+  library_sync_hour: "Preferred sync hour",
+};
+
+const FIELD_PLACEHOLDERS = {
+  plex_url: "http://192.168.1.50:32400",
+  plex_token: "Server token for library access",
+  radarr_url: "http://192.168.1.50:7878",
+  sonarr_url: "http://192.168.1.50:8989",
+  tautulli_url: "http://192.168.1.50:8181",
+};
+
+const FIELD_HELP = {
+  plex_token:
+    "Lets CuratorX read your Plex libraries (sync, collections, ratings). This is a server token for the Media Server — not the same as household Sign in with Plex on the login page.",
+  tmdb_api_key: "Powers posters, details, and discovery for titles not yet in your library.",
+  fanart_api_key: "Optional richer backdrop art. Leave blank if you only need TMDB.",
+  tautulli_url: "Optional: watch history for purge suggestions and “what we’ve been watching”.",
+  movies_root: "Host path Radarr uses for movies (advanced; usually matches Radarr).",
+  tv_root: "Host path Sonarr uses for TV (advanced; usually matches Sonarr).",
+  library_enrich_workers: "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
+};
+
+function fieldLabel(field) {
+  return FIELD_LABELS[field] || field.replace(/_/g, " ");
+}
+
 function seerrSecretPlaceholder(settings, fallback = "") {
   if (settings?.seerr?.api_key_set) {
     return "Configured (leave blank to keep)";
@@ -127,13 +172,13 @@ function CertifiedBadge({ certified, testing, serviceId }) {
   if (certified) {
     return (
       <span className="certified-badge certified-badge-ok" data-testid={`certified-badge-${serviceId}`}>
-        Certified ✓
+        Connected ✓
       </span>
     );
   }
   return (
     <span className="certified-badge certified-badge-pending" data-testid={`certified-badge-${serviceId}`}>
-      Uncertified
+      Not connected
     </span>
   );
 }
@@ -178,13 +223,13 @@ function ProviderSelect({ value, onChange }) {
 }
 
 const STEP_LABELS = {
-  identity_seed: "Identity Seed",
-  infrastructure: "Infrastructure",
-  dropdown_mapping: "Library Mapping",
+  identity_seed: "Name",
+  infrastructure: "Connections",
+  dropdown_mapping: "Libraries",
 };
 
 const INFRASTRUCTURE_SERVICES = [
-  { id: "llm", label: "LLM Engine", kind: "llm" },
+  { id: "llm", label: "Language model", kind: "llm" },
   { id: "plex", label: "Plex", kind: "plex", fields: ["plex_url", "plex_token"] },
   { id: "radarr", label: "Radarr", kind: "service", fields: ["radarr_url", "radarr_api_key"] },
   { id: "sonarr", label: "Sonarr", kind: "service", fields: ["sonarr_url", "sonarr_api_key"] },
@@ -287,7 +332,7 @@ export default function ConfigPage() {
     const initialResults = {};
     for (const [service, cert] of Object.entries(certMap || {})) {
       if (cert?.certified) {
-        initialResults[service] = { state: "success", message: "Certified" };
+        initialResults[service] = { state: "success", message: "Connected" };
       }
     }
     if (Object.keys(initialResults).length) {
@@ -792,14 +837,14 @@ export default function ConfigPage() {
     if (!onboardingReady(verification)) {
       setFooterAlert({
         type: "error",
-        message: "Certify LLM, Plex, Radarr, Sonarr, and select both library sections before finishing.",
+        message: "Connect your language model, Plex, Radarr, and Sonarr, and choose movie and TV libraries before finishing.",
       });
       return;
     }
     try {
       await persistSettings({ onboarding_complete: true });
       setShowWizard(false);
-      const message = "Onboarding complete. Welcome to CuratorX.";
+      const message = "Setup complete. Welcome to CuratorX.";
       setFooterAlert({ type: "success", message });
       setStatus(message);
       navigate("/");
@@ -827,8 +872,10 @@ export default function ConfigPage() {
     if (currentStep === "identity_seed") {
       return (
         <section className="wizard-panel wizard-card">
-          <h2>Step 1 — Identity seed</h2>
-          <p className="wizard-note">Name your curator. Persona tuning adapts automatically after setup.</p>
+          <h2>Step 1 — Name your curator</h2>
+          <p className="wizard-note">
+            Pick a name for the voice in chat. You can refine personality later under Settings.
+          </p>
           <label className="identity-field">
             <span>Curator name</span>
             <input
@@ -852,9 +899,10 @@ export default function ConfigPage() {
     if (currentStep === "infrastructure") {
       return (
         <section className="wizard-panel wizard-card">
-          <h2>Step 2 — Infrastructure verification matrix</h2>
+          <h2>Step 2 — Connect your stack</h2>
           <p className="wizard-note">
-            Verify your LLM engine, Plex server, and automation stack before mapping libraries.
+            Point CuratorX at your language model, Plex server, Radarr, and Sonarr. Hit Verify on each
+            card so we know they respond before you pick libraries.
           </p>
 
           <div className="service-cards">
@@ -888,20 +936,23 @@ export default function ConfigPage() {
                     </div>
                     <div className="wizard-fields">
                       <label>
-                        <span>LLM provider</span>
+                        <span>Provider</span>
                         <ProviderSelect
                           value={settings.llm_provider}
                           onChange={(event) => handleProviderChange(event.target.value)}
                         />
                       </label>
                       <label>
-                        <span>Base URL</span>
+                        <span>API base URL</span>
                         <input
                           type="text"
                           value={settings.llm_base_url ?? ""}
                           onChange={(event) => updateSettings({ llm_base_url: event.target.value })}
                           placeholder={LLM_PROVIDER_DEFAULTS[settings.llm_provider] || "https://api.openai.com/v1"}
                         />
+                        <span className="wizard-note field-help">
+                          Where your model lives (OpenAI, Anthropic, Ollama, or another OpenAI-compatible endpoint).
+                        </span>
                       </label>
                       <label>
                         <span>API key</span>
@@ -914,7 +965,7 @@ export default function ConfigPage() {
                         })}
                       </label>
                       <label>
-                        <span>Model</span>
+                        <span>Model name</span>
                         <input
                           type="text"
                           list={settings.llm_provider === "anthropic" ? "anthropic-model-options" : undefined}
@@ -965,17 +1016,24 @@ export default function ConfigPage() {
                     <div className="service-fields">
                       {fields.map((field) => (
                         <label key={field}>
-                          <span>{field}</span>
+                          <span>{fieldLabel(field)}</span>
                           {SECRET_FIELDS.includes(field) ? (
-                            renderSecretInput(field, { disabled: testing === id })
+                            renderSecretInput(field, {
+                              disabled: testing === id,
+                              placeholder: FIELD_PLACEHOLDERS[field],
+                            })
                           ) : (
                             <input
                               type="text"
                               value={settings[field] ?? ""}
                               disabled={testing === id}
+                              placeholder={FIELD_PLACEHOLDERS[field] || ""}
                               onChange={(event) => updateSettings({ [field]: event.target.value })}
                             />
                           )}
+                          {FIELD_HELP[field] ? (
+                            <span className="wizard-note field-help">{FIELD_HELP[field]}</span>
+                          ) : null}
                         </label>
                       ))}
                     </div>
@@ -993,7 +1051,7 @@ export default function ConfigPage() {
 
           {onboardingHints.length ? (
             <div className="onboarding-assistant">
-              <h3>Onboarding assistant</h3>
+              <h3>Setup tips</h3>
               <div className="onboarding-hints">
                 {onboardingHints.map((hint) => (
                   <p key={hint}>{hint}</p>
@@ -1007,10 +1065,10 @@ export default function ConfigPage() {
 
     return (
       <section className="wizard-panel wizard-card">
-        <h2>Step 3 — Dropdown mapping layer</h2>
+        <h2>Step 3 — Choose your libraries</h2>
         <p className="wizard-note">
-          Plex is certified. Choose movie and TV libraries — credentials stay hidden unless you re-verify
-          on step 2.
+          Plex is connected. Select which movie and TV libraries CuratorX should index. You can change
+          these later under Settings.
         </p>
         <div className="wizard-actions">
           <CertifiedBadge certified={certifications.plex?.certified} testing={testing === "plex"} serviceId="plex" />
@@ -1060,7 +1118,7 @@ export default function ConfigPage() {
             checked={Boolean(settings.sync_reviews_to_plex)}
             onChange={(event) => handleSyncReviewsToggle(event.target.checked)}
           />
-          <span>Sync personal reviews to Plex star ratings</span>
+          <span>Copy star ratings to Plex when you review a title</span>
         </label>
         <label className="config-toggle" data-testid="plex-collections-enabled">
           <input
@@ -1068,7 +1126,7 @@ export default function ConfigPage() {
             checked={Boolean(settings?.features?.plex_collections_enabled)}
             onChange={(event) => handlePlexCollectionsToggle(event.target.checked)}
           />
-          <span>Allow curator to manage Plex collections</span>
+          <span>Let the curator propose Plex collections</span>
         </label>
         <InlineAlert
           type={actionAlert?.area === "plex-sections" ? actionAlert.type : null}
@@ -1122,12 +1180,12 @@ export default function ConfigPage() {
       URL.revokeObjectURL(url);
       setActionFeedback("training-export", {
         type: "success",
-        message: "Training corpus downloaded.",
+        message: "Taste data downloaded.",
       });
     } catch (error) {
       setActionFeedback("training-export", {
         type: "error",
-        message: error.message || "Training corpus export failed.",
+        message: error.message || "Taste data export failed.",
       });
     } finally {
       setExportingCorpus(false);
@@ -1139,19 +1197,19 @@ export default function ConfigPage() {
       <>
         <section className="config-section" data-testid="maintenance-dashboard">
           <div className="dashboard-header">
-            <h2>Maintenance dashboard</h2>
+            <h2>Connection overview</h2>
             <button type="button" className="ghost" data-testid="rerun-wizard" onClick={() => setShowWizard(true)}>
-              Re-run onboarding wizard
+              Re-run setup
             </button>
           </div>
-          <p>Re-test integrations, adjust library mapping, and tune advanced settings.</p>
+          <p>Test connections, pick libraries, and adjust optional household features.</p>
         </section>
 
         <section className="config-section" data-testid="library-sync-card">
           <h2>Library sync</h2>
           <p>
-            Pull the latest movies and shows from Plex into CuratorX. First sync can take a few minutes
-            while titles are scanned and enriched.
+            Refresh CuratorX from your Plex libraries. The first sync can take a few minutes while titles
+            are indexed and enriched.
           </p>
           <div className="config-actions">
             <button type="button" data-testid="library-sync-button" onClick={handleLibrarySync} disabled={syncingLibrary}>
@@ -1226,7 +1284,7 @@ export default function ConfigPage() {
 
         <section className="config-section" data-testid="library-health-dashboard">
           <h2>Library health</h2>
-          <p>Quick signals for backlog, stale adds, and how much of your watched library you have rated.</p>
+          <p>A quick read on backlog and how much of what you watch you have rated.</p>
           {libraryHealth ? (
             <div className="library-health-grid">
               <div className="library-health-metric" data-testid="library-health-unwatched">
@@ -1238,29 +1296,29 @@ export default function ConfigPage() {
               </div>
               <div className="library-health-metric" data-testid="library-health-stale">
                 <span className="library-health-value">{libraryHealth.stale_adds}</span>
-                <span className="library-health-label">Stale adds</span>
+                <span className="library-health-label">Never played</span>
                 <span className="library-health-detail">
-                  Added {libraryHealth.stale_add_days}+ days ago, never played
+                  Added {libraryHealth.stale_add_days}+ days ago, not started
                 </span>
               </div>
               <div className="library-health-metric" data-testid="library-health-ratings">
                 <span className="library-health-value">{libraryHealth.rating_coverage_pct}%</span>
-                <span className="library-health-label">Rating coverage</span>
+                <span className="library-health-label">Rated of watched</span>
                 <span className="library-health-detail">
                   {libraryHealth.reviewed_count} reviewed of {libraryHealth.watched_count} watched
                 </span>
               </div>
             </div>
           ) : (
-            <p className="status status-secondary">Run a library sync to populate health metrics.</p>
+            <p className="status status-secondary">Run Library sync to fill in these stats.</p>
           )}
         </section>
 
         <section className="config-section" data-testid="training-corpus-export">
-          <h2>Training corpus export</h2>
+          <h2>Export taste data</h2>
           <p>
-            Download message reactions, preference facts, and personal reviews as JSON for offline taste
-            training or backup.
+            Download your chat reactions, saved preferences, and personal reviews as JSON — useful for
+            backup or offline experiments.
           </p>
           <div className="config-actions">
             <button
@@ -1269,7 +1327,7 @@ export default function ConfigPage() {
               onClick={handleExportTrainingCorpus}
               disabled={exportingCorpus}
             >
-              {exportingCorpus ? "Preparing export…" : "Download training corpus"}
+              {exportingCorpus ? "Preparing export…" : "Download taste data"}
             </button>
           </div>
           <InlineAlert
@@ -1296,7 +1354,8 @@ export default function ConfigPage() {
         />
 
         <section className="config-section">
-          <h2>LLM engine</h2>
+          <h2>Language model</h2>
+          <p className="wizard-note">The AI that powers chat recommendations. Bring your own key or run Ollama locally.</p>
           <div className="wizard-fields">
             <label>
               <span>Provider</span>
@@ -1306,19 +1365,22 @@ export default function ConfigPage() {
               />
             </label>
             <label>
-              <span>Base URL</span>
+              <span>API base URL</span>
               <input
                 type="text"
                 value={settings.llm_base_url ?? ""}
                 onChange={(event) => updateSettings({ llm_base_url: event.target.value })}
+                placeholder={LLM_PROVIDER_DEFAULTS[settings.llm_provider] || "https://api.openai.com/v1"}
               />
             </label>
             <label>
               <span>API key</span>
-              {renderSecretInput("llm_api_key")}
+              {renderSecretInput("llm_api_key", {
+                placeholder: secretPlaceholder(settings, "llm_api_key", "Required except for Ollama"),
+              })}
             </label>
             <label>
-              <span>Model</span>
+              <span>Model name</span>
               <input
                 type="text"
                 list={settings.llm_provider === "anthropic" ? "anthropic-model-options-maintenance" : undefined}
@@ -1336,7 +1398,7 @@ export default function ConfigPage() {
             </label>
           </div>
           <button type="button" onClick={() => runTest("llm")} disabled={testing === "llm"}>
-            Test LLM
+            Test connection
           </button>
           <CertifiedBadge certified={certifications.llm?.certified} testing={testing === "llm"} serviceId="llm" />
           <InlineAlert
@@ -1346,7 +1408,10 @@ export default function ConfigPage() {
         </section>
 
         <section className="config-section">
-          <h2>Core integrations</h2>
+          <h2>Plex, Radarr &amp; Sonarr</h2>
+          <p className="wizard-note">
+            Library and download stack. Plex is required; Radarr and Sonarr unlock add/remove after you confirm in chat.
+          </p>
           <div className="service-cards">
             {[
               { id: "plex", label: "Plex", fields: ["plex_url", "plex_token"] },
@@ -1372,16 +1437,20 @@ export default function ConfigPage() {
                   <div className="service-fields">
                     {fields.map((field) => (
                       <label key={field}>
-                        <span>{field}</span>
+                        <span>{fieldLabel(field)}</span>
                         {SECRET_FIELDS.includes(field) ? (
-                          renderSecretInput(field)
+                          renderSecretInput(field, { placeholder: FIELD_PLACEHOLDERS[field] })
                         ) : (
                           <input
                             type="text"
                             value={settings[field] ?? ""}
+                            placeholder={FIELD_PLACEHOLDERS[field] || ""}
                             onChange={(event) => updateSettings({ [field]: event.target.value })}
                           />
                         )}
+                        {FIELD_HELP[field] ? (
+                          <span className="wizard-note field-help">{FIELD_HELP[field]}</span>
+                        ) : null}
                       </label>
                     ))}
                   </div>
@@ -1398,8 +1467,10 @@ export default function ConfigPage() {
         </section>
 
         <section className="config-section">
-          <h2>Optional metadata services</h2>
-          <p className="wizard-note">TMDB, Fanart.tv, and Tautulli — configure anytime after onboarding.</p>
+          <h2>Optional enrichments</h2>
+          <p className="wizard-note">
+            TMDB improves discovery and artwork. Fanart.tv and Tautulli are optional extras — add them whenever you like.
+          </p>
           <div className="service-cards">
             {OPTIONAL_SERVICES.map(({ id, label, fields }) => {
               const result = testResults[id];
@@ -1421,16 +1492,20 @@ export default function ConfigPage() {
                   <div className="service-fields">
                     {fields.map((field) => (
                       <label key={field}>
-                        <span>{field}</span>
+                        <span>{fieldLabel(field)}</span>
                         {SECRET_FIELDS.includes(field) ? (
-                          renderSecretInput(field)
+                          renderSecretInput(field, { placeholder: FIELD_PLACEHOLDERS[field] })
                         ) : (
                           <input
                             type="text"
                             value={settings[field] ?? ""}
+                            placeholder={FIELD_PLACEHOLDERS[field] || ""}
                             onChange={(event) => updateSettings({ [field]: event.target.value })}
                           />
                         )}
+                        {FIELD_HELP[field] ? (
+                          <span className="wizard-note field-help">{FIELD_HELP[field]}</span>
+                        ) : null}
                       </label>
                     ))}
                   </div>
@@ -1448,9 +1523,11 @@ export default function ConfigPage() {
 
         {!showWizard ? (
           <section className="config-section" data-testid="multi-user-settings">
-            <h2>Multi-user auth (optional)</h2>
+            <h2>Household login (optional)</h2>
             <p className="wizard-note">
-              Require Plex sign-in for household members. The first Plex account to sign in becomes owner; later accounts start as members.
+              When enabled, people open CuratorX via <strong>Sign in with Plex</strong> (plex.tv PIN / link
+              on the login page). The first account becomes owner; later accounts start as members. This is
+              separate from the Plex <em>server</em> token above used for library sync.
             </p>
             <label className="config-toggle" data-testid="multi-user-enabled-toggle">
               <input
@@ -1474,20 +1551,20 @@ export default function ConfigPage() {
                         "multi-user",
                         "success",
                         enabled
-                          ? "Multi-user auth enabled. Sign in with Plex on the login page."
-                          : "Multi-user auth disabled.",
+                          ? "Household login enabled. Members use Sign in with Plex (PIN) on the login page."
+                          : "Household login disabled.",
                       ),
                     )
                     .catch((error) => setActionFeedback("multi-user", "error", error.message));
                 }}
               />
-              <span>Enable multi-user auth</span>
+              <span>Require Plex sign-in for the app</span>
             </label>
             {settings?.features?.multi_user_enabled ? (
               <>
                 <div className="service-fields">
                   <label>
-                    <span>Auth mode</span>
+                    <span>Sign-in method</span>
                     <select
                       data-testid="auth-mode-select"
                       value={settings?.auth?.mode || "plex"}
@@ -1499,10 +1576,10 @@ export default function ConfigPage() {
                         }).catch((error) => setActionFeedback("multi-user", "error", error.message));
                       }}
                     >
-                      <option value="plex">Plex login</option>
-                      <option value="disabled">Disabled</option>
+                      <option value="plex">Plex (recommended)</option>
+                      <option value="disabled">Off</option>
                       <option value="oidc" disabled>
-                        OIDC (coming soon)
+                        Other providers (coming soon)
                       </option>
                       <option value="local" disabled>
                         Local accounts (coming soon)
@@ -1521,15 +1598,21 @@ export default function ConfigPage() {
                         }).catch((error) => setActionFeedback("multi-user", "error", error.message));
                       }}
                     />
-                    <span>Allow Plex sign-in</span>
+                    <span>Allow Sign in with Plex (PIN)</span>
                   </label>
+                  <p className="wizard-note field-help">
+                    Primary path is the PIN / link button on the login page. Token paste there is an advanced
+                    fallback only — do not look for a token on plex.tv account settings.
+                  </p>
                 </div>
                 {featureFlags?.user?.role === "owner" || !featureFlags?.features?.multi_user_enabled ? (
                   <div className="user-management" data-testid="user-management">
                     <h3>Users</h3>
                     {usersLoading ? <p className="wizard-note">Loading users…</p> : null}
                     {!usersLoading && managedUsers.length === 0 ? (
-                      <p className="wizard-note">No Plex users have signed in yet.</p>
+                      <p className="wizard-note">
+                        No one has signed in yet. Have household members use Sign in with Plex on the login page.
+                      </p>
                     ) : null}
                     {managedUsers.length ? (
                       <ul className="user-management-list">
@@ -1575,9 +1658,9 @@ export default function ConfigPage() {
 
         {!showWizard ? (
           <section className="config-section" data-testid="seerr-settings">
-            <h2>Seerr (optional)</h2>
+            <h2>Overseerr / Seerr (optional)</h2>
             <p className="wizard-note">
-              Household discovery and requests via Seerr/Overseerr. Members see &quot;Request in Seerr&quot; instead of Radarr/Sonarr adds.
+              Let household members request titles through Overseerr or Jellyseerr instead of managing Radarr/Sonarr directly.
             </p>
             <label className="config-toggle" data-testid="seerr-enabled-toggle">
               <input
@@ -1593,18 +1676,18 @@ export default function ConfigPage() {
                       setActionFeedback(
                         "seerr",
                         "success",
-                        enabled ? "Seerr integration enabled." : "Seerr integration disabled.",
+                        enabled ? "Seerr requests enabled." : "Seerr requests disabled.",
                       ),
                     )
                     .catch((error) => setActionFeedback("seerr", "error", error.message));
                 }}
               />
-              <span>Enable Seerr integration</span>
+              <span>Route household requests through Seerr</span>
             </label>
             <div className={`service-card ${testResults.seerr?.state === "success" ? "service-ok" : ""} ${testing === "seerr" ? "service-loading" : ""} ${testResults.seerr?.state === "error" ? "service-error" : ""}`}>
                 <div className="service-card-header">
                   <div className="service-card-title">
-                    <h3>Seerr connection</h3>
+                    <h3>Seerr server</h3>
                     <CertifiedBadge
                       certified={certifications.seerr?.certified}
                       testing={testing === "seerr"}
@@ -1617,11 +1700,12 @@ export default function ConfigPage() {
                 </div>
                 <div className="service-fields">
                   <label>
-                    <span>Seerr URL</span>
+                    <span>Server URL</span>
                     <input
                       type="text"
                       data-testid="seerr-url"
                       value={settings?.seerr?.url ?? ""}
+                      placeholder="http://192.168.1.50:5055"
                       onChange={(event) => updateSeerrSettings({ url: event.target.value })}
                       onBlur={() =>
                         persistSettings({
@@ -1647,7 +1731,7 @@ export default function ConfigPage() {
                       }).catch((error) => setActionFeedback("seerr", "error", error.message));
                     }}
                   />
-                  <span>Link Plex users to Seerr on login</span>
+                  <span>Match Plex users to Seerr accounts when they sign in</span>
                 </label>
                 <label className="config-toggle" data-testid="seerr-require-linked-user">
                   <input
@@ -1664,7 +1748,7 @@ export default function ConfigPage() {
                       }).catch((error) => setActionFeedback("seerr", "error", error.message));
                     }}
                   />
-                  <span>Require linked Seerr user before requests</span>
+                  <span>Only allow requests after a Seerr account is linked</span>
                 </label>
                 {testResults.seerr?.message ? (
                   <InlineAlert
@@ -1677,8 +1761,8 @@ export default function ConfigPage() {
         ) : null}
 
         <section className="config-section" data-testid="plex-library-mapping">
-          <h2>Plex library mapping</h2>
-          <p className="wizard-note">Update movie and TV libraries when your Plex layout changes.</p>
+          <h2>Plex libraries</h2>
+          <p className="wizard-note">Choose which movie and TV libraries CuratorX indexes. Update these if you rename or add libraries in Plex.</p>
           <div className="wizard-actions">
             <CertifiedBadge certified={certifications.plex?.certified} testing={testing === "plex"} serviceId="plex" />
             {!sections.length ? (
@@ -1727,10 +1811,10 @@ export default function ConfigPage() {
               checked={Boolean(settings.sync_reviews_to_plex)}
               onChange={(event) => handleSyncReviewsToggle(event.target.checked)}
             />
-            <span>Sync personal reviews to Plex star ratings</span>
+            <span>Copy star ratings to Plex when you review a title</span>
           </label>
           <p className="wizard-note">
-            When enabled, saving a 1–5 star review in CuratorX writes the matching Plex rating (2, 4, 6, 8, or 10).
+            A 1–5 star review in CuratorX becomes the matching Plex rating (2, 4, 6, 8, or 10).
           </p>
           <label className="config-toggle" data-testid="plex-collections-enabled">
             <input
@@ -1738,10 +1822,10 @@ export default function ConfigPage() {
               checked={Boolean(settings?.features?.plex_collections_enabled)}
               onChange={(event) => handlePlexCollectionsToggle(event.target.checked)}
             />
-            <span>Allow curator to manage Plex collections</span>
+            <span>Let the curator propose Plex collections</span>
           </label>
           <p className="wizard-note">
-            When enabled, the curator can propose creating Plex collections or adding owned titles to existing ones (confirmation required).
+            The curator can suggest creating a collection or adding titles you already own — you always confirm first.
           </p>
           <InlineAlert
             type={actionAlert?.area === "plex-sections" ? actionAlert.type : null}
@@ -1757,13 +1841,16 @@ export default function ConfigPage() {
             aria-expanded={advancedOpen}
             onClick={() => setAdvancedOpen((open) => !open)}
           >
-            <h2>Advanced settings</h2>
+            <h2>Advanced</h2>
             <span className="collapsible-chevron">{advancedOpen ? "▾" : "▸"}</span>
           </button>
           {advancedOpen ? (
             <div className="collapsible-body">
               <div className="config-section-sub">
-                <h3>Paths and sync</h3>
+                <h3>Disk paths &amp; sync schedule</h3>
+                <p className="wizard-note">
+                  Most Unraid users can leave these alone. Adjust only if auto-sync timing or folder paths need a tweak.
+                </p>
                 <div className="config-grid">
                   {[
                     "movies_root",
@@ -1775,7 +1862,7 @@ export default function ConfigPage() {
                     "library_enrich_workers",
                   ].map((key) => (
                     <label key={key}>
-                      <span>{key}</span>
+                      <span>{fieldLabel(key)}</span>
                       <input
                         type="text"
                         value={settings[key] ?? ""}
@@ -1790,10 +1877,13 @@ export default function ConfigPage() {
                           })
                         }
                       />
+                      {FIELD_HELP[key] ? (
+                        <span className="wizard-note field-help">{FIELD_HELP[key]}</span>
+                      ) : null}
                     </label>
                   ))}
                   <label>
-                    <span>library_sync_hour</span>
+                    <span>{fieldLabel("library_sync_hour")}</span>
                     <select
                       data-testid="library-sync-hour"
                       value={
@@ -1809,7 +1899,7 @@ export default function ConfigPage() {
                         });
                       }}
                     >
-                      <option value="">Any / interval only</option>
+                      <option value="">Any time (interval only)</option>
                       {Array.from({ length: 24 }, (_, hour) => (
                         <option key={hour} value={hour}>
                           {String(hour).padStart(2, "0")}:00 (local)
@@ -1819,8 +1909,8 @@ export default function ConfigPage() {
                   </label>
                 </div>
                 <p className="slider-help-text" style={{ marginTop: "0.5rem" }}>
-                  Preferred sync hour uses the container local timezone. On Unraid, set the{" "}
-                  <code>TZ</code> env (e.g. <code>America/New_York</code>) if the clock is wrong.
+                  Preferred hour uses the container&apos;s local clock. On Unraid, set the{" "}
+                  <code>TZ</code> variable (for example <code>America/New_York</code>) if the hour looks wrong.
                 </p>
                 <div className="config-actions">
                   <button type="button" onClick={handleSaveSettings}>
@@ -1847,7 +1937,7 @@ export default function ConfigPage() {
       <header className="topbar">
         <div>
           <p className="eyebrow">Configuration</p>
-          <h1>{showWizard ? "Onboarding wizard" : "Curator maintenance"}</h1>
+          <h1>{showWizard ? "First-run setup" : "Settings"}</h1>
         </div>
         <Link to="/" className="btn-link">
           Back to chat
@@ -1909,7 +1999,7 @@ export default function ConfigPage() {
                 </button>
               ) : (
                 <button type="button" data-testid="wizard-finish" onClick={handleFinishOnboarding} disabled={!onboardingReady(verification)}>
-                  Finish onboarding
+                  Finish setup
                 </button>
               )}
               <InlineAlert type={footerAlert?.type} message={footerAlert?.message} testId="wizard-footer-alert" />

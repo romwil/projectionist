@@ -150,9 +150,9 @@ The maintenance dashboard includes a **Library health** section with three at-a-
 
 Use these to spot backlog, forgotten imports, and gaps in your review log before asking the curator for purge or rating suggestions.
 
-### Training corpus export
+### Export taste data
 
-Owners can download a JSON backup of taste-training data from **Config → Training corpus export** (`GET /api/admin/export/training-corpus`). The file includes:
+Owners can download a JSON backup of taste-training data from **Settings → Export taste data** (`GET /api/admin/export/training-corpus`). The file includes:
 
 - `message_feedback` — helpful / not-helpful reactions on curator replies
 - `preference_facts` — explicit and inferred taste signals

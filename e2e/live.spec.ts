@@ -33,7 +33,7 @@ test.describe("Live stack e2e (opt-in)", () => {
     await expect(page.locator("body")).toBeVisible();
     const login = page.getByTestId("login-page");
     const workspace = page.getByTestId("workspace-main");
-    const wizard = page.getByRole("heading", { name: /Onboarding wizard|Curator maintenance|Sign in/i });
+    const wizard = page.getByRole("heading", { name: /First-run setup|Settings|Sign in/i });
     await expect(login.or(workspace).or(wizard).first()).toBeVisible({ timeout: 30_000 });
   });
 });

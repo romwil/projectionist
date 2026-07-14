@@ -161,8 +161,8 @@ export default function PersonaSection({
     <section className="config-section persona-section" data-testid="persona-section">
       <h2>Curator persona</h2>
       <p className="wizard-note">
-        Draft your curator&apos;s core identity, pick an archetype preset, tune behavior sliders, and preview the
-        prompt sent to the LLM. Identity text is never overwritten by sliders — only presets fill it when empty.
+        Shape how your curator talks and recommends. Write a short identity, try a preset, then fine-tune with
+        sliders. Your written identity stays unless you edit it — presets only fill it when empty.
       </p>
 
       {showCuratorName ? (
@@ -181,11 +181,11 @@ export default function PersonaSection({
 
       {showIdentityField ? (
         <label className="persona-identity-field">
-          <span>Persona identity</span>
+          <span>Who are they?</span>
           <textarea
             data-testid="persona-identity"
             rows={4}
-            placeholder="Who is your curator? Core values, background, and voice — never overwritten by sliders."
+            placeholder="Voice, taste, and personality — written here is never overwritten by sliders."
             value={persona.persona_identity || ""}
             disabled={savingPersona}
             onChange={(event) => setPersona({ ...persona, persona_identity: event.target.value })}
@@ -195,8 +195,8 @@ export default function PersonaSection({
       ) : null}
 
       <div className="persona-presets">
-        <h3>Persona archetypes</h3>
-        <p className="wizard-note">Each preset sets slider positions and adds a rich behavioral anchor to the LLM prompt.</p>
+        <h3>Presets</h3>
+        <p className="wizard-note">Quick starting points for tone and taste. You can still tweak the sliders after.</p>
         <div className="preset-grid" data-testid="persona-preset-grid">
           {presets.map((preset) => (
             <button

@@ -10,22 +10,22 @@ Open **Settings** (`/config`). First-time setup runs a **3-step gated wizard** �
 
 ```mermaid
 flowchart LR
-  S1[Step1_IdentitySeed] -->|name_set| S2[Step2_Infrastructure]
-  S2 -->|all_certified| S3[Step3_DropdownMapping]
+  S1[Step1_Name] -->|name_set| S2[Step2_Connections]
+  S2 -->|all_connected| S3[Step3_Libraries]
   S3 -->|sections_selected| Chat[Main chat unlocked]
 ```
 
 | Step | Name | Requirements to advance |
 |------|------|-------------------------|
-| 1 | Identity Seed | Enter curator name |
-| 2 | Infrastructure Matrix | Verify LLM, Plex, Radarr, and Sonarr (certified badges) |
-| 3 | Dropdown Mapping | Select movie and TV Plex libraries from dropdowns (unlocked after Plex verified) |
+| 1 | Name | Enter curator name |
+| 2 | Connections | Verify language model, Plex, Radarr, and Sonarr |
+| 3 | Libraries | Select movie and TV Plex libraries (unlocked after Plex connects) |
 
-**Finish** sets `onboarding_complete` when all four services are certified and both Plex sections are selected. Persona sliders, optional metadata services, and legacy lenses are available in the **maintenance dashboard** after onboarding.
+**Finish** sets `onboarding_complete` when all four services are connected and both Plex sections are selected. Persona, optional enrichments, and household login live under **Settings** after setup.
 
 ### Plex library mapping
 
-1. On step 2, enter Plex URL/token and click **Verify**.
+1. On step 2, enter the Plex **server** URL and **server token** (library access — separate from household Sign in with Plex), then click **Verify**.
 2. After success, credentials collapse — manual text fields are hidden.
 3. On step 3, choose **Movie library** and **TV library** from dropdowns (filtered by Plex section type).
 4. Selections save immediately to `plex_movie_section` and `plex_tv_section`.

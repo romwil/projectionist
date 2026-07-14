@@ -5,7 +5,7 @@ import { certifyInfrastructureStep } from "./fixtures/selectors";
 
 async function goToInfrastructureStep(page: import("@playwright/test").Page) {
   await page.getByTestId("wizard-step-infrastructure").click();
-  await expect(page.getByRole("heading", { name: /Infrastructure verification/ })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Connect your stack/ })).toBeVisible();
 }
 
 test.describe("Config onboarding wizard", () => {
@@ -19,7 +19,7 @@ test.describe("Config onboarding wizard", () => {
   });
 
   test("loads three-step wizard navigation", async ({ page }) => {
-    await expect(page.getByRole("heading", { name: "Onboarding wizard" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "First-run setup" })).toBeVisible();
     await expect(page.getByTestId("wizard-step-identity_seed")).toBeVisible();
     await expect(page.getByTestId("wizard-step-infrastructure")).toBeVisible();
     await expect(page.getByTestId("wizard-step-dropdown_mapping")).toBeVisible();
@@ -46,7 +46,7 @@ test.describe("Config onboarding wizard", () => {
     await certifyInfrastructureStep(page);
 
     await page.getByTestId("wizard-next").click();
-    await expect(page.getByRole("heading", { name: /Dropdown mapping/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /Choose your libraries/ })).toBeVisible();
 
     await expect(page.getByTestId("plex-movie-section")).toBeEnabled({ timeout: 10_000 });
     await expect(page.getByTestId("plex-tv-section")).toBeEnabled();

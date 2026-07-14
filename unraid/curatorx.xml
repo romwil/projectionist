@@ -8,6 +8,7 @@
   <Privileged>false</Privileged>
   <Support>https://github.com/romwil/curatorx/issues</Support>
   <Project>https://github.com/romwil/curatorx</Project>
+  <Icon>https://raw.githubusercontent.com/romwil/curatorx/main/unraid/curatorx-icon.png</Icon>
   <Overview>
 Chat-first Plex collection curator with BYOP LLM support, RAG over your library, TMDB discovery, and confirmation-gated Radarr/Sonarr add/remove actions.
   </Overview>
@@ -31,7 +32,7 @@ CuratorX helps you curate your movie and TV collection through conversation. Con
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/curatorx/config" Mode="rw" Description="settings.json and SQLite database" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/curatorx/config</Config>
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Container timezone for preferred library sync hour (e.g. America/New_York)" Type="Variable" Display="advanced" Required="false" Mask="false">UTC</Config>
   <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
-  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex token" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex Media Server token (library access; not household Sign in with Plex)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="RADARR_URL" Target="RADARR_URL" Default="" Mode="" Description="Optional seed: Radarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="RADARR_API_KEY" Target="RADARR_API_KEY" Default="" Mode="" Description="Optional seed: Radarr API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="SONARR_URL" Target="SONARR_URL" Default="" Mode="" Description="Optional seed: Sonarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>

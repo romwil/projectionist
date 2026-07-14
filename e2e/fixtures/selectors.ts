@@ -1,7 +1,22 @@
 import { expect, type Page } from "@playwright/test";
 
+/** Map settings keys → visible label + optional service-card heading for disambiguation. */
+const FIELD_META: Record<string, { label: string; card?: string }> = {
+  plex_url: { label: "Plex server URL", card: "Plex" },
+  plex_token: { label: "Plex server token", card: "Plex" },
+  radarr_url: { label: "Radarr URL", card: "Radarr" },
+  radarr_api_key: { label: "API key", card: "Radarr" },
+  sonarr_url: { label: "Sonarr URL", card: "Sonarr" },
+  sonarr_api_key: { label: "API key", card: "Sonarr" },
+};
+
 export function settingsField(page: Page, field: string) {
-  return page.locator(`label:has(span:text-is("${field}")) input`);
+  const meta = FIELD_META[field] || { label: field };
+  const labelInput = `label:has(span:text-is("${meta.label}")) input`;
+  if (meta.card) {
+    return page.locator(`.service-card:has(h3:text-is("${meta.card}")) ${labelInput}`);
+  }
+  return page.locator(labelInput).first();
 }
 
 export function llmApiKeyInput(page: Page) {

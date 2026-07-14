@@ -12,19 +12,19 @@ test.describe("Config maintenance dashboard", () => {
   });
 
   test("shows maintenance dashboard when onboarding is complete", async ({ page }) => {
-    await expect(page.getByRole("heading", { name: "Curator maintenance" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
     await expect(page.getByTestId("maintenance-dashboard")).toBeVisible();
     await expect(page.getByTestId("wizard-nav")).toHaveCount(0);
   });
 
   test("can re-run onboarding wizard from maintenance", async ({ page }) => {
     await page.getByTestId("rerun-wizard").click();
-    await expect(page.getByRole("heading", { name: "Onboarding wizard" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "First-run setup" })).toBeVisible();
     await expect(page.getByTestId("wizard-nav")).toBeVisible();
   });
 
   test("shows LLM test controls and certified badge area", async ({ page }) => {
-    await expect(page.getByRole("button", { name: "Test LLM" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Test connection" })).toBeVisible();
     await expect(page.getByTestId("certified-badge-llm")).toBeVisible();
   });
 

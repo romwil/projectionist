@@ -55,7 +55,7 @@ With `features.multi_user_enabled` left at `false` (the default), CuratorX runs 
 | Route | Purpose |
 |-------|---------|
 | `/` | Curator chat — single workspace |
-| `/config` | Onboarding wizard (first run) or maintenance dashboard |
+| `/config` | First-run setup wizard or Settings |
 | `/title/{movie\|show}/{id}` | Title detail — backdrop hero, metadata, purge notes |
 
 Session ID persists in `localStorage` for chat continuity across reloads.

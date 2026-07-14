@@ -26,6 +26,6 @@ test.describe("Setup incomplete banner", () => {
   test("banner links to config page", async ({ page }) => {
     await page.getByTestId("setup-banner").getByRole("link", { name: "Settings" }).click();
     await expect(page).toHaveURL(/\/config$/);
-    await expect(page.getByRole("heading", { name: "Onboarding wizard" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "First-run setup" })).toBeVisible();
   });
 });

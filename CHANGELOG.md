@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.6] — 2026-07-13
+
+Unraid CA application icon plus friendlier Config / first-run copy. Preserves 1.1.5 **Sign in with Plex** (PIN) as the household login path; Config now clearly separates the Plex *server* token (library sync) from user PIN sign-in.
+
+### Added
+- Community Applications icon assets: `unraid/curatorx-icon.png` (256) and `unraid/curatorx-icon-512.png` (512)
+- `<Icon>` on Unraid templates pointing at the GitHub raw 256 PNG
+- Icon specs section in [docs/wiki/Unraid.md](docs/wiki/Unraid.md)
+
+### Changed
+- Config / onboarding labels and help text in plain language (no raw `plex_token` keys, demoted jargon)
+- Distinguishes **Plex server token** (libraries) from household **Sign in with Plex** PIN login; never directs users to plex.tv/account for a token
+- Wizard steps renamed: Name → Connections → Libraries; Settings replaces “maintenance dashboard” wording
+
 ## [1.1.5] — 2026-07-13
 
 Overseerr-style **Sign in with Plex** for multi-user login (plex.tv PIN / link flow).

@@ -2,6 +2,18 @@
 
 CuratorX is packaged for Unraid Community Applications as a single container with one config volume.
 
+## Community Applications icon
+
+| Spec | Value |
+|------|--------|
+| Format | PNG (transparency optional; solid cinema-dark background is fine) |
+| Size | **256×256** minimum (also ship **512×512** for sharper CA/Docker UI) |
+| Style | Clear at thumbnail size; distinctive mark, not tiny text |
+| Repo assets | `unraid/curatorx-icon.png` (256), `unraid/curatorx-icon-512.png` (512) |
+| Template `<Icon>` | Raw GitHub URL to the 256 PNG |
+
+Resize from a larger master if needed: `sips -z 256 256 source.png --out unraid/curatorx-icon.png` (macOS) or ImageMagick `convert`.
+
 ## Install from template
 
 1. In Unraid, open **Apps** (Community Applications).
@@ -12,7 +24,7 @@ CuratorX is packaged for Unraid Community Applications as a single container wit
 
 | Field | Value |
 |-------|-------|
-| Repository | `romwil/curatorx:1.0` (or `:1.0.13` / `:latest`) |
+| Repository | `romwil/curatorx:1.1` (or `:1.1.6` / `:latest`) |
 | Host port | `8788` (or map freely) |
 | Config | `/mnt/user/appdata/curatorx/config` → `/config` |
 | TZ (advanced) | e.g. `America/New_York` — needed so preferred `library_sync_hour` matches wall clock |
