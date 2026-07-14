@@ -3410,6 +3410,31 @@ button.ghost.inline-link {
   border-radius: var(--radius);
 }
 
+.settings-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0 0 var(--space-3);
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.settings-toggle-row input {
+  margin-top: 3px;
+}
+
+.settings-footnote-list {
+  margin: var(--space-4) 0 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.settings-footnote-list li {
+  margin-bottom: 4px;
+}
+
 .editorial-page {
   min-height: 100vh;
   display: flex;

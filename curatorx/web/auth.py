@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import secrets
 import threading
@@ -38,6 +39,8 @@ PLEX_PIN_NONCE_TTL_SECONDS = 1800
 
 _pin_bindings_lock = threading.Lock()
 _pin_bindings: Dict[str, Dict[str, Any]] = {}
+
+logger = logging.getLogger(__name__)
 
 UserRole = Literal["owner", "member", "guest"]
 
@@ -411,6 +414,14 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
         seerr_user_id=seerr_user_id,
         seerr_permissions=seerr_permissions,
     )
+    try:
+        from curatorx.watchlist.crypto import encrypt_plex_token
+        from curatorx.watchlist.plex_sync import maybe_pull_on_login
+
+        db.set_user_plex_token_enc(str(user_row["id"]), encrypt_plex_token(cleaned))
+        maybe_pull_on_login(db, settings, user_id=str(user_row["id"]))
+    except Exception:
+        logger.debug("Could not persist/sync Plex watchlist token", exc_info=True)
     return CurrentUser(
         id=str(user_row["id"]),
         display_name=str(user_row["display_name"]),

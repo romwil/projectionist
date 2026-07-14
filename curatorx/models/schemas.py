@@ -33,6 +33,7 @@ class TitleCard(BaseModel):
     user_stars: Optional[int] = None
     total_episode_count: Optional[int] = None
     unwatched_episode_count: Optional[int] = None
+    card_kind: Optional[str] = None
 
 
 class TitleDetail(TitleCard):
@@ -264,6 +265,7 @@ class WatchlistPin(BaseModel):
     media_type: MediaType
     title: str
     created_at: float
+    plex_rating_key: Optional[str] = None
 
 
 class WatchlistCreate(BaseModel):
@@ -276,6 +278,16 @@ class WatchlistCreate(BaseModel):
 class WatchlistListResponse(BaseModel):
     items: List[WatchlistPin] = Field(default_factory=list)
     count: int = 0
+
+
+class WatchlistSyncSettingsUpdate(BaseModel):
+    enabled: Optional[bool] = None
+    pull_on_login: Optional[bool] = None
+    push_on_pin: Optional[bool] = None
+
+
+class WatchlistSyncRequest(BaseModel):
+    direction: str = "both"
 
 
 class EngagementStreakResponse(BaseModel):

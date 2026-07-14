@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { setTitleCardDragData } from "../lib/easterEggs.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
+import { allowWatchlistPin } from "../lib/watchlistPin.js";
 
 function ShowProgressRing({ total, unwatched }) {
   if (!total || total <= 0) return null;
@@ -53,6 +54,7 @@ export default function TitleCard({
     item.media_type === "show" &&
     (item.total_episode_count > 0 || item.unwatched_episode_count != null);
   const isPinned = Boolean(pinRecord);
+  const showPin = Boolean(onTogglePin) && allowWatchlistPin(item);
   const facetMatches = item.facet_matches || [];
   const whyReason = displayRecommendationReason(item.recommendation_reason);
   const hasWhyDetail = Boolean(whyReason || facetMatches.length);
@@ -133,7 +135,7 @@ export default function TitleCard({
             unwatched={item.unwatched_episode_count}
           />
         ) : null}
-        {onTogglePin ? (
+        {showPin ? (
           <button
             type="button"
             className={`title-card-pin ${isPinned ? "pinned" : ""}`}

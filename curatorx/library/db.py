@@ -459,6 +459,18 @@ class Database:
             conn.execute("ALTER TABLE users ADD COLUMN preferred_name TEXT")
         if user_cols and "disabled" not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN disabled INTEGER NOT NULL DEFAULT 0")
+        if user_cols:
+            for name, typedef in {
+                "watchlist_sync_enabled": "INTEGER NOT NULL DEFAULT 1",
+                "watchlist_pull_on_login": "INTEGER NOT NULL DEFAULT 1",
+                "watchlist_push_on_pin": "INTEGER NOT NULL DEFAULT 1",
+                "watchlist_last_synced_at": "REAL",
+            }.items():
+                if name not in user_cols:
+                    conn.execute(f"ALTER TABLE users ADD COLUMN {name} {typedef}")
+        pin_cols = self._table_columns(conn, "watchlist_pins")
+        if pin_cols and "plex_rating_key" not in pin_cols:
+            conn.execute("ALTER TABLE watchlist_pins ADD COLUMN plex_rating_key TEXT")
 
     def _migrate_embeddings_content_hash(self, conn: sqlite3.Connection) -> None:
         cols = self._table_columns(conn, "embeddings")
@@ -831,6 +843,97 @@ class Database:
         assert row is not None
         return self._row_to_user(row)
 
+    def set_user_plex_token_enc(self, user_id: str, token_enc: str) -> None:
+        with self.connect() as conn:
+            existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+            if existing is None:
+                raise ValueError("User not found")
+            conn.execute(
+                "UPDATE users SET plex_token_enc = ? WHERE id = ?",
+                (token_enc, user_id),
+            )
+
+    def get_user_plex_token_enc(self, user_id: str) -> Optional[str]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT plex_token_enc FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+        if row is None or row["plex_token_enc"] is None:
+            return None
+        return str(row["plex_token_enc"])
+
+    def get_watchlist_sync_prefs(self, user_id: str) -> Dict[str, Any]:
+        with self.connect() as conn:
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        if row is None:
+            return {
+                "watchlist_sync_enabled": True,
+                "watchlist_pull_on_login": True,
+                "watchlist_push_on_pin": True,
+                "watchlist_last_synced_at": None,
+            }
+        keys = set(row.keys())
+        return {
+            "watchlist_sync_enabled": (
+                bool(int(row["watchlist_sync_enabled"]))
+                if "watchlist_sync_enabled" in keys and row["watchlist_sync_enabled"] is not None
+                else True
+            ),
+            "watchlist_pull_on_login": (
+                bool(int(row["watchlist_pull_on_login"]))
+                if "watchlist_pull_on_login" in keys and row["watchlist_pull_on_login"] is not None
+                else True
+            ),
+            "watchlist_push_on_pin": (
+                bool(int(row["watchlist_push_on_pin"]))
+                if "watchlist_push_on_pin" in keys and row["watchlist_push_on_pin"] is not None
+                else True
+            ),
+            "watchlist_last_synced_at": (
+                float(row["watchlist_last_synced_at"])
+                if "watchlist_last_synced_at" in keys and row["watchlist_last_synced_at"] is not None
+                else None
+            ),
+        }
+
+    def update_watchlist_sync_prefs(
+        self,
+        user_id: str,
+        *,
+        enabled: Optional[bool] = None,
+        pull_on_login: Optional[bool] = None,
+        push_on_pin: Optional[bool] = None,
+    ) -> Dict[str, Any]:
+        with self.connect() as conn:
+            existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+            if existing is None:
+                raise ValueError("User not found")
+            if enabled is not None:
+                conn.execute(
+                    "UPDATE users SET watchlist_sync_enabled = ? WHERE id = ?",
+                    (1 if enabled else 0, user_id),
+                )
+            if pull_on_login is not None:
+                conn.execute(
+                    "UPDATE users SET watchlist_pull_on_login = ? WHERE id = ?",
+                    (1 if pull_on_login else 0, user_id),
+                )
+            if push_on_pin is not None:
+                conn.execute(
+                    "UPDATE users SET watchlist_push_on_pin = ? WHERE id = ?",
+                    (1 if push_on_pin else 0, user_id),
+                )
+        return self.get_watchlist_sync_prefs(user_id)
+
+    def mark_watchlist_synced(self, user_id: str, *, synced_at: Optional[float] = None) -> None:
+        stamp = time.time() if synced_at is None else float(synced_at)
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE users SET watchlist_last_synced_at = ? WHERE id = ?",
+                (stamp, user_id),
+            )
+
     def _row_to_user(self, row: sqlite3.Row) -> Dict[str, Any]:
         keys = set(row.keys()) if hasattr(row, "keys") else set()
         preferred_name = None
@@ -852,6 +955,9 @@ class Database:
             "seerr_linked": seerr_user_id is not None,
             "seerr_permissions": int(row["seerr_permissions"]) if row["seerr_permissions"] is not None else None,
             "avatar_url": str(row["avatar_url"]) if row["avatar_url"] is not None else None,
+            "has_plex_token": bool(
+                "plex_token_enc" in keys and row["plex_token_enc"]
+            ),
             "created_at": float(row["created_at"]),
             "last_login_at": float(row["last_login_at"]) if row["last_login_at"] is not None else None,
         }
@@ -2465,18 +2571,45 @@ class Database:
         tvdb_id: Optional[int],
         media_type: str,
         title: str,
+        plex_rating_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = time.time()
         with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO watchlist_pins (
-                    id, user_id, tmdb_id, tvdb_id, media_type, title, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
-                ON CONFLICT DO NOTHING
-                """,
-                (pin_id, user_id, tmdb_id, tvdb_id, media_type, title, now),
-            )
+            cols = self._table_columns(conn, "watchlist_pins")
+            if "plex_rating_key" in cols:
+                conn.execute(
+                    """
+                    INSERT INTO watchlist_pins (
+                        id, user_id, tmdb_id, tvdb_id, media_type, title, created_at, plex_rating_key
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (pin_id, user_id, tmdb_id, tvdb_id, media_type, title, now, plex_rating_key),
+                )
+                if plex_rating_key:
+                    conn.execute(
+                        """
+                        UPDATE watchlist_pins
+                        SET plex_rating_key = COALESCE(plex_rating_key, ?)
+                        WHERE media_type = ?
+                          AND COALESCE(tmdb_id, -1) = COALESCE(?, -1)
+                          AND COALESCE(tvdb_id, -1) = COALESCE(?, -1)
+                          AND (
+                            (user_id IS NULL AND ? IS NULL) OR user_id = ?
+                          )
+                        """,
+                        (plex_rating_key, media_type, tmdb_id, tvdb_id, user_id, user_id),
+                    )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO watchlist_pins (
+                        id, user_id, tmdb_id, tvdb_id, media_type, title, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT DO NOTHING
+                    """,
+                    (pin_id, user_id, tmdb_id, tvdb_id, media_type, title, now),
+                )
             row = conn.execute(
                 """
                 SELECT * FROM watchlist_pins
@@ -2491,6 +2624,32 @@ class Database:
             ).fetchone()
         if row is None:
             raise ValueError("Could not save watchlist pin")
+        return self._row_to_watchlist_pin(row)
+
+    def set_watchlist_pin_plex_rating_key(self, pin_id: str, plex_rating_key: str) -> None:
+        with self.connect() as conn:
+            cols = self._table_columns(conn, "watchlist_pins")
+            if "plex_rating_key" not in cols:
+                return
+            conn.execute(
+                "UPDATE watchlist_pins SET plex_rating_key = ? WHERE id = ?",
+                (plex_rating_key, pin_id),
+            )
+
+    def get_watchlist_pin(self, pin_id: str, *, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            if user_id is None:
+                row = conn.execute(
+                    "SELECT * FROM watchlist_pins WHERE id = ?",
+                    (pin_id,),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT * FROM watchlist_pins WHERE id = ? AND user_id = ?",
+                    (pin_id, user_id),
+                ).fetchone()
+        if row is None:
+            return None
         return self._row_to_watchlist_pin(row)
 
     def delete_watchlist_pin(self, pin_id: str, *, user_id: Optional[str] = None) -> bool:
@@ -2524,6 +2683,10 @@ class Database:
 
     @staticmethod
     def _row_to_watchlist_pin(row: sqlite3.Row) -> Dict[str, Any]:
+        keys = set(row.keys()) if hasattr(row, "keys") else set()
+        plex_rating_key = None
+        if "plex_rating_key" in keys and row["plex_rating_key"] is not None:
+            plex_rating_key = str(row["plex_rating_key"])
         return {
             "id": str(row["id"]),
             "user_id": str(row["user_id"]) if row["user_id"] is not None else None,
@@ -2532,4 +2695,5 @@ class Database:
             "media_type": str(row["media_type"]),
             "title": str(row["title"]),
             "created_at": float(row["created_at"]),
+            "plex_rating_key": plex_rating_key,
         }

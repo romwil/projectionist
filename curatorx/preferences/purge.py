@@ -85,6 +85,7 @@ def suggest_purge_candidates(
             in_radarr=bool(row["in_radarr"]),
             in_sonarr=bool(row["in_sonarr"]),
             recommendation_reason=reason,
+            card_kind="purge",
         )
         candidates.append((purge_score, card))
 

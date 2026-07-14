@@ -90,6 +90,10 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             "suggest_titles_to_rate",
             "start_review_dialogue",
             "query_watchlist",
+            "add_to_watchlist",
+            "remove_from_watchlist",
+            "curate_watchlist",
+            "critique_watchlist",
             "upcoming_premieres",
         ):
             self.assertIn(expected, names)
@@ -189,6 +193,28 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             payload = json.loads(result)
             self.assertEqual(payload["count"], 1)
             self.assertEqual(payload["items"][0]["title"], "Inception")
+            self.assertIn("in_library", payload["items"][0])
+
+    async def test_add_and_critique_watchlist_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.ensure_seed_data()
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            added = json.loads(
+                await registry.execute(
+                    "add_to_watchlist",
+                    {
+                        "title": "Heat",
+                        "media_type": "movie",
+                        "tmdb_id": 949,
+                    },
+                )
+            )
+            self.assertIn("pin", added)
+            critique = json.loads(await registry.execute("critique_watchlist", {}))
+            self.assertIn("critique", critique)
+            curated = json.loads(await registry.execute("curate_watchlist", {}))
+            self.assertIn("remove_suggestions", curated)
 
     async def test_upcoming_premieres_without_tmdb_key(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

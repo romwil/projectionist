@@ -94,6 +94,8 @@ from curatorx.models.schemas import (
     WatchlistCreate,
     WatchlistListResponse,
     WatchlistPin,
+    WatchlistSyncRequest,
+    WatchlistSyncSettingsUpdate,
 )
 from curatorx.persona import (
     build_assembled_persona_prompt,
@@ -1810,14 +1812,64 @@ def list_watchlist(user=Depends(get_current_user_dep)) -> WatchlistListResponse:
     )
 
 
+@app.get("/api/watchlist/sync")
+def get_watchlist_sync(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    from curatorx.watchlist.plex_sync import get_watchlist_sync_status
+
+    return get_watchlist_sync_status(_db(), _settings(), user_id=user.id)
+
+
+@app.put("/api/watchlist/sync")
+def put_watchlist_sync(
+    payload: WatchlistSyncSettingsUpdate,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    from curatorx.watchlist.plex_sync import get_watchlist_sync_status, update_watchlist_sync_settings
+
+    if payload.enabled is None and payload.pull_on_login is None and payload.push_on_pin is None:
+        raise HTTPException(status_code=400, detail="No sync settings provided")
+    try:
+        update_watchlist_sync_settings(
+            _db(),
+            user_id=user.id,
+            enabled=payload.enabled,
+            pull_on_login=payload.pull_on_login,
+            push_on_pin=payload.push_on_pin,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return get_watchlist_sync_status(_db(), _settings(), user_id=user.id)
+
+
+@app.post("/api/watchlist/sync")
+def run_watchlist_sync(
+    payload: Optional[WatchlistSyncRequest] = None,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    from curatorx.watchlist.plex_sync import sync_watchlist_with_plex
+
+    direction = (payload.direction if payload else "both") or "both"
+    if direction not in {"both", "pull", "push"}:
+        raise HTTPException(status_code=400, detail="direction must be both, pull, or push")
+    return sync_watchlist_with_plex(
+        _db(),
+        _settings(),
+        user_id=user.id,
+        direction=direction,
+    )
+
+
 @app.post("/api/watchlist", response_model=WatchlistPin)
 def add_watchlist_pin(
     payload: WatchlistCreate,
     user=Depends(get_current_user_dep),
 ) -> WatchlistPin:
+    from curatorx.watchlist.plex_sync import push_pin_to_plex
+
     if not payload.tmdb_id and not payload.tvdb_id:
         raise HTTPException(status_code=400, detail="tmdb_id or tvdb_id is required")
-    user_id = user.id if _settings().features.multi_user_enabled else None
+    settings = _settings()
+    user_id = user.id if settings.features.multi_user_enabled else None
     try:
         pin = _db().add_watchlist_pin(
             pin_id=str(uuid.uuid4()),
@@ -1829,6 +1881,12 @@ def add_watchlist_pin(
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
+    try:
+        push_result = push_pin_to_plex(_db(), settings, pin, user_id=user.id)
+        if push_result.get("plex_rating_key") and pin.get("id"):
+            pin = {**pin, "plex_rating_key": push_result["plex_rating_key"]}
+    except Exception:
+        logger.debug("Watchlist push-on-pin failed", exc_info=True)
     return WatchlistPin(**pin)
 
 
@@ -1837,10 +1895,22 @@ def delete_watchlist_pin(
     pin_id: str,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, bool]:
-    user_id = user.id if _settings().features.multi_user_enabled else None
+    from curatorx.watchlist.plex_sync import remove_pin_from_plex
+
+    settings = _settings()
+    user_id = user.id if settings.features.multi_user_enabled else None
+    existing = _db().get_watchlist_pin(pin_id, user_id=user_id)
+    if existing is None and user_id is not None:
+        # Fallback for single-scope pins created before multi-user.
+        existing = _db().get_watchlist_pin(pin_id)
     removed = _db().delete_watchlist_pin(pin_id, user_id=user_id)
     if not removed:
         raise HTTPException(status_code=404, detail="Watchlist pin not found")
+    if existing is not None:
+        try:
+            remove_pin_from_plex(_db(), settings, existing, user_id=user.id)
+        except Exception:
+            logger.debug("Watchlist remove-from-plex failed", exc_info=True)
     return {"removed": True}
 
 

@@ -348,6 +348,24 @@ export async function removeWatchlistPin(pinId) {
   });
 }
 
+export async function getWatchlistSync() {
+  return api("/watchlist/sync");
+}
+
+export async function updateWatchlistSync(payload) {
+  return api("/watchlist/sync", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function runWatchlistSync(payload = { direction: "both" }) {
+  return api("/watchlist/sync", {
+    method: "POST",
+    body: JSON.stringify(payload || { direction: "both" }),
+  });
+}
+
 export async function getEngagementStreak() {
   return api("/engagement/streak");
 }

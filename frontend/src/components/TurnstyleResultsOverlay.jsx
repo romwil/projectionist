@@ -94,7 +94,7 @@ export default function TurnstyleResultsOverlay({
               requestPath={requestPath}
               onAdd={onAdd}
               onDismiss={onDismiss}
-              onTogglePin={onTogglePin}
+              onTogglePin={item.card_kind === "purge" ? undefined : onTogglePin}
               pinRecord={watchlistLookup?.byItemKey?.get(
                 `${item.media_type}:${item.tmdb_id ?? ""}:${item.tvdb_id ?? ""}`
               )}

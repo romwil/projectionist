@@ -98,7 +98,7 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
               requestPath={handlers.requestPath}
               onAdd={handlers.onAdd}
               onDismiss={handlers.onDismiss}
-              onTogglePin={handlers.onTogglePin}
+              onTogglePin={item.card_kind === "purge" ? undefined : handlers.onTogglePin}
               pinRecord={handlers.watchlistLookup?.byItemKey?.get(
                 `${item.media_type}:${item.tmdb_id ?? ""}:${item.tvdb_id ?? ""}`
               )}
