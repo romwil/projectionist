@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from contextvars import ContextVar
+from pathlib import Path
 from typing import Literal, Optional, Tuple
 
 from curatorx.privacy.schema import Audience
@@ -29,12 +30,22 @@ def audience_for_mode(mode: Optional[McpMode] = None) -> Audience:
     return "mcp_full" if resolved == "full" else "privacy"
 
 
+def _data_dir() -> Path:
+    return Path(os.environ.get("DATA_DIR", "/config"))
+
+
 def privacy_api_key() -> str:
-    return (os.environ.get("CURATORX_MCP_API_KEY") or "").strip()
+    """Privacy-mode key from settings.json (preferred) or CURATORX_MCP_API_KEY."""
+    from curatorx.config_store import load_merged_settings
+
+    return str(load_merged_settings(_data_dir()).mcp_api_key or "").strip()
 
 
 def full_api_key() -> str:
-    return (os.environ.get("CURATORX_MCP_FULL_API_KEY") or "").strip()
+    """Full-mode key from settings.json (preferred) or CURATORX_MCP_FULL_API_KEY."""
+    from curatorx.config_store import load_merged_settings
+
+    return str(load_merged_settings(_data_dir()).mcp_full_api_key or "").strip()
 
 
 def full_mode_allowed() -> bool:

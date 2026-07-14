@@ -6,13 +6,14 @@ import json
 import logging
 import os
 import re
+import secrets
 import threading
 import uuid
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
@@ -364,9 +365,17 @@ class SettingsPayload(BaseModel):
     tv_page_size: int = Field(default=500, ge=50, le=2000)
     library_enrich_workers: int = Field(default=6, ge=1, le=16)
     sync_reviews_to_plex: bool = True
+    mcp_api_key: str = ""
+    mcp_full_api_key: str = ""
+    mcp_tmdb_poster_size: str = "w500"
+    mcp_tmdb_backdrop_size: str = "w1280"
     features: FeatureFlagsPayload = Field(default_factory=FeatureFlagsPayload)
     auth: AuthSettingsPayload = Field(default_factory=AuthSettingsPayload)
     seerr: SeerrSettingsPayload = Field(default_factory=SeerrSettingsPayload)
+
+
+class McpKeyWhichPayload(BaseModel):
+    which: Literal["privacy", "full"]
 
 
 class PlexCollectionProposePayload(BaseModel):
@@ -429,12 +438,56 @@ def _scoped_user_id(user) -> Optional[str]:
     return None
 
 
+def _secret_hint(value: str) -> str:
+    """Last-4 hint for owner UI; never a reversible echo of the secret."""
+    cleaned = str(value or "").strip()
+    if not cleaned:
+        return ""
+    if len(cleaned) <= 4:
+        return "••••"
+    return f"…{cleaned[-4:]}"
+
+
+def _normalize_mcp_image_sizes(settings: Settings) -> Settings:
+    from curatorx.privacy.schema import BACKDROP_SIZES, POSTER_SIZES
+
+    poster = settings.mcp_tmdb_poster_size if settings.mcp_tmdb_poster_size in POSTER_SIZES else "w500"
+    backdrop = (
+        settings.mcp_tmdb_backdrop_size if settings.mcp_tmdb_backdrop_size in BACKDROP_SIZES else "w1280"
+    )
+    if poster == settings.mcp_tmdb_poster_size and backdrop == settings.mcp_tmdb_backdrop_size:
+        return settings
+    return Settings.from_mapping(
+        {
+            **asdict(settings),
+            "mcp_tmdb_poster_size": poster,
+            "mcp_tmdb_backdrop_size": backdrop,
+        }
+    )
+
+
+def _validate_distinct_mcp_keys(settings: Settings) -> None:
+    privacy = str(settings.mcp_api_key or "").strip()
+    full = str(settings.mcp_full_api_key or "").strip()
+    if privacy and full and privacy == full:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Privacy and full MCP keys must differ. "
+                "Use separate secrets for CURATORX_MCP_API_KEY and CURATORX_MCP_FULL_API_KEY."
+            ),
+        )
+
+
 def _mask_settings(settings: Settings) -> Dict[str, Any]:
     payload = asdict(settings)
     sources = secret_field_sources(DATA_DIR)
     for field in SECRET_FIELDS:
-        payload[f"{field}_set"] = bool(getattr(settings, field))
+        raw = getattr(settings, field)
+        payload[f"{field}_set"] = bool(raw)
         payload[f"{field}_source"] = sources.get(field, "")
+        if field in {"mcp_api_key", "mcp_full_api_key"}:
+            payload[f"{field}_hint"] = _secret_hint(str(raw or ""))
         payload[field] = ""
     seerr_payload = dict(payload.get("seerr") or {})
     seerr_payload["api_key_set"] = bool(settings.seerr.api_key)
@@ -738,7 +791,10 @@ def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) 
     before = Settings.load(settings_path)
     existing = _settings()
     merged = merge_secret_fields(payload.model_dump(), existing)
-    settings = normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
+    settings = _normalize_mcp_image_sizes(
+        normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
+    )
+    _validate_distinct_mcp_keys(settings)
     if settings.features.multi_user_enabled and not has_usable_session_secret(DATA_DIR):
         raise HTTPException(
             status_code=400,
@@ -756,6 +812,63 @@ def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) 
     save_settings(DATA_DIR, settings)
     sync_settings_to_db(_db(), settings)
     return _mask_settings(settings)
+
+
+def _mcp_key_field(which: str) -> str:
+    return "mcp_api_key" if which == "privacy" else "mcp_full_api_key"
+
+
+@app.post("/api/settings/mcp-keys/rotate")
+def rotate_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Generate a new MCP key, persist to settings.json, return plaintext once."""
+    del user
+    field = _mcp_key_field(payload.which)
+    settings_path = DATA_DIR / "settings.json"
+    before = Settings.load(settings_path) if settings_path.exists() else Settings()
+    existing = _settings()
+    new_key = secrets.token_urlsafe(32)
+    other_field = "mcp_full_api_key" if field == "mcp_api_key" else "mcp_api_key"
+    other_value = str(getattr(existing, other_field) or "").strip()
+    if other_value and new_key == other_value:
+        raise HTTPException(status_code=500, detail="Generated MCP key collided; retry rotate.")
+    updated = Settings.from_mapping({**asdict(existing), field: new_key})
+    _validate_distinct_mcp_keys(updated)
+    invalidate_certifications_on_settings_change(_db(), before, updated, {field: new_key})
+    save_settings(DATA_DIR, updated)
+    sync_settings_to_db(_db(), updated)
+    return {
+        "which": payload.which,
+        "field": field,
+        "key": new_key,
+        "hint": _secret_hint(new_key),
+        "settings": _mask_settings(updated),
+    }
+
+
+@app.post("/api/settings/mcp-keys/clear")
+def clear_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Clear a file-persisted MCP key. Env/Unraid-sourced keys must be removed from the template."""
+    del user
+    field = _mcp_key_field(payload.which)
+    sources = secret_field_sources(DATA_DIR)
+    if sources.get(field) == "env":
+        env_name = "CURATORX_MCP_API_KEY" if payload.which == "privacy" else "CURATORX_MCP_FULL_API_KEY"
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"This key is set via {env_name} (container / Unraid). "
+                "Remove that environment variable and restart, or rotate in Admin to "
+                "persist a new key in settings.json (file overrides env)."
+            ),
+        )
+    settings_path = DATA_DIR / "settings.json"
+    before = Settings.load(settings_path) if settings_path.exists() else Settings()
+    existing = _settings()
+    updated = Settings.from_mapping({**asdict(existing), field: ""})
+    invalidate_certifications_on_settings_change(_db(), before, updated, {field: ""})
+    save_settings(DATA_DIR, updated)
+    sync_settings_to_db(_db(), updated)
+    return {"which": payload.which, "field": field, "settings": _mask_settings(updated)}
 
 
 @app.post("/api/setup/test/plex")

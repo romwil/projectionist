@@ -24,12 +24,21 @@ pip install "curatorx[mcp]"
 
 ## Images (TMDB CDN)
 
-Emitted `poster_url` / `backdrop_url` are allowlisted to `https://image.tmdb.org/t/p/{size}/…` only. Configurable sizes (settings / Advanced later):
+Emitted `poster_url` / `backdrop_url` are allowlisted to `https://image.tmdb.org/t/p/{size}/…` only. Configurable sizes in **Admin → Advanced** (persisted in `settings.json`):
 
 - `mcp_tmdb_poster_size` (default `w500`; allow `w185` / `w342` / `w500` / `w780`)
-- `mcp_tmdb_backdrop_size` (default `w1280`)
+- `mcp_tmdb_backdrop_size` (default `w1280`; allow `w300` / `w780` / `w1280` / `original`)
 
 Plex/Fanart thumbs (including any URL containing `X-Plex-Token`) are cleared rather than rewritten.
+
+## Admin → Advanced (operators)
+
+Owners can **generate / regenerate** privacy and full MCP keys, see a last-4 hint (never the full secret on list GETs), and copy a newly generated key once. Keys persist to `settings.json` (file overrides empty-or-absent env after rotate). Unraid templates also expose both env vars.
+
+| Env / setting | Mode |
+|---------------|------|
+| `CURATORX_MCP_API_KEY` / `mcp_api_key` | Privacy |
+| `CURATORX_MCP_FULL_API_KEY` / `mcp_full_api_key` | Full (must differ) |
 
 ## Stdio (Cursor / Claude Desktop)
 

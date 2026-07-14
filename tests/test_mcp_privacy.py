@@ -88,6 +88,18 @@ class PrivacySchemaTests(unittest.TestCase):
 
 
 class McpHttpKeyModeTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self._prev_data_dir = os.environ.get("DATA_DIR")
+        os.environ["DATA_DIR"] = self._tmpdir.name
+
+    def tearDown(self) -> None:
+        if self._prev_data_dir is None:
+            os.environ.pop("DATA_DIR", None)
+        else:
+            os.environ["DATA_DIR"] = self._prev_data_dir
+        self._tmpdir.cleanup()
+
     def test_privacy_key_maps_to_privacy(self) -> None:
         with patch.dict(
             os.environ,

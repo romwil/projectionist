@@ -38,6 +38,8 @@ SECRET_FIELDS = (
     "tautulli_api_key",
     "llm_api_key",
     "webhook_secret",
+    "mcp_api_key",
+    "mcp_full_api_key",
 )
 
 # Masked or omitted in partial PUT payloads — preserve existing when incoming is empty.

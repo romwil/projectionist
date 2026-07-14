@@ -39,6 +39,8 @@ ENV_TO_FIELD = {
     "LLM_EMBEDDING_MODEL": "llm_embedding_model",
     "LLM_EMBEDDING_BASE_URL": "llm_embedding_base_url",
     "CURATORX_WEBHOOK_SECRET": "webhook_secret",
+    "CURATORX_MCP_API_KEY": "mcp_api_key",
+    "CURATORX_MCP_FULL_API_KEY": "mcp_full_api_key",
 }
 
 FIELD_TO_ENV = {value: key for key, value in ENV_TO_FIELD.items()}
@@ -542,6 +544,9 @@ class Settings:
     library_enrich_workers: int = 6
     sync_reviews_to_plex: bool = True
     webhook_secret: str = ""
+    # Dual-mode MCP HTTP keys (also CURATORX_MCP_* env / Unraid).
+    mcp_api_key: str = ""
+    mcp_full_api_key: str = ""
     # MCP / privacy image CDN sizes (image.tmdb.org/t/p/{size}/…).
     mcp_tmdb_poster_size: str = "w500"
     mcp_tmdb_backdrop_size: str = "w1280"
@@ -684,6 +689,8 @@ def secret_field_sources(data_dir: Path) -> Dict[str, str]:
         "tautulli_api_key",
         "llm_api_key",
         "webhook_secret",
+        "mcp_api_key",
+        "mcp_full_api_key",
     )
     for field in secret_fields:
         if _file_field_explicitly_set(file_data, field):

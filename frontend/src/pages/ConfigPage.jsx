@@ -8,6 +8,7 @@ import {
   LLM_PROVIDER_OPTIONS,
   WIZARD_STEPS,
   api,
+  clearMcpKey,
   getAuthMe,
   getFeatures,
   getHealth,
@@ -22,6 +23,7 @@ import {
   putPersona,
   putSystemConfig,
   resolveModelForProvider,
+  rotateMcpKey,
   saveSettings,
   syncUserSeerr,
   testService,
@@ -87,7 +89,12 @@ const FIELD_LABELS = {
   tv_page_size: "TV titles per sync page",
   library_enrich_workers: "Parallel enrich workers",
   library_sync_hour: "Preferred sync hour",
+  mcp_tmdb_poster_size: "MCP poster size",
+  mcp_tmdb_backdrop_size: "MCP backdrop size",
 };
+
+const MCP_POSTER_SIZES = ["w185", "w342", "w500", "w780"];
+const MCP_BACKDROP_SIZES = ["w300", "w780", "w1280", "original"];
 
 const FIELD_PLACEHOLDERS = {
   plex_url: "http://192.168.1.50:32400",
@@ -106,6 +113,8 @@ const FIELD_HELP = {
   movies_root: "Host path Radarr uses for movies (advanced; usually matches Radarr).",
   tv_root: "Host path Sonarr uses for TV (advanced; usually matches Sonarr).",
   library_enrich_workers: "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
+  mcp_tmdb_poster_size: "TMDB CDN size for MCP / privacy poster URLs (image.tmdb.org).",
+  mcp_tmdb_backdrop_size: "TMDB CDN size for MCP / privacy backdrop URLs.",
 };
 
 function fieldLabel(field) {
@@ -350,6 +359,8 @@ export default function ConfigPage() {
   const [appVersion, setAppVersion] = useState("");
   const [managedUsers, setManagedUsers] = useState([]);
   const [usersLoading, setUsersLoading] = useState(false);
+  const [mcpRevealedKeys, setMcpRevealedKeys] = useState({});
+  const [mcpKeyBusy, setMcpKeyBusy] = useState(null);
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
 
@@ -957,6 +968,142 @@ export default function ConfigPage() {
     } catch (error) {
       setActionFeedback("save", "error", error.message);
     }
+  }
+
+  async function handleRotateMcpKey(which) {
+    const label = which === "privacy" ? "privacy" : "full";
+    if (
+      !window.confirm(
+        `Regenerate the ${label} MCP API key? Clients using the old key will stop working until you update them.`,
+      )
+    ) {
+      return;
+    }
+    clearActionFeedback("mcp");
+    setMcpKeyBusy(`rotate-${which}`);
+    try {
+      const result = await rotateMcpKey(which);
+      if (result.settings) {
+        setSettings((prev) => ({ ...prev, ...result.settings }));
+      }
+      setMcpRevealedKeys((prev) => ({ ...prev, [which]: result.key }));
+      setActionFeedback(
+        "mcp",
+        "success",
+        `${label.charAt(0).toUpperCase() + label.slice(1)} MCP key regenerated. Copy it now — it won’t be shown again.`,
+      );
+    } catch (error) {
+      setActionFeedback("mcp", "error", error.message);
+    } finally {
+      setMcpKeyBusy(null);
+    }
+  }
+
+  async function handleClearMcpKey(which) {
+    const label = which === "privacy" ? "privacy" : "full";
+    if (!window.confirm(`Clear the ${label} MCP API key from settings?`)) {
+      return;
+    }
+    clearActionFeedback("mcp");
+    setMcpKeyBusy(`clear-${which}`);
+    try {
+      const result = await clearMcpKey(which);
+      if (result.settings) {
+        setSettings((prev) => ({ ...prev, ...result.settings }));
+      }
+      setMcpRevealedKeys((prev) => {
+        const next = { ...prev };
+        delete next[which];
+        return next;
+      });
+      setActionFeedback("mcp", "success", `${label.charAt(0).toUpperCase() + label.slice(1)} MCP key cleared.`);
+    } catch (error) {
+      setActionFeedback("mcp", "error", error.message);
+    } finally {
+      setMcpKeyBusy(null);
+    }
+  }
+
+  async function copyMcpKey(which) {
+    const value = mcpRevealedKeys[which];
+    if (!value) return;
+    try {
+      await navigator.clipboard.writeText(value);
+      setActionFeedback("mcp", "success", "MCP key copied to clipboard.");
+    } catch {
+      setActionFeedback("mcp", "error", "Could not copy — select the key and copy manually.");
+    }
+  }
+
+  function renderMcpKeyRow(which) {
+    const field = which === "privacy" ? "mcp_api_key" : "mcp_full_api_key";
+    const envName = which === "privacy" ? "CURATORX_MCP_API_KEY" : "CURATORX_MCP_FULL_API_KEY";
+    const title = which === "privacy" ? "Privacy MCP key" : "Full MCP key";
+    const blurb =
+      which === "privacy"
+        ? "Share with limited apps — public content schema, read-only tools."
+        : "Trusted in-stack only — internal library fields + confirm-gated *arr propose tools. Must differ from the privacy key.";
+    const configured = Boolean(settings?.[`${field}_set`]);
+    const hint = settings?.[`${field}_hint`] || "";
+    const source = settings?.[`${field}_source`] || "";
+    const revealed = mcpRevealedKeys[which] || "";
+    return (
+      <div className="mcp-key-row" data-testid={`mcp-key-${which}`}>
+        <div className="mcp-key-row-head">
+          <h4>{title}</h4>
+          <code className="mcp-key-env">{envName}</code>
+        </div>
+        <p className="wizard-note">{blurb}</p>
+        <p className="mcp-key-status" data-testid={`mcp-key-${which}-status`}>
+          {configured ? (
+            <>
+              Configured
+              {hint ? (
+                <>
+                  {" "}
+                  (<code>{hint}</code>)
+                </>
+              ) : null}
+              {source ? ` · source: ${source}` : null}
+            </>
+          ) : (
+            "Not set — HTTP /mcp disabled for this mode until you rotate or set the env var."
+          )}
+        </p>
+        {revealed ? (
+          <label className="mcp-key-reveal">
+            <span>New key (copy now)</span>
+            <div className="mcp-key-reveal-row">
+              <input type="text" readOnly value={revealed} data-testid={`mcp-key-${which}-revealed`} />
+              <button type="button" className="ghost" onClick={() => copyMcpKey(which)}>
+                Copy
+              </button>
+            </div>
+          </label>
+        ) : null}
+        <div className="config-actions">
+          <button
+            type="button"
+            data-testid={`mcp-key-${which}-rotate`}
+            disabled={Boolean(mcpKeyBusy)}
+            onClick={() => handleRotateMcpKey(which)}
+          >
+            {mcpKeyBusy === `rotate-${which}` ? "Regenerating…" : configured ? "Regenerate" : "Generate"}
+          </button>
+          {configured && source !== "env" ? (
+            <button
+              type="button"
+              className="ghost"
+              data-testid={`mcp-key-${which}-clear`}
+              disabled={Boolean(mcpKeyBusy)}
+              onClick={() => handleClearMcpKey(which)}
+            >
+              Clear
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
   }
 
   if (sectionParam && !ADMIN_SECTIONS.has(sectionParam)) {
@@ -2108,6 +2255,67 @@ export default function ConfigPage() {
                   </button>
                 </div>
                 <InlineAlert type={actionAlert?.area === "save" ? actionAlert.type : null} message={actionAlert?.area === "save" ? actionAlert.message : null} />
+              </div>
+
+              <div className="config-section-sub" data-testid="advanced-mcp">
+                <h3>MCP (Model Context Protocol)</h3>
+                <p className="wizard-note">
+                  Dual-mode HTTP MCP at <code>/mcp</code>. Present{" "}
+                  <code>X-CuratorX-MCP-Key</code> (or Bearer). Keys must differ. Regenerating writes{" "}
+                  <code>settings.json</code> (overrides Unraid/env until you remove the file value).
+                  See <Link to="/privacy">Privacy</Link> and operator docs for exposure tables.
+                </p>
+                {renderMcpKeyRow("privacy")}
+                {renderMcpKeyRow("full")}
+                <InlineAlert
+                  type={actionAlert?.area === "mcp" ? actionAlert.type : null}
+                  message={actionAlert?.area === "mcp" ? actionAlert.message : null}
+                />
+                <h4 className="mcp-image-heading">TMDB image sizes</h4>
+                <p className="wizard-note">
+                  Poster/backdrop URLs emitted to MCP and member public schemas use the TMDB CDN only.
+                </p>
+                <div className="config-grid">
+                  <label>
+                    <span>{fieldLabel("mcp_tmdb_poster_size")}</span>
+                    <select
+                      data-testid="mcp-tmdb-poster-size"
+                      value={settings.mcp_tmdb_poster_size || "w500"}
+                      onChange={(event) =>
+                        updateSettings({ mcp_tmdb_poster_size: event.target.value })
+                      }
+                    >
+                      {MCP_POSTER_SIZES.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="wizard-note field-help">{FIELD_HELP.mcp_tmdb_poster_size}</span>
+                  </label>
+                  <label>
+                    <span>{fieldLabel("mcp_tmdb_backdrop_size")}</span>
+                    <select
+                      data-testid="mcp-tmdb-backdrop-size"
+                      value={settings.mcp_tmdb_backdrop_size || "w1280"}
+                      onChange={(event) =>
+                        updateSettings({ mcp_tmdb_backdrop_size: event.target.value })
+                      }
+                    >
+                      {MCP_BACKDROP_SIZES.map((size) => (
+                        <option key={size} value={size}>
+                          {size}
+                        </option>
+                      ))}
+                    </select>
+                    <span className="wizard-note field-help">{FIELD_HELP.mcp_tmdb_backdrop_size}</span>
+                  </label>
+                </div>
+                <div className="config-actions">
+                  <button type="button" data-testid="mcp-image-sizes-save" onClick={handleSaveSettings}>
+                    Save image sizes
+                  </button>
+                </div>
               </div>
             </div>
           ) : null}

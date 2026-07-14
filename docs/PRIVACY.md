@@ -125,7 +125,7 @@ CuratorX supports two trust planes (selected by which secret is presented — ne
 | Privacy MCP key | `CURATORX_MCP_API_KEY` | Read-oriented library intelligence with a **public content** schema |
 | Full / in-stack MCP key | `CURATORX_MCP_FULL_API_KEY` | Deeper internal library fields + confirm-gated *arr propose tools for trusted automation on your LAN |
 
-Details and exposure: [MCP](#mcp). Rotate keys in Admin → Advanced when available. Do not reuse the same string for both keys.
+Details and exposure: [MCP](#mcp). Rotate keys in **Admin → Advanced** (last-4 hint on status; full value shown once after regenerate). Do not reuse the same string for both keys.
 
 ### Images (TMDB posters)
 

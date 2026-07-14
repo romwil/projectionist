@@ -614,6 +614,20 @@ export async function saveSettings(payload) {
   });
 }
 
+export async function rotateMcpKey(which) {
+  return api("/settings/mcp-keys/rotate", {
+    method: "POST",
+    body: JSON.stringify({ which }),
+  });
+}
+
+export async function clearMcpKey(which) {
+  return api("/settings/mcp-keys/clear", {
+    method: "POST",
+    body: JSON.stringify({ which }),
+  });
+}
+
 export async function testService(service, settings) {
   const payload = {
     ...settings,

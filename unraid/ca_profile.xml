@@ -20,7 +20,7 @@ CuratorX helps you curate your movie and TV collection through conversation.
 - Do **not** port-forward bare `:8788` to the internet.
 - Optional multi-user: set `CURATORX_SESSION_SECRET` (or accept auto-generated secret under Config).
 - Plex webhooks require `CURATORX_WEBHOOK_SECRET`.
-- Optional MCP HTTP: set `CURATORX_MCP_API_KEY` to enable `/mcp`.
+- Optional MCP HTTP: set `CURATORX_MCP_API_KEY` (privacy) and/or `CURATORX_MCP_FULL_API_KEY` (full; must differ) to enable `/mcp`. Or generate keys in Admin → Advanced.
 
 **First run**
 1. Open the Web UI at port **8788**.
@@ -36,6 +36,7 @@ CuratorX helps you curate your movie and TV collection through conversation.
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Container timezone for preferred library sync hour" Type="Variable" Display="advanced" Required="false" Mask="false">UTC</Config>
   <Config Name="CURATORX_SESSION_SECRET" Target="CURATORX_SESSION_SECRET" Default="" Mode="" Description="Strong secret for multi-user session cookies (auto-generated under Config if unset)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="CURATORX_WEBHOOK_SECRET" Target="CURATORX_WEBHOOK_SECRET" Default="" Mode="" Description="Required for Plex webhook auth header X-CuratorX-Webhook-Secret" Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="CURATORX_MCP_API_KEY" Target="CURATORX_MCP_API_KEY" Default="" Mode="" Description="Enable HTTP MCP at /mcp when set" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="CURATORX_MCP_API_KEY" Target="CURATORX_MCP_API_KEY" Default="" Mode="" Description="Privacy MCP key for HTTP /mcp (public schema, read-only). Or generate in Admin → Advanced." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="CURATORX_MCP_FULL_API_KEY" Target="CURATORX_MCP_FULL_API_KEY" Default="" Mode="" Description="Full MCP key for trusted in-stack /mcp (must differ from privacy key). Or generate in Admin → Advanced." Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="LLM_PROVIDER" Target="LLM_PROVIDER" Default="openai_compatible" Mode="" Description="LLM provider: openai_compatible, anthropic, ollama" Type="Variable" Display="advanced" Required="false" Mask="false">openai_compatible</Config>
 </Container>
