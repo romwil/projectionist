@@ -542,6 +542,9 @@ class Settings:
     library_enrich_workers: int = 6
     sync_reviews_to_plex: bool = True
     webhook_secret: str = ""
+    # MCP / privacy image CDN sizes (image.tmdb.org/t/p/{size}/…).
+    mcp_tmdb_poster_size: str = "w500"
+    mcp_tmdb_backdrop_size: str = "w1280"
     features: FeatureFlags = field(default_factory=FeatureFlags)
     auth: AuthSettings = field(default_factory=AuthSettings)
     seerr: SeerrSettings = field(default_factory=SeerrSettings)

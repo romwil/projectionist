@@ -132,6 +132,7 @@ from curatorx.web.auth import (
 from curatorx.web.rate_limit import enforce_rate_limit
 from curatorx.web.jobs import get_job_manager, get_sync_scheduler
 from curatorx.web.session_tokens import ensure_session_secret, has_usable_session_secret
+from curatorx.web.library_privacy import sanitize_library_payload
 from curatorx.web.webhooks import register_webhook_routes
 from curatorx.web.setup import (
     SECRET_FIELDS,
@@ -435,6 +436,10 @@ def _mask_settings(settings: Settings) -> Dict[str, Any]:
 
 def _db():
     return get_job_manager().db
+
+
+def _sanitize_library_payload(payload: Any, user) -> Any:
+    return sanitize_library_payload(payload, settings=_settings(), user=user)
 
 
 register_webhook_routes(app, db_factory=_db, settings_factory=_settings)
@@ -882,31 +887,36 @@ def start_library_sync(user=Depends(require_role("owner"))) -> Dict[str, Any]:
 
 
 @app.get("/api/library/stats")
-def library_stats() -> Dict[str, Any]:
+def library_stats(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     db = _db()
     items = db.all_library_items()
     movies = sum(1 for i in items if i["media_type"] == "movie")
     shows = sum(1 for i in items if i["media_type"] == "show")
-    return {
+    payload = {
         "total": len(items),
         "movies": movies,
         "shows": shows,
         "last_sync": db.get_sync_state("last_sync"),
     }
+    return _sanitize_library_payload(payload, user)
 
 
 @app.get("/api/library/health")
-def library_health() -> Dict[str, Any]:
-    return compute_library_health(_db())
+def library_health(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    return _sanitize_library_payload(compute_library_health(_db()), user)
 
 
 @app.get("/api/library/purge-candidates")
-def library_purge_candidates(limit: int = 12) -> Dict[str, Any]:
+def library_purge_candidates(
+    limit: int = 12,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
     cards = suggest_purge_candidates(_db(), _settings(), limit=min(max(1, limit), 25))
-    return {
+    payload = {
         "count": len(cards),
         "items": [card.model_dump() for card in cards],
     }
+    return _sanitize_library_payload(payload, user)
 
 
 @app.get("/api/admin/export/training-corpus")
@@ -921,8 +931,8 @@ def export_training_corpus(user=Depends(require_role("owner"))) -> JSONResponse:
 
 
 @app.get("/api/library/overview")
-def library_overview_endpoint() -> Dict[str, Any]:
-    return library_overview(_db())
+def library_overview_endpoint(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    return _sanitize_library_payload(library_overview(_db()), user)
 
 
 @app.get("/api/library/query")
@@ -962,6 +972,7 @@ async def library_query_endpoint(
     sort: str = "title",
     offset: int = 0,
     limit: int = 25,
+    user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     filters = filters_from_mapping(
         {
@@ -1003,8 +1014,10 @@ async def library_query_endpoint(
         }
     )
     if filters.semantic_query:
-        return await query_library_async(_db(), filters, _settings())
-    return query_library(_db(), filters)
+        result = await query_library_async(_db(), filters, _settings())
+    else:
+        result = query_library(_db(), filters)
+    return _sanitize_library_payload(result, user)
 
 
 @app.get("/api/library/aggregate")
@@ -1016,6 +1029,7 @@ def library_aggregate_endpoint(
     genres: Optional[str] = None,
     directors: Optional[str] = None,
     keywords: Optional[str] = None,
+    user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     normalized = group_by.strip().lower()
     allowed = {
@@ -1048,13 +1062,23 @@ def library_aggregate_endpoint(
             "keywords": keywords,
         }
     )
-    return aggregate_library(_db(), normalized, filters)  # type: ignore[arg-type]
+    return _sanitize_library_payload(
+        aggregate_library(_db(), normalized, filters),  # type: ignore[arg-type]
+        user,
+    )
 
 
 @app.get("/api/library/facets")
-def library_facets_endpoint(facet_type: str, limit: int = 50) -> Dict[str, Any]:
+def library_facets_endpoint(
+    facet_type: str,
+    limit: int = 50,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
     try:
-        return library_facet_catalog(_db(), facet_type, limit=limit)
+        return _sanitize_library_payload(
+            library_facet_catalog(_db(), facet_type, limit=limit),
+            user,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -1067,15 +1091,19 @@ def library_tv_episodes_endpoint(
     unwatched_only: bool = False,
     offset: int = 0,
     limit: int = 25,
+    user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    return query_episodes(
-        _db(),
-        show=show,
-        show_id=show_id,
-        season=season,
-        unwatched_only=unwatched_only,
-        offset=offset,
-        limit=limit,
+    return _sanitize_library_payload(
+        query_episodes(
+            _db(),
+            show=show,
+            show_id=show_id,
+            season=season,
+            unwatched_only=unwatched_only,
+            offset=offset,
+            limit=limit,
+        ),
+        user,
     )
 
 
@@ -1084,13 +1112,17 @@ def library_tv_progress_endpoint(
     group_by: str = "show",
     in_progress_only: bool = False,
     limit: int = 25,
+    user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     try:
-        return summarize_tv_progress(
-            _db(),
-            group_by=group_by,
-            in_progress_only=in_progress_only,
-            limit=limit,
+        return _sanitize_library_payload(
+            summarize_tv_progress(
+                _db(),
+                group_by=group_by,
+                in_progress_only=in_progress_only,
+                limit=limit,
+            ),
+            user,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -1510,7 +1542,12 @@ async def chat_stream(
 
 
 @app.get("/api/title/{media_type}/{item_id}")
-def title_detail(media_type: str, item_id: str, id_type: str = "tmdb") -> Dict[str, Any]:
+def title_detail(
+    media_type: str,
+    item_id: str,
+    id_type: str = "tmdb",
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
     settings = _settings()
     db = _db()
     kwargs: Dict[str, Any] = {"media_type": media_type}
@@ -1521,7 +1558,7 @@ def title_detail(media_type: str, item_id: str, id_type: str = "tmdb") -> Dict[s
     else:
         kwargs["tmdb_id"] = int(item_id)
     detail = get_title_detail(db, settings, **kwargs)
-    return detail.model_dump()
+    return _sanitize_library_payload(detail.model_dump(), user)
 
 
 @app.post("/api/actions/propose")

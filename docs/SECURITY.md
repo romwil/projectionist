@@ -37,11 +37,24 @@ SPA AuthGate ──blocks browser──► /login
 Most /api/*  ──curl without cookie──► still succeeds when multi_user_enabled
 ```
 
+### MCP & privacy (dual-mode)
+
+CuratorX exposes optional MCP over stdio and HTTP (`/mcp`). Trust is selected by **which API key** is presented — never by a client-supplied mode flag.
+
+| Mode | Credential | Schema | Tools |
+|------|------------|--------|-------|
+| **privacy** | `CURATORX_MCP_API_KEY` | Public content (titles/metadata; TMDB CDN images only) | Read-only library tools |
+| **full** | `CURATORX_MCP_FULL_API_KEY` (must differ from privacy key) | Internal fields (`rating_key`, watch telemetry, *arr flags) **minus** live `X-Plex-Token` URLs | Read tools + confirm-gated `propose_*` / `confirm_pending_action` |
+
+Stdio: `CURATORX_MCP_MODE=privacy|full`; full requires a distinct `CURATORX_MCP_FULL_API_KEY` in the environment. Shared sanitizers in [`curatorx/privacy/`](../curatorx/privacy/) also redact `/api/library/*` browse JSON for non-owner members when multi-user is on.
+
+See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
+
 ---
 
 ## Findings
 
-Statuses reflect the 1.2 hardening track. Residual risk is what remains after mitigations.
+Statuses reflect the 1.2 hardening track plus Pre-CA / **1.3** privacy workstreams. Residual risk is what remains after mitigations.
 
 | ID | Severity | Location | Exploit one-liner | Status | Residual risk |
 |----|----------|----------|-------------------|--------|---------------|
@@ -58,6 +71,12 @@ Statuses reflect the 1.2 hardening track. Residual risk is what remains after mi
 | **S11** | Medium | Settings JSON under `DATA_DIR` / `/config` (`settings.json`) via [`curatorx/config_store`](../curatorx/config_store.py) + [`app.py`](../curatorx/web/app.py) save path — API keys and tokens in plaintext on disk. | Read volume / backup / host filesystem → fleet credentials. | **Open** | Protect `/config` permissions and backups; treat volume as secret material. |
 | **S12** | Low | Docs historically claimed multi-user “enforces” API auth ([`CONFIGURATION.md`](CONFIGURATION.md), [`WEB_UI.md`](WEB_UI.md), [`wiki/Multi-User.md`](wiki/Multi-User.md)). | Operators assume network peers cannot hit `/api` without login. | **Mitigated** | Docs + API middleware aligned for multi-user 1.2. |
 | **S13** | Low | [`Dockerfile`](../Dockerfile) — final image runs as root (no `USER`). | Container breakout has root inside the image. | **Open** | Drop privileges / non-root user in a later packaging pass; rely on Docker/Unraid isolation meantime. |
+| **P1** | High | MCP / library payloads emitted `poster_url` / `backdrop_url` with live `X-Plex-Token` (Plex thumbs from sync). | Holder of privacy MCP key or member curling `/api/library` exfiltrates server token. | **Mitigated** | Sanitizer allowlists `image.tmdb.org` only; tokenized non-TMDB URLs cleared for all audiences. |
+| **P2** | High | Privacy MCP tools returned `rating_key` and other Plex infrastructure ids. | Correlate titles to PMS items / probe the media stack. | **Mitigated** | Public schema drops `rating_key` (and related plex ids); privacy mode rejects rating_key title lookups. |
+| **P3** | Medium | Privacy MCP / member APIs exposed raw view/added timestamps, file sizes, `in_radarr`/`in_sonarr`. | Household telemetry + *arr inventory leaks to limited apps / members. | **Mitigated** | Public schema drops telemetry/arr/size; optional `watch_state` enum only. |
+| **P4** | High | Single shared MCP key with no mode separation invited oversharing into write-capable or internal-schema clients. | Compromised limited app inherits full library schema / future writes. | **Mitigated** | Dual keys (`CURATORX_MCP_API_KEY` vs `CURATORX_MCP_FULL_API_KEY`); equal keys refuse full mode. |
+| **P5** | Medium | Authenticated members received the same internal library JSON as owners. | Member curls dump rating keys, sizes, arr flags. | **Mitigated** | `/api/library/*` browse + title detail sanitize with `audience=member` when multi-user on and role ≠ owner. |
+| **P6** | Medium | Full MCP / stdio could be enabled accidentally without a distinct full secret. | Laptop stdio or mis-set env escalates to propose tools. | **Mitigated** | Stdio full requires distinct `CURATORX_MCP_FULL_API_KEY`; HTTP maps key → mode; propose tools error in privacy mode. |
 
 ---
 
@@ -68,10 +87,12 @@ Statuses reflect the 1.2 hardening track. Residual risk is what remains after mi
 3. Set a non-empty **webhook secret** if anything outside the host can POST `/api/webhooks/plex`.
 4. Treat multi-user as a **household convenience + UI gate**, not as API isolation — keep the host on a trusted segment.
 5. Restrict who can mount/read the `/config` volume.
+6. Prefer a **privacy MCP key** for shared/third-party clients; only mint `CURATORX_MCP_FULL_API_KEY` for trusted in-stack automation (keys must differ).
 
 ## Related docs
 
 - [PRIVACY.md](PRIVACY.md) — plain-language privacy & data use (household + owner; in-app at `/privacy`)
+- [MCP.md](MCP.md) — dual-mode MCP keys, schemas, TMDB image policy
 - [TESTING.md](TESTING.md) — API authz regression outline (`tests/test_api_authz.py`)
 - [CONFIGURATION.md](CONFIGURATION.md) — feature flags and session secret
 - [WEB_UI.md](WEB_UI.md) — UI login vs API surface

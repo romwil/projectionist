@@ -1,4 +1,4 @@
-"""MCP stdio server exposing CuratorX library query tools."""
+"""MCP stdio / HTTP server exposing CuratorX library query tools."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 from pathlib import Path
 from typing import Any, Optional
 
@@ -23,6 +24,13 @@ from curatorx.library.query import (
     query_library_async,
 )
 from curatorx.library.titles import get_title_detail
+from curatorx.mcp.mode import (
+    audience_for_mode,
+    get_mcp_mode,
+    resolve_stdio_mcp_mode,
+    set_mcp_mode,
+)
+from curatorx.privacy import sanitize
 from curatorx.web.jobs import _resolve_db_path
 
 mcp = FastMCP(
@@ -31,7 +39,8 @@ mcp = FastMCP(
         "Query the user's Plex library indexed by CuratorX. "
         "Use library_query for paginated owned-title browse with rich filters; "
         "library_aggregate for counts; library_facet_catalog for top directors/actors; "
-        "library_tv_episodes and library_tv_progress for TV episode-level queries."
+        "library_tv_episodes and library_tv_progress for TV episode-level queries. "
+        "Full MCP mode also exposes confirm-gated *arr propose tools."
     ),
 )
 
@@ -47,12 +56,56 @@ def _settings() -> Settings:
     return load_merged_settings(Path(os.environ.get("DATA_DIR", "/config")))
 
 
+def _emit(payload: Any) -> str:
+    """Serialize tool results with audience sanitization (never live X-Plex-Token)."""
+    cleaned = sanitize(payload, audience=audience_for_mode(), settings=_settings())
+    return json.dumps(cleaned)
+
+
+def _require_full_mode() -> Optional[str]:
+    if get_mcp_mode() != "full":
+        return json.dumps(
+            {
+                "error": "This tool requires full MCP mode (CURATORX_MCP_FULL_API_KEY / CURATORX_MCP_MODE=full).",
+            }
+        )
+    return None
+
+
 def _filter_mapping(**kwargs: Any) -> dict[str, Any]:
     bool_keys = {"unwatched_only", "in_progress_only", "missing_tmdb_id"}
     return {
         key: value
         for key, value in kwargs.items()
         if value is not None or key in bool_keys
+    }
+
+
+def _public_tmdb_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Trim TMDB search hits for privacy mode (no raw poster_path fan-out needed)."""
+    from curatorx.connectors.tmdb import TMDBClient
+
+    settings = _settings()
+    poster_size = getattr(settings, "mcp_tmdb_poster_size", "w500") or "w500"
+    backdrop_size = getattr(settings, "mcp_tmdb_backdrop_size", "w1280") or "w1280"
+    media = "show" if item.get("media_type") == "tv" or "first_air_date" in item else "movie"
+    title = str(item.get("title") or item.get("name") or "")
+    year_raw = item.get("release_date") or item.get("first_air_date") or ""
+    year = None
+    if isinstance(year_raw, str) and len(year_raw) >= 4 and year_raw[:4].isdigit():
+        year = int(year_raw[:4])
+    tmdb = TMDBClient("")  # URL helpers only
+    poster = tmdb.poster_url(item.get("poster_path"), size=poster_size)
+    backdrop = tmdb.backdrop_url(item.get("backdrop_path"), size=backdrop_size)
+    return {
+        "tmdb_id": int(item.get("id") or 0) or None,
+        "title": title,
+        "year": year,
+        "media_type": media,
+        "overview": str(item.get("overview") or "")[:480],
+        "vote_average": item.get("vote_average"),
+        "poster_url": poster,
+        "backdrop_url": backdrop,
     }
 
 
@@ -138,7 +191,7 @@ def library_query(
         result = asyncio.run(query_library_async(_database(), filters, _settings()))
     else:
         result = query_library(_database(), filters)
-    return json.dumps(result)
+    return _emit(result)
 
 
 @mcp.tool()
@@ -168,7 +221,7 @@ def library_aggregate(
         "decade_genre",
     }
     if normalized not in allowed:
-        return json.dumps({"error": f"group_by must be one of: {', '.join(sorted(allowed))}"})
+        return _emit({"error": f"group_by must be one of: {', '.join(sorted(allowed))}"})
     filters = filters_from_mapping(
         _filter_mapping(
             media_type=media_type,
@@ -179,16 +232,16 @@ def library_aggregate(
             keywords=keywords,
         )
     )
-    return json.dumps(aggregate_library(_database(), normalized, filters))  # type: ignore[arg-type]
+    return _emit(aggregate_library(_database(), normalized, filters))  # type: ignore[arg-type]
 
 
 @mcp.tool()
 def library_facet_catalog_tool(facet_type: str, limit: int = 50) -> str:
     """List top directors, actors, keywords, countries, or languages in the library."""
     try:
-        return json.dumps(library_facet_catalog(_database(), facet_type, limit=limit))
+        return _emit(library_facet_catalog(_database(), facet_type, limit=limit))
     except ValueError as exc:
-        return json.dumps({"error": str(exc)})
+        return _emit({"error": str(exc)})
 
 
 @mcp.tool()
@@ -201,7 +254,7 @@ def library_tv_episodes(
     limit: int = 25,
 ) -> str:
     """Browse episodes for an owned TV show."""
-    return json.dumps(
+    return _emit(
         query_episodes(
             _database(),
             show=show,
@@ -222,7 +275,7 @@ def library_tv_progress(
 ) -> str:
     """Summarize TV watch completion by show or season."""
     try:
-        return json.dumps(
+        return _emit(
             summarize_tv_progress(
                 _database(),
                 group_by=group_by,
@@ -231,13 +284,13 @@ def library_tv_progress(
             )
         )
     except ValueError as exc:
-        return json.dumps({"error": str(exc)})
+        return _emit({"error": str(exc)})
 
 
 @mcp.tool()
 def library_overview_tool() -> str:
     """Compact library inventory: totals, decades, genres, directors, TV progress."""
-    return json.dumps(library_overview(_database()))
+    return _emit(library_overview(_database()))
 
 
 @mcp.tool()
@@ -248,18 +301,20 @@ def library_title_detail(
     rating_key: Optional[str] = None,
 ) -> str:
     """Fetch rich metadata for one title in or outside the library."""
+    # Privacy mode: do not accept/lookup by rating_key (Plex infrastructure id).
+    if get_mcp_mode() != "full" and rating_key:
+        return _emit({"error": "rating_key lookups require full MCP mode; use tmdb_id or tvdb_id"})
     kwargs: dict[str, Any] = {"media_type": media_type}
-    if rating_key:
+    if rating_key and get_mcp_mode() == "full":
         kwargs["rating_key"] = rating_key
     elif tvdb_id is not None:
         kwargs["tvdb_id"] = tvdb_id
     elif tmdb_id is not None:
         kwargs["tmdb_id"] = tmdb_id
     else:
-        return json.dumps({"error": "Provide tmdb_id, tvdb_id, or rating_key"})
+        return _emit({"error": "Provide tmdb_id, tvdb_id, or rating_key (full mode)"})
     detail = get_title_detail(_database(), _settings(), **kwargs)
-    return json.dumps(detail.model_dump())
-
+    return _emit(detail.model_dump())
 
 
 @mcp.tool()
@@ -280,7 +335,7 @@ def what_to_watch_tonight(
         )
     )
     result = query_library(_database(), filters)
-    return json.dumps(result)
+    return _emit(result)
 
 
 @mcp.tool()
@@ -304,7 +359,7 @@ def find_collection_gaps(
     )
     overview = library_overview(_database())
     sample = query_library(_database(), filters)
-    return json.dumps({"overview": overview, "sample_owned": sample})
+    return _emit({"overview": overview, "sample_owned": sample})
 
 
 @mcp.tool()
@@ -321,7 +376,7 @@ def recommend_hidden_gems(
             limit=limit,
         )
     )
-    return json.dumps(query_library(_database(), filters))
+    return _emit(query_library(_database(), filters))
 
 
 @mcp.tool()
@@ -330,7 +385,7 @@ def suggest_purge_candidates_tool(limit: int = 12) -> str:
     from curatorx.preferences.purge import suggest_purge_candidates
 
     cards = suggest_purge_candidates(_database(), _settings(), limit=min(max(1, limit), 25))
-    return json.dumps({"count": len(cards), "items": [c.model_dump() for c in cards]})
+    return _emit({"count": len(cards), "items": [c.model_dump() for c in cards]})
 
 
 @mcp.tool()
@@ -338,14 +393,14 @@ def analyze_watch_patterns(limit: int = 25) -> str:
     """High-level watch pattern snapshot from library overview + progress."""
     overview = library_overview(_database())
     progress = summarize_tv_progress(_database(), group_by="show", in_progress_only=True, limit=limit)
-    return json.dumps({"overview": overview, "in_progress_tv": progress})
+    return _emit({"overview": overview, "in_progress_tv": progress})
 
 
 @mcp.tool()
 def list_watchlist_pins(limit: int = 50) -> str:
     """List household watchlist pins (shared library sidecar; no per-user MCP auth yet)."""
     items = _database().list_watchlist_pins()[: max(1, min(limit, 200))]
-    return json.dumps({"items": items, "count": len(items)})
+    return _emit({"items": items, "count": len(items)})
 
 
 @mcp.tool()
@@ -354,24 +409,189 @@ def upcoming_premieres(limit: int = 20) -> str:
     filters = filters_from_mapping(
         _filter_mapping(recently_added_days=30, sort="added_at", limit=limit)
     )
-    return json.dumps(query_library(_database(), filters))
+    return _emit(query_library(_database(), filters))
 
 
 @mcp.tool()
 def search_tmdb_proxy(query: str, media_type: Optional[str] = "movie", limit: int = 10) -> str:
     """Search TMDB when configured (read-only discovery outside the owned library)."""
-    from curatorx.connectors.tmdb import TmdbClient
+    from curatorx.connectors.tmdb import TMDBClient
 
     settings = _settings()
     if not settings.tmdb_api_key:
-        return json.dumps({"error": "TMDB API key is not configured"})
-    client = TmdbClient(settings.tmdb_api_key)
+        return _emit({"error": "TMDB API key is not configured"})
+    client = TMDBClient(settings.tmdb_api_key)
+    capped = max(1, min(int(limit or 10), 25))
     if media_type == "show":
-        results = client.search_tv(query)[:limit]
+        results = client.search_tv(query)[:capped]
     else:
-        results = client.search_movie(query)[:limit]
-    return json.dumps({"items": results, "count": len(results)})
+        results = client.search_movie(query)[:capped]
+    # Always emit trimmed public TMDB fields (CDN posters only, no API key leakage).
+    items = [_public_tmdb_item(dict(item)) for item in results if isinstance(item, dict)]
+    return _emit({"items": items, "count": len(items)})
 
+
+# --- Full-mode confirm-gated *arr tools -------------------------------------------------
+
+
+@mcp.tool()
+def propose_add_radarr(tmdb_id: int, title: str = "") -> str:
+    """Full mode: queue a Radarr add for confirmation (returns pending_token)."""
+    denied = _require_full_mode()
+    if denied:
+        return denied
+    from curatorx.agent.tools import check_radarr_already_exists, mark_in_radarr
+    from curatorx.config_store import (
+        radarr_add_configuration_error,
+        resolve_radarr_root_folder,
+        validate_arr_root_folder,
+    )
+    from curatorx.connectors.radarr import RadarrClient
+
+    settings = _settings()
+    config_error = radarr_add_configuration_error(settings)
+    if config_error:
+        return _emit({"error": config_error})
+    client = RadarrClient(settings.radarr_url, settings.radarr_api_key)
+    root_error = validate_arr_root_folder(
+        "Radarr",
+        resolve_radarr_root_folder(settings),
+        client.root_folders(),
+    )
+    if root_error:
+        return _emit({"error": root_error})
+    existing = check_radarr_already_exists(client, int(tmdb_id), title=title)
+    if existing:
+        mark_in_radarr(_database(), int(tmdb_id), title=title)
+        return _emit(existing)
+    token = uuid.uuid4().hex
+    payload = {"action": "add_radarr", "tmdb_id": int(tmdb_id), "title": title}
+    _database().save_pending_action(token, "add_radarr", payload, user_id=None)
+    return _emit(
+        {
+            "pending_token": token,
+            "confirmation_token": token,
+            "summary": f"Add to Radarr: {title or tmdb_id}",
+            "message": "Call confirm_pending_action with this token to execute.",
+        }
+    )
+
+
+@mcp.tool()
+def propose_add_sonarr(tvdb_id: int, title: str = "") -> str:
+    """Full mode: queue a Sonarr add for confirmation (returns pending_token)."""
+    denied = _require_full_mode()
+    if denied:
+        return denied
+    from curatorx.agent.tools import check_sonarr_already_exists, mark_in_sonarr
+    from curatorx.config_store import (
+        resolve_sonarr_root_folder,
+        sonarr_add_configuration_error,
+        validate_arr_root_folder,
+    )
+    from curatorx.connectors.sonarr import SonarrClient
+
+    settings = _settings()
+    config_error = sonarr_add_configuration_error(settings)
+    if config_error:
+        return _emit({"error": config_error})
+    client = SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
+    root_error = validate_arr_root_folder(
+        "Sonarr",
+        resolve_sonarr_root_folder(settings),
+        client.root_folders(),
+    )
+    if root_error:
+        return _emit({"error": root_error})
+    existing = check_sonarr_already_exists(client, int(tvdb_id), title=title)
+    if existing:
+        mark_in_sonarr(_database(), int(tvdb_id), title=title)
+        return _emit(existing)
+    token = uuid.uuid4().hex
+    payload = {"action": "add_sonarr", "tvdb_id": int(tvdb_id), "title": title}
+    _database().save_pending_action(token, "add_sonarr", payload, user_id=None)
+    return _emit(
+        {
+            "pending_token": token,
+            "confirmation_token": token,
+            "summary": f"Add to Sonarr: {title or tvdb_id}",
+            "message": "Call confirm_pending_action with this token to execute.",
+        }
+    )
+
+
+@mcp.tool()
+def propose_remove_arr(
+    media_type: str = "movie",
+    title: str = "",
+    tmdb_id: Optional[int] = None,
+    tvdb_id: Optional[int] = None,
+    arr_id: Optional[int] = None,
+    delete_files: bool = False,
+) -> str:
+    """Full mode: queue an *arr remove for confirmation (returns pending_token)."""
+    denied = _require_full_mode()
+    if denied:
+        return denied
+    from curatorx.agent.tools import resolve_arr_removal_target
+    from curatorx.connectors.arr_errors import ArrTitleNotFoundError
+
+    try:
+        resolved = resolve_arr_removal_target(
+            _settings(),
+            media_type=media_type,
+            arr_id=int(arr_id) if arr_id is not None else None,
+            tmdb_id=int(tmdb_id) if tmdb_id is not None else None,
+            tvdb_id=int(tvdb_id) if tvdb_id is not None else None,
+            title=title,
+        )
+    except ArrTitleNotFoundError as error:
+        return _emit({"error": str(error)})
+    token = uuid.uuid4().hex
+    payload: dict[str, Any] = {
+        "action": "remove_arr",
+        "media_type": media_type,
+        "arr_id": resolved["arr_id"],
+        "title": resolved.get("title") or title,
+        "delete_files": bool(delete_files),
+    }
+    if resolved.get("tmdb_id") is not None:
+        payload["tmdb_id"] = resolved["tmdb_id"]
+    if resolved.get("tvdb_id") is not None:
+        payload["tvdb_id"] = resolved["tvdb_id"]
+    _database().save_pending_action(token, "remove_arr", payload, user_id=None)
+    return _emit(
+        {
+            "pending_token": token,
+            "confirmation_token": token,
+            "summary": f"Remove from *arr: {payload['title']}",
+            "arr_id": resolved["arr_id"],
+            "message": "Call confirm_pending_action with this token to execute.",
+        }
+    )
+
+
+@mcp.tool()
+def confirm_pending_action(token: str, confirmed: bool = True) -> str:
+    """Full mode: confirm or cancel a pending *arr propose token."""
+    denied = _require_full_mode()
+    if denied:
+        return denied
+
+    async def _run() -> dict[str, Any]:
+        from curatorx.agent.tools import execute_confirmed_action
+
+        db = _database()
+        if not confirmed:
+            db.pop_pending_action(token, user_id=None)
+            return {"cancelled": True}
+        result = await execute_confirmed_action(db, _settings(), token, user_id=None)
+        return {"ok": True, **result}
+
+    try:
+        return _emit(asyncio.run(_run()))
+    except Exception as error:  # noqa: BLE001
+        return _emit({"error": str(error)})
 
 
 def main() -> None:
@@ -381,7 +601,9 @@ def main() -> None:
     if os.environ.get("CURATORX_SKIP_DOTENV") != "1":
         load_dotenv_file()
     configure_logging()
-    logging.getLogger(__name__).info("CuratorX MCP server starting")
+    mode = resolve_stdio_mcp_mode()
+    set_mcp_mode(mode)
+    logging.getLogger(__name__).info("CuratorX MCP server starting mode=%s", mode)
     mcp.run(transport="stdio")
 
 

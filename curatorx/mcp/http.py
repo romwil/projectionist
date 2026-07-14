@@ -1,28 +1,21 @@
-"""HTTP /mcp mount helpers (API-key gated Streamable HTTP)."""
+"""HTTP /mcp mount helpers (API-key gated Streamable HTTP, dual-mode)."""
 
 from __future__ import annotations
 
-import os
+import logging
 from typing import Optional
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from curatorx.mcp.mode import resolve_http_mcp_auth, set_mcp_mode
+
+logger = logging.getLogger(__name__)
+
 
 class McpApiKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next) -> Response:
-        expected = (os.environ.get("CURATORX_MCP_API_KEY") or "").strip()
-        if not expected:
-            return JSONResponse(
-                {
-                    "detail": (
-                        "MCP HTTP transport disabled. Set CURATORX_MCP_API_KEY "
-                        "to enable /mcp."
-                    )
-                },
-                status_code=503,
-            )
         provided = (
             request.headers.get("x-curatorx-mcp-key")
             or request.headers.get("authorization")
@@ -30,8 +23,15 @@ class McpApiKeyMiddleware(BaseHTTPMiddleware):
         ).strip()
         if provided.lower().startswith("bearer "):
             provided = provided[7:].strip()
-        if not provided or provided != expected:
-            return JSONResponse({"detail": "Invalid MCP API key"}, status_code=401)
+
+        mode, detail, status = resolve_http_mcp_auth(provided)
+        if mode is None:
+            return JSONResponse({"detail": detail}, status_code=status)
+
+        set_mcp_mode(mode)
+        # Log trust plane only — never the key material.
+        logger.info("MCP HTTP auth ok mode=%s path=%s", mode, request.url.path)
+        request.state.mcp_mode = mode
         return await call_next(request)
 
 
