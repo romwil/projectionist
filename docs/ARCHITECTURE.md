@@ -284,13 +284,18 @@ See [DOCKER.md](DOCKER.md) for Mac Colima, Unraid, and Compose details.
 
 | Topic | Behavior |
 |-------|----------|
-| Authentication | **None by default** — single implicit owner; use trusted LAN or reverse proxy. Optional multi-user auth (`features.multi_user_enabled`) adds **Sign in with Plex** PIN (OIDC/local not shipped) |
+| Authentication | **None by default** — single implicit owner on trusted LAN. With `features.multi_user_enabled`, **Sign in with Plex** PIN + session cookies; middleware protects `/api/*` (allowlist: health/features/auth/webhooks) |
+| Roles | Owner-only: settings, setup tests, library sync mutate, persona/lens writes. Guests cannot request media / *arr writes |
+| Partitioning | Chat, pending actions, watchlist, reviews, preferences scoped by `user_id` when multi-user is on (shared library remains household-wide) |
 | Feature gates | `GET /api/features` exposes enabled flags; auth UI, Seerr, and Plex collection tools stay hidden until opted in |
-| Webhooks | Optional `webhook_secret` / `CURATORX_WEBHOOK_SECRET`; validates `X-CuratorX-Webhook-Secret` when set |
-| Destructive actions | Confirmation tokens for all *arr writes; owner role gates apply when multi-user is on |
+| Webhooks | Require non-empty `webhook_secret` / `CURATORX_WEBHOOK_SECRET` + matching `X-CuratorX-Webhook-Secret` |
+| Destructive actions | Confirmation tokens for all *arr / Seerr writes; tokens bound to user when multi-user is on |
+| Session secret | Auto-persisted under DATA_DIR; `CURATORX_SESSION_SECRET` preferred; public default refused for multi-user |
 | Secrets | Masked on API read; env overrides file |
 | Lens isolation | Chat and taste scoped by `lens_id`; no cross-lens history leakage in API |
-| Message feedback | Helpful/not-helpful on assistant replies trains preferences; scoped per user when multi-user is on |
+| MCP | Optional stdio + HTTP `/mcp` (API key via `CURATORX_MCP_API_KEY`); read-oriented library tools |
+
+See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for the full partitioning matrix.
 
 ---
 

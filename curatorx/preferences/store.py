@@ -8,7 +8,12 @@ from curatorx.library.db import DEFAULT_LENS_ID, Database
 from curatorx.models.schemas import PreferenceSignal
 
 
-def remember_preference(db: Database, signal: PreferenceSignal) -> None:
+def remember_preference(
+    db: Database,
+    signal: PreferenceSignal,
+    *,
+    user_id: Optional[str] = None,
+) -> None:
     weight = signal.weight
     if weight is None:
         weight = {
@@ -37,6 +42,7 @@ def remember_preference(db: Database, signal: PreferenceSignal) -> None:
         tmdb_id=signal.tmdb_id,
         tvdb_id=signal.tvdb_id,
         media_type=signal.media_type,
+        user_id=user_id,
     )
 
 
@@ -44,6 +50,8 @@ def preference_context(
     db: Database,
     limit: int = 20,
     lens_id: Optional[str] = None,
+    *,
+    user_id: Optional[str] = None,
 ) -> str:
     resolved = lens_id or db.get_active_lens_id() or DEFAULT_LENS_ID
     taste_rows = db.get_lens_taste_profile(resolved)
@@ -55,7 +63,7 @@ def preference_context(
             lines.append(f"- {row['cluster_tag']} (weight={row['weight']}){lock}")
         return "\n".join(lines)
 
-    facts = db.preference_facts(limit=limit)
+    facts = db.preference_facts(limit=limit, user_id=user_id)
     if not facts:
         return "No explicit preferences recorded yet."
     for fact in facts:

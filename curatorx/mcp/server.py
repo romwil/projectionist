@@ -261,6 +261,119 @@ def library_title_detail(
     return json.dumps(detail.model_dump())
 
 
+
+@mcp.tool()
+def what_to_watch_tonight(
+    media_type: Optional[str] = "movie",
+    query: Optional[str] = None,
+    limit: int = 12,
+) -> str:
+    """Suggest owned titles worth watching now (unwatched / in-progress bias)."""
+    filters = filters_from_mapping(
+        _filter_mapping(
+            media_type=media_type,
+            query=query or "watch tonight",
+            unwatched_only=False,
+            in_progress_only=False,
+            sort="title",
+            limit=limit,
+        )
+    )
+    result = query_library(_database(), filters)
+    return json.dumps(result)
+
+
+@mcp.tool()
+def find_collection_gaps(
+    media_type: Optional[str] = "movie",
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    genres: Optional[str] = None,
+    limit: int = 12,
+) -> str:
+    """Summarize owned inventory slices useful for spotting collection gaps."""
+    filters = filters_from_mapping(
+        _filter_mapping(
+            media_type=media_type,
+            year_from=year_from,
+            year_to=year_to,
+            genres=genres,
+            sort="title",
+            limit=limit,
+        )
+    )
+    overview = library_overview(_database())
+    sample = query_library(_database(), filters)
+    return json.dumps({"overview": overview, "sample_owned": sample})
+
+
+@mcp.tool()
+def recommend_hidden_gems(
+    media_type: Optional[str] = "movie",
+    limit: int = 12,
+) -> str:
+    """Surface lower-view-count owned titles (hidden gems in the library)."""
+    filters = filters_from_mapping(
+        _filter_mapping(
+            media_type=media_type,
+            max_view_count=1,
+            sort="vote",
+            limit=limit,
+        )
+    )
+    return json.dumps(query_library(_database(), filters))
+
+
+@mcp.tool()
+def suggest_purge_candidates_tool(limit: int = 12) -> str:
+    """Suggest rarely watched / low-affinity owned titles for purge review."""
+    from curatorx.preferences.purge import suggest_purge_candidates
+
+    cards = suggest_purge_candidates(_database(), _settings(), limit=min(max(1, limit), 25))
+    return json.dumps({"count": len(cards), "items": [c.model_dump() for c in cards]})
+
+
+@mcp.tool()
+def analyze_watch_patterns(limit: int = 25) -> str:
+    """High-level watch pattern snapshot from library overview + progress."""
+    overview = library_overview(_database())
+    progress = summarize_tv_progress(_database(), group_by="show", in_progress_only=True, limit=limit)
+    return json.dumps({"overview": overview, "in_progress_tv": progress})
+
+
+@mcp.tool()
+def list_watchlist_pins(limit: int = 50) -> str:
+    """List household watchlist pins (shared library sidecar; no per-user MCP auth yet)."""
+    items = _database().list_watchlist_pins()[: max(1, min(limit, 200))]
+    return json.dumps({"items": items, "count": len(items)})
+
+
+@mcp.tool()
+def upcoming_premieres(limit: int = 20) -> str:
+    """Best-effort recently added library titles (proxy for newly available / premiere-like)."""
+    filters = filters_from_mapping(
+        _filter_mapping(recently_added_days=30, sort="added_at", limit=limit)
+    )
+    return json.dumps(query_library(_database(), filters))
+
+
+@mcp.tool()
+def search_tmdb_proxy(query: str, media_type: Optional[str] = "movie", limit: int = 10) -> str:
+    """Search TMDB when configured (read-only discovery outside the owned library)."""
+    from curatorx.connectors.tmdb import TmdbClient
+
+    settings = _settings()
+    if not settings.tmdb_api_key:
+        return json.dumps({"error": "TMDB API key is not configured"})
+    client = TmdbClient(settings.tmdb_api_key)
+    if media_type == "show":
+        results = client.search_tv(query)[:limit]
+    else:
+        results = client.search_movie(query)[:limit]
+    return json.dumps({"items": results, "count": len(results)})
+
+
+
 def main() -> None:
     from curatorx.config_store import load_dotenv_file
     from curatorx.logging_config import configure_logging

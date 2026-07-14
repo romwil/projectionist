@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "curatorx": {
+      "command": "curatorx-mcp",
+      "env": {
+        "DATA_DIR": "/config",
+        "CURATORX_SKIP_DOTENV": "0"
+      }
+    }
+  }
+}

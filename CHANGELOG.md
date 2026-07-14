@@ -2,8 +2,30 @@
 
 ## [Unreleased]
 
-### Docs
-- Product vernacular pass for 1.1.6: README hero/highlights, FAQ, wiki, onboarding — Docker tags `:1.1` / `:1.1.6`, Sign in with Plex (PIN) as household auth, Plex server token vs login, sync phase checkpoints / resume, Unraid CA icon paths
+## [1.2.0] — 2026-07-14
+
+Pre-CA security hardening, multi-user API enforcement, MCP product surface, and Unraid CA packaging freeze.
+
+### Security
+- Global API auth middleware when multi-user is enabled (allowlist: health/features/auth/webhooks)
+- Owner-only settings, setup tests, library sync mutate, persona/lens writes
+- Session secret auto-bootstrap under DATA_DIR; refuse public default for multi-user
+- Plex PIN nonce cookie binding + per-IP rate limits; Secure cookies behind HTTPS proxies
+- Setup-test SSRF guards (link-local/metadata) + host-matched secret attachment
+- Webhooks reject empty secrets; Seerr requests always require confirmation tokens
+- Chat threads, pending actions, reviews, and preferences scoped by `user_id`
+- Guest role blocked from request / *arr mutating agent tools
+
+### Added
+- Expanded MCP library tools + `docs/MCP.md` + sample `mcp.json`
+- Optional HTTP MCP at `/mcp` gated by `CURATORX_MCP_API_KEY`
+- Unraid `ca_profile.xml` + advanced env vars (`CURATORX_SESSION_SECRET`, webhook, MCP)
+- `tests/test_api_authz.py`
+
+### Changed
+- Docker image installs `[web,mcp]`; tags move to `:1.2` / `:1.2.0`
+- Architecture + Multi-User wiki document the partitioning matrix
+- `docs/SECURITY.md` findings S1–S2, S4–S10, S12 marked Mitigated where code landed
 
 ## [1.1.6] — 2026-07-13
 

@@ -216,6 +216,15 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(title="CuratorX", version=__version__, lifespan=lifespan)
 app.middleware("http")(multi_user_api_auth_middleware)
 
+try:
+    from curatorx.mcp.http import mount_mcp_http
+    from curatorx.mcp.server import mcp as _mcp_server
+
+    mount_mcp_http(app, _mcp_server)
+except Exception:  # noqa: BLE001
+    # Optional [mcp] extra may be absent in slim installs.
+    pass
+
 
 def _row_to_lens(row: Any) -> Lens:
     return Lens(
@@ -1712,8 +1721,11 @@ def delete_watchlist_pin(
 
 
 @app.post("/api/preferences")
-def add_preference(payload: PreferenceSignal) -> Dict[str, bool]:
-    remember_preference(_db(), payload)
+def add_preference(
+    payload: PreferenceSignal,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, bool]:
+    remember_preference(_db(), payload, user_id=_scoped_user_id(user))
     return {"saved": True}
 
 
@@ -1725,6 +1737,7 @@ def list_reviews(
     title: Optional[str] = None,
     min_stars: Optional[int] = None,
     limit: int = 50,
+    user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     items = get_reviews(
         _db(),
@@ -1734,6 +1747,7 @@ def list_reviews(
         title=title,
         min_stars=min_stars,
         limit=limit,
+        user_id=_scoped_user_id(user),
     )
     return {"items": items, "count": len(items)}
 
@@ -1743,7 +1757,6 @@ def create_review(
     payload: UserReviewCreate,
     user=Depends(get_current_user_dep),
 ):
-    del user
     try:
         saved = save_review(
             _db(),
@@ -1759,6 +1772,7 @@ def create_review(
             session_id=payload.session_id,
             lens_id=payload.lens_id,
             prompt_id=payload.prompt_id,
+            user_id=_scoped_user_id(user),
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error

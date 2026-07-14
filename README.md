@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
-[![Version](https://img.shields.io/badge/version-1.1.6-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.2.0-green.svg)](CHANGELOG.md)
 
 **A cinema-dark chat curator for your self-hosted Plex library.**
 
@@ -75,7 +75,8 @@ Published multi-arch images (**amd64 + arm64**):
 
 | Tag | Use |
 |-----|-----|
-| [`romwil/curatorx:1.1.6`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
+| [`romwil/curatorx:1.2.0`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
+| [`romwil/curatorx:1.2`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.2 line |
 | [`romwil/curatorx:1.1`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.1 line |
 | [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Newest stable |
 

@@ -1,10 +1,11 @@
 # Multi-User
 
-CuratorX is a **single-owner** app by default — no login screen.
+CuratorX is a **single-owner** app by default — no login screen. With `features.multi_user_enabled`, it becomes a household identity + API trust boundary.
 
 ## Enabling household mode
 
-In Configuration (or `settings.json`):
+1. Prefer setting `CURATORX_SESSION_SECRET` (or let CuratorX auto-generate `session_secret` under Config).
+2. In Configuration (or `settings.json`):
 
 ```json
 {
@@ -18,29 +19,35 @@ In Configuration (or `settings.json`):
 }
 ```
 
-When enabled:
+CuratorX refuses to enable multi-user while the public development session secret is in use.
 
-- Visitors must sign in via **Sign in with Plex** (plex.tv PIN / link flow — same pattern as Overseerr / Seerr) before the **SPA** loads the main UI
-- The first linked account becomes the **owner**
-- Watchlists and some admin routes already use the session; **API-wide enforcement and per-user chat partitioning land in 1.2** — today treat multi-user as a UI gate on a trusted LAN (see [SECURITY.md](../SECURITY.md))
+## Partitioning matrix
 
-No OAuth callback URL is required for reverse proxies; the server talks to plex.tv and sets CuratorX’s session cookie. Token paste on `/login` is an advanced fallback only.
+| Resource | Scope |
+|----------|--------|
+| Library, embeddings, facets, sync | Shared household |
+| Settings / setup tests / library sync mutate | **Owner-only** |
+| Persona / lens definitions | Shared read; **owner write** |
+| Chat threads / messages | **Per-user** |
+| Watchlist | Per-user |
+| Reviews / preferences | **Per-user** (legacy NULL rows still readable) |
+| Jobs status | Any authenticated user; mutate owner-only |
+| Pending *arr / Seerr confirms | **Per-user** tokens |
+| Guest role | Read + chat + watchlist; **no requests / *arr writes** |
 
-The **Plex server token** in Config (library sync) is separate from household sign-in.
+## Auth behavior
 
-Honest current state: **UI gate today; API enforcement in progress for 1.2.**
+- Visitors must **Sign in with Plex** (PIN) before the SPA loads
+- Middleware requires a session for almost all `/api/*` (allowlist: health, features, `/api/auth/*`, webhooks)
+- PIN create/poll are bound with an HttpOnly `plex_pin_nonce` cookie and rate-limited
+- Webhooks require a configured secret (`CURATORX_WEBHOOK_SECRET` / `webhook_secret`)
+- Cookie `Secure` is set when `X-Forwarded-Proto: https`
+
+First linked Plex account becomes **owner**.
 
 ## Not shipped
 
 - OIDC / SSO
 - Local username + password accounts
 
-Those flags may appear in settings schemas as placeholders — do not expect them to authenticate users yet.
-
-## Owner tasks
-
-- Start library sync from **Config** (prefer Config over `/sync` in chat when multi-user is on)
-- Manage feature flags and service credentials
-- Approve / perform fleet-changing Radarr/Sonarr actions; treat the host as trusted until 1.2 API auth ships
-
-See [../CONFIGURATION.md](../CONFIGURATION.md#feature-flags-optional-off-by-default), [../SECURITY.md](../SECURITY.md), and [Seerr](Seerr.md).
+See [../SECURITY.md](../SECURITY.md), [../CONFIGURATION.md](../CONFIGURATION.md), and [Seerr](Seerr.md).

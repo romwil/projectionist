@@ -32,7 +32,7 @@ from curatorx.web.session_tokens import (
 )
 
 _API_AUTH_ALLOWLIST_EXACT = frozenset({"/api/health", "/api/features"})
-_API_AUTH_ALLOWLIST_PREFIXES = ("/api/auth/", "/api/webhooks/")
+_API_AUTH_ALLOWLIST_PREFIXES = ("/api/auth/", "/api/webhooks/", "/mcp")
 PLEX_PIN_NONCE_COOKIE = "plex_pin_nonce"
 PLEX_PIN_NONCE_TTL_SECONDS = 1800
 
@@ -159,6 +159,8 @@ def _user_from_session(request: Request, db: Database) -> Optional[CurrentUser]:
 async def multi_user_api_auth_middleware(request: Request, call_next):
     """Require a valid session for /api/* when multi-user auth is enabled."""
     path = request.url.path
+    if path.startswith("/mcp"):
+        return await call_next(request)
     if not path.startswith("/api/") or is_public_api_path(path):
         return await call_next(request)
 

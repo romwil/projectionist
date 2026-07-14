@@ -1301,6 +1301,7 @@ class ToolRegistry:
                 text=str(args.get("text") or ""),
                 lens_id=self.lens_id,
             ),
+            user_id=self.user_id,
         )
         return json.dumps({"saved": True})
 
@@ -1798,6 +1799,7 @@ class ToolRegistry:
             review_tags=list(args.get("review_tags") or []),
             prompted_by="curator_suggestion",
             lens_id=self.lens_id,
+            user_id=self.user_id,
         )
         review = sync_review_rating_to_plex(
             self.db,

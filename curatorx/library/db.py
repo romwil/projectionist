@@ -262,6 +262,7 @@ class Database:
             self._migrate_phase0_tables(conn)
             self._migrate_multi_user_columns(conn)
             self._migrate_phase4_tables(conn)
+            self._migrate_multi_user_columns(conn)  # reviews/prefs tables exist after phase4
             self._migrate_embeddings_content_hash(conn)
             self._seed_defaults(conn)
 
@@ -495,7 +496,8 @@ class Database:
                 plex_rating_synced INTEGER DEFAULT 0,
                 plex_synced_at REAL,
                 created_at REAL NOT NULL,
-                updated_at REAL NOT NULL
+                updated_at REAL NOT NULL,
+                user_id TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_reviews_rating_key ON user_title_reviews(rating_key);
             CREATE INDEX IF NOT EXISTS idx_reviews_tmdb ON user_title_reviews(tmdb_id, media_type);
@@ -1638,8 +1640,9 @@ class Database:
         with self.connect() as conn:
             conn.execute(
                 """
-                INSERT INTO preference_facts (signal_type, text, weight, tmdb_id, tvdb_id, media_type, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO preference_facts
+                    (signal_type, text, weight, tmdb_id, tvdb_id, media_type, created_at, user_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     signal_type,
@@ -1649,15 +1652,27 @@ class Database:
                     kwargs.get("tvdb_id"),
                     kwargs.get("media_type"),
                     time.time(),
+                    kwargs.get("user_id"),
                 ),
             )
 
-    def preference_facts(self, limit: int = 50) -> List[sqlite3.Row]:
+    def preference_facts(self, limit: int = 50, *, user_id: Optional[str] = None) -> List[sqlite3.Row]:
         with self.connect() as conn:
+            if user_id is None:
+                return list(
+                    conn.execute(
+                        "SELECT * FROM preference_facts ORDER BY created_at DESC LIMIT ?",
+                        (limit,),
+                    ).fetchall()
+                )
             return list(
                 conn.execute(
-                    "SELECT * FROM preference_facts ORDER BY created_at DESC LIMIT ?",
-                    (limit,),
+                    """
+                    SELECT * FROM preference_facts
+                    WHERE user_id = ? OR user_id IS NULL
+                    ORDER BY created_at DESC LIMIT ?
+                    """,
+                    (user_id, limit),
                 ).fetchall()
             )
 

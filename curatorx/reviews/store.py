@@ -328,6 +328,7 @@ def save_review(
     session_id: Optional[str] = None,
     lens_id: Optional[str] = None,
     prompt_id: Optional[str] = None,
+    user_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     stars = normalize_stars(stars)
 
@@ -338,15 +339,38 @@ def save_review(
     with db.connect() as conn:
         existing = None
         if rating_key:
-            existing = conn.execute(
-                "SELECT id FROM user_title_reviews WHERE rating_key = ?",
-                (rating_key,),
-            ).fetchone()
+            if user_id is None:
+                existing = conn.execute(
+                    "SELECT id FROM user_title_reviews WHERE rating_key = ?",
+                    (rating_key,),
+                ).fetchone()
+            else:
+                existing = conn.execute(
+                    """
+                    SELECT id FROM user_title_reviews
+                    WHERE rating_key = ? AND (user_id = ? OR user_id IS NULL)
+                    ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END
+                    LIMIT 1
+                    """,
+                    (rating_key, user_id, user_id),
+                ).fetchone()
         if existing is None and tmdb_id is not None:
-            existing = conn.execute(
-                "SELECT id FROM user_title_reviews WHERE tmdb_id = ? AND media_type = ?",
-                (tmdb_id, media_type),
-            ).fetchone()
+            if user_id is None:
+                existing = conn.execute(
+                    "SELECT id FROM user_title_reviews WHERE tmdb_id = ? AND media_type = ?",
+                    (tmdb_id, media_type),
+                ).fetchone()
+            else:
+                existing = conn.execute(
+                    """
+                    SELECT id FROM user_title_reviews
+                    WHERE tmdb_id = ? AND media_type = ?
+                      AND (user_id = ? OR user_id IS NULL)
+                    ORDER BY CASE WHEN user_id = ? THEN 0 ELSE 1 END
+                    LIMIT 1
+                    """,
+                    (tmdb_id, media_type, user_id, user_id),
+                ).fetchone()
 
         if existing is not None:
             review_id = str(existing["id"])
@@ -363,6 +387,7 @@ def save_review(
                     rating_key = COALESCE(?, rating_key),
                     tmdb_id = COALESCE(?, tmdb_id),
                     tvdb_id = COALESCE(?, tvdb_id),
+                    user_id = COALESCE(user_id, ?),
                     updated_at = ?
                 WHERE id = ?
                 """,
@@ -377,6 +402,7 @@ def save_review(
                     rating_key,
                     tmdb_id,
                     tvdb_id,
+                    user_id,
                     now,
                     review_id,
                 ),
@@ -387,8 +413,8 @@ def save_review(
                 INSERT INTO user_title_reviews (
                     id, rating_key, tmdb_id, tvdb_id, media_type, title,
                     stars, review_text, review_tags, prompted_by,
-                    session_id, lens_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    session_id, lens_id, created_at, updated_at, user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     review_id,
@@ -405,6 +431,7 @@ def save_review(
                     lens_id,
                     now,
                     now,
+                    user_id,
                 ),
             )
 
@@ -450,6 +477,7 @@ def save_review(
                 media_type=media_type,  # type: ignore[arg-type]
                 lens_id=lens_id,
             ),
+            user_id=user_id,
         )
 
     return saved
@@ -464,10 +492,14 @@ def get_reviews(
     title: Optional[str] = None,
     min_stars: Optional[int] = None,
     limit: int = 50,
+    user_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     clauses: List[str] = []
     params: List[Any] = []
 
+    if user_id is not None:
+        clauses.append("(user_id = ? OR user_id IS NULL)")
+        params.append(user_id)
     if rating_key:
         clauses.append("rating_key = ?")
         params.append(rating_key)
