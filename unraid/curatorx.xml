@@ -1,47 +1,71 @@
 <?xml version="1.0"?>
+<!-- Unraid Community Applications template — CuratorX 1.3 (stable minor tag). -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:1.3</Repository>
   <Registry>https://hub.docker.com/r/romwil/curatorx</Registry>
   <Network>bridge</Network>
+  <MyIP/>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
   <Support>https://github.com/romwil/curatorx/issues</Support>
   <Project>https://github.com/romwil/curatorx</Project>
-  <Icon>https://raw.githubusercontent.com/romwil/curatorx/main/unraid/curatorx-icon.png</Icon>
-  <Overview>
-Chat-first Plex collection curator with BYOP LLM support, RAG over your library, TMDB discovery, and confirmation-gated Radarr/Sonarr add/remove actions. Keep port 8788 on a trusted LAN — do not WAN-expose without an authenticated reverse proxy.
-  </Overview>
-  <Description>
-CuratorX helps you curate your movie and TV collection through conversation. Connect Plex, Radarr, Sonarr, TMDB, and your preferred LLM provider.
-
-**First run**
-1. Open the Web UI at port **8788**.
-2. Complete setup in **Settings** (`/config`).
-3. Run **Sync library** to index your Plex libraries.
-4. Start chatting with the curator.
-
-**Optional:** Tautulli for watch stats and purge suggestions; Fanart.tv for richer poster art.
-
-**Support:** [GitHub Issues](https://github.com/romwil/curatorx/issues)
-  </Description>
+  <Readme>https://raw.githubusercontent.com/romwil/curatorx/main/docs/wiki/Unraid.md</Readme>
+  <Overview>Chat-first Plex collection curator with BYOP LLM support, RAG over your library, TMDB discovery, and confirmation-gated Radarr/Sonarr add/remove. Keep port 8788 on a trusted LAN — do not WAN-expose without an authenticated reverse proxy.</Overview>
   <Category>MediaServer:Other Tools:Utilities</Category>
   <WebUI>http://[IP]:[PORT:8788]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/romwil/curatorx/main/templates/curatorx.xml</TemplateURL>
-  <Config Name="Web UI port" Target="8788" Default="8788" Mode="tcp" Description="CuratorX web interface" Type="Port" Display="always" Required="true" Mask="false">8788</Config>
-  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/curatorx/config" Mode="rw" Description="settings.json and SQLite database" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/curatorx/config</Config>
+  <Icon>https://raw.githubusercontent.com/romwil/curatorx/main/unraid/curatorx-icon.png</Icon>
+  <ExtraParams>--add-host=host.docker.internal:host-gateway</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
+  <Changes>
+### 1.3.0 — Initial CA template
+- Image line: `romwil/curatorx:1.3` (pin `:1.3.0` if you need an exact build)
+- Config volume `/config` for settings.json + SQLite
+- Dual MCP keys: privacy (`CURATORX_MCP_API_KEY`) and full (`CURATORX_MCP_FULL_API_KEY`); or generate in Admin → Advanced
+- Optional seed envs for Plex / *arr / TMDB / LLM; session + webhook secrets for multi-user and Plex webhooks
+  </Changes>
+  <Description>
+CuratorX helps you curate your movie and TV collection through conversation. Connect Plex, Radarr, Sonarr, TMDB, and your preferred LLM provider (cloud API or Ollama).
+
+**Security**
+- Bind to a trusted LAN or put CuratorX behind an authenticated reverse proxy.
+- Do **not** port-forward bare `:8788` to the internet.
+- Optional multi-user: set `CURATORX_SESSION_SECRET` (or accept the auto-generated secret under Config).
+- Plex webhooks require `CURATORX_WEBHOOK_SECRET`.
+- Optional MCP at `/mcp`: set privacy and/or full API keys (they must differ), or generate them in **Admin → Advanced**.
+
+**First run**
+1. Open the Web UI at port **8788**.
+2. Complete setup in **Settings** / **Admin** (Plex server URL + token, TMDB, LLM; optionally Radarr/Sonarr).
+3. Map movie and TV libraries, then run **Sync library**.
+4. Start chatting with the curator.
+
+**Optional:** Tautulli for watch stats and purge suggestions; Fanart.tv for richer poster art. For Ollama on the Unraid host, set `LLM_PROVIDER=ollama` and `LLM_BASE_URL=http://host.docker.internal:11434/v1` (Extra Parameters already add `host.docker.internal`).
+
+**Support:** [GitHub Issues](https://github.com/romwil/curatorx/issues) · [Unraid wiki](https://github.com/romwil/curatorx/blob/main/docs/wiki/Unraid.md)
+  </Description>
+  <Config Name="Web UI port" Target="8788" Default="8788" Mode="tcp" Description="CuratorX web interface (LAN only recommended)" Type="Port" Display="always" Required="true" Mask="false">8788</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/curatorx/config" Mode="rw" Description="settings.json, SQLite database, and auto-generated session secret" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/curatorx/config</Config>
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Container timezone for preferred library sync hour (e.g. America/New_York)" Type="Variable" Display="advanced" Required="false" Mask="false">UTC</Config>
-  <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
-  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex Media Server token (library access; not household Sign in with Plex)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex server URL (e.g. http://192.168.1.10:32400)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex Media Server token for library access (not household Sign in with Plex)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="RADARR_URL" Target="RADARR_URL" Default="" Mode="" Description="Optional seed: Radarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="RADARR_API_KEY" Target="RADARR_API_KEY" Default="" Mode="" Description="Optional seed: Radarr API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="SONARR_URL" Target="SONARR_URL" Default="" Mode="" Description="Optional seed: Sonarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="SONARR_API_KEY" Target="SONARR_API_KEY" Default="" Mode="" Description="Optional seed: Sonarr API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="TMDB_API_KEY" Target="TMDB_API_KEY" Default="" Mode="" Description="Optional seed: TMDB API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="LLM_API_KEY" Target="LLM_API_KEY" Default="" Mode="" Description="Optional seed: LLM API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="LLM_PROVIDER" Target="LLM_PROVIDER" Default="openai_compatible" Mode="" Description="LLM provider: openai_compatible, anthropic, ollama" Type="Variable" Display="advanced" Required="false" Mask="false">openai_compatible</Config>
+  <Config Name="TMDB_API_KEY" Target="TMDB_API_KEY" Default="" Mode="" Description="Optional seed: TMDB API key (metadata + discovery)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="FANART_API_KEY" Target="FANART_API_KEY" Default="" Mode="" Description="Optional seed: Fanart.tv API key for richer poster art" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="TAUTULLI_URL" Target="TAUTULLI_URL" Default="" Mode="" Description="Optional seed: Tautulli URL for watch stats / purge suggestions" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="TAUTULLI_API_KEY" Target="TAUTULLI_API_KEY" Default="" Mode="" Description="Optional seed: Tautulli API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="LLM_PROVIDER" Target="LLM_PROVIDER" Default="openai_compatible" Mode="" Description="LLM provider: openai_compatible, anthropic, ollama (or other presets in Settings)" Type="Variable" Display="advanced" Required="false" Mask="false">openai_compatible</Config>
+  <Config Name="LLM_BASE_URL" Target="LLM_BASE_URL" Default="" Mode="" Description="Optional seed: LLM base URL (e.g. http://host.docker.internal:11434/v1 for Ollama)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="LLM_API_KEY" Target="LLM_API_KEY" Default="" Mode="" Description="Optional seed: LLM API key (not required for Ollama)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="LLM_MODEL" Target="LLM_MODEL" Default="gpt-4o-mini" Mode="" Description="Optional seed: chat model name" Type="Variable" Display="advanced" Required="false" Mask="false">gpt-4o-mini</Config>
   <Config Name="CURATORX_SESSION_SECRET" Target="CURATORX_SESSION_SECRET" Default="" Mode="" Description="Optional: strong secret for multi-user session cookies (auto-generated under Config if unset)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="CURATORX_WEBHOOK_SECRET" Target="CURATORX_WEBHOOK_SECRET" Default="" Mode="" Description="Required for Plex webhook auth (X-CuratorX-Webhook-Secret)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="CURATORX_MCP_API_KEY" Target="CURATORX_MCP_API_KEY" Default="" Mode="" Description="Privacy MCP key for HTTP /mcp (public schema, read-only). Or generate in Admin → Advanced." Type="Variable" Display="advanced" Required="false" Mask="true"/>
-  <Config Name="CURATORX_MCP_FULL_API_KEY" Target="CURATORX_MCP_FULL_API_KEY" Default="" Mode="" Description="Full MCP key for trusted in-stack /mcp (must differ from privacy key). Or generate in Admin → Advanced." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="CURATORX_WEBHOOK_SECRET" Target="CURATORX_WEBHOOK_SECRET" Default="" Mode="" Description="Secret for Plex webhook auth header X-CuratorX-Webhook-Secret (required if using webhooks)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="CURATORX_MCP_API_KEY" Target="CURATORX_MCP_API_KEY" Default="" Mode="" Description="Privacy MCP key for HTTP /mcp — public schema, read-only. Leave empty to generate in Admin → Advanced." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="CURATORX_MCP_FULL_API_KEY" Target="CURATORX_MCP_FULL_API_KEY" Default="" Mode="" Description="Full MCP key for trusted in-stack /mcp (internal fields + confirm-gated *arr). Must differ from the privacy key. Or generate in Admin → Advanced." Type="Variable" Display="advanced" Required="false" Mask="true"/>
 </Container>

@@ -2,6 +2,14 @@
 
 CuratorX is packaged for Unraid Community Applications as a single container with one config volume. Use the **1.3** image line (`romwil/curatorx:1.3` or pin `:1.3.0`).
 
+CA packaging in this repo:
+
+| File | Role |
+|------|------|
+| `ca_profile.xml` (repo root) | Repository profile for CA submission (Profile, icon, support links) |
+| `templates/curatorx.xml` | Canonical Docker template (CA TemplateURL) |
+| `unraid/curatorx.xml` | Same template, kept in sync for Unraid asset layout |
+
 ## Community Applications icon
 
 | Spec | Value |

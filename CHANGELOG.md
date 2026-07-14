@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+- Unraid CA packaging: root `ca_profile.xml` (Community Applications repository profile); removed misnamed container template at `unraid/ca_profile.xml`
+- Unraid templates baseline for first CA submission of 1.3.0 (`Changes`, `Requires`, Ollama `ExtraParams`, Fanart/Tautulli/LLM seed envs)
+
 ## [1.3.0] — 2026-07-14
 
 Privacy-safe MCP, Admin/Settings split, household management, wide/mobile chat, voice, watchlist sync, and local curated lists.

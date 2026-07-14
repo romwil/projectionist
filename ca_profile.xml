@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<!-- Community Applications repository profile (must live at repo root). -->
+<CommunityApplications>
+  <Profile>
+CuratorX is a chat-first Plex collection curator for self-hosted homelabs. Connect Plex, Radarr, Sonarr, TMDB, and your preferred LLM (or Ollama on the Unraid host). Features include RAG over your library, confirmation-gated *arr actions, optional household Sign in with Plex, and dual-mode MCP (privacy + full).
+
+**Support:** GitHub Issues — https://github.com/romwil/curatorx/issues
+**Docs:** https://github.com/romwil/curatorx/tree/main/docs
+**Install notes:** https://github.com/romwil/curatorx/blob/main/docs/wiki/Unraid.md
+
+Keep port 8788 on a trusted LAN; do not WAN-expose without an authenticated reverse proxy.
+  </Profile>
+  <Icon>https://raw.githubusercontent.com/romwil/curatorx/main/unraid/curatorx-icon.png</Icon>
+  <WebPage>https://github.com/romwil/curatorx</WebPage>
+  <Forum>https://github.com/romwil/curatorx/issues</Forum>
+</CommunityApplications>
