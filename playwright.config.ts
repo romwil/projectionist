@@ -1,6 +1,10 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const port = process.env.E2E_PORT || "8788";
+// Default to 8799 — NOT 8788. Locally, :8788 is often an SSH tunnel to production
+// (or Docker). With reuseExistingServer, Playwright would hit that live/old UI
+// instead of the local build. Override with E2E_PORT / E2E_BASE_URL when needed
+// (e.g. live-stack against docker compose on 8788).
+const port = process.env.E2E_PORT || "8799";
 const baseURL = process.env.E2E_BASE_URL || `http://127.0.0.1:${port}`;
 
 export default defineConfig({

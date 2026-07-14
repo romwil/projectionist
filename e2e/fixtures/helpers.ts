@@ -1,7 +1,8 @@
 import type { APIRequestContext } from "@playwright/test";
 
 function e2eBaseURL() {
-  return process.env.E2E_BASE_URL || `http://127.0.0.1:${process.env.E2E_PORT || "8788"}`;
+  // Keep in sync with playwright.config.ts — default 8799, never 8788 (SSH tunnel trap).
+  return process.env.E2E_BASE_URL || `http://127.0.0.1:${process.env.E2E_PORT || "8799"}`;
 }
 
 export async function resetOnboarding(request: APIRequestContext, complete = false) {

@@ -1,0 +1,16 @@
+---
+description: Avoid Playwright/e2e against localhost:8788 (often production SSH tunnel)
+globs: playwright.config.ts,e2e/**/*,scripts/*e2e*,docs/TESTING.md
+alwaysApply: false
+---
+
+# E2E port: never default to 8788
+
+Port **8788** is frequently an **SSH tunnel to production** (or Docker). If Playwright binds or reuses `localhost:8788`, tests hit the **live old UI**, not the local build.
+
+## Required behavior
+
+- Default mocked e2e port is **8799** (`E2E_PORT` / `playwright.config.ts` / `scripts/start-e2e-server.sh`).
+- Do not change the default back to 8788.
+- When debugging e2e locally and something looks like a stale/remote UI, check whether :8788 is a tunnel — run with `E2E_PORT=8799` (or another free port).
+- Intentional live-stack against Docker may still use `E2E_BASE_URL=http://127.0.0.1:8788` with `CURATORX_E2E_LIVE=1`.

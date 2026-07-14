@@ -66,9 +66,21 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Tests start a temporary CuratorX server on **http://127.0.0.1:8788** (override with `E2E_PORT`).
+Tests start a temporary CuratorX server on **http://127.0.0.1:8799** (override with `E2E_PORT` / `E2E_BASE_URL`).
 
-If you already have Docker running on port 8788, Playwright reuses it locally (`reuseExistingServer`).
+### Port 8788 trap (do not use for mocked e2e)
+
+**Never point default Playwright / mocked e2e at `localhost:8788`.** On many developer machines that port is an **SSH tunnel to production** (or Docker). With `reuseExistingServer`, Playwright will happily talk to that live/old UI instead of your local build — confusing failures and wasted debugging.
+
+| Port | Use |
+|------|-----|
+| **8799** (default) | Mocked / temp e2e server Playwright starts |
+| **8788** | App / Docker / Unraid host mapping; only for intentional live-stack tests via `E2E_BASE_URL` |
+
+```bash
+# Explicit free port (same as default):
+E2E_PORT=8799 npm run test:e2e
+```
 
 ## What is covered (mocked e2e)
 

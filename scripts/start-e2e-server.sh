@@ -2,7 +2,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PORT="${E2E_PORT:-8788}"
+# Prefer 8799 over 8788: :8788 is often an SSH tunnel to production (or Docker).
+# Binding/reusing 8788 makes Playwright hit the live old UI, not this local build.
+PORT="${E2E_PORT:-8799}"
 DATA_DIR="${E2E_DATA_DIR:-$(mktemp -d -t curatorx-e2e-XXXXXX)}"
 
 export DATA_DIR
