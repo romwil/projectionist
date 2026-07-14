@@ -131,7 +131,7 @@ Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use
 ./scripts/docker-release.sh 1.3.0 --also-line 1.3
 ```
 
-The script builds with `--provenance=false --sbom=false` (required so Unraid can check for updates against Docker v2 manifests) and pushes `:VERSION`, `:X.Y`, and `:latest`.
+The script builds with `--provenance=false --sbom=false` and pushes `:VERSION`, `:X.Y`, and `:latest`.
 
 ---
 
