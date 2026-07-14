@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Callable, Literal, Optional
 
 from fastapi import Depends, HTTPException, Request, Response
+from starlette.responses import JSONResponse
 
 from curatorx.config_store import Settings, load_merged_settings
 from curatorx.connectors.plex_account import (
@@ -25,6 +26,9 @@ from curatorx.web.session_tokens import (
     create_session_token,
     parse_session_token,
 )
+
+_API_AUTH_ALLOWLIST_EXACT = frozenset({"/api/health", "/api/features"})
+_API_AUTH_ALLOWLIST_PREFIXES = ("/api/auth/", "/api/webhooks/")
 
 UserRole = Literal["owner", "member", "guest"]
 
@@ -90,7 +94,18 @@ def bootstrap_owner(db: Optional[Database] = None) -> CurrentUser:
     return CurrentUser(id=BOOTSTRAP_OWNER_ID, display_name="Owner", role="owner")
 
 
-def set_session_cookie(response: Response, user_id: str) -> None:
+def _cookie_should_be_secure(request: Optional[Request]) -> bool:
+    if request is None:
+        return False
+    forwarded = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
+    return forwarded == "https"
+
+
+def set_session_cookie(
+    response: Response,
+    user_id: str,
+    request: Optional[Request] = None,
+) -> None:
     token = create_session_token(user_id)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
@@ -99,11 +114,24 @@ def set_session_cookie(response: Response, user_id: str) -> None:
         samesite="lax",
         max_age=DEFAULT_TTL_SECONDS,
         path="/",
+        secure=_cookie_should_be_secure(request),
     )
 
 
-def clear_session_cookie(response: Response) -> None:
-    response.delete_cookie(key=SESSION_COOKIE_NAME, path="/")
+def clear_session_cookie(response: Response, request: Optional[Request] = None) -> None:
+    response.delete_cookie(
+        key=SESSION_COOKIE_NAME,
+        path="/",
+        secure=_cookie_should_be_secure(request),
+    )
+
+
+def is_public_api_path(path: str) -> bool:
+    """Paths that stay reachable without a session when multi-user is enabled."""
+    cleaned = (path or "").split("?", 1)[0]
+    if cleaned in _API_AUTH_ALLOWLIST_EXACT:
+        return True
+    return any(cleaned.startswith(prefix) for prefix in _API_AUTH_ALLOWLIST_PREFIXES)
 
 
 def _user_from_session(request: Request, db: Database) -> Optional[CurrentUser]:
@@ -117,6 +145,24 @@ def _user_from_session(request: Request, db: Database) -> Optional[CurrentUser]:
     if row is None:
         return None
     return row_to_current_user(row)
+
+
+async def multi_user_api_auth_middleware(request: Request, call_next):
+    """Require a valid session for /api/* when multi-user auth is enabled."""
+    path = request.url.path
+    if not path.startswith("/api/") or is_public_api_path(path):
+        return await call_next(request)
+
+    settings = _settings()
+    if not settings.features.multi_user_enabled:
+        return await call_next(request)
+
+    from curatorx.web.jobs import get_job_manager
+
+    user = _user_from_session(request, get_job_manager().db)
+    if user is None:
+        return JSONResponse({"detail": "Authentication required"}, status_code=401)
+    return await call_next(request)
 
 
 def get_current_user(request: Request, db: Optional[Database] = None) -> CurrentUser:

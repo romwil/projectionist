@@ -120,6 +120,7 @@ from curatorx.web.auth import (
     bootstrap_owner,
     clear_session_cookie,
     get_current_user_dep,
+    multi_user_api_auth_middleware,
     poll_plex_pin_login,
     require_role,
     set_session_cookie,
@@ -128,6 +129,7 @@ from curatorx.web.auth import (
     try_get_current_user,
 )
 from curatorx.web.jobs import get_job_manager, get_sync_scheduler
+from curatorx.web.session_tokens import ensure_session_secret, has_usable_session_secret
 from curatorx.web.webhooks import register_webhook_routes
 from curatorx.web.setup import (
     SECRET_FIELDS,
@@ -168,6 +170,13 @@ logger = logging.getLogger(__name__)
 async def lifespan(_app: FastAPI):
     logger.info("CuratorX startup (version %s, data_dir=%s)", __version__, DATA_DIR)
 
+    logger.info("Startup: ensuring session secret…")
+    try:
+        ensure_session_secret(DATA_DIR)
+        logger.info("Startup: session secret ready")
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup: session secret bootstrap failed (continuing)")
+
     logger.info("Startup: initializing job manager…")
     manager = get_job_manager()
     logger.info("Startup: job manager ready")
@@ -203,6 +212,7 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="CuratorX", version=__version__, lifespan=lifespan)
+app.middleware("http")(multi_user_api_auth_middleware)
 
 
 def _row_to_lens(row: Any) -> Lens:
@@ -509,26 +519,26 @@ def auth_plex_pin_start() -> Dict[str, Any]:
 
 
 @app.get("/api/auth/plex/pin/{pin_id}")
-def auth_plex_pin_poll(pin_id: int, response: Response) -> Dict[str, Any]:
+def auth_plex_pin_poll(pin_id: int, request: Request, response: Response) -> Dict[str, Any]:
     """Poll Plex PIN. When authorized, upsert user and set session cookie."""
     user = poll_plex_pin_login(pin_id, _db())
     if user is None:
         return {"authenticated": False, "pending": True}
-    set_session_cookie(response, user.id)
+    set_session_cookie(response, user.id, request)
     return {"user": user.to_dict(), "authenticated": True, "pending": False}
 
 
 @app.post("/api/auth/plex")
-def auth_plex(payload: PlexLoginPayload, response: Response) -> Dict[str, Any]:
+def auth_plex(payload: PlexLoginPayload, request: Request, response: Response) -> Dict[str, Any]:
     """Advanced fallback: sign in with a raw Plex auth token."""
     user = authenticate_plex_user(payload.auth_token, _db())
-    set_session_cookie(response, user.id)
+    set_session_cookie(response, user.id, request)
     return {"user": user.to_dict(), "authenticated": True}
 
 
 @app.post("/api/auth/logout")
-def auth_logout(response: Response) -> Dict[str, bool]:
-    clear_session_cookie(response)
+def auth_logout(request: Request, response: Response) -> Dict[str, bool]:
+    clear_session_cookie(response, request)
     return {"logged_out": True}
 
 
@@ -589,17 +599,29 @@ def llm_providers() -> Dict[str, Any]:
 
 
 @app.get("/api/settings")
-def get_settings() -> Dict[str, Any]:
+def get_settings(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     return _mask_settings(_settings())
 
 
 @app.put("/api/settings")
-def put_settings(payload: SettingsPayload) -> Dict[str, Any]:
+def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     settings_path = DATA_DIR / "settings.json"
     before = Settings.load(settings_path)
     existing = _settings()
     merged = merge_secret_fields(payload.model_dump(), existing)
     settings = normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
+    if settings.features.multi_user_enabled and not has_usable_session_secret(DATA_DIR):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Cannot enable multi-user auth without a strong session secret. "
+                "Set CURATORX_SESSION_SECRET to a long random value "
+                "(not the development default), or remove that env var so CuratorX "
+                "can generate one under DATA_DIR."
+            ),
+        )
     wizard_status = build_wizard_status(settings, _db())
     if not settings.onboarding_complete and wizard_status["onboarding_complete"]:
         settings = Settings.from_mapping({**asdict(settings), "onboarding_complete": True})
@@ -610,7 +632,8 @@ def put_settings(payload: SettingsPayload) -> Dict[str, Any]:
 
 
 @app.post("/api/setup/test/plex")
-def api_test_plex(payload: TestPayload) -> Dict[str, Any]:
+def api_test_plex(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     resolved = resolve_test_payload(payload.model_dump(), _settings())
     result = test_plex(resolved["plex_url"], resolved["plex_token"])
     record_service_integration(
@@ -624,7 +647,8 @@ def api_test_plex(payload: TestPayload) -> Dict[str, Any]:
 
 
 @app.post("/api/setup/test/radarr")
-def api_test_radarr(payload: TestPayload) -> Dict[str, Any]:
+def api_test_radarr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     settings = _settings()
     resolved = resolve_test_payload(payload.model_dump(), settings)
     result = test_radarr(
@@ -643,7 +667,8 @@ def api_test_radarr(payload: TestPayload) -> Dict[str, Any]:
 
 
 @app.post("/api/setup/test/sonarr")
-def api_test_sonarr(payload: TestPayload) -> Dict[str, Any]:
+def api_test_sonarr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     settings = _settings()
     resolved = resolve_test_payload(payload.model_dump(), settings)
     result = test_sonarr(
@@ -662,7 +687,8 @@ def api_test_sonarr(payload: TestPayload) -> Dict[str, Any]:
 
 
 @app.post("/api/setup/test/tmdb")
-def api_test_tmdb(payload: TestPayload) -> Dict[str, Any]:
+def api_test_tmdb(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     resolved = resolve_test_payload(payload.model_dump(), _settings())
     result = test_tmdb(resolved["tmdb_api_key"])
     record_service_integration(
@@ -675,7 +701,8 @@ def api_test_tmdb(payload: TestPayload) -> Dict[str, Any]:
 
 
 @app.post("/api/setup/test/fanart")
-def api_test_fanart(payload: TestPayload) -> Dict[str, Any]:
+def api_test_fanart(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     resolved = resolve_test_payload(payload.model_dump(), _settings())
     result = test_fanart(resolved["fanart_api_key"])
     record_service_integration(
@@ -688,7 +715,8 @@ def api_test_fanart(payload: TestPayload) -> Dict[str, Any]:
 
 
 @app.post("/api/setup/test/tautulli")
-def api_test_tautulli(payload: TestPayload) -> Dict[str, Any]:
+def api_test_tautulli(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     resolved = resolve_test_payload(payload.model_dump(), _settings())
     result = test_tautulli(resolved["tautulli_url"], resolved["tautulli_api_key"])
     record_service_integration(
@@ -702,7 +730,8 @@ def api_test_tautulli(payload: TestPayload) -> Dict[str, Any]:
 
 
 @app.post("/api/setup/test/seerr")
-def api_test_seerr(payload: TestPayload) -> Dict[str, Any]:
+def api_test_seerr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     resolved = resolve_test_payload(payload.model_dump(), _settings())
     result = test_seerr(resolved["seerr_url"], resolved["seerr_api_key"])
     record_service_integration(
@@ -716,7 +745,8 @@ def api_test_seerr(payload: TestPayload) -> Dict[str, Any]:
 
 
 @app.post("/api/setup/test/llm")
-def api_test_llm(payload: TestPayload) -> Dict[str, Any]:
+def api_test_llm(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     resolved = resolve_test_payload(payload.model_dump(), _settings())
     result = test_llm(
         resolved["llm_provider"],
@@ -773,7 +803,8 @@ def get_job(job_id: str) -> Dict[str, Any]:
 
 
 @app.post("/api/library/sync")
-def start_library_sync() -> Dict[str, Any]:
+def start_library_sync(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     job = get_job_manager().start_sync(_settings())
     logger.info("Library sync queued job_id=%s", job.id)
     return job.to_dict()
@@ -1009,7 +1040,8 @@ def get_active_lens() -> Lens:
 
 
 @app.put("/api/lenses/active", response_model=Lens)
-def set_active_lens(payload: ActiveLensPayload) -> Lens:
+def set_active_lens(payload: ActiveLensPayload, user=Depends(require_role("owner"))) -> Lens:
+    del user
     try:
         _db().set_active_lens_id(payload.lens_id)
     except ValueError as error:
@@ -1020,7 +1052,8 @@ def set_active_lens(payload: ActiveLensPayload) -> Lens:
 
 
 @app.post("/api/lenses", response_model=Lens)
-def create_lens(payload: LensCreate) -> Lens:
+def create_lens(payload: LensCreate, user=Depends(require_role("owner"))) -> Lens:
+    del user
     lens_id = re.sub(r"[^a-z0-9_-]+", "-", payload.lens_id.strip().lower()).strip("-")
     if not lens_id:
         raise HTTPException(status_code=400, detail="Invalid lens_id")
@@ -1030,7 +1063,8 @@ def create_lens(payload: LensCreate) -> Lens:
 
 
 @app.put("/api/lenses/{lens_id}", response_model=Lens)
-def update_lens(lens_id: str, payload: LensUpdate) -> Lens:
+def update_lens(lens_id: str, payload: LensUpdate, user=Depends(require_role("owner"))) -> Lens:
+    del user
     if not _db().get_lens(lens_id):
         raise HTTPException(status_code=404, detail="Lens not found")
     try:
@@ -1119,7 +1153,8 @@ def get_persona() -> PersonaMetrics:
 
 
 @app.put("/api/persona", response_model=PersonaMetrics)
-def put_persona(payload: PersonaMetricsUpdate) -> PersonaMetrics:
+def put_persona(payload: PersonaMetricsUpdate, user=Depends(require_role("owner"))) -> PersonaMetrics:
+    del user
     db = _db()
     provided = payload.model_fields_set
     clear_override = payload.clear_persona_override
@@ -1185,7 +1220,11 @@ def get_system_config() -> Dict[str, str]:
 
 
 @app.put("/api/system-config")
-def put_system_config(payload: SystemConfigUpdate) -> Dict[str, str]:
+def put_system_config(
+    payload: SystemConfigUpdate,
+    user=Depends(require_role("owner")),
+) -> Dict[str, str]:
+    del user
     if not payload.values:
         raise HTTPException(status_code=400, detail="No config values provided")
     db = _db()

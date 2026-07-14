@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 import tempfile
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
+
+from curatorx.web.session_tokens import clear_session_secret_cache
 
 
 class AuthTests(unittest.TestCase):
@@ -17,6 +21,8 @@ class AuthTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
+        os.environ["CURATORX_SESSION_SECRET"] = "test-auth-session-secret-value"
+        clear_session_secret_cache()
         import curatorx.web.jobs as jobs
 
         jobs._manager = None
@@ -29,18 +35,29 @@ class AuthTests(unittest.TestCase):
         import curatorx.web.jobs as jobs
 
         jobs._manager = None
+        clear_session_secret_cache()
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
+        os.environ.pop("CURATORX_SESSION_SECRET", None)
         self._tmpdir.cleanup()
 
     def _enable_multi_user(self, *, seerr: bool = False) -> None:
+        """Enable multi-user by writing settings to disk (owner PUT also works)."""
+        path = Path(self._tmpdir.name) / "settings.json"
         payload = {
             "features": {"multi_user_enabled": True, "seerr_enabled": seerr},
             "auth": {"mode": "plex", "plex_login_enabled": True},
+            "llm_provider": "ollama",
         }
         if seerr:
             payload["seerr"] = {"url": "http://seerr.test", "api_key": "secret"}
-        self.client.put("/api/settings", json=payload)
+        if path.exists():
+            existing = json.loads(path.read_text(encoding="utf-8"))
+            existing.update(payload)
+            if "features" in existing and "features" in payload:
+                existing["features"] = {**existing.get("features", {}), **payload["features"]}
+            payload = existing
+        path.write_text(json.dumps(payload), encoding="utf-8")
 
     def test_bootstrap_owner_when_multi_user_disabled(self) -> None:
         resp = self.client.get("/api/auth/me")

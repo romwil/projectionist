@@ -40,4 +40,5 @@ CuratorX helps you curate your movie and TV collection through conversation. Con
   <Config Name="TMDB_API_KEY" Target="TMDB_API_KEY" Default="" Mode="" Description="Optional seed: TMDB API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="LLM_API_KEY" Target="LLM_API_KEY" Default="" Mode="" Description="Optional seed: LLM API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
   <Config Name="LLM_PROVIDER" Target="LLM_PROVIDER" Default="openai_compatible" Mode="" Description="LLM provider: openai_compatible, anthropic, ollama" Type="Variable" Display="advanced" Required="false" Mask="false">openai_compatible</Config>
+  <Config Name="CURATORX_SESSION_SECRET" Target="CURATORX_SESSION_SECRET" Default="" Mode="" Description="Optional: strong secret for multi-user session cookies (auto-generated under Config if unset)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
 </Container>
