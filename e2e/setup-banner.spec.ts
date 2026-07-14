@@ -23,9 +23,9 @@ test.describe("Setup incomplete banner", () => {
     await expect(page.getByTestId("setup-banner")).toContainText("Finish setup");
   });
 
-  test("banner links to config page", async ({ page }) => {
-    await page.getByTestId("setup-banner").getByRole("link", { name: "Settings" }).click();
-    await expect(page).toHaveURL(/\/config$/);
+  test("banner links to admin page", async ({ page }) => {
+    await page.getByTestId("setup-banner").getByRole("link", { name: "Admin" }).click();
+    await expect(page).toHaveURL(/\/admin/);
     await expect(page.getByRole("heading", { name: "First-run setup" })).toBeVisible();
   });
 });

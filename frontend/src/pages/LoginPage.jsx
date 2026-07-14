@@ -234,9 +234,13 @@ export default function LoginPage() {
           <Link to="/privacy" data-testid="privacy-link">
             Privacy &amp; data use
           </Link>
+          {" · "}
+          <Link to="/about" data-testid="about-link">
+            About
+          </Link>
         </p>
         <p className="login-footer">
-          Need to change auth settings? <Link to="/config">Open Configuration</Link>
+          Need to change auth settings? <Link to="/admin">Open Admin</Link>
         </p>
       </div>
     </div>

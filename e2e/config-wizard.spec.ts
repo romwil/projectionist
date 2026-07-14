@@ -14,7 +14,7 @@ test.describe("Config onboarding wizard", () => {
     setForceWizardIncomplete(true);
     await resetOnboarding(request, false);
     await mockCuratorApis(page);
-    await page.goto("/config");
+    await page.goto("/admin");
     await page.getByTestId("wizard-nav").waitFor();
   });
 

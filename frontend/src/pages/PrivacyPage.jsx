@@ -1,94 +1,86 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import privacyMarkdown from "@docs/PRIVACY.md?raw";
+
+/** Stable ids for in-page jump links / e2e (must match docs/PRIVACY.md anchors). */
+const HEADING_ANCHORS = {
+  "from the household member": "household-members",
+  "from the server owner": "server-owners",
+  "mcp (model context protocol)": "mcp",
+  "exposure matrices": "exposure-matrices",
+  "we do not": "we-do-not",
+};
+
+function headingText(children) {
+  if (typeof children === "string") return children;
+  if (Array.isArray(children)) return children.map(headingText).join("");
+  if (children?.props?.children) return headingText(children.props.children);
+  return "";
+}
+
+function headingId(children) {
+  const text = headingText(children).trim().toLowerCase();
+  for (const [prefix, id] of Object.entries(HEADING_ANCHORS)) {
+    if (text.startsWith(prefix)) return id;
+  }
+  return undefined;
+}
+
+const markdownComponents = {
+  h2: ({ children, ...props }) => {
+    const id = headingId(children);
+    return (
+      <h2 id={id} {...props}>
+        {children}
+      </h2>
+    );
+  },
+  table: ({ children }) => (
+    <div className="privacy-table-wrap">
+      <table>{children}</table>
+    </div>
+  ),
+};
 
 /**
- * Public privacy disclosure page.
- * Tries /privacy.md (static asset synced with docs/PRIVACY.md); falls back to a stub outline.
+ * Public privacy disclosure — content from docs/PRIVACY.md (vite @docs alias).
  */
-const FALLBACK = `# Privacy & data use
-
-CuratorX is self-hosted software. Your media credentials and household taste stay on the machine you run.
-
-## For household members
-
-- Sign in with Plex shares display name, optional email/avatar, and may link Seerr when the owner enables it.
-- Chat history, ratings, and watchlist pins are yours when multi-user is on.
-- The library catalog is shared household context.
-- The owner's configured LLM provider receives prompts and tool results (title metadata — not Plex tokens).
-
-## For server owners
-
-- Fleet credentials live in Admin. Only owners should open Admin.
-- MCP keys (when enabled) expose library intelligence according to privacy vs full mode — see Security docs when published.
-
-## Voice
-
-If you enable voice in Settings, your browser or OS may process speech. CuratorX stores transcripts as chat text, not raw audio files.
-
----
-
-_Full disclosure text will mirror \`docs/PRIVACY.md\` when that document ships. Meanwhile use the links below._
-`;
-
 export default function PrivacyPage() {
-  const [markdown, setMarkdown] = useState("");
-  const [source, setSource] = useState("loading");
-
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
-      try {
-        const response = await fetch("/privacy.md", { credentials: "same-origin" });
-        if (!response.ok) throw new Error("missing");
-        const text = await response.text();
-        if (cancelled) return;
-        if (!text.trim() || text.trim().startsWith("<!")) {
-          setMarkdown(FALLBACK);
-          setSource("fallback");
-          return;
-        }
-        setMarkdown(text);
-        setSource("file");
-      } catch {
-        if (!cancelled) {
-          setMarkdown(FALLBACK);
-          setSource("fallback");
-        }
-      }
-    }
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const markdown = typeof privacyMarkdown === "string" && privacyMarkdown.trim() ? privacyMarkdown : "";
 
   return (
-    <div className="editorial-page privacy-page" data-testid="privacy-page" data-source={source}>
-      <header className="editorial-header">
-        <p className="eyebrow">Disclosure</p>
-        <h1>Privacy &amp; data use</h1>
-        <p className="editorial-lede">
-          What CuratorX stores, what the chat model sees, and what never leaves your stack.
-        </p>
+    <div className="privacy-page" data-testid="privacy-page" data-source="docs">
+      <header className="privacy-topbar">
+        <Link to="/" className="privacy-brand">
+          CuratorX
+        </Link>
+        <nav className="privacy-topnav" aria-label="Privacy shortcuts">
+          <a href="#household-members">Household</a>
+          <a href="#server-owners">Owners</a>
+          <a href="#mcp">MCP</a>
+          <Link to="/about">About</Link>
+          <Link to="/login">Login</Link>
+        </nav>
       </header>
 
-      <article className="editorial-prose" data-testid="privacy-content">
-        {source === "loading" ? (
-          <p className="status status-secondary">Loading…</p>
+      <article className="privacy-article privacy-prose" data-testid="privacy-content">
+        {markdown ? (
+          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+            {markdown}
+          </ReactMarkdown>
         ) : (
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdown}</ReactMarkdown>
+          <p className="status status-secondary">Privacy disclosure is unavailable.</p>
         )}
       </article>
 
-      <p className="editorial-back">
-        <Link to="/login">Login</Link>
-        {" · "}
+      <footer className="privacy-footer">
         <Link to="/about">About</Link>
         {" · "}
+        <Link to="/settings">Settings</Link>
+        {" · "}
         <Link to="/">Chat</Link>
-      </p>
+      </footer>
     </div>
   );
 }

@@ -453,6 +453,9 @@ class Database:
         pref_cols = self._table_columns(conn, "preference_facts")
         if pref_cols and "user_id" not in pref_cols:
             conn.execute("ALTER TABLE preference_facts ADD COLUMN user_id TEXT")
+        user_cols = self._table_columns(conn, "users")
+        if user_cols and "preferred_name" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN preferred_name TEXT")
 
     def _migrate_embeddings_content_hash(self, conn: sqlite3.Connection) -> None:
         cols = self._table_columns(conn, "embeddings")
@@ -786,10 +789,34 @@ class Database:
         assert row is not None
         return self._row_to_user(row)
 
+    def update_user_profile(
+        self,
+        user_id: str,
+        *,
+        preferred_name: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        with self.connect() as conn:
+            existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+            if existing is None:
+                raise ValueError("User not found")
+            cleaned = (preferred_name or "").strip() or None
+            conn.execute(
+                "UPDATE users SET preferred_name = ? WHERE id = ?",
+                (cleaned, user_id),
+            )
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        assert row is not None
+        return self._row_to_user(row)
+
     def _row_to_user(self, row: sqlite3.Row) -> Dict[str, Any]:
+        keys = set(row.keys()) if hasattr(row, "keys") else set()
+        preferred_name = None
+        if "preferred_name" in keys and row["preferred_name"] is not None:
+            preferred_name = str(row["preferred_name"])
         return {
             "id": str(row["id"]),
             "display_name": str(row["display_name"]),
+            "preferred_name": preferred_name,
             "email": str(row["email"]) if row["email"] is not None else None,
             "role": str(row["role"]),
             "plex_user_id": str(row["plex_user_id"]) if row["plex_user_id"] is not None else None,

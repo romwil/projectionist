@@ -103,6 +103,13 @@ export async function getAuthMe() {
   return response.json();
 }
 
+export async function patchAuthMe(payload) {
+  return api("/auth/me", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function startPlexPinLogin() {
   return api("/auth/plex/pin", { method: "POST" });
 }

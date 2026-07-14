@@ -91,7 +91,7 @@ function appendPerfectPickAck(message) {
 }
 
 export default function App() {
-  const { authReady, multiUserEnabled } = useAuthGate();
+  const { authReady, multiUserEnabled, isOwner } = useAuthGate();
   const [messages, setMessages] = useState([]);
   const [messageFeedback, setMessageFeedback] = useState({});
   const [threads, setThreads] = useState([]);
@@ -894,8 +894,16 @@ export default function App() {
               ★ {watchlistPins.length} pinned
             </button>
           ) : null}
-          <Link to="/config" className="app-topbar-link">
-            Config
+          {isOwner ? (
+            <Link to="/admin" className="app-topbar-link" data-testid="topbar-admin-link">
+              Admin
+            </Link>
+          ) : null}
+          <Link to="/settings" className="app-topbar-link" data-testid="topbar-settings-link">
+            Settings
+          </Link>
+          <Link to="/about" className="app-topbar-link" data-testid="topbar-about-link">
+            About
           </Link>
           {multiUserEnabled ? <UserMenu /> : null}
         </div>
@@ -903,7 +911,7 @@ export default function App() {
 
       {setup && !setup.onboarding_complete ? (
         <div className="banner workspace-banner" data-testid="setup-banner">
-          Finish setup in <Link to="/config">Settings</Link> to connect Plex, TMDB, and your LLM provider.
+          Finish setup in <Link to="/admin">Admin</Link> to connect Plex, TMDB, and your LLM provider.
         </div>
       ) : null}
 

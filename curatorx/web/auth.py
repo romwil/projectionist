@@ -59,11 +59,13 @@ class CurrentUser:
     plex_user_id: Optional[str] = None
     seerr_user_id: Optional[int] = None
     avatar_url: Optional[str] = None
+    preferred_name: Optional[str] = None
 
     def to_dict(self) -> dict[str, object]:
         return {
             "id": self.id,
             "display_name": self.display_name,
+            "preferred_name": self.preferred_name,
             "role": self.role,
             "email": self.email,
             "plex_user_id": self.plex_user_id,
@@ -80,6 +82,9 @@ def row_to_current_user(row) -> CurrentUser:
     avatar_url = None
     if "avatar_url" in keys and row["avatar_url"] is not None:
         avatar_url = str(row["avatar_url"])
+    preferred_name = None
+    if "preferred_name" in keys and row["preferred_name"] is not None:
+        preferred_name = str(row["preferred_name"]).strip() or None
     return CurrentUser(
         id=str(row["id"]),
         display_name=str(row["display_name"] or "User"),
@@ -88,6 +93,7 @@ def row_to_current_user(row) -> CurrentUser:
         plex_user_id=str(row["plex_user_id"]) if row["plex_user_id"] is not None else None,
         seerr_user_id=int(row["seerr_user_id"]) if row["seerr_user_id"] is not None else None,
         avatar_url=avatar_url,
+        preferred_name=preferred_name,
     )
 
 

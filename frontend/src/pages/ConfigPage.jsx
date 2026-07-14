@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useOutletContext, useParams } from "react-router-dom";
 import {
   AUTO_CERTIFY_SERVICES,
   ANTHROPIC_MODEL_OPTIONS,
@@ -29,6 +29,28 @@ import {
   formatLastSyncRelative,
   formatSyncJobDetails,
 } from "../lib/jobProgress.js";
+
+const ADMIN_SECTIONS = new Set([
+  "overview",
+  "connections",
+  "libraries",
+  "sync",
+  "persona",
+  "household",
+  "seerr",
+  "advanced",
+]);
+
+const SECTION_TITLES = {
+  overview: "Overview",
+  connections: "Connections",
+  libraries: "Libraries",
+  sync: "Library sync",
+  persona: "Persona",
+  household: "Household",
+  seerr: "Seerr",
+  advanced: "Advanced",
+};
 
 const SECRET_FIELDS = [
   "plex_token",
@@ -284,6 +306,11 @@ function firstIncompleteWizardStep(wizardData) {
 
 export default function ConfigPage() {
   const navigate = useNavigate();
+  const { section: sectionParam } = useParams();
+  const outletContext = useOutletContext() || {};
+  const setWizardMode = outletContext.setWizardMode;
+  const section = ADMIN_SECTIONS.has(sectionParam) ? sectionParam : "overview";
+  const showSection = (id) => section === id;
   const [settings, setSettings] = useState(null);
   const [persona, setPersona] = useState(null);
   const [wizard, setWizard] = useState(null);
@@ -309,7 +336,7 @@ export default function ConfigPage() {
   const [onboardingHints, setOnboardingHints] = useState([]);
   const [savingPersona, setSavingPersona] = useState(false);
   const [plexCollapsed, setPlexCollapsed] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(() => section === "advanced");
   const [visibleSecrets, setVisibleSecrets] = useState({});
   const [libraryStats, setLibraryStats] = useState(null);
   const [libraryHealth, setLibraryHealth] = useState(null);
@@ -322,6 +349,21 @@ export default function ConfigPage() {
   const [usersLoading, setUsersLoading] = useState(false);
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
+
+  useEffect(() => {
+    setAdvancedOpen(section === "advanced");
+  }, [section]);
+
+  useEffect(() => {
+    if (typeof setWizardMode === "function") {
+      setWizardMode(showWizard);
+    }
+    return () => {
+      if (typeof setWizardMode === "function") {
+        setWizardMode(false);
+      }
+    };
+  }, [setWizardMode, showWizard]);
 
   const preview = useMemo(() => wizardPersonaPreview(persona), [persona]);
   const movieSections = useMemo(() => sections.filter((s) => s.type === "movie"), [sections]);
@@ -864,7 +906,17 @@ export default function ConfigPage() {
     }
   }
 
-  if (!settings || !persona || !wizard) return <p>Loading settings…</p>;
+  if (sectionParam && !ADMIN_SECTIONS.has(sectionParam)) {
+    return <Navigate to="/admin/overview" replace />;
+  }
+
+  if (!settings || !persona || !wizard) {
+    return (
+      <div className="config-page admin-config-page" data-testid="config-loading">
+        <p className="status status-secondary">Loading configuration…</p>
+      </div>
+    );
+  }
 
   const currentStep = WIZARD_STEPS[stepIndex];
 
@@ -1195,6 +1247,7 @@ export default function ConfigPage() {
   function renderMaintenanceDashboard() {
     return (
       <>
+        {showSection("overview") ? (
         <section className="config-section" data-testid="maintenance-dashboard">
           <div className="dashboard-header">
             <h2>Connection overview</h2>
@@ -1204,7 +1257,9 @@ export default function ConfigPage() {
           </div>
           <p>Test connections, pick libraries, and adjust optional household features.</p>
         </section>
+        ) : null}
 
+        {showSection("sync") ? (
         <section className="config-section" data-testid="library-sync-card">
           <h2>Library sync</h2>
           <p>
@@ -1281,7 +1336,9 @@ export default function ConfigPage() {
             message={actionAlert?.area === "library-sync" ? actionAlert.message : null}
           />
         </section>
+        ) : null}
 
+        {showSection("overview") ? (
         <section className="config-section" data-testid="library-health-dashboard">
           <h2>Library health</h2>
           <p>A quick read on backlog and how much of what you watch you have rated.</p>
@@ -1313,7 +1370,9 @@ export default function ConfigPage() {
             <p className="status status-secondary">Run Library sync to fill in these stats.</p>
           )}
         </section>
+        ) : null}
 
+        {showSection("overview") ? (
         <section className="config-section" data-testid="training-corpus-export">
           <h2>Export taste data</h2>
           <p>
@@ -1335,7 +1394,9 @@ export default function ConfigPage() {
             message={actionAlert?.area === "training-export" ? actionAlert.message : null}
           />
         </section>
+        ) : null}
 
+        {showSection("persona") ? (
         <PersonaSection
           persona={persona}
           setPersona={setPersona}
@@ -1352,7 +1413,10 @@ export default function ConfigPage() {
             }));
           }}
         />
+        ) : null}
 
+        {showSection("connections") ? (
+        <>
         <section className="config-section">
           <h2>Language model</h2>
           <p className="wizard-note">The AI that powers chat recommendations. Bring your own key or run Ollama locally.</p>
@@ -1520,8 +1584,10 @@ export default function ConfigPage() {
             })}
           </div>
         </section>
+        </>
+        ) : null}
 
-        {!showWizard ? (
+        {!showWizard && showSection("household") ? (
           <section className="config-section" data-testid="multi-user-settings">
             <h2>Household login (optional)</h2>
             <p className="wizard-note">
@@ -1656,7 +1722,7 @@ export default function ConfigPage() {
           </section>
         ) : null}
 
-        {!showWizard ? (
+        {!showWizard && showSection("seerr") ? (
           <section className="config-section" data-testid="seerr-settings">
             <h2>Overseerr / Seerr (optional)</h2>
             <p className="wizard-note">
@@ -1760,6 +1826,7 @@ export default function ConfigPage() {
           </section>
         ) : null}
 
+        {showSection("libraries") ? (
         <section className="config-section" data-testid="plex-library-mapping">
           <h2>Plex libraries</h2>
           <p className="wizard-note">Choose which movie and TV libraries CuratorX indexes. Update these if you rename or add libraries in Plex.</p>
@@ -1832,7 +1899,9 @@ export default function ConfigPage() {
             message={actionAlert?.area === "plex-sections" ? actionAlert.message : null}
           />
         </section>
+        ) : null}
 
+        {showSection("advanced") ? (
         <section className="config-section config-section-collapsible">
           <button
             type="button"
@@ -1922,8 +1991,9 @@ export default function ConfigPage() {
             </div>
           ) : null}
         </section>
+        ) : null}
 
-        {appVersion ? (
+        {appVersion && showSection("overview") ? (
           <p className="status status-secondary" data-testid="app-version">
             CuratorX {appVersion}
           </p>
@@ -1933,15 +2003,17 @@ export default function ConfigPage() {
   }
 
   return (
-    <div className="config-page">
-      <header className="topbar">
+    <div className={`config-page admin-config-page ${showWizard ? "config-wizard-mode" : ""}`}>
+      <header className="topbar admin-section-topbar">
         <div>
-          <p className="eyebrow">Configuration</p>
-          <h1>{showWizard ? "First-run setup" : "Settings"}</h1>
+          <p className="eyebrow">{showWizard ? "Configuration" : "Admin"}</p>
+          <h1>{showWizard ? "First-run setup" : SECTION_TITLES[section] || "Admin"}</h1>
         </div>
-        <Link to="/" className="btn-link">
-          Back to chat
-        </Link>
+        {showWizard ? (
+          <Link to="/" className="btn-link">
+            Back to chat
+          </Link>
+        ) : null}
       </header>
 
       {showWizard ? (

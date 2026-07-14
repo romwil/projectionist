@@ -307,6 +307,10 @@ class UserRoleUpdatePayload(BaseModel):
     role: str = Field(pattern="^(owner|member|guest)$")
 
 
+class AuthMeUpdatePayload(BaseModel):
+    preferred_name: Optional[str] = Field(default=None, max_length=80)
+
+
 class SeerrSyncPayload(BaseModel):
     auth_token: str = Field(min_length=1)
 
@@ -520,6 +524,25 @@ def privacy_page() -> HTMLResponse:
     return _serve_index()
 
 
+@app.get("/about", response_class=HTMLResponse)
+def about_page() -> HTMLResponse:
+    return _serve_index()
+
+
+@app.get("/admin", response_class=HTMLResponse)
+@app.get("/admin/{section}", response_class=HTMLResponse)
+def admin_page(section: str = "") -> HTMLResponse:
+    del section
+    return _serve_index()
+
+
+@app.get("/settings", response_class=HTMLResponse)
+@app.get("/settings/{section}", response_class=HTMLResponse)
+def settings_page(section: str = "") -> HTMLResponse:
+    del section
+    return _serve_index()
+
+
 @app.get("/api/health")
 def health() -> Dict[str, str]:
     return {"status": "ok", "version": __version__}
@@ -540,6 +563,22 @@ def get_features(request: Request) -> Dict[str, Any]:
 @app.get("/api/auth/me")
 def auth_me(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     return {"user": user.to_dict(), "authenticated": True}
+
+
+@app.patch("/api/auth/me")
+def patch_auth_me(
+    payload: AuthMeUpdatePayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Self-service profile updates (preferred conversation name)."""
+    fields_set = getattr(payload, "model_fields_set", None) or getattr(payload, "__fields_set__", set())
+    if "preferred_name" not in fields_set:
+        return {"user": user.to_dict(), "authenticated": True}
+    try:
+        updated = _db().update_user_profile(user.id, preferred_name=payload.preferred_name)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return {"user": updated, "authenticated": True}
 
 
 @app.post("/api/auth/plex/pin")

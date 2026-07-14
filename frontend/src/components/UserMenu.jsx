@@ -45,6 +45,8 @@ export default function UserMenu() {
 
   if (!user) return null;
 
+  const isOwner = user.role === "owner";
+
   return (
     <div className="user-menu" ref={menuRef} data-testid="user-menu">
       <button
@@ -67,11 +69,17 @@ export default function UserMenu() {
             {user.display_name}
             <span>{user.role}</span>
           </p>
-          {user.role === "owner" ? (
-            <Link to="/config" className="user-menu-link" onClick={() => setOpen(false)}>
-              Configuration
+          {isOwner ? (
+            <Link to="/admin" className="user-menu-link" onClick={() => setOpen(false)}>
+              Admin
             </Link>
           ) : null}
+          <Link to="/settings" className="user-menu-link" onClick={() => setOpen(false)}>
+            Settings
+          </Link>
+          <Link to="/about" className="user-menu-link" onClick={() => setOpen(false)}>
+            About
+          </Link>
           <button type="button" className="user-menu-link" data-testid="logout-button" onClick={handleLogout}>
             Sign out
           </button>
@@ -85,6 +93,7 @@ export function useAuthGate() {
   const navigate = useNavigate();
   const [authReady, setAuthReady] = useState(false);
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
+  const [isOwner, setIsOwner] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -97,6 +106,7 @@ export function useAuthGate() {
         if (cancelled) return;
         setMultiUserEnabled(enabled);
         if (!enabled) {
+          setIsOwner(true);
           setAuthReady(true);
           return;
         }
@@ -106,6 +116,7 @@ export function useAuthGate() {
           navigate("/login", { replace: true });
           return;
         }
+        setIsOwner(me.user?.role === "owner");
         setAuthReady(true);
       } catch {
         if (cancelled) return;
@@ -114,6 +125,7 @@ export function useAuthGate() {
           navigate("/login", { replace: true });
           return;
         }
+        setIsOwner(true);
         setAuthReady(true);
       }
     }
@@ -124,5 +136,5 @@ export function useAuthGate() {
     };
   }, [navigate]);
 
-  return { authReady, multiUserEnabled };
+  return { authReady, multiUserEnabled, isOwner };
 }
