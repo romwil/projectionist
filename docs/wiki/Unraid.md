@@ -67,4 +67,22 @@ That includes `settings.json`, `curatorx.db`, and `jobs_state.json`.
 
 Pull a newer tag and recreate the container with the **same** `/config` mount. An interrupted sync job is marked failed; start sync again from Config — phase checkpoints resume unfinished work when still valid (≤72h).
 
+### “Version: not available” / Force Update keeps the old image
+
+Unraid’s Docker update checker often returns **not available** for images published as **OCI indexes** (Buildx default with provenance/SBOM attestations). Force Update then appears to “succeed” while reusing the **local cache**, so you only get a new build after manually removing the image.
+
+**Maintainer fix (already required for CuratorX releases):** push with Docker v2 manifests via [`scripts/docker-release.sh`](../../scripts/docker-release.sh) (`--provenance=false --sbom=false`). After that, Check for Updates should work like other CA apps.
+
+**On your Unraid box right now:**
+
+```bash
+# Unraid terminal — pull a fresh digest, then Force Update / recreate
+docker pull romwil/curatorx:1.1
+# or pin a patch: docker pull romwil/curatorx:1.1.6
+```
+
+Or: Docker → CuratorX → Remove (keep volumes / keep appdata) → re-add from template / CA so it pulls again. Do **not** delete `/mnt/user/appdata/curatorx/config`.
+
+Optional: install Community Applications’ **Docker Update Patch** plugin if many containers show “not available.”
+
 See also: [Installation](Installation.md) · [Troubleshooting](Troubleshooting.md) · [../DOCKER.md](../DOCKER.md)

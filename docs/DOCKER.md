@@ -116,6 +116,31 @@ LLM_BASE_URL=http://host.docker.internal:11434/v1
 
 Or use the host LAN IP if `host.docker.internal` is unavailable.
 
+### Unraid shows “not available” for updates
+
+CuratorX images **must** be published as Docker Hub **v2 manifest lists**, not OCI indexes with provenance attestations. Unraid cannot check OCI indexes reliably → **Version: not available**, and Force Update often reuses the local image.
+
+Publish with:
+
+```bash
+./scripts/docker-release.sh 1.1.6
+```
+
+(uses `docker buildx build --provenance=false --sbom=false --push`).
+
+Operator workaround until a fixed image is pulled: `docker pull romwil/curatorx:1.1` on the Unraid host, then recreate the container (keep appdata). Details: [wiki/Unraid.md](wiki/Unraid.md#upgrading).
+
+---
+
+## Publishing multi-arch images (maintainers)
+
+```bash
+./scripts/docker-release.sh <semver>          # also tags X.Y and latest
+./scripts/docker-release.sh 1.2.0 --also-line 1.2
+```
+
+Always keep `--provenance=false --sbom=false` for Unraid CA compatibility.
+
 ---
 
 ## Data layout
