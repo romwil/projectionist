@@ -50,6 +50,7 @@ import {
   markEasterEggFired,
   resolveDockDropTarget,
 } from "./lib/easterEggs.js";
+import { extractSpeakableText } from "./lib/voiceSpeech.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import ChatThread from "./components/ChatThread";
 import InlineAlert from "./components/InlineAlert";
@@ -64,6 +65,7 @@ import UserMenu, { useAuthGate } from "./components/UserMenu";
 import { reviewPromptBlock } from "./components/ReviewPromptCard";
 import useChatScroll from "./hooks/useChatScroll";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
+import useVoiceMode from "./hooks/useVoiceMode.js";
 
 const SIDEBAR_RAIL_KEY = "curatorx.sidebar.rail";
 const ADD_FEEDBACK_DISMISS_MS = 5000;
@@ -128,6 +130,7 @@ export default function App() {
   const jobsRunningRef = useRef(false);
   const composerRef = useRef(null);
   const konamiTrackerRef = useRef(null);
+  const inputRef = useRef("");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return sessionStorage.getItem(SIDEBAR_RAIL_KEY) === "true";
@@ -135,6 +138,32 @@ export default function App() {
       return false;
     }
   });
+
+  inputRef.current = input;
+
+  const {
+    listening: voiceListening,
+    speaking: voiceSpeaking,
+    ttsMuted,
+    voiceStatus,
+    showMic,
+    toggleListening,
+    stopListening: stopVoiceListening,
+    speakReply,
+    stopTts,
+    muteTts,
+    unmuteTts,
+  } = useVoiceMode({
+    getComposerText: () => inputRef.current,
+    setComposerText: setInput,
+  });
+
+  const speakAssistantMessage = useCallback(
+    (message) => {
+      speakReply(extractSpeakableText(message));
+    },
+    [speakReply]
+  );
 
   const { scrollRef, showNewReplyChip, scrollToLatestTurn } = useChatScroll({
     messages,
@@ -451,6 +480,8 @@ export default function App() {
 
   async function sendMessage(text) {
     if (!text.trim() || loading) return;
+    stopVoiceListening();
+    stopTts();
     setLoading(true);
     setChatError("");
     const userMessage = {
@@ -464,14 +495,13 @@ export default function App() {
     const curatorName = persona?.curator_name || "Curator";
     if (!easterEggAlreadyFired() && isReversedCuratorName(text, curatorName)) {
       markEasterEggFired();
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: createId(),
-          role: "assistant",
-          blocks: [{ type: "text", content: easterEggResponse("reversed_name", curatorName) }],
-        },
-      ]);
+      const eggMessage = {
+        id: createId(),
+        role: "assistant",
+        blocks: [{ type: "text", content: easterEggResponse("reversed_name", curatorName) }],
+      };
+      setMessages((prev) => [...prev, eggMessage]);
+      speakAssistantMessage(eggMessage);
       setLoading(false);
       return;
     }
@@ -485,6 +515,7 @@ export default function App() {
           curatorName: persona?.curator_name || "Curator",
         });
         setMessages((prev) => [...prev, assistantMessage]);
+        speakAssistantMessage(assistantMessage);
         if (slash.command === "sync" && !features?.features?.multi_user_enabled) {
           refreshJobs();
         }
@@ -514,6 +545,7 @@ export default function App() {
         helpfulCountRef.current = 0;
       }
       setMessages((prev) => [...prev, assistantMessage]);
+      speakAssistantMessage(assistantMessage);
       setPendingTokens(normalizePendingTokens(result.pending_tokens));
       if (Array.isArray(result.pending_tokens) && result.pending_tokens.length >= 2) {
         setPendingBulk(null);
@@ -1024,14 +1056,13 @@ export default function App() {
                   if (!konamiTrackerRef.current) {
                     konamiTrackerRef.current = createKonamiTracker((kind) => {
                       const name = persona?.curator_name || "Curator";
-                      setMessages((prev) => [
-                        ...prev,
-                        {
-                          id: createId(),
-                          role: "assistant",
-                          blocks: [{ type: "text", content: easterEggResponse(kind, name) }],
-                        },
-                      ]);
+                      const eggMessage = {
+                        id: createId(),
+                        role: "assistant",
+                        blocks: [{ type: "text", content: easterEggResponse(kind, name) }],
+                      };
+                      setMessages((prev) => [...prev, eggMessage]);
+                      speakAssistantMessage(eggMessage);
                     });
                   }
                   konamiTrackerRef.current(event);
@@ -1046,10 +1077,68 @@ export default function App() {
                     event.preventDefault();
                   }
                 }}
-                placeholder={composerPlaceholder || "Describe what you're hunting for…"}
+                placeholder={
+                  voiceListening
+                    ? "Listening…"
+                    : composerPlaceholder || "Describe what you're hunting for…"
+                }
                 rows={2}
                 disabled={loading || !threadsReady}
               />
+              {showMic ? (
+                <button
+                  type="button"
+                  className={`composer-mic ghost ${voiceListening ? "is-listening" : ""}`}
+                  data-testid="composer-mic"
+                  aria-label={voiceListening ? "Stop dictation" : "Dictate with microphone"}
+                  aria-pressed={voiceListening}
+                  title={voiceListening ? "Stop dictation" : "Dictate"}
+                  disabled={loading || !threadsReady}
+                  onClick={toggleListening}
+                >
+                  <svg
+                    className="composer-mic-icon"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <path
+                      d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"
+                      fill="currentColor"
+                    />
+                    <path
+                      d="M17.5 11a5.5 5.5 0 0 1-11 0"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                    <path
+                      d="M12 16.5V20"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              ) : null}
+              {voiceSpeaking || ttsMuted ? (
+                <button
+                  type="button"
+                  className={`composer-tts-mute ghost ${ttsMuted ? "is-muted" : ""}`}
+                  data-testid="composer-tts-mute"
+                  aria-label={ttsMuted ? "Unmute spoken replies" : "Mute spoken reply"}
+                  aria-pressed={ttsMuted}
+                  title={ttsMuted ? "Unmute replies" : "Mute reply"}
+                  onClick={() => {
+                    if (ttsMuted) unmuteTts();
+                    else muteTts();
+                  }}
+                >
+                  {ttsMuted ? "Unmute" : "Mute"}
+                </button>
+              ) : null}
               <button
                 type="submit"
                 className="composer-send"
@@ -1073,6 +1162,11 @@ export default function App() {
                 </svg>
               </button>
             </div>
+            {voiceStatus ? (
+              <p className="composer-voice-status status status-secondary" data-testid="composer-voice-status">
+                {voiceStatus}
+              </p>
+            ) : null}
           </form>
         </main>
       </div>

@@ -1,36 +1,16 @@
 import { useEffect, useState } from "react";
-
-const STORAGE_KEY = "curatorx.voicePrefs";
-
-function loadPrefs() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { voice_input_enabled: false, voice_speak_replies: false };
-    return { voice_input_enabled: false, voice_speak_replies: false, ...JSON.parse(raw) };
-  } catch {
-    return { voice_input_enabled: false, voice_speak_replies: false };
-  }
-}
-
-function speechSupported() {
-  if (typeof window === "undefined") return { input: false, speak: false };
-  const Recognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  return {
-    input: Boolean(Recognition),
-    speak: typeof window.speechSynthesis !== "undefined",
-  };
-}
+import {
+  loadVoicePrefs,
+  saveVoicePrefs,
+  speechSupported,
+} from "../../lib/voicePrefs.js";
 
 export default function VoicePage() {
-  const [prefs, setPrefs] = useState(loadPrefs);
+  const [prefs, setPrefs] = useState(loadVoicePrefs);
   const support = speechSupported();
 
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
-    } catch {
-      // localStorage unavailable
-    }
+    saveVoicePrefs(prefs);
   }, [prefs]);
 
   function toggle(key) {
@@ -43,7 +23,7 @@ export default function VoicePage() {
         <h2>Voice</h2>
         <p>
           Talk to your curator with the browser mic, and optionally hear replies spoken aloud.
-          Full composer controls arrive in a follow-on release.
+          Preferences stay on this device until account sync ships.
         </p>
       </header>
 
@@ -57,10 +37,15 @@ export default function VoicePage() {
         <span>Enable voice input</span>
       </label>
       {!support.input ? (
-        <p className="status status-secondary">
+        <p className="status status-secondary" data-testid="voice-input-unsupported">
           Speech recognition is not available in this browser. Chromium-based browsers work best.
         </p>
-      ) : null}
+      ) : (
+        <p className="field-help">
+          When enabled, a mic appears next to the chat send button. Dictation fills the composer — Enter
+          still sends.
+        </p>
+      )}
 
       <label className="config-toggle" data-testid="voice-speak-toggle">
         <input
@@ -72,12 +57,18 @@ export default function VoicePage() {
         <span>Speak replies</span>
       </label>
       {!support.speak ? (
-        <p className="status status-secondary">Speech synthesis is not available in this browser.</p>
-      ) : null}
+        <p className="status status-secondary" data-testid="voice-speak-unsupported">
+          Speech synthesis is not available in this browser.
+        </p>
+      ) : (
+        <p className="field-help">
+          Assistant text replies are read aloud. You can mute mid-reply from the composer.
+        </p>
+      )}
 
       <p className="field-help">
         Audio may be processed by your browser or OS speech service. CuratorX stores transcripts as chat
-        text, not raw audio. Prefs are saved locally until account sync ships.
+        text, not raw audio.
       </p>
     </section>
   );

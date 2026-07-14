@@ -1019,6 +1019,44 @@ button.watchlist-chip {
   display: block;
 }
 
+.composer-mic,
+.composer-tts-mute {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 10px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+
+.composer-mic-icon {
+  display: block;
+}
+
+.composer-mic.is-listening {
+  color: var(--accent-text);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.composer-mic.is-listening:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.composer-tts-mute.is-muted {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
+.composer-voice-status {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+
 .message.user .message-inner {
   margin-left: auto;
   background: transparent;
