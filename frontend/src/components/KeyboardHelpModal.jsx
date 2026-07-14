@@ -36,6 +36,11 @@ export default function KeyboardHelpModal({ open, onClose, plexCollectionsEnable
         <p className="keyboard-help-footnote">
           Slash commands: `/help`, `/stats`, `/sync`, `/purge`{plexCollectionsEnabled ? ", `/collections`" : ""}
         </p>
+        <p className="keyboard-help-footnote keyboard-help-privacy">
+          <a href="/privacy" data-testid="keyboard-help-privacy-link">
+            Privacy &amp; data use
+          </a>
+        </p>
       </div>
     </div>
   );

@@ -515,6 +515,11 @@ def login_page() -> HTMLResponse:
     return _serve_index()
 
 
+@app.get("/privacy", response_class=HTMLResponse)
+def privacy_page() -> HTMLResponse:
+    return _serve_index()
+
+
 @app.get("/api/health")
 def health() -> Dict[str, str]:
     return {"status": "ok", "version": __version__}

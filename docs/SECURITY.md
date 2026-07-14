@@ -71,6 +71,7 @@ Statuses reflect the 1.2 hardening track. Residual risk is what remains after mi
 
 ## Related docs
 
+- [PRIVACY.md](PRIVACY.md) — plain-language privacy & data use (household + owner; in-app at `/privacy`)
 - [TESTING.md](TESTING.md) — API authz regression outline (`tests/test_api_authz.py`)
 - [CONFIGURATION.md](CONFIGURATION.md) — feature flags and session secret
 - [WEB_UI.md](WEB_UI.md) — UI login vs API surface

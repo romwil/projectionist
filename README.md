@@ -9,6 +9,8 @@
 
 CuratorX sits between Plex and your *arr stack: talk about taste, find gaps and purge candidates, rate what you watched, and add titles to Radarr or Sonarr only after you confirm. Bring your own LLM (cloud or local). Built for Unraid and Docker.
 
+**Privacy:** CuratorX is self-hosted — see [PRIVACY.md](docs/PRIVACY.md) (also the in-app **`/privacy`** page) for what is stored, what household members vs owners see, and what MCP / the LLM receive. Operators: [SECURITY.md](docs/SECURITY.md).
+
 > Ordinary recommenders blend everything you’ve ever watched. CuratorX keeps taste contexts separate so a comfort binge doesn’t reshape your discovery lane.
 
 ---
@@ -122,6 +124,8 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | Doc | Description |
 |-----|-------------|
 | **[Wiki home](docs/wiki/Home.md)** | In-repo wiki index |
+| [Privacy](docs/PRIVACY.md) | Data use (household + owner); in-app `/privacy` |
+| [Security](docs/SECURITY.md) | Threat model and findings checklist |
 | [FAQ](docs/FAQ.md) | Common questions |
 | [Onboarding](docs/ONBOARDING.md) | First-run checklist |
 | [Web UI](docs/WEB_UI.md) | Workspace layout and routes |

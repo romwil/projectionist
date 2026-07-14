@@ -19,6 +19,7 @@ A cinema-dark chat curator for self-hosted Plex: library-grounded recommendation
 | [Seerr](Seerr.md) | Optional Seerr requests for members |
 | [Troubleshooting](Troubleshooting.md) | Common failures and fixes |
 | [FAQ](FAQ.md) | Short answers (mirrors [`../FAQ.md`](../FAQ.md)) |
+| [Privacy](../PRIVACY.md) | What data CuratorX stores and who can see it (also `/privacy` in the UI) |
 | [Security](../SECURITY.md) | Threat model + living findings checklist (pen-test brief) |
 
 ## Related guides
@@ -26,6 +27,7 @@ A cinema-dark chat curator for self-hosted Plex: library-grounded recommendation
 - [../ONBOARDING.md](../ONBOARDING.md) — first-run wizard
 - [../WEB_UI.md](../WEB_UI.md) — single workspace UI
 - [../DOCKER.md](../DOCKER.md) — Mac / Compose / Unraid notes
+- [../PRIVACY.md](../PRIVACY.md) — privacy & data use (household + owner)
 - [../SECURITY.md](../SECURITY.md) — security assessment (S1–S13)
 - [../TESTING.md](../TESTING.md) — CA release test checklist
 - [../../CHANGELOG.md](../../CHANGELOG.md) — release notes
