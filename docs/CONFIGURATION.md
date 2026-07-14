@@ -78,7 +78,7 @@ Default values (also in `config/settings.example.json`):
 
 | Flag | Default | What it does when enabled |
 |------|---------|---------------------------|
-| `features.multi_user_enabled` | `false` | Requires sign-in; enforces owner vs member roles; per-user chat and reviews |
+| `features.multi_user_enabled` | `false` | UI gate today (login + session cookie); owner vs member roles on some routes. **API enforcement for most `/api/*` is in progress for 1.2** — see [SECURITY.md](SECURITY.md) |
 | `features.seerr_enabled` | `false` | Activates Seerr connector for household discovery and requests |
 | `auth.mode` | `disabled` | Set to `plex`, `oidc`, or `local` when multi-user is on |
 | `seerr.link_on_login` | `true` | After Plex login, bridge identity to Seerr |
@@ -90,12 +90,12 @@ Default values (also in `config/settings.example.json`):
 
 ### Multi-user Plex login
 
-When `features.multi_user_enabled` is `true`, CuratorX requires sign-in before using the chat UI.
+When `features.multi_user_enabled` is `true`, CuratorX requires sign-in before using the **chat UI** (SPA auth gate). That is a browser gate today — raw calls to most `/api/*` routes are not yet fully session-enforced (landing in **1.2**; see [SECURITY.md](SECURITY.md)).
 
 1. **Enable in Config** — Turn on **Enable multi-user auth** and set **Auth mode** to **Plex login**.
-2. **Set a session secret (recommended)** — Export `CURATORX_SESSION_SECRET` to a long random string in your container or `.env`. Without it, CuratorX uses a dev default (fine for LAN testing only).
+2. **Set a session secret (required for any real deploy)** — Export `CURATORX_SESSION_SECRET` to a long random string in your container or `.env`. Without it, CuratorX uses a well-known dev default that anyone can forge sessions with.
 3. **Sign in** — Open CuratorX; you are redirected to `/login`. Click **Sign in with Plex**. CuratorX opens the plex.tv link flow (same PIN/OAuth pattern as Overseerr / Seerr). After you approve in Plex, CuratorX stores a signed session cookie. Token paste remains an advanced fallback only.
-4. **Roles** — The first Plex account to sign in becomes **owner**. Later accounts start as **member**. Owners can promote/demote users under **Config → Multi-user auth → Users**.
+4. **Roles** — The first Plex account to sign in becomes **owner**. Later accounts start as **member**. Owners can promote/demote users under **Config → Multi-user auth → Users**. Role checks already apply on some endpoints (users, watchlist, parts of Seerr/collections); broader API + chat partitioning lands in 1.2.
 5. **Seerr bridge** — With Seerr enabled and **Link Plex users to Seerr on login** checked, CuratorX calls Seerr `POST /auth/plex` during login and stores `seerr_user_id` + permissions on the user row.
 
 | Endpoint | Purpose |

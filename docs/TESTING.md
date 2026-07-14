@@ -46,6 +46,23 @@ These cover auth-disabled bootstrap, empty library stats/sync start, optional_in
 message feedback/reviews/webhooks error paths, Seerr/multi-user-off API safety, and arr confirm
 friendly errors.
 
+### API authz regression (multi-user) — `tests/test_api_authz.py`
+
+Outline for the 1.2 API enforcement suite (add alongside Workstream B). When
+`features.multi_user_enabled` is **on**, unauthenticated clients must not hit the control plane.
+
+| Expectation | Request (no session cookie) | Expected |
+|-------------|----------------------------|----------|
+| Settings read gated | `GET /api/settings` | **401** |
+| Settings write gated | `PUT /api/settings` | **401** |
+| Chat gated | `POST /api/chat` | **401** |
+| Action confirm gated | `POST /api/actions/confirm` | **401** |
+| Allowlist still public | `GET /api/health`, `GET /api/features`, `/api/auth/*` | **200** / auth flow as designed |
+| Webhook allowlist | `POST /api/webhooks/plex` (with valid secret when required) | Not forced through session auth |
+
+When multi-user is **off**, preserve trusted-LAN single-owner behavior (bootstrap owner; existing
+`tests/test_ca_release.py` must stay green). Full finding list: [SECURITY.md](SECURITY.md).
+
 Live integration tests (`tests/test_live_integrations.py`) are **skipped** during discover unless
 `CURATORX_LIVE_INTEGRATION=1` is set — see [Live service integrations](#live-service-integrations-optional).
 
