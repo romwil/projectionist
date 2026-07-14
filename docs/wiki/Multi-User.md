@@ -20,9 +20,11 @@ In Configuration (or `settings.json`):
 
 When enabled:
 
-- Visitors must sign in with **Plex**
+- Visitors must sign in with **Plex** via **Sign in with Plex** (plex.tv PIN / link flow, same pattern as Overseerr / Seerr)
 - The first linked account becomes the **owner**
 - Members get scoped chat/reviews; library sync and destructive *arr actions stay owner-gated
+
+No OAuth callback URL is required for reverse proxies; the server talks to plex.tv and sets CuratorX’s session cookie.
 
 ## Not in 1.0
 

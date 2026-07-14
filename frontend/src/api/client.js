@@ -103,6 +103,14 @@ export async function getAuthMe() {
   return response.json();
 }
 
+export async function startPlexPinLogin() {
+  return api("/auth/plex/pin", { method: "POST" });
+}
+
+export async function pollPlexPinLogin(pinId) {
+  return api(`/auth/plex/pin/${encodeURIComponent(pinId)}`);
+}
+
 export async function loginWithPlex(authToken) {
   return api("/auth/plex", {
     method: "POST",

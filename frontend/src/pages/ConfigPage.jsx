@@ -1499,7 +1499,7 @@ export default function ConfigPage() {
                         }).catch((error) => setActionFeedback("multi-user", "error", error.message));
                       }}
                     >
-                      <option value="plex">Plex token login</option>
+                      <option value="plex">Plex login</option>
                       <option value="disabled">Disabled</option>
                       <option value="oidc" disabled>
                         OIDC (coming soon)

@@ -85,6 +85,60 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(me.status_code, 200)
         self.assertEqual(me.json()["user"]["display_name"], "Household Owner")
 
+    def test_plex_pin_login_flow(self) -> None:
+        self._enable_multi_user()
+        pin_create = {
+            "id": 77,
+            "code": "ABCD",
+            "client_id": "client-xyz",
+            "auth_url": "https://app.plex.tv/auth/#!?clientID=client-xyz&code=ABCD",
+            "expires_in": 1800,
+            "expires_at": "2099-01-01T00:00:00Z",
+        }
+        profile = {"id": 4242, "title": "PIN User", "email": "pin@example.com"}
+        with patch("curatorx.web.auth.create_plex_pin", return_value=pin_create), patch(
+            "curatorx.web.auth.get_or_create_client_id",
+            return_value="client-xyz",
+        ):
+            start = self.client.post("/api/auth/plex/pin")
+        self.assertEqual(start.status_code, 200)
+        start_body = start.json()
+        self.assertEqual(start_body["id"], 77)
+        self.assertEqual(start_body["code"], "ABCD")
+        self.assertIn("app.plex.tv/auth", start_body["auth_url"])
+
+        with patch("curatorx.web.auth.fetch_plex_pin", return_value={"authToken": None}), patch(
+            "curatorx.web.auth.get_or_create_client_id",
+            return_value="client-xyz",
+        ):
+            pending = self.client.get("/api/auth/plex/pin/77")
+        self.assertEqual(pending.status_code, 200)
+        self.assertTrue(pending.json()["pending"])
+        self.assertFalse(pending.json()["authenticated"])
+
+        with patch(
+            "curatorx.web.auth.fetch_plex_pin",
+            return_value={"authToken": "pin-auth-token"},
+        ), patch(
+            "curatorx.web.auth.get_or_create_client_id",
+            return_value="client-xyz",
+        ), patch("curatorx.web.auth.fetch_plex_account", return_value=profile):
+            done = self.client.get("/api/auth/plex/pin/77")
+        self.assertEqual(done.status_code, 200)
+        body = done.json()
+        self.assertTrue(body["authenticated"])
+        self.assertFalse(body["pending"])
+        self.assertEqual(body["user"]["plex_user_id"], "4242")
+        self.assertIn("curatorx_session", done.cookies)
+
+        me = self.client.get("/api/auth/me")
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["user"]["display_name"], "PIN User")
+
+    def test_plex_pin_start_requires_multi_user(self) -> None:
+        resp = self.client.post("/api/auth/plex/pin")
+        self.assertEqual(resp.status_code, 400)
+
     def test_plex_login_second_user_is_member(self) -> None:
         self._enable_multi_user()
         owner_profile = {"id": 1, "title": "Owner", "email": "owner@example.com"}

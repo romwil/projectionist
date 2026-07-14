@@ -86,30 +86,39 @@ Default values (also in `config/settings.example.json`):
 
 **For most installs:** leave everything at the defaults. CuratorX behaves exactly as before — one implicit owner, no login, no Seerr calls.
 
-**To enable multi-user or Seerr later:** open **Config → Multi-user auth** and **Config → Seerr** (or edit `{DATA_DIR}/settings.json`), set `features.multi_user_enabled` to `true`, choose `auth.mode` (`plex` for token login), and save. For Seerr, set `features.seerr_enabled` to `true`, add your Seerr URL and API key, and test the connection. The frontend reads `GET /api/features` to show or hide login, Seerr request buttons, and user-management UI.
+**To enable multi-user or Seerr later:** open **Config → Multi-user auth** and **Config → Seerr** (or edit `{DATA_DIR}/settings.json`), set `features.multi_user_enabled` to `true`, choose `auth.mode` (`plex` for Plex PIN login), and save. For Seerr, set `features.seerr_enabled` to `true`, add your Seerr URL and API key, and test the connection. The frontend reads `GET /api/features` to show or hide login, Seerr request buttons, and user-management UI.
 
 ### Multi-user Plex login
 
 When `features.multi_user_enabled` is `true`, CuratorX requires sign-in before using the chat UI.
 
-1. **Enable in Config** — Turn on **Enable multi-user auth** and set **Auth mode** to **Plex token login**.
+1. **Enable in Config** — Turn on **Enable multi-user auth** and set **Auth mode** to **Plex login**.
 2. **Set a session secret (recommended)** — Export `CURATORX_SESSION_SECRET` to a long random string in your container or `.env`. Without it, CuratorX uses a dev default (fine for LAN testing only).
-3. **Sign in** — Open CuratorX; you are redirected to `/login`. Click **Sign in with Plex**, paste a Plex token from [plex.tv account settings](https://app.plex.tv/desktop/#!/settings/account), and submit.
+3. **Sign in** — Open CuratorX; you are redirected to `/login`. Click **Sign in with Plex**. CuratorX opens the plex.tv link flow (same PIN/OAuth pattern as Overseerr / Seerr). After you approve in Plex, CuratorX stores a signed session cookie. Token paste remains an advanced fallback only.
 4. **Roles** — The first Plex account to sign in becomes **owner**. Later accounts start as **member**. Owners can promote/demote users under **Config → Multi-user auth → Users**.
 5. **Seerr bridge** — With Seerr enabled and **Link Plex users to Seerr on login** checked, CuratorX calls Seerr `POST /auth/plex` during login and stores `seerr_user_id` + permissions on the user row.
 
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /api/auth/me` | Current signed-in user (401 when multi-user is on and no session) |
-| `POST /api/auth/plex` | Validate Plex token, upsert user, optional Seerr bridge, set session cookie |
+| `POST /api/auth/plex/pin` | Start Plex PIN login; returns `auth_url` to open |
+| `GET /api/auth/plex/pin/{id}` | Poll PIN; when authorized, upsert user and set session cookie |
+| `POST /api/auth/plex` | Advanced: validate a pasted Plex auth token, upsert user, set session cookie |
 | `POST /api/auth/logout` | Clear session cookie |
 | `GET /api/users` | List household users (owner only) |
 | `PATCH /api/users/{id}` | Change role (owner only) |
 
+**Proxy / Unraid notes**
+
+- No OAuth callback URL is required. The browser opens plex.tv; CuratorX polls plex.tv from the server.
+- Allow the CuratorX container outbound HTTPS to `plex.tv` / `app.plex.tv`.
+- Serve CuratorX over HTTPS (or trusted LAN HTTP) as usual for the HttpOnly session cookie (`SameSite=Lax`).
+
 **Troubleshooting**
 
 - **401 after enabling multi-user** — Expected until you sign in at `/login`.
-- **Invalid Plex token** — Regenerate the token in Plex account settings; tokens are user-specific.
+- **Popup blocked** — Use the **Open Plex sign-in** link on the login page.
+- **Plex sign-in never completes** — Confirm outbound access to plex.tv; retry Sign in with Plex.
 - **Seerr not linked** — Confirm Seerr URL/API key, enable **Link on login**, and ensure the Plex account exists in Seerr.
 
 ---

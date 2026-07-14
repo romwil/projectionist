@@ -2627,6 +2627,36 @@ button.ghost.inline-link {
   cursor: not-allowed;
 }
 
+.login-waiting {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.login-secondary-link,
+.login-advanced-toggle,
+.login-cancel {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.login-cancel {
+  color: var(--muted);
+}
+
+.login-advanced {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+}
+
 .user-menu {
   position: relative;
 }

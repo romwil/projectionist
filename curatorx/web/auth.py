@@ -10,7 +10,12 @@ from typing import Callable, Literal, Optional
 from fastapi import Depends, HTTPException, Request, Response
 
 from curatorx.config_store import Settings, load_merged_settings
-from curatorx.connectors.plex_account import fetch_plex_account
+from curatorx.connectors.plex_account import (
+    create_plex_pin,
+    fetch_plex_account,
+    fetch_plex_pin,
+    get_or_create_client_id,
+)
 from curatorx.connectors.seerr import SeerrClient
 from curatorx.config_store import seerr_configuration_error
 from curatorx.library.db import BOOTSTRAP_OWNER_ID, Database
@@ -183,12 +188,48 @@ def _bridge_seerr_on_login(
     )
 
 
-def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
+def _ensure_plex_login_enabled() -> Settings:
     settings = _settings()
     if not settings.features.multi_user_enabled:
         raise HTTPException(status_code=400, detail="Multi-user auth is not enabled")
     if not settings.auth.plex_login_enabled:
         raise HTTPException(status_code=400, detail="Plex login is not enabled")
+    return settings
+
+
+def start_plex_pin_login() -> dict[str, object]:
+    """Create a plex.tv PIN and auth URL for Overseerr-style sign-in."""
+    _ensure_plex_login_enabled()
+    try:
+        pin = create_plex_pin(get_or_create_client_id(_data_dir()))
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Could not start Plex login: {error}") from error
+    return {
+        "id": pin["id"],
+        "code": pin["code"],
+        "auth_url": pin["auth_url"],
+        "expires_in": pin.get("expires_in"),
+        "expires_at": pin.get("expires_at"),
+    }
+
+
+def poll_plex_pin_login(pin_id: int, db: Database) -> Optional[CurrentUser]:
+    """Poll plex.tv PIN once. Returns CurrentUser when authorized, else None."""
+    _ensure_plex_login_enabled()
+    client_id = get_or_create_client_id(_data_dir())
+    try:
+        pin = fetch_plex_pin(int(pin_id), client_id)
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Could not check Plex login: {error}") from error
+
+    auth_token = pin.get("authToken") or pin.get("auth_token")
+    if not auth_token:
+        return None
+    return authenticate_plex_user(str(auth_token), db)
+
+
+def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
+    settings = _ensure_plex_login_enabled()
 
     cleaned = str(auth_token or "").strip()
     if not cleaned:

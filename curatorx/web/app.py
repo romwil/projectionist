@@ -120,8 +120,10 @@ from curatorx.web.auth import (
     bootstrap_owner,
     clear_session_cookie,
     get_current_user_dep,
+    poll_plex_pin_login,
     require_role,
     set_session_cookie,
+    start_plex_pin_login,
     sync_user_seerr_from_token,
     try_get_current_user,
 )
@@ -500,8 +502,25 @@ def auth_me(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     return {"user": user.to_dict(), "authenticated": True}
 
 
+@app.post("/api/auth/plex/pin")
+def auth_plex_pin_start() -> Dict[str, Any]:
+    """Start Overseerr-style Plex PIN login; client opens auth_url and polls."""
+    return start_plex_pin_login()
+
+
+@app.get("/api/auth/plex/pin/{pin_id}")
+def auth_plex_pin_poll(pin_id: int, response: Response) -> Dict[str, Any]:
+    """Poll Plex PIN. When authorized, upsert user and set session cookie."""
+    user = poll_plex_pin_login(pin_id, _db())
+    if user is None:
+        return {"authenticated": False, "pending": True}
+    set_session_cookie(response, user.id)
+    return {"user": user.to_dict(), "authenticated": True, "pending": False}
+
+
 @app.post("/api/auth/plex")
 def auth_plex(payload: PlexLoginPayload, response: Response) -> Dict[str, Any]:
+    """Advanced fallback: sign in with a raw Plex auth token."""
     user = authenticate_plex_user(payload.auth_token, _db())
     set_session_cookie(response, user.id)
     return {"user": user.to_dict(), "authenticated": True}

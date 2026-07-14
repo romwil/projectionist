@@ -212,7 +212,9 @@ The curator can also propose **Plex collection** create/add actions; those requi
 | POST | `/api/plex/collections/{key}/items/propose` | Propose adding titles to a collection (owner only) |
 | GET | `/api/features` | Feature flags (multi-user, Seerr, auth modes) |
 | GET | `/api/auth/me` | Current user when multi-user auth is enabled |
-| POST | `/api/auth/plex` | Plex token login (sets HttpOnly session cookie) |
+| POST | `/api/auth/plex/pin` | Start Plex PIN / link login |
+| GET | `/api/auth/plex/pin/{id}` | Poll PIN; sets HttpOnly session cookie when authorized |
+| POST | `/api/auth/plex` | Advanced token login (sets HttpOnly session cookie) |
 | POST | `/api/auth/logout` | Sign out |
 | GET | `/api/users` | Household user list (owner only) |
 | PATCH | `/api/users/{id}` | Update user role (owner only) |
@@ -231,7 +233,7 @@ When `features.multi_user_enabled` is `true` in settings:
 
 1. The app loads `GET /api/features` and `GET /api/auth/me`.
 2. If features show multi-user mode and `/api/auth/me` returns **401**, the browser redirects to **`/login`**.
-3. **Sign in with Plex** opens a token field (v1). Paste a Plex account token; CuratorX validates it with Plex.tv and stores a signed **HttpOnly** session cookie.
+3. **Sign in with Plex** starts an Overseerr-style plex.tv PIN flow. Approve in the Plex window; CuratorX polls until authorized and stores a signed **HttpOnly** session cookie. Token paste is an advanced fallback only.
 4. After login, the main chat UI loads. The top bar shows an avatar menu with display name, role, and **Sign out**.
 5. **Owners** can open **Config → Multi-user auth** to manage roles and review Seerr linkage. **Members** see Seerr request buttons instead of Radarr/Sonarr adds when Seerr is enabled.
 
@@ -241,7 +243,7 @@ When multi-user is **off** (default), there is no login screen and the bootstrap
 
 ## Security
 
-Single-owner installs have no built-in authentication — run on a trusted LAN or behind an authenticated reverse proxy. When multi-user auth is enabled, Plex token login and signed session cookies protect the UI; set `CURATORX_SESSION_SECRET` in production. Destructive *arr operations always require confirmation tokens (10-minute TTL).
+Single-owner installs have no built-in authentication — run on a trusted LAN or behind an authenticated reverse proxy. When multi-user auth is enabled, Plex PIN login and signed session cookies protect the UI; set `CURATORX_SESSION_SECRET` in production. Destructive *arr operations always require confirmation tokens (10-minute TTL).
 
 ---
 

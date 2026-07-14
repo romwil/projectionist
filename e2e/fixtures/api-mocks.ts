@@ -607,28 +607,74 @@ export async function mockAuthUser(page: Page, user = { id: "user-1", display_na
 
 export async function mockPlexLogin(page: Page, user = { id: "user-1", display_name: "Test User", role: "owner" }) {
   let authenticated = false;
-  await page.route("**/api/auth/plex", async (route: Route) => {
-    authenticated = true;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ user }),
-    });
-  });
-  await page.route("**/api/auth/me", async (route: Route) => {
-    if (!authenticated) {
+  let pinAuthorized = false;
+
+  await page.route("**/api/auth/**", async (route: Route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    const method = route.request().method();
+
+    if (method === "POST" && path.endsWith("/api/auth/plex/pin")) {
+      pinAuthorized = true;
       await route.fulfill({
-        status: 401,
+        status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ detail: "Not authenticated" }),
+        body: JSON.stringify({
+          id: 42,
+          code: "TEST",
+          auth_url: "https://app.plex.tv/auth/#!?clientID=test&code=TEST",
+          expires_in: 1800,
+        }),
       });
       return;
     }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ user }),
-    });
+
+    if (method === "GET" && /\/api\/auth\/plex\/pin\/\d+$/.test(path)) {
+      if (!pinAuthorized) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ authenticated: false, pending: true }),
+        });
+        return;
+      }
+      authenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ user, authenticated: true, pending: false }),
+      });
+      return;
+    }
+
+    if (method === "POST" && path.endsWith("/api/auth/plex")) {
+      authenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ user, authenticated: true }),
+      });
+      return;
+    }
+
+    if (method === "GET" && path.endsWith("/api/auth/me")) {
+      if (!authenticated) {
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Not authenticated" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ user }),
+      });
+      return;
+    }
+
+    await route.continue();
   });
 }
 

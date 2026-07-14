@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.1.5] — 2026-07-13
+
+Overseerr-style **Sign in with Plex** for multi-user login (plex.tv PIN / link flow).
+
+### Added
+- `POST /api/auth/plex/pin` and `GET /api/auth/plex/pin/{id}` — create and poll a plex.tv PIN, then set the CuratorX session cookie
+- Login page primary path opens plex.tv auth; advanced token paste remains as a fallback
+
+### Fixed
+- Login copy no longer tells users to copy a token from plex.tv/account (Plex removed that UI for most accounts)
+
+### Changed
+- Docs / Config labels: “Plex login” instead of “Plex token login”
+
 ## [1.1.4] — 2026-07-12
 
 Pin turnstyle recommendation cards to the exact recommended work when year or `tmdb_id` is known.
