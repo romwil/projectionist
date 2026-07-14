@@ -46,6 +46,12 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 | Sync reviews to Plex | `sync_reviews_to_plex` in settings | When `true`, saving a 1–5 star review writes the matching Plex user rating (2/4/6/8/10) via `PUT /:/rate` |
 | Log level | `CURATORX_LOG_LEVEL` or `LOG_LEVEL` | `ERROR`, `WARNING`, `INFO` (default), or `DEBUG` |
 | Log format | `LOG_FORMAT` or `CURATORX_LOG_FORMAT` | `text` (default) or `json` |
+| Privacy MCP key | `CURATORX_MCP_API_KEY` | Enables HTTP `/mcp` in **privacy** mode (public schema, read-only). Or generate in **Admin → Advanced**. |
+| Full MCP key | `CURATORX_MCP_FULL_API_KEY` | Enables `/mcp` in **full** mode (internal fields + confirm-gated *arr proposes). Must differ from the privacy key. |
+| Session secret | `CURATORX_SESSION_SECRET` | Multi-user session cookies (auto-generated under `DATA_DIR` if unset) |
+| Webhook secret | `CURATORX_WEBHOOK_SECRET` | Required for Plex webhook auth (`X-CuratorX-Webhook-Secret`) |
+
+MCP details: [MCP.md](MCP.md). Privacy disclosure: [PRIVACY.md](PRIVACY.md) and in-app `/privacy`.
 
 ---
 
@@ -78,7 +84,7 @@ Default values (also in `config/settings.example.json`):
 
 | Flag | Default | What it does when enabled |
 |------|---------|---------------------------|
-| `features.multi_user_enabled` | `false` | UI gate today (login + session cookie); owner vs member roles on some routes. **API enforcement for most `/api/*` is in progress for 1.2** — see [SECURITY.md](SECURITY.md) |
+| `features.multi_user_enabled` | `false` | Login + session cookie; API middleware + per-user chat/actions when on — see [SECURITY.md](SECURITY.md) |
 | `features.seerr_enabled` | `false` | Activates Seerr connector for household discovery and requests |
 | `auth.mode` | `disabled` | Set to `plex`, `oidc`, or `local` when multi-user is on |
 | `seerr.link_on_login` | `true` | After Plex login, bridge identity to Seerr |
@@ -90,12 +96,12 @@ Default values (also in `config/settings.example.json`):
 
 ### Multi-user Plex login
 
-When `features.multi_user_enabled` is `true`, CuratorX requires sign-in before using the **chat UI** (SPA auth gate). That is a browser gate today — raw calls to most `/api/*` routes are not yet fully session-enforced (landing in **1.2**; see [SECURITY.md](SECURITY.md)).
+When `features.multi_user_enabled` is `true`, CuratorX requires sign-in for the chat UI and enforces session auth on `/api/*` (allowlisted health/features/auth/webhooks). See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).
 
-1. **Enable in Config** — Turn on **Enable multi-user auth** and set **Auth mode** to **Plex login**.
-2. **Set a session secret (required for any real deploy)** — Export `CURATORX_SESSION_SECRET` to a long random string in your container or `.env`. Without it, CuratorX uses a well-known dev default that anyone can forge sessions with.
+1. **Enable in Admin** — Turn on **Enable multi-user auth** and set **Auth mode** to **Plex login**.
+2. **Set a session secret (required for any real deploy)** — Export `CURATORX_SESSION_SECRET` to a long random string in your container or `.env`. Without it, CuratorX auto-generates one under `DATA_DIR` (or refuses the public dev default for multi-user).
 3. **Sign in** — Open CuratorX; you are redirected to `/login`. Click **Sign in with Plex**. CuratorX opens the plex.tv link flow (same PIN/OAuth pattern as Overseerr / Seerr). After you approve in Plex, CuratorX stores a signed session cookie. Token paste remains an advanced fallback only.
-4. **Roles** — The first Plex account to sign in becomes **owner**. Later accounts start as **member**. Owners can promote/demote users under **Config → Multi-user auth → Users**. Role checks already apply on some endpoints (users, watchlist, parts of Seerr/collections); broader API + chat partitioning lands in 1.2.
+4. **Roles** — The first Plex account to sign in becomes **owner**. Later accounts start as **member**. Owners can promote/demote, disable, or remove users under **Admin → Users**. Chat, pending actions, watchlist, and reviews are partitioned by user.
 5. **Seerr bridge** — With Seerr enabled and **Link Plex users to Seerr on login** checked, CuratorX calls Seerr `POST /auth/plex` during login and stores `seerr_user_id` + permissions on the user row.
 
 | Endpoint | Purpose |

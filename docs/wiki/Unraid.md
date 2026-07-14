@@ -24,7 +24,7 @@ Resize from a larger master if needed: `sips -z 256 256 source.png --out unraid/
 
 | Field | Value |
 |-------|-------|
-| Repository | `romwil/curatorx:1.1` (or `:1.1.6` / `:latest`) |
+| Repository | `romwil/curatorx:1.3` (or `:1.3.0` / `:latest`) |
 | Host port | `8788` (or map freely) |
 | Config | `/mnt/user/appdata/curatorx/config` → `/config` |
 | TZ (advanced) | e.g. `America/New_York` — needed so preferred `library_sync_hour` matches wall clock |
@@ -77,9 +77,11 @@ Unraid’s Docker update checker often returns **not available** for images publ
 
 ```bash
 # Unraid terminal — pull a fresh digest, then Force Update / recreate
-docker pull romwil/curatorx:1.1
-# or pin a patch: docker pull romwil/curatorx:1.1.6
+docker pull romwil/curatorx:1.3
+# or pin a patch: docker pull romwil/curatorx:1.3.0
 ```
+
+Optional advanced env (or generate in **Admin → Advanced**): `CURATORX_MCP_API_KEY` (privacy) and `CURATORX_MCP_FULL_API_KEY` (full; must differ). Privacy notes: in-app `/privacy` or [PRIVACY.md](../PRIVACY.md).
 
 Or: Docker → CuratorX → Remove (keep volumes / keep appdata) → re-add from template / CA so it pulls again. Do **not** delete `/mnt/user/appdata/curatorx/config`.
 

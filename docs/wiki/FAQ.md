@@ -1,6 +1,6 @@
 # FAQ
 
-Canonical FAQ for CuratorX 1.1. Same content as [`docs/FAQ.md`](../FAQ.md).
+Canonical FAQ for CuratorX 1.3. Same content as [`docs/FAQ.md`](../FAQ.md).
 
 ## What is CuratorX?
 
@@ -12,8 +12,8 @@ No. CuratorX is a **single workspace**: sidebar conversations + full-width chat 
 
 ## Which Docker image should I use?
 
-- Unraid / everyday: `romwil/curatorx:1.1`
-- Pin exact: `romwil/curatorx:1.1.6`
+- Unraid / everyday: `romwil/curatorx:1.3`
+- Pin exact: `romwil/curatorx:1.3.0`
 - Newest stable: `romwil/curatorx:latest`
 
 Images are multi-arch (amd64 + arm64).
@@ -49,6 +49,21 @@ Job **state** is durable; an interrupted job is marked failed so you can start s
 ## How is this different from Overseerr / Seerr?
 
 CuratorX is a **taste-aware curator** over your library (RAG, persona, ratings, purge advice). Seerr is an optional request front-end you can enable for members — it does not replace CuratorX’s owner chat loop.
+
+## Where is the privacy policy?
+
+In-app at **`/privacy`** (no login), and [PRIVACY.md](../PRIVACY.md).
+
+## What are the two MCP API keys?
+
+- `CURATORX_MCP_API_KEY` — privacy (public schema, read-only)
+- `CURATORX_MCP_FULL_API_KEY` — full (internal fields + confirm-gated *arr proposes; must differ)
+
+Generate in Admin → Advanced or set env vars. Details: [MCP.md](../MCP.md).
+
+## How does Plex watchlist sync work?
+
+Optional Discover sync uses an encrypted Sign-in-with-Plex account token (not the server library token). Re-sign in if sync asks. See [PRIVACY.md](../PRIVACY.md).
 
 ## Can CuratorX publish named lists to Plex Lists?
 

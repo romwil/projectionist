@@ -78,7 +78,7 @@ If you enable voice input:
 
 You can set a **preferred conversation name** on your profile. CuratorX stores it on your user record and uses it when addressing you. Fallback: Plex display name, then a neutral greeting.
 
-### Watchlist and Plex account token (planned / when enabled)
+### Watchlist and Plex account token
 
 Local watchlist pins are yours. When watchlist ↔ Plex Discover sync is enabled:
 

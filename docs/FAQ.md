@@ -1,6 +1,6 @@
 # CuratorX FAQ
 
-Common questions for CuratorX **1.1**. Also mirrored under [wiki/FAQ.md](wiki/FAQ.md).
+Common questions for CuratorX **1.3**. Also mirrored under [wiki/FAQ.md](wiki/FAQ.md).
 
 ## What is CuratorX?
 
@@ -10,8 +10,8 @@ A cinema-dark, chat-first curator for self-hosted **Plex** libraries. It indexes
 
 | Tag | When |
 |-----|------|
-| `romwil/curatorx:1.1` | Everyday Unraid / Compose |
-| `romwil/curatorx:1.1.6` | Pin an exact release |
+| `romwil/curatorx:1.3` | Everyday Unraid / Compose |
+| `romwil/curatorx:1.3.0` | Pin an exact release |
 | `romwil/curatorx:latest` | Newest stable |
 
 Images are multi-arch (**amd64 + arm64**). See [wiki/Installation.md](wiki/Installation.md).
@@ -58,6 +58,23 @@ Status dock (bottom-left of chat) and Config → Library sync show phase, counts
 
 CuratorX is a **taste-aware curator** (RAG, persona, ratings, purge advice, confirmation-gated *arr*). Seerr is an optional request front-end for members — it complements CuratorX; it does not replace the owner chat loop.
 
+## Where is the privacy policy?
+
+In-app at **`/privacy`** (no login), and the same document in [PRIVACY.md](PRIVACY.md). It covers household vs owner data, MCP exposure, voice, and watchlist token use.
+
+## What are the two MCP API keys?
+
+| Env / Admin → Advanced | Mode |
+|------------------------|------|
+| `CURATORX_MCP_API_KEY` | **Privacy** — public content schema, read-only library tools |
+| `CURATORX_MCP_FULL_API_KEY` | **Full** — internal library fields + confirm-gated *arr propose tools |
+
+Keys must differ. Either (or both) enables HTTP `/mcp`. Generate/rotate in **Admin → Advanced**, or set env vars (see [MCP.md](MCP.md) and [.env.example](../.env.example)).
+
+## How does Plex watchlist sync work?
+
+Local watchlist pins can sync with Plex Discover when you enable sync in Settings. CuratorX stores an **encrypted** copy of your Sign-in-with-Plex account token for that purpose only — never the server library token as a stand-in. Re-sign in if the token is missing. See [PRIVACY.md](PRIVACY.md).
+
 ## Can CuratorX publish named lists to Plex Lists?
 
 **Not yet.** CuratorX supports **local** named curated lists (Settings → Lists, plus chat tools `list_lists` / `create_list` / `add_to_list` / `remove_from_list`). A 2026 spike found **no clear public/stable API** for Plex Discover personal Lists (`watch.plex.tv/watchlist/my-lists`): official PMS docs cover Playlists/Collections, and Discover documents Watchlist add/remove only. Publish-to-Plex-Lists is deferred so we never fake a broken sync. Watchlist ↔ Discover sync remains separate and available.
@@ -65,6 +82,8 @@ CuratorX is a **taste-aware curator** (RAG, persona, ratings, purge advice, conf
 ## Where should I look next?
 
 - [wiki/Home.md](wiki/Home.md) — wiki index
+- [PRIVACY.md](PRIVACY.md) / in-app `/privacy` — data use
+- [MCP.md](MCP.md) — dual-mode MCP keys and tools
 - [ONBOARDING.md](ONBOARDING.md) — first-run wizard
 - [TROUBLESHOOTING via wiki](wiki/Troubleshooting.md) — common failures
 - [CHANGELOG.md](../CHANGELOG.md) — release notes

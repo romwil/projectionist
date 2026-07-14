@@ -7,18 +7,18 @@ CuratorX runs as a **single container**. Persist `/config` for `settings.json`, 
 Multi-arch images (**linux/amd64** + **linux/arm64**):
 
 ```bash
-docker pull romwil/curatorx:1.1
+docker pull romwil/curatorx:1.3
 
 docker run -d --name curatorx --restart unless-stopped \
   -p 8788:8788 \
   -v /path/to/curatorx/config:/config \
-  romwil/curatorx:1.1
+  romwil/curatorx:1.3
 ```
 
 | Tag | Meaning |
 |-----|---------|
-| `romwil/curatorx:1.1.6` | Exact release |
-| `romwil/curatorx:1.1` | 1.1 line |
+| `romwil/curatorx:1.3.0` | Exact release |
+| `romwil/curatorx:1.3` | 1.3 line |
 | `romwil/curatorx:latest` | Newest stable |
 
 Open **http://\<host\>:8788**.
@@ -33,7 +33,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Compose builds from the local `Dockerfile` by default. To run the published image instead, set the image to `romwil/curatorx:1.1` in `docker-compose.yml`.
+Compose builds from the local `Dockerfile` by default. To run the published image instead, set the image to `romwil/curatorx:1.3` in `docker-compose.yml`.
 
 ## Local (dev)
 

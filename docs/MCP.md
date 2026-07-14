@@ -6,7 +6,7 @@ CuratorX exposes a Model Context Protocol server over your indexed Plex library,
 
 ```bash
 pip install "curatorx[mcp]"
-# or in Docker image (1.2+): already included
+# or in Docker image (1.2+ / 1.3+): already included
 ```
 
 ## Modes

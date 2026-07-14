@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
-[![Version](https://img.shields.io/badge/version-1.2.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](CHANGELOG.md)
 
 **A cinema-dark chat curator for your self-hosted Plex library.**
 
@@ -41,11 +41,11 @@ CuratorX complements disk tools like [Reclaimspace](https://github.com/romwil/re
 ### Docker Hub (recommended)
 
 ```bash
-docker pull romwil/curatorx:1.1
+docker pull romwil/curatorx:1.3
 docker run -d --name curatorx \
   -p 8788:8788 \
   -v /path/to/curatorx/config:/config \
-  romwil/curatorx:1.1
+  romwil/curatorx:1.3
 ```
 
 Open **http://localhost:8788** and complete the setup wizard (Name → Connections → Libraries).
@@ -77,16 +77,16 @@ Published multi-arch images (**amd64 + arm64**):
 
 | Tag | Use |
 |-----|-----|
-| [`romwil/curatorx:1.2.0`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
+| [`romwil/curatorx:1.3.0`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
+| [`romwil/curatorx:1.3`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.3 line |
 | [`romwil/curatorx:1.2`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.2 line |
-| [`romwil/curatorx:1.1`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.1 line |
 | [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Newest stable |
 
 **Unraid:** install from Community Applications using the template (`templates/curatorx.xml` / `unraid/curatorx.xml`; CA icons at `unraid/curatorx-icon.png` / `unraid/curatorx-icon-512.png`), or add the container manually:
 
 | Setting | Value |
 |---------|-------|
-| Repository | `romwil/curatorx:1.1` |
+| Repository | `romwil/curatorx:1.3` |
 | Port | `8788` |
 | Config path | `/mnt/user/appdata/curatorx/config` → `/config` |
 

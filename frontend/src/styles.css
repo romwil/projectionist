@@ -2263,6 +2263,63 @@ button.watchlist-chip {
   margin-bottom: 8px;
 }
 
+.mcp-key-row {
+  display: grid;
+  gap: 8px;
+  padding: 12px 0;
+  border-top: 1px solid color-mix(in srgb, var(--border, #3a3a42) 80%, transparent);
+}
+
+.mcp-key-row:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.mcp-key-row-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 12px;
+}
+
+.mcp-key-row-head h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.mcp-key-env {
+  font-size: 0.8rem;
+  opacity: 0.8;
+}
+
+.mcp-key-status {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.mcp-key-reveal {
+  display: grid;
+  gap: 6px;
+}
+
+.mcp-key-reveal-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mcp-key-reveal-row input {
+  flex: 1 1 16rem;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.mcp-image-heading {
+  margin: 16px 0 0;
+  font-size: 1rem;
+}
+
 .config-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));

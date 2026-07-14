@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-07-14
+
+Privacy-safe MCP, Admin/Settings split, household management, wide/mobile chat, voice, watchlist sync, and local curated lists.
+
+### Security / Privacy
+- Dual-mode MCP: privacy key (`CURATORX_MCP_API_KEY`) vs full key (`CURATORX_MCP_FULL_API_KEY`); keys must differ
+- Shared public/internal sanitizers redact Plex tokens and infra IDs for privacy MCP and non-owner library browse
+- Public privacy disclosure at `/privacy` (no login) plus [docs/PRIVACY.md](docs/PRIVACY.md)
+
+### Added
+- Admin vs Settings shells, preferred conversation name, and in-app About (version from `/api/health`)
+- Household user disable/remove and Seerr sync management for owners
+- Browser voice mode (mic dictation + optional spoken replies) with Settings toggles
+- Wider chat stage on large screens and touch-first mobile chrome (fullscreen `100dvh`, sticky composer)
+- Plex Discover watchlist sync and pin-from-recs (encrypted Sign-in-with-Plex account token)
+- Local named curated lists (Settings → Lists + agent tools); Plex Lists publish deferred
+- Admin → Advanced: generate/rotate dual MCP keys, TMDB poster/backdrop CDN sizes
+
+### Changed
+- Docker / Unraid tags move to `:1.3` / `:1.3.0`
+- Unraid templates expose both MCP env vars (or generate keys in Admin → Advanced)
+
 ## [1.2.0] — 2026-07-14
 
 Pre-CA security hardening, multi-user API enforcement, MCP product surface, and Unraid CA packaging freeze.

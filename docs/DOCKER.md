@@ -136,7 +136,7 @@ Operator workaround until a fixed image is pulled: `docker pull romwil/curatorx:
 
 ```bash
 ./scripts/docker-release.sh <semver>          # also tags X.Y and latest
-./scripts/docker-release.sh 1.2.0 --also-line 1.2
+./scripts/docker-release.sh 1.3.0 --also-line 1.3
 ```
 
 Always keep `--provenance=false --sbom=false` for Unraid CA compatibility.
