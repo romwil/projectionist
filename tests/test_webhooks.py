@@ -102,6 +102,8 @@ class PlexWebhookApiTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
+        self._secret = "test-webhook-secret"
+        save_settings(Path(self._tmpdir.name), Settings(webhook_secret=self._secret))
         import curatorx.web.jobs as jobs
 
         jobs._manager = None
@@ -109,6 +111,7 @@ class PlexWebhookApiTests(unittest.TestCase):
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
+        self._headers = {"X-CuratorX-Webhook-Secret": self._secret}
 
     def tearDown(self) -> None:
         import curatorx.web.jobs as jobs
@@ -123,6 +126,7 @@ class PlexWebhookApiTests(unittest.TestCase):
         response = self.client.post(
             "/api/webhooks/plex",
             files={"payload": (None, payload, "application/json")},
+            headers=self._headers,
         )
         self.assertEqual(response.status_code, 200)
         body = response.json()
@@ -130,9 +134,25 @@ class PlexWebhookApiTests(unittest.TestCase):
         self.assertTrue(body["queued"])
 
     def test_post_json_payload_queues_prompt(self) -> None:
-        response = self.client.post("/api/webhooks/plex", json=_movie_stop_payload())
+        response = self.client.post(
+            "/api/webhooks/plex",
+            json=_movie_stop_payload(),
+            headers=self._headers,
+        )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["queued"])
+
+    def test_webhook_rejects_empty_secret_config(self) -> None:
+        save_settings(Path(os.environ["DATA_DIR"]), Settings(webhook_secret=""))
+        import curatorx.web.jobs as jobs
+
+        jobs._manager = None
+        import curatorx.web.app as app_mod
+
+        importlib.reload(app_mod)
+        client = TestClient(app_mod.app)
+        response = client.post("/api/webhooks/plex", json=_movie_stop_payload())
+        self.assertEqual(response.status_code, 503)
 
     def test_webhook_rejects_missing_secret_when_configured(self) -> None:
         save_settings(

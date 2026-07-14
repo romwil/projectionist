@@ -443,6 +443,15 @@ class Database:
         session_cols = self._table_columns(conn, "chat_sessions")
         if "user_id" not in session_cols:
             conn.execute("ALTER TABLE chat_sessions ADD COLUMN user_id TEXT REFERENCES users(id)")
+        pending_cols = self._table_columns(conn, "pending_actions")
+        if "user_id" not in pending_cols:
+            conn.execute("ALTER TABLE pending_actions ADD COLUMN user_id TEXT")
+        review_cols = self._table_columns(conn, "user_title_reviews")
+        if review_cols and "user_id" not in review_cols:
+            conn.execute("ALTER TABLE user_title_reviews ADD COLUMN user_id TEXT")
+        pref_cols = self._table_columns(conn, "preference_facts")
+        if pref_cols and "user_id" not in pref_cols:
+            conn.execute("ALTER TABLE preference_facts ADD COLUMN user_id TEXT")
 
     def _migrate_embeddings_content_hash(self, conn: sqlite3.Connection) -> None:
         cols = self._table_columns(conn, "embeddings")
@@ -1670,21 +1679,48 @@ class Database:
             "user_title_reviews": [dict(row) for row in review_rows],
         }
 
-    def save_pending_action(self, token: str, action_type: str, payload: Mapping[str, Any], ttl_seconds: int = 600) -> None:
+    def save_pending_action(
+        self,
+        token: str,
+        action_type: str,
+        payload: Mapping[str, Any],
+        ttl_seconds: int = 600,
+        *,
+        user_id: Optional[str] = None,
+    ) -> None:
         now = time.time()
         with self.connect() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO pending_actions (token, action_type, payload_json, created_at, expires_at) VALUES (?, ?, ?, ?, ?)",
-                (token, action_type, json.dumps(dict(payload)), now, now + ttl_seconds),
+                """
+                INSERT OR REPLACE INTO pending_actions
+                    (token, action_type, payload_json, created_at, expires_at, user_id)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (token, action_type, json.dumps(dict(payload)), now, now + ttl_seconds, user_id),
             )
 
-    def pop_pending_action(self, token: str) -> Optional[Mapping[str, Any]]:
+    def pop_pending_action(
+        self,
+        token: str,
+        *,
+        user_id: Optional[str] = None,
+    ) -> Optional[Mapping[str, Any]]:
         now = time.time()
         with self.connect() as conn:
-            row = conn.execute(
-                "SELECT * FROM pending_actions WHERE token = ? AND expires_at > ?",
-                (token, now),
-            ).fetchone()
+            if user_id is None:
+                row = conn.execute(
+                    "SELECT * FROM pending_actions WHERE token = ? AND expires_at > ?",
+                    (token, now),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """
+                    SELECT * FROM pending_actions
+                    WHERE token = ? AND expires_at > ?
+                      AND (user_id IS NULL OR user_id = ?)
+                    """,
+                    (token, now, user_id),
+                ).fetchone()
             if not row:
                 return None
             conn.execute("DELETE FROM pending_actions WHERE token = ?", (token,))
@@ -2127,27 +2163,49 @@ class Database:
             preview=preview,
         )
 
-    def list_chat_threads(self, *, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_chat_threads(self, *, limit: int = 50, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         with self.connect() as conn:
-            rows = conn.execute(
-                """
-                SELECT
-                    s.*,
-                    COUNT(m.id) AS message_count,
-                    (
-                        SELECT blocks_json FROM chat_messages
-                        WHERE session_id = s.id
-                        ORDER BY created_at DESC
-                        LIMIT 1
-                    ) AS last_blocks_json
-                FROM chat_sessions s
-                LEFT JOIN chat_messages m ON m.session_id = s.id
-                GROUP BY s.id
-                ORDER BY s.updated_at DESC
-                LIMIT ?
-                """,
-                (limit,),
-            ).fetchall()
+            if user_id is None:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        s.*,
+                        COUNT(m.id) AS message_count,
+                        (
+                            SELECT blocks_json FROM chat_messages
+                            WHERE session_id = s.id
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                        ) AS last_blocks_json
+                    FROM chat_sessions s
+                    LEFT JOIN chat_messages m ON m.session_id = s.id
+                    GROUP BY s.id
+                    ORDER BY s.updated_at DESC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT
+                        s.*,
+                        COUNT(m.id) AS message_count,
+                        (
+                            SELECT blocks_json FROM chat_messages
+                            WHERE session_id = s.id
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                        ) AS last_blocks_json
+                    FROM chat_sessions s
+                    LEFT JOIN chat_messages m ON m.session_id = s.id
+                    WHERE s.user_id = ?
+                    GROUP BY s.id
+                    ORDER BY s.updated_at DESC
+                    LIMIT ?
+                    """,
+                    (user_id, limit),
+                ).fetchall()
         threads: List[Dict[str, Any]] = []
         for row in rows:
             preview = self._preview_from_blocks(row["last_blocks_json"])
@@ -2197,9 +2255,15 @@ class Database:
                 (title, session_id),
             )
 
-    def delete_chat_thread(self, session_id: str) -> bool:
+    def delete_chat_thread(self, session_id: str, *, user_id: Optional[str] = None) -> bool:
         with self.connect() as conn:
-            row = conn.execute("SELECT id FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
+            if user_id is None:
+                row = conn.execute("SELECT id FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT id FROM chat_sessions WHERE id = ? AND (user_id IS NULL OR user_id = ?)",
+                    (session_id, user_id),
+                ).fetchone()
             if not row:
                 return False
             conn.execute("DELETE FROM chat_sessions WHERE id = ?", (session_id,))
@@ -2211,6 +2275,7 @@ class Database:
         lens_id: str = DEFAULT_LENS_ID,
         *,
         context_hash: str = DEFAULT_CONTEXT_HASH,
+        user_id: Optional[str] = None,
     ) -> None:
         now = time.time()
         resolved = lens_id or DEFAULT_LENS_ID
@@ -2219,11 +2284,20 @@ class Database:
             conn.execute(
                 """
                 INSERT OR IGNORE INTO chat_sessions (
-                    id, created_at, updated_at, lens_id, thread_title, context_hash
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                    id, created_at, updated_at, lens_id, thread_title, context_hash, user_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, now, now, resolved, self.DEFAULT_THREAD_TITLE, resolved_context),
+                (session_id, now, now, resolved, self.DEFAULT_THREAD_TITLE, resolved_context, user_id),
             )
+            if user_id is not None:
+                conn.execute(
+                    """
+                    UPDATE chat_sessions
+                    SET user_id = COALESCE(user_id, ?)
+                    WHERE id = ?
+                    """,
+                    (user_id, session_id),
+                )
             conn.execute(
                 """
                 UPDATE chat_sessions

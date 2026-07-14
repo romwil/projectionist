@@ -105,10 +105,22 @@ def _append_review_conflict_blocks(blocks: List[Dict[str, Any]], registry: ToolR
 
 
 class CuratorAgent:
-    def __init__(self, db: Database, settings: Settings, lens_id: Optional[str] = None) -> None:
+    def __init__(
+        self,
+        db: Database,
+        settings: Settings,
+        lens_id: Optional[str] = None,
+        *,
+        user_id: Optional[str] = None,
+        seerr_user_id: Optional[int] = None,
+        user_role: Optional[str] = None,
+    ) -> None:
         self.db = db
         self.settings = settings
         self.lens_id = lens_id or db.get_active_lens_id() or DEFAULT_LENS_ID
+        self.user_id = user_id
+        self.seerr_user_id = seerr_user_id
+        self.user_role = user_role
         self.provider = get_chat_provider(settings) if settings.llm_api_key or settings.llm_provider == "ollama" else None
 
     async def _fallback_run(self, registry: ToolRegistry, user_message: str) -> str:
@@ -128,9 +140,19 @@ class CuratorAgent:
         await registry.execute("search_library", {"query": user_message})
         return "Here's what I found in your library. Configure an LLM provider for richer conversation."
 
+    def _registry(self) -> ToolRegistry:
+        return ToolRegistry(
+            self.db,
+            self.settings,
+            self.lens_id,
+            user_id=self.user_id,
+            seerr_user_id=self.seerr_user_id,
+            user_role=self.user_role,
+        )
+
     async def run(self, session_id: str, user_message: str) -> Dict[str, Any]:
-        self.db.ensure_chat_session(session_id, self.lens_id)
-        registry = ToolRegistry(self.db, self.settings, self.lens_id)
+        self.db.ensure_chat_session(session_id, self.lens_id, user_id=self.user_id)
+        registry = self._registry()
 
         if not self.provider:
             text = await self._fallback_run(registry, user_message)
@@ -174,7 +196,7 @@ class CuratorAgent:
                 messages.append({"role": entry["role"], "content": text})
         messages.append({"role": "user", "content": user_message})
 
-        registry = ToolRegistry(self.db, self.settings, self.lens_id)
+        registry = self._registry()
         use_tools = bool(self.settings.llm_api_key or self.settings.llm_provider == "ollama")
         tool_defs = build_tool_definitions(self.settings) if use_tools else None
         response = await self.provider.chat(messages, tools=tool_defs)
@@ -267,8 +289,19 @@ async def stream_agent(
     session_id: str,
     user_message: str,
     lens_id: Optional[str] = None,
+    *,
+    user_id: Optional[str] = None,
+    seerr_user_id: Optional[int] = None,
+    user_role: Optional[str] = None,
 ) -> AsyncIterator[str]:
-    result = await CuratorAgent(db, settings, lens_id=lens_id).run(session_id, user_message)
+    result = await CuratorAgent(
+        db,
+        settings,
+        lens_id=lens_id,
+        user_id=user_id,
+        seerr_user_id=seerr_user_id,
+        user_role=user_role,
+    ).run(session_id, user_message)
     text_blocks = [b for b in result["message"]["blocks"] if b.get("type") == "text"]
     content = text_blocks[0]["content"] if text_blocks else ""
     chunk_size = 40

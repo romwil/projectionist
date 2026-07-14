@@ -12,6 +12,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from curatorx.web.auth import clear_pin_bindings
+from curatorx.web.rate_limit import clear_rate_limits
 from curatorx.web.session_tokens import clear_session_secret_cache
 
 
@@ -23,6 +25,8 @@ class AuthTests(unittest.TestCase):
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-auth-session-secret-value"
         clear_session_secret_cache()
+        clear_rate_limits()
+        clear_pin_bindings()
         import curatorx.web.jobs as jobs
 
         jobs._manager = None
@@ -36,6 +40,8 @@ class AuthTests(unittest.TestCase):
 
         jobs._manager = None
         clear_session_secret_cache()
+        clear_rate_limits()
+        clear_pin_bindings()
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
         os.environ.pop("CURATORX_SESSION_SECRET", None)
@@ -123,6 +129,13 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(start_body["id"], 77)
         self.assertEqual(start_body["code"], "ABCD")
         self.assertIn("app.plex.tv/auth", start_body["auth_url"])
+        self.assertIn("plex_pin_nonce", start.cookies)
+
+        # Poll without the nonce cookie must fail.
+        bare = TestClient(self.client.app)
+        with patch("curatorx.web.auth.fetch_plex_pin", return_value={"authToken": None}):
+            denied = bare.get("/api/auth/plex/pin/77")
+        self.assertEqual(denied.status_code, 401)
 
         with patch("curatorx.web.auth.fetch_plex_pin", return_value={"authToken": None}), patch(
             "curatorx.web.auth.get_or_create_client_id",

@@ -524,26 +524,80 @@ def merge_secret_fields(incoming: Mapping[str, Any], existing: Settings) -> Dict
     return merged
 
 
+def _attach_secret_if_host_matches(
+    merged: Dict[str, Any],
+    *,
+    url_field: str,
+    secret_field: str,
+    incoming_url: str,
+    saved_url: str,
+    saved_secret: str,
+) -> None:
+    """Backfill secrets only for empty URL (saved connection) or matching host."""
+    from curatorx.connectors.http import hosts_match
+
+    supplied_url = str(incoming_url or "").strip()
+    if not supplied_url:
+        if not str(merged.get(url_field) or "").strip():
+            merged[url_field] = saved_url
+        if not str(merged.get(secret_field) or "").strip():
+            merged[secret_field] = saved_secret
+        return
+    if hosts_match(supplied_url, saved_url) and not str(merged.get(secret_field) or "").strip():
+        merged[secret_field] = saved_secret
+
+
 def resolve_test_payload(payload: Mapping[str, Any], existing: Settings) -> Dict[str, Any]:
-    """Fill empty test payload fields from merged settings (incl. env-backed secrets)."""
-    merged = merge_secret_fields(payload, existing)
-    for field in ("plex_url", "radarr_url", "sonarr_url", "tautulli_url", "llm_base_url"):
-        if not str(merged.get(field) or "").strip():
-            merged[field] = getattr(existing, field)
-    if not str(merged.get("seerr_url") or "").strip():
-        merged["seerr_url"] = existing.seerr.url
-    if not str(merged.get("seerr_api_key") or "").strip():
-        merged["seerr_api_key"] = existing.seerr.api_key
+    """Fill empty test fields carefully — secrets only when host matches saved URL."""
+    from curatorx.connectors.http import validate_outbound_url
+
+    merged = dict(payload)
     seerr_incoming = merged.get("seerr")
     if isinstance(seerr_incoming, Mapping):
         if not str(merged.get("seerr_url") or "").strip():
             merged["seerr_url"] = str(seerr_incoming.get("url") or "")
         if not str(merged.get("seerr_api_key") or "").strip():
             merged["seerr_api_key"] = str(seerr_incoming.get("api_key") or "")
+
+    pairs = (
+        ("plex_url", "plex_token", existing.plex_url, existing.plex_token),
+        ("radarr_url", "radarr_api_key", existing.radarr_url, existing.radarr_api_key),
+        ("sonarr_url", "sonarr_api_key", existing.sonarr_url, existing.sonarr_api_key),
+        ("tautulli_url", "tautulli_api_key", existing.tautulli_url, existing.tautulli_api_key),
+        ("seerr_url", "seerr_api_key", existing.seerr.url, existing.seerr.api_key),
+        ("llm_base_url", "llm_api_key", existing.llm_base_url, existing.llm_api_key),
+    )
+    for url_field, secret_field, saved_url, saved_secret in pairs:
+        incoming_url = str(payload.get(url_field) or "").strip()
+        if url_field == "seerr_url" and not incoming_url and isinstance(seerr_incoming, Mapping):
+            incoming_url = str(seerr_incoming.get("url") or "").strip()
+        _attach_secret_if_host_matches(
+            merged,
+            url_field=url_field,
+            secret_field=secret_field,
+            incoming_url=incoming_url,
+            saved_url=saved_url,
+            saved_secret=saved_secret,
+        )
+        # Non-secret empty fields still backfill.
+        if not str(merged.get(url_field) or "").strip():
+            merged[url_field] = saved_url
+
     if not str(merged.get("llm_provider") or "").strip():
         merged["llm_provider"] = existing.llm_provider
     if not str(merged.get("llm_model") or "").strip():
         merged["llm_model"] = existing.llm_model
+    for key_field in ("tmdb_api_key", "fanart_api_key", "tvdb_api_key"):
+        if not str(merged.get(key_field) or "").strip():
+            merged[key_field] = getattr(existing, key_field)
+
+    for url_field in ("plex_url", "radarr_url", "sonarr_url", "tautulli_url", "seerr_url", "llm_base_url"):
+        candidate = str(merged.get(url_field) or "").strip()
+        if candidate:
+            try:
+                merged[url_field] = validate_outbound_url(candidate)
+            except ValueError as error:
+                raise ValueError(f"{url_field}: {error}") from error
     return merged
 
 

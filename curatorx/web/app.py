@@ -118,6 +118,7 @@ from curatorx.reviews.plex_sync import sync_review_rating_to_plex
 from curatorx.web.auth import (
     authenticate_plex_user,
     bootstrap_owner,
+    clear_pin_nonce_cookie,
     clear_session_cookie,
     get_current_user_dep,
     multi_user_api_auth_middleware,
@@ -128,6 +129,7 @@ from curatorx.web.auth import (
     sync_user_seerr_from_token,
     try_get_current_user,
 )
+from curatorx.web.rate_limit import enforce_rate_limit
 from curatorx.web.jobs import get_job_manager, get_sync_scheduler
 from curatorx.web.session_tokens import ensure_session_secret, has_usable_session_secret
 from curatorx.web.webhooks import register_webhook_routes
@@ -390,6 +392,20 @@ def _settings() -> Settings:
     return load_merged_settings(DATA_DIR)
 
 
+def _resolve_test_payload(payload: TestPayload) -> Dict[str, Any]:
+    try:
+        return resolve_test_payload(payload.model_dump(), _settings())
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+def _scoped_user_id(user) -> Optional[str]:
+    """Return user.id when multi-user partitioning is active, else None."""
+    if _settings().features.multi_user_enabled:
+        return user.id
+    return None
+
+
 def _mask_settings(settings: Settings) -> Dict[str, Any]:
     payload = asdict(settings)
     sources = secret_field_sources(DATA_DIR)
@@ -513,17 +529,18 @@ def auth_me(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
 
 
 @app.post("/api/auth/plex/pin")
-def auth_plex_pin_start() -> Dict[str, Any]:
+def auth_plex_pin_start(request: Request, response: Response) -> Dict[str, Any]:
     """Start Overseerr-style Plex PIN login; client opens auth_url and polls."""
-    return start_plex_pin_login()
+    return start_plex_pin_login(request, response)
 
 
 @app.get("/api/auth/plex/pin/{pin_id}")
 def auth_plex_pin_poll(pin_id: int, request: Request, response: Response) -> Dict[str, Any]:
     """Poll Plex PIN. When authorized, upsert user and set session cookie."""
-    user = poll_plex_pin_login(pin_id, _db())
+    user = poll_plex_pin_login(pin_id, request, _db())
     if user is None:
         return {"authenticated": False, "pending": True}
+    clear_pin_nonce_cookie(response, request)
     set_session_cookie(response, user.id, request)
     return {"user": user.to_dict(), "authenticated": True, "pending": False}
 
@@ -531,6 +548,7 @@ def auth_plex_pin_poll(pin_id: int, request: Request, response: Response) -> Dic
 @app.post("/api/auth/plex")
 def auth_plex(payload: PlexLoginPayload, request: Request, response: Response) -> Dict[str, Any]:
     """Advanced fallback: sign in with a raw Plex auth token."""
+    enforce_rate_limit(request, bucket="auth_plex_token", limit=10, window_seconds=60)
     user = authenticate_plex_user(payload.auth_token, _db())
     set_session_cookie(response, user.id, request)
     return {"user": user.to_dict(), "authenticated": True}
@@ -634,7 +652,7 @@ def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) 
 @app.post("/api/setup/test/plex")
 def api_test_plex(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
-    resolved = resolve_test_payload(payload.model_dump(), _settings())
+    resolved = _resolve_test_payload(payload)
     result = test_plex(resolved["plex_url"], resolved["plex_token"])
     record_service_integration(
         _db(),
@@ -650,7 +668,7 @@ def api_test_plex(payload: TestPayload, user=Depends(require_role("owner"))) -> 
 def api_test_radarr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
     settings = _settings()
-    resolved = resolve_test_payload(payload.model_dump(), settings)
+    resolved = _resolve_test_payload(payload)
     result = test_radarr(
         resolved["radarr_url"],
         resolved["radarr_api_key"],
@@ -670,7 +688,7 @@ def api_test_radarr(payload: TestPayload, user=Depends(require_role("owner"))) -
 def api_test_sonarr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
     settings = _settings()
-    resolved = resolve_test_payload(payload.model_dump(), settings)
+    resolved = _resolve_test_payload(payload)
     result = test_sonarr(
         resolved["sonarr_url"],
         resolved["sonarr_api_key"],
@@ -689,7 +707,7 @@ def api_test_sonarr(payload: TestPayload, user=Depends(require_role("owner"))) -
 @app.post("/api/setup/test/tmdb")
 def api_test_tmdb(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
-    resolved = resolve_test_payload(payload.model_dump(), _settings())
+    resolved = _resolve_test_payload(payload)
     result = test_tmdb(resolved["tmdb_api_key"])
     record_service_integration(
         _db(),
@@ -703,7 +721,7 @@ def api_test_tmdb(payload: TestPayload, user=Depends(require_role("owner"))) -> 
 @app.post("/api/setup/test/fanart")
 def api_test_fanart(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
-    resolved = resolve_test_payload(payload.model_dump(), _settings())
+    resolved = _resolve_test_payload(payload)
     result = test_fanart(resolved["fanart_api_key"])
     record_service_integration(
         _db(),
@@ -717,7 +735,7 @@ def api_test_fanart(payload: TestPayload, user=Depends(require_role("owner"))) -
 @app.post("/api/setup/test/tautulli")
 def api_test_tautulli(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
-    resolved = resolve_test_payload(payload.model_dump(), _settings())
+    resolved = _resolve_test_payload(payload)
     result = test_tautulli(resolved["tautulli_url"], resolved["tautulli_api_key"])
     record_service_integration(
         _db(),
@@ -732,7 +750,7 @@ def api_test_tautulli(payload: TestPayload, user=Depends(require_role("owner")))
 @app.post("/api/setup/test/seerr")
 def api_test_seerr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
-    resolved = resolve_test_payload(payload.model_dump(), _settings())
+    resolved = _resolve_test_payload(payload)
     result = test_seerr(resolved["seerr_url"], resolved["seerr_api_key"])
     record_service_integration(
         _db(),
@@ -747,7 +765,7 @@ def api_test_seerr(payload: TestPayload, user=Depends(require_role("owner"))) ->
 @app.post("/api/setup/test/llm")
 def api_test_llm(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
-    resolved = resolve_test_payload(payload.model_dump(), _settings())
+    resolved = _resolve_test_payload(payload)
     result = test_llm(
         resolved["llm_provider"],
         resolved["llm_base_url"],
@@ -1244,17 +1262,29 @@ def put_system_config(
 
 
 @app.post("/api/chat")
-async def chat(payload: ChatRequest) -> Dict[str, Any]:
+async def chat(payload: ChatRequest, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     session_id = payload.session_id or uuid.uuid4().hex
     lens_id = _resolve_lens_id(payload.lens_id)
     db = _db()
-    db.ensure_chat_session(session_id, lens_id)
+    scoped = _scoped_user_id(user)
+    if scoped and payload.session_id:
+        existing = db.get_chat_thread(session_id, user_id=scoped)
+        if existing is None and db.get_chat_thread(session_id) is not None:
+            raise HTTPException(status_code=404, detail="Thread not found")
+    db.ensure_chat_session(session_id, lens_id, user_id=scoped)
     settings = _settings()
     config_error = validate_llm_settings(settings)
     if config_error:
         raise HTTPException(status_code=400, detail=config_error)
     try:
-        return await CuratorAgent(db, settings, lens_id=lens_id).run(session_id, payload.message)
+        return await CuratorAgent(
+            db,
+            settings,
+            lens_id=lens_id,
+            user_id=scoped,
+            seerr_user_id=user.seerr_user_id,
+            user_role=user.role,
+        ).run(session_id, payload.message)
     except LLMProviderError as error:
         logger.warning("Chat LLM error for session %s: %s", session_id, error)
         raise HTTPException(status_code=502, detail=str(error)) from error
@@ -1264,12 +1294,15 @@ async def chat(payload: ChatRequest) -> Dict[str, Any]:
 
 
 @app.get("/api/chat/threads")
-def list_chat_threads() -> List[Dict[str, Any]]:
-    return _db().list_chat_threads()
+def list_chat_threads(user=Depends(get_current_user_dep)) -> List[Dict[str, Any]]:
+    return _db().list_chat_threads(user_id=_scoped_user_id(user))
 
 
 @app.post("/api/chat/threads")
-def create_chat_thread(payload: ThreadCreatePayload = ThreadCreatePayload()) -> Dict[str, Any]:
+def create_chat_thread(
+    payload: ThreadCreatePayload = ThreadCreatePayload(),
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
     session_id = uuid.uuid4().hex
     lens_id = _resolve_lens_id(payload.lens_id)
     context_hash = (payload.context_hash or "general").strip() or "general"
@@ -1278,14 +1311,19 @@ def create_chat_thread(payload: ThreadCreatePayload = ThreadCreatePayload()) -> 
         lens_id=lens_id,
         context_hash=context_hash,
         thread_title=payload.thread_title,
+        user_id=_scoped_user_id(user),
     )
     return {"session_id": session_id, **thread}
 
 
 @app.get("/api/chat/threads/{session_id}/messages")
-def get_chat_thread_messages(session_id: str, limit: int = 100) -> Dict[str, Any]:
+def get_chat_thread_messages(
+    session_id: str,
+    limit: int = 100,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
     db = _db()
-    thread = db.get_chat_thread(session_id)
+    thread = db.get_chat_thread(session_id, user_id=_scoped_user_id(user))
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
     messages = db.chat_history(session_id, limit=limit)
@@ -1293,7 +1331,13 @@ def get_chat_thread_messages(session_id: str, limit: int = 100) -> Dict[str, Any
 
 
 @app.patch("/api/chat/threads/{session_id}")
-def update_chat_thread(session_id: str, payload: ThreadUpdatePayload) -> Dict[str, Any]:
+def update_chat_thread(
+    session_id: str,
+    payload: ThreadUpdatePayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    if _db().get_chat_thread(session_id, user_id=_scoped_user_id(user)) is None:
+        raise HTTPException(status_code=404, detail="Thread not found")
     try:
         return _db().update_thread_title(session_id, payload.thread_title)
     except ValueError as error:
@@ -1301,8 +1345,8 @@ def update_chat_thread(session_id: str, payload: ThreadUpdatePayload) -> Dict[st
 
 
 @app.delete("/api/chat/threads/{session_id}")
-def delete_chat_thread(session_id: str) -> Dict[str, bool]:
-    if not _db().delete_chat_thread(session_id):
+def delete_chat_thread(session_id: str, user=Depends(get_current_user_dep)) -> Dict[str, bool]:
+    if not _db().delete_chat_thread(session_id, user_id=_scoped_user_id(user)):
         raise HTTPException(status_code=404, detail="Thread not found")
     return {"deleted": True}
 
@@ -1386,13 +1430,24 @@ async def chat_stream(
     message: str,
     session_id: Optional[str] = None,
     lens_id: Optional[str] = None,
+    user=Depends(get_current_user_dep),
 ) -> EventSourceResponse:
     sid = session_id or uuid.uuid4().hex
     resolved_lens = _resolve_lens_id(lens_id)
+    scoped = _scoped_user_id(user)
 
     async def event_generator():
         try:
-            async for chunk in stream_agent(_db(), _settings(), sid, message, lens_id=resolved_lens):
+            async for chunk in stream_agent(
+                _db(),
+                _settings(),
+                sid,
+                message,
+                lens_id=resolved_lens,
+                user_id=scoped,
+                seerr_user_id=user.seerr_user_id,
+                user_role=user.role,
+            ):
                 data = json.loads(chunk)
                 yield {"event": data.get("type", "message"), "data": chunk.strip()}
         except Exception as error:  # noqa: BLE001
@@ -1417,9 +1472,10 @@ def title_detail(media_type: str, item_id: str, id_type: str = "tmdb") -> Dict[s
 
 
 @app.post("/api/actions/propose")
-def propose_action(payload: Dict[str, Any]) -> Dict[str, Any]:
+def propose_action(payload: Dict[str, Any], user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     import uuid as uuid_mod
 
+    scoped = _scoped_user_id(user)
     action = payload.get("action")
     if action == "add_radarr":
         settings = _settings()
@@ -1453,6 +1509,7 @@ def propose_action(payload: Dict[str, Any]) -> Dict[str, Any]:
             token,
             "add_radarr",
             {"action": "add_radarr", "tmdb_id": tmdb_id, "title": payload.get("title", "")},
+            user_id=scoped,
         )
         logger.info(
             "Proposed add_radarr tmdb_id=%s title=%r token=%s",
@@ -1493,6 +1550,7 @@ def propose_action(payload: Dict[str, Any]) -> Dict[str, Any]:
             token,
             "add_sonarr",
             {"action": "add_sonarr", "tvdb_id": tvdb_id, "title": payload.get("title", "")},
+            user_id=scoped,
         )
         logger.info(
             "Proposed add_sonarr tvdb_id=%s title=%r token=%s",
@@ -1517,7 +1575,11 @@ def propose_action(payload: Dict[str, Any]) -> Dict[str, Any]:
         }
         if payload.get("tvdb_id") is not None:
             pending["tvdb_id"] = int(payload["tvdb_id"])
-        _db().save_pending_action(token, "request_seerr", pending)
+        if settings.seerr.require_linked_user_for_requests and user.seerr_user_id is None:
+            raise HTTPException(status_code=403, detail="Seerr account not linked for this user")
+        if user.seerr_user_id is not None:
+            pending["seerr_user_id"] = int(user.seerr_user_id)
+        _db().save_pending_action(token, "request_seerr", pending, user_id=scoped)
         logger.info(
             "Proposed request_seerr tmdb_id=%s media_type=%s title=%r token=%s",
             tmdb_id,
@@ -1553,13 +1615,19 @@ def list_seerr_requests(
 
 
 @app.post("/api/actions/confirm")
-async def confirm_action(payload: ActionConfirmRequest) -> Dict[str, Any]:
+async def confirm_action(
+    payload: ActionConfirmRequest,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    scoped = _scoped_user_id(user)
     if not payload.confirmed:
-        _db().pop_pending_action(payload.token)
+        _db().pop_pending_action(payload.token, user_id=scoped)
         logger.info("Action cancelled token=%s", payload.token[:8])
         return {"cancelled": True}
     try:
-        result = await execute_confirmed_action(_db(), _settings(), payload.token)
+        result = await execute_confirmed_action(
+            _db(), _settings(), payload.token, user_id=scoped
+        )
         logger.info("Action confirmed token=%s action=%s", payload.token[:8], result.get("action"))
         return {"ok": True, **result}
     except Exception as error:  # noqa: BLE001
@@ -1750,7 +1818,6 @@ def propose_plex_collection(
     payload: PlexCollectionProposePayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    del user
     settings = _settings()
     config_error = plex_collections_configuration_error(settings)
     if config_error:
@@ -1772,6 +1839,7 @@ def propose_plex_collection(
             "section_id": section_id,
             "rating_keys": list(payload.rating_keys),
         },
+        user_id=_scoped_user_id(user),
     )
     return {"confirmation_token": token}
 
@@ -1782,7 +1850,6 @@ def propose_plex_collection_items(
     payload: PlexCollectionItemsProposePayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    del user
     settings = _settings()
     config_error = plex_collections_configuration_error(settings)
     if config_error:
@@ -1810,6 +1877,7 @@ def propose_plex_collection_items(
             "collection_rating_key": str(payload.collection_rating_key or collection_key or "").strip(),
             "collection_title": str(payload.collection_title or "").strip(),
         },
+        user_id=_scoped_user_id(user),
     )
     return {"confirmation_token": token}
 

@@ -90,9 +90,10 @@ export function useAuthGate() {
     let cancelled = false;
 
     async function checkAuth() {
+      let enabled = false;
       try {
         const features = await getFeatures();
-        const enabled = Boolean(features?.features?.multi_user_enabled);
+        enabled = Boolean(features?.features?.multi_user_enabled);
         if (cancelled) return;
         setMultiUserEnabled(enabled);
         if (!enabled) {
@@ -107,9 +108,13 @@ export function useAuthGate() {
         }
         setAuthReady(true);
       } catch {
-        if (!cancelled) {
-          setAuthReady(true);
+        if (cancelled) return;
+        // Multi-user must not failure-open into the app on auth/network errors.
+        if (enabled) {
+          navigate("/login", { replace: true });
+          return;
         }
+        setAuthReady(true);
       }
     }
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
 import socket
@@ -14,6 +15,80 @@ from typing import Any, Mapping, Optional
 from curatorx.logging_config import sanitize_log_message, sanitize_url
 
 logger = logging.getLogger(__name__)
+
+_BLOCKED_HOSTNAMES = frozenset(
+    {
+        "metadata.google.internal",
+        "metadata.goog",
+        "kubernetes.default",
+        "kubernetes.default.svc",
+    }
+)
+
+
+def validate_outbound_url(url: str, *, allow_private: bool = True) -> str:
+    """Validate an operator-supplied URL before connector fetches (SSRF guard).
+
+    Blocks non-http(s) schemes, link-local / metadata ranges, and known metadata
+    hostnames. Private RFC1918 targets stay allowed by default for homelab
+    *arr/Plex URLs when ``allow_private`` is True.
+    """
+    cleaned = str(url or "").strip()
+    if not cleaned:
+        raise ValueError("URL is required")
+    parsed = urllib.parse.urlparse(cleaned)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("URL must use http or https")
+    hostname = (parsed.hostname or "").strip().lower()
+    if not hostname:
+        raise ValueError("URL hostname is required")
+    if hostname in _BLOCKED_HOSTNAMES or hostname.endswith(".metadata.google.internal"):
+        raise ValueError("URL host is not allowed")
+    # Literal IP in the hostname (no DNS needed).
+    try:
+        literal = ipaddress.ip_address(hostname)
+    except ValueError:
+        literal = None
+    candidates = [literal] if literal is not None else []
+    if literal is None:
+        try:
+            infos = socket.getaddrinfo(
+                hostname, parsed.port or (443 if parsed.scheme == "https" else 80)
+            )
+        except socket.gaierror:
+            # Unresolved hostnames (e.g. .test / mDNS) are allowed; fetch fails later.
+            return cleaned
+        for info in infos:
+            try:
+                candidates.append(ipaddress.ip_address(info[4][0]))
+            except ValueError:
+                continue
+    for ip in candidates:
+        if ip is None:
+            continue
+        if ip.is_loopback or ip.is_unspecified or ip.is_multicast or ip.is_reserved:
+            raise ValueError("URL resolves to a blocked address range")
+        if ip.is_link_local:
+            raise ValueError("URL resolves to a link-local or metadata address")
+        if ip.version == 4 and ip in ipaddress.ip_network("169.254.0.0/16"):
+            raise ValueError("URL resolves to a link-local or metadata address")
+        if ip.version == 6 and (
+            ip in ipaddress.ip_network("fe80::/10") or ip in ipaddress.ip_network("fd00:ec2::254/128")
+        ):
+            raise ValueError("URL resolves to a link-local or metadata address")
+        if not allow_private and ip.is_private:
+            raise ValueError("URL resolves to a private address range")
+    return cleaned
+
+
+def hosts_match(left_url: str, right_url: str) -> bool:
+    left = urllib.parse.urlparse(str(left_url or "").strip())
+    right = urllib.parse.urlparse(str(right_url or "").strip())
+    left_host = (left.hostname or "").strip().lower()
+    right_host = (right.hostname or "").strip().lower()
+    if not left_host or not right_host:
+        return False
+    return left_host == right_host
 
 
 def request_json(

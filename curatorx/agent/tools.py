@@ -153,7 +153,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "request_via_seerr",
             "description": (
                 "Queue a movie or TV show request in Seerr for household members. "
-                "Returns a confirmation token by default; set require_confirmation=false to submit immediately."
+                "Always returns a confirmation token; the user must confirm before submit."
             ),
             "parameters": {
                 "type": "object",
@@ -162,10 +162,6 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     "tmdb_id": {"type": "integer"},
                     "tvdb_id": {"type": "integer"},
                     "title": {"type": "string"},
-                    "require_confirmation": {
-                        "type": "boolean",
-                        "description": "When false, submit the Seerr request immediately.",
-                    },
                 },
                 "required": ["media_type", "tmdb_id"],
             },
@@ -1047,11 +1043,15 @@ class ToolRegistry:
         lens_id: str,
         *,
         user_id: Optional[str] = None,
+        seerr_user_id: Optional[int] = None,
+        user_role: Optional[str] = None,
     ) -> None:
         self.db = db
         self.settings = settings
         self.lens_id = lens_id
         self.user_id = user_id
+        self.seerr_user_id = seerr_user_id
+        self.user_role = user_role
         self._cards: List[TitleCard] = []
         self._pending_token_entries: List[Dict[str, str]] = []
         self._recommendation_context = False
@@ -1082,6 +1082,17 @@ class ToolRegistry:
         return list(self._review_prompts)
 
     async def execute(self, name: str, arguments: Mapping[str, Any]) -> str:
+        guest_denied = {
+            "add_to_radarr",
+            "add_to_sonarr",
+            "request_via_seerr",
+            "approve_seerr_request",
+            "remove_from_arr",
+            "create_plex_collection",
+            "add_to_plex_collection",
+        }
+        if self.user_role == "guest" and name in guest_denied:
+            return json.dumps({"error": "Guests cannot request or modify media"})
         handler: Optional[Callable] = getattr(self, f"_tool_{name}", None)
         if handler is None:
             logger.warning("Unknown agent tool requested: %s", name)
@@ -1320,7 +1331,7 @@ class ToolRegistry:
             "tmdb_id": tmdb_id,
             "title": str(args.get("title") or ""),
         }
-        self.db.save_pending_action(token, "add_radarr", payload)
+        self.db.save_pending_action(token, "add_radarr", payload, user_id=self.user_id)
         self._register_pending_token(token, "add_radarr")
         return json.dumps({"confirmation_token": token, "message": "Awaiting user confirmation to add to Radarr"})
 
@@ -1351,7 +1362,7 @@ class ToolRegistry:
             "tvdb_id": tvdb_id,
             "title": str(args.get("title") or ""),
         }
-        self.db.save_pending_action(token, "add_sonarr", payload)
+        self.db.save_pending_action(token, "add_sonarr", payload, user_id=self.user_id)
         self._register_pending_token(token, "add_sonarr")
         return json.dumps({"confirmation_token": token, "message": "Awaiting user confirmation to add to Sonarr"})
 
@@ -1363,7 +1374,9 @@ class ToolRegistry:
         tmdb_id = int(args["tmdb_id"])
         tvdb_id = args.get("tvdb_id")
         title = str(args.get("title") or "")
-        require_confirmation = bool(args.get("require_confirmation", True))
+        # Ignore require_confirmation=false — Seerr writes always need UI confirm (S10).
+        if self.settings.seerr.require_linked_user_for_requests and not self.seerr_user_id:
+            return json.dumps({"error": "Seerr account must be linked before requesting"})
         pending_payload: Dict[str, Any] = {
             "action": "request_seerr",
             "media_type": media_type,
@@ -1372,23 +1385,12 @@ class ToolRegistry:
         }
         if tvdb_id is not None:
             pending_payload["tvdb_id"] = int(tvdb_id)
-        if not require_confirmation:
-            client = SeerrClient(self.settings.seerr.url, self.settings.seerr.api_key)
-            result = client.create_request(
-                media_type,
-                tmdb_id,
-                tvdb_id=int(tvdb_id) if tvdb_id is not None else None,
-            )
-            return json.dumps(
-                {
-                    "requested": True,
-                    "request_id": result.get("id"),
-                    "status": result.get("status"),
-                    "title": title,
-                }
-            )
+        if self.seerr_user_id is not None:
+            pending_payload["seerr_user_id"] = int(self.seerr_user_id)
         token = uuid.uuid4().hex
-        self.db.save_pending_action(token, "request_seerr", pending_payload)
+        self.db.save_pending_action(
+            token, "request_seerr", pending_payload, user_id=self.user_id
+        )
         self._register_pending_token(token, "request_seerr")
         return json.dumps(
             {
@@ -1482,7 +1484,7 @@ class ToolRegistry:
             payload["tmdb_id"] = resolved["tmdb_id"]
         if resolved.get("tvdb_id") is not None:
             payload["tvdb_id"] = resolved["tvdb_id"]
-        self.db.save_pending_action(token, "remove_arr", payload)
+        self.db.save_pending_action(token, "remove_arr", payload, user_id=self.user_id)
         self._register_pending_token(token, "remove_arr")
         return json.dumps(
             {
@@ -1903,7 +1905,7 @@ class ToolRegistry:
             "section_id": section_id,
             "rating_keys": rating_keys,
         }
-        self.db.save_pending_action(token, "create_plex_collection", payload)
+        self.db.save_pending_action(token, "create_plex_collection", payload, user_id=self.user_id)
         self._register_pending_token(token, "create_plex_collection")
         return json.dumps(
             {
@@ -1943,7 +1945,7 @@ class ToolRegistry:
             "collection_rating_key": collection_rating_key,
             "collection_title": collection_title,
         }
-        self.db.save_pending_action(token, "add_to_plex_collection", payload)
+        self.db.save_pending_action(token, "add_to_plex_collection", payload, user_id=self.user_id)
         self._register_pending_token(token, "add_to_plex_collection")
         label = collection_title or collection_rating_key
         return json.dumps(
@@ -2215,8 +2217,14 @@ def resolve_arr_removal_target(
     }
 
 
-async def execute_confirmed_action(db: Database, settings: Settings, token: str) -> dict:
-    payload = db.pop_pending_action(token)
+async def execute_confirmed_action(
+    db: Database,
+    settings: Settings,
+    token: str,
+    *,
+    user_id: Optional[str] = None,
+) -> dict:
+    payload = db.pop_pending_action(token, user_id=user_id)
     if not payload:
         raise RuntimeError("Invalid or expired confirmation token")
     action = payload.get("action")
@@ -2266,10 +2274,12 @@ async def execute_confirmed_action(db: Database, settings: Settings, token: str)
         tmdb_id = int(payload["tmdb_id"])
         tvdb_id = payload.get("tvdb_id")
         title = str(payload.get("title") or "")
+        seerr_uid = payload.get("seerr_user_id")
         result = client.create_request(
             media_type,
             tmdb_id,
             tvdb_id=int(tvdb_id) if tvdb_id is not None else None,
+            user_id=int(seerr_uid) if seerr_uid is not None else None,
         )
         db.record_arr_queue(
             media_type=media_type,

@@ -131,10 +131,17 @@ def register_webhook_routes(
     async def plex_webhook(request: Request) -> Dict[str, Any]:
         settings = settings_factory()
         secret = str(settings.webhook_secret or "").strip()
-        if secret:
-            provided = str(request.headers.get("X-CuratorX-Webhook-Secret") or "").strip()
-            if not provided or not secrets.compare_digest(provided, secret):
-                raise HTTPException(status_code=401, detail="Invalid webhook secret")
+        if not secret:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Webhook secret is not configured. Set CURATORX_WEBHOOK_SECRET "
+                    "or webhook_secret in settings before enabling Plex webhooks."
+                ),
+            )
+        provided = str(request.headers.get("X-CuratorX-Webhook-Secret") or "").strip()
+        if not provided or not secrets.compare_digest(provided, secret):
+            raise HTTPException(status_code=401, detail="Invalid webhook secret")
         payload = await parse_plex_webhook_payload(request)
         result = handle_plex_webhook(db_factory(), payload)
         logger.info(

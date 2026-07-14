@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import os
+import secrets
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, Literal, Optional
+from typing import Any, Callable, Dict, Literal, Optional
 
 from fastapi import Depends, HTTPException, Request, Response
 from starlette.responses import JSONResponse
@@ -20,6 +23,7 @@ from curatorx.connectors.plex_account import (
 from curatorx.connectors.seerr import SeerrClient
 from curatorx.config_store import seerr_configuration_error
 from curatorx.library.db import BOOTSTRAP_OWNER_ID, Database
+from curatorx.web.rate_limit import enforce_rate_limit
 from curatorx.web.session_tokens import (
     DEFAULT_TTL_SECONDS,
     SESSION_COOKIE_NAME,
@@ -29,6 +33,11 @@ from curatorx.web.session_tokens import (
 
 _API_AUTH_ALLOWLIST_EXACT = frozenset({"/api/health", "/api/features"})
 _API_AUTH_ALLOWLIST_PREFIXES = ("/api/auth/", "/api/webhooks/")
+PLEX_PIN_NONCE_COOKIE = "plex_pin_nonce"
+PLEX_PIN_NONCE_TTL_SECONDS = 1800
+
+_pin_bindings_lock = threading.Lock()
+_pin_bindings: Dict[str, Dict[str, Any]] = {}
 
 UserRole = Literal["owner", "member", "guest"]
 
@@ -243,13 +252,74 @@ def _ensure_plex_login_enabled() -> Settings:
     return settings
 
 
-def start_plex_pin_login() -> dict[str, object]:
+def _purge_expired_pin_bindings() -> None:
+    now = time.time()
+    with _pin_bindings_lock:
+        expired = [key for key, value in _pin_bindings.items() if float(value.get("expires_at", 0)) < now]
+        for key in expired:
+            _pin_bindings.pop(key, None)
+
+
+def _bind_pin_nonce(pin_id: int, response: Response, request: Request) -> None:
+    _purge_expired_pin_bindings()
+    nonce = secrets.token_urlsafe(32)
+    with _pin_bindings_lock:
+        _pin_bindings[nonce] = {
+            "pin_id": int(pin_id),
+            "expires_at": time.time() + PLEX_PIN_NONCE_TTL_SECONDS,
+            "consumed": False,
+        }
+    response.set_cookie(
+        key=PLEX_PIN_NONCE_COOKIE,
+        value=nonce,
+        httponly=True,
+        samesite="lax",
+        max_age=PLEX_PIN_NONCE_TTL_SECONDS,
+        path="/",
+        secure=_cookie_should_be_secure(request),
+    )
+
+
+def _require_pin_nonce(pin_id: int, request: Request, *, consume: bool = False) -> None:
+    nonce = (request.cookies.get(PLEX_PIN_NONCE_COOKIE) or "").strip()
+    if not nonce:
+        raise HTTPException(status_code=401, detail="Plex PIN session cookie missing")
+    _purge_expired_pin_bindings()
+    with _pin_bindings_lock:
+        binding = _pin_bindings.get(nonce)
+        if binding is None:
+            raise HTTPException(status_code=401, detail="Plex PIN session expired")
+        if int(binding.get("pin_id") or -1) != int(pin_id):
+            raise HTTPException(status_code=403, detail="Plex PIN does not match login session")
+        if binding.get("consumed"):
+            raise HTTPException(status_code=409, detail="Plex PIN already consumed")
+        if consume:
+            binding["consumed"] = True
+
+
+def clear_pin_nonce_cookie(response: Response, request: Optional[Request] = None) -> None:
+    response.delete_cookie(
+        key=PLEX_PIN_NONCE_COOKIE,
+        path="/",
+        secure=_cookie_should_be_secure(request),
+    )
+
+
+def clear_pin_bindings() -> None:
+    """Test helper."""
+    with _pin_bindings_lock:
+        _pin_bindings.clear()
+
+
+def start_plex_pin_login(request: Request, response: Response) -> dict[str, object]:
     """Create a plex.tv PIN and auth URL for Overseerr-style sign-in."""
+    enforce_rate_limit(request, bucket="auth_plex_pin_start", limit=10, window_seconds=60)
     _ensure_plex_login_enabled()
     try:
         pin = create_plex_pin(get_or_create_client_id(_data_dir()))
     except Exception as error:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Could not start Plex login: {error}") from error
+    _bind_pin_nonce(int(pin["id"]), response, request)
     return {
         "id": pin["id"],
         "code": pin["code"],
@@ -259,9 +329,11 @@ def start_plex_pin_login() -> dict[str, object]:
     }
 
 
-def poll_plex_pin_login(pin_id: int, db: Database) -> Optional[CurrentUser]:
+def poll_plex_pin_login(pin_id: int, request: Request, db: Database) -> Optional[CurrentUser]:
     """Poll plex.tv PIN once. Returns CurrentUser when authorized, else None."""
+    enforce_rate_limit(request, bucket="auth_plex_pin_poll", limit=60, window_seconds=60)
     _ensure_plex_login_enabled()
+    _require_pin_nonce(pin_id, request, consume=False)
     client_id = get_or_create_client_id(_data_dir())
     try:
         pin = fetch_plex_pin(int(pin_id), client_id)
@@ -271,6 +343,7 @@ def poll_plex_pin_login(pin_id: int, db: Database) -> Optional[CurrentUser]:
     auth_token = pin.get("authToken") or pin.get("auth_token")
     if not auth_token:
         return None
+    _require_pin_nonce(pin_id, request, consume=True)
     return authenticate_plex_user(str(auth_token), db)
 
 

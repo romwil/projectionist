@@ -224,7 +224,7 @@ class SeerrAgentToolTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("confirmation_token", payload)
             self.assertEqual(len(registry.pending_tokens), 1)
 
-    async def test_request_via_seerr_immediate_submit(self) -> None:
+    async def test_request_via_seerr_always_requires_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             settings = Settings(
@@ -234,8 +234,7 @@ class SeerrAgentToolTests(unittest.IsolatedAsyncioTestCase):
             registry = ToolRegistry(db, settings, DEFAULT_LENS_ID)
             with patch(
                 "curatorx.agent.tools.SeerrClient.create_request",
-                return_value={"id": 99, "status": 2},
-            ):
+            ) as create_request:
                 result = await registry.execute(
                     "request_via_seerr",
                     {
@@ -246,8 +245,8 @@ class SeerrAgentToolTests(unittest.IsolatedAsyncioTestCase):
                     },
                 )
             payload = json.loads(result)
-            self.assertTrue(payload["requested"])
-            self.assertEqual(payload["request_id"], 99)
+            self.assertIn("confirmation_token", payload)
+            create_request.assert_not_called()
 
     async def test_request_via_seerr_errors_when_not_configured(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
