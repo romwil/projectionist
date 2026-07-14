@@ -3,6 +3,8 @@ WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 COPY frontend/ ./
+# PrivacyPage imports @docs/PRIVACY.md (alias → /docs in this stage)
+COPY docs/PRIVACY.md /docs/PRIVACY.md
 RUN npm run build
 
 FROM python:3.12-slim

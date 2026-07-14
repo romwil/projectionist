@@ -17,7 +17,8 @@ config/
 !.env.example
 *.md
 !README.md
-docs/
+docs/**
+!docs/PRIVACY.md
 tests/
 unraid/
 templates/
