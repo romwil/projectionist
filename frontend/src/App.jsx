@@ -138,6 +138,7 @@ export default function App() {
       return false;
     }
   });
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   inputRef.current = input;
 
@@ -261,6 +262,7 @@ export default function App() {
 
   const switchThread = useCallback(
     async (session) => {
+      setMobileNavOpen(false);
       if (!session || session === activeSessionId) return;
       helpfulCountRef.current = 0;
       perfectPickPendingRef.current = false;
@@ -277,6 +279,7 @@ export default function App() {
   );
 
   const handleCreateThread = useCallback(async () => {
+    setMobileNavOpen(false);
     try {
       const created = await createThread();
       const nextId = created.session_id;
@@ -294,9 +297,15 @@ export default function App() {
   useKeyboardShortcuts({
     composerRef,
     onNewThread: handleCreateThread,
-    onCloseOverlay: () => setTurnstyleResults(null),
+    onCloseOverlay: () => {
+      if (mobileNavOpen) {
+        setMobileNavOpen(false);
+        return;
+      }
+      setTurnstyleResults(null);
+    },
     onShowHelp: () => setKeyboardHelpOpen(true),
-    overlayOpen: Boolean(turnstyleResults),
+    overlayOpen: Boolean(turnstyleResults) || mobileNavOpen,
   });
 
   const handleMessageFeedbackChange = useCallback(
@@ -888,6 +897,17 @@ export default function App() {
     >
       <header className={`app-topbar ${nightOwl ? "night-owl" : ""}`}>
         <div className="app-topbar-brand">
+          <button
+            type="button"
+            className="app-topbar-menu ghost"
+            data-testid="mobile-nav-toggle"
+            aria-label="Open conversations"
+            aria-expanded={mobileNavOpen}
+            aria-controls="workspace-sidebar"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            <span aria-hidden="true">☰</span>
+          </button>
           <div className="app-topbar-titles">
             <h1>CuratorX</h1>
             <p
@@ -907,19 +927,19 @@ export default function App() {
         </div>
         <div className="app-topbar-actions">
           {stats ? (
-            <span className="stat-chip" data-testid="library-stats-chip">
+            <span className="stat-chip app-topbar-meta" data-testid="library-stats-chip">
               {stats.movies} movies · {stats.shows} shows
             </span>
           ) : null}
           {sessionStreak >= 3 ? (
-            <span className="stat-chip streak-chip" data-testid="curator-streak-chip" title="Conversations in the last 30 days">
+            <span className="stat-chip streak-chip app-topbar-meta" data-testid="curator-streak-chip" title="Conversations in the last 30 days">
               {sessionStreak} chats this month
             </span>
           ) : null}
           {watchlistPins.length ? (
             <button
               type="button"
-              className="stat-chip watchlist-chip"
+              className="stat-chip watchlist-chip app-topbar-meta"
               data-testid="watchlist-topbar-chip"
               onClick={() => setWatchlistOpen((open) => !open)}
             >
@@ -947,9 +967,19 @@ export default function App() {
         </div>
       ) : null}
 
-      <div className="workspace-body">
+      <div className={`workspace-body ${mobileNavOpen ? "mobile-nav-open" : ""}`}>
+        {mobileNavOpen ? (
+          <button
+            type="button"
+            className="workspace-drawer-backdrop"
+            data-testid="mobile-nav-backdrop"
+            aria-label="Close conversations"
+            onClick={() => setMobileNavOpen(false)}
+          />
+        ) : null}
         <aside
-          className={`workspace-sidebar ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}
+          id="workspace-sidebar"
+          className={`workspace-sidebar ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileNavOpen ? "mobile-nav-open" : ""}`}
           data-testid="workspace-sidebar"
         >
           <div className="workspace-sidebar-top">
