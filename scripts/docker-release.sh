@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # Multi-arch Docker Hub release for CuratorX.
-#
-# IMPORTANT: Unraid's update checker fails on OCI image indexes / attestation
-# manifests (shows "not available" and Force Update may use the local cache).
-# Always push Docker v2 schema 2 manifests: disable provenance + SBOM.
+# Builds linux/amd64 + linux/arm64 manifest lists with:
+#   --provenance=false --sbom=false
 #
 # Usage:
-#   ./scripts/docker-release.sh 1.2.0
-#   ./scripts/docker-release.sh 1.2.0 --also-line 1.2
+#   ./scripts/docker-release.sh 1.3.0
+#   ./scripts/docker-release.sh 1.3.0 --also-line 1.3
 #
 set -euo pipefail
 
@@ -50,7 +48,7 @@ TAGS=(
 )
 
 echo "Building ${IMAGE}:${VERSION} (+ :${ALSO_LINE} :latest) for ${PLATFORMS}"
-echo "Flags: --provenance=false --sbom=false (Unraid-compatible Docker manifests)"
+echo "Flags: --provenance=false --sbom=false"
 
 docker buildx build \
   --platform "${PLATFORMS}" \
@@ -60,5 +58,5 @@ docker buildx build \
   --push \
   .
 
-echo "Inspect (expect docker.distribution.manifest.list.v2+json, not oci.image.index):"
+echo "Inspect (expect docker.distribution.manifest.list.v2+json):"
 docker buildx imagetools inspect "${IMAGE}:${VERSION}" | head -20

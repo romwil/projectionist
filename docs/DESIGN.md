@@ -1,6 +1,6 @@
 # CuratorX — Design Document
 
-Product principles, single-workspace UX, lens isolation, agent behavior, and API design for CuratorX **1.1**. Items marked **Future** are planned but not fully shipped.
+Product principles, single-workspace UX, lens isolation, agent behavior, and API design for CuratorX **1.3**. Items marked **Future** are planned but not fully shipped.
 
 ---
 
@@ -24,7 +24,7 @@ Product principles, single-workspace UX, lens isolation, agent behavior, and API
 
 ---
 
-## Visual language (1.1)
+## Visual language
 
 **Cinema dark** — near-black chamber surfaces, warm paper text, a single **amber/gold** accent (no blue→violet gradients). Display type (**Fraunces**) for brand and empty-state headlines; body UI (**DM Sans**). Atmosphere comes from subtle ambient washes (persona/context), not glow stacks or pill chrome.
 

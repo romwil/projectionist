@@ -232,10 +232,10 @@ The curator can also propose **Plex collection** create/add actions; those requi
 When `features.multi_user_enabled` is `true` in settings:
 
 1. The app loads `GET /api/features` and `GET /api/auth/me`.
-2. If features show multi-user mode and `/api/auth/me` returns **401**, the browser redirects to **`/login`** (SPA gate — not full API enforcement yet; see [SECURITY.md](SECURITY.md)).
+2. If features show multi-user mode and `/api/auth/me` returns **401**, the browser redirects to **`/login`**. API middleware also requires a session for almost all `/api/*` (see [SECURITY.md](SECURITY.md)).
 3. **Sign in with Plex** starts an Overseerr-style plex.tv PIN flow. Approve in the Plex window; CuratorX polls until authorized and stores a signed **HttpOnly** session cookie. Token paste is an advanced fallback only.
 4. After login, the main chat UI loads. The top bar shows an avatar menu with display name, role, and **Sign out**.
-5. **Owners** can open **Config → Multi-user auth** to manage roles and review Seerr linkage. **Members** see Seerr request buttons instead of Radarr/Sonarr adds when Seerr is enabled.
+5. **Owners** manage household users under **Admin**. **Members** use **Settings** for personal prefs; Seerr request buttons appear instead of Radarr/Sonarr adds when Seerr is enabled.
 
 When multi-user is **off** (default), there is no login screen and the bootstrap owner is used implicitly.
 
@@ -243,7 +243,7 @@ When multi-user is **off** (default), there is no login screen and the bootstrap
 
 ## Security
 
-Single-owner installs have no built-in authentication — run on a trusted LAN or behind an authenticated reverse proxy. When multi-user auth is enabled, Plex PIN login and signed session cookies are a **UI gate** today; full `/api/*` session enforcement is in progress for **1.2** (see [SECURITY.md](SECURITY.md)). Always set `CURATORX_SESSION_SECRET` to a long random string (never leave the public dev default). Destructive *arr operations use confirmation tokens (10-minute TTL); bind those to users in 1.2.
+Single-owner installs have no built-in authentication — run on a trusted LAN or behind an authenticated reverse proxy. When multi-user is enabled, Plex PIN login and signed session cookies gate the SPA **and** most `/api/*` routes (see [SECURITY.md](SECURITY.md)). Always set `CURATORX_SESSION_SECRET` to a long random string (never leave the public dev default). Destructive *arr operations use confirmation tokens (10-minute TTL) scoped to the acting user.
 
 ---
 

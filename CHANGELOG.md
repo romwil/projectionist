@@ -23,6 +23,7 @@ Privacy-safe MCP, Admin/Settings split, household management, wide/mobile chat, 
 ### Changed
 - Docker / Unraid tags move to `:1.3` / `:1.3.0`
 - Unraid templates expose both MCP env vars (or generate keys in Admin → Advanced)
+- Operator docs baselined on 1.3.0 (install/config as the normal path)
 
 ## [1.2.0] — 2026-07-14
 

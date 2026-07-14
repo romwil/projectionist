@@ -293,7 +293,7 @@ See [DOCKER.md](DOCKER.md) for Mac Colima, Unraid, and Compose details.
 | Session secret | Auto-persisted under DATA_DIR; `CURATORX_SESSION_SECRET` preferred; public default refused for multi-user |
 | Secrets | Masked on API read; env overrides file |
 | Lens isolation | Chat and taste scoped by `lens_id`; no cross-lens history leakage in API |
-| MCP | Optional stdio + HTTP `/mcp` (API key via `CURATORX_MCP_API_KEY`); read-oriented library tools |
+| MCP | Optional stdio + HTTP `/mcp`; dual keys (`CURATORX_MCP_API_KEY` privacy / `CURATORX_MCP_FULL_API_KEY` full) |
 
 See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for the full partitioning matrix.
 

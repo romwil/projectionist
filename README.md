@@ -79,7 +79,6 @@ Published multi-arch images (**amd64 + arm64**):
 |-----|-----|
 | [`romwil/curatorx:1.3.0`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
 | [`romwil/curatorx:1.3`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.3 line |
-| [`romwil/curatorx:1.2`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.2 line |
 | [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Newest stable |
 
 **Unraid:** install from Community Applications using the template (`templates/curatorx.xml` / `unraid/curatorx.xml`; CA icons at `unraid/curatorx-icon.png` / `unraid/curatorx-icon-512.png`), or add the container manually:

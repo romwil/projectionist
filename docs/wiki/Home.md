@@ -1,6 +1,6 @@
 # CuratorX wiki
 
-In-repo documentation for operators deploying CuratorX 1.1 on Docker or Unraid.
+In-repo documentation for operators deploying CuratorX **1.3** on Docker or Unraid.
 
 ## What CuratorX is
 

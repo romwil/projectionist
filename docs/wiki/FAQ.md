@@ -1,6 +1,6 @@
 # FAQ
 
-Canonical FAQ for CuratorX 1.3. Same content as [`docs/FAQ.md`](../FAQ.md).
+Canonical FAQ for CuratorX **1.3**. Same content as [`docs/FAQ.md`](../FAQ.md).
 
 ## What is CuratorX?
 

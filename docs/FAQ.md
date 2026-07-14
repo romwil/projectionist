@@ -26,7 +26,7 @@ Under `/config` (`DATA_DIR`):
 | `curatorx.db` | Library index, chat, persona, lenses, checkpoints |
 | `jobs_state.json` | Durable sync job history |
 
-Back up the whole config directory before upgrades.
+Back up the whole config directory before major changes.
 
 ## Do I need an LLM API key?
 

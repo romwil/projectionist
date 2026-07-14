@@ -48,7 +48,7 @@ friendly errors.
 
 ### API authz regression (multi-user) — `tests/test_api_authz.py`
 
-Outline for the 1.2 API enforcement suite (add alongside Workstream B). When
+Regression suite for multi-user API enforcement (`tests/test_api_authz.py`). When
 `features.multi_user_enabled` is **on**, unauthenticated clients must not hit the control plane.
 
 | Expectation | Request (no session cookie) | Expected |

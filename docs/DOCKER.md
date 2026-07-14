@@ -1,6 +1,6 @@
 # CuratorX — Docker / Unraid
 
-Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`.
+Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Baseline image line: **`romwil/curatorx:1.3`** (pin `:1.3.0` when you need an exact build).
 
 ---
 
@@ -103,7 +103,9 @@ Install from the Community Applications template (`templates/curatorx.xml` or `u
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/curatorx/config` → `/config` |
-| **Image** | `romwil/curatorx:1.1` (also `:1.1.6`, `:latest`) — multi-arch amd64+arm64 |
+| **Image** | `romwil/curatorx:1.3` (or `:1.3.0` / `:latest`) — multi-arch amd64+arm64 |
+
+Optional advanced env (or generate in **Admin → Advanced**): `CURATORX_MCP_API_KEY` (privacy) and `CURATORX_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
 ### Ollama on the Unraid host
 
@@ -116,30 +118,20 @@ LLM_BASE_URL=http://host.docker.internal:11434/v1
 
 Or use the host LAN IP if `host.docker.internal` is unavailable.
 
-### Unraid shows “not available” for updates
-
-CuratorX images **must** be published as Docker Hub **v2 manifest lists**, not OCI indexes with provenance attestations. Unraid cannot check OCI indexes reliably → **Version: not available**, and Force Update often reuses the local image.
-
-Publish with:
-
-```bash
-./scripts/docker-release.sh 1.1.6
-```
-
-(uses `docker buildx build --provenance=false --sbom=false --push`).
-
-Operator workaround until a fixed image is pulled: `docker pull romwil/curatorx:1.1` on the Unraid host, then recreate the container (keep appdata). Details: [wiki/Unraid.md](wiki/Unraid.md#upgrading).
+Full Unraid steps: [wiki/Unraid.md](wiki/Unraid.md).
 
 ---
 
 ## Publishing multi-arch images (maintainers)
+
+Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use the release script:
 
 ```bash
 ./scripts/docker-release.sh <semver>          # also tags X.Y and latest
 ./scripts/docker-release.sh 1.3.0 --also-line 1.3
 ```
 
-Always keep `--provenance=false --sbom=false` for Unraid CA compatibility.
+The script builds with `--provenance=false --sbom=false` (required so Unraid can check for updates against Docker v2 manifests) and pushes `:VERSION`, `:X.Y`, and `:latest`.
 
 ---
 
@@ -153,7 +145,7 @@ Always keep `--provenance=false --sbom=false` for Unraid CA compatibility.
 
 SQLite uses **WAL** + `busy_timeout=30s` + `synchronous=NORMAL` so the UI can read while library sync writes (especially on Unraid appdata). NORMAL is a durability tradeoff vs FULL: less fsync cost under concurrent load; a crash mid-commit could lose the last transaction.
 
-Back up the entire `/config` directory before upgrades.
+Back up the entire `/config` directory before major changes.
 
 ---
 
