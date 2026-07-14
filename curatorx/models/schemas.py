@@ -290,6 +290,52 @@ class WatchlistSyncRequest(BaseModel):
     direction: str = "both"
 
 
+class CuratedListItem(BaseModel):
+    id: str
+    list_id: str
+    tmdb_id: Optional[int] = None
+    tvdb_id: Optional[int] = None
+    media_type: MediaType
+    title: str
+    library_item_id: Optional[int] = None
+    position: int = 0
+    created_at: float
+
+
+class CuratedList(BaseModel):
+    id: str
+    user_id: Optional[str] = None
+    name: str
+    description: str = ""
+    created_at: float
+    updated_at: float
+    item_count: int = 0
+    items: Optional[List[CuratedListItem]] = None
+
+
+class CuratedListCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    description: str = ""
+
+
+class CuratedListUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1)
+    description: Optional[str] = None
+
+
+class CuratedListItemCreate(BaseModel):
+    tmdb_id: Optional[int] = None
+    tvdb_id: Optional[int] = None
+    media_type: MediaType
+    title: str = Field(..., min_length=1)
+    library_item_id: Optional[int] = None
+
+
+class CuratedListCollectionResponse(BaseModel):
+    items: List[CuratedList] = Field(default_factory=list)
+    count: int = 0
+
+
 class EngagementStreakResponse(BaseModel):
     session_count_30d: int = 0
     streak_visible: bool = False

@@ -49,3 +49,7 @@ Job **state** is durable; an interrupted job is marked failed so you can start s
 ## How is this different from Overseerr / Seerr?
 
 CuratorX is a **taste-aware curator** over your library (RAG, persona, ratings, purge advice). Seerr is an optional request front-end you can enable for members — it does not replace CuratorX’s owner chat loop.
+
+## Can CuratorX publish named lists to Plex Lists?
+
+**Not yet.** Local named lists ship under Settings → Lists (and chat tools). A spike found no clear public/stable API for Plex Discover personal Lists, so publish is deferred. Watchlist ↔ Discover sync is separate.

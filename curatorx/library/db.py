@@ -264,6 +264,7 @@ class Database:
             self._migrate_phase4_tables(conn)
             self._migrate_multi_user_columns(conn)  # reviews/prefs tables exist after phase4
             self._migrate_embeddings_content_hash(conn)
+            self._migrate_curated_lists(conn)
             self._seed_defaults(conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
@@ -471,6 +472,47 @@ class Database:
         pin_cols = self._table_columns(conn, "watchlist_pins")
         if pin_cols and "plex_rating_key" not in pin_cols:
             conn.execute("ALTER TABLE watchlist_pins ADD COLUMN plex_rating_key TEXT")
+
+    def _migrate_curated_lists(self, conn: sqlite3.Connection) -> None:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS curated_lists (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_curated_lists_user ON curated_lists(user_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_curated_lists_name ON curated_lists(
+                COALESCE(user_id, ''),
+                name
+            );
+
+            CREATE TABLE IF NOT EXISTS curated_list_items (
+                id TEXT PRIMARY KEY,
+                list_id TEXT NOT NULL,
+                tmdb_id INTEGER,
+                tvdb_id INTEGER,
+                media_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                library_item_id INTEGER,
+                position INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                FOREIGN KEY (list_id) REFERENCES curated_lists(id) ON DELETE CASCADE,
+                FOREIGN KEY (library_item_id) REFERENCES library_items(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_curated_list_items_list ON curated_list_items(list_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_curated_list_items_identity ON curated_list_items(
+                list_id,
+                media_type,
+                COALESCE(tmdb_id, -1),
+                COALESCE(tvdb_id, -1)
+            );
+            """
+        )
 
     def _migrate_embeddings_content_hash(self, conn: sqlite3.Connection) -> None:
         cols = self._table_columns(conn, "embeddings")
@@ -2696,4 +2738,405 @@ class Database:
             "title": str(row["title"]),
             "created_at": float(row["created_at"]),
             "plex_rating_key": plex_rating_key,
+        }
+
+    def list_curated_lists(self, *, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        with self.connect() as conn:
+            if user_id is None:
+                rows = conn.execute(
+                    """
+                    SELECT l.*, (
+                        SELECT COUNT(*) FROM curated_list_items i WHERE i.list_id = l.id
+                    ) AS item_count
+                    FROM curated_lists l
+                    WHERE l.user_id IS NULL
+                    ORDER BY l.updated_at DESC, l.created_at DESC
+                    """
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT l.*, (
+                        SELECT COUNT(*) FROM curated_list_items i WHERE i.list_id = l.id
+                    ) AS item_count
+                    FROM curated_lists l
+                    WHERE l.user_id = ?
+                    ORDER BY l.updated_at DESC, l.created_at DESC
+                    """,
+                    (user_id,),
+                ).fetchall()
+        return [self._row_to_curated_list(row) for row in rows]
+
+    def get_curated_list(
+        self,
+        list_id: str,
+        *,
+        user_id: Optional[str] = None,
+        include_items: bool = False,
+    ) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            if user_id is None:
+                row = conn.execute(
+                    """
+                    SELECT l.*, (
+                        SELECT COUNT(*) FROM curated_list_items i WHERE i.list_id = l.id
+                    ) AS item_count
+                    FROM curated_lists l
+                    WHERE l.id = ? AND l.user_id IS NULL
+                    """,
+                    (list_id,),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    """
+                    SELECT l.*, (
+                        SELECT COUNT(*) FROM curated_list_items i WHERE i.list_id = l.id
+                    ) AS item_count
+                    FROM curated_lists l
+                    WHERE l.id = ? AND l.user_id = ?
+                    """,
+                    (list_id, user_id),
+                ).fetchone()
+            if row is None:
+                return None
+            payload = self._row_to_curated_list(row)
+            if include_items:
+                items = conn.execute(
+                    """
+                    SELECT * FROM curated_list_items
+                    WHERE list_id = ?
+                    ORDER BY position ASC, created_at ASC
+                    """,
+                    (list_id,),
+                ).fetchall()
+                payload["items"] = [self._row_to_curated_list_item(item) for item in items]
+            return payload
+
+    def create_curated_list(
+        self,
+        *,
+        list_id: str,
+        user_id: Optional[str],
+        name: str,
+        description: str = "",
+    ) -> Dict[str, Any]:
+        cleaned = (name or "").strip()
+        if not cleaned:
+            raise ValueError("name is required")
+        now = time.time()
+        with self.connect() as conn:
+            existing = conn.execute(
+                """
+                SELECT id FROM curated_lists
+                WHERE name = ?
+                  AND (
+                    (user_id IS NULL AND ? IS NULL) OR user_id = ?
+                  )
+                """,
+                (cleaned, user_id, user_id),
+            ).fetchone()
+            if existing is not None:
+                raise ValueError("A list with that name already exists")
+            conn.execute(
+                """
+                INSERT INTO curated_lists (id, user_id, name, description, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (list_id, user_id, cleaned, (description or "").strip(), now, now),
+            )
+            row = conn.execute(
+                """
+                SELECT l.*, 0 AS item_count
+                FROM curated_lists l
+                WHERE l.id = ?
+                """,
+                (list_id,),
+            ).fetchone()
+        assert row is not None
+        return self._row_to_curated_list(row)
+
+    def update_curated_list(
+        self,
+        list_id: str,
+        *,
+        user_id: Optional[str] = None,
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if name is None and description is None:
+            raise ValueError("No list fields to update")
+        cleaned_name = name.strip() if name is not None else None
+        if cleaned_name is not None and not cleaned_name:
+            raise ValueError("name cannot be empty")
+        now = time.time()
+        with self.connect() as conn:
+            if user_id is None:
+                existing = conn.execute(
+                    "SELECT * FROM curated_lists WHERE id = ? AND user_id IS NULL",
+                    (list_id,),
+                ).fetchone()
+            else:
+                existing = conn.execute(
+                    "SELECT * FROM curated_lists WHERE id = ? AND user_id = ?",
+                    (list_id, user_id),
+                ).fetchone()
+            if existing is None:
+                return None
+            next_name = cleaned_name if cleaned_name is not None else str(existing["name"])
+            next_description = (
+                description.strip() if description is not None else str(existing["description"] or "")
+            )
+            if cleaned_name is not None and cleaned_name != str(existing["name"]):
+                conflict = conn.execute(
+                    """
+                    SELECT id FROM curated_lists
+                    WHERE name = ?
+                      AND id != ?
+                      AND (
+                        (user_id IS NULL AND ? IS NULL) OR user_id = ?
+                      )
+                    """,
+                    (cleaned_name, list_id, user_id, user_id),
+                ).fetchone()
+                if conflict is not None:
+                    raise ValueError("A list with that name already exists")
+            conn.execute(
+                """
+                UPDATE curated_lists
+                SET name = ?, description = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (next_name, next_description, now, list_id),
+            )
+        return self.get_curated_list(list_id, user_id=user_id, include_items=False)
+
+    def delete_curated_list(self, list_id: str, *, user_id: Optional[str] = None) -> bool:
+        with self.connect() as conn:
+            if user_id is None:
+                row = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id IS NULL",
+                    (list_id,),
+                ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id = ?",
+                    (list_id, user_id),
+                ).fetchone()
+            if row is None:
+                return False
+            conn.execute("DELETE FROM curated_list_items WHERE list_id = ?", (list_id,))
+            conn.execute("DELETE FROM curated_lists WHERE id = ?", (list_id,))
+            return True
+
+    def add_curated_list_item(
+        self,
+        *,
+        item_id: str,
+        list_id: str,
+        user_id: Optional[str],
+        tmdb_id: Optional[int],
+        tvdb_id: Optional[int],
+        media_type: str,
+        title: str,
+        library_item_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        cleaned_title = (title or "").strip()
+        if not cleaned_title:
+            raise ValueError("title is required")
+        if media_type not in {"movie", "show"}:
+            raise ValueError("media_type must be movie or show")
+        if tmdb_id is None and tvdb_id is None:
+            raise ValueError("tmdb_id or tvdb_id is required")
+        now = time.time()
+        with self.connect() as conn:
+            if user_id is None:
+                owned = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id IS NULL",
+                    (list_id,),
+                ).fetchone()
+            else:
+                owned = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id = ?",
+                    (list_id, user_id),
+                ).fetchone()
+            if owned is None:
+                raise ValueError("List not found")
+            resolved_library_id = library_item_id
+            if resolved_library_id is None:
+                if media_type == "movie" and tmdb_id is not None:
+                    lib = conn.execute(
+                        "SELECT id FROM library_items WHERE media_type = 'movie' AND tmdb_id = ? LIMIT 1",
+                        (int(tmdb_id),),
+                    ).fetchone()
+                    if lib is not None:
+                        resolved_library_id = int(lib["id"])
+                elif media_type == "show" and tvdb_id is not None:
+                    lib = conn.execute(
+                        "SELECT id FROM library_items WHERE media_type = 'show' AND tvdb_id = ? LIMIT 1",
+                        (int(tvdb_id),),
+                    ).fetchone()
+                    if lib is not None:
+                        resolved_library_id = int(lib["id"])
+                elif tmdb_id is not None:
+                    lib = conn.execute(
+                        "SELECT id FROM library_items WHERE media_type = ? AND tmdb_id = ? LIMIT 1",
+                        (media_type, int(tmdb_id)),
+                    ).fetchone()
+                    if lib is not None:
+                        resolved_library_id = int(lib["id"])
+            position_row = conn.execute(
+                "SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM curated_list_items WHERE list_id = ?",
+                (list_id,),
+            ).fetchone()
+            position = int(position_row["next_pos"] or 0) if position_row else 0
+            conn.execute(
+                """
+                INSERT INTO curated_list_items (
+                    id, list_id, tmdb_id, tvdb_id, media_type, title,
+                    library_item_id, position, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT DO NOTHING
+                """,
+                (
+                    item_id,
+                    list_id,
+                    tmdb_id,
+                    tvdb_id,
+                    media_type,
+                    cleaned_title,
+                    resolved_library_id,
+                    position,
+                    now,
+                ),
+            )
+            conn.execute(
+                "UPDATE curated_lists SET updated_at = ? WHERE id = ?",
+                (now, list_id),
+            )
+            row = conn.execute(
+                """
+                SELECT * FROM curated_list_items
+                WHERE list_id = ?
+                  AND media_type = ?
+                  AND COALESCE(tmdb_id, -1) = COALESCE(?, -1)
+                  AND COALESCE(tvdb_id, -1) = COALESCE(?, -1)
+                """,
+                (list_id, media_type, tmdb_id, tvdb_id),
+            ).fetchone()
+        if row is None:
+            raise ValueError("Could not save list item")
+        return self._row_to_curated_list_item(row)
+
+    def delete_curated_list_item(
+        self,
+        list_id: str,
+        item_id: str,
+        *,
+        user_id: Optional[str] = None,
+    ) -> bool:
+        with self.connect() as conn:
+            if user_id is None:
+                owned = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id IS NULL",
+                    (list_id,),
+                ).fetchone()
+            else:
+                owned = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id = ?",
+                    (list_id, user_id),
+                ).fetchone()
+            if owned is None:
+                return False
+            row = conn.execute(
+                "SELECT id FROM curated_list_items WHERE id = ? AND list_id = ?",
+                (item_id, list_id),
+            ).fetchone()
+            if row is None:
+                return False
+            conn.execute(
+                "DELETE FROM curated_list_items WHERE id = ? AND list_id = ?",
+                (item_id, list_id),
+            )
+            conn.execute(
+                "UPDATE curated_lists SET updated_at = ? WHERE id = ?",
+                (time.time(), list_id),
+            )
+            return True
+
+    def find_curated_list_item(
+        self,
+        list_id: str,
+        *,
+        user_id: Optional[str] = None,
+        item_id: Optional[str] = None,
+        tmdb_id: Optional[int] = None,
+        tvdb_id: Optional[int] = None,
+        media_type: Optional[str] = None,
+        title: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            if user_id is None:
+                owned = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id IS NULL",
+                    (list_id,),
+                ).fetchone()
+            else:
+                owned = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id = ?",
+                    (list_id, user_id),
+                ).fetchone()
+            if owned is None:
+                return None
+            if item_id:
+                row = conn.execute(
+                    "SELECT * FROM curated_list_items WHERE id = ? AND list_id = ?",
+                    (item_id, list_id),
+                ).fetchone()
+                return self._row_to_curated_list_item(row) if row else None
+            rows = conn.execute(
+                "SELECT * FROM curated_list_items WHERE list_id = ? ORDER BY position ASC, created_at ASC",
+                (list_id,),
+            ).fetchall()
+        for row in rows:
+            item = self._row_to_curated_list_item(row)
+            if media_type and item["media_type"] != media_type:
+                continue
+            if tmdb_id is not None and item.get("tmdb_id") == int(tmdb_id):
+                return item
+            if tvdb_id is not None and item.get("tvdb_id") == int(tvdb_id):
+                return item
+            if title and item["title"].strip().lower() == title.strip().lower():
+                return item
+        return None
+
+    @staticmethod
+    def _row_to_curated_list(row: sqlite3.Row) -> Dict[str, Any]:
+        keys = set(row.keys()) if hasattr(row, "keys") else set()
+        item_count = int(row["item_count"]) if "item_count" in keys and row["item_count"] is not None else 0
+        return {
+            "id": str(row["id"]),
+            "user_id": str(row["user_id"]) if row["user_id"] is not None else None,
+            "name": str(row["name"]),
+            "description": str(row["description"] or ""),
+            "created_at": float(row["created_at"]),
+            "updated_at": float(row["updated_at"]),
+            "item_count": item_count,
+        }
+
+    @staticmethod
+    def _row_to_curated_list_item(row: sqlite3.Row) -> Dict[str, Any]:
+        keys = set(row.keys()) if hasattr(row, "keys") else set()
+        library_item_id = None
+        if "library_item_id" in keys and row["library_item_id"] is not None:
+            library_item_id = int(row["library_item_id"])
+        return {
+            "id": str(row["id"]),
+            "list_id": str(row["list_id"]),
+            "tmdb_id": int(row["tmdb_id"]) if row["tmdb_id"] is not None else None,
+            "tvdb_id": int(row["tvdb_id"]) if row["tvdb_id"] is not None else None,
+            "media_type": str(row["media_type"]),
+            "title": str(row["title"]),
+            "library_item_id": library_item_id,
+            "position": int(row["position"] or 0),
+            "created_at": float(row["created_at"]),
         }

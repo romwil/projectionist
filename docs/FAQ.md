@@ -58,6 +58,10 @@ Status dock (bottom-left of chat) and Config → Library sync show phase, counts
 
 CuratorX is a **taste-aware curator** (RAG, persona, ratings, purge advice, confirmation-gated *arr*). Seerr is an optional request front-end for members — it complements CuratorX; it does not replace the owner chat loop.
 
+## Can CuratorX publish named lists to Plex Lists?
+
+**Not yet.** CuratorX supports **local** named curated lists (Settings → Lists, plus chat tools `list_lists` / `create_list` / `add_to_list` / `remove_from_list`). A 2026 spike found **no clear public/stable API** for Plex Discover personal Lists (`watch.plex.tv/watchlist/my-lists`): official PMS docs cover Playlists/Collections, and Discover documents Watchlist add/remove only. Publish-to-Plex-Lists is deferred so we never fake a broken sync. Watchlist ↔ Discover sync remains separate and available.
+
 ## Where should I look next?
 
 - [wiki/Home.md](wiki/Home.md) — wiki index

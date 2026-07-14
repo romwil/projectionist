@@ -12,6 +12,7 @@ import SettingsLayout from "./layouts/SettingsLayout";
 import ProfilePage from "./pages/settings/ProfilePage";
 import VoicePage from "./pages/settings/VoicePage";
 import WatchlistSettingsPage from "./pages/settings/WatchlistSettingsPage";
+import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
@@ -32,6 +33,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="profile" element={<ProfilePage />} />
           <Route path="voice" element={<VoicePage />} />
           <Route path="watchlist" element={<WatchlistSettingsPage />} />
+          <Route path="lists" element={<ListsSettingsPage />} />
         </Route>
         <Route path="/title/:mediaType/:itemId" element={<TitleDetailPage />} />
       </Routes>

@@ -366,6 +366,47 @@ export async function runWatchlistSync(payload = { direction: "both" }) {
   });
 }
 
+export async function listCuratedLists() {
+  return api("/lists");
+}
+
+export async function createCuratedList(payload) {
+  return api("/lists", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function getCuratedList(listId) {
+  return api(`/lists/${encodeURIComponent(listId)}`);
+}
+
+export async function updateCuratedList(listId, payload) {
+  return api(`/lists/${encodeURIComponent(listId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCuratedList(listId) {
+  return api(`/lists/${encodeURIComponent(listId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function addCuratedListItem(listId, payload) {
+  return api(`/lists/${encodeURIComponent(listId)}/items`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteCuratedListItem(listId, itemId) {
+  return api(`/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getEngagementStreak() {
   return api("/engagement/streak");
 }

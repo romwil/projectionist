@@ -76,6 +76,12 @@ from curatorx.models.schemas import (
     ActionConfirmRequest,
     ActiveLensPayload,
     ChatRequest,
+    CuratedList,
+    CuratedListCollectionResponse,
+    CuratedListCreate,
+    CuratedListItem,
+    CuratedListItemCreate,
+    CuratedListUpdate,
     EngagementStreakResponse,
     Lens,
     LensCreate,
@@ -1911,6 +1917,121 @@ def delete_watchlist_pin(
             remove_pin_from_plex(_db(), settings, existing, user_id=user.id)
         except Exception:
             logger.debug("Watchlist remove-from-plex failed", exc_info=True)
+    return {"removed": True}
+
+
+@app.get("/api/lists", response_model=CuratedListCollectionResponse)
+def list_curated_lists(user=Depends(get_current_user_dep)) -> CuratedListCollectionResponse:
+    user_id = user.id if _settings().features.multi_user_enabled else None
+    items = _db().list_curated_lists(user_id=user_id)
+    return CuratedListCollectionResponse(
+        items=[CuratedList(**item) for item in items],
+        count=len(items),
+    )
+
+
+@app.post("/api/lists", response_model=CuratedList)
+def create_curated_list(
+    payload: CuratedListCreate,
+    user=Depends(get_current_user_dep),
+) -> CuratedList:
+    user_id = user.id if _settings().features.multi_user_enabled else None
+    try:
+        created = _db().create_curated_list(
+            list_id=str(uuid.uuid4()),
+            user_id=user_id,
+            name=payload.name,
+            description=payload.description or "",
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return CuratedList(**created)
+
+
+@app.get("/api/lists/{list_id}", response_model=CuratedList)
+def get_curated_list(
+    list_id: str,
+    user=Depends(get_current_user_dep),
+) -> CuratedList:
+    user_id = user.id if _settings().features.multi_user_enabled else None
+    found = _db().get_curated_list(list_id, user_id=user_id, include_items=True)
+    if found is None:
+        raise HTTPException(status_code=404, detail="List not found")
+    return CuratedList(**found)
+
+
+@app.patch("/api/lists/{list_id}", response_model=CuratedList)
+def update_curated_list(
+    list_id: str,
+    payload: CuratedListUpdate,
+    user=Depends(get_current_user_dep),
+) -> CuratedList:
+    user_id = user.id if _settings().features.multi_user_enabled else None
+    if payload.name is None and payload.description is None:
+        raise HTTPException(status_code=400, detail="No list fields to update")
+    try:
+        updated = _db().update_curated_list(
+            list_id,
+            user_id=user_id,
+            name=payload.name,
+            description=payload.description,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    if updated is None:
+        raise HTTPException(status_code=404, detail="List not found")
+    return CuratedList(**updated)
+
+
+@app.delete("/api/lists/{list_id}")
+def delete_curated_list(
+    list_id: str,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, bool]:
+    user_id = user.id if _settings().features.multi_user_enabled else None
+    removed = _db().delete_curated_list(list_id, user_id=user_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="List not found")
+    return {"removed": True}
+
+
+@app.post("/api/lists/{list_id}/items", response_model=CuratedListItem)
+def add_curated_list_item(
+    list_id: str,
+    payload: CuratedListItemCreate,
+    user=Depends(get_current_user_dep),
+) -> CuratedListItem:
+    if not payload.tmdb_id and not payload.tvdb_id:
+        raise HTTPException(status_code=400, detail="tmdb_id or tvdb_id is required")
+    user_id = user.id if _settings().features.multi_user_enabled else None
+    try:
+        item = _db().add_curated_list_item(
+            item_id=str(uuid.uuid4()),
+            list_id=list_id,
+            user_id=user_id,
+            tmdb_id=payload.tmdb_id,
+            tvdb_id=payload.tvdb_id,
+            media_type=payload.media_type,
+            title=payload.title.strip(),
+            library_item_id=payload.library_item_id,
+        )
+    except ValueError as error:
+        detail = str(error)
+        status = 404 if detail == "List not found" else 400
+        raise HTTPException(status_code=status, detail=detail) from error
+    return CuratedListItem(**item)
+
+
+@app.delete("/api/lists/{list_id}/items/{item_id}")
+def delete_curated_list_item(
+    list_id: str,
+    item_id: str,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, bool]:
+    user_id = user.id if _settings().features.multi_user_enabled else None
+    removed = _db().delete_curated_list_item(list_id, item_id, user_id=user_id)
+    if not removed:
+        raise HTTPException(status_code=404, detail="List item not found")
     return {"removed": True}
 
 

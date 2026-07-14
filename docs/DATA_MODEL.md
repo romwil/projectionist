@@ -119,6 +119,37 @@ Personal shelf of titles pinned from chat title cards.
 
 Unique per `(user_id, media_type, tmdb_id, tvdb_id)`.
 
+#### `curated_lists`
+
+Per-user named shelves (local CuratorX lists). Plex Lists publish is deferred — see FAQ.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | List UUID |
+| `user_id` | TEXT FK nullable | References `users.id`; NULL when multi-user is off |
+| `name` | TEXT | Display name (unique per user) |
+| `description` | TEXT | Optional blurb |
+| `created_at` | REAL | Unix timestamp |
+| `updated_at` | REAL | Unix timestamp |
+
+#### `curated_list_items`
+
+Titles on a curated list (TMDB/TVDB identity; optional library link).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | Item UUID |
+| `list_id` | TEXT FK | References `curated_lists.id` |
+| `tmdb_id` | INTEGER | Optional TMDB id |
+| `tvdb_id` | INTEGER | Optional TVDB id |
+| `media_type` | TEXT | `movie` or `show` |
+| `title` | TEXT | Display title |
+| `library_item_id` | INTEGER FK nullable | Best-effort link to `library_items.id` |
+| `position` | INTEGER | Order within the list |
+| `created_at` | REAL | Unix timestamp |
+
+Unique per `(list_id, media_type, tmdb_id, tvdb_id)`.
+
 #### `users`
 
 Household accounts (schema present; login enforced only when `features.multi_user_enabled` is true).

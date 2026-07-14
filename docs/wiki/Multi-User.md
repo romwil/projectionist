@@ -30,6 +30,7 @@ CuratorX refuses to enable multi-user while the public development session secre
 | Persona / lens definitions | Shared read; **owner write** |
 | Chat threads / messages | **Per-user** |
 | Watchlist | Per-user |
+| Named curated lists | Per-user (local; Plex Lists publish deferred) |
 | Reviews / preferences | **Per-user** (legacy NULL rows still readable) |
 | Jobs status | Any authenticated user; mutate owner-only |
 | Pending *arr / Seerr confirms | **Per-user** tokens |

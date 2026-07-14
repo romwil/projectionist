@@ -6,6 +6,7 @@ export const SETTINGS_NAV = [
   { to: "/settings/profile", id: "profile", label: "Profile" },
   { to: "/settings/voice", id: "voice", label: "Voice" },
   { to: "/settings/watchlist", id: "watchlist", label: "Watchlist" },
+  { to: "/settings/lists", id: "lists", label: "Lists" },
   { to: "/privacy", id: "privacy", label: "Privacy & data use", end: true },
   { to: "/about", id: "about", label: "About", end: true },
 ];
