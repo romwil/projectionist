@@ -34,10 +34,12 @@ Resize from a larger master if needed: `sips -z 256 256 source.png --out unraid/
 ## First run on Unraid
 
 1. Open `http://<unraid-ip>:8788`
-2. Finish **Settings** — Plex, TMDB, LLM; optionally Radarr/Sonarr
+2. Finish **Settings** (Name → Connections → Libraries) — Plex server URL + server token, TMDB, LLM; optionally Radarr/Sonarr
 3. Map movie and TV Plex libraries
-4. Click **Sync library** on the Config maintenance card
+4. Click **Sync library** on Config
 5. Watch progress in the status dock (bottom-left of chat)
+
+Household **Sign in with Plex** (PIN) is optional — enable multi-user later if you need per-person chats/watchlists.
 
 ## Networking tips
 
@@ -63,6 +65,6 @@ That includes `settings.json`, `curatorx.db`, and `jobs_state.json`.
 
 ## Upgrading
 
-Pull a newer tag and recreate the container with the **same** `/config` mount. Interrupted syncs after a restart are marked failed with a clear message — start sync again from Config.
+Pull a newer tag and recreate the container with the **same** `/config` mount. An interrupted sync job is marked failed; start sync again from Config — phase checkpoints resume unfinished work when still valid (≤72h).
 
 See also: [Installation](Installation.md) · [Troubleshooting](Troubleshooting.md) · [../DOCKER.md](../DOCKER.md)

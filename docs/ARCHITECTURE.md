@@ -18,7 +18,7 @@ It is a **separate product** from [Reclaimspace](https://github.com/romwil/recla
 | **Self-hosted, BYOP LLM** | OpenAI-compatible, Anthropic, or Ollama |
 | **Homelab friendly** | Single Docker container, SQLite, Unraid template |
 
-Non-goals for 1.0: cloud SaaS, automatic file deletion without confirmation, generic streaming-service recommendations, OIDC/local password auth. Multi-user auth, Seerr, and Plex collections are **optional** (off by default); see [CONFIGURATION.md](CONFIGURATION.md#feature-flags-optional-off-by-default).
+Non-goals: cloud SaaS, automatic file deletion without confirmation, generic streaming-service recommendations, OIDC/local password auth. Multi-user auth (**Sign in with Plex** PIN), Seerr, and Plex collections are **optional** (off by default); see [CONFIGURATION.md](CONFIGURATION.md#feature-flags-optional-off-by-default).
 
 ---
 
@@ -227,7 +227,7 @@ sequenceDiagram
 
 ### Library sync
 
-`POST /api/library/sync` → JobManager → Plex/Radarr/Sonarr/TMDB → embeddings. Jobs persist under `DATA_DIR/jobs_state.json`; inspect `GET /api/jobs` for phase / percent / message. Interrupted runs after restart are marked failed with a recovery message.
+`POST /api/library/sync` → JobManager → Plex/Radarr/Sonarr/TMDB → embeddings. Jobs persist under `DATA_DIR/jobs_state.json`; inspect `GET /api/jobs` for phase / percent / message. Interrupted runs after restart are marked failed with a recovery message; a new sync resumes from the last valid phase checkpoint (≤72h).
 
 ### Add-to-Radarr confirmation
 
@@ -284,7 +284,7 @@ See [DOCKER.md](DOCKER.md) for Mac Colima, Unraid, and Compose details.
 
 | Topic | Behavior |
 |-------|----------|
-| Authentication | **None by default** — single implicit owner; use trusted LAN or reverse proxy. Optional multi-user auth (`features.multi_user_enabled`) adds **Plex login** (OIDC/local not shipped in 1.0) |
+| Authentication | **None by default** — single implicit owner; use trusted LAN or reverse proxy. Optional multi-user auth (`features.multi_user_enabled`) adds **Sign in with Plex** PIN (OIDC/local not shipped) |
 | Feature gates | `GET /api/features` exposes enabled flags; auth UI, Seerr, and Plex collection tools stay hidden until opted in |
 | Webhooks | Optional `webhook_secret` / `CURATORX_WEBHOOK_SECRET`; validates `X-CuratorX-Webhook-Secret` when set |
 | Destructive actions | Confirmation tokens for all *arr writes; owner role gates apply when multi-user is on |
@@ -307,7 +307,7 @@ See [DOCKER.md](DOCKER.md) for Mac Colima, Unraid, and Compose details.
 | Agent blueprints | Schema present; scheduler wiring **Future** |
 | Interaction telemetry | Schema present; ingestion **Future** |
 | True LLM SSE streaming | **Future** |
-| OIDC / local auth | **Future** (not in 1.0) |
+| OIDC / local auth | **Future** (not shipped) |
 
 ---
 

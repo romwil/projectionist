@@ -14,8 +14,8 @@
 
 ## Sync fails or looks stuck
 
-- After a **container restart**, any in-flight sync is marked failed: *Interrupted by server restart — start sync again*
-- Confirm Plex URL/token and movie/TV section mapping
+- After a **container restart**, an in-flight sync job is marked failed: *Interrupted by server restart — start sync again*. Start sync again; phase checkpoints resume unfinished work when still valid (≤72h)
+- Confirm Plex server URL / server token and movie/TV section mapping
 - Check TMDB key if enrichment fails mid-sync
 - Tail logs with `CURATORX_LOG_LEVEL=DEBUG`
 
@@ -33,13 +33,14 @@
 ## Radarr / Sonarr add fails
 
 - Root folder and quality profile must be set
-- Adds are confirmation-gated — confirm the status-dock prompt
+- Adds are confirmation-gated — confirm in chat cards or the status-dock prompt
 - “Already exists” responses are handled gracefully; check the dock feedback
 
 ## Multi-user / Seerr
 
 - Features are off by default — enable flags explicitly
-- OIDC/local login are not available in 1.0
+- Sign-in is **Sign in with Plex** (PIN). OIDC/local login are not available
 - Sync via `/sync` is blocked for members when multi-user is on — use Config as owner
+- If PIN login never completes, confirm outbound HTTPS to plex.tv from the container
 
 More: [FAQ](FAQ.md) · [Library Sync](Library-Sync.md)

@@ -5,53 +5,32 @@
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
 [![Version](https://img.shields.io/badge/version-1.1.6-green.svg)](CHANGELOG.md)
 
-**An intent-aware curation companion for self-hosted Plex libraries.**
+**A cinema-dark chat curator for your self-hosted Plex library.**
 
-CuratorX turns your homelab from a passive download queue into a context-aware curator. It knows what you own, learns taste within isolated **curation lenses**, and recommends hidden gems, collection gaps, and purge candidates — then adds titles to Radarr/Sonarr only after you confirm.
+CuratorX sits between Plex and your *arr stack: talk about taste, find gaps and purge candidates, rate what you watched, and add titles to Radarr or Sonarr only after you confirm. Bring your own LLM (cloud or local). Built for Unraid and Docker.
 
-> Dumb recommenders average everything you ever watched. CuratorX sandboxes taste by lens so a late-night comfort binge never poisons your director-study discovery lane.
-
----
-
-## Table of contents
-
-- [Why CuratorX](#why-curatorx)
-- [Features](#features)
-- [Quick start](#quick-start)
-- [Docker Hub / Unraid](#docker-hub--unraid)
-- [Configuration](#configuration)
-- [Optional: multi-user & Seerr](#optional-multi-user--seerr)
-- [Documentation & wiki](#documentation--wiki)
-- [Testing](#testing)
-- [Contributing](#contributing)
-- [License](#license)
+> Ordinary recommenders blend everything you’ve ever watched. CuratorX keeps taste contexts separate so a comfort binge doesn’t reshape your discovery lane.
 
 ---
 
-## Why CuratorX
+## Who it’s for
 
-| Typical recommender | CuratorX |
-|---------------------|----------|
-| One global taste profile | **Lens isolation** — separate contexts (General, Director Studies, …) |
-| “Top 10 on Netflix” vibes | **Library-grounded RAG** — answers from what you own and watch |
-| Opaque scores | **Explainable cards** — every title carries a `recommendation_reason` |
-| Auto-grab everything | **Confirmation-gated *arr** — Radarr/Sonarr writes need explicit approval |
-| Vendor-locked AI | **BYOP LLM** — OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint |
+Homelab folks who already run **Plex** (and usually Radarr/Sonarr), want conversational curation over *their* library — not a Netflix top-10 — and prefer one clear UI over another request queue.
+
+---
+
+## Highlights
+
+- **Cinema-dark chat workspace** — Fraunces + DM Sans, amber accent, poster-forward title cards, turnstyle recommendation strips, slash commands
+- **Library-grounded curator** — RAG over your indexed Plex library; explainable “why this?” on every card
+- **Confirm before you grab** — Radarr / Sonarr (and optional Seerr) writes need an explicit confirm in chat or the status dock
+- **Ratings & watchlists** — half-star reviews, optional sync to Plex stars, household watchlist pins
+- **Sync that survives restarts** — durable jobs with live phase / count / %; phase checkpoints resume unfinished work (≤72h); embeddings skip unchanged titles
+- **Household optional** — Overseerr-style **Sign in with Plex** (PIN); shared conversations and roles when you turn multi-user on
+- **BYOP LLM** — OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint
+- **Unraid-ready** — `romwil/curatorx`, single `/config` volume, Community Applications template
 
 CuratorX complements disk tools like [Reclaimspace](https://github.com/romwil/reclaimspace): Reclaimspace quarantines duplicate files; CuratorX helps you decide *what* deserves the space.
-
----
-
-## Features
-
-- **Single chat workspace** — full-width conversation with sidebar threads, welcome panel, and status dock
-- **Chat-first curator** — discovery, gap analysis, purge advice, and “what to watch tonight”
-- **Curation lenses** — hard walls between taste contexts; chat history and telemetry scoped by `lens_id`
-- **Dynamic persona** — name your curator and tune tone sliders
-- **RAG over Plex** — semantic search with embeddings over your indexed library
-- **Durable library sync** — background jobs with live phase / count / `%` progress; state survives container restarts
-- **Safe automation** — short-lived confirmation tokens for all Radarr/Sonarr mutations
-- **Unraid-ready** — single Docker container, SQLite persistence, Community Applications template
 
 ---
 
@@ -60,14 +39,14 @@ CuratorX complements disk tools like [Reclaimspace](https://github.com/romwil/re
 ### Docker Hub (recommended)
 
 ```bash
-docker pull romwil/curatorx:1.0
+docker pull romwil/curatorx:1.1
 docker run -d --name curatorx \
   -p 8788:8788 \
   -v /path/to/curatorx/config:/config \
-  romwil/curatorx:1.0
+  romwil/curatorx:1.1
 ```
 
-Open **http://localhost:8788** and complete the setup wizard.
+Open **http://localhost:8788** and complete the setup wizard (Name → Connections → Libraries).
 
 ### Docker Compose
 
@@ -100,7 +79,7 @@ Published multi-arch images (**amd64 + arm64**):
 | [`romwil/curatorx:1.1`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.1 line |
 | [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Newest stable |
 
-**Unraid:** install from Community Applications using the template (`templates/curatorx.xml` / `unraid/curatorx.xml`), or add the container manually:
+**Unraid:** install from Community Applications using the template (`templates/curatorx.xml` / `unraid/curatorx.xml`; CA icons at `unraid/curatorx-icon.png` / `unraid/curatorx-icon-512.png`), or add the container manually:
 
 | Setting | Value |
 |---------|-------|
@@ -116,7 +95,7 @@ Full steps: [Wiki → Unraid](docs/wiki/Unraid.md) · [Docker guide](docs/DOCKER
 
 Settings live in `{DATA_DIR}/settings.json` (Docker: `/config/settings.json`). Environment variables from `.env` seed first-run values.
 
-Minimum to be useful: **Plex URL + token**, **movie/TV library sections**, **TMDB API key**, and an **LLM provider**. Radarr/Sonarr unlock add/remove after confirmation.
+**Config is for connecting services:** Plex server URL + **server token** (library sync), movie/TV libraries, TMDB, your LLM, and optionally Radarr/Sonarr. That server token is not the household login path.
 
 See [CONFIGURATION.md](docs/CONFIGURATION.md) and [Wiki → Configuration](docs/wiki/Configuration.md).
 
@@ -124,14 +103,14 @@ See [CONFIGURATION.md](docs/CONFIGURATION.md) and [Wiki → Configuration](docs/
 
 ## Optional: multi-user & Seerr
 
-CuratorX ships as a **single-owner** app with no login screen. Household features are opt-in:
+Default install is **single-owner** — no login screen. Household features are opt-in:
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `features.multi_user_enabled` | `false` | Plex sign-in gate; owner vs member roles |
+| `features.multi_user_enabled` | `false` | **Sign in with Plex** (PIN / link, Overseerr-style); owner vs member |
 | `features.seerr_enabled` | `false` | Seerr discovery / request path for members |
 
-OIDC and local username/password auth are **not** implemented in 1.0 — use Plex login when multi-user is on.
+OIDC and local username/password are not shipped — use Plex PIN login when multi-user is on. Token paste on `/login` is an advanced fallback only.
 
 Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs/wiki/Seerr.md)
 
@@ -179,7 +158,7 @@ CA-focused suites and live optional gates: [TESTING.md](docs/TESTING.md).
 3. Install: `pip install -e ".[web]"` and `cd frontend && npm install`
 4. Run the unit suites above, then open a PR with a clear description and test plan
 
-Open [issues](https://github.com/romwil/curatorx/issues) for lens presets, agent blueprints, and connector ideas.
+Open [issues](https://github.com/romwil/curatorx/issues) for ideas and bugs.
 
 ---
 

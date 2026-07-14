@@ -9,7 +9,7 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 | Setting | Env var | Description |
 |---------|---------|-------------|
 | Plex URL | `PLEX_URL` | Plex server base URL |
-| Plex token | `PLEX_TOKEN` | Plex authentication token |
+| Plex server token | `PLEX_TOKEN` | Library access for sync (not household login) |
 | Movie section | `PLEX_MOVIE_SECTION` | Plex movie library section key |
 | TV section | `PLEX_TV_SECTION` | Plex TV library section key |
 | TMDB API key | `TMDB_API_KEY` | Discovery and metadata enrichment |
@@ -123,9 +123,9 @@ When `features.multi_user_enabled` is `true`, CuratorX requires sign-in before u
 
 ---
 
-## Library sync (maintenance dashboard)
+## Library sync (Settings)
 
-After onboarding, open **Config** to reach the maintenance dashboard. The **Library sync** card lets you pull your Plex libraries into CuratorX on demand.
+After onboarding, open **Config** / **Settings**. The **Library sync** card lets you pull your Plex libraries into CuratorX on demand.
 
 | Control | What it does |
 |---------|----------------|
@@ -136,11 +136,11 @@ After onboarding, open **Config** to reach the maintenance dashboard. The **Libr
 
 **When to use it:** after adding new movies or shows in Plex, when title cards look stale, or when `/stats` in chat shows an old last-sync time. Automatic sync also runs on a schedule (`library_sync_interval_hours`, default 24 h). Optionally set `library_sync_hour` (0–23) so daily sync prefers a clock hour in the container’s local timezone (`TZ` env) instead of firing purely on elapsed time after the last run.
 
-**If sync fails:** check Plex URL/token and library section keys in Config, then read container logs (`docker compose logs -f curatorx`). The status line shows the error when the job fails.
+**If sync fails:** check Plex server URL / server token and library section keys in Config, then read container logs (`docker compose logs -f curatorx`). The status line shows the error when the job fails. After a container restart, start sync again — phase checkpoints resume unfinished work when still valid (≤72h).
 
 ### Library health dashboard
 
-The maintenance dashboard includes a **Library health** section with three at-a-glance metrics from `GET /api/library/health`:
+Settings includes a **Library health** section with three at-a-glance metrics from `GET /api/library/health`:
 
 | Metric | Meaning |
 |--------|---------|

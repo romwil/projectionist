@@ -4,7 +4,7 @@ Library sync indexes your Plex movie and TV libraries into CuratorX’s SQLite d
 
 ## How to start a sync
 
-- **Config page** — maintenance dashboard → **Sync library**
+- **Config page** — Settings → **Sync library**
 - **Chat** — `/sync` (single-user mode; owner-only when multi-user is on)
 - **API** — `POST /api/library/sync`
 - **Scheduler** — automatic re-sync using `library_sync_interval_hours` (minimum gap, default 24) and optional `library_sync_hour` (`0–23` preferred local hour; unset = interval-only)
@@ -26,13 +26,13 @@ Notes:
 
 While a sync runs, the **status dock** (bottom-left of the chat workspace) and the Config **Library sync** card show:
 
-- Friendly phase label (Preparing, Scanning movies, …)
+- Friendly phase label (Preparing, Scanning movies, Finishing · Building recommendations…, …)
 - Count hints when available (`120 of ~500`)
 - Weighted overall **percent** (never 100% until complete)
 
 Persona flavor phrases are secondary and never replace live progress.
 
-## Durable jobs (1.0)
+## Durable jobs & phase checkpoints
 
 Job state is written to `/config/jobs_state.json` (under `DATA_DIR`).
 
@@ -41,12 +41,14 @@ Job state is written to `/config/jobs_state.json` (under `DATA_DIR`).
 
   > Interrupted by server restart — start sync again
 
+- Starting sync again resumes from the last completed **phase checkpoint** when still valid (≤72h): movies → TV → enrich → index → episodes → finishing. Finished phases are skipped.
+- Embedding rebuilds skip unchanged titles (content-hash) when finishing.
 - API shape stays the same: `GET /api/jobs` includes `progress.phase`, `percent`, `message`, etc.
 
 ## Tips
 
 - First sync on a large library can take a while (network + TMDB enrichment). Metadata enrichment and TV episode fetches run with a bounded thread pool (`library_enrich_workers`, default 6; SQLite writes stay serial). Unchanged shows (matching Plex `leafCount` / `viewedLeafCount`) skip episode re-fetch on later syncs.
-- Keep `/config` on persistent storage so the index and job history are not lost
+- Keep `/config` on persistent storage so the index, checkpoints, and job history are not lost
 - Use `CURATORX_LOG_LEVEL=DEBUG` to trace sync phases in container logs
 
 See also: [Troubleshooting](Troubleshooting.md) · [../WEB_UI.md](../WEB_UI.md)

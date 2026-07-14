@@ -7,7 +7,7 @@ Settings persist to `{DATA_DIR}/settings.json` (Docker/Unraid: `/config/settings
 | Setting | Env | Notes |
 |---------|-----|-------|
 | Plex URL | `PLEX_URL` | e.g. `http://192.168.1.10:32400` |
-| Plex token | `PLEX_TOKEN` | From plex.tv / account |
+| Plex server token | `PLEX_TOKEN` | Library access for sync — not household login |
 | Movie / TV sections | `PLEX_MOVIE_SECTION`, `PLEX_TV_SECTION` | Set via wizard dropdowns |
 | TMDB API key | `TMDB_API_KEY` | Discovery + enrichment |
 
@@ -40,7 +40,7 @@ Supported LLM presets include OpenAI, Anthropic, Gemini, Groq, Mistral, Together
 }
 ```
 
-- **multi_user** — Plex login gate; owner vs member. See [Multi-User](Multi-User.md).
+- **multi_user** — **Sign in with Plex** (PIN) gate; owner vs member. See [Multi-User](Multi-User.md).
 - **seerr** — household request path. See [Seerr](Seerr.md).
 - **plex_collections** — allow curator-managed Plex collections (owner).
 

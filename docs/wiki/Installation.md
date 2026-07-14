@@ -7,18 +7,18 @@ CuratorX runs as a **single container**. Persist `/config` for `settings.json`, 
 Multi-arch images (**linux/amd64** + **linux/arm64**):
 
 ```bash
-docker pull romwil/curatorx:1.0
+docker pull romwil/curatorx:1.1
 
 docker run -d --name curatorx --restart unless-stopped \
   -p 8788:8788 \
   -v /path/to/curatorx/config:/config \
-  romwil/curatorx:1.0
+  romwil/curatorx:1.1
 ```
 
 | Tag | Meaning |
 |-----|---------|
-| `romwil/curatorx:1.0.13` | Exact release |
-| `romwil/curatorx:1.0` | 1.0 line |
+| `romwil/curatorx:1.1.6` | Exact release |
+| `romwil/curatorx:1.1` | 1.1 line |
 | `romwil/curatorx:latest` | Newest stable |
 
 Open **http://\<host\>:8788**.
@@ -33,7 +33,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Compose builds from the local `Dockerfile` by default. To run the published image instead, set the image to `romwil/curatorx:1.0` in `docker-compose.yml`.
+Compose builds from the local `Dockerfile` by default. To run the published image instead, set the image to `romwil/curatorx:1.1` in `docker-compose.yml`.
 
 ## Local (dev)
 
@@ -47,7 +47,7 @@ DATA_DIR=./config python -m curatorx.web
 
 ## After install
 
-1. Complete the **Settings** wizard (`/config`)
+1. Complete the **Settings** wizard (`/config`) — Name → Connections → Libraries
 2. Run **Sync library**
 3. Chat from the main workspace
 

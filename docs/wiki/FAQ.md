@@ -1,19 +1,19 @@
 # FAQ
 
-Canonical FAQ for CuratorX 1.0. Same content as [`docs/FAQ.md`](../FAQ.md).
+Canonical FAQ for CuratorX 1.1. Same content as [`docs/FAQ.md`](../FAQ.md).
 
 ## What is CuratorX?
 
-A chat-first curation companion for self-hosted **Plex** libraries. It indexes what you own, recommends with explainable reasons, and only writes to Radarr/Sonarr after you confirm.
+A cinema-dark, chat-first curator for self-hosted **Plex** libraries. It indexes what you own, recommends with explainable reasons, supports ratings and watchlists, and only writes to Radarr/Sonarr after you confirm.
 
 ## Is there still a dual UI (Turnstyle / Immersive)?
 
-No. **1.0 is a single workspace**: sidebar conversations + full-width chat + status dock. An optional overlay can expand large title-card result sets.
+No. CuratorX is a **single workspace**: sidebar conversations + full-width chat + status dock, with turnstyle / poster cards inside the chat stream. An optional overlay can expand large title-card result sets.
 
 ## Which Docker image should I use?
 
-- Unraid / everyday: `romwil/curatorx:1.0`
-- Pin exact: `romwil/curatorx:1.0.13`
+- Unraid / everyday: `romwil/curatorx:1.1`
+- Pin exact: `romwil/curatorx:1.1.6`
 - Newest stable: `romwil/curatorx:latest`
 
 Images are multi-arch (amd64 + arm64).
@@ -23,7 +23,7 @@ Images are multi-arch (amd64 + arm64).
 Under `/config` in the container (`DATA_DIR`):
 
 - `settings.json` — connections and feature flags
-- `curatorx.db` — library index, chat, persona, lenses
+- `curatorx.db` — library index, chat, persona, lenses, checkpoints
 - `jobs_state.json` — durable sync job history
 
 ## Do I need an LLM API key?
@@ -32,16 +32,20 @@ For chat curation, yes (or a local Ollama endpoint). Without an LLM, setup and l
 
 ## Is multi-user required?
 
-No. Default is single-owner with no login. Enable `features.multi_user_enabled` only if you want household Plex sign-in.
+No. Default is single-owner with no login. Enable `features.multi_user_enabled` only if you want household **Sign in with Plex** (PIN).
+
+## How do household users sign in?
+
+**Sign in with Plex** (plex.tv PIN / link). Token paste on `/login` is an advanced fallback only. The Plex **server token** in Config is for library sync, not login.
 
 ## Does CuratorX support OIDC or local passwords?
 
-Not in 1.0. Multi-user auth is **Plex login** only.
+Not currently. Multi-user auth is **Plex PIN login** only.
 
 ## Will a sync survive a container restart?
 
-Job **state** is durable. An in-flight sync cannot resume mid-phase; it is marked failed with a clear message so you can start sync again.
+Job **state** is durable; an interrupted job is marked failed so you can start sync again. A new sync resumes from the last valid **phase checkpoint** (≤72h) instead of redoing finished phases.
 
 ## How is this different from Overseerr / Seerr?
 
-CuratorX is a **taste-aware curator** over your library (RAG, lenses, persona, purge advice). Seerr is an optional request front-end you can enable for members — it does not replace CuratorX’s owner chat loop.
+CuratorX is a **taste-aware curator** over your library (RAG, persona, ratings, purge advice). Seerr is an optional request front-end you can enable for members — it does not replace CuratorX’s owner chat loop.

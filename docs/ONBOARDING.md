@@ -57,11 +57,11 @@ On first visit to **Settings** (`/config`), uncertified services with configured
 
 ## Index your library
 
-1. Open **Config** and click **Sync library** on the maintenance dashboard (or type `/sync` in chat when multi-user is off).
+1. Open **Config** / **Settings** and click **Sync library** (or type `/sync` in chat when multi-user is off).
 2. Watch progress in the **status dock** (phase, counts, percent) — or on the Config library sync card.
-3. Confirm stats via `GET /api/library/stats` or the top-bar movie/show counts.
+3. Confirm stats via the top-bar movie/show counts (or `GET /api/library/stats`).
 
-Job state is durable across container restarts; an interrupted sync is marked failed so you can start again cleanly.
+Job state is durable across container restarts. An interrupted job is marked failed; starting sync again resumes from the last valid phase checkpoint (≤72h) instead of redoing finished work.
 
 ---
 
@@ -69,7 +69,7 @@ Job state is durable across container restarts; an interrupted sync is marked fa
 
 CuratorX v3.0 infers conversational context automatically. The command bar shows an ambient label (default **General Exploration**) from `derived_contexts` via `GET /api/context/active`.
 
-Legacy **curation lenses** remain in the maintenance dashboard for backward compatibility but are not part of first-run onboarding.
+Legacy **curation lenses** remain under Settings for backward compatibility but are not part of first-run onboarding.
 
 ---
 

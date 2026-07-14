@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Docs
+- Product vernacular pass for 1.1.6: README hero/highlights, FAQ, wiki, onboarding — Docker tags `:1.1` / `:1.1.6`, Sign in with Plex (PIN) as household auth, Plex server token vs login, sync phase checkpoints / resume, Unraid CA icon paths
+
 ## [1.1.6] — 2026-07-13
 
 Unraid CA application icon plus friendlier Config / first-run copy. Preserves 1.1.5 **Sign in with Plex** (PIN) as the household login path; Config now clearly separates the Plex *server* token (library sync) from user PIN sign-in.

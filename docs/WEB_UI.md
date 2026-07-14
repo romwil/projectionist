@@ -42,7 +42,7 @@ There is **one workspace layout**. Visual language is **cinema dark** (near-blac
 | **Status dock** | Running jobs, add progress, drag-to-queue (sidebar bottom) |
 | **Results overlay** | Optional expand for large title-card sets |
 
-**Sync library** lives on the **Config** page (not the main chat sidebar). After onboarding, the maintenance dashboard shows a **Library sync** section with movie/show counts, last sync time, and live progress while a sync runs.
+**Sync library** lives on the **Config** / **Settings** page (not the main chat sidebar). After onboarding, Settings shows a **Library sync** section with movie/show counts, last sync time, and live progress while a sync runs.
 
 ### Single workspace (default)
 
