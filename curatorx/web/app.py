@@ -178,6 +178,36 @@ configure_logging()
 logger = logging.getLogger(__name__)
 
 
+def _safe_error_detail(error: Exception, context: str = "") -> str:
+    """Return a sanitized, user-safe error message for HTTP responses.
+
+    Security rationale: raw ``str(error)`` can leak internal file paths,
+    stack traces, LLM provider API-key fragments, database connection
+    strings, or other implementation details.  This helper logs the *full*
+    error (with traceback) at ``logger.error`` level for server-side
+    debugging, then returns a generic, context-specific message that never
+    exposes internals to the client.
+    """
+    logger.error(
+        "Request error (%s): %s",
+        context or type(error).__name__,
+        error,
+        exc_info=True,
+    )
+
+    if isinstance(error, LLMProviderError):
+        return "LLM provider error \u2014 check your API key and provider settings"
+
+    if isinstance(error, (ConnectionError, OSError)):
+        service = context or "the service"
+        return f"Unable to reach {service} \u2014 check connection settings"
+
+    if context:
+        return context
+
+    return "An error occurred while processing your request"
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     logger.info("CuratorX startup (version %s, data_dir=%s)", __version__, DATA_DIR)
@@ -225,6 +255,45 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="CuratorX", version=__version__, lifespan=lifespan)
 app.middleware("http")(multi_user_api_auth_middleware)
+
+
+_SECURITY_HEADERS = {
+    "X-Frame-Options": "DENY",
+    "X-Content-Type-Options": "nosniff",
+    "X-XSS-Protection": "0",
+    "Content-Security-Policy": (
+        "default-src 'self'; "
+        "img-src 'self' https://image.tmdb.org https://artworks.thetvdb.com "
+        "https://assets.fanart.tv data:; "
+        "style-src 'self' 'unsafe-inline'; "
+        "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    ),
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
+}
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    """Inject browser-security headers into every response.
+
+    Security rationale:
+      - X-Frame-Options: DENY blocks clickjacking via iframes.
+      - X-Content-Type-Options: nosniff prevents MIME-sniffing attacks.
+      - X-XSS-Protection: 0 disables the legacy XSS auditor (modern best
+        practice — rely on CSP instead).
+      - Content-Security-Policy restricts resource origins.
+      - Referrer-Policy limits URL leakage in cross-origin navigations.
+      - Permissions-Policy restricts sensitive browser APIs; microphone is
+        allowed for voice-mode functionality.
+    """
+    response = await call_next(request)
+    for header, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
+
 
 try:
     from curatorx.mcp.http import mount_mcp_http
@@ -428,7 +497,10 @@ def _resolve_test_payload(payload: TestPayload) -> Dict[str, Any]:
     try:
         return resolve_test_payload(payload.model_dump(), _settings())
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Invalid test configuration"),
+        ) from error
 
 
 def _scoped_user_id(user) -> Optional[str]:
@@ -644,7 +716,10 @@ def patch_auth_me(
     try:
         updated = _db().update_user_profile(user.id, preferred_name=payload.preferred_name)
     except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        raise HTTPException(
+            status_code=404,
+            detail=_safe_error_detail(error, "User not found"),
+        ) from error
     return {"user": updated, "authenticated": True}
 
 
@@ -708,7 +783,10 @@ def patch_user(
         try:
             updated = db.update_user_role(user_id, payload.role)
         except ValueError as error:
-            raise HTTPException(status_code=404, detail=str(error)) from error
+            raise HTTPException(
+                status_code=404,
+                detail=_safe_error_detail(error, "User not found"),
+            ) from error
     if payload.disabled is not None:
         if user_id == user.id and payload.disabled:
             raise HTTPException(status_code=400, detail="Cannot disable your own account")
@@ -718,7 +796,10 @@ def patch_user(
         try:
             updated = db.set_user_disabled(user_id, payload.disabled)
         except ValueError as error:
-            raise HTTPException(status_code=404, detail=str(error)) from error
+            raise HTTPException(
+                status_code=404,
+                detail=_safe_error_detail(error, "User not found"),
+            ) from error
     assert updated is not None
     return {"user": updated}
 
@@ -739,7 +820,10 @@ def delete_user(
     try:
         db.delete_user(user_id)
     except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        raise HTTPException(
+            status_code=404,
+            detail=_safe_error_detail(error, "User not found"),
+        ) from error
     return {"deleted": True, "id": user_id}
 
 
@@ -1244,7 +1328,10 @@ def library_facets_endpoint(
             user,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(exc, "Invalid facet query"),
+        ) from exc
 
 
 @app.get("/api/library/tv/episodes")
@@ -1289,7 +1376,10 @@ def library_tv_progress_endpoint(
             user,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(exc, "Invalid TV progress query"),
+        ) from exc
 
 
 @app.get("/api/lenses", response_model=List[Lens])
@@ -1312,7 +1402,10 @@ def set_active_lens(payload: ActiveLensPayload, user=Depends(require_role("owner
     try:
         _db().set_active_lens_id(payload.lens_id)
     except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        raise HTTPException(
+            status_code=404,
+            detail=_safe_error_detail(error, "Lens not found"),
+        ) from error
     row = _db().get_lens(payload.lens_id)
     assert row is not None
     return _row_to_lens(row)
@@ -1341,7 +1434,10 @@ def update_lens(lens_id: str, payload: LensUpdate, user=Depends(require_role("ow
             description=payload.description,
         )
     except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        raise HTTPException(
+            status_code=404,
+            detail=_safe_error_detail(error, "Lens not found"),
+        ) from error
     return _row_to_lens(row)
 
 
@@ -1482,7 +1578,8 @@ def put_persona(payload: PersonaMetricsUpdate, user=Depends(require_role("owner"
 
 
 @app.get("/api/system-config")
-def get_system_config() -> Dict[str, str]:
+def get_system_config(user=Depends(require_role("owner"))) -> Dict[str, str]:
+    del user
     return _db().get_all_config()
 
 
@@ -1506,12 +1603,16 @@ def put_system_config(
             try:
                 db.set_active_lens_id(str(value))
             except ValueError as error:
-                raise HTTPException(status_code=404, detail=str(error)) from error
+                raise HTTPException(
+                    status_code=404,
+                    detail=_safe_error_detail(error, "Lens not found"),
+                ) from error
     return db.get_all_config()
 
 
 @app.post("/api/chat")
-async def chat(payload: ChatRequest, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    enforce_rate_limit(request, bucket="chat", limit=30, window_seconds=60)
     session_id = payload.session_id or uuid.uuid4().hex
     lens_id = _resolve_lens_id(payload.lens_id)
     db = _db()
@@ -1535,11 +1636,15 @@ async def chat(payload: ChatRequest, user=Depends(get_current_user_dep)) -> Dict
             user_role=user.role,
         ).run(session_id, payload.message)
     except LLMProviderError as error:
-        logger.warning("Chat LLM error for session %s: %s", session_id, error)
-        raise HTTPException(status_code=502, detail=str(error)) from error
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Chat request failed"),
+        ) from error
     except Exception as error:  # noqa: BLE001
-        logger.exception("Chat request failed for session %s", session_id)
-        raise HTTPException(status_code=500, detail=str(error)) from error
+        raise HTTPException(
+            status_code=500,
+            detail=_safe_error_detail(error, "Chat request failed"),
+        ) from error
 
 
 @app.get("/api/chat/threads")
@@ -1590,7 +1695,10 @@ def update_chat_thread(
     try:
         return _db().update_thread_title(session_id, payload.thread_title)
     except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        raise HTTPException(
+            status_code=404,
+            detail=_safe_error_detail(error, "Thread not found"),
+        ) from error
 
 
 @app.delete("/api/chat/threads/{session_id}")
@@ -1676,11 +1784,13 @@ def list_thread_feedback(
 
 @app.get("/api/chat/stream")
 async def chat_stream(
+    request: Request,
     message: str,
     session_id: Optional[str] = None,
     lens_id: Optional[str] = None,
     user=Depends(get_current_user_dep),
 ) -> EventSourceResponse:
+    enforce_rate_limit(request, bucket="chat", limit=30, window_seconds=60)
     sid = session_id or uuid.uuid4().hex
     resolved_lens = _resolve_lens_id(lens_id)
     scoped = _scoped_user_id(user)
@@ -1700,7 +1810,8 @@ async def chat_stream(
                 data = json.loads(chunk)
                 yield {"event": data.get("type", "message"), "data": chunk.strip()}
         except Exception as error:  # noqa: BLE001
-            yield {"event": "error", "data": json.dumps({"error": str(error)})}
+            safe_msg = _safe_error_detail(error, "Chat stream failed")
+            yield {"event": "error", "data": json.dumps({"error": safe_msg})}
 
     return EventSourceResponse(event_generator())
 
@@ -1865,7 +1976,10 @@ def list_seerr_requests(
     try:
         return client.list_requests(take=take, skip=skip, filter=filter, requested_by=requested_by)
     except Exception as error:  # noqa: BLE001
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Unable to reach Seerr \u2014 check connection settings"),
+        ) from error
 
 
 @app.post("/api/actions/confirm")
@@ -1885,10 +1999,10 @@ async def confirm_action(
         logger.info("Action confirmed token=%s action=%s", payload.token[:8], result.get("action"))
         return {"ok": True, **result}
     except Exception as error:  # noqa: BLE001
-        logger.exception("Action confirm failed token=%s", payload.token[:8])
-        from curatorx.connectors.arr_errors import format_arr_http_error
-
-        raise HTTPException(status_code=400, detail=format_arr_http_error(error)) from error
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Action confirmation failed"),
+        ) from error
 
 
 @app.get("/api/persona/typing-phrases")
@@ -1956,7 +2070,10 @@ def put_watchlist_sync(
             push_on_pin=payload.push_on_pin,
         )
     except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        raise HTTPException(
+            status_code=404,
+            detail=_safe_error_detail(error, "Watchlist sync settings not found"),
+        ) from error
     return get_watchlist_sync_status(_db(), _settings(), user_id=user.id)
 
 
@@ -1999,7 +2116,10 @@ def add_watchlist_pin(
             title=payload.title.strip(),
         )
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Invalid watchlist pin"),
+        ) from error
     try:
         push_result = push_pin_to_plex(_db(), settings, pin, user_id=user.id)
         if push_result.get("plex_rating_key") and pin.get("id"):
@@ -2057,7 +2177,10 @@ def create_curated_list(
             description=payload.description or "",
         )
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Invalid list data"),
+        ) from error
     return CuratedList(**created)
 
 
@@ -2090,7 +2213,10 @@ def update_curated_list(
             description=payload.description,
         )
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Invalid list update"),
+        ) from error
     if updated is None:
         raise HTTPException(status_code=404, detail="List not found")
     return CuratedList(**updated)
@@ -2129,9 +2255,13 @@ def add_curated_list_item(
             library_item_id=payload.library_item_id,
         )
     except ValueError as error:
-        detail = str(error)
-        status = 404 if detail == "List not found" else 400
-        raise HTTPException(status_code=status, detail=detail) from error
+        is_not_found = "not found" in str(error).lower()
+        status = 404 if is_not_found else 400
+        context = "List not found" if is_not_found else "Invalid list item"
+        raise HTTPException(
+            status_code=status,
+            detail=_safe_error_detail(error, context),
+        ) from error
     return CuratedListItem(**item)
 
 
@@ -2203,7 +2333,10 @@ def create_review(
             user_id=_scoped_user_id(user),
         )
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Invalid review data"),
+        ) from error
     settings = _settings()
     saved = sync_review_rating_to_plex(
         _db(),
@@ -2355,5 +2488,8 @@ def dismiss_review_prompt(prompt_id: str) -> RatingPrompt:
     try:
         saved = dismiss_prompt(_db(), prompt_id)
     except ValueError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        raise HTTPException(
+            status_code=404,
+            detail=_safe_error_detail(error, "Prompt not found"),
+        ) from error
     return RatingPrompt(**saved)

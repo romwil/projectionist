@@ -255,7 +255,7 @@ class Database:
             self._migrate_chat_lens_columns(conn)
             self._migrate_chat_thread_columns(conn)
             self._migrate_service_integrations_certified(conn)
-            self._migrate_phase3_tables(conn)
+            self._migrate_context_tables(conn)
             self._migrate_persona_columns(conn)
             self._migrate_library_intelligence(conn)
             self._migrate_library_indexes(conn)
@@ -595,7 +595,7 @@ class Database:
             """
         )
 
-    def _migrate_phase3_tables(self, conn: sqlite3.Connection) -> None:
+    def _migrate_context_tables(self, conn: sqlite3.Connection) -> None:
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS derived_contexts (
@@ -2078,7 +2078,7 @@ class Database:
             raise ValueError(f"Unknown lens_id: {lens_id}")
         self.set_config(ACTIVE_LENS_CONFIG_KEY, lens_id)
 
-    # --- Derived contexts (Phase 3) ---
+    # --- Derived contexts ---
 
     def get_derived_context(self, context_hash: str) -> Optional[sqlite3.Row]:
         with self.connect() as conn:

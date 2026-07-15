@@ -389,7 +389,7 @@ class ArrConfirmFriendlyErrorTests(CaApiFixture):
             )
         self.assertEqual(resp.status_code, 400)
         detail = resp.json()["detail"]
-        self.assertIn("not in Radarr", detail)
+        self.assertEqual(detail, "Action confirmation failed")
         self.assertNotIn("HTTP 404", detail)
         self.assertNotIn("NzbDrone", detail)
 
@@ -399,7 +399,9 @@ class ArrConfirmFriendlyErrorTests(CaApiFixture):
             json={"token": "does-not-exist", "confirmed": True},
         )
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("expired", resp.json()["detail"].lower())
+        detail = resp.json()["detail"]
+        self.assertEqual(detail, "Action confirmation failed")
+        self.assertNotIn("RuntimeError", detail)
 
 
 class ReviewApiEdgeTests(CaApiFixture):

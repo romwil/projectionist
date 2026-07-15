@@ -4,7 +4,7 @@ Common questions for CuratorX **1.3**. Also mirrored under [wiki/FAQ.md](wiki/FA
 
 ## What is CuratorX?
 
-A cinema-dark, chat-first curator for self-hosted **Plex** libraries. It indexes what you own, recommends with explainable reasons, supports ratings and watchlists, and only writes to Radarr/Sonarr after you confirm.
+A cinema-dark, chat-first curator for self-hosted **Plex** libraries — and a real-world example of a **privacy-first MCP interface** over local structured data. It indexes what you own into a fast local SQLite store, lets a BYO LLM query that index via Model Context Protocol tool calls, recommends with explainable reasons, supports ratings and watchlists, and only writes to Radarr/Sonarr after you confirm. Your Plex token and collection details never leave your hardware. See [MCP.md](MCP.md) for the protocol surface.
 
 ## Which Docker image should I use?
 

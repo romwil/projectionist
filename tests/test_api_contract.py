@@ -107,7 +107,8 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(resp.status_code, 500)
             body = resp.json()
             self.assertIn("detail", body)
-            self.assertIn("LLM provider unavailable", body["detail"])
+            self.assertNotIn("LLM provider unavailable", body["detail"])
+            self.assertEqual(body["detail"], "Chat request failed")
 
     def test_wizard_status_shape(self) -> None:
         resp = self.client.get("/api/setup/wizard")
@@ -728,8 +729,7 @@ class ApiContractTests(unittest.TestCase):
             )
         self.assertEqual(confirm.status_code, 400)
         detail = confirm.json()["detail"]
-        self.assertIn("Rust", detail)
-        self.assertIn("not in Radarr", detail)
+        self.assertEqual(detail, "Action confirmation failed")
         self.assertNotIn("NzbDrone", detail)
         self.assertNotIn("HTTP 404", detail)
 

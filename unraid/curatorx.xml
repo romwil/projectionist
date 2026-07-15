@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.3 (stable minor tag). -->
+<!-- Unraid Community Applications template — CuratorX 1.4 (stable minor tag). -->
 <Container version="2">
   <Name>curatorx</Name>
-  <Repository>romwil/curatorx:1.3</Repository>
+  <Repository>romwil/curatorx:1.4</Repository>
   <Registry>https://hub.docker.com/r/romwil/curatorx</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -21,8 +21,16 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.4.0
+- Security headers (CSP, X-Frame-Options, XSSTO) on all responses
+- Error response sanitization — no internal details leak to clients
+- Rate limiting on chat endpoints (30 req/min)
+- System config endpoint gated behind owner auth
+- Roadmap: purged ML clustering; added semantic plot embeddings
+- MCP design philosophy documentation
+
 ### 1.3.0 — Initial CA template
-- Image line: `romwil/curatorx:1.3` (pin `:1.3.0` if you need an exact build)
+- Image line: `romwil/curatorx:1.4` (pin `:1.4.0` if you need an exact build)
 - Config volume `/config` for settings.json + SQLite
 - Dual MCP keys: privacy (`CURATORX_MCP_API_KEY`) and full (`CURATORX_MCP_FULL_API_KEY`); or generate in Admin → Advanced
 - Optional seed envs for Plex / *arr / TMDB / LLM; session + webhook secrets for multi-user and Plex webhooks

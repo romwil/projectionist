@@ -15,6 +15,16 @@ CuratorX sits between Plex and your *arr stack: talk about taste, find gaps and 
 
 ---
 
+## Design philosophy
+
+CuratorX is a **real-world, production-quality example of an MCP interface** against structured and unstructured local data. Every design choice reinforces a privacy-first thesis: your Plex library metadata stays on your hardware, the LLM receives only what it needs per turn, and tool calls operate over a highly optimized local SQLite index.
+
+> “The LLM gets to act like a natural language surgeon on a highly optimized, predictable local dataset. It’s incredibly fast, it’s cheap, and it keeps your Plex token and personal collection server info locked down.”
+
+The architecture demonstrates how MCP can bridge a conversational AI to a rich personal dataset without shipping that data to third parties. Dual API keys (privacy / full) let you share read-only library access externally while keeping *arr mutations and internal fields behind a separate trust boundary. See [MCP.md](docs/MCP.md) for the full protocol surface.
+
+---
+
 ## Who it’s for
 
 Homelab folks who already run **Plex** (and usually Radarr/Sonarr), want conversational curation over *their* library — not a Netflix top-10 — and prefer one clear UI over another request queue.

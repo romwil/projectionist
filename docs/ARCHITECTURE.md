@@ -20,6 +20,14 @@ It is a **separate product** from [Reclaimspace](https://github.com/romwil/recla
 
 Non-goals: cloud SaaS, automatic file deletion without confirmation, generic streaming-service recommendations, OIDC/local password auth. Multi-user auth (**Sign in with Plex** PIN), Seerr, and Plex collections are **optional** (off by default); see [CONFIGURATION.md](CONFIGURATION.md#feature-flags-optional-off-by-default).
 
+### Design thesis — MCP over local data
+
+CuratorX is a production-quality example of a **Model Context Protocol interface** against structured and unstructured local data. The LLM never sees raw credentials or bulk exports; it issues targeted tool calls against a pre-indexed SQLite store that returns exactly the slice needed for each conversational turn.
+
+> "The LLM gets to act like a natural language surgeon on a highly optimized, predictable local dataset. It's incredibly fast, it's cheap, and it keeps your Plex token and personal collection server info locked down."
+
+This pattern — privacy-first MCP bridging a conversational AI to a rich personal dataset — generalizes beyond media curation. CuratorX demonstrates the approach end-to-end: dual trust-plane keys, confirm-gated mutations, and field-level redaction per mode. See [MCP.md](MCP.md) for the protocol surface.
+
 ---
 
 ## Cognitive architecture
@@ -313,6 +321,8 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 | Interaction telemetry | Schema present; ingestion **Future** |
 | True LLM SSE streaming | **Future** |
 | OIDC / local auth | **Future** (not shipped) |
+| Plex Lists publish | **Future** (pending stable Plex Discover API) |
+| Semantic plot embeddings | **Future** — embed plot overviews into vectors for semantic search beyond metadata facets; enables natural language discovery like "films about isolation in confined spaces" |
 
 ---
 

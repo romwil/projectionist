@@ -67,7 +67,7 @@ Job state is durable across container restarts. An interrupted job is marked fai
 
 ## Ambient context (replaces manual lens switching)
 
-CuratorX v3.0 infers conversational context automatically. The command bar shows an ambient label (default **General Exploration**) from `derived_contexts` via `GET /api/context/active`.
+CuratorX v3.0 resolves conversational context automatically using rule-based signals (no ML pipeline required). The command bar shows an ambient label (default **General Exploration**) from `derived_contexts` via `GET /api/context/active`. The `derived_contexts` table stores lightweight context shells keyed by hash — this is a simple lookup, not an ML-derived clustering.
 
 Legacy **curation lenses** remain under Settings for backward compatibility but are not part of first-run onboarding.
 

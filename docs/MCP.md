@@ -2,6 +2,20 @@
 
 CuratorX exposes a Model Context Protocol server over your indexed Plex library, with **two trust planes** selected by which API key you present.
 
+## Why MCP for media curation?
+
+A personal Plex library is a uniquely well-structured local dataset: thousands of titles with rich metadata (genres, ratings, cast, watch state, file sizes) already indexed in SQLite. MCP lets an LLM reach into that index with surgical precision — one tool call per conversational turn — without ever bulk-exporting your collection or exposing your Plex token to a remote service.
+
+> "The LLM gets to act like a natural language surgeon on a highly optimized, predictable local dataset. It's incredibly fast, it's cheap, and it keeps your Plex token and personal collection server info locked down."
+
+CuratorX demonstrates this pattern as a **production-quality, privacy-first MCP interface** over local structured + unstructured data:
+
+- **Fast** — tool calls hit a pre-built SQLite index and NumPy vectors; sub-second responses even on modest homelab hardware.
+- **Cheap** — the LLM receives only the minimal context slice for each turn, keeping token costs low.
+- **Private** — credentials, watch history, and internal fields stay on your hardware. Dual keys let you share a read-only library view externally while keeping *arr mutations and internal fields behind a separate trust boundary.
+
+---
+
 ## Install
 
 ```bash

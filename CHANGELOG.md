@@ -1,10 +1,27 @@
 # Changelog
 
-## [Unreleased]
+## [1.4.0] — 2026-07-15
+
+Documentation alignment, security hardening, and roadmap cleanup.
+
+### Security
+- Error response sanitization: all ~20 `HTTPException(detail=str(error))` patterns replaced with `_safe_error_detail()` helper — no internal paths, stack traces, or API keys leak to clients
+- Security headers middleware: `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` on all responses
+- `GET /api/system-config` gated behind `require_role("owner")` (was readable by guests)
+- Rate limiting on `POST /api/chat` and `GET /api/chat/stream` (30 req/min per IP)
 
 ### Changed
+- Roadmap: purged unsupervised clustering ML pipeline, fluid persona slider automation, and visual clustering canvas from Phase 3
+- Roadmap: added semantic embeddings over cached plot summaries as deferred item
+- Renamed `_migrate_phase3_tables` → `_migrate_context_tables` in database layer (no schema change)
+- Product positioning: CuratorX framed as a real-world MCP interface example across README, ABOUT, ARCHITECTURE, MCP.md, FAQ, and wiki
+- PRD marked as historical design archive; ARCHITECTURE.md is the canonical roadmap source
 - Unraid CA packaging: root `ca_profile.xml` (Community Applications repository profile); removed misnamed container template at `unraid/ca_profile.xml`
 - Unraid templates baseline for first CA submission of 1.3.0 (`Changes`, `Requires`, Ollama `ExtraParams`, Fanart/Tautulli/LLM seed envs)
+
+### Added
+- 37 new security tests: error sanitization (13), security headers (9), system-config auth (4), rate limiting (11)
+- Design philosophy sections in README.md, docs/ABOUT.md, docs/MCP.md with MCP thesis quote
 
 ## [1.3.0] — 2026-07-14
 

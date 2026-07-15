@@ -78,8 +78,8 @@ Ambient context inference complements lenses for everyday chat; legacy lens CRUD
 
 Watch completions and chat signals under lens A do not update taste weights for lens B unless:
 
-- The user explicitly bridges contexts (**Future**), or
-- A cluster has `explicit_lock = 0` and shared global preference facts apply (global `preference_facts` remain cross-lens today).
+- The user explicitly shares a preference across lenses (**Future**), or
+- A lens has `explicit_lock = 0` and shared global preference facts apply (global `preference_facts` remain cross-lens today).
 
 ### API contract
 

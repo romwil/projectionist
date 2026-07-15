@@ -147,6 +147,55 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(path.read_text(encoding="utf-8").strip(), secret)
         self.assertNotEqual(secret, DEV_SESSION_SECRET)
 
+    def test_system_config_requires_auth_when_multi_user(self) -> None:
+        self._enable_multi_user_via_api()
+        self.client.cookies.clear()
+        resp = self.client.get("/api/system-config")
+        self.assertEqual(resp.status_code, 401)
+
+    def test_system_config_accessible_to_owner(self) -> None:
+        self._enable_multi_user_via_api()
+        self._login_as(1, "Owner")
+        resp = self.client.get("/api/system-config")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsInstance(resp.json(), dict)
+
+    def test_system_config_blocked_for_member(self) -> None:
+        self._enable_multi_user_via_api()
+        self._login_as(1, "Owner")
+        self.client.post("/api/auth/logout")
+        self._login_as(2, "Member")
+        resp = self.client.get("/api/system-config")
+        self.assertEqual(resp.status_code, 403)
+
+    def test_system_config_blocked_for_guest(self) -> None:
+        self._enable_multi_user_via_api()
+        self._login_as(1, "Owner")
+        from curatorx.web.jobs import get_job_manager
+
+        get_job_manager().db.update_user_role(
+            self._get_user_id(3, "Guest"), "guest"
+        )
+        self.client.post("/api/auth/logout")
+        self._login_as(3, "Guest")
+        resp = self.client.get("/api/system-config")
+        self.assertEqual(resp.status_code, 403)
+
+    def _get_user_id(self, plex_id: int, title: str) -> str:
+        with patch(
+            "curatorx.web.auth.fetch_plex_account",
+            return_value={
+                "id": plex_id,
+                "title": title,
+                "email": f"{title}@example.com",
+            },
+        ):
+            resp = self.client.post(
+                "/api/auth/plex",
+                json={"auth_token": f"token-{plex_id}"},
+            )
+        return resp.json()["user"]["id"]
+
     def test_secure_cookie_with_forwarded_proto(self) -> None:
         self._enable_multi_user_via_api()
         with patch(
