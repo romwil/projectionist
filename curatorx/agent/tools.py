@@ -1050,17 +1050,35 @@ def _tmdb_result_year(item: Mapping[str, Any]) -> Optional[int]:
         return None
 
 
-def _rank_tmdb_search_results(results: List[Mapping[str, Any]], *, year: Optional[int]) -> List[Mapping[str, Any]]:
+def _rank_tmdb_search_results(
+    results: List[Mapping[str, Any]],
+    *,
+    year: Optional[int],
+    title: Optional[str] = None,
+) -> List[Mapping[str, Any]]:
     """Order/filter TMDB search hits.
 
     When ``year`` is set, keep only that release year so one recommendation
     (e.g. Mandy 2018) does not expand into every same-name hit.
+
+    When both ``title`` and ``year`` are set, exact title matches are preferred
+    so that "Munich (2005)" pins Spielberg's film and not every same-year title
+    containing "Munich" (e.g. "Munich Mambo").
     """
     ordered = list(results)
     if year is None:
         return ordered
-    exact = [item for item in ordered if _tmdb_result_year(item) == year]
-    return exact
+    year_matched = [item for item in ordered if _tmdb_result_year(item) == year]
+    if title and year_matched:
+        normalised = title.strip().casefold()
+        exact = [
+            item
+            for item in year_matched
+            if str(item.get("title") or item.get("name") or "").strip().casefold() == normalised
+        ]
+        if exact:
+            return exact
+    return year_matched
 
 
 def _tmdb_search_item_to_tool_item(item: Mapping[str, Any], media_type: str) -> Dict[str, Any]:
@@ -1779,7 +1797,7 @@ class ToolRegistry:
             if not isinstance(raw_results, list):
                 raw_results = []
             total_matched = int(page.get("total_results") or len(raw_results))
-            results = _rank_tmdb_search_results(raw_results, year=year_int)
+            results = _rank_tmdb_search_results(raw_results, year=year_int, title=title)
             if year_int is not None:
                 # Year pin: honest count is filtered matches, not unscoped TMDB total.
                 total_matched = len(results)

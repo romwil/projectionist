@@ -375,7 +375,7 @@ async def stream_agent(
     messages.append({"role": "user", "content": user_message})
 
     tool_defs = build_tool_definitions(settings) if (settings.llm_api_key or settings.llm_provider == "ollama") else None
-    accumulated_text = ""
+    final_text = ""
 
     for _ in range(MAX_TOOL_ROUNDS):
         round_text = ""
@@ -427,7 +427,7 @@ async def stream_agent(
                     "arguments": fn.get("arguments", "{}"),
                 }
 
-        accumulated_text += round_text
+        final_text = round_text
 
         if current_tool_calls:
             tool_calls_list = []
@@ -458,8 +458,8 @@ async def stream_agent(
 
     # --- Assemble final message ---
     blocks: List[Dict[str, Any]] = []
-    if accumulated_text:
-        blocks.append({"type": "text", "content": accumulated_text})
+    if final_text:
+        blocks.append({"type": "text", "content": final_text})
     elif registry.cards:
         blocks.append({"type": "text", "content": "Here are the results I found."})
     else:

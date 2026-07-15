@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.6] — 2026-07-15
+
+### Fixed
+- Turnstyle viewport now shows the correct title when TMDB returns multiple same-year results — exact title match is preferred over fuzzy hits (e.g., "Munich" no longer shows "Munich Mambo")
+- SSE streaming no longer concatenates intermediate LLM reasoning into the final message — only the last round's text is persisted; intermediate "thinking" text streams as live tokens but doesn't appear in chat history
+
 ## [1.7.5] — 2026-07-15
 
 ### Fixed
