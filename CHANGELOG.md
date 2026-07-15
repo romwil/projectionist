@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.7.9] — 2026-07-15
+
+### Added
+- Shared test infrastructure (`tests/conftest.py`) with reusable fixtures: `fresh_db`, `seed_library`, `make_tool_registry`, `execute_tool`, and 9 dataset constants
+- 43 P0 value-based validation tests for highest-risk tools: `search_library`, `query_library`, `recommend_hidden_gems`, `suggest_purge_candidates`, `what_to_watch_tonight`
+- 68 P1/P2 value-based validation tests covering `explore_genre`, `summarize_tv_progress`, `query_tv_episodes`, `curate_watchlist`, `critique_watchlist`, `upcoming_premieres`, `suggest_titles_to_rate`, `get_user_reviews`, `query_watchlist`, `get_todays_anniversaries`, and more
+- 82 database query validation tests for `telemetry_summary`, `export_training_corpus`, `get_chat_thread`, `preference_facts`, `semantic_search`, and other complex SQL methods
+- Coverage infrastructure with `pytest-cov` integration and CI reporting
+- `TESTING.md` documentation on the value-based testing pattern
+
+### Changed
+- Migrated duplicated `_seed_library` and `_make_db` helpers to shared `conftest.py` fixtures
+- Test coverage from 1.4% to 76%+
+
 ## [1.7.8] — 2026-07-15
 
 ### Fixed

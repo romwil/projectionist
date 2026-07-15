@@ -21,7 +21,7 @@ jobs:
           node-version: "20"
 
       - name: Install Python package
-        run: pip install ".[web]"
+        run: pip install ".[web,dev]"
 
       - name: Install and build frontend
         run: |
@@ -37,9 +37,9 @@ jobs:
           npm install
           npx playwright install --with-deps chromium
 
-      - name: Run tests
+      - name: Run tests with coverage
         run: |
-          python -m unittest discover -s tests -v
+          python -m pytest tests/ -v --cov=curatorx --cov-report=term-missing --cov-fail-under=10
           npm run test:e2e
         env:
           CI: true

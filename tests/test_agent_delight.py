@@ -11,10 +11,7 @@ from curatorx.agent.tools import ToolRegistry, build_system_prompt
 from curatorx.config_store import Settings
 from curatorx.library.db import DEFAULT_LENS_ID, Database
 
-
-def _seed_library(db: Database, items: list[dict]) -> None:
-    for item in items:
-        db.upsert_library_item(item)
+from conftest import seed_library as _seed_library
 
 
 class TestGetTodaysAnniversaries(unittest.IsolatedAsyncioTestCase):

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.7.8 -->
+<!-- Unraid Community Applications template — CuratorX 1.7.9 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,9 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.7.9
+- Value-based test deep dive: 193 new logic-level tests, shared conftest.py infrastructure, coverage from 1.4% to 76%+
+
 ### 1.7.8
 - Fix scroll chip, turnstyle buttons, agent tool data consistency; 33 new validation tests
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curatorx"
-version = "1.7.8"
+version = "1.7.9"
 description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -39,6 +39,7 @@ mcp = [
 
 dev = [
     "coverage>=7.0",
+    "pytest-cov>=7.0",
 ]
 
 [project.urls]
@@ -49,6 +50,9 @@ Issues = "https://github.com/romwil/curatorx/issues"
 [project.scripts]
 curatorx-web = "curatorx.web.__main__:main"
 curatorx-mcp = "curatorx.mcp.server:main"
+
+[tool.pytest.ini_options]
+addopts = "--cov=curatorx --cov-report=term-missing --cov-fail-under=10"
 
 [tool.setuptools.packages.find]
 where = ["."]
