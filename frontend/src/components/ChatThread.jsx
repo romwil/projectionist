@@ -2,6 +2,7 @@ import { collectAddableFromMessage } from "../lib/addActions";
 import ReviewPromptCard from "./ReviewPromptCard";
 import ReviewConflictBanner from "./ReviewConflictBanner";
 import ConfirmAllButton from "./ConfirmAllButton";
+import DoubleFeatureCard from "./DoubleFeatureCard";
 import MessageReactions from "./MessageReactions";
 import TitleCard from "./TitleCard";
 import InlineAlert from "./InlineAlert";
@@ -82,6 +83,19 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
   }
   if (block.type === "error") {
     return <MessageText content={block.content} className="message-text message-error-text" />;
+  }
+  if (block.type === "double_feature" && block.payload) {
+    return (
+      <DoubleFeatureCard
+        titleA={block.payload.title_a}
+        titleB={block.payload.title_b}
+        bridgeText={block.payload.bridge_text}
+        combinedRuntime={block.payload.combined_runtime}
+        onAdd={handlers.onAdd}
+        onDismiss={handlers.onDismiss}
+        requestPath={handlers.requestPath}
+      />
+    );
   }
   if (block.type === "title_cards") {
     const items = (block.items || []).filter(isDisplayableCard).map((item) => enrichTitleCard(item, handlers.reviewLookup));

@@ -6,6 +6,7 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime as _dt
 from typing import Any, Callable, Dict, List, Mapping, Optional
 
 from curatorx.config_store import (
@@ -911,6 +912,94 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     },
                 },
                 "required": ["media_type", "rating_keys"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_todays_anniversaries",
+            "description": (
+                "Surface film/show anniversaries from the library — titles whose release date "
+                "month+day matches today. Returns items with anniversary context."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {"limit": {"type": "integer", "description": "Max results (default 5)"}},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_library_snapshot",
+            "description": (
+                "Return a high-level summary of the library: total titles, movies vs shows, "
+                "top genres, decade range, and estimated hidden gems (high rating, 0 views)."
+            ),
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_tonight_picks",
+            "description": (
+                "Suggest unwatched titles for tonight, optionally filtered by max runtime. "
+                "Prioritizes high taste-match titles under the runtime limit. "
+                "Use when it's late and the user wants something short."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "max_runtime_minutes": {
+                        "type": "integer",
+                        "description": "Only return titles shorter than this runtime (minutes)",
+                    },
+                    "limit": {"type": "integer", "description": "Max results (default 5)"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "suggest_double_feature",
+            "description": (
+                "Pick two complementary titles from the library for a double feature pairing. "
+                "Returns a DoubleFeature structure with bridge text explaining the connection."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "theme": {
+                        "type": "string",
+                        "description": "Optional thematic hint for the pairing (e.g. 'noir', 'coming-of-age')",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "quick_pick_roulette",
+            "description": (
+                "Pick ONE random unwatched title matching taste profile. "
+                "Optionally constrained by runtime and genre. Returns a single title with a 'Why this?' reason."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "max_runtime_minutes": {
+                        "type": "integer",
+                        "description": "Only pick titles shorter than this runtime",
+                    },
+                    "genres": {
+                        "type": "string",
+                        "description": "Comma-separated genre filter",
+                    },
+                },
             },
         },
     },
@@ -2400,6 +2489,275 @@ class ToolRegistry:
         )
         return json.dumps({"dialogue": dialogue})
 
+    # ------------------------------------------------------------------
+    # Delight feature tools (items 21-25)
+    # ------------------------------------------------------------------
+
+    async def _tool_get_todays_anniversaries(self, args: Mapping[str, Any]) -> str:
+        """Surface library titles with milestone release anniversaries (5, 10, 15, 20, 25+ years)."""
+        from datetime import date
+
+        limit = int(args.get("limit") or 5)
+        today = date.today()
+        current_year = today.year
+
+        milestone_years = [
+            current_year - n
+            for n in (5, 10, 15, 20, 25, 30, 40, 50, 75)
+        ]
+
+        placeholders = ",".join("?" * len(milestone_years))
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT id, rating_key, media_type, title, year, genres, poster_url,
+                       backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
+                       runtime_minutes, summary, in_radarr, in_sonarr
+                FROM library_items
+                WHERE year IN ({placeholders})
+                ORDER BY year ASC
+                LIMIT ?
+                """,
+                (*milestone_years, limit),
+            ).fetchall()
+
+        if not rows:
+            return json.dumps({"items": [], "note": "No library anniversaries today."})
+
+        items = []
+        for row in rows:
+            years_ago = current_year - (row["year"] or current_year)
+            context = f"Released {years_ago} year{'s' if years_ago != 1 else ''} ago"
+            last_viewed = row["last_viewed_at"]
+            if last_viewed:
+                months_ago = max(1, int((time.time() - last_viewed) / (30 * 86400)))
+                context += f" \u00b7 Last watched {months_ago} month{'s' if months_ago != 1 else ''} ago"
+            card = row_to_title_card(
+                dict(row),
+                reason=context,
+            )
+            self._cards.append(card)
+            items.append({**_card_to_tool_item(card), "anniversary_context": context})
+
+        return json.dumps({"items": items, "count": len(items)})
+
+    async def _tool_get_library_snapshot(self, args: Mapping[str, Any]) -> str:
+        """Return a high-level library summary for the 'at a glance' card."""
+        del args
+        overview = library_overview(self.db)
+        total = overview.get("total", 0)
+        movies = overview.get("movies", 0)
+        shows = overview.get("shows", 0)
+
+        with self.db.connect() as conn:
+            genre_rows = conn.execute(
+                "SELECT genres FROM library_items WHERE genres != '[]'"
+            ).fetchall()
+            decade_rows = conn.execute(
+                "SELECT MIN(year) as min_year, MAX(year) as max_year FROM library_items WHERE year IS NOT NULL"
+            ).fetchone()
+            hidden_gem_count = conn.execute(
+                """
+                SELECT COUNT(*) as cnt FROM library_items
+                WHERE view_count = 0
+                  AND CAST(json_extract('{"r":' || COALESCE(
+                      (SELECT vote_average FROM library_items li2 WHERE li2.id = library_items.id), '0'
+                  ) || '}', '$.r') AS REAL) >= 7.0
+                """
+            ).fetchone()
+
+        genre_counts: Dict[str, int] = {}
+        for row in genre_rows:
+            try:
+                genres_list = json.loads(row["genres"]) if isinstance(row["genres"], str) else row["genres"]
+            except (json.JSONDecodeError, TypeError):
+                continue
+            for genre in genres_list:
+                genre_counts[genre] = genre_counts.get(genre, 0) + 1
+
+        top_genres = sorted(genre_counts.items(), key=lambda x: x[1], reverse=True)[:3]
+        min_year = decade_rows["min_year"] if decade_rows else None
+        max_year = decade_rows["max_year"] if decade_rows else None
+        decade_range = f"{min_year}–{max_year}" if min_year and max_year else "unknown"
+        gems = hidden_gem_count["cnt"] if hidden_gem_count else 0
+
+        return json.dumps({
+            "total": total,
+            "movies": movies,
+            "shows": shows,
+            "top_genres": [{"name": g, "count": c} for g, c in top_genres],
+            "decade_range": decade_range,
+            "hidden_gems": gems,
+        })
+
+    async def _tool_get_tonight_picks(self, args: Mapping[str, Any]) -> str:
+        """Suggest unwatched titles for tonight, optionally filtered by runtime."""
+        max_runtime = args.get("max_runtime_minutes")
+        limit = int(args.get("limit") or 5)
+
+        where_clauses = ["view_count = 0"]
+        params: List[Any] = []
+        if max_runtime is not None:
+            where_clauses.append("runtime_minutes IS NOT NULL AND runtime_minutes <= ?")
+            params.append(int(max_runtime))
+
+        where_sql = " AND ".join(where_clauses)
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT id, rating_key, media_type, title, year, genres, poster_url,
+                       backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
+                       runtime_minutes, summary, in_radarr, in_sonarr
+                FROM library_items
+                WHERE {where_sql}
+                ORDER BY RANDOM()
+                LIMIT ?
+                """,
+                (*params, limit),
+            ).fetchall()
+
+        cards: List[TitleCard] = []
+        for row in rows:
+            runtime = row["runtime_minutes"]
+            reason = f"{runtime} min" if runtime else "Unwatched"
+            card = row_to_title_card(dict(row), reason=reason)
+            cards.append(card)
+            self._cards.append(card)
+
+        return json.dumps({
+            "items": [_card_to_tool_item(c) for c in cards],
+            "count": len(cards),
+            "max_runtime_filter": max_runtime,
+        })
+
+    async def _tool_suggest_double_feature(self, args: Mapping[str, Any]) -> str:
+        """Pick two complementary library titles for a double feature pairing."""
+        import random
+
+        theme = str(args.get("theme") or "").strip().lower()
+
+        where_clause = "media_type = 'movie' AND view_count >= 0"
+        params: List[Any] = []
+        if theme:
+            where_clause += " AND LOWER(genres) LIKE ?"
+            params.append(f"%{theme}%")
+
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT id, rating_key, media_type, title, year, genres, poster_url,
+                       backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
+                       runtime_minutes, summary, in_radarr, in_sonarr
+                FROM library_items
+                WHERE {where_clause}
+                ORDER BY RANDOM()
+                LIMIT 20
+                """,
+                params,
+            ).fetchall()
+
+        if len(rows) < 2:
+            return json.dumps({"error": "Not enough titles to form a double feature."})
+
+        candidates = [dict(r) for r in rows]
+        random.shuffle(candidates)
+
+        title_a_row = candidates[0]
+        title_b_row = None
+        for candidate in candidates[1:]:
+            shared_genres = set(json.loads(title_a_row.get("genres") or "[]")) & set(
+                json.loads(candidate.get("genres") or "[]")
+            )
+            if shared_genres:
+                title_b_row = candidate
+                break
+
+        if title_b_row is None:
+            title_b_row = candidates[1]
+
+        genres_a = set(json.loads(title_a_row.get("genres") or "[]"))
+        genres_b = set(json.loads(title_b_row.get("genres") or "[]"))
+        shared = genres_a & genres_b
+        year_a = title_a_row.get("year") or 0
+        year_b = title_b_row.get("year") or 0
+        year_gap = abs(year_a - year_b)
+
+        if shared and year_gap > 15:
+            bridge = f"Both explore {', '.join(sorted(shared)[:2]).lower()} territory, but {year_gap} years apart"
+        elif shared:
+            bridge = f"A {', '.join(sorted(shared)[:2]).lower()} pairing from the same era"
+        else:
+            bridge = f"Two different angles on cinema — contrast and compare"
+
+        card_a = row_to_title_card(title_a_row, reason="Double feature — first half")
+        card_b = row_to_title_card(title_b_row, reason="Double feature — second half")
+        self._cards.append(card_a)
+        self._cards.append(card_b)
+
+        runtime_a = title_a_row.get("runtime_minutes") or 0
+        runtime_b = title_b_row.get("runtime_minutes") or 0
+
+        return json.dumps({
+            "double_feature": True,
+            "title_a": _card_to_tool_item(card_a),
+            "title_b": _card_to_tool_item(card_b),
+            "bridge_text": bridge,
+            "combined_runtime": runtime_a + runtime_b,
+        })
+
+    async def _tool_quick_pick_roulette(self, args: Mapping[str, Any]) -> str:
+        """Pick ONE random unwatched title matching taste profile, optionally constrained."""
+        max_runtime = args.get("max_runtime_minutes")
+        genres_filter = str(args.get("genres") or "").strip()
+
+        where_clauses = ["view_count = 0"]
+        params: List[Any] = []
+        if max_runtime is not None:
+            where_clauses.append("runtime_minutes IS NOT NULL AND runtime_minutes <= ?")
+            params.append(int(max_runtime))
+        if genres_filter:
+            genre_parts = [g.strip() for g in genres_filter.split(",") if g.strip()]
+            if genre_parts:
+                genre_or = " OR ".join("LOWER(genres) LIKE ?" for _ in genre_parts)
+                where_clauses.append(f"({genre_or})")
+                params.extend(f"%{g.lower()}%" for g in genre_parts)
+
+        where_sql = " AND ".join(where_clauses)
+        with self.db.connect() as conn:
+            row = conn.execute(
+                f"""
+                SELECT id, rating_key, media_type, title, year, genres, poster_url,
+                       backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
+                       runtime_minutes, summary, in_radarr, in_sonarr
+                FROM library_items
+                WHERE {where_sql}
+                ORDER BY RANDOM()
+                LIMIT 1
+                """,
+                params,
+            ).fetchone()
+
+        if not row:
+            return json.dumps({"error": "No unwatched titles match the criteria."})
+
+        genres_list = json.loads(row["genres"]) if isinstance(row["genres"], str) else (row["genres"] or [])
+        runtime = row["runtime_minutes"]
+        reason_parts = []
+        if genres_list:
+            reason_parts.append(f"Matches your {genres_list[0].lower()} taste")
+        if runtime:
+            reason_parts.append(f"{runtime} min")
+        reason = " · ".join(reason_parts) if reason_parts else "Unwatched pick for you"
+
+        card = row_to_title_card(dict(row), reason=reason)
+        self._cards.append(card)
+
+        return json.dumps({
+            "quick_pick": True,
+            "item": _card_to_tool_item(card),
+            "why": reason,
+        })
+
 
 def _build_where_for_patterns(filters: LibraryFilters) -> tuple[str, List[Any]]:
     return _build_where(filters)
@@ -2773,6 +3131,26 @@ def build_system_prompt(
         )
     else:
         queued_block = ""
+    # Night Owl time-awareness block
+    current_hour = _dt.now().hour
+    night_owl_block = ""
+    active_persona_id = persona_id or ""
+    if not active_persona_id:
+        pm = db.get_persona()
+        if pm:
+            try:
+                active_persona_id = str(pm["persona_preset_id"] or "")
+            except (KeyError, TypeError):
+                active_persona_id = ""
+    if "night-owl" in active_persona_id.lower() and current_hour >= 21:
+        time_str = _dt.now().strftime("%-I:%M %p")
+        night_owl_block = (
+            f"\nTime awareness: It's {time_str} — late night mode. "
+            "Lean toward shorter, easy-to-finish films. When recommending, use get_tonight_picks "
+            f"with max_runtime_minutes appropriate for the hour (e.g. {'90' if current_hour >= 23 else '110'} min). "
+            "Mention the runtime prominently in your response.\n"
+        )
+
     return (
         f"You are {curator_name}, an expert movie and TV collection curator for CuratorX. "
         "You know the user's Plex library and help them discover what to add, what to watch tonight, "
@@ -2795,6 +3173,7 @@ def build_system_prompt(
         f"{queued_block}"
         f"{overview_block}\n"
         f"{_persona_prompt_block(db, persona_id=persona_id)}"
+        f"{night_owl_block}"
         f"{lens_block}\n\n"
         + preference_context(db, lens_id=resolved)
     )

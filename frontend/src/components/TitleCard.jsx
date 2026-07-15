@@ -159,6 +159,11 @@ export default function TitleCard({
         {item.rating ? <p className="rating">★ {item.rating.toFixed(1)}</p> : null}
         {userStars ? <p className="user-review-stars" data-testid="user-review-stars">Your rating: {Number(userStars) % 1 === 0 ? "★".repeat(userStars) : `${userStars}★`}</p> : null}
         {item.genres?.length ? <p className="genres">{item.genres.slice(0, 3).join(" · ")}</p> : null}
+        {item.runtime_minutes ? (
+          <p className={`runtime ${item.runtime_minutes < 100 ? "runtime-emphasis" : ""}`}>
+            {item.runtime_minutes} min
+          </p>
+        ) : null}
         {!compact && item.overview ? <p className="overview">{item.overview.slice(0, 160)}…</p> : null}
         {whyReason && !whyOpen ? <p className="reason">{whyReason}</p> : null}
         {hasWhyDetail ? (

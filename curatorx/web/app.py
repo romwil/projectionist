@@ -143,6 +143,8 @@ from curatorx.web.auth import (
 )
 from curatorx.web.rate_limit import enforce_rate_limit
 from curatorx.web.jobs import get_job_manager, get_sync_scheduler
+from curatorx.scheduler import IdleScheduler
+from curatorx.scheduler.tasks import register_all as register_scheduler_tasks
 from curatorx.web.session_tokens import ensure_session_secret, has_usable_session_secret
 from curatorx.web.library_privacy import sanitize_library_payload
 from curatorx.web.webhooks import register_webhook_routes
@@ -251,7 +253,16 @@ async def lifespan(_app: FastAPI):
     logger.info("Startup: starting sync scheduler…")
     get_sync_scheduler().start()
     logger.info("Job manager and sync scheduler ready")
+
+    logger.info("Startup: initializing idle task scheduler…")
+    idle_scheduler = IdleScheduler(manager.db, DATA_DIR)
+    register_scheduler_tasks(idle_scheduler)
+    idle_scheduler.start(asyncio.get_event_loop())
+    app.state.idle_scheduler = idle_scheduler
+    logger.info("Startup: idle task scheduler ready (%d tasks)", len(idle_scheduler._definitions))
+
     yield
+    idle_scheduler.stop()
     get_sync_scheduler().stop()
     logger.info("CuratorX shutdown complete")
 
@@ -574,6 +585,10 @@ def _mask_settings(settings: Settings) -> Dict[str, Any]:
 
 def _db():
     return get_job_manager().db
+
+
+def _idle_scheduler() -> Optional[IdleScheduler]:
+    return getattr(app.state, "idle_scheduler", None)
 
 
 def _sanitize_library_payload(payload: Any, user) -> Any:
@@ -1182,9 +1197,159 @@ def export_training_corpus(user=Depends(require_role("owner"))) -> JSONResponse:
     )
 
 
+class ScheduledTaskUpdatePayload(BaseModel):
+    enabled: Optional[bool] = None
+    run_interval_seconds: Optional[int] = Field(default=None, ge=60)
+
+
+@app.get("/api/admin/scheduled-tasks")
+def list_scheduled_tasks(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        return {"items": [], "idle": False}
+    return {
+        "items": scheduler.get_task_states(),
+        "idle": scheduler.is_idle(),
+    }
+
+
+@app.put("/api/admin/scheduled-tasks/{name}")
+def update_scheduled_task(
+    name: str,
+    payload: ScheduledTaskUpdatePayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    updated = scheduler.update_task(
+        name,
+        enabled=payload.enabled,
+        run_interval_seconds=payload.run_interval_seconds,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail=f"Task '{name}' not found")
+    return updated
+
+
+@app.post("/api/admin/scheduled-tasks/{name}/run")
+async def trigger_scheduled_task(
+    name: str,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    result = await scheduler.trigger_task(name)
+    if result.get("error"):
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
 @app.get("/api/library/overview")
 def library_overview_endpoint(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     return _sanitize_library_payload(library_overview(_db()), user)
+
+
+@app.get("/api/library/anniversaries")
+def library_anniversaries_endpoint(
+    limit: int = 5,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Return library titles with milestone release anniversaries (5, 10, 15, 20, 25+ years)."""
+    import time as _time
+    from datetime import date
+
+    del user
+    db = _db()
+    today = date.today()
+    current_year = today.year
+
+    milestone_years = [current_year - n for n in (5, 10, 15, 20, 25, 30, 40, 50, 75)]
+    placeholders = ",".join("?" * len(milestone_years))
+
+    with db.connect() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT id, rating_key, media_type, title, year, genres, poster_url,
+                   backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
+                   runtime_minutes, summary
+            FROM library_items
+            WHERE year IN ({placeholders})
+            ORDER BY year ASC
+            LIMIT ?
+            """,
+            (*milestone_years, limit),
+        ).fetchall()
+
+    items = []
+    for row in rows:
+        years_ago = current_year - (row["year"] or current_year)
+        context = f"Released {years_ago} year{'s' if years_ago != 1 else ''} ago"
+        last_viewed = row["last_viewed_at"]
+        if last_viewed:
+            months_ago = max(1, int((_time.time() - last_viewed) / (30 * 86400)))
+            context += f" \u00b7 Last watched {months_ago} month{'s' if months_ago != 1 else ''} ago"
+        item_data = dict(row)
+        item_data["anniversary_context"] = context
+        items.append(item_data)
+
+    return {"items": items, "count": len(items)}
+
+
+@app.get("/api/library/quick-pick")
+def library_quick_pick_endpoint(
+    max_runtime: Optional[int] = None,
+    genre: Optional[str] = None,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Pick ONE random unwatched title, optionally constrained by runtime/genre."""
+    del user
+    db = _db()
+
+    where_clauses = ["view_count = 0"]
+    params: list = []
+    if max_runtime is not None:
+        where_clauses.append("runtime_minutes IS NOT NULL AND runtime_minutes <= ?")
+        params.append(max_runtime)
+    if genre:
+        genre_parts = [g.strip() for g in genre.split(",") if g.strip()]
+        if genre_parts:
+            genre_or = " OR ".join("LOWER(genres) LIKE ?" for _ in genre_parts)
+            where_clauses.append(f"({genre_or})")
+            params.extend(f"%{g.lower()}%" for g in genre_parts)
+
+    where_sql = " AND ".join(where_clauses)
+    with db.connect() as conn:
+        row = conn.execute(
+            f"""
+            SELECT id, rating_key, media_type, title, year, genres, poster_url,
+                   backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
+                   runtime_minutes, summary
+            FROM library_items
+            WHERE {where_sql}
+            ORDER BY RANDOM()
+            LIMIT 1
+            """,
+            params,
+        ).fetchone()
+
+    if not row:
+        return {"item": None, "why": "No unwatched titles match the criteria."}
+
+    genres_list = json.loads(row["genres"]) if isinstance(row["genres"], str) else (row["genres"] or [])
+    runtime = row["runtime_minutes"]
+    reason_parts = []
+    if genres_list:
+        reason_parts.append(f"Matches your {genres_list[0].lower()} taste")
+    if runtime:
+        reason_parts.append(f"{runtime} min")
+    reason = " \u00b7 ".join(reason_parts) if reason_parts else "Unwatched pick for you"
+
+    return {"item": dict(row), "why": reason}
 
 
 @app.get("/api/library/query")
@@ -1734,6 +1899,9 @@ def put_system_config(
 @app.post("/api/chat")
 async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     enforce_rate_limit(request, bucket="chat", limit=30, window_seconds=60)
+    scheduler = _idle_scheduler()
+    if scheduler is not None:
+        scheduler.record_activity()
     session_id = payload.session_id or uuid.uuid4().hex
     lens_id = _resolve_lens_id(payload.lens_id)
     db = _db()
@@ -1916,6 +2084,9 @@ async def chat_stream(
     user=Depends(get_current_user_dep),
 ) -> EventSourceResponse:
     enforce_rate_limit(request, bucket="chat", limit=30, window_seconds=60)
+    scheduler = _idle_scheduler()
+    if scheduler is not None:
+        scheduler.record_activity()
     sid = session_id or uuid.uuid4().hex
     resolved_lens = _resolve_lens_id(lens_id)
     scoped = _scoped_user_id(user)

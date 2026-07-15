@@ -61,6 +61,9 @@ import ThreadList from "./components/ThreadList";
 import TurnstyleResultsOverlay from "./components/TurnstyleResultsOverlay";
 import TypingIndicator from "./components/TypingIndicator";
 import WelcomePanel from "./components/WelcomePanel";
+import OnThisDayCard from "./components/OnThisDayCard";
+import LibraryGlanceCard from "./components/LibraryGlanceCard";
+import QuickPickCard from "./components/QuickPickCard";
 import UserMenu, { useAuthGate } from "./components/UserMenu";
 import { reviewPromptBlock } from "./components/ReviewPromptCard";
 import useChatScroll from "./hooks/useChatScroll";
@@ -125,6 +128,10 @@ export default function App() {
   const [typingLabel, setTypingLabel] = useState("");
   const [composerPlaceholder, setComposerPlaceholder] = useState("");
   const [nightOwl, setNightOwl] = useState(isNightOwlHour);
+  const [anniversaries, setAnniversaries] = useState([]);
+  const [libraryGlance, setLibraryGlance] = useState(null);
+  const [glanceShown, setGlanceShown] = useState(false);
+  const [quickPick, setQuickPick] = useState(null);
   const helpfulCountRef = useRef(0);
   const perfectPickPendingRef = useRef(false);
   const jobsRunningRef = useRef(false);
@@ -409,6 +416,10 @@ export default function App() {
         .then(setActiveContext)
         .catch(() => setActiveContext({ context_hash: "general", inferred_label: "General Exploration" })),
     ]).catch(console.error);
+    api("/library/anniversaries").then((res) => setAnniversaries(res?.items || [])).catch(() => {});
+    api("/system-config").then((cfg) => {
+      if (cfg?.library_glance_shown === "true") setGlanceShown(true);
+    }).catch(() => {});
     refreshJobs();
     refreshWatchlist();
     refreshStreak();
@@ -425,9 +436,18 @@ export default function App() {
     const running = jobs.some((job) => job.status === "running" || job.status === "queued");
     if (jobsRunningRef.current && !running) {
       refreshReviewData();
+      if (!glanceShown) {
+        api("/library/overview")
+          .then((data) => {
+            if (data?.total > 0) {
+              setLibraryGlance(data);
+            }
+          })
+          .catch(() => {});
+      }
     }
     jobsRunningRef.current = running;
-  }, [jobs, refreshReviewData]);
+  }, [jobs, refreshReviewData, glanceShown]);
 
   useEffect(() => {
     if (!loading) return;
@@ -485,6 +505,26 @@ export default function App() {
         blocks: [{ type: "error", content: message }],
       },
     ]);
+  }
+
+  function handleDismissGlance() {
+    setLibraryGlance(null);
+    setGlanceShown(true);
+    api("/system-config", {
+      method: "PUT",
+      body: JSON.stringify({ values: { library_glance_shown: "true" } }),
+    }).catch(() => {});
+  }
+
+  async function handleQuickPick() {
+    try {
+      const result = await api("/library/quick-pick");
+      if (result?.item) {
+        setQuickPick(result);
+      }
+    } catch {
+      // graceful degradation
+    }
   }
 
   async function sendMessage(text) {
@@ -1029,11 +1069,30 @@ export default function App() {
         <main className="workspace-main" data-testid="workspace-main">
           <div className="chat-scroll-region" data-testid="chat-scroll-region" ref={scrollRef}>
             {showWelcomePanel ? (
-              <WelcomePanel
-                curatorName={curatorName}
-                greeting={personaUi?.welcome_greeting}
-                starters={personaUi?.welcome_starters}
-                onStarterSelect={sendMessage}
+              <>
+                {anniversaries.length > 0 ? (
+                  <OnThisDayCard items={anniversaries} accentColor={personaUi?.accent_hue} />
+                ) : null}
+                <WelcomePanel
+                  curatorName={curatorName}
+                  greeting={personaUi?.welcome_greeting}
+                  starters={personaUi?.welcome_starters}
+                  onStarterSelect={sendMessage}
+                />
+              </>
+            ) : null}
+            {libraryGlance && !glanceShown ? (
+              <LibraryGlanceCard snapshot={libraryGlance} onDismiss={handleDismissGlance} />
+            ) : null}
+            {quickPick?.item ? (
+              <QuickPickCard
+                item={quickPick.item}
+                why={quickPick.why}
+                onRetry={handleQuickPick}
+                onTellMore={() => sendMessage(`Tell me more about ${quickPick.item.title}`)}
+                onAdd={handleAdd}
+                onDismiss={() => setQuickPick(null)}
+                requestPath={requestPath}
               />
             ) : null}
             <ChatThread
@@ -1169,6 +1228,24 @@ export default function App() {
                   {ttsMuted ? "Unmute" : "Mute"}
                 </button>
               ) : null}
+              <button
+                type="button"
+                className="composer-surprise ghost"
+                data-testid="surprise-me-button"
+                disabled={loading || !threadsReady}
+                aria-label="Surprise me"
+                title="Surprise me — random pick"
+                onClick={handleQuickPick}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                  <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
+                  <circle cx="15.5" cy="8.5" r="1.5" fill="currentColor" />
+                  <circle cx="8.5" cy="15.5" r="1.5" fill="currentColor" />
+                  <circle cx="15.5" cy="15.5" r="1.5" fill="currentColor" />
+                  <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                </svg>
+              </button>
               <button
                 type="submit"
                 className="composer-send"

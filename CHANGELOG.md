@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.6.0] — 2026-07-15
+
+Owner dashboard, background idle task scheduler, and 5 chat delight features.
+
+### Added
+- Owner Dashboard at `/admin/dashboard`: library composition charts (decade, genre, runtime, country/language), health gauges (unwatched %, stale adds, rating coverage), storage intelligence (sortable purge table), taste profile timeline — all pure SVG/CSS, no charting library
+- Background idle task scheduler (`curatorx/scheduler/`): asyncio-based, idle-detection (15 min default), cooperative interruption, SQLite-backed state, status dock integration
+- 6 OOTB scheduled tasks: semantic embedding generation (24h), taste profile refresh (6h), library health metrics (6h), anniversary scanner (24h), recommendation pre-warming (12h), collection gap analysis (weekly)
+- Admin API for scheduled tasks: `GET/PUT /api/admin/scheduled-tasks`, `POST .../run`
+- "On This Day" anniversary prompts: `OnThisDayCard` above welcome panel + `GET /api/library/anniversaries` endpoint
+- Post-sync "Library at a Glance" card: one-time summary after first sync with genre highlights, decade range, hidden gems count
+- Night Owl time-aware suggestions: system prompt injects runtime caps after 9 PM, `get_tonight_picks` agent tool
+- Double Feature pairing: `suggest_double_feature` agent tool + `DoubleFeatureCard` component with amber-glow bridge connector
+- Quick-Pick Roulette: "Surprise me" dice button in composer + `QuickPickCard` reveal component + `GET /api/library/quick-pick` endpoint
+- 4 reusable SVG chart components: `BarChart`, `DonutChart`, `Gauge`, `ProgressBar`
+- Runtime badge emphasis on TitleCard for short films (<100 min)
+
+### Fixed
+- Genre filter in `quick_pick_roulette` and `/api/library/quick-pick`: comma-separated genres now match ANY (OR) instead of ALL (AND)
+
+### Changed
+- Chat endpoints (`POST /api/chat`, `GET /api/chat/stream`) record activity for idle scheduler
+- Scheduler starts in FastAPI lifespan context, stops gracefully on shutdown
+
 ## [1.5.0] — 2026-07-15
 
 Per-conversation persona selection, expanded personality sliders, login cleanup, test coverage infrastructure.

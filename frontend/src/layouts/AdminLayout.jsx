@@ -11,6 +11,7 @@ export const ADMIN_NAV = [
   { to: "/admin/household", id: "household", label: "Household" },
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },
   { to: "/admin/advanced", id: "advanced", label: "Advanced" },
+  { to: "/admin/dashboard", id: "dashboard", label: "Dashboard" },
 ];
 
 export default function AdminLayout() {

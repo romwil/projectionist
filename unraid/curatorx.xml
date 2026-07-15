@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.5 (stable minor tag). -->
+<!-- Unraid Community Applications template — CuratorX 1.6 (stable minor tag). -->
 <Container version="2">
   <Name>curatorx</Name>
-  <Repository>romwil/curatorx:1.5</Repository>
+  <Repository>romwil/curatorx:1.6</Repository>
   <Registry>https://hub.docker.com/r/romwil/curatorx</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -21,6 +21,12 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.6.0
+- Owner Dashboard: library composition charts, health gauges, storage intelligence, taste timeline
+- Background idle task scheduler with 6 OOTB tasks (embeddings, taste refresh, health, anniversaries, recs, gaps)
+- Chat delight: On This Day, Library at a Glance, Night Owl runtime picks, Double Feature, Surprise Me
+- Genre filter bugfix: comma-separated genres now OR instead of AND
+
 ### 1.5.0
 - Per-conversation persona selection with 5 built-in + custom personas
 - 7 personality sliders (4 new: depth, obscurity, verbosity, formality)

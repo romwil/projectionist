@@ -8,6 +8,7 @@ import LoginPage from "./pages/LoginPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import AboutPage from "./pages/AboutPage";
 import NotFoundPage from "./pages/NotFoundPage";
+import DashboardPage from "./pages/DashboardPage";
 import AdminLayout from "./layouts/AdminLayout";
 import SettingsLayout from "./layouts/SettingsLayout";
 import ProfilePage from "./pages/settings/ProfilePage";
@@ -27,6 +28,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/config" element={<Navigate to="/admin" replace />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="overview" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
           <Route path=":section" element={<ConfigPage />} />
         </Route>
         <Route path="/settings" element={<SettingsLayout />}>

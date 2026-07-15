@@ -622,6 +622,26 @@ export async function getLibraryStats() {
   return api("/library/stats");
 }
 
+export async function getLibraryOverview() {
+  return api("/library/overview");
+}
+
+export async function getLibraryAggregate(groupBy) {
+  return api(`/library/aggregate?group_by=${encodeURIComponent(groupBy)}`);
+}
+
+export async function getLibraryHealth() {
+  return api("/library/health");
+}
+
+export async function getPurgeCandidates() {
+  return api("/library/purge-candidates");
+}
+
+export async function getTvProgress() {
+  return api("/library/tv/progress");
+}
+
 export async function startLibrarySync() {
   return api("/library/sync", { method: "POST" });
 }
