@@ -92,6 +92,9 @@ from curatorx.models.schemas import (
     PersonaMetricsUpdate,
     PersonaPresetSummary,
     PersonaPreviewResponse,
+    PersonaTemplate,
+    PersonaTemplateCreate,
+    PersonaTemplateUpdate,
     PersonaUiCopy,
     PreferenceSignal,
     RatingPrompt,
@@ -464,6 +467,7 @@ class ThreadCreatePayload(BaseModel):
     thread_title: Optional[str] = None
     lens_id: Optional[str] = None
     context_hash: Optional[str] = None
+    persona_id: Optional[str] = None
 
 
 class ThreadUpdatePayload(BaseModel):
@@ -1577,6 +1581,123 @@ def put_persona(payload: PersonaMetricsUpdate, user=Depends(require_role("owner"
     return _row_to_persona(row)
 
 
+# --- Persona Templates (per-conversation persona selection) ---
+
+
+@app.get("/api/personas", response_model=List[PersonaTemplate])
+def list_personas(user=Depends(get_current_user_dep)) -> List[PersonaTemplate]:
+    """List persona templates visible to the current user.
+
+    Returns all builtin presets, all shared templates, and the user's own
+    private templates.  The persona_id on each conversation thread references
+    one of these templates.
+    """
+    templates = _db().list_persona_templates(user_id=user.id)
+    user_default = _db().get_user_default_persona_id(user.id)
+    return [
+        PersonaTemplate(**{**t, "is_default": t["id"] == user_default})
+        for t in templates
+    ]
+
+
+@app.post("/api/personas", response_model=PersonaTemplate)
+def create_persona(
+    payload: PersonaTemplateCreate,
+    user=Depends(get_current_user_dep),
+) -> PersonaTemplate:
+    """Create a custom persona template.
+
+    Owner-created templates are ``shared`` (visible to everyone);
+    member-created templates are ``private`` (visible only to the creator).
+    """
+    visibility = "shared" if user.role == "owner" else "private"
+    template = _db().create_persona_template(
+        template_id=uuid.uuid4().hex,
+        name=payload.name.strip(),
+        visibility=visibility,
+        owner_user_id=user.id,
+        val_bro_prof=payload.val_bro_prof,
+        val_dipl_snark=payload.val_dipl_snark,
+        val_pass_auto=payload.val_pass_auto,
+        val_depth=payload.val_depth,
+        val_obscurity=payload.val_obscurity,
+        val_verbosity=payload.val_verbosity,
+        val_formality=payload.val_formality,
+        system_prompt_override=payload.system_prompt_override,
+        accent_color=payload.accent_color,
+    )
+    return PersonaTemplate(**template)
+
+
+@app.put("/api/personas/{persona_id}", response_model=PersonaTemplate)
+def update_persona_template(
+    persona_id: str,
+    payload: PersonaTemplateUpdate,
+    user=Depends(get_current_user_dep),
+) -> PersonaTemplate:
+    """Update a custom persona template (owner of that persona only; builtins immutable)."""
+    db = _db()
+    existing = db.get_persona_template(persona_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    if existing["visibility"] == "builtin":
+        raise HTTPException(status_code=403, detail="Built-in personas are immutable")
+    if existing["owner_user_id"] != user.id and user.role != "owner":
+        raise HTTPException(status_code=403, detail="Only the persona owner can edit this persona")
+    try:
+        updated = db.update_persona_template(
+            persona_id,
+            name=payload.name,
+            val_bro_prof=payload.val_bro_prof,
+            val_dipl_snark=payload.val_dipl_snark,
+            val_pass_auto=payload.val_pass_auto,
+            val_depth=payload.val_depth,
+            val_obscurity=payload.val_obscurity,
+            val_verbosity=payload.val_verbosity,
+            val_formality=payload.val_formality,
+            system_prompt_override=payload.system_prompt_override,
+            accent_color=payload.accent_color,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return PersonaTemplate(**updated)
+
+
+@app.delete("/api/personas/{persona_id}")
+def delete_persona(
+    persona_id: str,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, bool]:
+    """Delete a custom persona template (owner only; builtins cannot be deleted)."""
+    db = _db()
+    existing = db.get_persona_template(persona_id)
+    if existing is None:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    if existing["visibility"] == "builtin":
+        raise HTTPException(status_code=403, detail="Built-in personas cannot be deleted")
+    if existing["owner_user_id"] != user.id and user.role != "owner":
+        raise HTTPException(status_code=403, detail="Only the persona owner can delete this persona")
+    try:
+        db.delete_persona_template(persona_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return {"deleted": True}
+
+
+@app.put("/api/personas/{persona_id}/default")
+def set_default_persona(
+    persona_id: str,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Set a persona template as the user's default for new conversations."""
+    db = _db()
+    template = db.get_persona_template(persona_id)
+    if template is None:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    db.set_user_default_persona(user.id, persona_id)
+    return {"default_persona_id": persona_id, "persona": PersonaTemplate(**{**template, "is_default": True})}
+
+
 @app.get("/api/system-config")
 def get_system_config(user=Depends(require_role("owner"))) -> Dict[str, str]:
     del user
@@ -1621,7 +1742,10 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
         existing = db.get_chat_thread(session_id, user_id=scoped)
         if existing is None and db.get_chat_thread(session_id) is not None:
             raise HTTPException(status_code=404, detail="Thread not found")
-    db.ensure_chat_session(session_id, lens_id, user_id=scoped)
+    persona_id = payload.persona_id
+    db.ensure_chat_session(session_id, lens_id, user_id=scoped, persona_id=persona_id)
+    if persona_id:
+        db.set_thread_persona(session_id, persona_id)
     settings = _settings()
     config_error = validate_llm_settings(settings)
     if config_error:
@@ -1666,6 +1790,7 @@ def create_chat_thread(
         context_hash=context_hash,
         thread_title=payload.thread_title,
         user_id=_scoped_user_id(user),
+        persona_id=payload.persona_id,
     )
     return {"session_id": session_id, **thread}
 

@@ -2862,8 +2862,8 @@ button.ghost.inline-link {
 .login-card {
   width: min(400px, 100%);
   display: grid;
-  gap: var(--space-4);
-  padding: var(--space-7) var(--space-6);
+  gap: var(--space-3);
+  padding: var(--space-6) var(--space-5);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -2943,6 +2943,44 @@ button.ghost.inline-link {
   gap: var(--space-3);
   padding-top: var(--space-2);
   border-top: 1px solid var(--border-subtle);
+}
+
+.not-found-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6);
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, #1a1612 0%, transparent 55%),
+    var(--bg);
+}
+
+.not-found-card {
+  text-align: center;
+  display: grid;
+  gap: var(--space-3);
+  justify-items: center;
+}
+
+.not-found-card h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.not-found-lede {
+  margin: 0;
+  color: var(--muted);
+  line-height: var(--leading-body);
+  font-size: var(--text-sm);
+}
+
+.not-found-home {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .user-menu {
@@ -3716,4 +3754,264 @@ button.ghost.inline-link {
   .settings-rail {
     transition: none;
   }
+}
+
+/* ── Persona Selector ── */
+
+.persona-selector {
+  position: relative;
+}
+
+.persona-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.persona-trigger:hover {
+  color: var(--text);
+}
+
+.persona-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.persona-dot-sm {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.persona-dropdown {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  min-width: 220px;
+  max-height: 340px;
+  overflow-y: auto;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-2) 0;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  margin-bottom: var(--space-2);
+}
+
+.persona-dropdown-section {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.persona-dropdown-divider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-1) 0;
+}
+
+.persona-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.persona-dropdown-item:hover {
+  background: var(--accent-soft);
+}
+
+.persona-dropdown-item.active {
+  color: var(--accent);
+}
+
+.persona-item-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.persona-default-badge {
+  color: var(--accent);
+  font-size: var(--text-xs);
+}
+
+.persona-edit-btn,
+.persona-star-btn {
+  padding: 2px 4px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.persona-dropdown-item:hover .persona-edit-btn,
+.persona-dropdown-item:hover .persona-star-btn {
+  opacity: 1;
+}
+
+.persona-create {
+  color: var(--accent);
+  font-style: italic;
+}
+
+/* Thread persona badge */
+
+.thread-persona-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+  padding: 1px 6px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  margin-top: 2px;
+}
+
+/* ── Persona Modal ── */
+
+.persona-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.persona-modal {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+.persona-modal-title {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  margin-bottom: var(--space-4);
+}
+
+.persona-name-input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--text-md);
+  margin-bottom: var(--space-4);
+}
+
+.persona-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.persona-slider-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 80px;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+
+.persona-slider-lo {
+  color: var(--muted);
+  text-align: right;
+}
+
+.persona-slider-hi {
+  color: var(--muted);
+}
+
+.persona-slider {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.persona-advanced-toggle {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin-bottom: var(--space-3);
+}
+
+.persona-prompt-textarea {
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  resize: vertical;
+  margin-bottom: var(--space-4);
+}
+
+.persona-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.persona-modal-actions .spacer {
+  flex: 1;
+}
+
+.btn-primary {
+  padding: var(--space-2) var(--space-4);
+  background: var(--accent);
+  color: var(--accent-text);
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  padding: var(--space-2) var(--space-4);
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-sm);
 }

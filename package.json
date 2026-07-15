@@ -4,7 +4,7 @@
   "version": "1.3.0",
   "scripts": {
     "test": "python -m unittest discover -s tests -q && npm run test:frontend && npm run test:e2e",
-    "test:frontend": "cd frontend && npm install && npm run build",
+    "test:frontend": "cd frontend && npm install && npm run test:unit && npm run build",
     "test:e2e": "playwright test",
     "test:e2e:live": "E2E_MOCK_APIS=0 playwright test",
     "test:e2e:live-stack": "CURATORX_E2E_LIVE=1 E2E_MOCK_APIS=0 playwright test e2e/live.spec.ts",

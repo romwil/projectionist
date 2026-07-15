@@ -1,0 +1,6 @@
+{
+  "include": ["src/lib/**/*.js", "src/lib/**/*.mjs"],
+  "exclude": ["**/*.test.*"],
+  "reporter": ["text", "html"],
+  "report-dir": "coverage"
+}

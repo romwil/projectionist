@@ -19,6 +19,52 @@ ACTIVE_LENS_CONFIG_KEY = "active_lens_id"
 ACTIVE_CONTEXT_CONFIG_KEY = "active_context_hash"
 CURATOR_NAME_CONFIG_KEY = "curator_name"
 
+BUILTIN_PERSONA_IDS = {
+    "classic-curator",
+    "blunt-archivist",
+    "enthusiastic-scout",
+    "academic-critic",
+    "night-owl-host",
+}
+
+BUILTIN_PERSONA_SEEDS: list[dict[str, object]] = [
+    {
+        "id": "classic-curator",
+        "name": "Classic Curator",
+        "val_bro_prof": 0.45, "val_dipl_snark": 0.28, "val_pass_auto": 0.42,
+        "val_depth": 0.6, "val_obscurity": 0.4, "val_verbosity": 0.6, "val_formality": 0.5,
+        "accent_color": "#8B6914",
+    },
+    {
+        "id": "blunt-archivist",
+        "name": "Blunt Archivist",
+        "val_bro_prof": 0.78, "val_dipl_snark": 0.82, "val_pass_auto": 0.75,
+        "val_depth": 0.8, "val_obscurity": 0.3, "val_verbosity": 0.3, "val_formality": 0.7,
+        "accent_color": "#4A6178",
+    },
+    {
+        "id": "enthusiastic-scout",
+        "name": "Enthusiastic Scout",
+        "val_bro_prof": 0.22, "val_dipl_snark": 0.35, "val_pass_auto": 0.68,
+        "val_depth": 0.4, "val_obscurity": 0.5, "val_verbosity": 0.7, "val_formality": 0.2,
+        "accent_color": "#C45224",
+    },
+    {
+        "id": "academic-critic",
+        "name": "Academic Critic",
+        "val_bro_prof": 0.92, "val_dipl_snark": 0.55, "val_pass_auto": 0.38,
+        "val_depth": 0.9, "val_obscurity": 0.7, "val_verbosity": 0.8, "val_formality": 0.8,
+        "accent_color": "#6B3FA0",
+    },
+    {
+        "id": "night-owl-host",
+        "name": "Night Owl Host",
+        "val_bro_prof": 0.25, "val_dipl_snark": 0.40, "val_pass_auto": 0.55,
+        "val_depth": 0.3, "val_obscurity": 0.3, "val_verbosity": 0.4, "val_formality": 0.1,
+        "accent_color": "#5C4FA0",
+    },
+]
+
 # Busy wait before OperationalError on contended locks (Unraid volume latency).
 SQLITE_BUSY_TIMEOUT_MS = 30_000
 # WAL + NORMAL is durable enough for this app and much kinder under concurrent readers.
@@ -199,6 +245,24 @@ CREATE TABLE IF NOT EXISTS system_telemetry_stream (
     FOREIGN KEY (associated_context_hash) REFERENCES derived_contexts(context_hash)
 );
 
+CREATE TABLE IF NOT EXISTS persona_templates (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    visibility TEXT NOT NULL CHECK (visibility IN ('builtin', 'shared', 'private')),
+    owner_user_id TEXT,
+    val_bro_prof REAL DEFAULT 0.5,
+    val_dipl_snark REAL DEFAULT 0.5,
+    val_pass_auto REAL DEFAULT 0.5,
+    val_depth REAL DEFAULT 0.5,
+    val_obscurity REAL DEFAULT 0.5,
+    val_verbosity REAL DEFAULT 0.5,
+    val_formality REAL DEFAULT 0.5,
+    system_prompt_override TEXT,
+    accent_color TEXT,
+    is_default INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+);
+
 CREATE VIEW IF NOT EXISTS integration_profiles AS
 SELECT
     service_name AS service_id,
@@ -265,6 +329,7 @@ class Database:
             self._migrate_multi_user_columns(conn)  # reviews/prefs tables exist after phase4
             self._migrate_embeddings_content_hash(conn)
             self._migrate_curated_lists(conn)
+            self._migrate_persona_templates(conn)
             self._seed_defaults(conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
@@ -644,6 +709,113 @@ class Database:
                 COALESCE(tvdb_id, -1)
             );
             """
+        )
+
+    def _migrate_persona_templates(self, conn: sqlite3.Connection) -> None:
+        """Create persona_templates table, add persona_id to threads, default_persona_id to users.
+
+        This migration enables per-conversation persona selection:
+        - persona_templates holds reusable persona configurations (builtin presets,
+          shared templates created by the owner, private per-user templates).
+        - chat_sessions.persona_id links each conversation to a specific persona.
+        - users.default_persona_id lets each user set their preferred default.
+        - Existing curator_persona_metrics slider values are migrated to a shared
+          template so they aren't lost.
+        """
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS persona_templates (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                visibility TEXT NOT NULL CHECK (visibility IN ('builtin', 'shared', 'private')),
+                owner_user_id TEXT,
+                val_bro_prof REAL DEFAULT 0.5,
+                val_dipl_snark REAL DEFAULT 0.5,
+                val_pass_auto REAL DEFAULT 0.5,
+                val_depth REAL DEFAULT 0.5,
+                val_obscurity REAL DEFAULT 0.5,
+                val_verbosity REAL DEFAULT 0.5,
+                val_formality REAL DEFAULT 0.5,
+                system_prompt_override TEXT,
+                accent_color TEXT,
+                is_default INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            );
+            """
+        )
+        session_cols = self._table_columns(conn, "chat_sessions")
+        if "persona_id" not in session_cols:
+            conn.execute("ALTER TABLE chat_sessions ADD COLUMN persona_id TEXT")
+        user_cols = self._table_columns(conn, "users")
+        if user_cols and "default_persona_id" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN default_persona_id TEXT")
+
+        self._seed_builtin_persona_templates(conn)
+        self._migrate_legacy_persona_to_template(conn)
+
+    def _seed_builtin_persona_templates(self, conn: sqlite3.Connection) -> None:
+        """Insert the 5 built-in persona presets into persona_templates if absent."""
+        for seed in BUILTIN_PERSONA_SEEDS:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO persona_templates (
+                    id, name, visibility, owner_user_id,
+                    val_bro_prof, val_dipl_snark, val_pass_auto,
+                    val_depth, val_obscurity, val_verbosity, val_formality,
+                    accent_color
+                ) VALUES (?, ?, 'builtin', NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    seed["id"],
+                    seed["name"],
+                    seed["val_bro_prof"],
+                    seed["val_dipl_snark"],
+                    seed["val_pass_auto"],
+                    seed["val_depth"],
+                    seed["val_obscurity"],
+                    seed["val_verbosity"],
+                    seed["val_formality"],
+                    seed.get("accent_color"),
+                ),
+            )
+
+    def _migrate_legacy_persona_to_template(self, conn: sqlite3.Connection) -> None:
+        """Copy existing singleton persona metrics into a shared persona template.
+
+        If the user has customized the server-wide persona (non-default slider
+        values or a custom prompt override), those values are preserved as a
+        shared template owned by the bootstrap user.
+        """
+        row = conn.execute(
+            "SELECT * FROM curator_persona_metrics WHERE metric_id = ?",
+            (DEFAULT_PERSONA_ID,),
+        ).fetchone()
+        if row is None:
+            return
+        bro = float(row["val_bro_prof"])
+        snark = float(row["val_dipl_snark"])
+        auto = float(row["val_pass_auto"])
+        override = row["persona_prompt_override"] if "persona_prompt_override" in row.keys() else None
+        is_default = bro == 0.5 and snark == 0.5 and auto == 0.5 and not override
+        if is_default:
+            return
+        migrated_id = "migrated-persona"
+        existing = conn.execute(
+            "SELECT id FROM persona_templates WHERE id = ?", (migrated_id,)
+        ).fetchone()
+        if existing:
+            return
+        name = str(row["curator_name"]) if "curator_name" in row.keys() else "Curator"
+        conn.execute(
+            """
+            INSERT INTO persona_templates (
+                id, name, visibility, owner_user_id,
+                val_bro_prof, val_dipl_snark, val_pass_auto,
+                val_depth, val_obscurity, val_verbosity, val_formality,
+                system_prompt_override, is_default
+            ) VALUES (?, ?, 'shared', ?, ?, ?, ?, 0.5, 0.5, 0.5, 0.5, ?, 1)
+            """,
+            (migrated_id, f"{name} (migrated)", BOOTSTRAP_OWNER_ID, bro, snark, auto, override),
         )
 
     def _seed_defaults(self, conn: sqlite3.Connection) -> None:
@@ -2194,6 +2366,223 @@ class Database:
         assert persona is not None
         return persona
 
+    # --- Persona Templates ---
+
+    _PERSONA_TEMPLATE_COLS = (
+        "id, name, visibility, owner_user_id, "
+        "val_bro_prof, val_dipl_snark, val_pass_auto, "
+        "val_depth, val_obscurity, val_verbosity, val_formality, "
+        "system_prompt_override, accent_color, is_default, created_at"
+    )
+
+    def _row_to_persona_template(self, row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "id": str(row["id"]),
+            "name": str(row["name"]),
+            "visibility": str(row["visibility"]),
+            "owner_user_id": row["owner_user_id"],
+            "val_bro_prof": float(row["val_bro_prof"]),
+            "val_dipl_snark": float(row["val_dipl_snark"]),
+            "val_pass_auto": float(row["val_pass_auto"]),
+            "val_depth": float(row["val_depth"]),
+            "val_obscurity": float(row["val_obscurity"]),
+            "val_verbosity": float(row["val_verbosity"]),
+            "val_formality": float(row["val_formality"]),
+            "system_prompt_override": row["system_prompt_override"],
+            "accent_color": row["accent_color"],
+            "is_default": bool(row["is_default"]),
+            "created_at": str(row["created_at"]) if row["created_at"] else None,
+        }
+
+    def list_persona_templates(
+        self,
+        *,
+        user_id: Optional[str] = None,
+    ) -> List[Dict[str, Any]]:
+        """Return persona templates visible to a given user.
+
+        Visibility rules:
+        - ``builtin`` templates are always visible.
+        - ``shared`` templates are always visible.
+        - ``private`` templates are only visible to their owner.
+        """
+        with self.connect() as conn:
+            if user_id is None:
+                rows = conn.execute(
+                    f"SELECT {self._PERSONA_TEMPLATE_COLS} FROM persona_templates "
+                    "WHERE visibility IN ('builtin', 'shared') "
+                    "ORDER BY visibility ASC, name ASC"
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    f"SELECT {self._PERSONA_TEMPLATE_COLS} FROM persona_templates "
+                    "WHERE visibility IN ('builtin', 'shared') "
+                    "   OR (visibility = 'private' AND owner_user_id = ?) "
+                    "ORDER BY visibility ASC, name ASC",
+                    (user_id,),
+                ).fetchall()
+        return [self._row_to_persona_template(row) for row in rows]
+
+    def get_persona_template(self, template_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                f"SELECT {self._PERSONA_TEMPLATE_COLS} FROM persona_templates WHERE id = ?",
+                (template_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_persona_template(row)
+
+    def create_persona_template(
+        self,
+        *,
+        template_id: str,
+        name: str,
+        visibility: str = "shared",
+        owner_user_id: Optional[str] = None,
+        val_bro_prof: float = 0.5,
+        val_dipl_snark: float = 0.5,
+        val_pass_auto: float = 0.5,
+        val_depth: float = 0.5,
+        val_obscurity: float = 0.5,
+        val_verbosity: float = 0.5,
+        val_formality: float = 0.5,
+        system_prompt_override: Optional[str] = None,
+        accent_color: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a new persona template.
+
+        Owner-created templates are ``shared`` (visible to all users);
+        member-created templates are ``private`` (visible only to the creator).
+        """
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO persona_templates (
+                    id, name, visibility, owner_user_id,
+                    val_bro_prof, val_dipl_snark, val_pass_auto,
+                    val_depth, val_obscurity, val_verbosity, val_formality,
+                    system_prompt_override, accent_color
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    template_id, name, visibility, owner_user_id,
+                    val_bro_prof, val_dipl_snark, val_pass_auto,
+                    val_depth, val_obscurity, val_verbosity, val_formality,
+                    system_prompt_override, accent_color,
+                ),
+            )
+        template = self.get_persona_template(template_id)
+        assert template is not None
+        return template
+
+    def update_persona_template(
+        self,
+        template_id: str,
+        *,
+        name: Optional[str] = None,
+        val_bro_prof: Optional[float] = None,
+        val_dipl_snark: Optional[float] = None,
+        val_pass_auto: Optional[float] = None,
+        val_depth: Optional[float] = None,
+        val_obscurity: Optional[float] = None,
+        val_verbosity: Optional[float] = None,
+        val_formality: Optional[float] = None,
+        system_prompt_override: Optional[str] = ...,  # type: ignore[assignment]
+        accent_color: Optional[str] = ...,  # type: ignore[assignment]
+    ) -> Dict[str, Any]:
+        """Update a custom persona template. Built-in templates are immutable."""
+        current = self.get_persona_template(template_id)
+        if current is None:
+            raise ValueError(f"Unknown persona template: {template_id}")
+        if current["visibility"] == "builtin":
+            raise ValueError("Built-in persona templates are immutable")
+
+        resolved = {
+            "name": name if name is not None else current["name"],
+            "val_bro_prof": val_bro_prof if val_bro_prof is not None else current["val_bro_prof"],
+            "val_dipl_snark": val_dipl_snark if val_dipl_snark is not None else current["val_dipl_snark"],
+            "val_pass_auto": val_pass_auto if val_pass_auto is not None else current["val_pass_auto"],
+            "val_depth": val_depth if val_depth is not None else current["val_depth"],
+            "val_obscurity": val_obscurity if val_obscurity is not None else current["val_obscurity"],
+            "val_verbosity": val_verbosity if val_verbosity is not None else current["val_verbosity"],
+            "val_formality": val_formality if val_formality is not None else current["val_formality"],
+            "system_prompt_override": (
+                system_prompt_override if system_prompt_override is not ... else current["system_prompt_override"]
+            ),
+            "accent_color": accent_color if accent_color is not ... else current["accent_color"],
+        }
+        with self.connect() as conn:
+            conn.execute(
+                """
+                UPDATE persona_templates SET
+                    name = ?, val_bro_prof = ?, val_dipl_snark = ?, val_pass_auto = ?,
+                    val_depth = ?, val_obscurity = ?, val_verbosity = ?, val_formality = ?,
+                    system_prompt_override = ?, accent_color = ?
+                WHERE id = ?
+                """,
+                (
+                    resolved["name"],
+                    resolved["val_bro_prof"], resolved["val_dipl_snark"], resolved["val_pass_auto"],
+                    resolved["val_depth"], resolved["val_obscurity"],
+                    resolved["val_verbosity"], resolved["val_formality"],
+                    resolved["system_prompt_override"], resolved["accent_color"],
+                    template_id,
+                ),
+            )
+        updated = self.get_persona_template(template_id)
+        assert updated is not None
+        return updated
+
+    def delete_persona_template(self, template_id: str) -> bool:
+        """Delete a custom persona template. Built-in templates cannot be deleted."""
+        current = self.get_persona_template(template_id)
+        if current is None:
+            return False
+        if current["visibility"] == "builtin":
+            raise ValueError("Built-in persona templates cannot be deleted")
+        with self.connect() as conn:
+            conn.execute("DELETE FROM persona_templates WHERE id = ?", (template_id,))
+        return True
+
+    def set_user_default_persona(self, user_id: str, persona_id: str) -> None:
+        """Set a user's default persona template for new conversations."""
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE users SET default_persona_id = ? WHERE id = ?",
+                (persona_id, user_id),
+            )
+
+    def get_user_default_persona_id(self, user_id: str) -> Optional[str]:
+        """Return the user's default persona template ID, or None."""
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT default_persona_id FROM users WHERE id = ?",
+                (user_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return row["default_persona_id"]
+
+    def set_thread_persona(self, session_id: str, persona_id: Optional[str]) -> None:
+        """Attach or update a persona template on a chat thread."""
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE chat_sessions SET persona_id = ? WHERE id = ?",
+                (persona_id, session_id),
+            )
+
+    def get_thread_persona_id(self, session_id: str) -> Optional[str]:
+        """Return the persona_id attached to a thread, or None."""
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT persona_id FROM chat_sessions WHERE id = ?",
+                (session_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return row["persona_id"]
+
     # --- Lenses ---
 
     def list_lenses(self) -> List[sqlite3.Row]:
@@ -2314,11 +2703,13 @@ class Database:
         return ""
 
     def _row_to_thread_summary(self, row: sqlite3.Row, *, message_count: int = 0, preview: str = "") -> Dict[str, Any]:
+        persona_id = row["persona_id"] if "persona_id" in row.keys() else None
         return {
             "id": str(row["id"]),
             "thread_title": str(row["thread_title"] or self.DEFAULT_THREAD_TITLE),
             "context_hash": str(row["context_hash"] or DEFAULT_CONTEXT_HASH),
             "lens_id": str(row["lens_id"] or DEFAULT_LENS_ID),
+            "persona_id": str(persona_id) if persona_id else None,
             "created_at": float(row["created_at"]),
             "updated_at": float(row["updated_at"]),
             "message_count": message_count,
@@ -2333,6 +2724,7 @@ class Database:
         context_hash: str = DEFAULT_CONTEXT_HASH,
         thread_title: Optional[str] = None,
         user_id: Optional[str] = None,
+        persona_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         now = time.time()
         resolved_lens = lens_id or DEFAULT_LENS_ID
@@ -2342,10 +2734,10 @@ class Database:
             conn.execute(
                 """
                 INSERT INTO chat_sessions (
-                    id, created_at, updated_at, lens_id, thread_title, context_hash, user_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    id, created_at, updated_at, lens_id, thread_title, context_hash, user_id, persona_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, now, now, resolved_lens, title, resolved_context, user_id),
+                (session_id, now, now, resolved_lens, title, resolved_context, user_id, persona_id),
             )
             row = conn.execute("SELECT * FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
         assert row is not None
@@ -2495,6 +2887,7 @@ class Database:
         *,
         context_hash: str = DEFAULT_CONTEXT_HASH,
         user_id: Optional[str] = None,
+        persona_id: Optional[str] = None,
     ) -> None:
         now = time.time()
         resolved = lens_id or DEFAULT_LENS_ID
@@ -2503,10 +2896,10 @@ class Database:
             conn.execute(
                 """
                 INSERT OR IGNORE INTO chat_sessions (
-                    id, created_at, updated_at, lens_id, thread_title, context_hash, user_id
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    id, created_at, updated_at, lens_id, thread_title, context_hash, user_id, persona_id
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, now, now, resolved, self.DEFAULT_THREAD_TITLE, resolved_context, user_id),
+                (session_id, now, now, resolved, self.DEFAULT_THREAD_TITLE, resolved_context, user_id, persona_id),
             )
             if user_id is not None:
                 conn.execute(

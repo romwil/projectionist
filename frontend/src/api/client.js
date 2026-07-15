@@ -411,6 +411,36 @@ export async function getEngagementStreak() {
   return api("/engagement/streak");
 }
 
+export async function getPersonas() {
+  return api("/personas");
+}
+
+export async function createPersona(data) {
+  return api("/personas", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updatePersona(id, data) {
+  return api(`/personas/${encodeURIComponent(id)}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePersona(id) {
+  return api(`/personas/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function setDefaultPersona(id) {
+  return api(`/personas/${encodeURIComponent(id)}/default`, {
+    method: "PUT",
+  });
+}
+
 export async function getTypingPhrases() {
   return api("/persona/typing-phrases");
 }
@@ -419,9 +449,10 @@ export async function listJobs() {
   return api("/jobs");
 }
 
-export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, sessionId: explicitSessionId } = {}) {
+export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, sessionId: explicitSessionId, personaId } = {}) {
   const body = { message, session_id: explicitSessionId || sessionId() };
   if (lensId) body.lens_id = lensId;
+  if (personaId) body.persona_id = personaId;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {

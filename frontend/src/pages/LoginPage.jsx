@@ -239,9 +239,6 @@ export default function LoginPage() {
             About
           </Link>
         </p>
-        <p className="login-footer">
-          Need to change auth settings? <Link to="/admin">Open Admin</Link>
-        </p>
       </div>
     </div>
   );

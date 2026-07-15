@@ -1,3 +1,5 @@
+import { Link } from "react-router-dom";
+
 const SHORTCUTS = [
   { keys: "/", description: "Focus the composer" },
   { keys: "Enter", description: "Send the message" },
@@ -37,9 +39,9 @@ export default function KeyboardHelpModal({ open, onClose, plexCollectionsEnable
           Slash commands: `/help`, `/stats`, `/sync`, `/purge`{plexCollectionsEnabled ? ", `/collections`" : ""}
         </p>
         <p className="keyboard-help-footnote keyboard-help-privacy">
-          <a href="/privacy" data-testid="keyboard-help-privacy-link">
+          <Link to="/privacy" data-testid="keyboard-help-privacy-link">
             Privacy &amp; data use
-          </a>
+          </Link>
         </p>
       </div>
     </div>

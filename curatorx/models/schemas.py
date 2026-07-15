@@ -68,6 +68,7 @@ class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
     lens_id: Optional[str] = None
+    persona_id: Optional[str] = None
 
 
 class ActionConfirmRequest(BaseModel):
@@ -339,3 +340,62 @@ class CuratedListCollectionResponse(BaseModel):
 class EngagementStreakResponse(BaseModel):
     session_count_30d: int = 0
     streak_visible: bool = False
+
+
+# --- Persona Templates (per-conversation persona selection) ---
+
+
+class PersonaTemplate(BaseModel):
+    """A reusable persona configuration with 7 behavioral sliders.
+
+    Personas come in three visibility tiers:
+    - ``builtin``: shipped with CuratorX, immutable (Classic Curator, etc.)
+    - ``shared``: created by the server owner, visible to all users
+    - ``private``: created by an individual user, visible only to them
+    """
+
+    id: str
+    name: str
+    visibility: str
+    owner_user_id: Optional[str] = None
+    val_bro_prof: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_dipl_snark: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_pass_auto: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_depth: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_obscurity: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_verbosity: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_formality: float = Field(default=0.5, ge=0.0, le=1.0)
+    system_prompt_override: Optional[str] = None
+    accent_color: Optional[str] = None
+    is_default: bool = False
+    created_at: Optional[str] = None
+
+
+class PersonaTemplateCreate(BaseModel):
+    """Payload for creating a new persona template (all 7 sliders validated)."""
+
+    name: str = Field(..., min_length=1, max_length=100)
+    val_bro_prof: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_dipl_snark: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_pass_auto: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_depth: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_obscurity: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_verbosity: float = Field(default=0.5, ge=0.0, le=1.0)
+    val_formality: float = Field(default=0.5, ge=0.0, le=1.0)
+    system_prompt_override: Optional[str] = None
+    accent_color: Optional[str] = None
+
+
+class PersonaTemplateUpdate(BaseModel):
+    """Payload for updating a persona template (all fields optional)."""
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    val_bro_prof: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    val_dipl_snark: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    val_pass_auto: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    val_depth: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    val_obscurity: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    val_verbosity: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    val_formality: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    system_prompt_override: Optional[str] = None
+    accent_color: Optional[str] = None

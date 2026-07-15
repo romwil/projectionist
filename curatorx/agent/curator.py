@@ -185,7 +185,10 @@ class CuratorAgent:
             }
 
         history = self.db.chat_history(session_id, limit=20, lens_id=self.lens_id)
-        messages: List[Dict[str, Any]] = [{"role": "system", "content": build_system_prompt(self.db, self.lens_id)}]
+        thread_persona_id = self.db.get_thread_persona_id(session_id)
+        messages: List[Dict[str, Any]] = [
+            {"role": "system", "content": build_system_prompt(self.db, self.lens_id, persona_id=thread_persona_id)}
+        ]
         for entry in history:
             text = " ".join(
                 block.get("content", "")

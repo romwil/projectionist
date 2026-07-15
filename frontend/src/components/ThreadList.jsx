@@ -7,6 +7,7 @@ export default function ThreadList({
   onCreate,
   compact = false,
   hideHeader = false,
+  personaLookup = {},
 }) {
   return (
     <div className={`thread-list ${compact ? "compact" : ""}`} data-testid="thread-list">
@@ -31,6 +32,7 @@ export default function ThreadList({
         <ul className="thread-items">
           {threads.map((thread) => {
             const isActive = thread.id === activeSessionId;
+            const persona = thread.persona_id ? personaLookup[thread.persona_id] : null;
             return (
               <li key={thread.id}>
                 <button
@@ -40,6 +42,14 @@ export default function ThreadList({
                   onClick={() => onSelect(thread.id)}
                 >
                   <span className="thread-item-title">{thread.thread_title}</span>
+                  {persona ? (
+                    <span className="thread-persona-badge">
+                      {persona.accent_color && (
+                        <span className="persona-dot-sm" style={{ background: persona.accent_color }} />
+                      )}
+                      {persona.name}
+                    </span>
+                  ) : null}
                   {thread.preview ? <span className="thread-item-preview">{thread.preview}</span> : null}
                   <span className="thread-item-meta">{relativeTime(thread.updated_at)}</span>
                 </button>

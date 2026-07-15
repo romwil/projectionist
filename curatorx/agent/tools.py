@@ -2695,8 +2695,35 @@ async def execute_confirmed_action(
     raise RuntimeError(f"Unknown action {action}")
 
 
-def _persona_prompt_block(db: Database) -> str:
+def _persona_prompt_block(db: Database, *, persona_id: Optional[str] = None) -> str:
+    """Build the persona section of the system prompt.
+
+    Resolution order for per-conversation persona:
+    1. ``persona_id`` — the persona template attached to this conversation
+    2. Global singleton in ``curator_persona_metrics`` (legacy fallback)
+
+    When a persona_template is found, its 7 slider values are passed through
+    the same prompt-assembly pipeline as the legacy 3-slider persona.
+    """
     from curatorx.persona import build_persona_prompt, persona_row_to_dict
+
+    if persona_id:
+        template = db.get_persona_template(persona_id)
+        if template:
+            synth = {
+                "curator_name": template.get("name", "Curator"),
+                "persona_identity": "",
+                "val_bro_prof": template["val_bro_prof"],
+                "val_dipl_snark": template["val_dipl_snark"],
+                "val_pass_auto": template["val_pass_auto"],
+                "val_depth": template["val_depth"],
+                "val_obscurity": template["val_obscurity"],
+                "val_verbosity": template["val_verbosity"],
+                "val_formality": template["val_formality"],
+                "persona_prompt_override": template.get("system_prompt_override"),
+                "persona_preset_id": template["id"] if template["visibility"] == "builtin" else None,
+            }
+            return build_persona_prompt(synth)
 
     persona = db.get_persona()
     if not persona:
@@ -2704,7 +2731,17 @@ def _persona_prompt_block(db: Database) -> str:
     return build_persona_prompt(persona_row_to_dict(persona))
 
 
-def build_system_prompt(db: Database, lens_id: Optional[str] = None) -> str:
+def build_system_prompt(
+    db: Database,
+    lens_id: Optional[str] = None,
+    *,
+    persona_id: Optional[str] = None,
+) -> str:
+    """Assemble the full system prompt for the Curator agent.
+
+    ``persona_id`` specifies the per-conversation persona template. When
+    omitted, the global singleton persona is used (backward-compatible).
+    """
     from curatorx.library.db import DEFAULT_LENS_ID
 
     resolved = lens_id or db.get_active_lens_id() or DEFAULT_LENS_ID
@@ -2757,7 +2794,7 @@ def build_system_prompt(db: Database, lens_id: Optional[str] = None) -> str:
         "Star ratings accept half-stars (e.g. 4.5); never ask users to round fractional ratings.\n"
         f"{queued_block}"
         f"{overview_block}\n"
-        f"{_persona_prompt_block(db)}"
+        f"{_persona_prompt_block(db, persona_id=persona_id)}"
         f"{lens_block}\n\n"
         + preference_context(db, lens_id=resolved)
     )

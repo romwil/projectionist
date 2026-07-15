@@ -107,6 +107,66 @@ PACING_GUIDANCE: dict[SliderBand, str] = {
     "high": "Pacing: headline first — verdict, then bullets. No preamble unless the user asked for analysis.",
 }
 
+DEPTH_GUIDANCE: dict[SliderBand, str] = {
+    "low": (
+        "Depth: keep it quick — surface-level picks optimized for \"what to watch now\". "
+        "Skip the deep analysis unless asked."
+    ),
+    "mid": (
+        "Depth: balanced analysis — explain why a pick fits with a sentence or two of context "
+        "(genre alignment, director lineage, mood match) without writing an essay."
+    ),
+    "high": (
+        "Depth: go deep — rich analysis of why each pick fits (thematic resonance, craft choices, "
+        "where it sits in a director's body of work). Treat picks as curated arguments, not lists."
+    ),
+}
+
+OBSCURITY_GUIDANCE: dict[SliderBand, str] = {
+    "low": (
+        "Obscurity: lean mainstream — popular, accessible titles the user probably hasn't seen yet "
+        "from their library or well-known catalogs. Save the deep cuts for when they ask."
+    ),
+    "mid": (
+        "Obscurity: balanced mix — blend familiar favorites with occasional left-field picks. "
+        "When suggesting something niche, bridge it to known territory."
+    ),
+    "high": (
+        "Obscurity: lean arthouse/niche — prioritize underseen gems, festival films, international "
+        "cinema, and cult picks. Surface titles they'd never find on their own."
+    ),
+}
+
+VERBOSITY_GUIDANCE: dict[SliderBand, str] = {
+    "low": (
+        "Verbosity: concise — tight, punchy responses. One or two sentences per pick. "
+        "Bullet points over paragraphs. Say less, mean more."
+    ),
+    "mid": (
+        "Verbosity: moderate — enough detail to justify the pick without rambling. "
+        "Match length to question complexity."
+    ),
+    "high": (
+        "Verbosity: detailed — thorough explanations, rich comparisons, contextual deep-dives. "
+        "Give the user everything they need to decide without asking follow-ups."
+    ),
+}
+
+FORMALITY_GUIDANCE: dict[SliderBand, str] = {
+    "low": (
+        "Formality: casual/chatty — conversational tone, contractions, emoji-friendly if the mood fits. "
+        "Talk like a movie-obsessed friend, not a critic."
+    ),
+    "mid": (
+        "Formality: even — relaxed but clear. Structure with light formatting when helpful, "
+        "but don't over-template responses."
+    ),
+    "high": (
+        "Formality: structured — organized responses with clear sections, numbered lists, "
+        "and professional prose. Think film-journal review, not text message."
+    ),
+}
+
 
 def persona_row_to_dict(row: Any) -> dict[str, Any]:
     if row is None:
@@ -141,14 +201,32 @@ def _slider_label(value: float, low: str, mid: str, high: str) -> str:
 
 
 def build_behavioral_prompt_from_sliders(persona: Mapping[str, Any]) -> str:
-    """Slider-generated behavioral template; name is a ``{curator_name}`` placeholder."""
+    """Slider-generated behavioral template; name is a ``{curator_name}`` placeholder.
+
+    Reads all 7 slider dimensions (3 original + 4 expanded):
+    - val_bro_prof: Vocabulary (casual ↔ professorial)
+    - val_dipl_snark: Directness (diplomatic ↔ snarky)
+    - val_pass_auto: Initiative (passive ↔ autonomous)
+    - val_depth: Depth (quick picks ↔ deep dives)
+    - val_obscurity: Obscurity (mainstream ↔ arthouse/niche)
+    - val_verbosity: Verbosity (concise ↔ detailed)
+    - val_formality: Formality (casual/chatty ↔ formal/structured)
+    """
     bro = float(persona.get("val_bro_prof") or 0.5)
     snark = float(persona.get("val_dipl_snark") or 0.5)
     auto = float(persona.get("val_pass_auto") or 0.5)
+    depth = float(persona.get("val_depth") or 0.5)
+    obscurity = float(persona.get("val_obscurity") or 0.5)
+    verbosity = float(persona.get("val_verbosity") or 0.5)
+    formality = float(persona.get("val_formality") or 0.5)
 
     vocab_band = slider_band(bro)
     direct_band = slider_band(snark)
     init_band = slider_band(auto)
+    depth_band = slider_band(depth)
+    obscurity_band = slider_band(obscurity)
+    verbosity_band = slider_band(verbosity)
+    formality_band = slider_band(formality)
 
     preset_id = persona.get("persona_preset_id")
     preset = get_preset(str(preset_id) if preset_id else None)
@@ -178,6 +256,22 @@ def build_behavioral_prompt_from_sliders(persona: Mapping[str, Any]) -> str:
             (
                 f"Initiative ({_slider_label(auto, 'passive', 'collaborative', 'autonomous')}, {auto:.2f}): "
                 f"{INITIATIVE_GUIDANCE[init_band]}"
+            ),
+            (
+                f"Depth ({_slider_label(depth, 'quick', 'balanced', 'deep')}, {depth:.2f}): "
+                f"{DEPTH_GUIDANCE[depth_band]}"
+            ),
+            (
+                f"Obscurity ({_slider_label(obscurity, 'mainstream', 'balanced', 'niche')}, {obscurity:.2f}): "
+                f"{OBSCURITY_GUIDANCE[obscurity_band]}"
+            ),
+            (
+                f"Verbosity ({_slider_label(verbosity, 'concise', 'moderate', 'detailed')}, {verbosity:.2f}): "
+                f"{VERBOSITY_GUIDANCE[verbosity_band]}"
+            ),
+            (
+                f"Formality ({_slider_label(formality, 'casual', 'even', 'structured')}, {formality:.2f}): "
+                f"{FORMALITY_GUIDANCE[formality_band]}"
             ),
             f"Recommendation pacing: {PACING_GUIDANCE[direct_band]}",
             f"When the user disagrees: {DISAGREEMENT_GUIDANCE[direct_band][init_band]}",

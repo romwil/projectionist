@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.5.0] — 2026-07-15
+
+Per-conversation persona selection, expanded personality sliders, login cleanup, test coverage infrastructure.
+
+### Added
+- Per-conversation persona system: `persona_templates` table with 5 built-in presets (Classic Curator, Blunt Archivist, Enthusiastic Scout, Academic Critic, Night Owl Host) plus owner-shared and user-private custom personas
+- 4 new personality sliders: Depth (quick picks↔deep dives), Obscurity (mainstream↔arthouse), Verbosity (concise↔detailed), Formality (chatty↔structured) — total 7 dimensions
+- Composer persona selector dropdown with create/edit modal and "Show Advanced" toggle for custom system prompts
+- Per-conversation persona indicator in thread sidebar
+- 404 catch-all route with "Page not found" page
+- Custom `react-markdown` link renderer for privacy page — relative `.md` links rewrite to GitHub docs URLs
+- `tests/test_session_tokens.py` (12 tests) and `tests/test_crypto.py` (15 tests) for security-critical modules
+- `tests/test_persona_templates.py` and `tests/test_persona_api.py` (37 tests) for persona system
+- Coverage tooling: `.coveragerc` for Python, `c8` + `.c8rc.json` for frontend
+- Frontend unit tests wired into CI pipeline and top-level `npm test`
+
+### Changed
+- Persona sliders expanded from 3 to 7 dimensions; `build_system_prompt()` reads from conversation's persona template
+- Login page decluttered: removed Admin link from footer, tightened card spacing
+- `KeyboardHelpModal` privacy link changed from raw `<a>` to React Router `<Link>`
+
+### Fixed
+- Privacy page: relative markdown links (`SECURITY.md`, `MCP.md`, `wiki/*.md`) no longer navigate to dead SPA routes
+
 ## [1.4.0] — 2026-07-15
 
 Documentation alignment, security hardening, and roadmap cleanup.

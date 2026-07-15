@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curatorx"
-version = "1.4.0"
+version = "1.5.0"
 description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -34,6 +34,10 @@ web = [
 
 mcp = [
     "mcp>=1.0.0",
+]
+
+dev = [
+    "coverage>=7.0",
 ]
 
 [project.urls]

@@ -1,0 +1,16 @@
+[run]
+source = curatorx
+omit =
+    curatorx/web/static/*
+    */test*
+
+[report]
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__
+    if TYPE_CHECKING
+show_missing = true
+precision = 1
+
+[html]
+directory = htmlcov

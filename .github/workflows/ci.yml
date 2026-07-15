@@ -29,6 +29,9 @@ jobs:
           npm install
           npm run build
 
+      - name: Frontend unit tests
+        run: cd frontend && npm run test:unit
+
       - name: Install Playwright
         run: |
           npm install
