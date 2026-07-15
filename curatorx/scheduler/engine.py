@@ -13,10 +13,17 @@ from the FastAPI lifespan.  It maintains its own SQLite table
 
 Circuit Breaker / Watchdog
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
-Each task runs with a configurable timeout (default 5 minutes).  If a task
-hangs beyond its timeout, it is cancelled and logged as a timeout failure.
-Tasks can call ``heartbeat()`` on the provided callback during long operations
-to reset the timeout window.
+Each task runs with a configurable timeout (default 5 minutes).  The timeout
+is enforced via a deadline loop: the scheduler waits up to *timeout* seconds
+for the task to finish.  If it hasn't finished, the scheduler checks whether
+the task called ``heartbeat()`` since the last wait began.  If a heartbeat
+arrived, the deadline resets and the scheduler waits another full timeout
+window.  If no heartbeat arrived, the task is cancelled and logged as a
+timeout failure.
+
+Tasks receive a ``should_stop`` callback which doubles as a heartbeat — each
+call to ``should_stop()`` records a heartbeat, so tasks that poll for
+cooperative interruption automatically extend their timeout window.
 
 A per-task failure counter tracks consecutive failures.  After
 ``QUARANTINE_THRESHOLD`` consecutive failures (default 3), the task is
@@ -127,11 +134,17 @@ class QuarantineInfo:
 
 
 class _HeartbeatHandle:
-    """Passed to tasks so they can call ``heartbeat()`` to reset the timeout window.
+    """Liveness signal that tasks use to extend the timeout deadline.
 
-    Long-running tasks (e.g. batch embedding) should call this between batches
-    to signal liveness without requiring the entire task to complete within a
-    single timeout window.
+    The scheduler enforces a per-task timeout via a deadline loop.  Each
+    iteration of the loop snapshots ``last_heartbeat`` before waiting.  If the
+    wait expires and ``last_heartbeat`` has advanced, the deadline resets for
+    another full timeout window.  If it hasn't advanced, the task is cancelled.
+
+    Long-running tasks (e.g. batch embedding) should call ``heartbeat()``
+    between batches.  The ``should_stop`` callback passed to tasks also calls
+    ``heartbeat()`` automatically, so tasks that poll ``should_stop()``
+    regularly will keep the deadline alive without extra effort.
     """
 
     def __init__(self) -> None:
@@ -425,14 +438,54 @@ class IdleScheduler:
         candidates.sort(key=lambda x: x[0], reverse=True)
         return [defn for _, defn in candidates]
 
+    async def _run_with_deadline(
+        self,
+        defn: TaskDefinition,
+        hb: _HeartbeatHandle,
+        run_coro: Awaitable[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Run a task with a deadline that resets on each heartbeat.
+
+        Instead of a single ``asyncio.wait_for`` (whose timeout is fixed once
+        set), this loops: each iteration snapshots ``hb.last_heartbeat``, then
+        waits up to *timeout* seconds for the shielded task.  On timeout, if a
+        heartbeat arrived since the snapshot, the loop continues with a fresh
+        deadline.  Otherwise the task is cancelled for real.
+
+        ``asyncio.shield`` prevents ``wait_for`` from cancelling the underlying
+        task when only the timeout fires — we need the task alive so we can
+        re-enter the wait if a heartbeat arrived.
+        """
+        task = asyncio.ensure_future(run_coro)
+        timeout = defn.timeout_seconds
+
+        while not task.done():
+            last_hb = hb.last_heartbeat
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+                return task.result()
+            except asyncio.TimeoutError:
+                if hb.last_heartbeat > last_hb:
+                    continue
+                task.cancel()
+                try:
+                    await task
+                except (asyncio.CancelledError, Exception):
+                    pass
+                raise asyncio.TimeoutError()
+
+        return task.result()
+
     async def _execute_task(
         self, defn: TaskDefinition, *, force: bool = False
     ) -> Dict[str, Any]:
         """Run a single task with timeout watchdog and failure tracking.
 
-        The task runs inside ``asyncio.wait_for`` with the configured timeout.
-        A :class:`_HeartbeatHandle` is threaded through the ``should_stop``
-        callback so tasks can call ``heartbeat()`` to reset the deadline.
+        The task runs inside :meth:`_run_with_deadline` which enforces a
+        per-heartbeat sliding timeout.  A :class:`_HeartbeatHandle` is threaded
+        through the ``should_stop`` callback: every call to ``should_stop()``
+        records a heartbeat, so tasks that poll for cooperative interruption
+        automatically extend their deadline.
 
         On success the failure counter resets.  On failure the counter increments;
         after ``QUARANTINE_THRESHOLD`` consecutive failures the task is quarantined.
@@ -455,19 +508,22 @@ class IdleScheduler:
                     return True
                 return False
 
-            timeout = defn.timeout_seconds
-
             async def _run_with_heartbeat() -> Dict[str, Any]:
-                """Execute the task, extending the deadline on each heartbeat."""
                 assert defn.run_fn is not None
 
                 def stop_with_heartbeat() -> bool:
+                    """Check whether the task should stop, and record a heartbeat.
+
+                    Calling ``should_stop()`` is proof of liveness — the task is
+                    still actively executing and checking for interruption — so
+                    each call extends the timeout deadline automatically.
+                    """
                     hb.heartbeat()
                     return stop_check()
 
                 return await defn.run_fn(self._db, settings, stop_with_heartbeat)
 
-            result = await asyncio.wait_for(_run_with_heartbeat(), timeout=timeout)
+            result = await self._run_with_deadline(defn, hb, _run_with_heartbeat())
             elapsed_ms = int((time.time() - start) * 1000)
 
             status = result.get("status", "completed") if isinstance(result, dict) else "completed"

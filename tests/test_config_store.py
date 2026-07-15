@@ -105,6 +105,7 @@ class ConfigStoreTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = Path(tmp)
             save_settings(data_dir, Settings(tmdb_api_key="file-key"))
+            saved_plex = os.environ.pop("PLEX_TOKEN", None)
             os.environ["LLM_API_KEY"] = "env-key"
             try:
                 sources = secret_field_sources(data_dir)
@@ -113,6 +114,8 @@ class ConfigStoreTests(unittest.TestCase):
                 self.assertEqual(sources["plex_token"], "")
             finally:
                 del os.environ["LLM_API_KEY"]
+                if saved_plex is not None:
+                    os.environ["PLEX_TOKEN"] = saved_plex
 
     def test_secret_field_sources_prefers_file_over_env(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -330,15 +333,22 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertEqual(loaded.seerr.api_key, "secret")
 
     def test_load_merged_settings_normalizes_empty_path_fields(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            data_dir = Path(tmp)
-            save_settings(
-                data_dir,
-                Settings(radarr_root_folder="", movies_root="", radarr_url="http://radarr"),
-            )
-            loaded = load_merged_settings(data_dir)
-            self.assertEqual(loaded.radarr_root_folder, "/media/movies")
-            self.assertEqual(loaded.movies_root, "/media/movies")
+        env_keys = ("MOVIES_ROOT", "TV_ROOT", "RADARR_ROOT_FOLDER", "SONARR_ROOT_FOLDER")
+        saved = {k: os.environ.pop(k, None) for k in env_keys}
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                data_dir = Path(tmp)
+                save_settings(
+                    data_dir,
+                    Settings(radarr_root_folder="", movies_root="", radarr_url="http://radarr"),
+                )
+                loaded = load_merged_settings(data_dir)
+                self.assertEqual(loaded.radarr_root_folder, "/media/movies")
+                self.assertEqual(loaded.movies_root, "/media/movies")
+        finally:
+            for k, v in saved.items():
+                if v is not None:
+                    os.environ[k] = v
 
 
 if __name__ == "__main__":

@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.7.2] — 2026-07-15
+
+Heartbeat deadline bug fix, test suite isolation, zero failures.
+
+### Fixed
+- Scheduler heartbeat mechanism now actually resets the timeout deadline — previously `asyncio.wait_for()` ignored heartbeat timestamps entirely
+- Test suite environment isolation: patched `PLEX_TOKEN`, `MOVIES_ROOT`, `TV_ROOT`, `RADARR_ROOT_FOLDER`, `SONARR_ROOT_FOLDER` leakage from developer `.env` into test assertions
+- Added missing `python-multipart` dependency for webhook multipart form parsing
+
+### Changed
+- Heartbeat timeout uses `asyncio.shield()` + deadline loop instead of fixed `asyncio.wait_for()`
+- Full test suite now passes with zero failures (698 Python + 102 frontend)
+
 ## [1.7.1] — 2026-07-15
 
 Scheduler hardening, data retention, and trickle embedding ingestion.

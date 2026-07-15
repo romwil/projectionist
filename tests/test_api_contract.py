@@ -518,7 +518,10 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(progress.status_code, 200)
         self.assertEqual(progress.json()["group_by"], "show")
 
+    @patch.dict(os.environ, {}, clear=False)
     def test_settings_put_restores_empty_root_folders(self) -> None:
+        for key in ("MOVIES_ROOT", "TV_ROOT", "RADARR_ROOT_FOLDER", "SONARR_ROOT_FOLDER"):
+            os.environ.pop(key, None)
         self.client.put(
             "/api/settings",
             json={

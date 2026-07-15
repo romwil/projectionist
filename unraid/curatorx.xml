@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.7.1 (stable minor tag). -->
+<!-- Unraid Community Applications template — CuratorX 1.7.2 (stable minor tag). -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:1.7</Repository>
@@ -21,6 +21,9 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.7.2
+- Fix scheduler heartbeat deadline bug; zero test failures
+
 ### 1.7.1
 - Scheduler circuit breaker: quarantines tasks after 3 consecutive failures (1h cooldown, admin reset endpoint)
 - Data retention pruning for telemetry/anniversaries with automatic VACUUM

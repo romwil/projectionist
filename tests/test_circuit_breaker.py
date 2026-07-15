@@ -51,6 +51,35 @@ async def _heartbeat_task(
     return {"status": "completed"}
 
 
+async def _slow_with_heartbeats(
+    db: Database, settings: Settings, should_stop: Callable[[], bool]
+) -> Dict[str, Any]:
+    """Takes ~4s total but heartbeats every 0.5s — should survive a 2s timeout."""
+    for _ in range(8):
+        should_stop()
+        await asyncio.sleep(0.5)
+    return {"status": "completed"}
+
+
+async def _slow_no_heartbeats(
+    db: Database, settings: Settings, should_stop: Callable[[], bool]
+) -> Dict[str, Any]:
+    """Takes ~4s with no heartbeats — should timeout with a 2s timeout."""
+    await asyncio.sleep(4)
+    return {"status": "completed"}
+
+
+async def _heartbeat_then_hang(
+    db: Database, settings: Settings, should_stop: Callable[[], bool]
+) -> Dict[str, Any]:
+    """Heartbeats for ~1.5s then hangs — should timeout ~2s after the last heartbeat."""
+    for _ in range(3):
+        should_stop()
+        await asyncio.sleep(0.5)
+    await asyncio.sleep(60)
+    return {"status": "completed"}
+
+
 class QuarantineInfoTests(unittest.TestCase):
     """Unit tests for the QuarantineInfo dataclass."""
 
@@ -283,6 +312,67 @@ class AdminAPIQuarantineFieldTests(unittest.TestCase):
             self.assertTrue(state["quarantine"]["is_quarantined"])
             self.assertEqual(state["quarantine"]["consecutive_failures"], QUARANTINE_THRESHOLD)
             self.assertIn("intentional failure", state["quarantine"]["last_error"])
+
+
+class HeartbeatDeadlineTests(unittest.TestCase):
+    """Tests that heartbeats actually extend the timeout deadline."""
+
+    def test_heartbeat_extends_timeout(self) -> None:
+        """A task that takes 4s but heartbeats every 0.5s should survive a 2s timeout."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _make_db(tmp)
+            scheduler = IdleScheduler(db, Path(tmp), idle_threshold_minutes=0)
+            scheduler.register(
+                TaskDefinition(
+                    name="slow_hb",
+                    run_interval_seconds=3600,
+                    timeout_seconds=2,
+                    run_fn=_slow_with_heartbeats,
+                )
+            )
+            result = asyncio.run(scheduler.trigger_task("slow_hb"))
+            self.assertEqual(result["status"], "completed")
+
+    def test_no_heartbeat_causes_timeout(self) -> None:
+        """A task that takes 4s with no heartbeats should timeout at 2s."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _make_db(tmp)
+            scheduler = IdleScheduler(db, Path(tmp), idle_threshold_minutes=0)
+            scheduler.register(
+                TaskDefinition(
+                    name="slow_no_hb",
+                    run_interval_seconds=3600,
+                    timeout_seconds=2,
+                    run_fn=_slow_no_heartbeats,
+                )
+            )
+            t0 = time.time()
+            result = asyncio.run(scheduler.trigger_task("slow_no_hb"))
+            elapsed = time.time() - t0
+            self.assertEqual(result["status"], "error")
+            self.assertIn("timed out", result["error"])
+            self.assertLess(elapsed, 3.5, "Should timeout around 2s, not wait the full 4s")
+
+    def test_heartbeat_stops_then_timeout(self) -> None:
+        """A task that heartbeats for 1.5s then hangs should timeout ~2s after the last heartbeat."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _make_db(tmp)
+            scheduler = IdleScheduler(db, Path(tmp), idle_threshold_minutes=0)
+            scheduler.register(
+                TaskDefinition(
+                    name="hb_then_hang",
+                    run_interval_seconds=3600,
+                    timeout_seconds=2,
+                    run_fn=_heartbeat_then_hang,
+                )
+            )
+            t0 = time.time()
+            result = asyncio.run(scheduler.trigger_task("hb_then_hang"))
+            elapsed = time.time() - t0
+            self.assertEqual(result["status"], "error")
+            self.assertIn("timed out", result["error"])
+            self.assertGreater(elapsed, 2.5, "Should run ~1.5s of heartbeats + ~2s timeout")
+            self.assertLess(elapsed, 6.0, "Should not wait for the full 60s hang")
 
 
 if __name__ == "__main__":
