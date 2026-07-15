@@ -27,12 +27,20 @@ COPY --from=frontend /frontend/dist ./frontend/dist
 
 RUN pip install --no-cache-dir ".[web,mcp]"
 
+# Non-root user (security finding S13). UID/GID 1000 — bind-mount volumes
+# for /config should be owned by 1000:1000 or world-writable.
+RUN addgroup --system --gid 1000 curatorx \
+    && adduser --system --uid 1000 --ingroup curatorx curatorx \
+    && mkdir -p /config && chown curatorx:curatorx /config
+
 ENV DATA_DIR=/config
 ENV PORT=8788
 
 EXPOSE 8788
 
 VOLUME ["/config"]
+
+USER curatorx
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/api/health')" || exit 1

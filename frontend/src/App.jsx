@@ -22,6 +22,7 @@ import {
   removeWatchlistPin,
   saveReview,
   sendChat,
+  sendChatStream,
   sessionId,
   setActiveSession,
   submitMessageFeedback,
@@ -579,34 +580,68 @@ export default function App() {
       return;
     }
 
+    const streamPlaceholderId = createId();
+    let streamAccumulated = "";
+    let streamFailed = false;
+
     try {
-      const result = await sendChat(text, "general", { sessionId: activeSessionId });
-      if (!result?.message?.blocks?.length) {
-        appendChatError(
-          "The curator returned no content blocks. Check your LLM provider, API key, and model in Settings."
-        );
-        return;
-      }
-      let assistantMessage = result.message;
-      if (perfectPickPendingRef.current) {
-        assistantMessage = appendPerfectPickAck(assistantMessage);
-        perfectPickPendingRef.current = false;
-        helpfulCountRef.current = 0;
-      }
-      setMessages((prev) => [...prev, assistantMessage]);
-      speakAssistantMessage(assistantMessage);
-      setPendingTokens(normalizePendingTokens(result.pending_tokens));
-      if (Array.isArray(result.pending_tokens) && result.pending_tokens.length >= 2) {
-        setPendingBulk(null);
-        setPendingAdd(null);
-      }
-      refreshJobs();
-      refreshThreads();
-      getActiveContext()
-        .then(setActiveContext)
-        .catch(() => {});
+      setMessages((prev) => [
+        ...prev,
+        { id: streamPlaceholderId, role: "assistant", blocks: [{ type: "text", content: "" }], _streaming: true },
+      ]);
+
+      await sendChatStream(text, {
+        sessionId: activeSessionId,
+        onToken: ({ content }) => {
+          streamAccumulated += content;
+          const snapshot = streamAccumulated;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === streamPlaceholderId
+                ? { ...msg, blocks: [{ type: "text", content: snapshot }] }
+                : msg,
+            ),
+          );
+        },
+        onToolCall: ({ name, status }) => {
+          if (status === "start") {
+            const label = name.replace(/_/g, " ");
+            setTypingLabel(`Searching ${label}…`);
+          }
+        },
+        onDone: (data) => {
+          let assistantMessage = data.message;
+          if (perfectPickPendingRef.current) {
+            assistantMessage = appendPerfectPickAck(assistantMessage);
+            perfectPickPendingRef.current = false;
+            helpfulCountRef.current = 0;
+          }
+          setMessages((prev) =>
+            prev.map((msg) => (msg.id === streamPlaceholderId ? assistantMessage : msg)),
+          );
+          speakAssistantMessage(assistantMessage);
+          setPendingTokens(normalizePendingTokens(data.pending_tokens));
+          if (Array.isArray(data.pending_tokens) && data.pending_tokens.length >= 2) {
+            setPendingBulk(null);
+            setPendingAdd(null);
+          }
+          refreshJobs();
+          refreshThreads();
+          getActiveContext()
+            .then(setActiveContext)
+            .catch(() => {});
+        },
+        onError: ({ error }) => {
+          streamFailed = true;
+          setMessages((prev) => prev.filter((msg) => msg.id !== streamPlaceholderId));
+          appendChatError(error || "Chat stream failed");
+        },
+      });
     } catch (error) {
-      appendChatError(formatApiError(error));
+      if (!streamFailed) {
+        setMessages((prev) => prev.filter((msg) => msg.id !== streamPlaceholderId));
+        appendChatError(formatApiError(error));
+      }
     } finally {
       setLoading(false);
     }
@@ -1120,7 +1155,9 @@ export default function App() {
               draggableToDock={dockDropEnabled}
               onReviewConflictResolved={handleReviewConflictResolved}
             />
-            {loading ? <TypingIndicator label={typingLabel || `${curatorName} is thinking`} /> : null}
+            {loading && !messages.some((m) => m._streaming && m.blocks?.[0]?.content) ? (
+              <TypingIndicator label={typingLabel || `${curatorName} is thinking`} />
+            ) : null}
             <NewReplyChip visible={showNewReplyChip} onClick={() => scrollToLatestTurn("smooth")} />
           </div>
 

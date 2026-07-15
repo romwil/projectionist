@@ -128,15 +128,20 @@ from curatorx.reviews.store import (
 )
 from curatorx.reviews.plex_sync import sync_review_rating_to_plex
 from curatorx.web.auth import (
+    authenticate_local_user,
     authenticate_plex_user,
+    available_auth_methods,
     bootstrap_owner,
     clear_pin_nonce_cookie,
     clear_session_cookie,
     get_current_user_dep,
+    handle_oidc_callback,
     multi_user_api_auth_middleware,
     poll_plex_pin_login,
+    register_local_user,
     require_role,
     set_session_cookie,
+    start_oidc_authorize,
     start_plex_pin_login,
     sync_user_seerr_from_token,
     try_get_current_user,
@@ -390,6 +395,21 @@ class AuthSettingsPayload(BaseModel):
     plex_login_enabled: bool = True
     oidc_enabled: bool = False
     local_login_enabled: bool = False
+    oidc_issuer_url: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_redirect_uri: str = ""
+    oidc_provider_name: str = "SSO"
+
+
+class LocalRegisterPayload(BaseModel):
+    username: str = Field(min_length=2, max_length=80)
+    password: str = Field(min_length=8, max_length=256)
+
+
+class LocalLoginPayload(BaseModel):
+    username: str = Field(min_length=1)
+    password: str = Field(min_length=1)
 
 
 class PlexLoginPayload(BaseModel):
@@ -580,11 +600,21 @@ def _mask_settings(settings: Settings) -> Dict[str, Any]:
     seerr_payload["api_key_set"] = bool(settings.seerr.api_key)
     seerr_payload["api_key"] = ""
     payload["seerr"] = seerr_payload
+    auth_payload = dict(payload.get("auth") or {})
+    auth_payload["oidc_client_secret_set"] = bool(settings.auth.oidc_client_secret)
+    auth_payload["oidc_client_secret"] = ""
+    payload["auth"] = auth_payload
     return payload
 
 
 def _db():
     return get_job_manager().db
+
+
+def _telemetry():
+    from curatorx.telemetry import TelemetryIngester
+
+    return TelemetryIngester(_db())
 
 
 def _idle_scheduler() -> Optional[IdleScheduler]:
@@ -613,7 +643,9 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "plex_login_enabled": settings.auth.plex_login_enabled,
             "oidc_enabled": settings.auth.oidc_enabled,
             "local_login_enabled": settings.auth.local_login_enabled,
+            "oidc_provider_name": settings.auth.oidc_provider_name or "SSO",
         },
+        "auth_methods": available_auth_methods(settings),
         "seerr": {
             "link_on_login": settings.seerr.link_on_login,
             "require_linked_user_for_requests": settings.seerr.require_linked_user_for_requests,
@@ -764,6 +796,67 @@ def auth_plex(payload: PlexLoginPayload, request: Request, response: Response) -
     """Advanced fallback: sign in with a raw Plex auth token."""
     enforce_rate_limit(request, bucket="auth_plex_token", limit=10, window_seconds=60)
     user = authenticate_plex_user(payload.auth_token, _db())
+    set_session_cookie(response, user.id, request)
+    return {"user": user.to_dict(), "authenticated": True}
+
+
+@app.post("/api/auth/local/register")
+def auth_local_register(
+    payload: LocalRegisterPayload,
+    request: Request,
+    response: Response,
+) -> Dict[str, Any]:
+    """Create a local-password account.  Owner-only unless bootstrapping."""
+    enforce_rate_limit(request, bucket="auth_local_register", limit=5, window_seconds=60)
+    db = _db()
+    from curatorx.web.auth import _count_local_users
+
+    requesting_user = None
+    if _count_local_users(db) > 0:
+        requesting_user = get_current_user_dep(request)
+
+    user = register_local_user(
+        username=payload.username,
+        password=payload.password,
+        db=db,
+        requesting_user=requesting_user,
+    )
+    set_session_cookie(response, user.id, request)
+    return {"user": user.to_dict(), "authenticated": True}
+
+
+@app.post("/api/auth/local/login")
+def auth_local_login(
+    payload: LocalLoginPayload,
+    request: Request,
+    response: Response,
+) -> Dict[str, Any]:
+    """Authenticate with username/password and set session cookie."""
+    user = authenticate_local_user(
+        username=payload.username,
+        password=payload.password,
+        db=_db(),
+        request=request,
+    )
+    set_session_cookie(response, user.id, request)
+    return {"user": user.to_dict(), "authenticated": True}
+
+
+@app.get("/api/auth/oidc/authorize")
+def auth_oidc_authorize(request: Request) -> Dict[str, Any]:
+    """Start OIDC login — returns the provider authorization URL."""
+    return start_oidc_authorize(request)
+
+
+@app.get("/api/auth/oidc/callback")
+def auth_oidc_callback(
+    code: str,
+    state: str,
+    request: Request,
+    response: Response,
+) -> Dict[str, Any]:
+    """Handle OIDC provider callback — exchange code, create/find user, set session."""
+    user = handle_oidc_callback(code=code, state=state, db=_db(), request=request)
     set_session_cookie(response, user.id, request)
     return {"user": user.to_dict(), "authenticated": True}
 
@@ -1247,6 +1340,32 @@ async def trigger_scheduled_task(
     if result.get("error"):
         raise HTTPException(status_code=404, detail=result["error"])
     return result
+
+
+@app.get("/api/admin/telemetry/summary")
+def telemetry_summary(
+    hours: int = 24,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner-only: event counts by type for the given window."""
+    del user
+    windows = {}
+    for window in (24, 168, 720):
+        windows[f"{window}h"] = _db().telemetry_summary(hours=window)
+    return {"windows": windows, "requested_hours": hours, "detail": _db().telemetry_summary(hours=hours)}
+
+
+@app.get("/api/admin/telemetry/events")
+def telemetry_events(
+    type: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner-only: recent telemetry events with pagination."""
+    del user
+    events = _db().telemetry_events(event_class=type, limit=min(limit, 200), offset=offset)
+    return {"items": events, "count": len(events)}
 
 
 @app.get("/api/library/overview")
@@ -1918,6 +2037,15 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
     config_error = validate_llm_settings(settings)
     if config_error:
         raise HTTPException(status_code=400, detail=config_error)
+
+    _telemetry().record_chat_message(
+        session_id=session_id,
+        lens_id=lens_id,
+        message_length=len(payload.message),
+        persona_id=persona_id,
+        user_id=scoped,
+    )
+
     try:
         return await CuratorAgent(
             db,
@@ -2021,6 +2149,13 @@ def submit_message_feedback(
         deleted = db.delete_message_feedback(message_id, user_id=user.id)
         return {"saved": False, "deleted": deleted, "feedback": None}
 
+    _telemetry().record_chat_feedback(
+        message_id=message_id,
+        feedback_type=payload.feedback,
+        session_id=payload.session_id,
+        user_id=user.id,
+    )
+
     blocks = json.loads(str(row["blocks_json"]))
     excerpt = _message_text_excerpt(blocks)
     signal_type = "positive" if payload.feedback == "helpful" else "negative"
@@ -2081,8 +2216,18 @@ async def chat_stream(
     message: str,
     session_id: Optional[str] = None,
     lens_id: Optional[str] = None,
+    persona_id: Optional[str] = None,
     user=Depends(get_current_user_dep),
 ) -> EventSourceResponse:
+    """SSE endpoint for token-by-token chat streaming.
+
+    Events emitted:
+
+    - ``event: token``       — ``{"content": "word"}``
+    - ``event: tool_call``   — ``{"name": "search_library", "status": "start|complete"}``
+    - ``event: done``        — final message payload (same shape as POST /api/chat)
+    - ``event: error``       — ``{"error": "description"}``
+    """
     enforce_rate_limit(request, bucket="chat", limit=30, window_seconds=60)
     scheduler = _idle_scheduler()
     if scheduler is not None:
@@ -2102,9 +2247,19 @@ async def chat_stream(
                 user_id=scoped,
                 seerr_user_id=user.seerr_user_id,
                 user_role=user.role,
+                persona_id=persona_id,
             ):
                 data = json.loads(chunk)
-                yield {"event": data.get("type", "message"), "data": chunk.strip()}
+                event_type = data.get("type", "message")
+
+                if event_type in ("tool_start", "tool_result"):
+                    status = "start" if event_type == "tool_start" else "complete"
+                    yield {
+                        "event": "tool_call",
+                        "data": json.dumps({"name": data.get("name"), "status": status}),
+                    }
+                else:
+                    yield {"event": event_type, "data": chunk.strip()}
         except Exception as error:  # noqa: BLE001
             safe_msg = _safe_error_detail(error, "Chat stream failed")
             yield {"event": "error", "data": json.dumps({"error": safe_msg})}
@@ -2580,6 +2735,10 @@ def add_preference(
     user=Depends(get_current_user_dep),
 ) -> Dict[str, bool]:
     remember_preference(_db(), payload, user_id=_scoped_user_id(user))
+    _telemetry().record_preference_signal(
+        signal_type=payload.signal_type,
+        user_id=_scoped_user_id(user),
+    )
     return {"saved": True}
 
 
@@ -2633,6 +2792,13 @@ def create_review(
             status_code=400,
             detail=_safe_error_detail(error, "Invalid review data"),
         ) from error
+
+    _telemetry().record_review_saved(
+        rating_key=payload.rating_key,
+        stars=payload.stars,
+        prompted_by=payload.prompted_by,
+        user_id=_scoped_user_id(user),
+    )
     settings = _settings()
     saved = sync_review_rating_to_plex(
         _db(),

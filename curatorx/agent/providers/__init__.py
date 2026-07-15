@@ -314,11 +314,32 @@ class AnthropicProvider:
         self.model = model
         self.base_url = base_url.rstrip("/").removesuffix("/v1")
 
-    async def chat(
+    def _anthropic_headers(self) -> Dict[str, str]:
+        return {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+
+    def _anthropic_tools(self, tools: Optional[List[Mapping[str, Any]]]) -> List[Dict[str, Any]]:
+        if not tools:
+            return []
+        return [
+            {
+                "name": tool["function"]["name"],
+                "description": tool["function"].get("description", ""),
+                "input_schema": tool["function"].get("parameters", {"type": "object", "properties": {}}),
+            }
+            for tool in tools
+        ]
+
+    def _anthropic_body(
         self,
         messages: List[Mapping[str, Any]],
         tools: Optional[List[Mapping[str, Any]]] = None,
-    ) -> Mapping[str, Any]:
+        *,
+        stream: bool = False,
+    ) -> Dict[str, Any]:
         system, converted = _convert_messages_for_anthropic(messages)
         body: Dict[str, Any] = {
             "model": self.model,
@@ -328,22 +349,21 @@ class AnthropicProvider:
         if system:
             body["system"] = system
         if tools:
-            body["tools"] = [
-                {
-                    "name": tool["function"]["name"],
-                    "description": tool["function"].get("description", ""),
-                    "input_schema": tool["function"].get("parameters", {"type": "object", "properties": {}}),
-                }
-                for tool in tools
-            ]
+            body["tools"] = self._anthropic_tools(tools)
+        if stream:
+            body["stream"] = True
+        return body
+
+    async def chat(
+        self,
+        messages: List[Mapping[str, Any]],
+        tools: Optional[List[Mapping[str, Any]]] = None,
+    ) -> Mapping[str, Any]:
+        body = self._anthropic_body(messages, tools)
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 f"{self.base_url}/v1/messages",
-                headers={
-                    "x-api-key": self.api_key,
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json",
-                },
+                headers=self._anthropic_headers(),
                 json=body,
             )
             if response.is_error:
@@ -355,8 +375,106 @@ class AnthropicProvider:
         messages: List[Mapping[str, Any]],
         tools: Optional[List[Mapping[str, Any]]] = None,
     ) -> AsyncIterator[Mapping[str, Any]]:
-        result = await self.chat(messages, tools)
-        yield {"anthropic_complete": result}
+        """Stream Anthropic Messages API, yielding OpenAI-format delta chunks.
+
+        Each yielded dict matches the shape from ``OpenAICompatibleProvider.stream``
+        so ``stream_agent`` can process both providers identically.  Tool-use blocks
+        are emitted as ``tool_calls`` deltas (index-keyed) and text blocks as
+        ``content`` deltas, with a final chunk carrying ``finish_reason``.
+        """
+        body = self._anthropic_body(messages, tools, stream=True)
+        tool_call_index = -1
+
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            async with client.stream(
+                "POST",
+                f"{self.base_url}/v1/messages",
+                headers=self._anthropic_headers(),
+                json=body,
+            ) as response:
+                if response.is_error:
+                    await response.aread()
+                    raise LLMProviderError(_format_anthropic_error(response))
+
+                async for line in response.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    payload = line[6:].strip()
+                    if not payload:
+                        continue
+                    try:
+                        event = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+
+                    event_type = event.get("type")
+
+                    if event_type == "content_block_start":
+                        block = event.get("content_block") or {}
+                        if block.get("type") == "tool_use":
+                            tool_call_index += 1
+                            yield {
+                                "choices": [{
+                                    "index": 0,
+                                    "delta": {
+                                        "tool_calls": [{
+                                            "index": tool_call_index,
+                                            "id": block.get("id", ""),
+                                            "type": "function",
+                                            "function": {
+                                                "name": block.get("name", ""),
+                                                "arguments": "",
+                                            },
+                                        }],
+                                    },
+                                    "finish_reason": None,
+                                }],
+                            }
+
+                    elif event_type == "content_block_delta":
+                        delta = event.get("delta") or {}
+                        if delta.get("type") == "text_delta":
+                            text = delta.get("text", "")
+                            if text:
+                                yield {
+                                    "choices": [{
+                                        "index": 0,
+                                        "delta": {"content": text},
+                                        "finish_reason": None,
+                                    }],
+                                }
+                        elif delta.get("type") == "input_json_delta":
+                            partial = delta.get("partial_json", "")
+                            if partial:
+                                yield {
+                                    "choices": [{
+                                        "index": 0,
+                                        "delta": {
+                                            "tool_calls": [{
+                                                "index": tool_call_index,
+                                                "function": {"arguments": partial},
+                                            }],
+                                        },
+                                        "finish_reason": None,
+                                    }],
+                                }
+
+                    elif event_type == "message_delta":
+                        stop = (event.get("delta") or {}).get("stop_reason")
+                        finish = "tool_calls" if stop == "tool_use" else "stop"
+                        yield {
+                            "choices": [{
+                                "index": 0,
+                                "delta": {},
+                                "finish_reason": finish,
+                            }],
+                        }
+
+                    elif event_type == "error":
+                        err = event.get("error") or {}
+                        raise LLMProviderError(
+                            f"Anthropic streaming error: {err.get('message', 'unknown')}"
+                        )
 
 
 def get_chat_provider(settings: Settings) -> ChatProvider:

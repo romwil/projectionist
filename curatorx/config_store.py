@@ -489,6 +489,11 @@ class AuthSettings:
     plex_login_enabled: bool = True
     oidc_enabled: bool = False
     local_login_enabled: bool = False
+    oidc_issuer_url: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: str = ""
+    oidc_redirect_uri: str = ""
+    oidc_provider_name: str = "SSO"
 
 
 @dataclass

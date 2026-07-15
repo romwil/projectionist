@@ -3,8 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   formatApiError,
   getFeatures,
+  loginWithLocal,
   loginWithPlex,
   pollPlexPinLogin,
+  startOidcLogin,
   startPlexPinLogin,
 } from "../api/client";
 import InlineAlert from "../components/InlineAlert";
@@ -23,6 +25,9 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const pollRef = useRef(null);
   const popupRef = useRef(null);
+
+  const [localUsername, setLocalUsername] = useState("");
+  const [localPassword, setLocalPassword] = useState("");
 
   useEffect(() => {
     getFeatures()
@@ -129,7 +134,47 @@ export default function LoginPage() {
     }
   }
 
-  const plexEnabled = features?.auth?.plex_login_enabled !== false;
+  async function handleLocalLogin(event) {
+    event.preventDefault();
+    if (!localUsername.trim() || !localPassword) {
+      setError("Enter your username and password.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      await loginWithLocal(localUsername.trim(), localPassword);
+      navigate("/", { replace: true });
+    } catch (signInError) {
+      setError(formatApiError(signInError));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleOidcLogin() {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await startOidcLogin();
+      if (data?.authorize_url) {
+        window.location.href = data.authorize_url;
+      } else {
+        setError("OIDC provider did not return an authorization URL.");
+        setLoading(false);
+      }
+    } catch (signInError) {
+      setError(formatApiError(signInError));
+      setLoading(false);
+    }
+  }
+
+  const authMethods = features?.auth_methods || [];
+  const plexEnabled = authMethods.includes("plex");
+  const localEnabled = authMethods.includes("local");
+  const oidcEnabled = authMethods.includes("oidc");
+  const oidcProviderName = features?.auth?.oidc_provider_name || "SSO";
+  const noMethods = !plexEnabled && !localEnabled && !oidcEnabled;
 
   return (
     <div className="login-page" data-testid="login-page">
@@ -137,14 +182,80 @@ export default function LoginPage() {
         <p className="eyebrow">CuratorX</p>
         <h1>Sign in</h1>
         <p className="login-lede">
-          Multi-user mode is enabled. Sign in with your Plex account to access your conversations and
-          watchlist.
+          Multi-user mode is enabled. Sign in to access your conversations and watchlist.
         </p>
 
         {error ? <InlineAlert type="error" message={error} /> : null}
 
+        {noMethods ? (
+          <InlineAlert type="error" message="No sign-in methods are enabled in Configuration." />
+        ) : null}
+
+        {/* --- Local password login --- */}
+        {localEnabled ? (
+          <div className="login-form" data-testid="local-login-section">
+            <form onSubmit={handleLocalLogin}>
+              <label className="login-token-field">
+                <span>Username</span>
+                <input
+                  type="text"
+                  data-testid="local-username"
+                  value={localUsername}
+                  onChange={(e) => setLocalUsername(e.target.value)}
+                  placeholder="Username"
+                  autoComplete="username"
+                  disabled={loading}
+                />
+              </label>
+              <label className="login-token-field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  data-testid="local-password"
+                  value={localPassword}
+                  onChange={(e) => setLocalPassword(e.target.value)}
+                  placeholder="Password"
+                  autoComplete="current-password"
+                  disabled={loading}
+                />
+              </label>
+              <button
+                type="submit"
+                className="login-primary"
+                data-testid="local-login-submit"
+                disabled={loading}
+              >
+                {loading ? "Signing in…" : "Sign in"}
+              </button>
+            </form>
+          </div>
+        ) : null}
+
+        {/* --- Divider between methods --- */}
+        {localEnabled && (plexEnabled || oidcEnabled) ? (
+          <div className="login-divider">
+            <span>or</span>
+          </div>
+        ) : null}
+
+        {/* --- OIDC login --- */}
+        {oidcEnabled ? (
+          <div className="login-form" data-testid="oidc-login-section">
+            <button
+              type="button"
+              className="login-primary login-oidc"
+              data-testid="oidc-login-button"
+              disabled={loading}
+              onClick={handleOidcLogin}
+            >
+              {loading ? "Redirecting…" : `Sign in with ${oidcProviderName}`}
+            </button>
+          </div>
+        ) : null}
+
+        {/* --- Plex login --- */}
         {plexEnabled ? (
-          <div className="login-form">
+          <div className="login-form" data-testid="plex-login-section">
             {!waitingForPlex ? (
               <button
                 type="button"
@@ -226,9 +337,7 @@ export default function LoginPage() {
               </div>
             ) : null}
           </div>
-        ) : (
-          <InlineAlert type="error" message="Plex login is disabled in Configuration." />
-        )}
+        ) : null}
 
         <p className="login-footer">
           <Link to="/privacy" data-testid="privacy-link">

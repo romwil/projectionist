@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.6 (stable minor tag). -->
+<!-- Unraid Community Applications template — CuratorX 1.7 (stable minor tag). -->
 <Container version="2">
   <Name>curatorx</Name>
-  <Repository>romwil/curatorx:1.6</Repository>
+  <Repository>romwil/curatorx:1.7</Repository>
   <Registry>https://hub.docker.com/r/romwil/curatorx</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -21,6 +21,15 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.7.0
+- Non-root Docker container (security S13) — runs as UID/GID 1000
+- True token-by-token SSE streaming for OpenAI + Anthropic LLM providers
+- Local-password authentication (PBKDF2-HMAC-SHA256, owner-only registration)
+- OIDC authentication for homelab IdPs (Authelia, Authentik, Keycloak)
+- Multi-method login page (Plex + local + OIDC, dynamically configured)
+- Telemetry ingestion module with admin API endpoints
+- 48 new tests, 0 regressions
+
 ### 1.6.0
 - Owner Dashboard: library composition charts, health gauges, storage intelligence, taste timeline
 - Background idle task scheduler with 6 OOTB tasks (embeddings, taste refresh, health, anniversaries, recs, gaps)

@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.7.0] — 2026-07-15
+
+Non-root Docker, true SSE streaming, multi-method auth, and telemetry ingestion.
+
+### Added
+- Non-root Docker container user (security finding S13 mitigated) — UID/GID 1000
+- True token-by-token SSE streaming for LLM chat responses (OpenAI + Anthropic providers)
+- Local-password authentication (PBKDF2-HMAC-SHA256, owner-only registration)
+- OIDC authentication for homelab identity providers (Authelia, Authentik, Keycloak)
+- Multi-method login page — dynamically shows Plex, local, and/or OIDC based on configuration
+- Telemetry ingestion module — non-blocking event capture for chat, feedback, preferences, reviews, playback, and tool invocations
+- Admin telemetry API (`/api/admin/telemetry/summary`, `/api/admin/telemetry/events`)
+- 48 new tests across SSE streaming, local auth, OIDC auth, and telemetry
+
+### Changed
+- Anthropic provider streams natively instead of buffering + simulating chunks
+- SSE endpoint emits structured `token`, `tool_call`, `done`, and `error` events
+- Frontend chat renders tokens incrementally as they arrive from the LLM
+- Features API now returns `auth_methods` array and `oidc_provider_name`
+
+### Security
+- Container runs as non-root user `curatorx` (S13)
+- OIDC state parameter prevents CSRF on authorization flow
+- Local passwords hashed with PBKDF2-HMAC-SHA256 (600k iterations, constant-time verify)
+
 ## [1.6.0] — 2026-07-15
 
 Owner dashboard, background idle task scheduler, and 5 chat delight features.

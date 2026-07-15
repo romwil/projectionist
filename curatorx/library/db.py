@@ -403,6 +403,8 @@ class Database:
                 oidc_sub TEXT UNIQUE,
                 avatar_url TEXT,
                 disabled INTEGER NOT NULL DEFAULT 0,
+                password_hash TEXT,
+                auth_method TEXT DEFAULT 'plex',
                 created_at REAL NOT NULL,
                 last_login_at REAL
             );
@@ -537,6 +539,13 @@ class Database:
         pin_cols = self._table_columns(conn, "watchlist_pins")
         if pin_cols and "plex_rating_key" not in pin_cols:
             conn.execute("ALTER TABLE watchlist_pins ADD COLUMN plex_rating_key TEXT")
+        if user_cols:
+            for name, typedef in {
+                "password_hash": "TEXT",
+                "auth_method": "TEXT DEFAULT 'plex'",
+            }.items():
+                if name not in user_cols:
+                    conn.execute(f"ALTER TABLE users ADD COLUMN {name} {typedef}")
 
     def _migrate_curated_lists(self, conn: sqlite3.Connection) -> None:
         conn.executescript(
@@ -1057,6 +1066,76 @@ class Database:
         assert row is not None
         return self._row_to_user(row)
 
+    def create_local_user(
+        self,
+        *,
+        user_id: str,
+        display_name: str,
+        password_hash: str,
+        role: str = "member",
+        email: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Create a user who authenticates via local password."""
+        now = time.time()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (
+                    id, display_name, email, role, password_hash, auth_method,
+                    created_at, last_login_at
+                ) VALUES (?, ?, ?, ?, ?, 'local', ?, ?)
+                """,
+                (user_id, display_name, email, role, password_hash, now, now),
+            )
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        assert row is not None
+        return self._row_to_user(row)
+
+    def get_user_by_display_name(self, display_name: str) -> Optional[sqlite3.Row]:
+        """Look up a local user by display_name (used as username for local auth)."""
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT * FROM users WHERE display_name = ? AND auth_method = 'local'",
+                (display_name,),
+            ).fetchone()
+
+    def upsert_oidc_user(
+        self,
+        *,
+        oidc_sub: str,
+        display_name: str,
+        email: Optional[str] = None,
+        role: str = "member",
+    ) -> Dict[str, Any]:
+        """Create or update a user identified by OIDC subject claim."""
+        now = time.time()
+        user_id = f"oidc-{oidc_sub}"
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (
+                    id, display_name, email, role, oidc_sub, auth_method,
+                    created_at, last_login_at
+                ) VALUES (?, ?, ?, ?, ?, 'oidc', ?, ?)
+                ON CONFLICT(oidc_sub) DO UPDATE SET
+                    display_name = excluded.display_name,
+                    email = excluded.email,
+                    last_login_at = excluded.last_login_at
+                """,
+                (user_id, display_name, email, role, oidc_sub, now, now),
+            )
+            row = conn.execute(
+                "SELECT * FROM users WHERE oidc_sub = ?", (oidc_sub,)
+            ).fetchone()
+        assert row is not None
+        return self._row_to_user(row)
+
+    def get_user_by_oidc_sub(self, oidc_sub: str) -> Optional[sqlite3.Row]:
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT * FROM users WHERE oidc_sub = ?", (oidc_sub,)
+            ).fetchone()
+
     def set_user_plex_token_enc(self, user_id: str, token_enc: str) -> None:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -1172,6 +1251,7 @@ class Database:
             "has_plex_token": bool(
                 "plex_token_enc" in keys and row["plex_token_enc"]
             ),
+            "auth_method": str(row["auth_method"]) if "auth_method" in keys and row["auth_method"] is not None else "plex",
             "created_at": float(row["created_at"]),
             "last_login_at": float(row["last_login_at"]) if row["last_login_at"] is not None else None,
         }
@@ -2051,6 +2131,68 @@ class Database:
                     (user_id, limit),
                 ).fetchall()
             )
+
+    # --- Telemetry ---
+
+    def insert_telemetry_event(
+        self,
+        *,
+        event_id: str,
+        event_class: str,
+        payload_json: str,
+        media_node_id: Optional[str] = None,
+        associated_context_hash: Optional[str] = None,
+    ) -> None:
+        """Insert a single event into the telemetry stream table."""
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO system_telemetry_stream
+                    (id, event_class, payload_json, media_node_id, associated_context_hash)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (event_id, event_class, payload_json, media_node_id, associated_context_hash),
+            )
+
+    def telemetry_summary(self, *, hours: int = 24) -> Dict[str, Any]:
+        """Return event counts grouped by event_class within the last *hours*."""
+        cutoff = f"-{hours} hours"
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT event_class, COUNT(*) AS count
+                FROM system_telemetry_stream
+                WHERE timestamp >= datetime('now', ?)
+                GROUP BY event_class
+                ORDER BY count DESC
+                """,
+                (cutoff,),
+            ).fetchall()
+        return {str(row["event_class"]): int(row["count"]) for row in rows}
+
+    def telemetry_events(
+        self,
+        *,
+        event_class: Optional[str] = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> List[Dict[str, Any]]:
+        """Return recent telemetry events, optionally filtered by class."""
+        if event_class:
+            rows = self._query(
+                "SELECT * FROM system_telemetry_stream WHERE event_class = ? ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                (event_class, limit, offset),
+            )
+        else:
+            rows = self._query(
+                "SELECT * FROM system_telemetry_stream ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            )
+        return [dict(row) for row in rows]
+
+    def _query(self, sql: str, params=()) -> List[sqlite3.Row]:
+        with self.connect() as conn:
+            return conn.execute(sql, params).fetchall()
 
     def export_training_corpus(self) -> Dict[str, Any]:
         with self.connect() as conn:

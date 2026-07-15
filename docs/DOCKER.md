@@ -135,6 +135,23 @@ The script builds with `--provenance=false --sbom=false` and pushes `:VERSION`, 
 
 ---
 
+## Non-root container user
+
+Starting with v1.7, the CuratorX image runs as user **`curatorx`** (UID **1000**, GID **1000**) instead of root. This limits the impact of a container breakout (security finding S13).
+
+**New installs:** no action needed — the image creates `/config` with the correct ownership.
+
+**Existing installs** with a bind-mounted `/config` directory owned by root:
+
+```bash
+# one-time fix on the Docker host
+sudo chown -R 1000:1000 /path/to/curatorx/config
+```
+
+On **Unraid**, appdata paths are typically owned by `nobody:users` (65534:100). If CuratorX cannot write to `/config` after upgrading, run the `chown` above against your appdata path (e.g. `/mnt/user/appdata/curatorx/config`).
+
+---
+
 ## Data layout
 
 | Path | Contents |

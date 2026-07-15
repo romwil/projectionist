@@ -1,7 +1,19 @@
-"""Optional multi-user auth (inactive when features.multi_user_enabled=false)."""
+"""Optional multi-user auth (inactive when features.multi_user_enabled=false).
+
+Supports three authentication methods:
+  - **Plex** — PIN-based OAuth flow via plex.tv (original, default).
+  - **Local password** — simple username/password stored with salted HMAC hash.
+  - **OIDC** — redirect-based OpenID Connect flow for identity providers
+    common in homelabs (Authelia, Authentik, Keycloak, etc.).
+
+All three methods produce the same signed session cookie; downstream
+middleware is method-agnostic.
+"""
 
 from __future__ import annotations
 
+import hashlib
+import hmac as _hmac
 import logging
 import os
 import secrets
@@ -9,8 +21,9 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Literal, Optional
+from typing import Any, Callable, Dict, List, Literal, Optional
 
+import httpx
 from fastapi import Depends, HTTPException, Request, Response
 from starlette.responses import JSONResponse
 
@@ -455,3 +468,316 @@ def sync_user_seerr_from_token(user_id: str, auth_token: str, db: Database) -> d
         seerr_user_id=int(seerr_user_id),
         seerr_permissions=int(permissions) if permissions is not None else None,
     )
+
+
+# ---------------------------------------------------------------------------
+# Local password auth
+# ---------------------------------------------------------------------------
+
+_PASSWORD_HASH_ITERATIONS = 600_000
+_PASSWORD_SALT_BYTES = 32
+
+
+def _hash_password(password: str, salt: Optional[bytes] = None) -> str:
+    """Derive a salted password hash using PBKDF2-HMAC-SHA256.
+
+    Returns ``<hex-salt>$<hex-hash>`` — constant-time comparison is used on
+    verification so timing attacks against the hash are not practical.
+    """
+    if salt is None:
+        salt = secrets.token_bytes(_PASSWORD_SALT_BYTES)
+    derived = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        _PASSWORD_HASH_ITERATIONS,
+    )
+    return f"{salt.hex()}${derived.hex()}"
+
+
+def _verify_password(password: str, stored_hash: str) -> bool:
+    """Constant-time verification of a password against a stored hash."""
+    if "$" not in stored_hash:
+        return False
+    salt_hex, expected_hex = stored_hash.split("$", 1)
+    try:
+        salt = bytes.fromhex(salt_hex)
+    except ValueError:
+        return False
+    derived = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        salt,
+        _PASSWORD_HASH_ITERATIONS,
+    )
+    return _hmac.compare_digest(derived.hex(), expected_hex)
+
+
+def _ensure_local_login_enabled() -> Settings:
+    settings = _settings()
+    if not settings.features.multi_user_enabled:
+        raise HTTPException(status_code=400, detail="Multi-user auth is not enabled")
+    if not settings.auth.local_login_enabled:
+        raise HTTPException(status_code=400, detail="Local password login is not enabled")
+    return settings
+
+
+def _count_local_users(db: Database) -> int:
+    """Count users created via local-password auth (excludes bootstrap owner)."""
+    users = db.list_users(limit=200)
+    return sum(1 for u in users if u.get("auth_method") == "local")
+
+
+def register_local_user(
+    *,
+    username: str,
+    password: str,
+    db: Database,
+    requesting_user: Optional[CurrentUser] = None,
+) -> CurrentUser:
+    """Create a local-password account.
+
+    Rules:
+      - If no local-auth users exist yet → first user becomes ``owner``
+        (bootstrap — no session required).
+      - Otherwise the caller must be an ``owner``.
+    """
+    _ensure_local_login_enabled()
+
+    username = username.strip()
+    if not username or len(username) < 2:
+        raise HTTPException(status_code=400, detail="Username must be at least 2 characters")
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    existing = db.get_user_by_display_name(username)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Username already taken")
+
+    is_first_local = _count_local_users(db) == 0
+    if not is_first_local:
+        if requesting_user is None or requesting_user.role != "owner":
+            raise HTTPException(status_code=403, detail="Only the owner can create local accounts")
+
+    role = "owner" if is_first_local else "member"
+    user_id = f"local-{secrets.token_hex(12)}"
+    password_hash = _hash_password(password)
+
+    user_row = db.create_local_user(
+        user_id=user_id,
+        display_name=username,
+        password_hash=password_hash,
+        role=role,
+    )
+    return row_to_current_user_from_dict(user_row)
+
+
+def authenticate_local_user(
+    *,
+    username: str,
+    password: str,
+    db: Database,
+    request: Request,
+) -> CurrentUser:
+    """Validate credentials and return the authenticated user."""
+    enforce_rate_limit(request, bucket="auth_local_login", limit=10, window_seconds=60)
+    _ensure_local_login_enabled()
+
+    row = db.get_user_by_display_name(username.strip())
+    if row is None:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    if _user_is_disabled(row):
+        raise HTTPException(status_code=403, detail="This account has been disabled")
+
+    stored_hash = row["password_hash"]
+    if not stored_hash or not _verify_password(password, str(stored_hash)):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    return row_to_current_user(row)
+
+
+def row_to_current_user_from_dict(d: dict) -> CurrentUser:
+    """Build CurrentUser from a dict (as returned by db._row_to_user)."""
+    return CurrentUser(
+        id=str(d["id"]),
+        display_name=str(d.get("display_name") or "User"),
+        role=str(d.get("role", "member")),  # type: ignore[arg-type]
+        email=d.get("email"),
+        plex_user_id=d.get("plex_user_id"),
+        seerr_user_id=d.get("seerr_user_id"),
+        avatar_url=d.get("avatar_url"),
+        preferred_name=d.get("preferred_name"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# OIDC auth
+# ---------------------------------------------------------------------------
+
+_oidc_state_lock = threading.Lock()
+_oidc_states: Dict[str, Dict[str, Any]] = {}
+OIDC_STATE_TTL_SECONDS = 600
+
+
+def _ensure_oidc_enabled() -> Settings:
+    settings = _settings()
+    if not settings.features.multi_user_enabled:
+        raise HTTPException(status_code=400, detail="Multi-user auth is not enabled")
+    if not settings.auth.oidc_enabled:
+        raise HTTPException(status_code=400, detail="OIDC login is not enabled")
+    if not settings.auth.oidc_issuer_url or not settings.auth.oidc_client_id:
+        raise HTTPException(status_code=400, detail="OIDC is not fully configured")
+    return settings
+
+
+def _oidc_discovery_url(issuer: str) -> str:
+    return issuer.rstrip("/") + "/.well-known/openid-configuration"
+
+
+def _purge_expired_oidc_states() -> None:
+    now = time.time()
+    with _oidc_state_lock:
+        expired = [k for k, v in _oidc_states.items() if float(v.get("expires_at", 0)) < now]
+        for k in expired:
+            _oidc_states.pop(k, None)
+
+
+def clear_oidc_states() -> None:
+    """Test helper."""
+    with _oidc_state_lock:
+        _oidc_states.clear()
+
+
+def start_oidc_authorize(request: Request) -> dict[str, str]:
+    """Build the OIDC authorization redirect URL with a CSRF state parameter."""
+    enforce_rate_limit(request, bucket="auth_oidc_start", limit=10, window_seconds=60)
+    settings = _ensure_oidc_enabled()
+
+    discovery_url = _oidc_discovery_url(settings.auth.oidc_issuer_url)
+    try:
+        disc = httpx.get(discovery_url, timeout=10).json()
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not fetch OIDC discovery document: {error}",
+        ) from error
+
+    authorization_endpoint = disc.get("authorization_endpoint", "")
+    if not authorization_endpoint:
+        raise HTTPException(status_code=502, detail="OIDC discovery missing authorization_endpoint")
+
+    state = secrets.token_urlsafe(32)
+    _purge_expired_oidc_states()
+    with _oidc_state_lock:
+        _oidc_states[state] = {
+            "expires_at": time.time() + OIDC_STATE_TTL_SECONDS,
+            "token_endpoint": disc.get("token_endpoint", ""),
+            "userinfo_endpoint": disc.get("userinfo_endpoint", ""),
+        }
+
+    redirect_uri = settings.auth.oidc_redirect_uri or ""
+    params = (
+        f"?response_type=code"
+        f"&client_id={settings.auth.oidc_client_id}"
+        f"&redirect_uri={redirect_uri}"
+        f"&scope=openid%20profile%20email"
+        f"&state={state}"
+    )
+    return {"authorize_url": authorization_endpoint + params, "state": state}
+
+
+def handle_oidc_callback(
+    *,
+    code: str,
+    state: str,
+    db: Database,
+    request: Request,
+) -> CurrentUser:
+    """Exchange the authorization code for tokens, resolve user identity."""
+    enforce_rate_limit(request, bucket="auth_oidc_callback", limit=10, window_seconds=60)
+    settings = _ensure_oidc_enabled()
+
+    _purge_expired_oidc_states()
+    with _oidc_state_lock:
+        state_data = _oidc_states.pop(state, None)
+
+    if state_data is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired OIDC state")
+
+    token_endpoint = state_data.get("token_endpoint", "")
+    userinfo_endpoint = state_data.get("userinfo_endpoint", "")
+
+    if not token_endpoint:
+        raise HTTPException(status_code=502, detail="OIDC token endpoint unknown")
+
+    redirect_uri = settings.auth.oidc_redirect_uri or ""
+    try:
+        token_resp = httpx.post(
+            token_endpoint,
+            data={
+                "grant_type": "authorization_code",
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "client_id": settings.auth.oidc_client_id,
+                "client_secret": settings.auth.oidc_client_secret,
+            },
+            timeout=10,
+        )
+        token_resp.raise_for_status()
+        token_data = token_resp.json()
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail="OIDC token exchange failed") from error
+
+    access_token = token_data.get("access_token", "")
+    if not access_token:
+        raise HTTPException(status_code=502, detail="OIDC token response missing access_token")
+
+    if not userinfo_endpoint:
+        raise HTTPException(status_code=502, detail="OIDC userinfo endpoint unknown")
+
+    try:
+        userinfo_resp = httpx.get(
+            userinfo_endpoint,
+            headers={"Authorization": f"Bearer {access_token}"},
+            timeout=10,
+        )
+        userinfo_resp.raise_for_status()
+        userinfo = userinfo_resp.json()
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail="Failed to fetch OIDC user info") from error
+
+    sub = str(userinfo.get("sub") or "").strip()
+    if not sub:
+        raise HTTPException(status_code=502, detail="OIDC user info missing sub claim")
+
+    display_name = str(
+        userinfo.get("preferred_username")
+        or userinfo.get("name")
+        or userinfo.get("email")
+        or sub
+    ).strip()
+    email = userinfo.get("email")
+
+    existing = db.get_user_by_oidc_sub(sub)
+    if existing is not None and _user_is_disabled(existing):
+        raise HTTPException(status_code=403, detail="This account has been disabled")
+
+    user_row = db.upsert_oidc_user(
+        oidc_sub=sub,
+        display_name=display_name,
+        email=str(email) if email else None,
+    )
+    return row_to_current_user_from_dict(user_row)
+
+
+def available_auth_methods(settings: Settings) -> List[str]:
+    """Return the list of configured auth methods for the features endpoint."""
+    methods: List[str] = []
+    if settings.auth.plex_login_enabled:
+        methods.append("plex")
+    if settings.auth.local_login_enabled:
+        methods.append("local")
+    if settings.auth.oidc_enabled and settings.auth.oidc_issuer_url and settings.auth.oidc_client_id:
+        methods.append("oidc")
+    return methods

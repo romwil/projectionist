@@ -125,6 +125,24 @@ export async function loginWithPlex(authToken) {
   });
 }
 
+export async function registerLocalUser(username, password) {
+  return api("/auth/local/register", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function loginWithLocal(username, password) {
+  return api("/auth/local/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
+  });
+}
+
+export async function startOidcLogin() {
+  return api("/auth/oidc/authorize");
+}
+
 export async function logout() {
   return api("/auth/logout", { method: "POST" });
 }
@@ -463,6 +481,89 @@ export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, s
     });
   } finally {
     clearTimeout(timeout);
+  }
+}
+
+/**
+ * Stream chat via the SSE endpoint. Calls event handlers as tokens arrive.
+ *
+ * @param {string} message
+ * @param {object} options
+ * @param {string}   [options.sessionId]
+ * @param {string}   [options.personaId]
+ * @param {function} [options.onToken]    - ({content}) per text token
+ * @param {function} [options.onToolCall] - ({name, status}) on tool start/complete
+ * @param {function} [options.onDone]     - (fullPayload) when finished
+ * @param {function} [options.onError]    - ({error}) on stream error
+ * @param {AbortSignal} [options.signal]  - abort controller signal
+ */
+export async function sendChatStream(message, { sessionId: sid, personaId, onToken, onToolCall, onDone, onError, signal } = {}) {
+  const params = new URLSearchParams({ message, session_id: sid || sessionId() });
+  if (personaId) params.set("persona_id", personaId);
+
+  const response = await fetch(`${API}/chat/stream?${params}`, {
+    credentials: "include",
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(parseApiErrorBody(text, response.statusText));
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let currentEvent = "message";
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+
+    for (;;) {
+      const nlIndex = buffer.indexOf("\n");
+      if (nlIndex === -1) break;
+      const line = buffer.slice(0, nlIndex).trimEnd();
+      buffer = buffer.slice(nlIndex + 1);
+
+      if (line.startsWith("event:")) {
+        currentEvent = line.slice(6).trim();
+        continue;
+      }
+      if (!line.startsWith("data:")) {
+        currentEvent = "message";
+        continue;
+      }
+      const raw = line.slice(5).trim();
+      if (!raw) continue;
+
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+
+      switch (currentEvent) {
+        case "token":
+          onToken?.(parsed);
+          break;
+        case "tool_call":
+          onToolCall?.(parsed);
+          break;
+        case "done":
+          onDone?.(parsed);
+          break;
+        case "error":
+          onError?.(parsed);
+          break;
+        default:
+          break;
+      }
+      currentEvent = "message";
+    }
   }
 }
 

@@ -151,6 +151,18 @@ def register_webhook_routes(
             result.get("queued"),
             result.get("rating_key"),
         )
+        if result.get("handled"):
+            try:
+                from curatorx.telemetry import TelemetryIngester
+
+                TelemetryIngester(db_factory()).record_playback_event(
+                    event=str(result.get("event") or ""),
+                    rating_key=str(result.get("rating_key") or ""),
+                    completion_pct=result.get("completion_pct"),
+                    media_type=result.get("media_type"),
+                )
+            except Exception:
+                logger.debug("Telemetry playback record failed", exc_info=True)
         return result
 
     app.include_router(router)
