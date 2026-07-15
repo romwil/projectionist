@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.3] — 2026-07-15
+
+Fix Docker startup failure on existing installs with root-owned `/config` volumes.
+
+### Fixed
+- Docker container startup failure on existing installs — entrypoint now auto-fixes `/config` ownership before dropping to non-root user
+- Compatible with both fresh installs and upgrades from root-based containers
+
 ## [1.7.2] — 2026-07-15
 
 Heartbeat deadline bug fix, test suite isolation, zero failures.

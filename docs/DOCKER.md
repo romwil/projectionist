@@ -139,16 +139,18 @@ The script builds with `--provenance=false --sbom=false` and pushes `:VERSION`, 
 
 Starting with v1.7, the CuratorX image runs as user **`curatorx`** (UID **1000**, GID **1000**) instead of root. This limits the impact of a container breakout (security finding S13).
 
-**New installs:** no action needed — the image creates `/config` with the correct ownership.
+Starting with v1.7.3, the container uses an **entrypoint script** that automatically handles permission migration:
 
-**Existing installs** with a bind-mounted `/config` directory owned by root:
+1. Container starts as root (the entrypoint script runs first)
+2. `chown -R curatorx:curatorx /config` fixes ownership for existing installs
+3. Privileges drop to the `curatorx` user via `gosu` before the application starts
+4. If the container is already running as non-root (e.g. Kubernetes `runAsUser`), the entrypoint skips the chown and runs the application directly
 
-```bash
-# one-time fix on the Docker host
-sudo chown -R 1000:1000 /path/to/curatorx/config
-```
+**New installs:** no action needed.
 
-On **Unraid**, appdata paths are typically owned by `nobody:users` (65534:100). If CuratorX cannot write to `/config` after upgrading, run the `chown` above against your appdata path (e.g. `/mnt/user/appdata/curatorx/config`).
+**Existing installs upgrading from pre-1.7.3:** no manual action needed — the entrypoint auto-fixes `/config` ownership on first boot. No more `chown` required on the host.
+
+**Kubernetes / rootless runtimes:** if your pod security context sets `runAsUser`, the entrypoint detects it is already non-root and runs the CMD directly without attempting chown.
 
 ---
 
