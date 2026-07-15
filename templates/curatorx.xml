@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
-<!-- Canonical Unraid / Community Applications template — CuratorX 1.3 (stable minor tag). -->
+<!-- Unraid Community Applications template — CuratorX 1.7.3 (stable minor tag). -->
 <Container version="2">
   <Name>curatorx</Name>
-  <Repository>romwil/curatorx:1.3</Repository>
+  <Repository>romwil/curatorx:1.7</Repository>
   <Registry>https://hub.docker.com/r/romwil/curatorx</Registry>
   <Network>bridge</Network>
   <MyIP/>
@@ -21,8 +21,51 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.7.3
+- Fix container startup on existing installs with root-owned config
+
+### 1.7.2
+- Fix scheduler heartbeat deadline bug; zero test failures
+
+### 1.7.1
+- Scheduler circuit breaker: quarantines tasks after 3 consecutive failures (1h cooldown, admin reset endpoint)
+- Data retention pruning for telemetry/anniversaries with automatic VACUUM
+- Trickle ingestion caps semantic embedding work per scheduler cycle (MAX_ITEMS_PER_CYCLE=50)
+- Agent/scheduler boundary and SQLite concurrency model documented
+- 38 new tests, 0 regressions
+
+### 1.7.0
+- Non-root Docker container (security S13) — runs as UID/GID 1000
+- True token-by-token SSE streaming for OpenAI + Anthropic LLM providers
+- Local-password authentication (PBKDF2-HMAC-SHA256, owner-only registration)
+- OIDC authentication for homelab IdPs (Authelia, Authentik, Keycloak)
+- Multi-method login page (Plex + local + OIDC, dynamically configured)
+- Telemetry ingestion module with admin API endpoints
+- 48 new tests, 0 regressions
+
+### 1.6.0
+- Owner Dashboard: library composition charts, health gauges, storage intelligence, taste timeline
+- Background idle task scheduler with 6 OOTB tasks (embeddings, taste refresh, health, anniversaries, recs, gaps)
+- Chat delight: On This Day, Library at a Glance, Night Owl runtime picks, Double Feature, Surprise Me
+- Genre filter bugfix: comma-separated genres now OR instead of AND
+
+### 1.5.0
+- Per-conversation persona selection with 5 built-in + custom personas
+- 7 personality sliders (4 new: depth, obscurity, verbosity, formality)
+- Composer persona dropdown with create/edit and Show Advanced toggle
+- Login page cleanup and privacy link fixes
+- Test coverage: 64 new tests, coverage tooling, CI pipeline updated
+
+### 1.4.0
+- Security headers (CSP, X-Frame-Options, XSSTO) on all responses
+- Error response sanitization — no internal details leak to clients
+- Rate limiting on chat endpoints (30 req/min)
+- System config endpoint gated behind owner auth
+- Roadmap: purged ML clustering; added semantic plot embeddings
+- MCP design philosophy documentation
+
 ### 1.3.0 — Initial CA template
-- Image line: `romwil/curatorx:1.3` (pin `:1.3.0` if you need an exact build)
+- Image line: `romwil/curatorx:1.5` (pin `:1.4.0` if you need an exact build)
 - Config volume `/config` for settings.json + SQLite
 - Dual MCP keys: privacy (`CURATORX_MCP_API_KEY`) and full (`CURATORX_MCP_FULL_API_KEY`); or generate in Admin → Advanced
 - Optional seed envs for Plex / *arr / TMDB / LLM; session + webhook secrets for multi-user and Plex webhooks
