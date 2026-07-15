@@ -1369,6 +1369,7 @@ class Database:
 
     def ensure_seed_data(self) -> None:
         with self.connect() as conn:
+            self._seed_builtin_persona_templates(conn)
             self._seed_defaults(conn)
 
     def _open_connection(self) -> sqlite3.Connection:

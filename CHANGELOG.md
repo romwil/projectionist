@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.7.5] — 2026-07-15
+
+### Fixed
+- Persona selector now appears on upgraded installs — builtin persona templates are re-seeded on every startup via `ensure_seed_data()`, fixing empty `persona_templates` table after upgrade from pre-1.5.0
+
 ## [1.7.4] — 2026-07-15
 
 Persona audit: wire selector, complete slider set, sanitize error responses.
