@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.7.4] — 2026-07-15
+
+Persona audit: wire selector, complete slider set, sanitize error responses.
+
+### Fixed
+- PersonaSelector now wired into chat composer — per-conversation persona switching, custom creation, and set-as-default all functional
+- PersonaSection (Admin > Persona) now shows all 7 personality sliders (was missing Depth, Obscurity, Verbosity, Formality)
+- Sanitized 2 remaining raw `str(error)` responses in persona template endpoints
+- Synced templates/curatorx.xml with unraid source for CA auto-update detection
+
 ## [1.7.3] — 2026-07-15
 
 Fix Docker startup failure on existing installs with root-owned `/config` volumes.

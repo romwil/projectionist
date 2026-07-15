@@ -27,6 +27,38 @@ const PERSONA_FIELDS = [
     help:
       "Controls how proactively the curator proposes next steps. Low = suggest and wait; high = concrete queue/purge plans and pattern callouts.",
   },
+  {
+    key: "val_depth",
+    label: "Depth",
+    low: "Quick picks",
+    high: "Deep dives",
+    help:
+      "Controls recommendation depth. Low = surface-level picks and quick lists; high = contextual deep dives with thematic reasoning.",
+  },
+  {
+    key: "val_obscurity",
+    label: "Obscurity",
+    low: "Mainstream",
+    high: "Niche",
+    help:
+      "Controls how far off the beaten path recommendations go. Low = popular crowd-pleasers; high = hidden gems and festival circuit picks.",
+  },
+  {
+    key: "val_verbosity",
+    label: "Verbosity",
+    low: "Concise",
+    high: "Detailed",
+    help:
+      "Controls response length. Low = short punchy answers; high = rich, detailed explanations with context and comparisons.",
+  },
+  {
+    key: "val_formality",
+    label: "Formality",
+    low: "Chatty",
+    high: "Structured",
+    help:
+      "Controls conversational register. Low = relaxed chat with slang; high = organized, well-structured prose.",
+  },
 ];
 
 function isCustomMode(persona) {

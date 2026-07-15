@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   api,
@@ -21,11 +21,16 @@ import {
   proposeAction,
   removeWatchlistPin,
   saveReview,
+  createPersona,
+  deletePersona,
+  getPersonas,
   sendChat,
   sendChatStream,
   sessionId,
   setActiveSession,
+  setDefaultPersona,
   submitMessageFeedback,
+  updatePersona,
 } from "./api/client";
 import { agentPulseTitle, resolveAgentPulse } from "./lib/agentPulse.js";
 import {
@@ -55,6 +60,7 @@ import { extractSpeakableText } from "./lib/voiceSpeech.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import ChatThread from "./components/ChatThread";
 import InlineAlert from "./components/InlineAlert";
+import PersonaSelector from "./components/PersonaSelector";
 import KeyboardHelpModal from "./components/KeyboardHelpModal";
 import NewReplyChip from "./components/NewReplyChip";
 import StatusDock from "./components/StatusDock";
@@ -133,6 +139,9 @@ export default function App() {
   const [libraryGlance, setLibraryGlance] = useState(null);
   const [glanceShown, setGlanceShown] = useState(false);
   const [quickPick, setQuickPick] = useState(null);
+  const [personas, setPersonas] = useState([]);
+  const [activePersonaId, setActivePersonaId] = useState(null);
+  const [defaultPersonaId, setDefaultPersonaId] = useState(null);
   const helpfulCountRef = useRef(0);
   const perfectPickPendingRef = useRef(false);
   const jobsRunningRef = useRef(false);
@@ -221,6 +230,20 @@ export default function App() {
       .catch(console.error);
   }, []);
 
+  const refreshPersonas = useCallback(async () => {
+    try {
+      const data = await getPersonas();
+      const list = data.items || data || [];
+      setPersonas(list);
+      const def = list.find((p) => p.is_default);
+      if (def) setDefaultPersonaId(def.id);
+      return list;
+    } catch (error) {
+      console.error(error);
+      return [];
+    }
+  }, []);
+
   const refreshThreads = useCallback(async () => {
     try {
       const nextThreads = await listThreads();
@@ -281,9 +304,11 @@ export default function App() {
       setPendingBulk(null);
       setPendingTokens([]);
       setAddFeedback(null);
+      const thread = threads.find((t) => t.id === session);
+      setActivePersonaId(thread?.persona_id || defaultPersonaId);
       await loadThreadMessages(session);
     },
-    [activeSessionId, loadThreadMessages]
+    [activeSessionId, defaultPersonaId, loadThreadMessages, threads]
   );
 
   const handleCreateThread = useCallback(async () => {
@@ -296,11 +321,12 @@ export default function App() {
       setMessages([]);
       setMessageFeedback({});
       setChatError("");
+      setActivePersonaId(defaultPersonaId);
       await refreshThreads();
     } catch (error) {
       console.error(error);
     }
-  }, [refreshThreads]);
+  }, [defaultPersonaId, refreshThreads]);
 
   useKeyboardShortcuts({
     composerRef,
@@ -425,13 +451,14 @@ export default function App() {
     refreshWatchlist();
     refreshStreak();
     refreshTypingPhrases();
+    refreshPersonas();
     const interval = setInterval(refreshJobs, 5000);
     const nightInterval = setInterval(() => setNightOwl(isNightOwlHour()), 60_000);
     return () => {
       clearInterval(interval);
       clearInterval(nightInterval);
     };
-  }, [refreshJobs, refreshReviewData, refreshStreak, refreshTypingPhrases, refreshWatchlist]);
+  }, [refreshJobs, refreshPersonas, refreshReviewData, refreshStreak, refreshTypingPhrases, refreshWatchlist]);
 
   useEffect(() => {
     const running = jobs.some((job) => job.status === "running" || job.status === "queued");
@@ -517,6 +544,28 @@ export default function App() {
     }).catch(() => {});
   }
 
+  async function handleCreatePersona(data) {
+    await createPersona(data);
+    const list = await refreshPersonas();
+    if (list.length === 1) setActivePersonaId(list[0].id);
+  }
+
+  async function handleUpdatePersona(id, data) {
+    await updatePersona(id, data);
+    await refreshPersonas();
+  }
+
+  async function handleDeletePersona(id) {
+    await deletePersona(id);
+    await refreshPersonas();
+    if (activePersonaId === id) setActivePersonaId(defaultPersonaId);
+  }
+
+  async function handleSetDefaultPersona(id) {
+    await setDefaultPersona(id);
+    setDefaultPersonaId(id);
+  }
+
   async function handleQuickPick() {
     try {
       const result = await api("/library/quick-pick");
@@ -592,6 +641,7 @@ export default function App() {
 
       await sendChatStream(text, {
         sessionId: activeSessionId,
+        personaId: activePersonaId || undefined,
         onToken: ({ content }) => {
           streamAccumulated += content;
           const snapshot = streamAccumulated;
@@ -943,6 +993,10 @@ export default function App() {
   const sonarrConnected = Boolean(setup?.checks?.sonarr?.ok);
   const dockDropEnabled =
     requestPath !== "seerr" && (radarrConnected || sonarrConnected);
+  const personaLookup = useMemo(
+    () => Object.fromEntries(personas.map((p) => [p.id, p])),
+    [personas],
+  );
   const watchlistLookup = buildWatchlistLookup(watchlistPins);
   const contextLabel = activeContext?.inferred_label || "Exploring…";
   const ambientAccent = blendAmbientAccent(
@@ -1077,6 +1131,7 @@ export default function App() {
               onSelect={switchThread}
               onCreate={handleCreateThread}
               hideHeader
+              personaLookup={personaLookup}
             />
           </div>
           <StatusDock
@@ -1173,6 +1228,18 @@ export default function App() {
             </span>
             <InlineAlert type="error" message={chatError} />
             <div className="composer-row">
+              {personas.length > 0 && (
+                <PersonaSelector
+                  personas={personas}
+                  activePersonaId={activePersonaId}
+                  onSelect={setActivePersonaId}
+                  onCreate={handleCreatePersona}
+                  onUpdate={handleUpdatePersona}
+                  onDelete={handleDeletePersona}
+                  onSetDefault={handleSetDefaultPersona}
+                  defaultPersonaId={defaultPersonaId}
+                />
+              )}
               <textarea
                 ref={composerRef}
                 data-testid="composer-input"

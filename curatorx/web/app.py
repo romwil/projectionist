@@ -1959,7 +1959,7 @@ def update_persona_template(
             accent_color=payload.accent_color,
         )
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(status_code=400, detail=_safe_error_detail(error, "Persona update failed")) from error
     return PersonaTemplate(**updated)
 
 
@@ -1980,7 +1980,7 @@ def delete_persona(
     try:
         db.delete_persona_template(persona_id)
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(status_code=400, detail=_safe_error_detail(error, "Persona deletion failed")) from error
     return {"deleted": True}
 
 
