@@ -8,10 +8,20 @@ Stores vectors in the existing ``embeddings`` table (same one used by library
 sync) and records the text hash in its ``content_hash`` column.
 
 This is the heaviest idle task — default interval is 24 hours.
+
+Trickle ingestion
+~~~~~~~~~~~~~~~~~
+To avoid pegging CPU/network when hundreds of items need embedding (e.g.
+after an initial library sync), the task caps work at ``MAX_ITEMS_PER_CYCLE``
+per scheduler invocation.  Remaining items are picked up on the next idle
+cycle.  Within each cycle, items are sent to the embedding API in batches
+of ``BATCH_SIZE`` and ``should_stop()`` is checked between batches for
+cooperative interruption.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any, Callable, Dict
 
@@ -27,6 +37,7 @@ from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
 logger = logging.getLogger(__name__)
 
 BATCH_SIZE = 10
+MAX_ITEMS_PER_CYCLE = 50
 INTERVAL_SECONDS = 86400  # 24 hours
 
 
@@ -60,7 +71,23 @@ async def run(
         pending_texts.clear()
         pending_hashes.clear()
 
-    for idx, row in enumerate(rows):
+    for row in rows:
+        if embedded >= MAX_ITEMS_PER_CYCLE:
+            remaining = total - skipped - embedded
+            logger.info(
+                "Semantic embeddings: cycle cap reached (%d embedded, ~%d remaining); "
+                "will continue on next idle cycle",
+                embedded,
+                remaining,
+            )
+            return {
+                "status": "cycle_limit",
+                "embedded": embedded,
+                "skipped": skipped,
+                "total": total,
+                "remaining": remaining,
+            }
+
         summary = str(row["summary"] or "").strip()
         if not summary:
             skipped += 1
@@ -80,6 +107,7 @@ async def run(
 
         if len(pending_rows) >= BATCH_SIZE:
             await _flush()
+            await asyncio.sleep(0)
             if should_stop():
                 logger.info(
                     "Semantic embeddings interrupted after %d embedded, %d skipped",

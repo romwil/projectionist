@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.7 (stable minor tag). -->
+<!-- Unraid Community Applications template — CuratorX 1.7.1 (stable minor tag). -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:1.7</Repository>
@@ -21,6 +21,13 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.7.1
+- Scheduler circuit breaker: quarantines tasks after 3 consecutive failures (1h cooldown, admin reset endpoint)
+- Data retention pruning for telemetry/anniversaries with automatic VACUUM
+- Trickle ingestion caps semantic embedding work per scheduler cycle (MAX_ITEMS_PER_CYCLE=50)
+- Agent/scheduler boundary and SQLite concurrency model documented
+- 38 new tests, 0 regressions
+
 ### 1.7.0
 - Non-root Docker container (security S13) — runs as UID/GID 1000
 - True token-by-token SSE streaming for OpenAI + Anthropic LLM providers

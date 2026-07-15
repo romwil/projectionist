@@ -2194,6 +2194,55 @@ class Database:
         with self.connect() as conn:
             return conn.execute(sql, params).fetchall()
 
+    # --- Data retention / pruning ---
+
+    def prune_telemetry(self, retention_days: int) -> int:
+        """Delete telemetry events older than *retention_days*. Returns rows deleted."""
+        with self.connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM system_telemetry_stream WHERE timestamp < datetime('now', ?)",
+                (f"-{retention_days} days",),
+            )
+            return cursor.rowcount
+
+    def prune_interaction_telemetry(self, retention_days: int) -> int:
+        """Delete interaction telemetry older than *retention_days*. Returns rows deleted."""
+        with self.connect() as conn:
+            cursor = conn.execute(
+                "DELETE FROM interaction_telemetry WHERE timestamp < datetime('now', ?)",
+                (f"-{retention_days} days",),
+            )
+            return cursor.rowcount
+
+    def prune_daily_anniversaries(self, retention_days: int) -> int:
+        """Delete daily anniversary entries older than *retention_days*. Returns rows deleted.
+
+        The ``daily_anniversaries`` table is created lazily by the anniversary
+        scanner task, so this method tolerates its absence.
+        """
+        with self.connect() as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='daily_anniversaries'"
+            ).fetchone()
+            if not exists:
+                return 0
+            cursor = conn.execute(
+                "DELETE FROM daily_anniversaries WHERE scanned_date < date('now', ?)",
+                (f"-{retention_days} days",),
+            )
+            return cursor.rowcount
+
+    def vacuum(self) -> None:
+        """Run VACUUM to reclaim space after large deletes.
+
+        VACUUM cannot run inside a transaction, so we use a raw connection.
+        """
+        conn = self._open_connection()
+        try:
+            conn.execute("VACUUM")
+        finally:
+            conn.close()
+
     def export_training_corpus(self) -> Dict[str, Any]:
         with self.connect() as conn:
             feedback_rows = conn.execute(

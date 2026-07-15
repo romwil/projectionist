@@ -256,6 +256,49 @@ Two-phase: propose token → user confirm → execute. TTL 600 seconds.
 
 ---
 
+## SQLite concurrency model
+
+CuratorX runs as a single process with multiple concurrent writers: the FastAPI request handlers (asyncio tasks on the main thread), the idle scheduler (asyncio background task), and telemetry ingestion (daemon threads). SQLite's default journal mode (`DELETE`) only allows one reader *or* one writer at a time, which would cause `database is locked` errors under concurrent access. Three mechanisms work together to prevent this.
+
+### WAL mode (write-ahead logging)
+
+Every connection sets `PRAGMA journal_mode=WAL` on open (`db.py._open_connection`). WAL mode is persistent — once set on a database file it survives restarts — but we set it per-connection defensively. With WAL:
+
+- **Readers never block writers.** A chat-turn SELECT runs concurrently with a scheduler INSERT without contention.
+- **Writers never block readers.** An active library sync doesn't freeze the web UI.
+- **Only one writer** can commit at a time (SQLite fundamental), but the WAL makes the write-lock window very short compared to DELETE journal mode.
+
+### Busy timeout (30 seconds)
+
+Every connection sets `PRAGMA busy_timeout=30000`. When a writer encounters a locked database, SQLite retries internally for up to 30 seconds before raising `OperationalError`. This absorbs brief write overlaps (e.g. a telemetry insert landing at the same moment as a scheduler commit) without application-level retry logic. The Python-level `timeout` parameter on `sqlite3.connect()` is set to the same value for consistency.
+
+On top of busy_timeout, the `run_with_db_lock_retry` utility adds application-level exponential backoff for critical multi-row writes (batch upserts, embedding stores) — up to 6 retries with jittered delays. This two-layer approach handles both brief contention (SQLite-level) and sustained bursts (application-level).
+
+### Synchronous = NORMAL
+
+With WAL, `PRAGMA synchronous=NORMAL` avoids an fsync on every commit while still guaranteeing durability against application crashes. Data loss is only possible on an OS crash or power failure *during* a commit — an acceptable tradeoff for a homelab media curator running on Unraid/NAS hardware where fsync can be especially slow over network-attached storage.
+
+### Why not a single-writer queue?
+
+A common architectural pattern for SQLite is to funnel all writes through an in-memory asyncio.Queue with a dedicated worker. CuratorX intentionally avoids this because:
+
+1. **The scheduler already runs tasks sequentially** — only one task executes at a time, eliminating writer contention among background jobs.
+2. **Telemetry writes are tiny single-row inserts** — they hold the write lock for microseconds and the busy_timeout absorbs any overlap.
+3. **Request-handler writes are infrequent** — most chat turns are read-heavy (RAG search, history lookup); writes are limited to saving the assistant's reply and occasional preference updates.
+4. **A queue adds complexity** — error propagation, backpressure, shutdown ordering, and testing overhead that isn't justified at homelab scale.
+
+If write contention ever becomes measurable (observable via the `SQLite locked` warning logs), the migration path is straightforward: add an asyncio.Queue in `Database` and route writes through it. The current `connect()` context manager makes this a single-point refactor.
+
+### Trickle ingestion for embeddings
+
+The `semantic_embeddings` scheduler task is the heaviest writer. To avoid pegging CPU and holding the write lock during large backfills (e.g. 500 new movies after an initial sync), it uses trickle ingestion:
+
+- **Per-cycle cap** (`MAX_ITEMS_PER_CYCLE = 50`): embeds at most 50 items per scheduler invocation, then exits with `cycle_limit` status. Remaining items are picked up on the next idle cycle.
+- **Batched API calls** (`BATCH_SIZE = 10`): items are sent to the embedding API in batches of 10, with an `asyncio.sleep(0)` yield between batches to allow other coroutines to run.
+- **Cooperative interruption**: `should_stop()` is checked between batches, so if a chat request arrives the task yields immediately.
+
+---
+
 ## Deployment architecture
 
 ```mermaid
@@ -285,6 +328,50 @@ flowchart TB
 ```
 
 See [DOCKER.md](DOCKER.md) for Mac Colima, Unraid, and Compose details.
+
+---
+
+## Agent tools vs. background scheduler
+
+CuratorX has two execution paths that operate on the same data. Understanding the boundary prevents duplication and clarifies where new functionality belongs.
+
+```
+User Chat ──► CuratorAgent ──► Tools ──► DB ◄── Scheduler Tasks ◄── IdleScheduler
+              (sync, <2s)                         (async, batch)
+```
+
+### Agent tools — synchronous, user-triggered
+
+Defined in `curatorx/agent/tools.py`. Executed within a single chat turn when the user asks a question or requests an action. Tools call into `db.py` and external APIs (TMDB, Radarr, Sonarr, Plex). Results flow back to the LLM for response generation.
+
+**Characteristics:** latency-sensitive (<2 seconds), scoped to one user query, read-heavy with occasional confirmed writes.
+
+### Background scheduler — asynchronous, system-triggered
+
+Defined in `curatorx/scheduler/engine.py` with individual tasks in `curatorx/scheduler/tasks/`. The `IdleScheduler` runs during idle periods (no chat activity for N minutes) and executes maintenance and enrichment tasks sequentially to avoid SQLite write contention.
+
+**Characteristics:** batch-oriented, minutes-long, produces data that agent tools later consume. Each task receives a `should_stop` callback for cooperative interruption when chat activity resumes.
+
+### The boundary rule
+
+| If it…                                            | It belongs in…         |
+|---------------------------------------------------|------------------------|
+| Takes <2s and answers a user question              | Agent tool             |
+| Is batch processing, enrichment, or maintenance    | Scheduler task         |
+| Takes >30s or touches every row in a table         | Scheduler task         |
+| Reads pre-computed results for a chat response     | Agent tool (consumer)  |
+
+Some features span both sides. The scheduler pre-computes; the agent tool reads the results:
+
+- **Embeddings:** `semantic_embeddings` task batch-embeds library items → `search_library` tool queries them.
+- **Anniversaries:** `anniversary_scanner` task scans release dates → `get_todays_anniversaries` tool reads them.
+- **Recommendations:** `recommendation_warmup` task builds candidate lists → agent tools read the cache.
+- **Taste profile:** `taste_refresh` task recomputes cluster weights → agent uses them for personalization.
+- **Health metrics:** `health_metrics` task caches library stats → `/api/library/health` serves the cache.
+
+### Watchdog and circuit breaker
+
+Each scheduler task runs with a configurable timeout (default 5 minutes). A per-task failure counter tracks consecutive failures; after 3 consecutive failures the task is **quarantined** — skipped on subsequent cycles until the cooldown period (default 1 hour) elapses or an admin clears it via `POST /api/admin/scheduled-tasks/{name}/reset`. Quarantine state is in-memory and resets on restart.
 
 ---
 

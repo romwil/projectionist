@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.7.1] — 2026-07-15
+
+Scheduler hardening, data retention, and trickle embedding ingestion.
+
+### Added
+- Scheduler circuit breaker: per-task timeout (default 5min), consecutive failure tracking, automatic quarantine after 3 failures with 1-hour cooldown
+- Heartbeat mechanism for long-running tasks to signal liveness and reset timeout window
+- Admin quarantine reset endpoint (`POST /api/admin/scheduled-tasks/{name}/reset`)
+- Data retention pruning: telemetry (90d), interaction telemetry (90d), daily anniversaries (30d) with automatic VACUUM
+- `data_retention` scheduled task registered as OOTB background task
+- Trickle ingestion for semantic embeddings: MAX_ITEMS_PER_CYCLE=50 cap with cooperative yielding
+- 38 new tests for circuit breaker, data retention, and embedding trickle patterns
+
+### Changed
+- Scheduler admin API (`GET /api/admin/scheduled-tasks`) now includes quarantine status per task
+- Stale task selection skips quarantined tasks automatically
+- Semantic embeddings task returns `cycle_limit` status when capped, remaining items picked up next cycle
+
+### Documentation
+- ARCHITECTURE.md: new "Agent tools vs. background scheduler" section with boundary rules and examples
+- ARCHITECTURE.md: new "SQLite concurrency model" section explaining WAL mode, busy timeout, and trickle ingestion
+
 ## [1.7.0] — 2026-07-15
 
 Non-root Docker, true SSE streaming, multi-method auth, and telemetry ingestion.

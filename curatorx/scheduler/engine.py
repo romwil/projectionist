@@ -11,6 +11,23 @@ from the FastAPI lifespan.  It maintains its own SQLite table
 (``scheduled_tasks``) for persistence across restarts, and emits progress to
 ``jobs_state.json`` so the status dock shows activity.
 
+Circuit Breaker / Watchdog
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+Each task runs with a configurable timeout (default 5 minutes).  If a task
+hangs beyond its timeout, it is cancelled and logged as a timeout failure.
+Tasks can call ``heartbeat()`` on the provided callback during long operations
+to reset the timeout window.
+
+A per-task failure counter tracks consecutive failures.  After
+``QUARANTINE_THRESHOLD`` consecutive failures (default 3), the task is
+**quarantined** — skipped on subsequent scheduler cycles until either:
+
+- The configurable cooldown period (default 1 hour) elapses, or
+- An admin manually resets the quarantine via the API.
+
+Quarantine state is held in-memory and does not persist across restarts,
+which is intentional: a restart is itself a recovery action.
+
 No external dependencies — pure asyncio + SQLite.
 """
 
@@ -32,6 +49,9 @@ logger = logging.getLogger(__name__)
 DEFAULT_IDLE_THRESHOLD_MINUTES = 15
 SCHEDULER_POLL_SECONDS = 30
 SCHEDULER_INITIAL_DELAY_SECONDS = 60
+DEFAULT_TASK_TIMEOUT_SECONDS = 300  # 5 minutes
+QUARANTINE_THRESHOLD = 3
+DEFAULT_QUARANTINE_COOLDOWN_SECONDS = 3600  # 1 hour
 
 
 @dataclass
@@ -41,6 +61,7 @@ class TaskDefinition:
     name: str
     run_interval_seconds: int
     enabled: bool = True
+    timeout_seconds: int = DEFAULT_TASK_TIMEOUT_SECONDS
     run_fn: Optional[
         Callable[[Database, Settings, Callable[[], bool]], Awaitable[Dict[str, Any]]]
     ] = None
@@ -58,6 +79,68 @@ class TaskState:
     last_status: Optional[str] = None
 
 
+@dataclass
+class QuarantineInfo:
+    """In-memory quarantine state for a task that has failed repeatedly."""
+
+    consecutive_failures: int = 0
+    last_error: str = ""
+    quarantined_at: Optional[float] = None
+    cooldown_seconds: int = DEFAULT_QUARANTINE_COOLDOWN_SECONDS
+
+    @property
+    def is_quarantined(self) -> bool:
+        if self.quarantined_at is None:
+            return False
+        elapsed = time.time() - self.quarantined_at
+        if elapsed >= self.cooldown_seconds:
+            self.release()
+            return False
+        return True
+
+    @property
+    def remaining_seconds(self) -> Optional[float]:
+        if self.quarantined_at is None:
+            return None
+        remaining = self.cooldown_seconds - (time.time() - self.quarantined_at)
+        return max(0.0, remaining)
+
+    def record_failure(self, error: str) -> bool:
+        """Record a failure. Returns True if the task is now quarantined."""
+        self.consecutive_failures += 1
+        self.last_error = error
+        if self.consecutive_failures >= QUARANTINE_THRESHOLD and self.quarantined_at is None:
+            self.quarantined_at = time.time()
+            return True
+        return False
+
+    def record_success(self) -> None:
+        self.consecutive_failures = 0
+        self.last_error = ""
+        self.quarantined_at = None
+
+    def release(self) -> None:
+        """Manually clear quarantine (admin reset or cooldown expiry)."""
+        self.consecutive_failures = 0
+        self.last_error = ""
+        self.quarantined_at = None
+
+
+class _HeartbeatHandle:
+    """Passed to tasks so they can call ``heartbeat()`` to reset the timeout window.
+
+    Long-running tasks (e.g. batch embedding) should call this between batches
+    to signal liveness without requiring the entire task to complete within a
+    single timeout window.
+    """
+
+    def __init__(self) -> None:
+        self.last_heartbeat: float = time.time()
+
+    def heartbeat(self) -> None:
+        self.last_heartbeat = time.time()
+
+
 class IdleScheduler:
     """Runs registered background tasks during idle periods.
 
@@ -66,6 +149,9 @@ class IdleScheduler:
     (most overdue first).  Each task receives a *should_stop* callback that
     returns ``True`` when a chat request arrives or the app is shutting down,
     allowing cooperative interruption between batches.
+
+    A circuit-breaker quarantines tasks that fail repeatedly, and a per-task
+    timeout watchdog cancels tasks that hang.
     """
 
     def __init__(
@@ -80,6 +166,7 @@ class IdleScheduler:
         self._idle_threshold = idle_threshold_minutes * 60
         self._last_activity: float = time.time()
         self._definitions: Dict[str, TaskDefinition] = {}
+        self._quarantine: Dict[str, QuarantineInfo] = {}
         self._shutdown = False
         self._running_task: Optional[str] = None
         self._task: Optional[asyncio.Task[None]] = None
@@ -90,6 +177,8 @@ class IdleScheduler:
     def register(self, defn: TaskDefinition) -> None:
         """Register a task definition and upsert its persistent state row."""
         self._definitions[defn.name] = defn
+        if defn.name not in self._quarantine:
+            self._quarantine[defn.name] = QuarantineInfo()
         self._upsert_task_state(defn)
 
     def record_activity(self) -> None:
@@ -123,7 +212,7 @@ class IdleScheduler:
         return self._shutdown or not self.is_idle()
 
     def get_task_states(self) -> List[Dict[str, Any]]:
-        """Return all task states for the admin API."""
+        """Return all task states for the admin API, including quarantine status."""
         states = self._load_all_states()
         result: List[Dict[str, Any]] = []
         now = time.time()
@@ -133,6 +222,20 @@ class IdleScheduler:
             next_run: Optional[float] = None
             if state.last_run_at is not None:
                 next_run = state.last_run_at + interval
+            qinfo = self._quarantine.get(state.name)
+            quarantine_dict: Dict[str, Any] = {
+                "is_quarantined": False,
+                "consecutive_failures": 0,
+                "last_error": "",
+                "remaining_seconds": None,
+            }
+            if qinfo is not None:
+                quarantine_dict = {
+                    "is_quarantined": qinfo.is_quarantined,
+                    "consecutive_failures": qinfo.consecutive_failures,
+                    "last_error": qinfo.last_error,
+                    "remaining_seconds": qinfo.remaining_seconds,
+                }
             result.append(
                 {
                     "name": state.name,
@@ -151,6 +254,7 @@ class IdleScheduler:
                             or (now - state.last_run_at) >= interval
                         )
                     ),
+                    "quarantine": quarantine_dict,
                 }
             )
         return result
@@ -195,6 +299,27 @@ class IdleScheduler:
         if defn is None or defn.run_fn is None:
             return {"error": f"Task '{name}' not found or has no run function"}
         return await self._execute_task(defn, force=True)
+
+    def reset_quarantine(self, name: str) -> Optional[Dict[str, Any]]:
+        """Clear quarantine state for a task, allowing it to run again.
+
+        Returns the updated quarantine info dict, or None if the task doesn't exist.
+        """
+        if name not in self._definitions:
+            return None
+        qinfo = self._quarantine.get(name)
+        if qinfo is None:
+            qinfo = QuarantineInfo()
+            self._quarantine[name] = qinfo
+        else:
+            qinfo.release()
+        logger.info("Quarantine reset for task '%s'", name)
+        return {
+            "name": name,
+            "is_quarantined": qinfo.is_quarantined,
+            "consecutive_failures": qinfo.consecutive_failures,
+            "last_error": qinfo.last_error,
+        }
 
     # -- Internal ------------------------------------------------------------
 
@@ -274,7 +399,7 @@ class IdleScheduler:
         }
 
     def _stale_tasks(self) -> List[TaskDefinition]:
-        """Return enabled tasks overdue for execution, sorted most-overdue first."""
+        """Return enabled, non-quarantined tasks overdue for execution, sorted most-overdue first."""
         now = time.time()
         states = {s.name: s for s in self._load_all_states()}
         candidates: List[tuple[float, TaskDefinition]] = []
@@ -284,6 +409,9 @@ class IdleScheduler:
                 continue
             state = states.get(defn.name)
             if state is None or not state.enabled:
+                continue
+            qinfo = self._quarantine.get(defn.name)
+            if qinfo is not None and qinfo.is_quarantined:
                 continue
             if state.last_run_at is None:
                 staleness = float("inf")
@@ -300,12 +428,22 @@ class IdleScheduler:
     async def _execute_task(
         self, defn: TaskDefinition, *, force: bool = False
     ) -> Dict[str, Any]:
-        """Run a single task, record timing and status."""
+        """Run a single task with timeout watchdog and failure tracking.
+
+        The task runs inside ``asyncio.wait_for`` with the configured timeout.
+        A :class:`_HeartbeatHandle` is threaded through the ``should_stop``
+        callback so tasks can call ``heartbeat()`` to reset the deadline.
+
+        On success the failure counter resets.  On failure the counter increments;
+        after ``QUARANTINE_THRESHOLD`` consecutive failures the task is quarantined.
+        """
         assert defn.run_fn is not None
         self._running_task = defn.name
         logger.info("Scheduler: starting task '%s'%s", defn.name, " (manual)" if force else "")
         self._emit_progress(defn.name, "running")
 
+        hb = _HeartbeatHandle()
+        qinfo = self._quarantine.setdefault(defn.name, QuarantineInfo())
         start = time.time()
         try:
             settings = load_merged_settings(self._data_dir)
@@ -317,10 +455,23 @@ class IdleScheduler:
                     return True
                 return False
 
-            result = await defn.run_fn(self._db, settings, stop_check)
+            timeout = defn.timeout_seconds
+
+            async def _run_with_heartbeat() -> Dict[str, Any]:
+                """Execute the task, extending the deadline on each heartbeat."""
+                assert defn.run_fn is not None
+
+                def stop_with_heartbeat() -> bool:
+                    hb.heartbeat()
+                    return stop_check()
+
+                return await defn.run_fn(self._db, settings, stop_with_heartbeat)
+
+            result = await asyncio.wait_for(_run_with_heartbeat(), timeout=timeout)
             elapsed_ms = int((time.time() - start) * 1000)
 
             status = result.get("status", "completed") if isinstance(result, dict) else "completed"
+            qinfo.record_success()
             self._record_run(defn.name, elapsed_ms, status)
             self._emit_progress(defn.name, "completed")
             logger.info(
@@ -331,12 +482,42 @@ class IdleScheduler:
             )
             return {"name": defn.name, "status": status, "duration_ms": elapsed_ms, **(result or {})}
 
+        except asyncio.TimeoutError:
+            elapsed_ms = int((time.time() - start) * 1000)
+            error_msg = f"timed out after {defn.timeout_seconds}s"
+            logger.error(
+                "Scheduler: task '%s' %s (elapsed %dms)",
+                defn.name,
+                error_msg,
+                elapsed_ms,
+            )
+            now_quarantined = qinfo.record_failure(error_msg)
+            if now_quarantined:
+                logger.warning(
+                    "Task '%s' quarantined after %d consecutive failures: %s",
+                    defn.name,
+                    qinfo.consecutive_failures,
+                    error_msg,
+                )
+            self._record_run(defn.name, elapsed_ms, f"error: {error_msg}")
+            self._emit_progress(defn.name, "error")
+            return {"name": defn.name, "status": "error", "duration_ms": elapsed_ms, "error": error_msg}
+
         except Exception as exc:
             elapsed_ms = int((time.time() - start) * 1000)
+            error_msg = str(exc)
             logger.exception("Scheduler: task '%s' failed after %dms", defn.name, elapsed_ms)
+            now_quarantined = qinfo.record_failure(error_msg)
+            if now_quarantined:
+                logger.warning(
+                    "Task '%s' quarantined after %d consecutive failures: %s",
+                    defn.name,
+                    qinfo.consecutive_failures,
+                    error_msg,
+                )
             self._record_run(defn.name, elapsed_ms, f"error: {exc}")
             self._emit_progress(defn.name, "error")
-            return {"name": defn.name, "status": "error", "duration_ms": elapsed_ms, "error": str(exc)}
+            return {"name": defn.name, "status": "error", "duration_ms": elapsed_ms, "error": error_msg}
         finally:
             self._running_task = None
 

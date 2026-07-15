@@ -1342,6 +1342,22 @@ async def trigger_scheduled_task(
     return result
 
 
+@app.post("/api/admin/scheduled-tasks/{name}/reset")
+def reset_scheduled_task_quarantine(
+    name: str,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Clear quarantine state for a task, allowing it to run again."""
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    result = scheduler.reset_quarantine(name)
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Task '{name}' not found")
+    return result
+
+
 @app.get("/api/admin/telemetry/summary")
 def telemetry_summary(
     hours: int = 24,
