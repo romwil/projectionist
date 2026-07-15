@@ -1449,12 +1449,28 @@ class ToolRegistry:
             matched = [str(g["id"]) for g in genre_list if g.get("name", "").lower() in wanted]
             genre_ids = ",".join(matched)
 
+        keywords_text = str(args.get("keywords") or "").strip()
+        keyword_ids: Optional[str] = None
+        if keywords_text:
+            resolved_ids: List[str] = []
+            for kw in keywords_text.split(","):
+                kw = kw.strip()
+                if not kw:
+                    continue
+                if kw.isdigit():
+                    resolved_ids.append(kw)
+                else:
+                    kw_results = tmdb.search_keywords(kw)
+                    if kw_results:
+                        resolved_ids.append(str(kw_results[0]["id"]))
+            keyword_ids = ",".join(resolved_ids) if resolved_ids else None
+
         if media_type == "movie":
             results = tmdb.discover_movies(
                 year_from=args.get("year_from"),
                 year_to=args.get("year_to"),
                 with_genres=genre_ids or None,
-                with_keywords=str(args.get("keywords") or "") or None,
+                with_keywords=keyword_ids,
             )
         else:
             results = tmdb.discover_tv(
@@ -2578,9 +2594,8 @@ class ToolRegistry:
                 """
                 SELECT COUNT(*) as cnt FROM library_items
                 WHERE view_count = 0
-                  AND CAST(json_extract('{"r":' || COALESCE(
-                      (SELECT vote_average FROM library_items li2 WHERE li2.id = library_items.id), '0'
-                  ) || '}', '$.r') AS REAL) >= 7.0
+                  AND vote_average IS NOT NULL
+                  AND vote_average >= 7.0
                 """
             ).fetchone()
 

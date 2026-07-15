@@ -99,15 +99,20 @@ export default function useChatScroll({ messages, loading, sessionId }) {
     if (!isNewMessage && !loading) return;
 
     const last = messages[count - 1];
-    // Capture follow state before the DOM grows from the new message / typing row.
-    const wasFollowing = followingRef.current && !isScrolledUp();
+    const wasFollowing = followingRef.current;
     if (isNewMessage) {
       prevCountRef.current = count;
     }
 
     requestAnimationFrame(() => {
       if (!wasFollowing) {
-        // User scrolled up intentionally — soft affordance only.
+        // Re-check actual scroll position — content growth during streaming
+        // can change scrollHeight without user interaction, so verify we're
+        // genuinely scrolled away before showing the chip.
+        if (!isScrolledUp()) {
+          followingRef.current = true;
+          return;
+        }
         if (isNewMessage || loading) {
           setShowNewReplyChip(true);
         }
@@ -126,6 +131,16 @@ export default function useChatScroll({ messages, loading, sessionId }) {
       }
     });
   }, [messages, loading, scrollToLatestTurn, isScrolledUp]);
+
+  // When loading ends (streaming finishes) and user is at/near bottom, dismiss
+  // the chip — the scroll handler won't fire if no scroll actually happens.
+  useEffect(() => {
+    if (loading || !showNewReplyChip) return;
+    if (!isScrolledUp()) {
+      followingRef.current = true;
+      setShowNewReplyChip(false);
+    }
+  }, [loading, showNewReplyChip, isScrolledUp]);
 
   return { scrollRef, showNewReplyChip, scrollToBottom, scrollToLatestTurn };
 }

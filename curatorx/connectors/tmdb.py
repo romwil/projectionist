@@ -111,6 +111,13 @@ class TMDBClient:
             return []
         return [k.get("name", "") for k in payload.get("keywords", []) if k.get("name")]
 
+    def search_keywords(self, query: str, *, page: int = 1) -> List[Mapping[str, Any]]:
+        """Search TMDB keywords by text. Returns list of {id, name} dicts."""
+        payload = request_json(
+            self._url("/search/keyword", query=query, page=page), timeout=self.timeout
+        )
+        return payload.get("results", []) if isinstance(payload, dict) else []
+
     def genre_list_movies(self) -> List[Mapping[str, Any]]:
         payload = request_json(self._url("/genre/movie/list"), timeout=self.timeout)
         return payload.get("genres", []) if isinstance(payload, dict) else []

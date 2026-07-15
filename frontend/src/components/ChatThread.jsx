@@ -12,7 +12,7 @@ function isDisplayableCard(item) {
   return Boolean(item?.title || item?.tmdb_id || item?.tvdb_id || item?.rating_key);
 }
 
-function renderBulkConfirmActions(message, handlers, showTokenConfirm) {
+function renderBulkConfirmActions(message, handlers, showTokenConfirm, viewportBlock) {
   const { radarr, sonarr, seerr } = collectAddableFromMessage(message, {
     requestPath: handlers.requestPath,
   });
@@ -29,40 +29,53 @@ function renderBulkConfirmActions(message, handlers, showTokenConfirm) {
         disabled={handlers.actionsDisabled}
       />
     );
-    return actions.length ? <div className="bulk-confirm-actions">{actions}</div> : null;
+  } else {
+    if (seerr.length >= 2) {
+      actions.push(
+        <ConfirmAllButton
+          key="seerr"
+          count={seerr.length}
+          target="seerr"
+          onClick={() => handlers.onConfirmAllItems?.(seerr, "seerr")}
+          disabled={handlers.actionsDisabled}
+        />
+      );
+    }
+    if (radarr.length >= 2) {
+      actions.push(
+        <ConfirmAllButton
+          key="radarr"
+          count={radarr.length}
+          target="radarr"
+          onClick={() => handlers.onConfirmAllItems?.(radarr, "radarr")}
+          disabled={handlers.actionsDisabled}
+        />
+      );
+    }
+    if (sonarr.length >= 2) {
+      actions.push(
+        <ConfirmAllButton
+          key="sonarr"
+          count={sonarr.length}
+          target="sonarr"
+          onClick={() => handlers.onConfirmAllItems?.(sonarr, "sonarr")}
+          disabled={handlers.actionsDisabled}
+        />
+      );
+    }
   }
 
-  if (seerr.length >= 2) {
+  if (viewportBlock) {
     actions.push(
-      <ConfirmAllButton
-        key="seerr"
-        count={seerr.length}
-        target="seerr"
-        onClick={() => handlers.onConfirmAllItems?.(seerr, "seerr")}
-        disabled={handlers.actionsDisabled}
-      />
-    );
-  }
-  if (radarr.length >= 2) {
-    actions.push(
-      <ConfirmAllButton
-        key="radarr"
-        count={radarr.length}
-        target="radarr"
-        onClick={() => handlers.onConfirmAllItems?.(radarr, "radarr")}
-        disabled={handlers.actionsDisabled}
-      />
-    );
-  }
-  if (sonarr.length >= 2) {
-    actions.push(
-      <ConfirmAllButton
-        key="sonarr"
-        count={sonarr.length}
-        target="sonarr"
-        onClick={() => handlers.onConfirmAllItems?.(sonarr, "sonarr")}
-        disabled={handlers.actionsDisabled}
-      />
+      <button
+        key="viewport"
+        type="button"
+        className="confirm-all-button viewport-expand-btn"
+        data-testid="expand-title-cards"
+        onClick={() => handlers.onOpenViewport?.(viewportBlock.payload)}
+      >
+        Expand {viewportBlock.payload?.items?.length || 0} titles in turnstyle view
+      </button>
     );
   }
 
@@ -101,6 +114,9 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
     const items = (block.items || []).filter(isDisplayableCard).map((item) => enrichTitleCard(item, handlers.reviewLookup));
     if (!items.length) return null;
     const isLastTitleCards = !blocks.slice(blockIndex + 1).some((entry) => entry.type === "title_cards");
+    const nextViewport = blocks.slice(blockIndex + 1).find(
+      (entry) => entry.type === "action_prompt" && entry.action === "open_viewport"
+    );
     return (
       <>
         <div className="inline-cards">
@@ -121,7 +137,7 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
           ))}
         </div>
         {role === "assistant" && isLastTitleCards
-          ? renderBulkConfirmActions(message, handlers, handlers.pendingTokenCount >= 2)
+          ? renderBulkConfirmActions(message, handlers, handlers.pendingTokenCount >= 2, nextViewport)
           : null}
       </>
     );
@@ -170,8 +186,11 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
     );
   }
   if (block.type === "action_prompt" && block.action === "open_viewport") {
+    // Already rendered inline with the preceding title_cards bulk actions row
+    const precedingHasTitleCards = blocks.slice(0, blockIndex).some((entry) => entry.type === "title_cards");
+    if (precedingHasTitleCards) return null;
     return (
-      <button type="button" className="viewport-link" data-testid="expand-title-cards" onClick={() => handlers.onOpenViewport?.(block.payload)}>
+      <button type="button" className="confirm-all-button viewport-expand-btn" data-testid="expand-title-cards" onClick={() => handlers.onOpenViewport?.(block.payload)}>
         Expand {block.payload?.items?.length || 0} titles in turnstyle view
       </button>
     );

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.7.8] — 2026-07-15
+
+### Fixed
+- "New reply" chip now properly dismisses when scrolled to bottom — fixed streaming race condition
+- Turnstyle preview buttons ("Confirm all" + "Expand") now side-by-side with consistent outlined styling
+- Library snapshot hidden gems SQL simplified — was using broken self-joining subquery
+- Collection gaps keyword resolution — text keywords now resolve to TMDB IDs before API call
+
+### Added
+- 33 value-based agent tool validation tests covering gap detection, anniversaries, library snapshot, tonight picks, double feature, quick pick, watch patterns, and edge cases
+
 ## [1.7.7] — 2026-07-15
 
 ### Fixed
