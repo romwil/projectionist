@@ -54,6 +54,7 @@ docker buildx build \
   --platform "${PLATFORMS}" \
   --provenance=false \
   --sbom=false \
+  --build-arg "CURATORX_VERSION=${VERSION}" \
   "${TAGS[@]}" \
   --push \
   .

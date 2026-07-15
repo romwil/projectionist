@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.7] — 2026-07-15
+
+### Fixed
+- Docker image now embeds version as OCI label via build arg — ensures each release produces a distinct image manifest, eliminating stale layer cache issues on Unraid "Force Update"
+- Dockerfile version label was hardcoded at 1.7.3; now dynamically set from release script
+
 ## [1.7.6] — 2026-07-15
 
 ### Fixed
