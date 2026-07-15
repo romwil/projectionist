@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.7.10] — 2026-07-15
+
+### Fixed
+- Docker images now include build timestamp in file content (not just labels), forcing Docker daemons to recognize image changes on Force Update
+- Startup log now shows build info for easier version verification
+
 ## [1.7.9] — 2026-07-15
 
 ### Added

@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.7.9 -->
+<!-- Unraid Community Applications template — CuratorX 1.7.10 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,10 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.7.10
+- Fix Unraid Force Update: build timestamp now embedded in image file content, not just labels
+- Startup log shows build info for version verification
+
 ### 1.7.9
 - Value-based test deep dive: 193 new logic-level tests, shared conftest.py infrastructure, coverage from 1.4% to 76%+
 

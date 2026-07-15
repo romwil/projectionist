@@ -10,10 +10,12 @@ RUN npm run build
 FROM python:3.12-slim
 
 ARG CURATORX_VERSION=dev
+ARG BUILD_DATE=unknown
 
 LABEL org.opencontainers.image.title="CuratorX" \
       org.opencontainers.image.description="Chat-first Plex collection curator for self-hosted homelabs" \
       org.opencontainers.image.version="${CURATORX_VERSION}" \
+      org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.source="https://github.com/romwil/curatorx" \
       org.opencontainers.image.licenses="MIT"
 
@@ -26,6 +28,8 @@ RUN apt-get update \
 COPY pyproject.toml README.md LICENSE ./
 COPY curatorx ./curatorx
 COPY --from=frontend /frontend/dist ./frontend/dist
+
+RUN echo "${CURATORX_VERSION} built ${BUILD_DATE}" > /app/.build-info
 
 RUN pip install --no-cache-dir ".[web,mcp]"
 

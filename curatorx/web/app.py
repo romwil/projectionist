@@ -220,7 +220,13 @@ def _safe_error_detail(error: Exception, context: str = "") -> str:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    logger.info("CuratorX startup (version %s, data_dir=%s)", __version__, DATA_DIR)
+    build_info = "unknown"
+    try:
+        with open("/app/.build-info") as f:
+            build_info = f.read().strip()
+    except FileNotFoundError:
+        pass
+    logger.info("CuratorX startup (version %s, build %s, data_dir=%s)", __version__, build_info, DATA_DIR)
 
     logger.info("Startup: ensuring session secret…")
     try:

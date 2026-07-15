@@ -122,6 +122,28 @@ Full Unraid steps: [wiki/Unraid.md](wiki/Unraid.md).
 
 ---
 
+## Troubleshooting
+
+### Unraid "Force Update" not pulling fresh images
+
+Unraid's Docker manager may not detect new images when only metadata (labels) changed between releases. Starting with v1.7.10, CuratorX embeds a unique build timestamp in the image file content to guarantee Docker recognizes every release as new.
+
+If you're on an older version or Force Update still shows stale content:
+
+```bash
+docker stop curatorx
+docker rmi romwil/curatorx:latest
+# Then restart from the Unraid Docker UI — it will pull a fresh image
+```
+
+You can verify you have the correct build by checking the startup log or running:
+
+```bash
+docker exec curatorx cat /app/.build-info
+```
+
+---
+
 ## Publishing multi-arch images (maintainers)
 
 Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use the release script:
