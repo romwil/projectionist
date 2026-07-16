@@ -74,6 +74,36 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "find_similar_titles",
+            "description": (
+                "Find titles similar or surprisingly adjacent to a seed library title using "
+                "cached plot-neighbor scores (embedding cosine + surprise). Prefer this over "
+                "search_library when the user asks for 'more like X' or 'something similar but unexpected'."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "item_id": {
+                        "type": "integer",
+                        "description": "Library item id of the seed title",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Seed title to look up when item_id is unknown",
+                    },
+                    "mode": {
+                        "type": "string",
+                        "enum": ["similar", "surprising"],
+                        "description": "similar = high cosine; surprising = high cosine with low genre/keyword/credit overlap",
+                    },
+                    "limit": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "find_collection_gaps",
             "description": "Find movies or shows missing from the library for a genre/decade/theme query.",
             "parameters": {
@@ -507,13 +537,13 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_facet_catalog",
-            "description": "List top directors, actors, keywords, countries, or languages in the owned library.",
+            "description": "List top directors, actors, keywords, countries, languages, or plot motifs in the owned library.",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "facet_type": {
                         "type": "string",
-                        "enum": ["director", "actor", "keyword", "country", "language"],
+                        "enum": ["director", "actor", "keyword", "country", "language", "motif"],
                     },
                     "limit": {"type": "integer"},
                 },
@@ -1379,6 +1409,69 @@ class ToolRegistry:
                 "offset": 0,
                 "has_more": False,
                 "items": items,
+            }
+        )
+
+    async def _tool_find_similar_titles(self, args: Mapping[str, Any]) -> str:
+        """Read cached plot neighbors (similar or surprising) for a seed title."""
+        limit = min(max(1, int(args.get("limit") or 10)), 25)
+        mode = str(args.get("mode") or "similar").strip().lower()
+        if mode not in {"similar", "surprising"}:
+            mode = "similar"
+
+        seed_row = None
+        seed_id = args.get("item_id")
+        if seed_id is not None:
+            try:
+                seed_row = self.db.library_item_by_id(int(seed_id))
+            except (TypeError, ValueError):
+                seed_row = None
+
+        if seed_row is None:
+            title = str(args.get("title") or "").strip()
+            if not title:
+                return json.dumps({"error": "Provide item_id or title", "items": []})
+            pattern = f"%{title.lower()}%"
+            with self.db.connect() as conn:
+                seed_row = conn.execute(
+                    """
+                    SELECT * FROM library_items
+                    WHERE lower(title) LIKE ?
+                    ORDER BY CASE WHEN lower(title) = ? THEN 0 ELSE 1 END, title
+                    LIMIT 1
+                    """,
+                    (pattern, title.lower()),
+                ).fetchone()
+        if seed_row is None:
+            return json.dumps({"error": "Seed title not found in library", "items": []})
+
+        neighbors = self.db.get_neighbors(int(seed_row["id"]), mode=mode, limit=limit)
+        cards = []
+        items = []
+        for row in neighbors:
+            card = row_to_title_card(row)
+            cards.append(card)
+            payload = _card_to_tool_item(card)
+            payload["score"] = float(row["score"] or 0)
+            payload["surprise_score"] = float(row["surprise_score"] or 0)
+            items.append(payload)
+        self._cards.extend(cards)
+
+        return json.dumps(
+            {
+                "seed": {
+                    "id": int(seed_row["id"]),
+                    "title": str(seed_row["title"]),
+                    "year": seed_row["year"],
+                    "media_type": str(seed_row["media_type"]),
+                },
+                "mode": mode,
+                "items": items,
+                "returned": len(items),
+                "note": (
+                    "Neighbors come from the plot_neighbors idle cache. "
+                    "Empty results mean embeddings/neighbors have not been computed yet."
+                ),
             }
         )
 

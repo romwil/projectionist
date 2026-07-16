@@ -53,6 +53,7 @@ class LibraryFilters:
     directors: List[str] = field(default_factory=list)
     cast: List[str] = field(default_factory=list)
     keywords: List[str] = field(default_factory=list)
+    motifs: List[str] = field(default_factory=list)
     countries: List[str] = field(default_factory=list)
     content_ratings: List[str] = field(default_factory=list)
     original_language: Optional[str] = None
@@ -135,6 +136,7 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         directors=_parse_csv_list(data.get("directors")),
         cast=_parse_csv_list(data.get("cast")),
         keywords=_parse_csv_list(data.get("keywords")),
+        motifs=_parse_csv_list(data.get("motifs")),
         countries=_parse_csv_list(data.get("countries")),
         content_ratings=_parse_csv_list(data.get("content_ratings")),
         original_language=str(data["original_language"]).strip() if data.get("original_language") else None,
@@ -406,6 +408,10 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         params.extend(facet_params)
     if filters.keywords:
         facet_sql, facet_params = _facet_subquery("keyword", filters.keywords)
+        clauses.append(facet_sql)
+        params.extend(facet_params)
+    if filters.motifs:
+        facet_sql, facet_params = _facet_subquery("motif", filters.motifs)
         clauses.append(facet_sql)
         params.extend(facet_params)
     if filters.countries:

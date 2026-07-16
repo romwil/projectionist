@@ -31,6 +31,7 @@ from curatorx.library.embeddings import (
     build_item_embedding_text,
     content_hash_for_text,
     embed_texts,
+    embedding_model_label,
 )
 from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
 
@@ -65,7 +66,7 @@ async def run(
             (int(row["id"]), vector, content_hash)
             for row, vector, content_hash in zip(pending_rows, vectors, pending_hashes)
         ]
-        db.set_embeddings(pairs)
+        db.set_embeddings(pairs, embedding_model=embedding_model_label(settings))
         embedded += len(pending_rows)
         pending_rows.clear()
         pending_texts.clear()

@@ -225,7 +225,7 @@ def library_facet_catalog(
     limit: int = 50,
 ) -> Dict[str, Any]:
     normalized = facet_type.strip().lower()
-    allowed = {"director", "actor", "keyword", "country", "language"}
+    allowed = {"director", "actor", "keyword", "country", "language", "motif"}
     if normalized not in allowed:
         raise ValueError(f"facet_type must be one of: {', '.join(sorted(allowed))}")
     capped = min(max(1, limit), 100)

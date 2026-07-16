@@ -74,19 +74,57 @@ def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
 
 
 async def build_item_embedding_text(row) -> str:
+    """Build weighted/sectioned text for item embeddings.
+
+    Plot section (summary + TMDB overview + tagline + optional LLM logline) is
+    listed first and denser so semantic similarity leans on narrative.  Metadata
+    (title/year/genres/keywords) is a lighter second section for grounding.
+    """
+    def _field(name: str) -> str:
+        try:
+            value = row[name]
+        except (KeyError, IndexError, TypeError):
+            return ""
+        return str(value or "").strip()
+
     genres = row["genres"] if isinstance(row["genres"], str) else "[]"
     keywords = row["keywords"] if isinstance(row["keywords"], str) else "[]"
-    return "\n".join(
+
+    plot_parts = [
+        _field("summary"),
+        _field("tmdb_overview"),
+        _field("tagline"),
+        _field("llm_logline"),
+    ]
+    # Repeat non-empty plot lines once for mild plot weighting vs metadata.
+    plot_body = "\n".join(p for p in plot_parts if p)
+    plot_section = "\n".join(
         part
         for part in [
-            row["title"],
-            str(row["year"] or ""),
-            row["summary"] or "",
-            genres,
-            keywords,
+            "PLOT:",
+            plot_body,
+            plot_body if plot_body else "",
         ]
         if part
     )
+
+    meta_parts = [
+        f"Title: {_field('title')}" if _field("title") else "",
+        f"Year: {_field('year')}" if _field("year") else "",
+        f"Genres: {genres}" if genres and genres != "[]" else "",
+        f"Keywords: {keywords}" if keywords and keywords != "[]" else "",
+    ]
+    meta_section = "\n".join(
+        part for part in ["METADATA:", *[p for p in meta_parts if p]] if part
+    )
+    return "\n\n".join(section for section in [plot_section, meta_section] if section)
+
+
+def embedding_model_label(settings: Settings) -> str:
+    """Stable label stored on embeddings rows for hygiene / future rebuilds."""
+    if settings.llm_api_key:
+        return str(settings.llm_embedding_model or "text-embedding-3-small").strip()
+    return "hash-fallback"
 
 
 def _embedding_progress_message(current: int, total: int, *, skipped: int = 0) -> str:
@@ -140,7 +178,7 @@ async def rebuild_embeddings(
             (int(row["id"]), vector, content_hash)
             for row, vector, content_hash in zip(pending_rows, vectors, pending_hashes)
         ]
-        db.set_embeddings(pairs)
+        db.set_embeddings(pairs, embedding_model=embedding_model_label(settings))
         embedded += len(pending_rows)
         pending_rows.clear()
         pending_texts.clear()

@@ -19,9 +19,12 @@ def register_all(scheduler: IdleScheduler) -> None:
         data_retention,
         gap_analysis,
         health_metrics,
+        llm_logline_enrichment,
         metadata_enrichment,
+        plot_neighbors,
         recommendation_warmup,
         semantic_embeddings,
+        summary_motifs,
         taste_refresh,
     )
 
@@ -33,3 +36,6 @@ def register_all(scheduler: IdleScheduler) -> None:
     gap_analysis.register(scheduler)
     data_retention.register(scheduler)
     metadata_enrichment.register(scheduler)
+    plot_neighbors.register(scheduler)
+    summary_motifs.register(scheduler)
+    llm_logline_enrichment.register(scheduler)

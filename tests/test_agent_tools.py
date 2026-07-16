@@ -74,6 +74,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             "summarize_library",
             "get_library_overview",
             "get_facet_catalog",
+            "find_similar_titles",
             "query_tv_episodes",
             "summarize_tv_progress",
             "search_tmdb",
