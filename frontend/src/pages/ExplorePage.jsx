@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getExploreFeedOnThisDay,
   getExploreFeedRecentReleases,
   getExploreFeedRecentlyAdded,
+  getLibraryFacets,
   getLibraryHealth,
   getLibraryMotifs,
   getLibraryNeighbors,
   getLibraryOverview,
   queryLibrary,
 } from "../api/client";
+import { tagPath } from "../lib/browseLinks.js";
 import {
   buildMotifQueryParams,
   buildPulseStats,
@@ -131,6 +133,8 @@ function useFeed(loader, deps = []) {
 }
 
 export default function ExplorePage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
   const onThisDay = useFeed(() => getExploreFeedOnThisDay({ limit: 12 }), []);
@@ -145,6 +149,11 @@ export default function ExplorePage() {
   const [seedQuery, setSeedQuery] = useState("");
   const [seedHits, setSeedHits] = useState([]);
   const [neighbors, setNeighbors] = useState({ loading: false, items: [], note: null, error: "" });
+  const [tagFacets, setTagFacets] = useState([]);
+  const [tagsLoading, setTagsLoading] = useState(true);
+  const [tagsNote, setTagsNote] = useState("");
+  const [tagSearch, setTagSearch] = useState("");
+  const [facetWall, setFacetWall] = useState({ loading: false, items: [], note: null, error: "", label: "" });
 
   useEffect(() => {
     let cancelled = false;
@@ -191,6 +200,84 @@ export default function ExplorePage() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    setTagsLoading(true);
+    getLibraryFacets("keyword", 60)
+      .then((data) => {
+        if (cancelled) return;
+        const facets = Array.isArray(data?.facets) ? data.facets : [];
+        setTagFacets(
+          facets
+            .map((entry) => ({
+              value: String(entry.value || entry.name || "").trim(),
+              count: Number(entry.count || 0) || 0,
+            }))
+            .filter((entry) => entry.value),
+        );
+        setTagsNote(facets.length ? "" : "No keyword tags indexed yet.");
+        setTagsLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setTagFacets([]);
+        setTagsNote(err.message || "Could not load tags.");
+        setTagsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const genre = String(searchParams.get("genre") || "").trim();
+    const cast = String(searchParams.get("cast") || "").trim();
+    const directors = String(searchParams.get("directors") || "").trim();
+    if (!genre && !cast && !directors) {
+      setFacetWall({ loading: false, items: [], note: null, error: "", label: "" });
+      return undefined;
+    }
+    const filters = { limit: 24 };
+    let label = "";
+    if (genre) {
+      filters.genres = [genre];
+      label = `Genre: ${genre}`;
+    } else if (cast) {
+      filters.cast = [cast];
+      label = `Cast: ${cast}`;
+    } else if (directors) {
+      filters.directors = [directors];
+      label = `Director: ${directors}`;
+    }
+    let cancelled = false;
+    setFacetWall({ loading: true, items: [], note: null, error: "", label });
+    queryLibrary(filters)
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setFacetWall({
+          loading: false,
+          items,
+          note: items.length ? null : `No library titles match ${label.toLowerCase()}.`,
+          error: "",
+          label,
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setFacetWall({
+          loading: false,
+          items: [],
+          note: null,
+          error: err.message || "Could not load filtered titles.",
+          label,
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
 
   useEffect(() => {
     if (!selectedMotifs.length) {
@@ -299,6 +386,23 @@ export default function ExplorePage() {
     setSeedHits([]);
   }
 
+  const filteredTagFacets = useMemo(() => {
+    const q = tagSearch.trim().toLowerCase();
+    if (!q) return tagFacets;
+    return tagFacets.filter((facet) => facet.value.toLowerCase().includes(q));
+  }, [tagFacets, tagSearch]);
+
+  function goToTag(name) {
+    const path = tagPath(name);
+    if (path) navigate(path);
+  }
+
+  function handleTagSearchSubmit(event) {
+    event.preventDefault();
+    const value = tagSearch.trim();
+    if (value) goToTag(value);
+  }
+
   return (
     <div className="app-root explore-page" data-testid="explore-page">
       <header className="app-topbar">
@@ -380,6 +484,82 @@ export default function ExplorePage() {
             items={onThisDay.items}
             loading={onThisDay.loading}
           />
+        </ExploreSection>
+
+        {facetWall.label ? (
+          <ExploreSection
+            id="facet-filter"
+            title={facetWall.label}
+            subtitle="Deep-link filter from title detail"
+            empty={facetWall.error || facetWall.note}
+          >
+            {facetWall.loading ? (
+              <p className="status status-secondary">Loading titles…</p>
+            ) : facetWall.items.length ? (
+              <div className="explore-poster-wall" data-testid="explore-facet-wall">
+                {facetWall.items.map((item) => (
+                  <ExplorePosterCard
+                    key={item.id || item.rating_key || item.title}
+                    item={item}
+                  />
+                ))}
+              </div>
+            ) : null}
+          </ExploreSection>
+        ) : null}
+
+        <ExploreSection
+          id="tags"
+          title="Tags"
+          subtitle="Browse keyword tags from your library"
+          empty={tagsLoading ? null : tagsNote && !tagFacets.length ? tagsNote : null}
+        >
+          <form
+            className="explore-tag-search"
+            data-testid="explore-tag-search"
+            onSubmit={handleTagSearchSubmit}
+          >
+            <label className="explore-seed-label" htmlFor="explore-tag-input">
+              Find a tag
+            </label>
+            <div className="explore-tag-search-row">
+              <input
+                id="explore-tag-input"
+                className="explore-seed-input"
+                data-testid="explore-tag-input"
+                type="search"
+                placeholder="time travel, heist, found footage…"
+                value={tagSearch}
+                onChange={(e) => setTagSearch(e.target.value)}
+                autoComplete="off"
+              />
+              <button type="submit" className="ghost" data-testid="explore-tag-submit">
+                Open tag
+              </button>
+            </div>
+          </form>
+          {tagsLoading ? (
+            <p className="status status-secondary">Loading tags…</p>
+          ) : filteredTagFacets.length ? (
+            <div className="explore-motif-chips" data-testid="explore-tag-chips">
+              {filteredTagFacets.map((facet) => (
+                <button
+                  key={facet.value}
+                  type="button"
+                  className="explore-motif-chip"
+                  data-testid="explore-tag-chip"
+                  onClick={() => goToTag(facet.value)}
+                >
+                  {facet.value}
+                  {facet.count ? <span className="explore-motif-count">{facet.count}</span> : null}
+                </button>
+              ))}
+            </div>
+          ) : tagSearch.trim() ? (
+            <p className="explore-empty status status-secondary">
+              No matching facet chips — press Open tag to browse “{tagSearch.trim()}” anyway.
+            </p>
+          ) : null}
         </ExploreSection>
 
         <ExploreSection

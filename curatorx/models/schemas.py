@@ -36,10 +36,22 @@ class TitleCard(BaseModel):
     card_kind: Optional[str] = None
 
 
+class CreditPerson(BaseModel):
+    name: str
+    tmdb_person_id: Optional[int] = None
+    person_id: Optional[int] = None
+    department: str = ""
+    job: str = ""
+    character: str = ""
+    profile_url: str = ""
+    billing_order: int = 0
+
+
 class TitleDetail(TitleCard):
     cast: List[str] = Field(default_factory=list)
     directors: List[str] = Field(default_factory=list)
     keywords: List[str] = Field(default_factory=list)
+    credits: List[CreditPerson] = Field(default_factory=list)
     file_size_bytes: int = 0
     view_count: int = 0
     last_viewed_at: Optional[int] = None

@@ -77,6 +77,15 @@ From the repo root with Python dependencies installed (`pip install -e ".[web]"`
 bash scripts/run-e2e.sh
 ```
 
+On **Windows (PowerShell)** without WSL:
+
+```powershell
+.\scripts\run-e2e.ps1
+```
+
+Playwright starts the temp server with `node scripts/start-e2e-server.mjs` (see `playwright.config.ts`).
+
+
 Or step by step:
 
 ```bash

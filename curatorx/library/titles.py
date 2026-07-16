@@ -3,15 +3,146 @@
 from __future__ import annotations
 
 import json
-from typing import Optional
+from typing import Any, List, Mapping, Optional
 
 from curatorx.config_store import Settings
 from curatorx.connectors.fanart import FanartClient
 from curatorx.connectors.plex import cached_machine_identifier, plex_watch_url
 from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import Database
-from curatorx.models.schemas import TitleDetail
+from curatorx.models.schemas import CreditPerson, TitleDetail
 from curatorx.preferences.purge import suggest_purge_candidates
+
+
+def _credit_from_db_row(row) -> CreditPerson:
+    tmdb_id = row["tmdb_person_id"]
+    person_id = row["person_id"]
+    return CreditPerson(
+        name=str(row["name"] or "").strip(),
+        tmdb_person_id=int(tmdb_id) if tmdb_id is not None else None,
+        person_id=int(person_id) if person_id is not None else None,
+        department=str(row["department"] or ""),
+        job=str(row["job"] or ""),
+        character=str(row["character"] or ""),
+        profile_url=str(row["profile_url"] or ""),
+        billing_order=int(row["billing_order"] or 0),
+    )
+
+
+def _credits_from_tmdb(
+    credits_payload: Mapping[str, Any],
+    *,
+    tmdb: TMDBClient,
+    cast_limit: int = 12,
+) -> List[CreditPerson]:
+    """Map TMDB credits.cast / directors into CreditPerson rows."""
+    people: List[CreditPerson] = []
+    seen: set[tuple[Optional[int], str, str, str]] = set()
+
+    cast = credits_payload.get("cast") or []
+    if isinstance(cast, list):
+        for index, entry in enumerate(cast[:cast_limit]):
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("name") or "").strip()
+            if not name:
+                continue
+            tmdb_person_id = entry.get("id")
+            try:
+                resolved_id = int(tmdb_person_id) if tmdb_person_id is not None else None
+            except (TypeError, ValueError):
+                resolved_id = None
+            character = str(entry.get("character") or "")
+            key = (resolved_id, name, "Acting", character)
+            if key in seen:
+                continue
+            seen.add(key)
+            order = entry.get("order")
+            try:
+                billing = int(order) if order is not None else index
+            except (TypeError, ValueError):
+                billing = index
+            people.append(
+                CreditPerson(
+                    name=name,
+                    tmdb_person_id=resolved_id,
+                    department="Acting",
+                    job="Actor",
+                    character=character,
+                    profile_url=tmdb.profile_url(entry.get("profile_path")),
+                    billing_order=billing,
+                )
+            )
+
+    crew = credits_payload.get("crew") or []
+    if isinstance(crew, list):
+        for entry in crew:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("job") or "") != "Director":
+                continue
+            name = str(entry.get("name") or "").strip()
+            if not name:
+                continue
+            tmdb_person_id = entry.get("id")
+            try:
+                resolved_id = int(tmdb_person_id) if tmdb_person_id is not None else None
+            except (TypeError, ValueError):
+                resolved_id = None
+            key = (resolved_id, name, "Directing", "Director")
+            if key in seen:
+                continue
+            seen.add(key)
+            people.append(
+                CreditPerson(
+                    name=name,
+                    tmdb_person_id=resolved_id,
+                    department="Directing",
+                    job="Director",
+                    character="",
+                    profile_url=tmdb.profile_url(entry.get("profile_path")),
+                    billing_order=0,
+                )
+            )
+
+    people.sort(key=lambda p: (0 if p.job == "Director" else 1, p.billing_order, p.name))
+    return people
+
+
+def _keyword_names_from_tmdb(meta: Mapping[str, Any]) -> List[str]:
+    keywords_block = meta.get("keywords") or {}
+    if not isinstance(keywords_block, dict):
+        return []
+    # Movies use "keywords"; TV uses "results".
+    raw = keywords_block.get("keywords") or keywords_block.get("results") or []
+    if not isinstance(raw, list):
+        return []
+    names: List[str] = []
+    for entry in raw:
+        if isinstance(entry, dict):
+            name = str(entry.get("name") or "").strip()
+            if name:
+                names.append(name)
+    return names
+
+
+def _apply_tmdb_credit_strings(detail: TitleDetail, credits_payload: Mapping[str, Any]) -> None:
+    cast = credits_payload.get("cast") or []
+    if not detail.cast and isinstance(cast, list):
+        detail.cast = [
+            str(c.get("name") or "").strip()
+            for c in cast[:8]
+            if isinstance(c, dict) and str(c.get("name") or "").strip()
+        ]
+    crew = credits_payload.get("crew") or []
+    if not detail.directors and isinstance(crew, list):
+        detail.directors = [
+            str(c.get("name") or "").strip()
+            for c in crew
+            if isinstance(c, dict)
+            and str(c.get("job") or "") == "Director"
+            and str(c.get("name") or "").strip()
+        ]
 
 
 def get_title_detail(
@@ -61,6 +192,16 @@ def get_title_detail(
         detail.last_viewed_at = row["last_viewed_at"]
         detail.in_radarr = bool(row["in_radarr"])
         detail.in_sonarr = bool(row["in_sonarr"])
+        try:
+            item_id = int(row["id"])
+        except (TypeError, ValueError, KeyError):
+            item_id = None
+        if item_id is not None:
+            detail.credits = [
+                _credit_from_db_row(credit_row)
+                for credit_row in db.list_credits_for_item(item_id)
+                if str(credit_row["name"] or "").strip()
+            ]
 
     resolved_tmdb_id = detail.tmdb_id
     if settings.tmdb_api_key and resolved_tmdb_id:
@@ -77,14 +218,11 @@ def get_title_detail(
                     detail.backdrop_url = tmdb.backdrop_url(meta.get("backdrop_path"))
                 detail.runtime_minutes = int((meta.get("runtime") or 0) or 0) or None
                 credits = meta.get("credits") or {}
-                if not detail.cast:
-                    detail.cast = [c.get("name", "") for c in credits.get("cast", [])[:8]]
-                if not detail.directors:
-                    detail.directors = [
-                        c.get("name", "") for c in credits.get("crew", []) if c.get("job") == "Director"
-                    ]
-                keywords = (meta.get("keywords") or {}).get("keywords") or []
-                detail.keywords = detail.keywords or [k.get("name", "") for k in keywords if k.get("name")]
+                if isinstance(credits, dict):
+                    _apply_tmdb_credit_strings(detail, credits)
+                    if not detail.credits:
+                        detail.credits = _credits_from_tmdb(credits, tmdb=tmdb)
+                detail.keywords = detail.keywords or _keyword_names_from_tmdb(meta)
                 trailer_key = TMDBClient.youtube_trailer_key(meta)
                 detail.trailer_youtube_key = trailer_key if isinstance(trailer_key, str) else ""
             else:
@@ -99,6 +237,12 @@ def get_title_detail(
                 external = meta.get("external_ids") or {}
                 if external.get("tvdb_id"):
                     detail.tvdb_id = int(external["tvdb_id"])
+                credits = meta.get("credits") or {}
+                if isinstance(credits, dict):
+                    _apply_tmdb_credit_strings(detail, credits)
+                    if not detail.credits:
+                        detail.credits = _credits_from_tmdb(credits, tmdb=tmdb)
+                detail.keywords = detail.keywords or _keyword_names_from_tmdb(meta)
                 trailer_key = TMDBClient.youtube_trailer_key(meta)
                 detail.trailer_youtube_key = trailer_key if isinstance(trailer_key, str) else ""
         except RuntimeError:

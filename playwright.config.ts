@@ -1,6 +1,6 @@
-import { defineConfig, devices } from "@playwright/test";
+﻿import { defineConfig, devices } from "@playwright/test";
 
-// Default to 8799 — NOT 8788. Locally, :8788 is often an SSH tunnel to production
+// Default to 8799 â€” NOT 8788. Locally, :8788 is often an SSH tunnel to production
 // (or Docker). With reuseExistingServer, Playwright would hit that live/old UI
 // instead of the local build. Override with E2E_PORT / E2E_BASE_URL when needed
 // (e.g. live-stack against docker compose on 8788).
@@ -27,9 +27,10 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "bash scripts/start-e2e-server.sh",
+    command: "node scripts/start-e2e-server.mjs",
     url: `${baseURL}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
 });
+

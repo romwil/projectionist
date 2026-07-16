@@ -814,6 +814,23 @@ export async function queryLibrary(filters = {}) {
   return api(`/library/query?${params}`);
 }
 
+export async function getLibraryFacets(facetType, limit = 50) {
+  const params = new URLSearchParams({
+    facet_type: String(facetType || ""),
+    limit: String(limit),
+  });
+  return api(`/library/facets?${params}`);
+}
+
+export async function getPerson(tmdbPersonId) {
+  return api(`/person/${encodeURIComponent(tmdbPersonId)}`);
+}
+
+export async function resolvePerson(name) {
+  const params = new URLSearchParams({ name: String(name || "").trim() });
+  return api(`/person/resolve?${params}`);
+}
+
 export async function getPurgeCandidates() {
   return api("/library/purge-candidates");
 }

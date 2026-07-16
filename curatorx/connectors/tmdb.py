@@ -64,6 +64,13 @@ class TMDBClient:
         )
         return payload if isinstance(payload, dict) else {}
 
+    def person_details(self, person_id: int) -> Mapping[str, Any]:
+        payload = request_json(self._url(f"/person/{int(person_id)}"), timeout=self.timeout)
+        return payload if isinstance(payload, dict) else {}
+
+    def profile_url(self, path: Optional[str], size: str = "w185") -> str:
+        return self.poster_url(path, size=size)
+
     @staticmethod
     def youtube_trailer_key(payload: Mapping[str, Any]) -> str:
         """Pick the best YouTube trailer key from a TMDB details/videos payload."""

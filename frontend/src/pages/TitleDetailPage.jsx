@@ -2,8 +2,38 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api, getFeatures } from "../api/client";
 import RecommendModal from "../components/RecommendModal";
+import {
+  exploreCastPath,
+  exploreDirectorsPath,
+  exploreGenrePath,
+  personPath,
+  tagPath,
+} from "../lib/browseLinks.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
+
+function creditLink(credit) {
+  const path = personPath(credit?.tmdb_person_id);
+  if (path) return path;
+  const name = String(credit?.name || "").trim();
+  if (!name) return null;
+  if (String(credit?.job || "") === "Director" || String(credit?.department || "") === "Directing") {
+    return exploreDirectorsPath(name);
+  }
+  return exploreCastPath(name);
+}
+
+function CreditLink({ credit, children, className, testId }) {
+  const to = creditLink(credit);
+  if (!to) {
+    return <span className={className}>{children}</span>;
+  }
+  return (
+    <Link to={to} className={className} data-testid={testId}>
+      {children}
+    </Link>
+  );
+}
 
 function decadeLabel(year) {
   if (!year || year < 1000) return null;
@@ -87,20 +117,36 @@ export default function TitleDetailPage() {
     String(detail.plex_watch_url || "").trim() ||
     (canWatchOnPlex(detail) ? plexWatchUrl(detail.rating_key, detail.plex_machine_id || "") : "");
   const whyReason = displayRecommendationReason(detail.recommendation_reason);
-  const overviewInsight =
-    whyReason ||
-    (detail.overview
-      ? detail.overview.length > 220
-        ? `${detail.overview.slice(0, 220).trim()}…`
-        : detail.overview
-      : "");
-  const showWhy = Boolean(whyReason || overviewInsight);
+  const showWhy = Boolean(whyReason);
   const purgeNote = String(detail.purge_reason || "").trim();
   const runtimeLabel = detail.runtime_minutes ? `${detail.runtime_minutes} mins` : null;
-  const genreLabel = detail.genres?.length ? detail.genres.slice(0, 2).join(" · ") : null;
-  const directorLabel = detail.directors?.length ? detail.directors[0] : null;
   const sizeLabel = formatFileSize(detail.file_size_bytes);
   const showNeighbors = Array.isArray(neighbors) && neighbors.length > 0;
+
+  const credits = (() => {
+    const raw = Array.isArray(detail.credits) ? detail.credits : [];
+    if (raw.length) return raw;
+    const fallback = [];
+    for (const name of detail.directors || []) {
+      if (!name) continue;
+      fallback.push({ name, job: "Director", department: "Directing" });
+    }
+    for (const name of detail.cast || []) {
+      if (!name) continue;
+      fallback.push({ name, job: "Actor", department: "Acting" });
+    }
+    return fallback;
+  })();
+
+  const directorCredits = credits.filter(
+    (c) => String(c.job || "") === "Director" || String(c.department || "") === "Directing",
+  );
+  const castCredits = credits.filter(
+    (c) =>
+      String(c.job || "") !== "Director" && String(c.department || "") !== "Directing",
+  );
+  const directorCredit = directorCredits[0] || null;
+  const genreChips = Array.isArray(detail.genres) ? detail.genres.slice(0, 2) : [];
 
   function scrollCarousel(dir) {
     const node = carouselRef.current;
@@ -199,15 +245,13 @@ export default function TitleDetailPage() {
           {showWhy ? (
             <div className="title-why-card" data-testid="title-why-card">
               <h2 className="title-why-heading">Why this?</h2>
-              <p className="title-why-body">{overviewInsight}</p>
-              {whyReason ? (
-                <p className="title-why-badge">
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    auto_awesome
-                  </span>
-                  Curator note
-                </p>
-              ) : null}
+              <p className="title-why-body">{whyReason}</p>
+              <p className="title-why-badge">
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  auto_awesome
+                </span>
+                Curator note
+              </p>
             </div>
           ) : null}
 
@@ -227,8 +271,37 @@ export default function TitleDetailPage() {
         <aside className="title-detail-side">
           <div className="title-meta-grid">
             <MetaTile label="Decade" value={decadeLabel(detail.year)} />
-            <MetaTile label="Director" value={directorLabel} />
-            <MetaTile label="Genre" value={genreLabel} />
+            {directorCredit ? (
+              <div className="title-meta-tile">
+                <span className="title-meta-tile-label">Director</span>
+                <CreditLink
+                  credit={directorCredit}
+                  className="title-meta-tile-value title-credit-link"
+                  testId="title-director-link"
+                >
+                  {directorCredit.name}
+                </CreditLink>
+              </div>
+            ) : null}
+            {genreChips.length ? (
+              <div className="title-meta-tile">
+                <span className="title-meta-tile-label">Genre</span>
+                <span className="title-meta-tile-value title-genre-links">
+                  {genreChips.map((genre, index) => (
+                    <span key={genre}>
+                      {index > 0 ? " · " : null}
+                      <Link
+                        to={exploreGenrePath(genre)}
+                        className="title-credit-link"
+                        data-testid="title-genre-link"
+                      >
+                        {genre}
+                      </Link>
+                    </span>
+                  ))}
+                </span>
+              </div>
+            ) : null}
             <MetaTile label="Size" value={sizeLabel} />
             <MetaTile
               label="Views"
@@ -244,21 +317,39 @@ export default function TitleDetailPage() {
             <div className="title-detail-section">
               <h2 className="title-detail-section-label">Tags</h2>
               <div className="title-tag-list">
-                {detail.keywords.slice(0, 8).map((tag) => (
-                  <span key={tag} className="title-tag">
-                    {tag}
-                  </span>
-                ))}
+                {detail.keywords.slice(0, 8).map((tag) => {
+                  const to = tagPath(tag);
+                  return to ? (
+                    <Link key={tag} to={to} className="title-tag title-tag-link" data-testid="title-tag-link">
+                      {tag}
+                    </Link>
+                  ) : (
+                    <span key={tag} className="title-tag">
+                      {tag}
+                    </span>
+                  );
+                })}
               </div>
             </div>
           ) : null}
 
-          {detail.cast?.length ? (
+          {castCredits.length ? (
             <div className="title-detail-section">
               <h2 className="title-detail-section-label">Cast</h2>
               <ul className="title-cast-list">
-                {detail.cast.slice(0, 6).map((name) => (
-                  <li key={name}>{name}</li>
+                {castCredits.slice(0, 6).map((credit) => (
+                  <li key={`${credit.tmdb_person_id || credit.name}-${credit.character || ""}`}>
+                    <CreditLink
+                      credit={credit}
+                      className="title-credit-link"
+                      testId="title-cast-link"
+                    >
+                      {credit.name}
+                    </CreditLink>
+                    {credit.character ? (
+                      <span className="title-cast-role">{credit.character}</span>
+                    ) : null}
+                  </li>
                 ))}
               </ul>
             </div>
