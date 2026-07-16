@@ -1,4 +1,16 @@
-"""Library sync from Plex with TMDB enrichment."""
+"""Library sync from Plex with TMDB enrichment.
+
+During the enriching phase each Plex title is hydrated from TMDB details
+(credits, keywords, countries, languages, **full release/air dates**, collections,
+networks, production companies).  Cast/directors stay dual-written as JSON on
+``library_items`` for older callers; structured ``people`` / ``credits`` rows are
+written in the same upsert transaction.
+
+Titles that already exist without dates (e.g. synced before this enrichment)
+are filled by the idle ``metadata_enrichment`` trickle task — small batches with
+TMDB rate-limit pauses — so Explore date feeds stay honest without inventing
+dates from ``year``.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +18,7 @@ import json
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Any, Callable, List, NamedTuple, Optional, Set
+from typing import Any, Callable, List, Mapping, NamedTuple, Optional, Set
 
 from curatorx.config_store import Settings
 from curatorx.connectors.fanart import FanartClient
@@ -269,6 +281,52 @@ def _apply_tmdb_enrichment(
                 c.get("name", "") for c in credits.get("crew", []) if c.get("job") in {"Director", "Creator"}
             ]
 
+    # Structured credits for people/credits tables (dual-write alongside JSON blobs).
+    structured = _structured_credits_from_tmdb(details, tmdb_client=tmdb_client)
+    if structured:
+        row["structured_credits"] = structured
+
+    # Full ISO dates — never invent from year alone (provenance honesty).
+    if media_type == "movie":
+        release = str(details.get("release_date") or "").strip()
+        if release:
+            row["release_date"] = release
+        collection = details.get("belongs_to_collection") or {}
+        if isinstance(collection, dict) and collection.get("id"):
+            try:
+                row["tmdb_collection_id"] = int(collection["id"])
+            except (TypeError, ValueError):
+                pass
+            name = str(collection.get("name") or "").strip()
+            if name:
+                row["collection_name"] = name
+    else:
+        first_air = str(details.get("first_air_date") or "").strip()
+        if first_air:
+            row["first_air_date"] = first_air
+        last_air = str(details.get("last_air_date") or "").strip()
+        if last_air:
+            row["last_air_date"] = last_air
+        networks = [
+            str(n.get("name") or "").strip()
+            for n in (details.get("networks") or [])
+            if isinstance(n, dict) and n.get("name")
+        ]
+        if networks:
+            row["networks"] = networks
+
+    status = str(details.get("status") or "").strip()
+    if status:
+        row["status"] = status
+
+    companies = [
+        str(c.get("name") or "").strip()
+        for c in (details.get("production_companies") or [])
+        if isinstance(c, dict) and c.get("name")
+    ]
+    if companies:
+        row["production_companies"] = companies
+
     if media_type == "movie":
         runtime = details.get("runtime")
         if runtime:
@@ -277,6 +335,71 @@ def _apply_tmdb_enrichment(
         runtimes = details.get("episode_run_time") or []
         if runtimes:
             row["runtime_minutes"] = int(runtimes[0])
+
+
+def _structured_credits_from_tmdb(
+    details: Mapping[str, Any],
+    *,
+    tmdb_client: Optional[TMDBClient] = None,
+    cast_limit: int = 40,
+    crew_limit: int = 40,
+) -> List[dict]:
+    """Flatten TMDB credits into rows suitable for ``upsert_credits_for_item``."""
+    credits = details.get("credits") or {}
+    if not isinstance(credits, dict):
+        return []
+    out: List[dict] = []
+
+    def _profile_url(path: Any) -> str:
+        if not path or not tmdb_client:
+            return ""
+        return tmdb_client.poster_url(str(path), size="w185")
+
+    for idx, entry in enumerate(credits.get("cast") or []):
+        if idx >= cast_limit:
+            break
+        if not isinstance(entry, dict) or entry.get("id") is None or not entry.get("name"):
+            continue
+        out.append(
+            {
+                "tmdb_person_id": int(entry["id"]),
+                "name": str(entry["name"]),
+                "profile_url": _profile_url(entry.get("profile_path")),
+                "department": "Acting",
+                "job": "Actor",
+                "character": str(entry.get("character") or ""),
+                "billing_order": int(entry.get("order") if entry.get("order") is not None else idx),
+            }
+        )
+
+    for idx, entry in enumerate(credits.get("crew") or []):
+        if idx >= crew_limit:
+            break
+        if not isinstance(entry, dict) or entry.get("id") is None or not entry.get("name"):
+            continue
+        out.append(
+            {
+                "tmdb_person_id": int(entry["id"]),
+                "name": str(entry["name"]),
+                "profile_url": _profile_url(entry.get("profile_path")),
+                "department": str(entry.get("department") or ""),
+                "job": str(entry.get("job") or ""),
+                "character": "",
+                "billing_order": idx,
+            }
+        )
+    return out
+
+
+def apply_tmdb_details_to_library_row(
+    row: dict,
+    details: dict,
+    *,
+    media_type: str,
+    tmdb_client: Optional[TMDBClient] = None,
+) -> None:
+    """Public helper for sync + idle trickle: mutate ``row`` from TMDB details."""
+    _apply_tmdb_enrichment(row, details, media_type=media_type, tmdb_client=tmdb_client)
 
 
 def _row_from_plex_item(
@@ -300,6 +423,15 @@ def _row_from_plex_item(
 
     item_cast = item.cast
     item_directors = item.directors
+    release_date: Optional[str] = None
+    first_air_date: Optional[str] = None
+    last_air_date: Optional[str] = None
+    tmdb_collection_id: Optional[int] = None
+    collection_name = ""
+    status = ""
+    networks: list[str] = []
+    production_companies: list[str] = []
+    structured_credits: list[dict] = []
 
     if tmdb and tmdb_id:
         try:
@@ -346,6 +478,15 @@ def _row_from_plex_item(
             runtime_minutes = row_stub.get("runtime_minutes", runtime_minutes)
             item_cast = row_stub.get("cast") or item.cast
             item_directors = row_stub.get("directors") or item.directors
+            release_date = row_stub.get("release_date")
+            first_air_date = row_stub.get("first_air_date")
+            last_air_date = row_stub.get("last_air_date")
+            tmdb_collection_id = row_stub.get("tmdb_collection_id")
+            collection_name = row_stub.get("collection_name") or ""
+            status = row_stub.get("status") or ""
+            networks = row_stub.get("networks") or []
+            production_companies = row_stub.get("production_companies") or []
+            structured_credits = row_stub.get("structured_credits") or []
         except RuntimeError as error:
             logger.debug(
                 "TMDB enrichment skipped %s tmdb_id=%s: %s",
@@ -373,7 +514,7 @@ def _row_from_plex_item(
         except RuntimeError as error:
             logger.debug("Fanart TV enrichment skipped tvdb_id=%s: %s", tvdb_id, error)
 
-    return {
+    result = {
         "rating_key": item.rating_key,
         "media_type": item.media_type,
         "title": item.title,
@@ -405,7 +546,18 @@ def _row_from_plex_item(
         "view_offset_ms": item.view_offset_ms,
         "duration_ms": item.duration_ms,
         "plex_user_rating_stars": item.user_rating_stars,
+        "release_date": release_date,
+        "first_air_date": first_air_date,
+        "last_air_date": last_air_date,
+        "tmdb_collection_id": tmdb_collection_id,
+        "collection_name": collection_name,
+        "status": status,
+        "networks": networks,
+        "production_companies": production_companies,
     }
+    if structured_credits:
+        result["structured_credits"] = structured_credits
+    return result
 
 
 async def sync_library(

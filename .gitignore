@@ -25,3 +25,5 @@ blob-report/
 playwright/.cache/
 htmlcov/
 frontend/coverage/
+# Local Stitch design exports — keep on disk, never commit.
+stitch_curatorx_design_system/

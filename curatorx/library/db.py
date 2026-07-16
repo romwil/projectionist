@@ -331,6 +331,8 @@ class Database:
             self._migrate_curated_lists(conn)
             self._migrate_persona_templates(conn)
             self._migrate_recommendations(conn)
+            self._migrate_library_metadata_enrichment(conn)
+            self._migrate_people_credits(conn)
             self._seed_defaults(conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
@@ -440,6 +442,71 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_library_media_year ON library_items(media_type, year)"
         )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_library_added_at ON library_items(added_at)")
+
+    def _migrate_library_metadata_enrichment(self, conn: sqlite3.Connection) -> None:
+        """Add full release/air dates, collections, status, networks, and companies.
+
+        Explore "Recent Releases" and franchise shelves need true ISO dates and
+        collection IDs — not just ``year``.  Columns are nullable so older rows
+        stay honest until TMDB enrichment (sync or idle trickle) fills them.
+        """
+        cols = self._table_columns(conn, "library_items")
+        new_columns = {
+            "release_date": "TEXT",
+            "first_air_date": "TEXT",
+            "last_air_date": "TEXT",
+            "tmdb_collection_id": "INTEGER",
+            "collection_name": "TEXT DEFAULT ''",
+            "status": "TEXT DEFAULT ''",
+            "networks": "TEXT DEFAULT '[]'",
+            "production_companies": "TEXT DEFAULT '[]'",
+        }
+        for name, typedef in new_columns.items():
+            if name not in cols:
+                conn.execute(f"ALTER TABLE library_items ADD COLUMN {name} {typedef}")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_library_release_date ON library_items(release_date)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_library_first_air_date ON library_items(first_air_date)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_library_collection "
+            "ON library_items(tmdb_collection_id)"
+        )
+
+    def _migrate_people_credits(self, conn: sqlite3.Connection) -> None:
+        """Normalize cast/crew into people + credits (Stage 1 data platform).
+
+        JSON ``cast`` / ``directors`` on ``library_items`` remain dual-written for
+        backward compatibility; person pages and shared-crew queries use these tables.
+        """
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS people (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                tmdb_person_id INTEGER NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                profile_url TEXT DEFAULT '',
+                created_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_people_name ON people(name);
+
+            CREATE TABLE IF NOT EXISTS credits (
+                item_id INTEGER NOT NULL,
+                person_id INTEGER NOT NULL,
+                department TEXT NOT NULL DEFAULT '',
+                job TEXT NOT NULL DEFAULT '',
+                character TEXT NOT NULL DEFAULT '',
+                billing_order INTEGER DEFAULT 0,
+                PRIMARY KEY (item_id, person_id, department, job, character),
+                FOREIGN KEY(item_id) REFERENCES library_items(id) ON DELETE CASCADE,
+                FOREIGN KEY(person_id) REFERENCES people(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_credits_person ON credits(person_id);
+            CREATE INDEX IF NOT EXISTS idx_credits_item ON credits(item_id);
+            """
+        )
 
     def _migrate_library_intelligence(self, conn: sqlite3.Connection) -> None:
         cols = self._table_columns(conn, "library_items")
@@ -782,6 +849,10 @@ class Database:
             conn.execute(
                 "ALTER TABLE users ADD COLUMN ui_font_size TEXT NOT NULL DEFAULT 'medium'"
             )
+        if user_cols and "ui_theme" not in user_cols:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN ui_theme TEXT NOT NULL DEFAULT 'system'"
+            )
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS user_recommendations (
@@ -1099,6 +1170,7 @@ class Database:
         *,
         preferred_name: Any = ...,
         ui_font_size: Any = ...,
+        ui_theme: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -1118,6 +1190,13 @@ class Database:
                 if "ui_font_size" in cols:
                     updates.append("ui_font_size = ?")
                     params.append(cleaned_font)
+            if ui_theme is not ...:
+                cleaned_theme = str(ui_theme or "system").strip().lower()
+                if cleaned_theme not in {"lights_up", "lights_down", "system"}:
+                    cleaned_theme = "system"
+                if "ui_theme" in cols:
+                    updates.append("ui_theme = ?")
+                    params.append(cleaned_theme)
             if updates:
                 params.append(user_id)
                 conn.execute(
@@ -1299,6 +1378,11 @@ class Database:
             cleaned = str(row["ui_font_size"]).strip().lower()
             if cleaned in {"small", "medium", "large"}:
                 ui_font_size = cleaned
+        ui_theme = "system"
+        if "ui_theme" in keys and row["ui_theme"] is not None:
+            cleaned_theme = str(row["ui_theme"]).strip().lower()
+            if cleaned_theme in {"lights_up", "lights_down", "system"}:
+                ui_theme = cleaned_theme
         disabled = False
         if "disabled" in keys and row["disabled"] is not None:
             disabled = bool(int(row["disabled"]))
@@ -1308,6 +1392,7 @@ class Database:
             "display_name": str(row["display_name"]),
             "preferred_name": preferred_name,
             "ui_font_size": ui_font_size,
+            "ui_theme": ui_theme,
             "email": str(row["email"]) if row["email"] is not None else None,
             "role": str(row["role"]),
             "disabled": disabled,
@@ -1509,6 +1594,14 @@ class Database:
             item.get("view_offset_ms"),
             item.get("duration_ms"),
             item.get("plex_user_rating_stars"),
+            item.get("release_date") or None,
+            item.get("first_air_date") or None,
+            item.get("last_air_date") or None,
+            item.get("tmdb_collection_id"),
+            item.get("collection_name", "") or "",
+            item.get("status", "") or "",
+            json.dumps(item.get("networks", [])),
+            json.dumps(item.get("production_companies", [])),
             now,
         )
 
@@ -1521,8 +1614,12 @@ class Database:
                     season_count, leaf_count, viewed_leaf_count,
                     unwatched_episode_count, total_episode_count,
                     last_episode_watched_at, last_episode_sync_at, view_offset_ms, duration_ms,
-                    plex_user_rating_stars, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    plex_user_rating_stars,
+                    release_date, first_air_date, last_air_date,
+                    tmdb_collection_id, collection_name, status,
+                    networks, production_companies,
+                    updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(rating_key) DO UPDATE SET
                     media_type=excluded.media_type,
                     title=excluded.title,
@@ -1564,6 +1661,28 @@ class Database:
                     view_offset_ms=excluded.view_offset_ms,
                     duration_ms=excluded.duration_ms,
                     plex_user_rating_stars=excluded.plex_user_rating_stars,
+                    release_date=COALESCE(excluded.release_date, library_items.release_date),
+                    first_air_date=COALESCE(excluded.first_air_date, library_items.first_air_date),
+                    last_air_date=COALESCE(excluded.last_air_date, library_items.last_air_date),
+                    tmdb_collection_id=COALESCE(
+                        excluded.tmdb_collection_id, library_items.tmdb_collection_id
+                    ),
+                    collection_name=CASE
+                        WHEN excluded.collection_name != '' THEN excluded.collection_name
+                        ELSE library_items.collection_name
+                    END,
+                    status=CASE
+                        WHEN excluded.status != '' THEN excluded.status
+                        ELSE library_items.status
+                    END,
+                    networks=CASE
+                        WHEN excluded.networks != '[]' THEN excluded.networks
+                        ELSE library_items.networks
+                    END,
+                    production_companies=CASE
+                        WHEN excluded.production_companies != '[]' THEN excluded.production_companies
+                        ELSE library_items.production_companies
+                    END,
                     updated_at=excluded.updated_at
                 """
 
@@ -1581,12 +1700,21 @@ class Database:
     def upsert_library_item(self, item: Mapping[str, Any]) -> int:
         def _write() -> int:
             with self.connect() as conn:
-                return self._upsert_library_item_on_conn(conn, item)
+                item_id = self._upsert_library_item_on_conn(conn, item)
+                structured = item.get("structured_credits")
+                if structured is not None and item_id:
+                    self._upsert_credits_for_item_on_conn(conn, item_id, structured)
+                return item_id
 
         return run_with_db_lock_retry(_write, label="upsert_library_item")
 
     def upsert_library_items(self, items: Sequence[Mapping[str, Any]]) -> List[int]:
-        """Upsert many library rows in a single transaction (one commit)."""
+        """Upsert many library rows in a single transaction (one commit).
+
+        When an item mapping includes ``structured_credits`` (list of credit dicts
+        from TMDB), those rows are dual-written into ``people`` / ``credits`` after
+        the library row upsert — same transaction.
+        """
         if not items:
             return []
 
@@ -1595,10 +1723,213 @@ class Database:
             ids: List[int] = []
             with self.connect() as conn:
                 for item in items:
-                    ids.append(self._upsert_library_item_on_conn(conn, item, now=now))
+                    item_id = self._upsert_library_item_on_conn(conn, item, now=now)
+                    ids.append(item_id)
+                    structured = item.get("structured_credits")
+                    if structured is not None and item_id:
+                        self._upsert_credits_for_item_on_conn(conn, item_id, structured)
             return ids
 
         return run_with_db_lock_retry(_write, label="upsert_library_items")
+
+    def upsert_person(
+        self,
+        *,
+        tmdb_person_id: int,
+        name: str,
+        profile_url: str = "",
+    ) -> int:
+        """Insert or update a TMDB person; returns local ``people.id``."""
+
+        def _write() -> int:
+            with self.connect() as conn:
+                return self._upsert_person_on_conn(
+                    conn,
+                    tmdb_person_id=tmdb_person_id,
+                    name=name,
+                    profile_url=profile_url,
+                )
+
+        return run_with_db_lock_retry(_write, label="upsert_person")
+
+    def _upsert_person_on_conn(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        tmdb_person_id: int,
+        name: str,
+        profile_url: str = "",
+    ) -> int:
+        now = time.time()
+        conn.execute(
+            """
+            INSERT INTO people (tmdb_person_id, name, profile_url, created_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(tmdb_person_id) DO UPDATE SET
+                name=excluded.name,
+                profile_url=CASE
+                    WHEN excluded.profile_url != '' THEN excluded.profile_url
+                    ELSE people.profile_url
+                END
+            """,
+            (int(tmdb_person_id), str(name or "").strip() or "Unknown", profile_url or "", now),
+        )
+        row = conn.execute(
+            "SELECT id FROM people WHERE tmdb_person_id = ?",
+            (int(tmdb_person_id),),
+        ).fetchone()
+        return int(row["id"]) if row else 0
+
+    def upsert_credits_for_item(
+        self,
+        item_id: int,
+        credits: Sequence[Mapping[str, Any]],
+    ) -> int:
+        """Replace all credits for ``item_id`` with ``credits``; returns row count."""
+
+        def _write() -> int:
+            with self.connect() as conn:
+                return self._upsert_credits_for_item_on_conn(conn, item_id, credits)
+
+        return run_with_db_lock_retry(_write, label="upsert_credits_for_item")
+
+    def _upsert_credits_for_item_on_conn(
+        self,
+        conn: sqlite3.Connection,
+        item_id: int,
+        credits: Sequence[Mapping[str, Any]],
+    ) -> int:
+        conn.execute("DELETE FROM credits WHERE item_id = ?", (int(item_id),))
+        written = 0
+        for entry in credits:
+            tmdb_person_id = entry.get("tmdb_person_id")
+            if tmdb_person_id is None:
+                continue
+            try:
+                person_tmdb = int(tmdb_person_id)
+            except (TypeError, ValueError):
+                continue
+            name = str(entry.get("name") or "").strip()
+            if not name:
+                continue
+            person_id = self._upsert_person_on_conn(
+                conn,
+                tmdb_person_id=person_tmdb,
+                name=name,
+                profile_url=str(entry.get("profile_url") or ""),
+            )
+            if not person_id:
+                continue
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO credits (
+                    item_id, person_id, department, job, character, billing_order
+                ) VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    int(item_id),
+                    person_id,
+                    str(entry.get("department") or ""),
+                    str(entry.get("job") or ""),
+                    str(entry.get("character") or ""),
+                    int(entry.get("billing_order") or 0),
+                ),
+            )
+            written += 1
+        return written
+
+    def list_credits_for_item(self, item_id: int) -> List[sqlite3.Row]:
+        """Return credits for a library item joined with person identity."""
+        with self.connect() as conn:
+            return list(
+                conn.execute(
+                    """
+                    SELECT
+                        c.item_id,
+                        c.person_id,
+                        c.department,
+                        c.job,
+                        c.character,
+                        c.billing_order,
+                        p.tmdb_person_id,
+                        p.name,
+                        p.profile_url
+                    FROM credits c
+                    JOIN people p ON p.id = c.person_id
+                    WHERE c.item_id = ?
+                    ORDER BY c.billing_order ASC, p.name ASC
+                    """,
+                    (int(item_id),),
+                ).fetchall()
+            )
+
+    def list_library_titles_for_person(
+        self,
+        *,
+        person_id: Optional[int] = None,
+        tmdb_person_id: Optional[int] = None,
+    ) -> List[sqlite3.Row]:
+        """In-library titles linked to a person (by local id or TMDB person id)."""
+        if person_id is None and tmdb_person_id is None:
+            return []
+        with self.connect() as conn:
+            if person_id is not None:
+                return list(
+                    conn.execute(
+                        """
+                        SELECT DISTINCT
+                            li.*,
+                            c.department,
+                            c.job,
+                            c.character,
+                            c.billing_order
+                        FROM credits c
+                        JOIN library_items li ON li.id = c.item_id
+                        WHERE c.person_id = ?
+                        ORDER BY li.year DESC, li.title ASC
+                        """,
+                        (int(person_id),),
+                    ).fetchall()
+                )
+            return list(
+                conn.execute(
+                    """
+                    SELECT DISTINCT
+                        li.*,
+                        c.department,
+                        c.job,
+                        c.character,
+                        c.billing_order
+                    FROM credits c
+                    JOIN people p ON p.id = c.person_id
+                    JOIN library_items li ON li.id = c.item_id
+                    WHERE p.tmdb_person_id = ?
+                    ORDER BY li.year DESC, li.title ASC
+                    """,
+                    (int(tmdb_person_id),),  # type: ignore[arg-type]
+                ).fetchall()
+            )
+
+    def items_needing_metadata_enrichment(self, *, limit: int = 25) -> List[sqlite3.Row]:
+        """Library rows with a TMDB id but missing release/air dates (trickle backlog)."""
+        with self.connect() as conn:
+            return list(
+                conn.execute(
+                    """
+                    SELECT id, rating_key, media_type, title, tmdb_id,
+                           release_date, first_air_date, last_air_date
+                    FROM library_items
+                    WHERE tmdb_id IS NOT NULL
+                      AND (
+                        (media_type = 'movie' AND (release_date IS NULL OR release_date = ''))
+                        OR (media_type = 'show' AND (first_air_date IS NULL OR first_air_date = ''))
+                      )
+                    ORDER BY updated_at ASC
+                    LIMIT ?
+                    """,
+                    (max(1, int(limit)),),
+                ).fetchall()
+            )
 
     def set_embedding(self, item_id: int, vector: Sequence[float]) -> None:
         self.set_embeddings([(item_id, vector)])
