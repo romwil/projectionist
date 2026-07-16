@@ -27,7 +27,13 @@ import unittest
 from pathlib import Path
 
 from curatorx.config_store import load_dotenv_file, load_merged_settings
-from curatorx.web.setup import test_plex, test_radarr, test_seerr, test_sonarr
+# Alias so pytest does not collect setup helpers as tests (names start with test_).
+from curatorx.web.setup import (
+    test_plex as check_plex,
+    test_radarr as check_radarr,
+    test_seerr as check_seerr,
+    test_sonarr as check_sonarr,
+)
 
 _LIVE_FLAG = os.environ.get("CURATORX_LIVE_INTEGRATION", "").strip().lower()
 _LIVE_ENABLED = _LIVE_FLAG in {"1", "true", "yes"}
@@ -67,7 +73,7 @@ class LiveIntegrationTests(unittest.TestCase):
     def test_plex_lists_sections(self) -> None:
         if not self.plex_url or not self.plex_token:
             self.skipTest("Plex not configured (need PLEX_URL + PLEX_TOKEN)")
-        result = test_plex(self.plex_url, self.plex_token)
+        result = check_plex(self.plex_url, self.plex_token)
         self.assertTrue(result["ok"], result.get("message"))
         self.assertIsInstance(result.get("sections"), list)
         self.assertGreaterEqual(len(result["sections"]), 1, result.get("message"))
@@ -75,7 +81,7 @@ class LiveIntegrationTests(unittest.TestCase):
     def test_radarr_reports_movies_or_root_folders(self) -> None:
         if not self.radarr_url or not self.radarr_api_key:
             self.skipTest("Radarr not configured (need RADARR_URL + RADARR_API_KEY)")
-        result = test_radarr(self.radarr_url, self.radarr_api_key)
+        result = check_radarr(self.radarr_url, self.radarr_api_key)
         self.assertTrue(result["ok"], result.get("message"))
         movie_count = result.get("movie_count")
         root_folders = result.get("root_folders") or []
@@ -87,7 +93,7 @@ class LiveIntegrationTests(unittest.TestCase):
     def test_sonarr_lists_series(self) -> None:
         if not self.sonarr_url or not self.sonarr_api_key:
             self.skipTest("Sonarr not configured (need SONARR_URL + SONARR_API_KEY)")
-        result = test_sonarr(self.sonarr_url, self.sonarr_api_key)
+        result = check_sonarr(self.sonarr_url, self.sonarr_api_key)
         self.assertTrue(result["ok"], result.get("message"))
         series_count = result.get("series_count")
         self.assertIsInstance(series_count, int)
@@ -96,7 +102,7 @@ class LiveIntegrationTests(unittest.TestCase):
     def test_seerr_auth_me(self) -> None:
         if not self.seerr_url or not self.seerr_api_key:
             self.skipTest("Seerr not configured (need SEERR_URL + SEERR_API_KEY)")
-        result = test_seerr(self.seerr_url, self.seerr_api_key)
+        result = check_seerr(self.seerr_url, self.seerr_api_key)
         self.assertTrue(result["ok"], result.get("message"))
         self.assertIn("user_id", result)
 

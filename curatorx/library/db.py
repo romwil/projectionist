@@ -330,6 +330,7 @@ class Database:
             self._migrate_embeddings_content_hash(conn)
             self._migrate_curated_lists(conn)
             self._migrate_persona_templates(conn)
+            self._migrate_recommendations(conn)
             self._seed_defaults(conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
@@ -774,6 +775,39 @@ class Database:
         self._seed_builtin_persona_templates(conn)
         self._migrate_legacy_persona_to_template(conn)
 
+    def _migrate_recommendations(self, conn: sqlite3.Connection) -> None:
+        """Per-user UI font size + household title recommendations inbox."""
+        user_cols = self._table_columns(conn, "users")
+        if user_cols and "ui_font_size" not in user_cols:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN ui_font_size TEXT NOT NULL DEFAULT 'medium'"
+            )
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS user_recommendations (
+                id TEXT PRIMARY KEY,
+                from_user_id TEXT NOT NULL,
+                to_user_id TEXT NOT NULL,
+                media_type TEXT NOT NULL CHECK (media_type IN ('movie', 'show')),
+                tmdb_id INTEGER,
+                tvdb_id INTEGER,
+                rating_key TEXT,
+                title TEXT NOT NULL,
+                year INTEGER,
+                poster_url TEXT,
+                message TEXT,
+                created_at REAL NOT NULL,
+                seen_at REAL,
+                FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_recommendations_to
+                ON user_recommendations(to_user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_user_recommendations_unread
+                ON user_recommendations(to_user_id, seen_at);
+            """
+        )
+
     def _seed_builtin_persona_templates(self, conn: sqlite3.Connection) -> None:
         """Insert the 5 built-in persona presets into persona_templates if absent."""
         for seed in BUILTIN_PERSONA_SEEDS:
@@ -1063,17 +1097,33 @@ class Database:
         self,
         user_id: str,
         *,
-        preferred_name: Optional[str] = None,
+        preferred_name: Any = ...,
+        ui_font_size: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
             if existing is None:
                 raise ValueError("User not found")
-            cleaned = (preferred_name or "").strip() or None
-            conn.execute(
-                "UPDATE users SET preferred_name = ? WHERE id = ?",
-                (cleaned, user_id),
-            )
+            cols = self._table_columns(conn, "users")
+            updates: List[str] = []
+            params: List[Any] = []
+            if preferred_name is not ...:
+                cleaned = (preferred_name or "").strip() or None
+                updates.append("preferred_name = ?")
+                params.append(cleaned)
+            if ui_font_size is not ...:
+                cleaned_font = str(ui_font_size or "medium").strip().lower()
+                if cleaned_font not in {"small", "medium", "large"}:
+                    cleaned_font = "medium"
+                if "ui_font_size" in cols:
+                    updates.append("ui_font_size = ?")
+                    params.append(cleaned_font)
+            if updates:
+                params.append(user_id)
+                conn.execute(
+                    f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+                    tuple(params),
+                )
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         assert row is not None
         return self._row_to_user(row)
@@ -1244,6 +1294,11 @@ class Database:
         preferred_name = None
         if "preferred_name" in keys and row["preferred_name"] is not None:
             preferred_name = str(row["preferred_name"])
+        ui_font_size = "medium"
+        if "ui_font_size" in keys and row["ui_font_size"] is not None:
+            cleaned = str(row["ui_font_size"]).strip().lower()
+            if cleaned in {"small", "medium", "large"}:
+                ui_font_size = cleaned
         disabled = False
         if "disabled" in keys and row["disabled"] is not None:
             disabled = bool(int(row["disabled"]))
@@ -1252,6 +1307,7 @@ class Database:
             "id": str(row["id"]),
             "display_name": str(row["display_name"]),
             "preferred_name": preferred_name,
+            "ui_font_size": ui_font_size,
             "email": str(row["email"]) if row["email"] is not None else None,
             "role": str(row["role"]),
             "disabled": disabled,
@@ -3414,6 +3470,149 @@ class Database:
             "title": str(row["title"]),
             "created_at": float(row["created_at"]),
             "plex_rating_key": plex_rating_key,
+        }
+
+    def create_recommendation(
+        self,
+        *,
+        recommendation_id: str,
+        from_user_id: str,
+        to_user_id: str,
+        media_type: str,
+        title: str,
+        tmdb_id: Optional[int] = None,
+        tvdb_id: Optional[int] = None,
+        rating_key: Optional[str] = None,
+        year: Optional[int] = None,
+        poster_url: Optional[str] = None,
+        message: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        now = time.time()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO user_recommendations (
+                    id, from_user_id, to_user_id, media_type, tmdb_id, tvdb_id,
+                    rating_key, title, year, poster_url, message, created_at, seen_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                """,
+                (
+                    recommendation_id,
+                    from_user_id,
+                    to_user_id,
+                    media_type,
+                    tmdb_id,
+                    tvdb_id,
+                    rating_key,
+                    title,
+                    year,
+                    poster_url,
+                    message,
+                    now,
+                ),
+            )
+            row = conn.execute(
+                "SELECT * FROM user_recommendations WHERE id = ?",
+                (recommendation_id,),
+            ).fetchone()
+        assert row is not None
+        return self._row_to_recommendation(row)
+
+    def list_recommendations_for_user(
+        self,
+        user_id: str,
+        *,
+        unread_only: bool = False,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        query = """
+            SELECT r.*,
+                   COALESCE(fu.preferred_name, fu.display_name) AS from_display_name,
+                   fu.avatar_url AS from_avatar_url
+            FROM user_recommendations r
+            LEFT JOIN users fu ON fu.id = r.from_user_id
+            WHERE r.to_user_id = ?
+        """
+        params: List[Any] = [user_id]
+        if unread_only:
+            query += " AND r.seen_at IS NULL"
+        query += " ORDER BY r.created_at DESC LIMIT ?"
+        params.append(limit)
+        with self.connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [self._row_to_recommendation(row) for row in rows]
+
+    def count_unread_recommendations(self, user_id: str) -> int:
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS cnt FROM user_recommendations
+                WHERE to_user_id = ? AND seen_at IS NULL
+                """,
+                (user_id,),
+            ).fetchone()
+        return int(row["cnt"] if row else 0)
+
+    def mark_recommendations_seen(
+        self,
+        user_id: str,
+        *,
+        recommendation_ids: Optional[Sequence[str]] = None,
+        all_unread: bool = False,
+    ) -> int:
+        now = time.time()
+        with self.connect() as conn:
+            if all_unread:
+                cursor = conn.execute(
+                    """
+                    UPDATE user_recommendations
+                    SET seen_at = ?
+                    WHERE to_user_id = ? AND seen_at IS NULL
+                    """,
+                    (now, user_id),
+                )
+                return int(cursor.rowcount or 0)
+            ids = [str(i).strip() for i in (recommendation_ids or []) if str(i).strip()]
+            if not ids:
+                return 0
+            placeholders = ",".join("?" for _ in ids)
+            cursor = conn.execute(
+                f"""
+                UPDATE user_recommendations
+                SET seen_at = ?
+                WHERE to_user_id = ? AND seen_at IS NULL AND id IN ({placeholders})
+                """,
+                (now, user_id, *ids),
+            )
+            return int(cursor.rowcount or 0)
+
+    @staticmethod
+    def _row_to_recommendation(row: sqlite3.Row) -> Dict[str, Any]:
+        keys = set(row.keys()) if hasattr(row, "keys") else set()
+        return {
+            "id": str(row["id"]),
+            "from_user_id": str(row["from_user_id"]),
+            "to_user_id": str(row["to_user_id"]),
+            "media_type": str(row["media_type"]),
+            "tmdb_id": int(row["tmdb_id"]) if row["tmdb_id"] is not None else None,
+            "tvdb_id": int(row["tvdb_id"]) if row["tvdb_id"] is not None else None,
+            "rating_key": str(row["rating_key"]) if row["rating_key"] is not None else None,
+            "title": str(row["title"]),
+            "year": int(row["year"]) if row["year"] is not None else None,
+            "poster_url": str(row["poster_url"]) if row["poster_url"] is not None else None,
+            "message": str(row["message"]) if row["message"] is not None else None,
+            "created_at": float(row["created_at"]),
+            "seen_at": float(row["seen_at"]) if row["seen_at"] is not None else None,
+            "from_display_name": (
+                str(row["from_display_name"])
+                if "from_display_name" in keys and row["from_display_name"] is not None
+                else None
+            ),
+            "from_avatar_url": (
+                str(row["from_avatar_url"])
+                if "from_avatar_url" in keys and row["from_avatar_url"] is not None
+                else None
+            ),
         }
 
     def list_curated_lists(self, *, user_id: Optional[str] = None) -> List[Dict[str, Any]]:

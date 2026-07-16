@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.7.12 -->
+<!-- Unraid Community Applications template — CuratorX 1.7.13 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,12 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.7.13
+- Fix Surprise Me blank screen (genres JSON string crash), Plex watchlist pull on refresh, TMDB ID crossed wires, stuck context labels, unclickable profile menu
+- Click movie/TV cards (chat + turnstyle) and watchlist items to open title detail with YouTube trailer modal
+- Watch on Plex when title is in library; Plex server name before library totals in top bar
+- Recommend titles to household users with unread inbox on home; per-user UI font size in Profile settings
+
 ### 1.7.12
 - Fix Rating Coverage (was always 0%), Taste Profile ratings scale (now stars/5), per-thread context label, ConfigPage error handling
 - Purge Candidates: multi-select with checkboxes, Delete Selected and Dismiss Selected with confirmation dialog

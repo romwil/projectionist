@@ -7,6 +7,7 @@ from typing import Optional
 
 from curatorx.config_store import Settings
 from curatorx.connectors.fanart import FanartClient
+from curatorx.connectors.plex import cached_machine_identifier, plex_watch_url
 from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import Database
 from curatorx.models.schemas import TitleDetail
@@ -28,9 +29,9 @@ def get_title_detail(
             if item["rating_key"] == rating_key:
                 row = item
                 break
-    elif tmdb_id:
+    if row is None and tmdb_id:
         row = db.library_item_by_tmdb(tmdb_id, media_type)
-    elif tvdb_id:
+    if row is None and tvdb_id:
         row = db.library_item_by_tvdb(tvdb_id)
 
     detail = TitleDetail(
@@ -61,11 +62,12 @@ def get_title_detail(
         detail.in_radarr = bool(row["in_radarr"])
         detail.in_sonarr = bool(row["in_sonarr"])
 
-    if settings.tmdb_api_key and tmdb_id:
+    resolved_tmdb_id = detail.tmdb_id
+    if settings.tmdb_api_key and resolved_tmdb_id:
         tmdb = TMDBClient(settings.tmdb_api_key)
         try:
             if media_type == "movie":
-                meta = tmdb.movie_details(tmdb_id)
+                meta = tmdb.movie_details(resolved_tmdb_id)
                 detail.title = detail.title or str(meta.get("title") or "")
                 detail.overview = detail.overview or str(meta.get("overview") or "")
                 detail.rating = float(meta.get("vote_average") or 0) or None
@@ -83,8 +85,10 @@ def get_title_detail(
                     ]
                 keywords = (meta.get("keywords") or {}).get("keywords") or []
                 detail.keywords = detail.keywords or [k.get("name", "") for k in keywords if k.get("name")]
+                trailer_key = TMDBClient.youtube_trailer_key(meta)
+                detail.trailer_youtube_key = trailer_key if isinstance(trailer_key, str) else ""
             else:
-                meta = tmdb.tv_details(tmdb_id)
+                meta = tmdb.tv_details(resolved_tmdb_id)
                 detail.title = detail.title or str(meta.get("name") or "")
                 detail.overview = detail.overview or str(meta.get("overview") or "")
                 detail.rating = float(meta.get("vote_average") or 0) or None
@@ -95,11 +99,13 @@ def get_title_detail(
                 external = meta.get("external_ids") or {}
                 if external.get("tvdb_id"):
                     detail.tvdb_id = int(external["tvdb_id"])
+                trailer_key = TMDBClient.youtube_trailer_key(meta)
+                detail.trailer_youtube_key = trailer_key if isinstance(trailer_key, str) else ""
         except RuntimeError:
             pass
 
-    if settings.fanart_api_key and tmdb_id and media_type == "movie":
-        art = FanartClient(settings.fanart_api_key).movie(tmdb_id)
+    if settings.fanart_api_key and resolved_tmdb_id and media_type == "movie":
+        art = FanartClient(settings.fanart_api_key).movie(resolved_tmdb_id)
         if not detail.poster_url:
             detail.poster_url = FanartClient(settings.fanart_api_key).best_poster(art)
 
@@ -110,5 +116,10 @@ def get_title_detail(
                 detail.purge_reason = card.recommendation_reason
                 detail.purge_score = 0.8
                 break
+
+    if detail.in_library and detail.rating_key:
+        machine_id = cached_machine_identifier(settings.plex_url, settings.plex_token)
+        detail.plex_machine_id = machine_id
+        detail.plex_watch_url = plex_watch_url(machine_id, detail.rating_key)
 
     return detail

@@ -84,6 +84,11 @@ export async function getFeatures() {
   return api("/features");
 }
 
+export async function getPlexMachineId() {
+  const payload = await api("/plex/machine-id");
+  return String(payload?.machine_id || "").trim();
+}
+
 export async function getHealth() {
   return api("/health");
 }
@@ -106,6 +111,32 @@ export async function getAuthMe() {
 export async function patchAuthMe(payload) {
   return api("/auth/me", {
     method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listHouseholdPeers() {
+  return api("/household/peers");
+}
+
+export async function listRecommendations(params = {}) {
+  const query = new URLSearchParams();
+  if (params.unread_only) query.set("unread_only", "true");
+  if (params.limit) query.set("limit", String(params.limit));
+  const suffix = query.toString() ? `?${query}` : "";
+  return api(`/recommendations${suffix}`);
+}
+
+export async function createRecommendations(payload) {
+  return api("/recommendations", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function markRecommendationsSeen(payload) {
+  return api("/recommendations/seen", {
+    method: "POST",
     body: JSON.stringify(payload),
   });
 }

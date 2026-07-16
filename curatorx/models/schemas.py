@@ -46,6 +46,9 @@ class TitleDetail(TitleCard):
     arr_id: Optional[int] = None
     purge_score: Optional[float] = None
     purge_reason: str = ""
+    trailer_youtube_key: str = ""
+    plex_watch_url: str = ""
+    plex_machine_id: str = ""
 
 
 class ChatMessageBlock(BaseModel):

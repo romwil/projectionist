@@ -41,6 +41,46 @@ def plex_rating_to_stars(plex_rating: Optional[float | int]) -> Optional[float]:
     return normalize_stars(rating / 2.0)
 
 
+def plex_watch_url(machine_id: str, rating_key: str) -> str:
+    """Build an app.plex.tv deep link that opens a library item for playback."""
+    server = str(machine_id or "").strip()
+    key = str(rating_key or "").strip()
+    if not server or not key:
+        return ""
+    metadata_key = urllib.parse.quote(f"/library/metadata/{key}", safe="")
+    return f"https://app.plex.tv/desktop/#!/server/{urllib.parse.quote(server, safe='')}/details?key={metadata_key}"
+
+
+_cached_plex_identity: Optional[tuple[str, str]] = None  # (machine_id, friendly_name)
+
+
+def cached_plex_identity(base_url: str, token: str, *, timeout: int = 30) -> tuple[str, str]:
+    """Return process-cached (machineIdentifier, friendlyName) when the server is reachable."""
+    global _cached_plex_identity
+    if _cached_plex_identity is not None:
+        return _cached_plex_identity
+    if not str(base_url or "").strip() or not str(token or "").strip():
+        return ("", "")
+    try:
+        identity = PlexClient(base_url, token, timeout=timeout).server_identity()
+    except Exception:
+        return ("", "")
+    _cached_plex_identity = identity
+    return identity
+
+
+def cached_machine_identifier(base_url: str, token: str, *, timeout: int = 30) -> str:
+    """Return a process-cached Plex machineIdentifier when the server is reachable."""
+    machine_id, _ = cached_plex_identity(base_url, token, timeout=timeout)
+    return machine_id
+
+
+def cached_plex_friendly_name(base_url: str, token: str, *, timeout: int = 30) -> str:
+    """Return a process-cached Plex friendlyName when the server is reachable."""
+    _, friendly_name = cached_plex_identity(base_url, token, timeout=timeout)
+    return friendly_name
+
+
 @dataclass
 class PlexSection:
     key: str
@@ -118,6 +158,7 @@ class PlexClient:
         self.tv_section = tv_section
         self.timeout = timeout
         self._machine_identifier: Optional[str] = None
+        self._friendly_name: Optional[str] = None
 
     def list_sections(self) -> List[PlexSection]:
         root = self._request_xml("/library/sections")
@@ -208,9 +249,10 @@ class PlexClient:
         root = self._request_xml(f"/library/metadata/{key}/children")
         return self._parse_episode_elements(self._container_children(root, "Video"))
 
-    def machine_identifier(self) -> str:
+    def server_identity(self) -> tuple[str, str]:
+        """Return (machineIdentifier, friendlyName) from the Plex root MediaContainer."""
         if self._machine_identifier:
-            return self._machine_identifier
+            return (self._machine_identifier, self._friendly_name or "")
         root = self._request_xml("/")
         container = root if root.tag == "MediaContainer" else root.find("MediaContainer")
         if container is None:
@@ -218,8 +260,18 @@ class PlexClient:
         machine_id = str(container.attrib.get("machineIdentifier") or "").strip()
         if not machine_id:
             raise RuntimeError("Plex server did not return machineIdentifier")
+        friendly_name = str(container.attrib.get("friendlyName") or "").strip()
         self._machine_identifier = machine_id
+        self._friendly_name = friendly_name
+        return (machine_id, friendly_name)
+
+    def machine_identifier(self) -> str:
+        machine_id, _ = self.server_identity()
         return machine_id
+
+    def friendly_name(self) -> str:
+        _, name = self.server_identity()
+        return name
 
     def set_user_rating(self, rating_key: str, stars: float | int) -> None:
         key = str(rating_key or "").strip()

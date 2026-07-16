@@ -30,6 +30,7 @@
   --text-2xl: 1.75rem;
   --leading-tight: 1.25;
   --leading-body: 1.55;
+  --base-font-size: 15px;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -39,7 +40,7 @@
   --space-7: 32px;
   --space-8: 48px;
   font-family: var(--font-body);
-  font-size: 15px;
+  font-size: var(--base-font-size);
   line-height: var(--leading-body);
 }
 
@@ -99,6 +100,10 @@ a {
   background: color-mix(in srgb, var(--surface) 88%, transparent);
   backdrop-filter: blur(12px);
   flex-shrink: 0;
+  /* Keep the profile dropdown above workspace-body (backdrop-filter creates a
+     stacking context; without a higher z-index, clicks hit the chat area). */
+  position: relative;
+  z-index: 50;
 }
 
 .app-topbar-menu {
@@ -859,6 +864,15 @@ button.watchlist-chip {
   flex: 1;
 }
 
+.watchlist-panel-item-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.watchlist-panel-item-link:hover .watchlist-panel-title {
+  color: var(--accent);
+}
+
 .watchlist-panel-title {
   font-size: 12px;
   line-height: 1.3;
@@ -1612,6 +1626,106 @@ button.watchlist-chip {
   border-radius: var(--radius-sm);
   overflow: hidden;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+}
+
+.title-card-poster-link {
+  display: block;
+  height: 100%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.title-card-poster-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.title-card-title-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.title-card-title-link:hover,
+.title-card-title-link:focus-visible {
+  color: var(--accent);
+}
+
+.title-card-plex-link,
+.title-detail-plex-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.title-card.compact .title-card-overlay-actions .title-card-plex-link {
+  pointer-events: auto;
+  width: 100%;
+  padding: 7px 10px;
+  line-height: 1.2;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(4, 6, 10, 0.85);
+  color: var(--text);
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.title-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.trailer-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 130;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(5, 8, 14, 0.78);
+  backdrop-filter: blur(4px);
+}
+
+.trailer-modal {
+  width: min(920px, 100%);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.trailer-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+}
+
+.trailer-modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.trailer-modal-frame {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+}
+
+.trailer-modal-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
 }
 
 .poster-wrap img,
@@ -3044,7 +3158,8 @@ button.ghost.inline-link {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
   display: grid;
   gap: 6px;
-  z-index: 20;
+  z-index: 60;
+  pointer-events: auto;
 }
 
 .user-menu-meta {
@@ -4778,4 +4893,196 @@ button.ghost.inline-link {
 .app-footer-full {
   position: fixed;
   grid-column: 1 / -1;
+}
+
+/* Recommendations inbox */
+.recommendations-inbox {
+  margin: var(--space-4) var(--space-4) 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background:
+    linear-gradient(135deg, rgba(212, 165, 116, 0.12), transparent 55%),
+    var(--surface);
+}
+
+.recommendations-inbox-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.recommendations-inbox-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.recommendations-inbox-stack {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.recommendation-card {
+  display: grid;
+  grid-template-columns: 64px 1fr;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+}
+
+.recommendation-card-poster {
+  width: 64px;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+}
+
+.recommendation-card-poster img,
+.recommendation-card-poster .poster-fallback {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: grid;
+  place-items: center;
+}
+
+.recommendation-card-from {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.recommendation-card-note {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-style: italic;
+}
+
+.recommendation-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* Recommend modal */
+.recommend-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+}
+
+.recommend-modal {
+  width: min(440px, 100%);
+  max-height: min(80vh, 640px);
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+}
+
+.recommend-modal-header {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.recommend-modal-header h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+}
+
+.recommend-peer-list {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.recommend-peer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.recommend-peer.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.recommend-note-label {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.recommend-note-label textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 64px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+}
+
+.recommend-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Profile font size */
+.settings-font-size {
+  border: 0;
+  margin: var(--space-4) 0;
+  padding: 0;
+}
+
+.settings-font-size legend {
+  font-weight: 600;
+  margin-bottom: var(--space-2);
+}
+
+.settings-font-size-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.settings-font-option {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.settings-font-option.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }

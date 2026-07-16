@@ -52,17 +52,48 @@ class TMDBClient:
 
     def movie_details(self, tmdb_id: int) -> Mapping[str, Any]:
         payload = request_json(
-            self._url(f"/movie/{tmdb_id}", append_to_response="credits,keywords,external_ids"),
+            self._url(f"/movie/{tmdb_id}", append_to_response="credits,keywords,external_ids,videos"),
             timeout=self.timeout,
         )
         return payload if isinstance(payload, dict) else {}
 
     def tv_details(self, tmdb_id: int) -> Mapping[str, Any]:
         payload = request_json(
-            self._url(f"/tv/{tmdb_id}", append_to_response="credits,keywords,external_ids"),
+            self._url(f"/tv/{tmdb_id}", append_to_response="credits,keywords,external_ids,videos"),
             timeout=self.timeout,
         )
         return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def youtube_trailer_key(payload: Mapping[str, Any]) -> str:
+        """Pick the best YouTube trailer key from a TMDB details/videos payload."""
+        videos = payload.get("videos") if isinstance(payload, dict) else None
+        results = videos.get("results") if isinstance(videos, dict) else None
+        if not isinstance(results, list):
+            return ""
+        candidates: List[Mapping[str, Any]] = []
+        for entry in results:
+            if not isinstance(entry, dict):
+                continue
+            if str(entry.get("site") or "").lower() != "youtube":
+                continue
+            key = str(entry.get("key") or "").strip()
+            if not key:
+                continue
+            candidates.append(entry)
+        if not candidates:
+            return ""
+
+        def rank(entry: Mapping[str, Any]) -> tuple:
+            kind = str(entry.get("type") or "").lower()
+            official = 1 if entry.get("official") else 0
+            type_score = 3 if kind == "trailer" else 2 if kind == "teaser" else 1
+            lang = str(entry.get("iso_639_1") or "").lower()
+            lang_score = 2 if lang == "en" else 1 if lang else 0
+            return (type_score, official, lang_score)
+
+        best = max(candidates, key=rank)
+        return str(best.get("key") or "").strip()
 
     def discover_movies(
         self,

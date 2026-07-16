@@ -1,11 +1,19 @@
 import { useEffect, useState } from "react";
 import { getAuthMe, getFeatures, logout, patchAuthMe } from "../../api/client";
+import { applyUiFontSize, normalizeUiFontSize } from "../../lib/uiPrefs.js";
 import { useNavigate } from "react-router-dom";
+
+const FONT_OPTIONS = [
+  { value: "small", label: "Small" },
+  { value: "medium", label: "Medium" },
+  { value: "large", label: "Large" },
+];
 
 export default function ProfilePage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [preferredName, setPreferredName] = useState("");
+  const [fontSize, setFontSize] = useState("medium");
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [requestPath, setRequestPath] = useState("direct");
@@ -17,6 +25,9 @@ export default function ProfilePage() {
         const next = payload?.user || null;
         setUser(next);
         setPreferredName(next?.preferred_name || "");
+        const nextFont = normalizeUiFontSize(next?.ui_font_size);
+        setFontSize(nextFont);
+        applyUiFontSize(nextFont);
         setSeerrLinked(Boolean(next?.seerr_user_id));
       })
       .catch(() => setUser(null));
@@ -32,10 +43,16 @@ export default function ProfilePage() {
     setSaving(true);
     setStatus(null);
     try {
-      const result = await patchAuthMe({ preferred_name: preferredName });
+      const result = await patchAuthMe({
+        preferred_name: preferredName,
+        ui_font_size: fontSize,
+      });
       setUser(result.user);
       setPreferredName(result.user?.preferred_name || "");
-      setStatus({ type: "success", message: "Preferred name saved." });
+      const nextFont = normalizeUiFontSize(result.user?.ui_font_size);
+      setFontSize(nextFont);
+      applyUiFontSize(nextFont);
+      setStatus({ type: "success", message: "Profile saved." });
     } catch (error) {
       setStatus({ type: "error", message: error.message || "Could not save." });
     } finally {
@@ -98,9 +115,33 @@ export default function ProfilePage() {
             Falls back to your Plex display name when empty. Separate from server admin identity.
           </span>
         </label>
+
+        <fieldset className="settings-font-size" data-testid="font-size-fieldset">
+          <legend>Text size</legend>
+          <p className="field-help">Scales UI text across CuratorX. Default is medium.</p>
+          <div className="settings-font-size-options" role="radiogroup" aria-label="Text size">
+            {FONT_OPTIONS.map((option) => (
+              <label key={option.value} className={`settings-font-option ${fontSize === option.value ? "selected" : ""}`}>
+                <input
+                  type="radio"
+                  name="ui-font-size"
+                  value={option.value}
+                  checked={fontSize === option.value}
+                  data-testid={`font-size-${option.value}`}
+                  onChange={() => {
+                    setFontSize(option.value);
+                    applyUiFontSize(option.value);
+                  }}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
         <div className="config-actions">
           <button type="submit" data-testid="preferred-name-save" disabled={saving}>
-            {saving ? "Saving…" : "Save preferred name"}
+            {saving ? "Saving…" : "Save profile"}
           </button>
         </div>
       </form>

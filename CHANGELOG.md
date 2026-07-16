@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.7.13] — 2026-07-15
+
+### Fixed
+- Surprise Me blank screen — genres returned as a JSON string caused TitleCard to crash on `.join`
+- Watchlist refresh now pulls from Plex (sync existed but was never called)
+- TMDB ID "crossed wires" — `get_title_detail` dropped `tmdb_id` when `tvdb_id` was present; enrichment used the wrong field
+- Context label stuck on old topic for new/switched threads (`initializeThreads` now reads per-thread `context_label`)
+- Profile dropdown menu items unclickable (topbar stacking context under chat; z-index fix)
+- ConfigPage / related error handling when touched
+
+### Added
+- Click movie/TV cards (chat + turnstyle) to open title detail with YouTube trailer modal
+- Watch on Plex action on cards/detail when title is in library
+- Plex server name shown before library totals in top bar
+- Click watchlist items to open title detail
+- Recommend titles to household users with delightful unread inbox on home
+- Per-user UI font size (small/medium/large) in Profile settings
+- Playwright/e2e coverage for profile menu clicks and card affordances
+
 ## [1.7.12] — 2026-07-15
 
 ### Fixed

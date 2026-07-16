@@ -24,40 +24,63 @@ const MOCK_CARDS = [
   },
 ];
 
-async function mockTitleCardChat(page: import("@playwright/test").Page) {
-  await page.route("**/api/chat", async (route) => {
-    if (route.request().method() !== "POST") {
+const LIBRARY_CARD = {
+  media_type: "movie",
+  title: "Heat",
+  year: 1995,
+  tmdb_id: 949,
+  rating_key: "plex-949",
+  poster_url: "",
+  genres: ["Crime", "Drama"],
+  in_library: true,
+  recommendation_reason: "In your library",
+};
+
+function sseDonePayload(sessionId: string, message: Record<string, unknown>, pendingTokens: unknown[] = []) {
+  const payload = {
+    type: "done",
+    session_id: sessionId,
+    message,
+    pending_tokens: pendingTokens,
+  };
+  return `event: done\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+async function mockChatStreamMessage(
+  page: import("@playwright/test").Page,
+  buildMessage: (sessionId: string) => Record<string, unknown>,
+) {
+  await page.route("**/api/chat/stream**", async (route) => {
+    if (route.request().method() !== "GET") {
       await route.continue();
       return;
     }
-    let sessionId = crypto.randomUUID().replace(/-/g, "");
-    try {
-      const body = route.request().postDataJSON() as { session_id?: string };
-      sessionId = body.session_id || sessionId;
-    } catch {
-      // ignore
-    }
-    const assistantMessage = {
-      id: "assistant-cards",
-      role: "assistant",
-      blocks: [
-        { type: "text", content: "Here are some neo-noir picks for you." },
-        { type: "title_cards", items: MOCK_CARDS },
-        {
-          type: "action_prompt",
-          action: "open_viewport",
-          payload: { title: "Recommendations", items: MOCK_CARDS },
-        },
-      ],
-      created_at: Math.floor(Date.now() / 1000),
-      lens_id: "general",
-    };
+    const url = new URL(route.request().url());
+    const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
     await route.fulfill({
       status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ session_id: sessionId, message: assistantMessage }),
+      contentType: "text/event-stream",
+      body: sseDonePayload(sessionId, buildMessage(sessionId)),
     });
   });
+}
+
+async function mockTitleCardChat(page: import("@playwright/test").Page) {
+  await mockChatStreamMessage(page, () => ({
+    id: "assistant-cards",
+    role: "assistant",
+    blocks: [
+      { type: "text", content: "Here are some neo-noir picks for you." },
+      { type: "title_cards", items: MOCK_CARDS },
+      {
+        type: "action_prompt",
+        action: "open_viewport",
+        payload: { title: "Recommendations", items: MOCK_CARDS },
+      },
+    ],
+    created_at: Math.floor(Date.now() / 1000),
+    lens_id: "general",
+  }));
 
   await page.route("**/api/actions/propose", async (route) => {
     await route.fulfill({
@@ -79,7 +102,7 @@ async function mockTitleCardChat(page: import("@playwright/test").Page) {
 async function sendMockChat(page: import("@playwright/test").Page) {
   await page.getByTestId("composer-input").fill("recommend neo-noir films");
   await page.getByTestId("send-button").click();
-  await expect(page.getByTestId("chat-scroll-region")).toBeVisible();
+  await expect(page.getByTestId("chat-message-assistant")).toBeVisible();
 }
 
 test.describe("Title cards in chat", () => {
@@ -234,47 +257,94 @@ test.describe("Title cards in chat", () => {
     expect(confirmRequests).toHaveLength(2);
   });
 
-  test("Why this expands human rationale and hides pipeline labels", async ({ page }) => {
-    await page.route("**/api/chat", async (route) => {
-      if (route.request().method() !== "POST") {
-        await route.continue();
-        return;
-      }
-      let sessionId = crypto.randomUUID().replace(/-/g, "");
-      try {
-        const body = route.request().postDataJSON() as { session_id?: string };
-        sessionId = body.session_id || sessionId;
-      } catch {
-        // ignore
-      }
-      const cards = [
-        {
-          ...MOCK_CARDS[0],
-          recommendation_reason: "Neo-noir classic that fits your unwatched streak",
-        },
-        {
-          ...MOCK_CARDS[1],
-          recommendation_reason: "TMDB title match",
-        },
-      ];
+  test("title card poster links to detail page", async ({ page }) => {
+    await page.route("**/api/title/movie/78**", async (route) => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
-          session_id: sessionId,
-          message: {
-            id: "assistant-why",
-            role: "assistant",
-            blocks: [
-              { type: "text", content: "Here are some picks." },
-              { type: "title_cards", items: cards },
-            ],
-            created_at: Math.floor(Date.now() / 1000),
-            lens_id: "general",
-          },
+          media_type: "movie",
+          title: "Blade Runner",
+          year: 1982,
+          tmdb_id: 78,
+          overview: "A blade runner must pursue replicants.",
+          trailer_youtube_key: "eogpIG53Cis",
+          in_library: false,
         }),
       });
     });
+
+    await sendMockChat(page);
+
+    const card = page.getByTestId("chat-message-assistant").getByTestId("title-card").first();
+    await expect(card.getByTestId("title-card-detail-link")).toHaveAttribute("href", "/title/movie/78");
+    await card.getByTestId("title-card-title-link").click();
+    await expect(page).toHaveURL(/\/title\/movie\/78$/);
+    await expect(page.getByTestId("title-detail-page")).toContainText("Blade Runner");
+    await page.getByTestId("watch-trailer-button").click();
+    await expect(page.getByTestId("trailer-modal")).toBeVisible();
+  });
+
+  test("turnstyle cards also link to detail page", async ({ page }) => {
+    await sendMockChat(page);
+    await page.getByTestId("expand-title-cards").click();
+
+    const overlay = page.getByTestId("turnstyle-results-overlay");
+    await expect(overlay.getByTestId("title-card-detail-link").first()).toHaveAttribute(
+      "href",
+      "/title/movie/78",
+    );
+  });
+
+  test("Watch on Plex appears only for in-library titles with rating_key", async ({ page }) => {
+    await mockChatStreamMessage(page, () => ({
+      id: "assistant-library",
+      role: "assistant",
+      blocks: [
+        { type: "text", content: "From your library." },
+        { type: "title_cards", items: [LIBRARY_CARD, MOCK_CARDS[0]] },
+      ],
+      created_at: Math.floor(Date.now() / 1000),
+      lens_id: "general",
+    }));
+
+    await sendMockChat(page);
+
+    const libraryCard = page.getByTestId("chat-message-assistant").getByTestId("title-card").first();
+    await expect(libraryCard).toContainText("Heat");
+    const plexLink = libraryCard.getByTestId("watch-on-plex-button");
+    await expect(plexLink).toBeVisible();
+    await expect(plexLink).toHaveAttribute(
+      "href",
+      "https://app.plex.tv/desktop/#!/server/mock-plex-machine/details?key=%2Flibrary%2Fmetadata%2Fplex-949",
+    );
+
+    const discoveryCard = page.getByTestId("chat-message-assistant").getByTestId("title-card").nth(1);
+    await expect(discoveryCard.getByTestId("watch-on-plex-button")).toHaveCount(0);
+    await expect(discoveryCard.getByTestId("add-radarr-button")).toBeVisible();
+  });
+
+  test("Why this expands human rationale and hides pipeline labels", async ({ page }) => {
+    const cards = [
+      {
+        ...MOCK_CARDS[0],
+        recommendation_reason: "Neo-noir classic that fits your unwatched streak",
+      },
+      {
+        ...MOCK_CARDS[1],
+        recommendation_reason: "TMDB title match",
+      },
+    ];
+    await mockChatStreamMessage(page, () => ({
+      id: "assistant-why",
+      role: "assistant",
+      blocks: [
+        { type: "text", content: "Here are some picks." },
+        { type: "title_cards", items: cards },
+      ],
+      created_at: Math.floor(Date.now() / 1000),
+      lens_id: "general",
+    }));
 
     await sendMockChat(page);
 

@@ -72,4 +72,19 @@ test.describe("Login flow", () => {
     await expect(page.getByTestId("user-menu")).toBeVisible();
     await expect(page.getByTestId("user-menu-trigger")).toContainText("Test User");
   });
+
+  test("profile menu items are clickable and navigate", async ({ page }) => {
+    await mockFeatures(page, { multi_user_enabled: true });
+    await mockAuthUser(page);
+    await page.goto("/");
+    await page.getByTestId("composer-input").waitFor();
+
+    await page.getByTestId("user-menu-trigger").click();
+    const panel = page.getByTestId("user-menu-panel");
+    await expect(panel).toBeVisible();
+
+    // Click must hit the link, not the chat workspace under the dropdown.
+    await panel.getByRole("link", { name: "About" }).click();
+    await expect(page).toHaveURL(/\/about$/);
+  });
 });

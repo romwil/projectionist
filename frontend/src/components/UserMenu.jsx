@@ -108,6 +108,15 @@ export function useAuthGate() {
         if (!enabled) {
           setIsOwner(true);
           setAuthReady(true);
+          try {
+            const me = await getAuthMe();
+            if (!cancelled && me?.user?.ui_font_size) {
+              const { applyUiFontSize } = await import("../lib/uiPrefs.js");
+              applyUiFontSize(me.user.ui_font_size);
+            }
+          } catch {
+            // ignore
+          }
           return;
         }
         const me = await getAuthMe();
@@ -115,6 +124,10 @@ export function useAuthGate() {
         if (!me) {
           navigate("/login", { replace: true });
           return;
+        }
+        if (me.user?.ui_font_size) {
+          const { applyUiFontSize } = await import("../lib/uiPrefs.js");
+          applyUiFontSize(me.user.ui_font_size);
         }
         setIsOwner(me.user?.role === "owner");
         setAuthReady(true);

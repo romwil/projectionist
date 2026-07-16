@@ -55,7 +55,7 @@ from curatorx.config_store import (
     validate_arr_root_folder,
     validate_llm_settings,
 )
-from curatorx.connectors.plex import PlexClient
+from curatorx.connectors.plex import PlexClient, cached_machine_identifier, cached_plex_friendly_name
 from curatorx.connectors.plex_collections import list_collections as list_plex_collections
 from curatorx.connectors.radarr import RadarrClient
 from curatorx.connectors.seerr import SeerrClient
@@ -429,6 +429,24 @@ class UserUpdatePayload(BaseModel):
 
 class AuthMeUpdatePayload(BaseModel):
     preferred_name: Optional[str] = Field(default=None, max_length=80)
+    ui_font_size: Optional[str] = Field(default=None, pattern="^(small|medium|large)$")
+
+
+class RecommendPayload(BaseModel):
+    to_user_ids: List[str] = Field(min_length=1)
+    media_type: str = Field(pattern="^(movie|show)$")
+    title: str = Field(min_length=1, max_length=300)
+    tmdb_id: Optional[int] = None
+    tvdb_id: Optional[int] = None
+    rating_key: Optional[str] = Field(default=None, max_length=64)
+    year: Optional[int] = None
+    poster_url: Optional[str] = Field(default=None, max_length=1000)
+    message: Optional[str] = Field(default=None, max_length=280)
+
+
+class RecommendationsSeenPayload(BaseModel):
+    ids: List[str] = Field(default_factory=list)
+    all_unread: bool = False
 
 
 class SeerrSyncPayload(BaseModel):
@@ -756,6 +774,14 @@ def get_features(request: Request) -> Dict[str, Any]:
     return _features_payload(bootstrap_owner(db), authenticated=True)
 
 
+@app.get("/api/plex/machine-id")
+def plex_machine_id(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    """Return the cached/fetched Plex machineIdentifier for Watch on Plex deep links."""
+    settings = _settings()
+    machine_id = cached_machine_identifier(settings.plex_url, settings.plex_token, timeout=5)
+    return {"machine_id": machine_id}
+
+
 @app.get("/api/auth/me")
 def auth_me(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     return {"user": user.to_dict(), "authenticated": True}
@@ -766,12 +792,17 @@ def patch_auth_me(
     payload: AuthMeUpdatePayload,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Self-service profile updates (preferred conversation name)."""
+    """Self-service profile updates (preferred conversation name, UI prefs)."""
     fields_set = getattr(payload, "model_fields_set", None) or getattr(payload, "__fields_set__", set())
-    if "preferred_name" not in fields_set:
+    updates: Dict[str, Any] = {}
+    if "preferred_name" in fields_set:
+        updates["preferred_name"] = payload.preferred_name
+    if "ui_font_size" in fields_set:
+        updates["ui_font_size"] = payload.ui_font_size
+    if not updates:
         return {"user": user.to_dict(), "authenticated": True}
     try:
-        updated = _db().update_user_profile(user.id, preferred_name=payload.preferred_name)
+        updated = _db().update_user_profile(user.id, **updates)
     except ValueError as error:
         raise HTTPException(
             status_code=404,
@@ -1258,11 +1289,16 @@ def library_stats(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     items = db.all_library_items()
     movies = sum(1 for i in items if i["media_type"] == "movie")
     shows = sum(1 for i in items if i["media_type"] == "show")
+    settings = _settings()
+    plex_server_name = ""
+    if settings.plex_url and settings.plex_token:
+        plex_server_name = cached_plex_friendly_name(settings.plex_url, settings.plex_token, timeout=5)
     payload = {
         "total": len(items),
         "movies": movies,
         "shows": shows,
         "last_sync": db.get_sync_state("last_sync"),
+        "plex_server_name": plex_server_name or None,
     }
     return _sanitize_library_payload(payload, user)
 
@@ -1514,7 +1550,10 @@ def library_quick_pick_endpoint(
         reason_parts.append(f"{runtime} min")
     reason = " \u00b7 ".join(reason_parts) if reason_parts else "Unwatched pick for you"
 
-    return {"item": dict(row), "why": reason}
+    item = dict(row)
+    item["genres"] = genres_list
+
+    return {"item": item, "why": reason}
 
 
 @app.get("/api/library/query")
@@ -2786,6 +2825,103 @@ def add_preference(
         user_id=_scoped_user_id(user),
     )
     return {"saved": True}
+
+
+@app.get("/api/household/peers")
+def list_household_peers(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    """Sanitized household directory for recommending titles to other users."""
+    if not _settings().features.multi_user_enabled:
+        return {"items": [], "count": 0}
+    peers = []
+    for item in _db().list_users(limit=200):
+        if item.get("disabled"):
+            continue
+        if str(item["id"]) == str(user.id):
+            continue
+        peers.append(
+            {
+                "id": item["id"],
+                "display_name": item.get("preferred_name") or item.get("display_name"),
+                "avatar_url": item.get("avatar_url"),
+                "role": item.get("role"),
+            }
+        )
+    return {"items": peers, "count": len(peers)}
+
+
+@app.get("/api/recommendations")
+def list_recommendations(
+    unread_only: bool = False,
+    limit: int = 20,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    if not _settings().features.multi_user_enabled:
+        return {"items": [], "count": 0, "unread_count": 0}
+    items = _db().list_recommendations_for_user(
+        user.id,
+        unread_only=unread_only,
+        limit=min(max(1, limit), 50),
+    )
+    unread_count = _db().count_unread_recommendations(user.id)
+    return {"items": items, "count": len(items), "unread_count": unread_count}
+
+
+@app.post("/api/recommendations")
+def create_recommendations(
+    payload: RecommendPayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    if not _settings().features.multi_user_enabled:
+        raise HTTPException(status_code=400, detail="Multi-user mode is required for recommendations")
+    if not payload.tmdb_id and not payload.tvdb_id and not payload.rating_key:
+        raise HTTPException(status_code=400, detail="Provide tmdb_id, tvdb_id, or rating_key")
+    db = _db()
+    recipient_ids = []
+    for raw_id in payload.to_user_ids:
+        rid = str(raw_id or "").strip()
+        if not rid or rid == user.id:
+            continue
+        target = db.get_user(rid)
+        if target is None:
+            raise HTTPException(status_code=404, detail=f"User not found: {rid}")
+        if bool(int(target["disabled"] or 0)):
+            raise HTTPException(status_code=400, detail=f"User is disabled: {rid}")
+        recipient_ids.append(rid)
+    if not recipient_ids:
+        raise HTTPException(status_code=400, detail="Choose at least one recipient")
+    created = []
+    for rid in recipient_ids:
+        created.append(
+            db.create_recommendation(
+                recommendation_id=str(uuid.uuid4()),
+                from_user_id=user.id,
+                to_user_id=rid,
+                media_type=payload.media_type,
+                title=payload.title.strip(),
+                tmdb_id=payload.tmdb_id,
+                tvdb_id=payload.tvdb_id,
+                rating_key=(payload.rating_key or "").strip() or None,
+                year=payload.year,
+                poster_url=(payload.poster_url or "").strip() or None,
+                message=(payload.message or "").strip() or None,
+            )
+        )
+    return {"items": created, "count": len(created)}
+
+
+@app.post("/api/recommendations/seen")
+def mark_recommendations_seen(
+    payload: RecommendationsSeenPayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    if not _settings().features.multi_user_enabled:
+        return {"updated": 0}
+    updated = _db().mark_recommendations_seen(
+        user.id,
+        recommendation_ids=payload.ids or None,
+        all_unread=payload.all_unread,
+    )
+    return {"updated": updated}
 
 
 @app.get("/api/reviews")

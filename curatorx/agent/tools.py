@@ -1891,11 +1891,11 @@ class ToolRegistry:
         kwargs: Dict[str, Any] = {"media_type": media_type}
         if args.get("rating_key"):
             kwargs["rating_key"] = str(args["rating_key"])
-        elif args.get("tvdb_id"):
-            kwargs["tvdb_id"] = int(args["tvdb_id"])
-        elif args.get("tmdb_id"):
+        if args.get("tmdb_id"):
             kwargs["tmdb_id"] = int(args["tmdb_id"])
-        else:
+        if args.get("tvdb_id"):
+            kwargs["tvdb_id"] = int(args["tvdb_id"])
+        if not any(k in kwargs for k in ("rating_key", "tmdb_id", "tvdb_id")):
             return json.dumps({"error": "Provide tmdb_id, tvdb_id, or rating_key"})
         detail = get_title_detail(self.db, self.settings, **kwargs)
         card = TitleCard.model_validate(detail.model_dump())

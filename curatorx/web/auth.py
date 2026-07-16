@@ -76,6 +76,7 @@ class CurrentUser:
     seerr_user_id: Optional[int] = None
     avatar_url: Optional[str] = None
     preferred_name: Optional[str] = None
+    ui_font_size: str = "medium"
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -87,6 +88,7 @@ class CurrentUser:
             "plex_user_id": self.plex_user_id,
             "seerr_user_id": self.seerr_user_id,
             "avatar_url": self.avatar_url,
+            "ui_font_size": self.ui_font_size or "medium",
         }
 
 
@@ -101,6 +103,11 @@ def row_to_current_user(row) -> CurrentUser:
     preferred_name = None
     if "preferred_name" in keys and row["preferred_name"] is not None:
         preferred_name = str(row["preferred_name"]).strip() or None
+    ui_font_size = "medium"
+    if "ui_font_size" in keys and row["ui_font_size"] is not None:
+        cleaned = str(row["ui_font_size"]).strip().lower()
+        if cleaned in {"small", "medium", "large"}:
+            ui_font_size = cleaned
     return CurrentUser(
         id=str(row["id"]),
         display_name=str(row["display_name"] or "User"),
@@ -110,6 +117,7 @@ def row_to_current_user(row) -> CurrentUser:
         seerr_user_id=int(row["seerr_user_id"]) if row["seerr_user_id"] is not None else None,
         avatar_url=avatar_url,
         preferred_name=preferred_name,
+        ui_font_size=ui_font_size,
     )
 
 
@@ -599,6 +607,9 @@ def authenticate_local_user(
 
 def row_to_current_user_from_dict(d: dict) -> CurrentUser:
     """Build CurrentUser from a dict (as returned by db._row_to_user)."""
+    font = str(d.get("ui_font_size") or "medium").strip().lower()
+    if font not in {"small", "medium", "large"}:
+        font = "medium"
     return CurrentUser(
         id=str(d["id"]),
         display_name=str(d.get("display_name") or "User"),
@@ -608,6 +619,7 @@ def row_to_current_user_from_dict(d: dict) -> CurrentUser:
         seerr_user_id=d.get("seerr_user_id"),
         avatar_url=d.get("avatar_url"),
         preferred_name=d.get("preferred_name"),
+        ui_font_size=font,
     )
 
 

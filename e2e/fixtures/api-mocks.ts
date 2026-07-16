@@ -331,6 +331,14 @@ export async function mockCuratorApis(page: Page) {
     });
   });
 
+  await page.route("**/api/plex/machine-id", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ machine_id: "mock-plex-machine" }),
+    });
+  });
+
   await page.route("**/api/library/query**", async (route: Route) => {
     await route.fulfill({
       status: 200,

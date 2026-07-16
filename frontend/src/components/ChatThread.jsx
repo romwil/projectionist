@@ -129,6 +129,7 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
               onAdd={handlers.onAdd}
               onDismiss={handlers.onDismiss}
               onTogglePin={item.card_kind === "purge" ? undefined : handlers.onTogglePin}
+              onRecommend={handlers.onRecommend}
               pinRecord={handlers.watchlistLookup?.byItemKey?.get(
                 `${item.media_type}:${item.tmdb_id ?? ""}:${item.tvdb_id ?? ""}`
               )}
@@ -219,6 +220,7 @@ export default function ChatThread({
   pendingTokenActions = [],
   actionsDisabled = false,
   onTogglePin,
+  onRecommend,
   watchlistLookup,
   requestPath = "arr",
   showErrors = true,
@@ -252,6 +254,7 @@ export default function ChatThread({
                     pendingTokenActions: message.id === lastAssistantId ? pendingTokenActions : [],
                     actionsDisabled,
                     onTogglePin,
+                    onRecommend,
                     watchlistLookup,
                     reviewLookup,
                     reviewPromptTemplates,

@@ -8,18 +8,22 @@ import {
   dismissReviewPrompt,
   formatApiError,
   getActiveContext,
+  getAuthMe,
   getEngagementStreak,
   getFeatures,
   getThreadFeedback,
   getThreadMessages,
   getTypingPhrases,
   listJobs,
+  listRecommendations,
   listReviewPrompts,
   listReviews,
   listThreads,
   listWatchlist,
+  markRecommendationsSeen,
   proposeAction,
   removeWatchlistPin,
+  runWatchlistSync,
   saveReview,
   createPersona,
   deletePersona,
@@ -57,12 +61,15 @@ import {
   resolveDockDropTarget,
 } from "./lib/easterEggs.js";
 import { extractSpeakableText } from "./lib/voiceSpeech.js";
+import { applyUiFontSize } from "./lib/uiPrefs.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import ChatThread from "./components/ChatThread";
 import InlineAlert from "./components/InlineAlert";
 import PersonaSelector from "./components/PersonaSelector";
 import KeyboardHelpModal from "./components/KeyboardHelpModal";
 import NewReplyChip from "./components/NewReplyChip";
+import RecommendModal from "./components/RecommendModal";
+import RecommendationsInbox from "./components/RecommendationsInbox";
 import StatusDock from "./components/StatusDock";
 import ThreadList from "./components/ThreadList";
 import TurnstyleResultsOverlay from "./components/TurnstyleResultsOverlay";
@@ -129,6 +136,8 @@ export default function App() {
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [watchlistPins, setWatchlistPins] = useState([]);
   const [watchlistOpen, setWatchlistOpen] = useState(false);
+  const [recommendItem, setRecommendItem] = useState(null);
+  const [incomingRecommendations, setIncomingRecommendations] = useState([]);
   const [sessionStreak, setSessionStreak] = useState(0);
   const [reviewPrompts, setReviewPrompts] = useState([]);
   const [reviewLookup, setReviewLookup] = useState({});
@@ -214,10 +223,24 @@ export default function App() {
   }, []);
 
   const refreshWatchlist = useCallback(() => {
-    listWatchlist()
-      .then((data) => setWatchlistPins(data.items || []))
-      .catch(console.error);
+    runWatchlistSync({ direction: "pull" })
+      .catch(() => {})
+      .finally(() => {
+        listWatchlist()
+          .then((data) => setWatchlistPins(data.items || []))
+          .catch(console.error);
+      });
   }, []);
+
+  const refreshRecommendations = useCallback(() => {
+    if (!multiUserEnabled) {
+      setIncomingRecommendations([]);
+      return;
+    }
+    listRecommendations({ unread_only: true, limit: 8 })
+      .then((data) => setIncomingRecommendations(data.items || []))
+      .catch(() => setIncomingRecommendations([]));
+  }, [multiUserEnabled]);
 
   const refreshStreak = useCallback(() => {
     getEngagementStreak()
@@ -435,6 +458,17 @@ export default function App() {
       }
 
       setActiveSessionId(storedId);
+
+      const activeThread = threadList.find((t) => t.id === storedId);
+      if (activeThread?.context_label) {
+        setActiveContext({
+          context_hash: activeThread.context_hash || "general",
+          inferred_label: activeThread.context_label,
+        });
+      } else {
+        setActiveContext({ context_hash: "general", inferred_label: "General Exploration" });
+      }
+
       setThreadsReady(true);
     }
 
@@ -448,9 +482,6 @@ export default function App() {
       api("/persona").then(setPersona).catch(console.error),
       getFeatures().then(setFeatures).catch(console.error),
       refreshReviewData(),
-      getActiveContext()
-        .then(setActiveContext)
-        .catch(() => setActiveContext({ context_hash: "general", inferred_label: "General Exploration" })),
     ]).catch(console.error);
     api("/library/anniversaries").then((res) => setAnniversaries(res?.items || [])).catch(() => {});
     api("/system-config").then((cfg) => {
@@ -461,13 +492,29 @@ export default function App() {
     refreshStreak();
     refreshTypingPhrases();
     refreshPersonas();
+    refreshRecommendations();
+    getAuthMe()
+      .then((payload) => {
+        if (payload?.user?.ui_font_size) {
+          applyUiFontSize(payload.user.ui_font_size);
+        }
+      })
+      .catch(() => {});
     const interval = setInterval(refreshJobs, 5000);
     const nightInterval = setInterval(() => setNightOwl(isNightOwlHour()), 60_000);
     return () => {
       clearInterval(interval);
       clearInterval(nightInterval);
     };
-  }, [refreshJobs, refreshPersonas, refreshReviewData, refreshStreak, refreshTypingPhrases, refreshWatchlist]);
+  }, [
+    refreshJobs,
+    refreshPersonas,
+    refreshRecommendations,
+    refreshReviewData,
+    refreshStreak,
+    refreshTypingPhrases,
+    refreshWatchlist,
+  ]);
 
   useEffect(() => {
     const running = jobs.some((job) => job.status === "running" || job.status === "queued");
@@ -954,6 +1001,35 @@ export default function App() {
     }
   }
 
+  function handleRecommendTitle(item) {
+    setRecommendItem(item);
+  }
+
+  async function handleDismissRecommendation(rec) {
+    if (!rec?.id) return;
+    setIncomingRecommendations((prev) => prev.filter((item) => item.id !== rec.id));
+    try {
+      await markRecommendationsSeen({ ids: [rec.id] });
+    } catch (error) {
+      console.error(error);
+      refreshRecommendations();
+    }
+  }
+
+  async function handleDismissAllRecommendations(items) {
+    setIncomingRecommendations([]);
+    try {
+      if (items?.length) {
+        await markRecommendationsSeen({ ids: items.map((item) => item.id) });
+      } else {
+        await markRecommendationsSeen({ all_unread: true });
+      }
+    } catch (error) {
+      console.error(error);
+      refreshRecommendations();
+    }
+  }
+
   async function handleReviewSave({ prompt, stars, review_text: reviewText, session_id: reviewSessionId, replace_plex_rating: replacePlexRating }) {
     const slashRate = String(prompt.id || "").startsWith("slash-rate-");
     const viewedUnrated = String(prompt.id || "").startsWith("viewed-unrated-");
@@ -1066,7 +1142,9 @@ export default function App() {
         <div className="app-topbar-actions">
           {stats ? (
             <span className="stat-chip app-topbar-meta" data-testid="library-stats-chip">
-              {stats.movies} movies · {stats.shows} shows
+              {stats.plex_server_name
+                ? `${stats.plex_server_name} · ${stats.movies} movies · ${stats.shows} shows`
+                : `${stats.movies} movies · ${stats.shows} shows`}
             </span>
           ) : null}
           {sessionStreak >= 3 ? (
@@ -1171,6 +1249,13 @@ export default function App() {
 
         <main className="workspace-main" data-testid="workspace-main">
           <div className="chat-scroll-region" data-testid="chat-scroll-region" ref={scrollRef}>
+            {incomingRecommendations.length ? (
+              <RecommendationsInbox
+                items={incomingRecommendations}
+                onDismiss={handleDismissRecommendation}
+                onDismissAll={handleDismissAllRecommendations}
+              />
+            ) : null}
             {showWelcomePanel ? (
               <>
                 {anniversaries.length > 0 ? (
@@ -1217,6 +1302,7 @@ export default function App() {
               pendingTokenActions={pendingTokens}
               actionsDisabled={addInProgress}
               onTogglePin={handleToggleWatchlistPin}
+              onRecommend={multiUserEnabled ? handleRecommendTitle : undefined}
               watchlistLookup={watchlistLookup}
               requestPath={requestPath}
               showErrors={false}
@@ -1414,6 +1500,12 @@ export default function App() {
         open={keyboardHelpOpen}
         onClose={() => setKeyboardHelpOpen(false)}
         plexCollectionsEnabled={Boolean(features?.features?.plex_collections_enabled)}
+      />
+
+      <RecommendModal
+        item={recommendItem}
+        open={Boolean(recommendItem)}
+        onClose={() => setRecommendItem(null)}
       />
 
       <footer className="app-footer" data-testid="app-footer">

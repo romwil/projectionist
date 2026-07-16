@@ -22,6 +22,11 @@ export default function SettingsLayout() {
       try {
         const features = await getFeatures();
         const multiUser = Boolean(features?.features?.multi_user_enabled);
+        const me = await getAuthMe().catch(() => null);
+        if (me?.user?.ui_font_size) {
+          const { applyUiFontSize } = await import("../lib/uiPrefs.js");
+          applyUiFontSize(me.user.ui_font_size);
+        }
         if (!multiUser) {
           if (!cancelled) {
             setIsOwner(true);
@@ -29,7 +34,6 @@ export default function SettingsLayout() {
           }
           return;
         }
-        const me = await getAuthMe();
         if (cancelled) return;
         if (!me?.user) {
           navigate("/login", { replace: true });
