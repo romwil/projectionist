@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.8.0 -->
+<!-- Unraid Community Applications template — CuratorX 1.8.1 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,11 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.8.1
+- Person and tag browse pages; clickable cast/crew/genre/motif chips from Title Detail and Explore
+- Windows-native e2e/dev PowerShell helpers and cross-platform e2e server launcher
+- Unraid appdata rollout.sh docs for pull/recreate without wiping config
+
 ### 1.8.0
 - Dual theme (Lights Up / Lights Down), icon top-bar, Explore hub, Title Detail neighbors, agent avatar
 - Metadata enrichment + structured people/credits; layered plot embeddings; item_neighbors + title_relations

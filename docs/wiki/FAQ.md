@@ -14,7 +14,7 @@ No. CuratorX is a **single workspace**: sidebar conversations + full-width chat 
 
 - Unraid / everyday: `romwil/curatorx:latest` (CA template default)
 - Track the line: `romwil/curatorx:1.8`
-- Pin exact: `romwil/curatorx:1.8.0`
+- Pin exact: `romwil/curatorx:1.8.1`
 
 Images are multi-arch (amd64 + arm64) and run as non-root.
 

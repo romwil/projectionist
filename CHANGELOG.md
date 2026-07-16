@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.8.1] — 2026-07-16
+
+Person/tag browse surfaces on Explore and Title Detail, plus Windows-native e2e/dev tooling and Unraid rollout docs.
+
+### Added
+- **Person browse** (`/person/{tmdb_person_id}`) — profile + library filmography from structured credits; resolve-by-name API for cast/crew links
+- **Tag browse** (`/tag/{tag_name}`) — genre/motif/theme facet pages with library title grids
+- Clickable cast, crew, genre, and motif chips on Title Detail and Explore that deep-link into person/tag pages
+- Windows PowerShell helpers: `scripts/setup-dev.ps1`, `scripts/dev-server.ps1`, `scripts/run-e2e.ps1`; cross-platform `scripts/start-e2e-server.mjs`
+- Playwright coverage for person/tag browse (`e2e/person-tag-browse.spec.ts`) and unit tests (`tests/test_person_browse.py`)
+- Unraid appdata **rollout** docs (`docs/DOCKER.md`) — `rollout.sh` pull/recreate without wiping `/config`
+
 ## [1.8.0] — 2026-07-16
 
 Platform expansion: structured credits + metadata enrichment, layered plot embeddings with materialized neighbors, title relations graph, Explore feed APIs, dual theme, and structural UI (Title Detail, Explore shell, agent avatar). Teaching-kit docs updated for sync-vs-idle trickle, honest provenance, and homelab SQLite constraints.

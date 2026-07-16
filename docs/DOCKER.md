@@ -134,7 +134,7 @@ CA XML remains the human install source of truth. For pull/recreate rollouts (po
 ssh automat
 cd /mnt/user/appdata/curatorx
 ./rollout.sh           # :latest
-./rollout.sh 1.8.0     # pin a release tag
+./rollout.sh 1.8.1     # pin a release tag
 ```
 
 `rollout.sh` uses plain Docker CLI on Unraid (Compose is usually absent). If `docker compose` / `docker-compose` is available it prefers that instead. Same-named containers are stop/rm only — `./config` is never wiped. Optional seed env: copy `.env.example` → `.env` (secrets usually already live in `config/`).
