@@ -128,6 +128,18 @@ Without either key, `/mcp` returns **503**. Wrong key → **401**. Logs record `
 | `upcoming_premieres` | Recently added titles |
 | `search_tmdb_proxy` | TMDB search when key configured (CDN posters; trimmed fields) |
 
+Chat agent tools (same library index; available in the in-app curator and mirrored concepts for MCP library browses) also include graph/person helpers. Prefer these when the user asks “more like X”, “same director”, or “franchise siblings”:
+
+| Agent tool | Purpose | Cache / source |
+|------------|---------|----------------|
+| `find_similar_titles` | Similar or surprising neighbors for a seed | `item_neighbors` (`mode=similar\|surprising`) |
+| `list_relations` | One-hop `title_relations` edges | collection / neighbor / shared_crew / llm_theme |
+| `walk_relations` | Shallow BFS (depth ≤ 2) over relations | same graph |
+| `titles_by_person` | In-library filmography for a person | `people` + `credits` |
+| `get_facet_catalog` | Top facet values including **`motif`** and **`theme`** | `library_facets` |
+
+Empty neighbor/relation results mean the idle scheduler has not materialized the cache yet — not that the library is empty. See [ARCHITECTURE.md](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
+
 ### Full mode only (*arr — propose → confirm)
 
 | Tool | Purpose |

@@ -1,20 +1,20 @@
 # FAQ
 
-Canonical FAQ for CuratorX **1.7**. Same content as [`docs/FAQ.md`](../FAQ.md).
+Canonical FAQ for CuratorX **1.8**. Same content as [`docs/FAQ.md`](../FAQ.md).
 
 ## What is CuratorX?
 
-A cinema-dark, chat-first curator for self-hosted **Plex** libraries — and a real-world example of a **privacy-first MCP interface** over local structured data. It indexes what you own into a fast local SQLite store, lets a BYO LLM query that index via Model Context Protocol tool calls, recommends with explainable reasons, supports ratings and watchlists, and only writes to Radarr/Sonarr after you confirm. Your Plex token and collection details never leave your hardware. See [MCP.md](../MCP.md) for the protocol surface.
+A chat-first + Explore curator for self-hosted **Plex** libraries — and a real-world example of **agentic access** to local structured + unstructured data via a privacy-first MCP interface. It indexes what you own into SQLite (credits, dates, plot layers, neighbors), lets a BYO LLM query that index with surgical tool calls, recommends with explainable reasons, and only writes to Radarr/Sonarr after you confirm. Your Plex token and collection details never leave your hardware. See [MCP.md](../MCP.md).
 
 ## Is there still a dual UI (Turnstyle / Immersive)?
 
-No. CuratorX is a **single workspace**: sidebar conversations + full-width chat + status dock, with turnstyle / poster cards inside the chat stream. An optional overlay can expand large title-card result sets. Privacy / About live in the page footer (not the top bar).
+No. CuratorX is a **single workspace**: sidebar conversations + full-width chat + status dock, with turnstyle / poster cards inside the chat stream, plus an **Explore** hub (`/explore`) for cinema browse. An optional overlay can expand large title-card result sets. Privacy / About live in the page footer (not the top bar).
 
 ## Which Docker image should I use?
 
 - Unraid / everyday: `romwil/curatorx:latest` (CA template default)
-- Track the line: `romwil/curatorx:1.7`
-- Pin exact: `romwil/curatorx:1.7.13`
+- Track the line: `romwil/curatorx:1.8`
+- Pin exact: `romwil/curatorx:1.8.0`
 
 Images are multi-arch (amd64 + arm64) and run as non-root.
 
@@ -49,6 +49,18 @@ Job **state** is durable; an interrupted job is marked failed so you can start s
 ## How is this different from Overseerr / Seerr?
 
 CuratorX is a **taste-aware curator** over your library (RAG, persona, ratings, purge advice, owner dashboard). Seerr is an optional request front-end you can enable for members — it does not replace CuratorX’s owner chat loop.
+
+## What is Explore?
+
+Top-bar cinema icon → `/explore`. Browse rails read the same SQLite feeds as the agent. Chat stays the primary curation loop.
+
+## Why is “More Like This” empty?
+
+Idle tasks materialize `item_neighbors` after sync. Empty = cache not built yet. See [Library Sync](Library-Sync.md).
+
+## Lights Up vs Lights Down?
+
+Theme toggle in the top bar or Settings → Profile. Lights Down = cinema chamber; Lights Up = gallery paper; Match system follows the OS.
 
 ## Where is the privacy policy?
 

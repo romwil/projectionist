@@ -10,9 +10,10 @@ Run these layers before tagging a Community Applications release. Default CI and
 
 | Layer | Command | Secrets? |
 |-------|---------|----------|
-| Backend unit + CA edge | `.venv/bin/python -m unittest discover -s tests -v` | No |
+| Backend unit + CA edge | `.venv/bin/python -m unittest discover -s tests -v` (or `pytest tests/ -v`) | No |
+| Explore / neighbors value suite | `pytest tests/test_explore_wave3.py tests/test_title_neighbors_api.py -v` | No |
 | Focused CA suite | `.venv/bin/python -m unittest tests.test_ca_release -v` | No |
-| Frontend unit | `cd frontend && npm run test:unit` | No |
+| Frontend unit | `cd frontend && npm run test:unit` (includes theme prefs + matchScore) | No |
 | Mocked Playwright | `npm run test:e2e` | No |
 | Live service ping (optional) | `CURATORX_LIVE_INTEGRATION=1 …` (below) | Yes |
 | Live stack Playwright (optional) | `npm run test:e2e:live-stack` | Running server |

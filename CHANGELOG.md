@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.8.0] — 2026-07-16
+
+Platform expansion: structured credits + metadata enrichment, layered plot embeddings with materialized neighbors, title relations graph, Explore feed APIs, dual theme, and structural UI (Title Detail, Explore shell, agent avatar). Teaching-kit docs updated for sync-vs-idle trickle, honest provenance, and homelab SQLite constraints.
+
+### Added
+- **Lights Up / Lights Down** dual theme (+ Match system) with icon top-bar chrome
+- **Explore hub** (`/explore`) — feed rails (recently-added, recent-releases, on-this-day), Library Pulse strip, Plot Lab (motifs + seed neighbors)
+- **Title Detail** redesign — backdrop hero, trailer, Watch on Plex, **More Like This** neighbors carousel
+- **Agent avatar** beside assistant messages; expandable **agent activity log** on the thinking indicator (SSE `tool_call` args/summary)
+- Frontend helpers + e2e for Explore feeds (`exploreFeeds.js`, `e2e/explore.spec.ts`)
+- Library **metadata enrichment** + structured **people / credits** (dual-written with legacy cast/directors JSON)
+- Layered plot text (`tmdb_overview`, `tagline`, optional `llm_logline`) and `embedding_model` hygiene
+- Materialized **`item_neighbors`** (similar + surprising scores) via idle `plot_neighbors`
+- **`title_relations`** graph (collection / neighbor / shared_crew; optional llm_theme) via `title_relations_refresh`
+- Motif / theme facets (`summary_motifs`, optional `llm_theme_tagging`)
+- Agent tools: `find_similar_titles`, `list_relations`, `walk_relations`, `titles_by_person`; `get_facet_catalog` supports `motif` / `theme`
+- Explore/library APIs: `/api/library/feeds/*`, `/api/library/neighbors/{item_id}`, `/api/library/motifs`, title neighbors route
+- Value-based tests for feeds, neighbors, relations, and person tools (`tests/test_explore_wave3.py`, `tests/test_title_neighbors_api.py`)
+- Docs teaching kit: ARCHITECTURE, DATA_MODEL, DESIGN, MCP, TESTING, README, wiki (Home / FAQ / Library-Sync)
+
+### Changed
+- Idle scheduler registers enrichment → embeddings → neighbors → motifs → relations trickle path
+- Provenance honesty: feeds never invent release dates from year alone; empty caches return explanatory notes
+
 ## [1.7.13] — 2026-07-15
 
 ### Fixed

@@ -1,18 +1,18 @@
 # CuratorX FAQ
 
-Common questions for CuratorX **1.7**. Also mirrored under [wiki/FAQ.md](wiki/FAQ.md).
+Common questions for CuratorX **1.8**. Also mirrored under [wiki/FAQ.md](wiki/FAQ.md).
 
 ## What is CuratorX?
 
-A cinema-dark, chat-first curator for self-hosted **Plex** libraries — and a real-world example of a **privacy-first MCP interface** over local structured data. It indexes what you own into a fast local SQLite store, lets a BYO LLM query that index via Model Context Protocol tool calls, recommends with explainable reasons, supports ratings and watchlists, and only writes to Radarr/Sonarr after you confirm. Your Plex token and collection details never leave your hardware. See [MCP.md](MCP.md) for the protocol surface.
+A chat-first + Explore curator for self-hosted **Plex** libraries — and a real-world example of **agentic access** to local structured + unstructured data via a privacy-first MCP interface. It indexes what you own into SQLite (credits, dates, plot layers, neighbors), lets a BYO LLM query that index with surgical tool calls, recommends with explainable reasons, and only writes to Radarr/Sonarr after you confirm. Your Plex token and collection details never leave your hardware. See [MCP.md](MCP.md).
 
 ## Which Docker image should I use?
 
 | Tag | When |
 |-----|------|
 | `romwil/curatorx:latest` | Everyday Unraid / Compose (CA template default) |
-| `romwil/curatorx:1.7` | Track the 1.7 line |
-| `romwil/curatorx:1.7.13` | Pin an exact release |
+| `romwil/curatorx:1.8` | Track the 1.8 line |
+| `romwil/curatorx:1.8.0` | Pin an exact release |
 
 Images are multi-arch (**amd64 + arm64**), run as non-root `curatorx` (UID/GID 1000). See [wiki/Installation.md](wiki/Installation.md).
 
@@ -61,6 +61,18 @@ Status dock (**bottom of the conversation sidebar**) and Settings → Library sy
 ## Where is About / Privacy?
 
 Subtle footer links on every layout, plus Settings. About is **not** in the top navigation bar.
+
+## What is Explore?
+
+Top-bar cinema icon → `/explore`. Browse rails (Recently Added, Recent Releases, On This Day, Plot Lab) read the same SQLite feeds as the agent. Chat remains the primary curation loop; Explore is cinema browse.
+
+## Why is “More Like This” / Plot Lab empty?
+
+Neighbors and motifs are **materialized by idle scheduler tasks** after sync (`plot_neighbors`, `summary_motifs`, `title_relations_refresh`). Empty means the cache has not been built yet — not that your library has no similar titles. Leave the container idle after a sync, or check Admin → scheduled tasks.
+
+## Lights Up vs Lights Down?
+
+**Lights Down** is the cinema chamber (default). **Lights Up** is gallery paper. **Match system** follows OS preference. Cycle from the top-bar icon or Settings → Profile.
 
 ## How is this different from Overseerr / Seerr?
 

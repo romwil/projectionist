@@ -1,6 +1,6 @@
 # CuratorX — Design Document
 
-Product principles, single-workspace UX, lens isolation, agent behavior, and API design for CuratorX **1.7**. Items marked **Future** are planned but not fully shipped.
+Product principles, single-workspace UX, lens isolation, agent behavior, and API design for CuratorX **1.8**. Items marked **Future** are planned but not fully shipped.
 
 ---
 
@@ -26,11 +26,19 @@ Product principles, single-workspace UX, lens isolation, agent behavior, and API
 
 ## Visual language
 
-**Cinema dark** — near-black chamber surfaces, warm paper text, a single **amber/gold** accent (no blue→violet gradients). Display type (**Fraunces**) for brand and empty-state headlines; body UI (**DM Sans**). Atmosphere comes from subtle ambient washes (persona/context), not glow stacks or pill chrome.
+Two complementary themes share layout and type; only color tokens swap via `html[data-theme]`:
+
+| Theme | Preference value | Feel |
+|-------|------------------|------|
+| **Lights Down** | `lights_down` (default) | Cinema chamber — near-black surfaces, warm paper text |
+| **Lights Up** | `lights_up` | Gallery paper — light surfaces, same amber accent discipline |
+| **Match system** | `system` | Follows `prefers-color-scheme` |
+
+Accent stays a single **amber/gold** (no blue→violet gradients). Display type (**Fraunces**) for brand and empty-state headlines; body UI (**DM Sans**). Atmosphere comes from subtle ambient washes (persona/context), not glow stacks or pill chrome. Toggle lives in the top bar (icon cycle) and **Settings → Profile**.
 
 | Token role | Intent |
 |------------|--------|
-| Surfaces | Layered `--bg` / `--surface` / `--surface-raised` |
+| Surfaces | Layered `--bg` / `--surface` / `--surface-raised` per theme |
 | Accent | Warm gold primary CTAs and focus |
 | Type | Display for brand; body for chat and forms |
 | Text size | Per-user preference (`small` / `medium` / `large`) via `--base-font-size` |
@@ -43,11 +51,12 @@ CuratorX serves one React application (`frontend/src/App.jsx`):
 
 | Region | Contents |
 |--------|----------|
-| **Top bar** | CuratorX brand, curator name, agent pulse; **Plex server name** + movie/show counts; optional streak chip; **watchlist pins** chip (click toggles panel); **Admin** (owners) / **Settings**; optional **UserMenu** when multi-user is on. No About link in the top bar. |
+| **Top bar** | CuratorX brand, curator name, agent pulse; **Plex server name** + movie/show counts; icon chrome for **Explore**, theme cycle, watchlist pins, Admin/Settings; optional streak chip; optional **UserMenu** when multi-user is on. No About link in the top bar. |
 | **Sidebar** | Conversation list + New thread + **Watchlist panel** + **status dock** (bottom of rail) |
-| **Chat column** | Recommendations inbox (multi-user), welcome / On This Day / Library Glance / Quick Pick, thread with ambient context tag (⧉), title cards, composer with **PersonaSelector** + Surprise Me |
+| **Chat column** | Recommendations inbox (multi-user), welcome / On This Day / Library Glance / Quick Pick, thread with **AgentAvatar** + ambient context tag (⧉), title cards, composer with **PersonaSelector** + Surprise Me |
+| **Explore** | Separate hub at `/explore` — cinema browse rails (not a second “app mode”) |
 | **Results overlay** | Optional horizontal expand for large card sets (“Cinema mode”) |
-| **Footer** | Subtle **Privacy** and **About** links on all layouts (chat, Admin, Settings) |
+| **Footer** | Subtle **Privacy** and **About** links on all layouts (chat, Admin, Settings, Explore) |
 
 ### Visual state tokens
 
@@ -66,16 +75,37 @@ Inline and turnstyle cards share the same affordances:
 
 | Action | Behavior |
 |--------|----------|
-| **Click title / poster** | Navigate to `/title/{movie\|show}/{id}` — backdrop hero, metadata, purge notes |
-| **Watch trailer** | On detail, opens a YouTube trailer modal when `trailer_youtube_key` is present |
+| **Click title / poster** | Navigate to `/title/{movie\|show}/{id}` — sticky back header, backdrop hero, synopsis, meta tiles, cast/tags |
+| **Watch trailer** | YouTube trailer modal when `trailer_youtube_key` is present |
 | **Watch on Plex** | Shown when the title is in-library (`rating_key`); opens Plex deep link |
+| **More Like This** | Horizontal neighbor carousel from cached `item_neighbors` (empty until idle `plot_neighbors` ran) |
 | **Recommend** | Multi-user: pick household peers + optional note; unread inbox on home |
 | **Pin (☆)** | Add/remove local watchlist pin |
-| **Why this?** | Expand `recommendation_reason` / facet matches |
+| **Why this?** | Expand `recommendation_reason` / facet matches (also surfaced on detail) |
 | **Add / Request** | Radarr, Sonarr, or Seerr via confirmation flow |
 | **Not interested** | Preference dismiss signal |
 
 Runtime under 100 minutes gets emphasis on the card. Show cards may display a TV progress ring.
+
+### Agent avatar
+
+Assistant messages show a circular **AgentAvatar** (curator initial) beside the bubble. Streaming state adds a subtle pulse so the chat feels inhabited without competing with title cards.
+
+---
+
+## Explore hub
+
+Route: `/explore` (top-bar cinema icon → Explore; “Back to chat” returns home).
+
+| Section | Role |
+|---------|------|
+| **Recently Added** | `/api/library/feeds/recently-added` (`added_at` window) |
+| **Recent Releases** | `/api/library/feeds/recent-releases` — honest empty until ISO dates enriched |
+| **Library Pulse** | Compact stats from overview + health (not a second dashboard) |
+| **On This Day** | `/api/library/feeds/on-this-day` (calendar mode or milestone fallback) |
+| **Plot Lab** | Motif chips → filtered poster wall; seed search → neighbor rail (`similar` / surprise) |
+
+Explore is browse-first; chat remains the primary curation loop. Empty rails show API `note` text (sync hasn’t recorded dates, neighbors not materialized yet) rather than inventing filler.
 
 ---
 
@@ -187,6 +217,7 @@ Under **Settings → Profile** (when signed in):
 
 - Display name / household identity (multi-user)
 - **UI font size** — `small` / `medium` / `large` (persisted as `ui_font_size`, applied via CSS variable)
+- **Theme** — Lights Up / Lights Down / Match system (also cycled from the top-bar icon)
 
 ---
 
@@ -237,25 +268,27 @@ Purge remains advisory in chat; *arr remove requires confirmation. Owners can al
 
 ## UI design system
 
-Dark **cinematic** styling in `frontend/src/styles.css`:
+Theme tokens in `frontend/src/styles.css` (`html[data-theme="lights-down|lights-up"]`):
 
-- Top bar + sidebar + chat column as one composition
+- Top bar + sidebar + chat column as one composition; Explore uses the same top-bar language
+- Icon-first top-bar actions (Material Symbols) with tooltips — fewer text nav chips
 - Title cards with poster, reason text, optional “Why this?”, and library / Plex / recommend actions
+- Title detail as a full-bleed hero composition (not a card stack)
 - Status dock anchored at the **bottom of the conversation sidebar**
-- User chat bubbles use a warm-tinted background for readability
+- User chat bubbles use a warm-tinted background; assistant rows include AgentAvatar
 - Footer Privacy / About — never compete with brand in the top bar
 
 Typography and accent colors follow persona presets where configured; avoid treating persona flavor as operational status.
 
 ---
 
-## Agent tools (1.7)
+## Agent tools (1.8)
 
-Core tools include library search and facet query, genre exploration, gap analysis, hidden gems, watch-tonight / tonight picks, purge candidates, preference recording, Radarr/Sonarr/Seerr propose/confirm, reviews and review dialogue, watchlist and local lists, Plex collections (when enabled), anniversaries, library snapshot, double feature, and quick-pick roulette.
+Core tools include library search and facet query (`motif` / `theme` included), **`find_similar_titles`**, **`list_relations`** / **`walk_relations`**, **`titles_by_person`**, genre exploration, gap analysis, hidden gems, watch-tonight / tonight picks, purge candidates, preference recording, Radarr/Sonarr/Seerr propose/confirm, reviews and review dialogue, watchlist and local lists, Plex collections (when enabled), anniversaries, library snapshot, double feature, and quick-pick roulette.
 
 Keyword routing still applies when no LLM provider is configured — same heuristics as earlier releases.
 
-Agent tools are **synchronous and user-triggered**; long batch work (embeddings, taste refresh, health metrics, anniversary scan, recommendation warmup, data retention) belongs to the **background idle scheduler** with circuit-breaker quarantine. Boundary rules: [ARCHITECTURE.md](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
+Agent tools are **synchronous and user-triggered**; long batch work (metadata enrichment, embeddings, plot neighbors, title relations, motifs/themes, taste refresh, health metrics, anniversary scan, recommendation warmup, data retention) belongs to the **background idle scheduler** with circuit-breaker quarantine. Boundary rules: [ARCHITECTURE.md](ARCHITECTURE.md#agent-tools-vs-background-scheduler). MCP surface: [MCP.md](MCP.md).
 
 ---
 
@@ -264,8 +297,10 @@ Agent tools are **synchronous and user-triggered**; long batch work (embeddings,
 | Area | Endpoints |
 |------|-----------|
 | Chat | `POST /api/chat`, `GET /api/chat/stream` (SSE tokens) |
-| Library | sync, stats, health, purge, aggregates, quick-pick, anniversaries, overview |
-| Title | `GET /api/title/{media_type}/{id}` |
+| Library | sync, stats, health, purge, aggregates, quick-pick, anniversaries, overview, query, facets |
+| Explore feeds | `GET /api/library/feeds/recently-added`, `…/recent-releases`, `…/on-this-day` |
+| Neighbors / motifs | `GET /api/library/neighbors/{item_id}`, `GET /api/library/motifs` |
+| Title | `GET /api/title/{media_type}/{id}`, `GET /api/title/{media_type}/{id}/neighbors` |
 | Setup | wizard, certifications, settings, service tests |
 | Persona | legacy `GET/PUT /api/persona`; templates CRUD + per-thread `persona_id` |
 | Lenses / context | `GET /api/lenses`, `GET /api/context/active` |

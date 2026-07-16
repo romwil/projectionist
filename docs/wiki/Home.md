@@ -1,12 +1,12 @@
 # CuratorX wiki
 
-In-repo documentation for operators deploying CuratorX **1.7** on Docker or Unraid.
+In-repo documentation for operators deploying CuratorX **1.8** on Docker or Unraid.
 
 ## What CuratorX is
 
-A cinema-dark chat curator for self-hosted Plex — and a **production-quality example of a privacy-first MCP (Model Context Protocol) interface** over local structured and unstructured data. CuratorX indexes your Plex library into a fast local SQLite store and exposes it to a BYO LLM via targeted MCP tool calls. Your Plex token, watch history, and collection details never leave your hardware.
+An **agentic curator** for self-hosted Plex — chat, Explore browse, and a **privacy-first MCP interface** over local structured + unstructured data. CuratorX indexes your library into SQLite (credits, dates, facets, layered plot text, materialized neighbors/relations) and exposes surgical tool calls to a BYO LLM. Your Plex token, watch history, and collection details never leave your hardware.
 
-Features: library-grounded recommendations, confirm-gated Radarr/Sonarr adds, ratings and watchlists, title detail / trailer / Watch on Plex, owner dashboard, optional household auth (Plex PIN, local password, OIDC), dual-key MCP transport (privacy / full trust), and a single `/config` Docker volume. See [MCP.md](../MCP.md) for the protocol surface.
+Features: library-grounded recommendations, Explore feeds, title detail with neighbors, confirm-gated Radarr/Sonarr adds, ratings and watchlists, Lights Up/Down themes, owner dashboard, optional household auth (Plex PIN, local password, OIDC), dual-key MCP transport, and a single `/config` Docker volume. See [MCP.md](../MCP.md) and [ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Pages
 

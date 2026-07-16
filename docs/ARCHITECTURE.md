@@ -184,8 +184,10 @@ flowchart LR
 ### Frontend (Vite / React)
 
 - **Single workspace** — chat thread, welcome panel, watchlist sidebar, keyboard shortcuts.
-- **Lens switcher** — updates active `lens_id`, theme accents, and chat scope.
-- **ChatThread** — renders blocks: `text`, `title_cards`, `action_prompt`, review prompts.
+- **Explore hub** — `/explore` cinema browse (Recently Added + feed rails); Plot Lab section reserved for motif/neighbor discovery.
+- **Title detail** — `/title/{movie|show}/{id}` with backdrop hero, neighbors carousel, trailer modal.
+- **Dual theme** — Lights Up (gallery paper) / Lights Down (cinema chamber) via `html[data-theme]`.
+- **ChatThread** — blocks (`text`, `title_cards`, `action_prompt`, review prompts) plus circular **AgentAvatar**.
 - **ConfigPage** — setup wizard, persona sliders, live service validation.
 
 See [WEB_UI.md](WEB_UI.md) and [DESIGN.md](DESIGN.md).
@@ -196,13 +198,14 @@ See [WEB_UI.md](WEB_UI.md) and [DESIGN.md](DESIGN.md).
 - **Lens API** — `/api/lenses`, `/api/lenses/active`.
 - **Persona API** — `/api/persona`, `/api/system-config`.
 - **Reviews API** — `/api/reviews` with optional Plex rating sync and conflict handling.
+- **Explore feeds** — `/api/library/feeds/*`, `/api/library/neighbors/{item_id}`, `/api/library/motifs`.
 - **Webhooks** — `POST /api/webhooks/plex` for near-completion rating prompts (optional shared secret).
 - **JobManager** — background library sync with progress polling.
 - **CuratorAgent** — accepts `lens_id`; builds persona-aware system prompt; tool list respects feature flags.
 
 ### Library and RAG
 
-Unchanged core: Plex sync → SQLite upsert → TMDB enrichment → embedding rebuild → semantic search.
+Plex sync → SQLite upsert → TMDB enrichment (sync + idle trickle) → layered plot text → embeddings → materialized neighbors → title_relations graph → semantic / facet / feed queries. Structured credits (`people` / `credits`) dual-write alongside legacy JSON cast/directors arrays.
 
 ### Connectors
 
@@ -361,13 +364,55 @@ Defined in `curatorx/scheduler/engine.py` with individual tasks in `curatorx/sch
 | Takes >30s or touches every row in a table         | Scheduler task         |
 | Reads pre-computed results for a chat response     | Agent tool (consumer)  |
 
-Some features span both sides. The scheduler pre-computes; the agent tool reads the results:
+Some features span both sides. The scheduler pre-computes; the agent tool (or Explore API) reads the results:
 
-- **Embeddings:** `semantic_embeddings` task batch-embeds library items → `search_library` tool queries them.
-- **Anniversaries:** `anniversary_scanner` task scans release dates → `get_todays_anniversaries` tool reads them.
-- **Recommendations:** `recommendation_warmup` task builds candidate lists → agent tools read the cache.
-- **Taste profile:** `taste_refresh` task recomputes cluster weights → agent uses them for personalization.
-- **Health metrics:** `health_metrics` task caches library stats → `/api/library/health` serves the cache.
+| Scheduler produces | Consumers |
+|--------------------|-----------|
+| `semantic_embeddings` | `search_library`, semantic `query_library` |
+| `metadata_enrichment` | release dates, TMDB overview/tagline, collection ids, structured credits |
+| `plot_neighbors` → `item_neighbors` | `find_similar_titles`, Title Detail “More Like This”, `/api/library/neighbors/{id}` |
+| `summary_motifs` / `llm_theme_tagging` → `library_facets` | `get_facet_catalog` (`motif` / `theme`), Explore Plot Lab |
+| `title_relations_refresh` → `title_relations` | `list_relations`, `walk_relations` |
+| `llm_logline_enrichment` | layered embedding text (optional; never invents plot) |
+| `anniversary_scanner` | `get_todays_anniversaries`, On This Day feed fallback |
+| `recommendation_warmup` | agent recommendation caches |
+| `taste_refresh` | persona/taste personalization |
+| `health_metrics` | `/api/library/health`, owner dashboard |
+
+### Metadata trickle (sync vs idle)
+
+**Sync** (user/API/schedule-triggered) must stay responsive: Plex scan, durable phase checkpoints, bounded TMDB enrichment workers, facet/FTS rebuild. It records honest provenance fields (`added_at` from Plex, ISO `release_date` / `first_air_date` from TMDB when present — **never invented from year alone**).
+
+**Idle trickle** fills gaps without pegging the homelab box:
+
+1. `metadata_enrichment` — missing dates, overviews, taglines, collection ids, credits
+2. `semantic_embeddings` — capped batches (see [Trickle ingestion](#trickle-ingestion-for-embeddings))
+3. `plot_neighbors` — materialize top-K cosine (+ surprise) into `item_neighbors`
+4. `summary_motifs` / optional `llm_theme_tagging` / `llm_logline_enrichment`
+5. `title_relations_refresh` — collection + neighbor + shared-crew edges
+
+Agent tools and Explore feeds **read caches**; they do not recompute embeddings or graphs per chat turn.
+
+### Materialized similarity & relations
+
+Homelab SQLite cannot afford full pairwise cosine on every “more like this” click. Pattern:
+
+1. Store vectors in `embeddings` (with `embedding_model` for rebuild hygiene).
+2. Idle task writes top neighbors to `item_neighbors` (`score`, `surprise_score`).
+3. Optional graph mirror in `title_relations` (`collection`, `neighbor`, `shared_crew`, optional `llm_theme`).
+4. UI/API/agent tools SELECT from those tables.
+
+Empty neighbor/relation responses are **honest** — they mean the idle cache has not been built yet, not that the library has no similar titles.
+
+### Explore feed APIs
+
+| Endpoint | Source | Honesty rule |
+|----------|--------|--------------|
+| `GET /api/library/feeds/recently-added` | `library_items.added_at` | Empty + note if sync never recorded `added_at` |
+| `GET /api/library/feeds/recent-releases` | `release_date` / `first_air_date` | Empty + note if no enriched dates (no year faking) |
+| `GET /api/library/feeds/on-this-day` | calendar month-day match, else milestone-year fallback | `mode` field discloses which path ran |
+| `GET /api/library/neighbors/{item_id}` | `item_neighbors` | Empty until `plot_neighbors` ran |
+| `GET /api/library/motifs` | `library_facets` where `facet_type='motif'` | Empty until motif task ran |
 
 ### Watchdog and circuit breaker
 
@@ -394,15 +439,23 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 
 ---
 
-## Extension points (1.7+)
+## Extension points (1.8+)
 
 | Extension | Status |
 |-----------|--------|
 | Curation lenses | **Implemented** — CRUD, active lens, chat filter |
 | Persona templates / sliders | **Implemented** — 7 dimensions, per-conversation selector, hot-reload prompt |
 | Single chat workspace | **Implemented** — see [WEB_UI.md](WEB_UI.md) and [DESIGN.md](DESIGN.md) |
+| Dual theme + icon chrome | **Implemented** — Lights Up / Lights Down / Match system; Material icon top-bar |
+| Explore hub | **Implemented** — `/explore` feed rails, Pulse strip, Plot Lab motifs/neighbors |
+| Title detail + neighbors | **Implemented** — hero detail, trailer, “More Like This” from `item_neighbors` |
+| Metadata enrichment + credits | **Implemented** — sync + idle trickle; `people` / `credits` tables |
+| Layered plot text | **Implemented** — Plex summary + TMDB overview/tagline + optional LLM logline |
+| Materialized neighbors | **Implemented** — `item_neighbors` via `plot_neighbors` idle task |
+| Title relations graph | **Implemented** — collection / neighbor / shared_crew (+ optional llm_theme) |
+| Motif / theme facets | **Implemented** — `summary_motifs`, optional `llm_theme_tagging` |
 | Owner dashboard | **Implemented** — `/admin/dashboard` composition, health, purge, taste |
-| Idle task scheduler | **Implemented** — embeddings, taste, health, anniversaries, warmup, retention; circuit breaker |
+| Idle task scheduler | **Implemented** — embeddings, enrichment, neighbors, relations, motifs, taste, health, …; circuit breaker |
 | Durable sync jobs | **Implemented** — `jobs_state.json` + restart recovery |
 | Reviews + Plex sync | **Implemented** — personal stars, conflict detection, webhook prompts |
 | Plex webhooks | **Implemented** — near-completion rating queue; optional auth secret |
@@ -413,7 +466,7 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 | Non-root Docker | **Implemented** — `curatorx` UID/GID 1000 + entrypoint chown |
 | Agent blueprints | Schema present; richer scheduler wiring **Future** |
 | Plex Lists publish | **Future** (pending stable Plex Discover API) |
-| Deeper plot-semantic search | **Partial** — library embeddings + trickle ingestion ship; richer NL “plot theme” discovery still evolving |
+| sqlite-vec ANN prefilter | **Future** — `item_neighbors` remains the read cache either way |
 
 ---
 

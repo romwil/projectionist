@@ -22,7 +22,7 @@ Default `DATA_DIR`: `/config` in Docker, `./config` in local dev.
 
 #### `library_items`
 
-Canonical Plex index enriched during sync.
+Canonical Plex index enriched during sync and idle `metadata_enrichment`.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -30,12 +30,19 @@ Canonical Plex index enriched during sync.
 | `rating_key` | TEXT UNIQUE | Plex rating key |
 | `media_type` | TEXT | `movie` or `show` |
 | `title` | TEXT | Display title |
-| `year` | INTEGER | Release / first air year |
-| `summary` | TEXT | Overview |
+| `year` | INTEGER | Release / first air **year** (coarse; not a substitute for ISO dates) |
+| `summary` | TEXT | Plex/local blurb |
+| `tmdb_overview` / `tagline` | TEXT | TMDB plot layers (empty until enriched) |
+| `llm_logline` | TEXT | Optional idle LLM one-liner; empty unless task ran — **never invented** |
 | `genres` | TEXT | JSON array |
-| `cast` / `directors` / `keywords` | TEXT | JSON arrays |
+| `cast` / `directors` / `keywords` | TEXT | JSON arrays (dual-written with `people`/`credits`) |
 | `tmdb_id` / `tvdb_id` / `imdb_id` | | External IDs |
 | `poster_url` / `backdrop_url` | TEXT | Art URLs |
+| `runtime_minutes` / `content_rating` / `vote_average` | | TMDB/Plex intelligence fields |
+| `original_language` / `countries` | TEXT | Language code; JSON country array |
+| `release_date` / `first_air_date` / `last_air_date` | TEXT | ISO dates when known (`YYYY-MM-DD`) |
+| `tmdb_collection_id` / `collection_name` | | Franchise / collection membership |
+| `added_at` | INTEGER | Plex added timestamp (Unix); drives Recently Added feed |
 | `view_count` | INTEGER | Plex plays |
 | `last_viewed_at` | INTEGER | Unix timestamp |
 | `view_offset_ms` | INTEGER | Plex partial-watch offset (milliseconds) |
@@ -44,7 +51,30 @@ Canonical Plex index enriched during sync.
 | `in_radarr` / `in_sonarr` | INTEGER | 0/1 queue flags |
 | `updated_at` | REAL | Last upsert |
 
-**Indexes:** `tmdb_id`, `tvdb_id`, `media_type`.
+**Indexes:** `tmdb_id`, `tvdb_id`, `media_type`, `added_at`, `release_date`, `tmdb_collection_id`.
+
+#### Provenance rules (dates & plot text)
+
+CuratorX treats missing metadata as a first-class state. Feeds and agent tools must not invent facts:
+
+| Field | Source of truth | Must not |
+|-------|-----------------|----------|
+| `added_at` | Plex library | Invent “recently added” from `updated_at` alone |
+| `release_date` / `first_air_date` | TMDB ISO date | Fabricate from `year` (year is coarse only) |
+| `summary` | Plex | Overwrite with hallucinated synopsis |
+| `tmdb_overview` / `tagline` | TMDB | Fill from LLM guesswork |
+| `llm_logline` | Optional idle LLM task | Run without a configured provider; invent when task skipped |
+
+Sync and `metadata_enrichment` use `COALESCE` / non-empty guards so empty TMDB fields do not wipe good prior data — and empty stays empty when the source has nothing.
+
+#### `people` / `credits`
+
+Normalized cast & crew (Stage 1). JSON `cast` / `directors` on `library_items` remain for backward-compatible card rendering; person browse and shared-crew relations use these tables.
+
+| Table | Key columns |
+|-------|-------------|
+| `people` | `id`, `tmdb_person_id` UNIQUE, `name`, `profile_url`, `created_at` |
+| `credits` | PK `(item_id, person_id, department, job, character)`; `billing_order`; FKs to `library_items` / `people` |
 
 #### `embeddings`
 
@@ -52,6 +82,42 @@ Canonical Plex index enriched during sync.
 |--------|------|-------------|
 | `item_id` | INTEGER PK FK | References `library_items.id` |
 | `vector` | TEXT | JSON float array (384-dim hash or provider length) |
+| `embedding_model` | TEXT | Model id that produced the vector (rebuild hygiene) |
+
+Layered embedding input prefers TMDB overview/tagline (+ optional `llm_logline`) over Plex `summary` when present.
+
+#### `item_neighbors`
+
+Materialized plot similarity cache (idle `plot_neighbors`). Read by Explore, Title Detail, and `find_similar_titles`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `item_id` / `neighbor_id` | INTEGER PK | Library item pair |
+| `score` | REAL | Cosine similarity |
+| `surprise_score` | REAL | High cosine with low genre/keyword/credit overlap |
+
+#### `title_relations`
+
+Lightweight title graph (idle `title_relations_refresh`).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `from_id` / `to_id` | INTEGER | Library item endpoints |
+| `relation` | TEXT | `collection`, `neighbor`, `shared_crew`, optional `llm_theme` |
+| `weight` | REAL | Edge strength |
+| `source` | TEXT | Provenance label (`tmdb_collection`, `item_neighbors`, …) |
+
+**PK:** `(from_id, to_id, relation)`.
+
+#### `library_facets` (motif / theme)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `item_id` | INTEGER FK | References `library_items.id` |
+| `facet_type` | TEXT | Sync types (`genre`, `director`, …) plus idle `motif` / `theme` |
+| `facet_value` | TEXT | Facet string |
+
+Idle motif/theme replaces only its own `facet_type` so sync-managed facets are preserved.
 
 #### `preference_facts`
 
@@ -355,29 +421,63 @@ erDiagram
     curation_lenses ||--o{ chat_sessions : scopes
     curation_lenses ||--o{ chat_messages : filters
     curation_lenses ||--o{ lens_taste_profile : weights
-    curation_lenses ||--o{ interaction_telemetry : tracks
-    curation_lenses ||--o{ agent_blueprints : schedules
     library_items ||--o| embeddings : has
+    library_items ||--o{ library_facets : tagged
+    library_items ||--o{ credits : credits
+    people ||--o{ credits : appears_in
+    library_items ||--o{ item_neighbors : similar_to
+    library_items ||--o{ title_relations : relates
     chat_sessions ||--o{ chat_messages : contains
-    curation_lenses {
-        text lens_id PK
-        text lens_name
+    library_items {
+        int id PK
+        text title
+        int year
+        text release_date
+        int added_at
+        text tmdb_overview
+        text tagline
+        int tmdb_collection_id
     }
-    chat_messages {
-        text id PK
-        text session_id FK
-        text lens_id
+    people {
+        int id PK
+        int tmdb_person_id UK
+        text name
     }
-    lens_taste_profile {
-        text lens_id FK
-        text cluster_tag
+    credits {
+        int item_id FK
+        int person_id FK
+        text department
+        text job
+    }
+    embeddings {
+        int item_id PK
+        text embedding_model
+    }
+    item_neighbors {
+        int item_id FK
+        int neighbor_id FK
+        real score
+        real surprise_score
+    }
+    title_relations {
+        int from_id FK
+        int to_id FK
+        text relation
         real weight
+        text source
     }
-    curator_persona_metrics {
-        text metric_id PK
-        text curator_name
+    library_facets {
+        int item_id FK
+        text facet_type
+        text facet_value
     }
 ```
+
+### Homelab SQLite constraints
+
+- Single process, WAL + busy timeout — see [ARCHITECTURE.md](ARCHITECTURE.md#sqlite-concurrency-model).
+- Prefer **materialized caches** (`item_neighbors`, `title_relations`) over per-request O(n²) scoring.
+- Idle tasks trickle with per-cycle caps so chat stays responsive on NAS / Unraid hardware.
 
 ---
 

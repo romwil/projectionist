@@ -81,7 +81,36 @@ class TestLibraryCountsValues(unittest.TestCase):
 |------|---------|
 | `tests/test_agent_tools_validation.py` | Value-based tests for agent tool methods (gaps, anniversaries, picks, patterns) |
 | `tests/test_db_query_validation.py` | Value-based tests for Database query methods (telemetry, chat threads, preferences, embeddings, arr queue) |
+| `tests/test_explore_wave3.py` | Value-based feeds, neighbors, title_relations, motif/theme facets, agent relation/person tools |
+| `tests/test_title_neighbors_api.py` | Title-detail neighbors API — exact cached scores / empty honesty |
 | Other `tests/test_*.py` files | Feature-specific unit and integration tests |
+
+## Neighbors & Explore feeds — value patterns
+
+Materialized caches and honest empties need exact assertions, not “items key exists”:
+
+```python
+# Recent releases: no ISO dates → empty list + explanatory note (never invent from year)
+payload = feed_recent_releases(db, days=90)
+assert payload["items"] == []
+assert "release_date" in (payload.get("note") or "")
+
+# After seeding release_date within the window, assert exact titles/order
+payload = feed_recent_releases(db, days=90)
+assert [i["title"] for i in payload["items"]] == ["New Film"]
+
+# Neighbors: empty until item_neighbors rows exist
+empty = neighbors_payload(db, seed_id, mode="similar")
+assert empty["items"] == []
+assert empty.get("note")  # cache not built
+
+# After insert into item_neighbors, assert score and neighbor_id exactly
+payload = neighbors_payload(db, seed_id, mode="similar", limit=5)
+assert payload["items"][0]["neighbor_id"] == other_id
+assert payload["items"][0]["score"] == pytest.approx(0.91)
+```
+
+Same idea for `list_relations` / `titles_by_person`: seed `title_relations` or `people`+`credits`, then assert returned edge types, weights, and title sets — not merely `returned > 0`.
 
 ## Running Tests
 

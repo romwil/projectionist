@@ -3,11 +3,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
-[![Version](https://img.shields.io/badge/version-1.7.13-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.8.0-green.svg)](CHANGELOG.md)
 
-**A cinema-dark chat curator for your self-hosted Plex library.**
+**Agentic access to your structured + unstructured local media data — chat curator, Explore hub, and privacy-first MCP for self-hosted Plex.**
 
-CuratorX sits between Plex and your *arr stack: talk about taste, find gaps and purge candidates, rate what you watched, and add titles to Radarr or Sonarr only after you confirm. Bring your own LLM (cloud or local). Built for Unraid and Docker.
+CuratorX sits between Plex and your *arr stack: talk about taste, browse Explore rails, find gaps and purge candidates, rate what you watched, and add titles to Radarr or Sonarr only after you confirm. Bring your own LLM (cloud or local). Built for Unraid and Docker.
 
 **Privacy:** CuratorX is self-hosted — see [PRIVACY.md](docs/PRIVACY.md) (also the in-app **`/privacy`** page) for what is stored, what household members vs owners see, and what MCP / the LLM receive. Operators: [SECURITY.md](docs/SECURITY.md).
 
@@ -17,11 +17,11 @@ CuratorX sits between Plex and your *arr stack: talk about taste, find gaps and 
 
 ## Design philosophy
 
-CuratorX is a **real-world, production-quality example of an MCP interface** against structured and unstructured local data. Every design choice reinforces a privacy-first thesis: your Plex library metadata stays on your hardware, the LLM receives only what it needs per turn, and tool calls operate over a highly optimized local SQLite index.
+CuratorX is a **real-world, production-quality example of agentic access** to structured and unstructured local data. Structured rows (credits, release dates, facets, relations) and unstructured plot text (Plex summaries, TMDB overviews, optional LLM loglines) live in one SQLite index. The LLM never bulk-exports your collection — it issues targeted tool calls; Explore and Title Detail read the same materialized caches.
 
 > “The LLM gets to act like a natural language surgeon on a highly optimized, predictable local dataset. It’s incredibly fast, it’s cheap, and it keeps your Plex token and personal collection server info locked down.”
 
-The architecture demonstrates how MCP can bridge a conversational AI to a rich personal dataset without shipping that data to third parties. Dual API keys (privacy / full) let you share read-only library access externally while keeping *arr mutations and internal fields behind a separate trust boundary. See [MCP.md](docs/MCP.md) for the full protocol surface.
+Teaching principles: **sync vs idle trickle** (keep interactive sync fast; enrich in the background), **materialize similarity** (`item_neighbors` / `title_relations` instead of per-click O(n²)), **honest provenance** (never invent release dates from year alone), and **homelab SQLite constraints** (WAL, busy timeout, capped idle writers). Dual MCP API keys (privacy / full) let you share read-only library access externally while keeping *arr mutations behind a separate trust boundary. See [MCP.md](docs/MCP.md) and [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
@@ -33,12 +33,13 @@ Homelab folks who already run **Plex** (and usually Radarr/Sonarr), want convers
 
 ## Highlights
 
-- **Cinema-dark chat workspace** — Fraunces + DM Sans, amber accent, poster-forward title cards, turnstyle strips, persona switching per conversation, slash commands
-- **Library-grounded curator** — RAG over your indexed Plex library; explainable “why this?”; title detail with trailer + **Watch on Plex**
+- **Chat + Explore** — cinema workspace with Lights Up / Lights Down themes; `/explore` browse hub; title detail with trailer, Watch on Plex, and **More Like This** neighbors
+- **Library-grounded curator** — RAG + facet query over structured credits/motifs and layered plot text; explainable “why this?”; agent tools for similar titles, relations, and people
 - **Confirm before you grab** — Radarr / Sonarr (and optional Seerr) writes need an explicit confirm in chat or the status dock
 - **Ratings, watchlists & household recommends** — 1–5★ reviews (optional Plex sync), Plex Discover watchlist pull, peer recommendations inbox
 - **Owner dashboard** — library composition charts, health gauges, multi-select purge, taste timeline
-- **Sync that survives restarts** — durable jobs with live phase / count / %; idle scheduler with circuit breaker; embeddings trickle in the background
+- **Sync that survives restarts** — durable jobs with live phase / count / %; idle trickle for metadata, embeddings, neighbors, and title relations (circuit breaker)
+- **Privacy-first MCP** — dual trust-plane keys over the same local index
 - **Household optional** — **Sign in with Plex** (PIN), optional local password and/or OIDC; roles when multi-user is on
 - **BYOP LLM** — OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint; true SSE token streaming
 - **Unraid-ready** — `romwil/curatorx:latest`, single `/config` volume, non-root container, Community Applications template
@@ -89,8 +90,8 @@ Published multi-arch images (**amd64 + arm64**):
 | Tag | Use |
 |-----|-----|
 | [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Everyday Unraid / Compose (CA template default) |
-| [`romwil/curatorx:1.7`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.7 line |
-| [`romwil/curatorx:1.7.13`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
+| [`romwil/curatorx:1.8`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.8 line |
+| [`romwil/curatorx:1.8.0`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
 
 **Unraid:** install from Community Applications using the template (`templates/curatorx.xml` / `unraid/curatorx.xml`; CA icons at `unraid/curatorx-icon.png` / `unraid/curatorx-icon-512.png`), or add the container manually:
 
