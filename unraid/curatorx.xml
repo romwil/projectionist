@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.7.11 -->
+<!-- Unraid Community Applications template — CuratorX 1.7.12 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,13 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.7.12
+- Fix Rating Coverage (was always 0%), Taste Profile ratings scale (now stars/5), per-thread context label, ConfigPage error handling
+- Purge Candidates: multi-select with checkboxes, Delete Selected and Dismiss Selected with confirmation dialog
+- TV Completion card expanded to 10 shows with larger progress bars and episode counts
+- Watchlist pins badge functional, chat width expanded to ~80%, user message warm background
+- Privacy/About links moved to footer, About removed from top nav
+
 ### 1.7.11
 - Fix owner dashboard data retrieval: 6 frontend/backend field-name mismatches causing empty panels
 - Decade Distribution, Top Genres, Countries, Languages, Runtime Distribution, Purge Candidates, TV Completion, and Reviews panels now populate correctly

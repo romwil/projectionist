@@ -67,6 +67,7 @@ import StatusDock from "./components/StatusDock";
 import ThreadList from "./components/ThreadList";
 import TurnstyleResultsOverlay from "./components/TurnstyleResultsOverlay";
 import TypingIndicator from "./components/TypingIndicator";
+import WatchlistPanel from "./components/WatchlistPanel";
 import WelcomePanel from "./components/WelcomePanel";
 import OnThisDayCard from "./components/OnThisDayCard";
 import LibraryGlanceCard from "./components/LibraryGlanceCard";
@@ -306,6 +307,13 @@ export default function App() {
       setAddFeedback(null);
       const thread = threads.find((t) => t.id === session);
       setActivePersonaId(thread?.persona_id || defaultPersonaId);
+      if (thread?.context_label) {
+        setActiveContext({ context_hash: thread.context_hash || "general", inferred_label: thread.context_label });
+      } else {
+        getActiveContext()
+          .then(setActiveContext)
+          .catch(() => setActiveContext({ context_hash: "general", inferred_label: "General Exploration" }));
+      }
       await loadThreadMessages(session);
     },
     [activeSessionId, defaultPersonaId, loadThreadMessages, threads]
@@ -322,6 +330,7 @@ export default function App() {
       setMessageFeedback({});
       setChatError("");
       setActivePersonaId(defaultPersonaId);
+      setActiveContext({ context_hash: "general", inferred_label: "General Exploration" });
       await refreshThreads();
     } catch (error) {
       console.error(error);
@@ -1070,6 +1079,7 @@ export default function App() {
               type="button"
               className="stat-chip watchlist-chip app-topbar-meta"
               data-testid="watchlist-topbar-chip"
+              title="Watchlist pins — click to toggle panel"
               onClick={() => setWatchlistOpen((open) => !open)}
             >
               ★ {watchlistPins.length} pinned
@@ -1082,9 +1092,6 @@ export default function App() {
           ) : null}
           <Link to="/settings" className="app-topbar-link" data-testid="topbar-settings-link">
             Settings
-          </Link>
-          <Link to="/about" className="app-topbar-link" data-testid="topbar-about-link">
-            About
           </Link>
           {multiUserEnabled ? <UserMenu /> : null}
         </div>
@@ -1134,6 +1141,12 @@ export default function App() {
               personaLookup={personaLookup}
             />
           </div>
+          <WatchlistPanel
+            pins={watchlistPins}
+            open={watchlistOpen}
+            onToggle={() => setWatchlistOpen((open) => !open)}
+            onRemove={(pin) => handleToggleWatchlistPin(pin, pin)}
+          />
           <StatusDock
             jobs={jobs}
             jobStatusPhrases={personaUi?.job_status_phrases}
@@ -1402,6 +1415,12 @@ export default function App() {
         onClose={() => setKeyboardHelpOpen(false)}
         plexCollectionsEnabled={Boolean(features?.features?.plex_collections_enabled)}
       />
+
+      <footer className="app-footer" data-testid="app-footer">
+        <Link to="/privacy" className="app-footer-link">Privacy</Link>
+        <span className="app-footer-sep">·</span>
+        <Link to="/about" className="app-footer-link">About</Link>
+      </footer>
     </div>
   );
 }

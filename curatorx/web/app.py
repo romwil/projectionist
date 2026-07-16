@@ -1285,6 +1285,30 @@ def library_purge_candidates(
     return _sanitize_library_payload(payload, user)
 
 
+@app.post("/api/library/purge-candidates/delete")
+def delete_purge_candidates(
+    payload: Dict[str, Any],
+    user=Depends(require_role("owner")),
+):
+    rating_keys = payload.get("rating_keys", [])
+    if not rating_keys or not isinstance(rating_keys, list):
+        raise HTTPException(status_code=400, detail="rating_keys must be a non-empty list")
+    deleted = _db().delete_library_items_by_rating_keys(rating_keys)
+    return {"deleted": deleted}
+
+
+@app.post("/api/library/purge-candidates/dismiss")
+def dismiss_purge_candidates_endpoint(
+    payload: Dict[str, Any],
+    user=Depends(require_role("owner")),
+):
+    rating_keys = payload.get("rating_keys", [])
+    if not rating_keys or not isinstance(rating_keys, list):
+        raise HTTPException(status_code=400, detail="rating_keys must be a non-empty list")
+    dismissed = _db().dismiss_purge_candidates(rating_keys)
+    return {"dismissed": dismissed}
+
+
 @app.get("/api/admin/export/training-corpus")
 def export_training_corpus(user=Depends(require_role("owner"))) -> JSONResponse:
     del user

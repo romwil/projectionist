@@ -42,10 +42,21 @@ def compute_library_health(db: Database) -> Dict[str, Any]:
         reviewed = int(
             conn.execute(
                 """
-                SELECT COUNT(*) AS cnt FROM (
-                    SELECT DISTINCT rating_key FROM user_title_reviews
-                    WHERE rating_key IS NOT NULL AND rating_key != ''
-                )
+                SELECT COUNT(*) AS cnt FROM library_items li
+                WHERE li.view_count > 0
+                  AND (
+                    EXISTS (
+                      SELECT 1 FROM user_title_reviews r
+                      WHERE r.rating_key IS NOT NULL AND r.rating_key != ''
+                        AND r.rating_key = li.rating_key
+                    )
+                    OR EXISTS (
+                      SELECT 1 FROM user_title_reviews r
+                      WHERE r.tmdb_id IS NOT NULL
+                        AND r.tmdb_id = li.tmdb_id
+                        AND r.media_type = li.media_type
+                    )
+                  )
                 """
             ).fetchone()["cnt"]
         )

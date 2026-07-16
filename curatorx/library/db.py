@@ -366,12 +366,19 @@ class Database:
             conn.execute(
                 f"ALTER TABLE chat_sessions ADD COLUMN context_hash TEXT DEFAULT '{DEFAULT_CONTEXT_HASH}'"
             )
+        if "context_label" not in session_cols:
+            conn.execute(
+                "ALTER TABLE chat_sessions ADD COLUMN context_label TEXT DEFAULT 'General Exploration'"
+            )
         conn.execute(
             "UPDATE chat_sessions SET thread_title = 'New conversation' WHERE thread_title IS NULL OR thread_title = ''"
         )
         conn.execute(
             "UPDATE chat_sessions SET context_hash = ? WHERE context_hash IS NULL OR context_hash = ''",
             (DEFAULT_CONTEXT_HASH,),
+        )
+        conn.execute(
+            "UPDATE chat_sessions SET context_label = 'General Exploration' WHERE context_label IS NULL OR context_label = ''"
         )
 
     def _migrate_service_integrations_certified(self, conn: sqlite3.Connection) -> None:
@@ -716,6 +723,11 @@ class Database:
                 media_type,
                 COALESCE(tmdb_id, -1),
                 COALESCE(tvdb_id, -1)
+            );
+
+            CREATE TABLE IF NOT EXISTS purge_dismissals (
+                rating_key TEXT PRIMARY KEY,
+                dismissed_at REAL NOT NULL
             );
             """
         )
@@ -1600,6 +1612,75 @@ class Database:
         with self.connect() as conn:
             rows = conn.execute("SELECT * FROM library_items ORDER BY title").fetchall()
             return list(rows)
+
+    def delete_library_items_by_rating_keys(self, rating_keys: List[str]) -> int:
+        """Delete library items (and related episodes/embeddings) by rating_key list."""
+        if not rating_keys:
+            return 0
+        keys = [str(k) for k in rating_keys if str(k).strip()]
+        if not keys:
+            return 0
+
+        def _write() -> int:
+            with self.connect() as conn:
+                placeholders = ", ".join("?" for _ in keys)
+                item_ids = [
+                    row["id"]
+                    for row in conn.execute(
+                        f"SELECT id FROM library_items WHERE rating_key IN ({placeholders})",
+                        keys,
+                    ).fetchall()
+                ]
+                if not item_ids:
+                    return 0
+                id_ph = ", ".join("?" for _ in item_ids)
+                conn.execute(
+                    f"DELETE FROM library_episodes WHERE show_item_id IN ({id_ph})",
+                    item_ids,
+                )
+                conn.execute(
+                    f"DELETE FROM embeddings WHERE item_id IN ({id_ph})",
+                    item_ids,
+                )
+                cursor = conn.execute(
+                    f"DELETE FROM library_items WHERE id IN ({id_ph})",
+                    item_ids,
+                )
+                return int(cursor.rowcount)
+
+        return run_with_db_lock_retry(_write, label="delete_library_items")
+
+    def dismiss_purge_candidates(self, rating_keys: List[str]) -> int:
+        """Mark rating_keys as dismissed so they won't appear as purge candidates."""
+        if not rating_keys:
+            return 0
+        keys = [str(k) for k in rating_keys if str(k).strip()]
+        if not keys:
+            return 0
+        now = time.time()
+
+        def _write() -> int:
+            with self.connect() as conn:
+                conn.executemany(
+                    """
+                    INSERT INTO purge_dismissals (rating_key, dismissed_at)
+                    VALUES (?, ?)
+                    ON CONFLICT(rating_key) DO UPDATE SET dismissed_at = excluded.dismissed_at
+                    """,
+                    [(k, now) for k in keys],
+                )
+                return len(keys)
+
+        return run_with_db_lock_retry(_write, label="dismiss_purge_candidates")
+
+    def dismissed_purge_keys(self) -> set:
+        """Return set of rating_keys that have been dismissed from purge."""
+        with self.connect() as conn:
+            try:
+                rows = conn.execute("SELECT rating_key FROM purge_dismissals").fetchall()
+                return {str(row["rating_key"]) for row in rows}
+            except Exception:
+                return set()
 
     def library_item_by_tmdb(self, tmdb_id: int, media_type: str) -> Optional[sqlite3.Row]:
         with self.connect() as conn:
@@ -2896,10 +2977,12 @@ class Database:
 
     def _row_to_thread_summary(self, row: sqlite3.Row, *, message_count: int = 0, preview: str = "") -> Dict[str, Any]:
         persona_id = row["persona_id"] if "persona_id" in row.keys() else None
+        context_label = row["context_label"] if "context_label" in row.keys() else "General Exploration"
         return {
             "id": str(row["id"]),
             "thread_title": str(row["thread_title"] or self.DEFAULT_THREAD_TITLE),
             "context_hash": str(row["context_hash"] or DEFAULT_CONTEXT_HASH),
+            "context_label": str(context_label or "General Exploration"),
             "lens_id": str(row["lens_id"] or DEFAULT_LENS_ID),
             "persona_id": str(persona_id) if persona_id else None,
             "created_at": float(row["created_at"]),
@@ -3037,6 +3120,14 @@ class Database:
         thread = self.get_chat_thread(session_id)
         assert thread is not None
         return thread
+
+    def update_thread_context_label(self, session_id: str, context_label: str) -> None:
+        label = (context_label or "").strip() or "General Exploration"
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE chat_sessions SET context_label = ? WHERE id = ?",
+                (label, session_id),
+            )
 
     def maybe_auto_title_thread(self, session_id: str, first_message: str) -> None:
         text = first_message.strip()

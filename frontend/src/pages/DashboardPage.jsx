@@ -8,6 +8,8 @@ import {
   getTvProgress,
   getEngagementStreak,
   listReviews,
+  deletePurgeCandidates,
+  dismissPurgeCandidates,
 } from "../api/client";
 import BarChart from "../components/charts/BarChart";
 import DonutChart from "../components/charts/DonutChart";
@@ -68,10 +70,14 @@ function formatBytes(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-function PurgeTable({ candidates }) {
+function PurgeTable({ candidates, onRefresh }) {
   const [sortKey, setSortKey] = useState("purge_score");
   const [sortDir, setSortDir] = useState("desc");
+  const [selected, setSelected] = useState(new Set());
+  const [confirmAction, setConfirmAction] = useState(null);
+  const [actionLoading, setActionLoading] = useState(false);
   const sorted = sortPurgeCandidates(candidates, sortKey, sortDir);
+  const displayed = sorted.slice(0, 20);
 
   function handleSort(key) {
     if (sortKey === key) {
@@ -82,36 +88,138 @@ function PurgeTable({ candidates }) {
     }
   }
 
+  function toggleSelect(ratingKey) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(ratingKey)) next.delete(ratingKey);
+      else next.add(ratingKey);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === displayed.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(displayed.map((c) => c.rating_key)));
+    }
+  }
+
+  async function handleConfirmedAction() {
+    const keys = [...selected];
+    if (!keys.length) return;
+    setActionLoading(true);
+    try {
+      if (confirmAction === "delete") {
+        await deletePurgeCandidates(keys);
+      } else if (confirmAction === "dismiss") {
+        await dismissPurgeCandidates(keys);
+      }
+      setSelected(new Set());
+      onRefresh?.();
+    } catch {
+      // silently fail (endpoint may return error in toast)
+    } finally {
+      setActionLoading(false);
+      setConfirmAction(null);
+    }
+  }
+
   const arrow = (key) => (sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "");
 
   if (!sorted.length) return <p className="dash-empty">No purge candidates found.</p>;
 
   return (
-    <div className="dash-table-wrap">
-      <table className="dash-table">
-        <thead>
-          <tr>
-            <th onClick={() => handleSort("title")}>Title{arrow("title")}</th>
-            <th onClick={() => handleSort("file_size")}>Size{arrow("file_size")}</th>
-            <th onClick={() => handleSort("last_watched")}>Last Watched{arrow("last_watched")}</th>
-            <th onClick={() => handleSort("taste_match")}>Taste %{arrow("taste_match")}</th>
-            <th onClick={() => handleSort("purge_score")}>Score{arrow("purge_score")}</th>
-            <th>Reason</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sorted.slice(0, 20).map((c, i) => (
-            <tr key={c.title + i}>
-              <td className="dash-table-title">{c.title}</td>
-              <td>{formatBytes(c.file_size)}</td>
-              <td>{c.last_watched || "Never"}</td>
-              <td>{c.taste_match != null ? `${Math.round(c.taste_match)}%` : "—"}</td>
-              <td>{c.purge_score != null ? c.purge_score.toFixed(1) : "—"}</td>
-              <td className="dash-table-reason">{c.reason || "—"}</td>
+    <div className="dash-purge-container">
+      {selected.size > 0 && (
+        <div className="dash-purge-actions">
+          <button
+            type="button"
+            className="dash-purge-btn dash-purge-btn--danger"
+            onClick={() => setConfirmAction("delete")}
+          >
+            Delete Selected <span className="dash-purge-badge">{selected.size}</span>
+          </button>
+          <button
+            type="button"
+            className="dash-purge-btn dash-purge-btn--muted"
+            onClick={() => setConfirmAction("dismiss")}
+          >
+            Dismiss Selected <span className="dash-purge-badge">{selected.size}</span>
+          </button>
+        </div>
+      )}
+
+      {confirmAction && (
+        <div className="dash-purge-confirm" role="alertdialog" aria-label="Confirm action">
+          <p>
+            {confirmAction === "delete"
+              ? `Are you sure you want to remove ${selected.size} title${selected.size > 1 ? "s" : ""} from your library?`
+              : `Dismiss ${selected.size} title${selected.size > 1 ? "s" : ""} from purge suggestions? They won't appear again.`}
+          </p>
+          <div className="dash-purge-confirm-actions">
+            <button
+              type="button"
+              className="dash-purge-btn dash-purge-btn--danger"
+              disabled={actionLoading}
+              onClick={handleConfirmedAction}
+            >
+              {actionLoading ? "Processing…" : "Confirm"}
+            </button>
+            <button
+              type="button"
+              className="dash-purge-btn dash-purge-btn--muted"
+              disabled={actionLoading}
+              onClick={() => setConfirmAction(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="dash-table-wrap">
+        <table className="dash-table">
+          <thead>
+            <tr>
+              <th className="dash-table-check">
+                <input
+                  type="checkbox"
+                  checked={displayed.length > 0 && selected.size === displayed.length}
+                  onChange={toggleSelectAll}
+                  aria-label="Select all"
+                />
+              </th>
+              <th onClick={() => handleSort("title")}>Title{arrow("title")}</th>
+              <th onClick={() => handleSort("file_size")}>Size{arrow("file_size")}</th>
+              <th onClick={() => handleSort("last_watched")}>Last Watched{arrow("last_watched")}</th>
+              <th onClick={() => handleSort("taste_match")}>Taste %{arrow("taste_match")}</th>
+              <th onClick={() => handleSort("purge_score")}>Score{arrow("purge_score")}</th>
+              <th>Reason</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {displayed.map((c, i) => (
+              <tr key={c.rating_key || c.title + i} className={selected.has(c.rating_key) ? "dash-table-row--selected" : ""}>
+                <td className="dash-table-check">
+                  <input
+                    type="checkbox"
+                    checked={selected.has(c.rating_key)}
+                    onChange={() => toggleSelect(c.rating_key)}
+                    aria-label={`Select ${c.title}`}
+                  />
+                </td>
+                <td className="dash-table-title">{c.title}</td>
+                <td>{formatBytes(c.file_size)}</td>
+                <td>{c.last_watched || "Never"}</td>
+                <td>{c.taste_match != null ? `${Math.round(c.taste_match)}%` : "—"}</td>
+                <td>{c.purge_score != null ? c.purge_score.toFixed(1) : "—"}</td>
+                <td className="dash-table-reason">{c.reason || "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -180,7 +288,7 @@ export default function DashboardPage() {
   const tvShows = Array.isArray(tv.data)
     ? tv.data
     : tv.data?.shows ?? tv.data?.buckets ?? tv.data?.progress ?? [];
-  const topTv = tvShows.slice(0, 5);
+  const topTv = tvShows.slice(0, 10);
 
   const purgeCandidates = Array.isArray(purge.data)
     ? purge.data
@@ -291,16 +399,16 @@ export default function DashboardPage() {
 
         <Panel title="TV Completion" loading={tv.loading} error={tv.error}>
           {topTv.length ? (
-            <div className="dash-tv-progress">
+            <div className="dash-tv-progress dash-tv-progress--expanded">
               {topTv.map((show) => (
                 <ProgressBar
                   key={show.title || show.name || show.show_title}
                   value={show.completion ?? show.completion_percent ?? show.progress ?? 0}
                   label={show.title || show.name || show.show_title || "Unknown"}
-                  detail={show.detail || (show.seasons_watched != null
-                    ? `${show.seasons_watched}/${show.seasons_total} seasons`
-                    : show.watched_episodes != null && show.total_episodes != null
-                      ? `${show.watched_episodes}/${show.total_episodes} episodes`
+                  detail={show.detail || (show.watched_episodes != null && show.total_episodes != null
+                    ? `${show.watched_episodes}/${show.total_episodes} episodes`
+                    : show.seasons_watched != null
+                      ? `${show.seasons_watched}/${show.seasons_total} seasons`
                       : undefined)}
                 />
               ))}
@@ -314,7 +422,7 @@ export default function DashboardPage() {
       {/* ─── Panel 3: Storage Intelligence ─── */}
       <h2 className="dash-section-title">Storage Intelligence</h2>
       <Panel title="Purge Candidates" loading={purge.loading} error={purge.error}>
-        <PurgeTable candidates={purgeCandidates} />
+        <PurgeTable candidates={purgeCandidates} onRefresh={purge.reload} />
       </Panel>
 
       {/* ─── Panel 4: Taste Profile ─── */}
@@ -332,7 +440,7 @@ export default function DashboardPage() {
                   <div className="dash-timeline-body">
                     <strong>{r.title || r.media_title || "Untitled"}</strong>
                     {starVal ? (
-                      <span className="dash-timeline-meta">{starVal}/10</span>
+                      <span className="dash-timeline-meta">{"★".repeat(Math.round(starVal))}{starVal}/5</span>
                     ) : null}
                     {r.review_text ? (
                       <span className="dash-timeline-detail">

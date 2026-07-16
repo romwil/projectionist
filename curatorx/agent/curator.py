@@ -489,6 +489,12 @@ async def stream_agent(
     db.maybe_auto_title_thread(session_id, user_message)
     db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=resolved_lens)
 
+    try:
+        ctx = db.get_active_derived_context()
+        db.update_thread_context_label(session_id, str(ctx["inferred_label"] or "General Exploration"))
+    except Exception:
+        pass
+
     yield json.dumps({
         "type": "done",
         "message": {
@@ -538,6 +544,12 @@ async def _emit_buffered(
     )
     db.maybe_auto_title_thread(session_id, user_message)
     db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=lens_id)
+
+    try:
+        ctx = db.get_active_derived_context()
+        db.update_thread_context_label(session_id, str(ctx["inferred_label"] or "General Exploration"))
+    except Exception:
+        pass
 
     yield json.dumps({
         "type": "done",

@@ -739,6 +739,20 @@ export async function getPurgeCandidates() {
   return api("/library/purge-candidates");
 }
 
+export async function deletePurgeCandidates(ratingKeys) {
+  return api("/library/purge-candidates/delete", {
+    method: "POST",
+    body: JSON.stringify({ rating_keys: ratingKeys }),
+  });
+}
+
+export async function dismissPurgeCandidates(ratingKeys) {
+  return api("/library/purge-candidates/dismiss", {
+    method: "POST",
+    body: JSON.stringify({ rating_keys: ratingKeys }),
+  });
+}
+
 export async function getTvProgress() {
   return api("/library/tv/progress");
 }

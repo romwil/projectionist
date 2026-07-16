@@ -123,12 +123,6 @@ export default function AdminLayout() {
               <Link to="/settings" className="admin-rail-meta-link">
                 Personal settings
               </Link>
-              <Link to="/privacy" className="admin-rail-meta-link">
-                Privacy
-              </Link>
-              <Link to="/about" className="admin-rail-meta-link">
-                About
-              </Link>
               <Link to="/" className="admin-rail-meta-link">
                 Back to chat
               </Link>
@@ -139,6 +133,11 @@ export default function AdminLayout() {
       <main className="admin-main">
         <Outlet context={{ setWizardMode }} />
       </main>
+      <footer className="app-footer app-footer-full" data-testid="app-footer">
+        <Link to="/privacy" className="app-footer-link">Privacy</Link>
+        <span className="app-footer-sep">·</span>
+        <Link to="/about" className="app-footer-link">About</Link>
+      </footer>
     </div>
   );
 }

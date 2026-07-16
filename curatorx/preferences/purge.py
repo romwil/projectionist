@@ -48,10 +48,13 @@ def _build_candidates(
             pass
 
     now = time.time()
+    dismissed_keys = db.dismissed_purge_keys()
     candidates: List[tuple[float, Dict[str, Any]]] = []
     for row in db.all_library_items():
         file_size = int(row["file_size"] or 0)
         if file_size < min_file_size:
+            continue
+        if str(row["rating_key"] or "") in dismissed_keys:
             continue
         view_count = int(row["view_count"] or 0)
         last_viewed = row["last_viewed_at"]

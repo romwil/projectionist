@@ -1087,9 +1087,9 @@ button.watchlist-chip {
 
 .message.user .message-inner {
   margin-left: auto;
-  background: transparent;
-  border-color: transparent;
-  color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 18%, var(--border-subtle));
+  color: var(--text);
 }
 
 .message.assistant .message-inner {
@@ -1238,7 +1238,7 @@ button.watchlist-chip {
 }
 
 .message-inner {
-  max-width: min(40rem, 72ch);
+  max-width: min(56rem, 80ch);
   padding: var(--space-4) var(--space-4);
   border-radius: var(--radius);
   border: 1px solid var(--border-subtle);
@@ -4211,6 +4211,26 @@ button.ghost.inline-link {
   gap: var(--space-3);
 }
 
+.dash-tv-progress--expanded {
+  gap: var(--space-4);
+}
+
+.dash-tv-progress--expanded .dash-progress-track {
+  height: 10px;
+}
+
+.dash-tv-progress--expanded .dash-progress-label {
+  font-size: var(--text-md);
+}
+
+.dash-tv-progress--expanded .dash-progress-pct {
+  font-size: var(--text-sm);
+}
+
+.dash-panel:has(.dash-tv-progress--expanded) {
+  grid-column: 1 / -1;
+}
+
 .dash-progress {
   display: grid;
   gap: 4px;
@@ -4303,6 +4323,94 @@ button.ghost.inline-link {
   max-width: 180px;
   font-size: var(--text-xs);
   color: var(--muted);
+}
+
+.dash-table-check {
+  width: 32px;
+  text-align: center !important;
+  cursor: default;
+}
+
+.dash-table-check input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.dash-table-row--selected {
+  background: var(--accent-soft);
+}
+
+/* Purge actions */
+.dash-purge-container {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.dash-purge-actions {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.dash-purge-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.dash-purge-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dash-purge-btn--danger {
+  background: var(--danger);
+  color: #1a1208;
+}
+
+.dash-purge-btn--muted {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+.dash-purge-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.2);
+  font-size: var(--text-xs);
+  font-weight: 700;
+}
+
+.dash-purge-confirm {
+  padding: var(--space-4);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.dash-purge-confirm p {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.dash-purge-confirm-actions {
+  display: flex;
+  gap: var(--space-3);
 }
 
 /* Taste timeline */
@@ -4632,4 +4740,42 @@ button.ghost.inline-link {
 .title-card .runtime-emphasis {
   font-weight: 700;
   color: var(--accent);
+}
+
+/* ── App Footer ──────────────────────────────────────────── */
+
+.app-footer {
+  position: fixed;
+  bottom: 0;
+  right: 0;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  pointer-events: none;
+}
+
+.app-footer-link {
+  pointer-events: auto;
+  color: var(--muted);
+  text-decoration: none;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.app-footer-link:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.app-footer-sep {
+  color: var(--muted);
+  opacity: 0.35;
+}
+
+.app-footer-full {
+  position: fixed;
+  grid-column: 1 / -1;
 }

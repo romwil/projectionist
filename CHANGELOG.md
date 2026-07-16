@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.7.12] — 2026-07-15
+
+### Fixed
+- Owner dashboard: Rating Coverage now correctly counts watched titles with reviews (was always 0%)
+- Owner dashboard: Taste Profile ratings display as stars out of 5 instead of /10 scale
+- Context label (⧉) now updates per-thread instead of staying stuck on one thread's topic
+- ConfigPage Promise.all error handling prevents blank persona page
+
+### Added
+- Owner dashboard: Purge Candidates now support multi-select with checkboxes, Delete Selected and Dismiss Selected actions with confirmation dialog
+- Owner dashboard: TV Completion card expanded — shows 10 shows with larger progress bars and episode counts
+- Watchlist pins badge in top bar now functional — click toggles watchlist panel, hover shows tooltip
+- Privacy and About links moved to a subtle page footer on all layouts
+- User chat messages now have a warm-tinted background for better readability
+
+### Changed
+- Chat conversation area expanded to ~80% width for better use of screen space
+- Removed About link from top navigation bar (accessible via footer and Settings)
+
 ## [1.7.11] — 2026-07-15
 
 ### Fixed

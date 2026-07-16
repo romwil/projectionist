@@ -7,8 +7,6 @@ export const SETTINGS_NAV = [
   { to: "/settings/voice", id: "voice", label: "Voice" },
   { to: "/settings/watchlist", id: "watchlist", label: "Watchlist" },
   { to: "/settings/lists", id: "lists", label: "Lists" },
-  { to: "/privacy", id: "privacy", label: "Privacy & data use", end: true },
-  { to: "/about", id: "about", label: "About", end: true },
 ];
 
 export default function SettingsLayout() {
@@ -118,6 +116,11 @@ export default function SettingsLayout() {
       <main className="settings-main">
         <Outlet />
       </main>
+      <footer className="app-footer app-footer-full" data-testid="app-footer">
+        <Link to="/privacy" className="app-footer-link">Privacy</Link>
+        <span className="app-footer-sep">·</span>
+        <Link to="/about" className="app-footer-link">About</Link>
+      </footer>
     </div>
   );
 }
