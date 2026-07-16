@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import { getAuthMe, getFeatures, logout, patchAuthMe } from "../../api/client";
-import { applyUiFontSize, normalizeUiFontSize } from "../../lib/uiPrefs.js";
+import {
+  applyUiFontSize,
+  applyUiTheme,
+  normalizeUiFontSize,
+  normalizeUiTheme,
+} from "../../lib/uiPrefs.js";
 import { useNavigate } from "react-router-dom";
 
 const FONT_OPTIONS = [
@@ -9,11 +14,18 @@ const FONT_OPTIONS = [
   { value: "large", label: "Large" },
 ];
 
+const THEME_OPTIONS = [
+  { value: "lights_up", label: "Lights Up" },
+  { value: "lights_down", label: "Lights Down" },
+  { value: "system", label: "Match system" },
+];
+
 export default function ProfilePage() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
   const [preferredName, setPreferredName] = useState("");
   const [fontSize, setFontSize] = useState("medium");
+  const [uiTheme, setUiTheme] = useState("system");
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [requestPath, setRequestPath] = useState("direct");
@@ -28,6 +40,9 @@ export default function ProfilePage() {
         const nextFont = normalizeUiFontSize(next?.ui_font_size);
         setFontSize(nextFont);
         applyUiFontSize(nextFont);
+        const nextTheme = normalizeUiTheme(next?.ui_theme);
+        setUiTheme(nextTheme);
+        applyUiTheme(nextTheme);
         setSeerrLinked(Boolean(next?.seerr_user_id));
       })
       .catch(() => setUser(null));
@@ -46,12 +61,16 @@ export default function ProfilePage() {
       const result = await patchAuthMe({
         preferred_name: preferredName,
         ui_font_size: fontSize,
+        ui_theme: uiTheme,
       });
       setUser(result.user);
       setPreferredName(result.user?.preferred_name || "");
       const nextFont = normalizeUiFontSize(result.user?.ui_font_size);
       setFontSize(nextFont);
       applyUiFontSize(nextFont);
+      const nextTheme = normalizeUiTheme(result.user?.ui_theme);
+      setUiTheme(nextTheme);
+      applyUiTheme(nextTheme);
       setStatus({ type: "success", message: "Profile saved." });
     } catch (error) {
       setStatus({ type: "error", message: error.message || "Could not save." });
@@ -115,6 +134,35 @@ export default function ProfilePage() {
             Falls back to your Plex display name when empty. Separate from server admin identity.
           </span>
         </label>
+
+        <fieldset className="settings-ui-theme" data-testid="ui-theme-fieldset">
+          <legend>Appearance</legend>
+          <p className="field-help">
+            Lights Up is gallery paper; Lights Down is the cinema chamber. Match system follows your
+            OS preference.
+          </p>
+          <div className="settings-ui-theme-options" role="radiogroup" aria-label="Appearance theme">
+            {THEME_OPTIONS.map((option) => (
+              <label
+                key={option.value}
+                className={`settings-theme-option ${uiTheme === option.value ? "selected" : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="ui-theme"
+                  value={option.value}
+                  checked={uiTheme === option.value}
+                  data-testid={`ui-theme-${option.value}`}
+                  onChange={() => {
+                    setUiTheme(option.value);
+                    applyUiTheme(option.value);
+                  }}
+                />
+                <span>{option.label}</span>
+              </label>
+            ))}
+          </div>
+        </fieldset>
 
         <fieldset className="settings-font-size" data-testid="font-size-fieldset">
           <legend>Text size</legend>

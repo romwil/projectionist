@@ -77,6 +77,7 @@ class CurrentUser:
     avatar_url: Optional[str] = None
     preferred_name: Optional[str] = None
     ui_font_size: str = "medium"
+    ui_theme: str = "system"
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -89,6 +90,7 @@ class CurrentUser:
             "seerr_user_id": self.seerr_user_id,
             "avatar_url": self.avatar_url,
             "ui_font_size": self.ui_font_size or "medium",
+            "ui_theme": self.ui_theme or "system",
         }
 
 
@@ -108,6 +110,11 @@ def row_to_current_user(row) -> CurrentUser:
         cleaned = str(row["ui_font_size"]).strip().lower()
         if cleaned in {"small", "medium", "large"}:
             ui_font_size = cleaned
+    ui_theme = "system"
+    if "ui_theme" in keys and row["ui_theme"] is not None:
+        cleaned_theme = str(row["ui_theme"]).strip().lower()
+        if cleaned_theme in {"lights_up", "lights_down", "system"}:
+            ui_theme = cleaned_theme
     return CurrentUser(
         id=str(row["id"]),
         display_name=str(row["display_name"] or "User"),
@@ -118,6 +125,7 @@ def row_to_current_user(row) -> CurrentUser:
         avatar_url=avatar_url,
         preferred_name=preferred_name,
         ui_font_size=ui_font_size,
+        ui_theme=ui_theme,
     )
 
 
@@ -610,6 +618,9 @@ def row_to_current_user_from_dict(d: dict) -> CurrentUser:
     font = str(d.get("ui_font_size") or "medium").strip().lower()
     if font not in {"small", "medium", "large"}:
         font = "medium"
+    theme = str(d.get("ui_theme") or "system").strip().lower()
+    if theme not in {"lights_up", "lights_down", "system"}:
+        theme = "system"
     return CurrentUser(
         id=str(d["id"]),
         display_name=str(d.get("display_name") or "User"),
@@ -620,6 +631,7 @@ def row_to_current_user_from_dict(d: dict) -> CurrentUser:
         avatar_url=d.get("avatar_url"),
         preferred_name=d.get("preferred_name"),
         ui_font_size=font,
+        ui_theme=theme,
     )
 
 

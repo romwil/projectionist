@@ -110,9 +110,10 @@ export function useAuthGate() {
           setAuthReady(true);
           try {
             const me = await getAuthMe();
-            if (!cancelled && me?.user?.ui_font_size) {
-              const { applyUiFontSize } = await import("../lib/uiPrefs.js");
-              applyUiFontSize(me.user.ui_font_size);
+            if (!cancelled && (me?.user?.ui_font_size || me?.user?.ui_theme)) {
+              const { applyUiFontSize, applyUiTheme } = await import("../lib/uiPrefs.js");
+              if (me.user.ui_font_size) applyUiFontSize(me.user.ui_font_size);
+              if (me.user.ui_theme) applyUiTheme(me.user.ui_theme);
             }
           } catch {
             // ignore
@@ -125,9 +126,10 @@ export function useAuthGate() {
           navigate("/login", { replace: true });
           return;
         }
-        if (me.user?.ui_font_size) {
-          const { applyUiFontSize } = await import("../lib/uiPrefs.js");
-          applyUiFontSize(me.user.ui_font_size);
+        if (me.user?.ui_font_size || me.user?.ui_theme) {
+          const { applyUiFontSize, applyUiTheme } = await import("../lib/uiPrefs.js");
+          if (me.user.ui_font_size) applyUiFontSize(me.user.ui_font_size);
+          if (me.user.ui_theme) applyUiTheme(me.user.ui_theme);
         }
         setIsOwner(me.user?.role === "owner");
         setAuthReady(true);

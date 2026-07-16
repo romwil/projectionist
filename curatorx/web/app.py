@@ -430,6 +430,7 @@ class UserUpdatePayload(BaseModel):
 class AuthMeUpdatePayload(BaseModel):
     preferred_name: Optional[str] = Field(default=None, max_length=80)
     ui_font_size: Optional[str] = Field(default=None, pattern="^(small|medium|large)$")
+    ui_theme: Optional[str] = Field(default=None, pattern="^(lights_up|lights_down|system)$")
 
 
 class RecommendPayload(BaseModel):
@@ -799,6 +800,8 @@ def patch_auth_me(
         updates["preferred_name"] = payload.preferred_name
     if "ui_font_size" in fields_set:
         updates["ui_font_size"] = payload.ui_font_size
+    if "ui_theme" in fields_set:
+        updates["ui_theme"] = payload.ui_theme
     if not updates:
         return {"user": user.to_dict(), "authenticated": True}
     try:

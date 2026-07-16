@@ -15,6 +15,7 @@ import ProfilePage from "./pages/settings/ProfilePage";
 import VoicePage from "./pages/settings/VoicePage";
 import WatchlistSettingsPage from "./pages/settings/WatchlistSettingsPage";
 import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
+import ExplorePage from "./pages/ExplorePage";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
@@ -22,6 +23,7 @@ createRoot(document.getElementById("root")).render(
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<App />} />
+        <Route path="/explore" element={<ExplorePage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/about" element={<AboutPage />} />

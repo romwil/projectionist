@@ -10,6 +10,34 @@
       href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&display=swap"
       rel="stylesheet"
     />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=swap"
+      rel="stylesheet"
+    />
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("curatorx.ui_theme") || "system";
+          if (stored !== "lights_up" && stored !== "lights_down" && stored !== "system") {
+            stored = "system";
+          }
+          var effective = stored;
+          if (stored === "system") {
+            effective =
+              window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches
+                ? "lights_up"
+                : "lights_down";
+          }
+          var attr = effective === "lights_up" ? "lights-up" : "lights-down";
+          document.documentElement.setAttribute("data-theme", attr);
+          document.documentElement.style.colorScheme =
+            effective === "lights_up" ? "light" : "dark";
+        } catch (e) {
+          document.documentElement.setAttribute("data-theme", "lights-down");
+          document.documentElement.style.colorScheme = "dark";
+        }
+      })();
+    </script>
     <title>CuratorX</title>
   </head>
   <body>

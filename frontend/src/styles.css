@@ -1,24 +1,13 @@
 :root {
-  color-scheme: dark;
-  /* Cinema dark — film chamber neutrals + single amber accent */
-  --bg: #07080b;
-  --surface: #101218;
-  --surface-2: #171a22;
-  --surface-raised: #1c2029;
-  --border-subtle: #22262f;
-  --border: #2c313c;
-  --text: #f3efe6;
-  --muted: #9a958a;
-  --accent: #d4a574;
-  --accent-2: #b8895a;
-  --accent-soft: rgba(212, 165, 116, 0.14);
-  --accent-text: #1a1208;
-  --danger: #e8918a;
-  --success: #7dba98;
+  /* Shared layout + type — colors live on html[data-theme] */
+  --sidebar-width: 280px;
+  --reading-column-max: 1200px;
+  --gutter: 24px;
+  --margin-mobile: 16px;
+  --card-gap: 20px;
   --radius-sm: 6px;
   --radius: 10px;
   --radius-lg: 14px;
-  --ambient-accent: hsl(210 12% 24%);
   --font-display: "Fraunces", "Times New Roman", serif;
   --font-body: "DM Sans", system-ui, sans-serif;
   --font-mono: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
@@ -39,9 +28,82 @@
   --space-6: 24px;
   --space-7: 32px;
   --space-8: 48px;
+  /* Fallback chamber tokens before FOUC script / theme attrs apply */
+  color-scheme: dark;
+  --bg: #0d0d0d;
+  --surface: #101218;
+  --surface-2: #171a22;
+  --surface-raised: #1c2029;
+  --border-subtle: #22262f;
+  --border: #2c313c;
+  --text: #e6e2d6;
+  --muted: #9a958a;
+  --accent: #ffb800;
+  --accent-2: #e0a200;
+  --accent-soft: rgba(255, 184, 0, 0.14);
+  --accent-text: #1a1208;
+  --danger: #e8918a;
+  --success: #7dba98;
+  --ambient-accent: hsl(36 18% 22%);
+  --workspace-wash-a: #1a1612;
+  --workspace-wash-b: #12151c;
+  --workspace-base: #0c0d11;
   font-family: var(--font-body);
   font-size: var(--base-font-size);
   line-height: var(--leading-body);
+}
+
+/* Cinema Dark / Lights Down — chamber */
+html[data-theme="lights-down"] {
+  color-scheme: dark;
+  --bg: #0d0d0d;
+  --surface: #101218;
+  --surface-2: #171a22;
+  --surface-raised: #1c2029;
+  --border-subtle: #22262f;
+  --border: #2c313c;
+  --text: #e6e2d6;
+  --muted: #9a958a;
+  --accent: #ffb800;
+  --accent-2: #e0a200;
+  --accent-soft: rgba(255, 184, 0, 0.14);
+  --accent-text: #1a1208;
+  --danger: #e8918a;
+  --success: #7dba98;
+  --ambient-accent: hsl(36 18% 22%);
+  --workspace-wash-a: #1a1612;
+  --workspace-wash-b: #12151c;
+  --workspace-base: #0c0d11;
+}
+
+/* Gallery paper / Lights Up */
+html[data-theme="lights-up"] {
+  color-scheme: light;
+  --bg: #f9f7f2;
+  --surface: #fbf9f4;
+  --surface-2: #f0eee9;
+  --surface-raised: #ffffff;
+  --border-subtle: #e5e2da;
+  --border: #d0c5af;
+  --text: #1b1c19;
+  --muted: #4d4635;
+  --accent: #b8860b;
+  --accent-2: #735c00;
+  --accent-soft: rgba(184, 134, 11, 0.12);
+  --accent-text: #1a1208;
+  --danger: #ba1a1a;
+  --success: #2e7d57;
+  --ambient-accent: hsl(40 28% 78%);
+  --workspace-wash-a: #f0ebe0;
+  --workspace-wash-b: #e8e4d8;
+  --workspace-base: #f5f2ea;
+}
+
+html {
+  transition:
+    color 300ms ease-in-out,
+    background-color 300ms ease-in-out,
+    border-color 300ms ease-in-out;
 }
 
 * {
@@ -51,11 +113,36 @@
 body {
   margin: 0;
   background:
-    radial-gradient(ellipse 90% 60% at 50% -10%, #1a1612 0%, transparent 55%),
-    radial-gradient(circle at 80% 0%, #12151c 0%, var(--bg) 50%);
+    radial-gradient(ellipse 90% 60% at 50% -10%, var(--workspace-wash-a) 0%, transparent 55%),
+    radial-gradient(circle at 80% 0%, var(--workspace-wash-b) 0%, var(--bg) 50%);
   color: var(--text);
   font-family: var(--font-body);
   -webkit-font-smoothing: antialiased;
+  transition:
+    color 300ms ease-in-out,
+    background-color 300ms ease-in-out,
+    border-color 300ms ease-in-out,
+    background 300ms ease-in-out;
+}
+
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined", sans-serif;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 22px;
+  width: 1em;
+  height: 1em;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  overflow: hidden;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
 }
 
 a {
@@ -83,8 +170,12 @@ a {
   background:
     radial-gradient(ellipse 100% 70% at 40% -25%, color-mix(in srgb, var(--ambient-accent) 22%, transparent), transparent 58%),
     radial-gradient(ellipse 70% 50% at 100% 0%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 45%),
-    linear-gradient(180deg, #0c0d11 0%, var(--bg) 40%);
-  transition: background 0.65s ease;
+    linear-gradient(180deg, var(--workspace-base) 0%, var(--bg) 40%);
+  transition:
+    color 300ms ease-in-out,
+    background-color 300ms ease-in-out,
+    border-color 300ms ease-in-out,
+    background 300ms ease-in-out;
 }
 
 .app-topbar {
@@ -186,6 +277,91 @@ a.app-topbar-link:focus-visible,
   background: transparent;
   color: var(--text);
   border-bottom-color: var(--accent);
+}
+
+/* Icon chrome — keep text links available for secondary surfaces */
+a.app-topbar-icon,
+button.app-topbar-icon,
+.app-topbar-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  max-width: 40px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
+  flex-shrink: 0;
+  overflow: visible;
+  transition: color 0.15s ease, background 0.15s ease;
+}
+
+a.app-topbar-icon:hover,
+a.app-topbar-icon:focus-visible,
+button.app-topbar-icon:hover,
+button.app-topbar-icon:focus-visible,
+.app-topbar-icon:hover,
+.app-topbar-icon:focus-visible {
+  color: var(--text);
+  background: var(--accent-soft);
+  border-bottom-color: transparent;
+}
+
+.app-topbar-icon .material-symbols-outlined {
+  font-size: 22px;
+}
+
+/* Fast tooltips (~120ms delay) for top-bar icon chrome */
+.app-topbar-icon[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) translateY(-2px);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 80ms ease 120ms,
+    transform 80ms ease 120ms;
+  z-index: 70;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--bg) 40%, transparent);
+}
+
+.app-topbar-icon:hover[data-tooltip]::after,
+.app-topbar-icon:focus-visible[data-tooltip]::after {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html,
+  body,
+  .app-root.workspace {
+    transition: none;
+  }
+
+  .app-topbar-icon[data-tooltip]::after {
+    transition: none;
+  }
 }
 
 .workspace-banner {
@@ -2819,6 +2995,14 @@ button.ghost.inline-link {
     padding: var(--space-2) 0;
   }
 
+  a.app-topbar-icon,
+  button.app-topbar-icon,
+  .app-topbar-icon {
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+  }
+
   .workspace-body {
     position: relative;
     flex: 1;
@@ -3154,8 +3338,8 @@ button.ghost.inline-link {
   padding: 10px;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(20, 25, 37, 0.98);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  background: color-mix(in srgb, var(--surface-raised) 98%, transparent);
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--bg) 45%, transparent);
   display: grid;
   gap: 6px;
   z-index: 60;
@@ -5053,26 +5237,30 @@ button.ghost.inline-link {
   gap: var(--space-2);
 }
 
-/* Profile font size */
-.settings-font-size {
+/* Profile font size / theme segmented controls */
+.settings-font-size,
+.settings-ui-theme {
   border: 0;
   margin: var(--space-4) 0;
   padding: 0;
 }
 
-.settings-font-size legend {
+.settings-font-size legend,
+.settings-ui-theme legend {
   font-weight: 600;
   margin-bottom: var(--space-2);
 }
 
-.settings-font-size-options {
+.settings-font-size-options,
+.settings-ui-theme-options {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-2);
 }
 
-.settings-font-option {
+.settings-font-option,
+.settings-theme-option {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -5082,7 +5270,16 @@ button.ghost.inline-link {
   cursor: pointer;
 }
 
-.settings-font-option.selected {
+.settings-font-option.selected,
+.settings-theme-option.selected {
   border-color: var(--accent);
   background: var(--accent-soft);
+}
+
+.explore-stub-main {
+  max-width: var(--reading-column-max);
+  margin: 0 auto;
+  padding: var(--space-7) var(--gutter);
+  display: grid;
+  gap: var(--space-4);
 }

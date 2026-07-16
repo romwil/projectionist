@@ -89,6 +89,22 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
         again = self.client.get("/api/auth/me")
         self.assertEqual(again.json()["user"]["ui_font_size"], "large")
 
+    def test_ui_theme_preference_round_trip(self) -> None:
+        me = self.client.get("/api/auth/me")
+        self.assertEqual(me.status_code, 200)
+        self.assertEqual(me.json()["user"].get("ui_theme", "system"), "system")
+
+        patched = self.client.patch("/api/auth/me", json={"ui_theme": "lights_down"})
+        self.assertEqual(patched.status_code, 200)
+        self.assertEqual(patched.json()["user"]["ui_theme"], "lights_down")
+
+        again = self.client.get("/api/auth/me")
+        self.assertEqual(again.json()["user"]["ui_theme"], "lights_down")
+
+        up = self.client.patch("/api/auth/me", json={"ui_theme": "lights_up"})
+        self.assertEqual(up.status_code, 200)
+        self.assertEqual(up.json()["user"]["ui_theme"], "lights_up")
+
     def test_library_stats_include_plex_server_name(self) -> None:
         path = Path(self._tmpdir.name) / "settings.json"
         path.write_text(

@@ -23,9 +23,10 @@ export default function SettingsLayout() {
         const features = await getFeatures();
         const multiUser = Boolean(features?.features?.multi_user_enabled);
         const me = await getAuthMe().catch(() => null);
-        if (me?.user?.ui_font_size) {
-          const { applyUiFontSize } = await import("../lib/uiPrefs.js");
-          applyUiFontSize(me.user.ui_font_size);
+        if (me?.user?.ui_font_size || me?.user?.ui_theme) {
+          const { applyUiFontSize, applyUiTheme } = await import("../lib/uiPrefs.js");
+          if (me.user.ui_font_size) applyUiFontSize(me.user.ui_font_size);
+          if (me.user.ui_theme) applyUiTheme(me.user.ui_theme);
         }
         if (!multiUser) {
           if (!cancelled) {

@@ -11,6 +11,7 @@ import {
   getAuthMe,
   getEngagementStreak,
   getFeatures,
+  patchAuthMe,
   getThreadFeedback,
   getThreadMessages,
   getTypingPhrases,
@@ -61,7 +62,15 @@ import {
   resolveDockDropTarget,
 } from "./lib/easterEggs.js";
 import { extractSpeakableText } from "./lib/voiceSpeech.js";
-import { applyUiFontSize } from "./lib/uiPrefs.js";
+import {
+  applyUiFontSize,
+  applyUiTheme,
+  cycleUiTheme,
+  loadStoredUiTheme,
+  normalizeUiTheme,
+  themeControlIcon,
+  themePreferenceLabel,
+} from "./lib/uiPrefs.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import ChatThread from "./components/ChatThread";
 import InlineAlert from "./components/InlineAlert";
@@ -112,6 +121,7 @@ function appendPerfectPickAck(message) {
 
 export default function App() {
   const { authReady, multiUserEnabled, isOwner } = useAuthGate();
+  const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
   const [messages, setMessages] = useState([]);
   const [messageFeedback, setMessageFeedback] = useState({});
   const [threads, setThreads] = useState([]);
@@ -493,10 +503,16 @@ export default function App() {
     refreshTypingPhrases();
     refreshPersonas();
     refreshRecommendations();
+    applyUiTheme(loadStoredUiTheme());
     getAuthMe()
       .then((payload) => {
         if (payload?.user?.ui_font_size) {
           applyUiFontSize(payload.user.ui_font_size);
+        }
+        if (payload?.user?.ui_theme) {
+          const nextTheme = normalizeUiTheme(payload.user.ui_theme);
+          setUiTheme(nextTheme);
+          applyUiTheme(nextTheme);
         }
       })
       .catch(() => {});
@@ -515,6 +531,14 @@ export default function App() {
     refreshTypingPhrases,
     refreshWatchlist,
   ]);
+
+  useEffect(() => {
+    if (uiTheme !== "system" || typeof window === "undefined" || !window.matchMedia) return undefined;
+    const mq = window.matchMedia("(prefers-color-scheme: light)");
+    const onChange = () => applyUiTheme("system");
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [uiTheme]);
 
   useEffect(() => {
     const running = jobs.some((job) => job.status === "running" || job.status === "queued");
@@ -1163,13 +1187,61 @@ export default function App() {
               ★ {watchlistPins.length} pinned
             </button>
           ) : null}
+          <Link
+            to="/explore"
+            className="app-topbar-icon"
+            data-testid="topbar-explore-link"
+            aria-label="Explore"
+            data-tooltip="Explore"
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              explore
+            </span>
+          </Link>
+          <button
+            type="button"
+            className="app-topbar-icon"
+            data-testid="topbar-theme-toggle"
+            aria-label={`Theme: ${themePreferenceLabel(uiTheme)}. Click to change.`}
+            data-tooltip={themePreferenceLabel(uiTheme)}
+            onClick={async () => {
+              const next = cycleUiTheme(uiTheme);
+              setUiTheme(next);
+              applyUiTheme(next);
+              try {
+                await patchAuthMe({ ui_theme: next });
+              } catch {
+                // Persist locally even if auth/profile API is unavailable
+              }
+            }}
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              {themeControlIcon(uiTheme)}
+            </span>
+          </button>
           {isOwner ? (
-            <Link to="/admin" className="app-topbar-link" data-testid="topbar-admin-link">
-              Admin
+            <Link
+              to="/admin"
+              className="app-topbar-icon"
+              data-testid="topbar-admin-link"
+              aria-label="Admin"
+              data-tooltip="Admin"
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">
+                admin_panel_settings
+              </span>
             </Link>
           ) : null}
-          <Link to="/settings" className="app-topbar-link" data-testid="topbar-settings-link">
-            Settings
+          <Link
+            to="/settings"
+            className="app-topbar-icon"
+            data-testid="topbar-settings-link"
+            aria-label="Settings"
+            data-tooltip="Settings"
+          >
+            <span className="material-symbols-outlined" aria-hidden="true">
+              settings
+            </span>
           </Link>
           {multiUserEnabled ? <UserMenu /> : null}
         </div>
