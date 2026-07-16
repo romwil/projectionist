@@ -25,6 +25,8 @@ MOVIE_TMDB_DETAILS = {
     "vote_average": 8.1,
     "original_language": "en",
     "runtime": 117,
+    "overview": "In a dystopian future, Deckard hunts synthetic humans.",
+    "tagline": "Man has made his match... now it's his problem.",
     "belongs_to_collection": {"id": 10, "name": "Blade Runner Collection"},
     "production_countries": [{"iso_3166_1": "US", "name": "United States of America"}],
     "production_companies": [
@@ -107,6 +109,9 @@ class MetadataMigrationTests(unittest.TestCase):
                         "status",
                         "networks",
                         "production_companies",
+                        "tmdb_overview",
+                        "tagline",
+                        "llm_logline",
                     }.issubset(cols)
                 )
                 indexes = {
@@ -191,6 +196,48 @@ class MetadataUpsertTests(unittest.TestCase):
             assert row is not None
             self.assertEqual(row["release_date"], "2000-01-15")
             self.assertEqual(row["status"], "Released")
+
+    def test_upsert_persists_plot_text_fields(self) -> None:
+        """Placeholder/param alignment: overview, tagline, llm_logline round-trip."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            overview = "In a dystopian future, Deckard hunts synthetic humans."
+            tagline = "Man has made his match... now it's his problem."
+            logline = "A weary hunter confronts what it means to be human."
+            item_id = db.upsert_library_item(
+                {
+                    "rating_key": "rk-plot",
+                    "media_type": "movie",
+                    "title": "Blade Runner",
+                    "year": 1982,
+                    "tmdb_id": 78,
+                    "tmdb_overview": overview,
+                    "tagline": tagline,
+                    "llm_logline": logline,
+                }
+            )
+            self.assertGreater(item_id, 0)
+            row = db.library_item_by_id(item_id)
+            assert row is not None
+            self.assertEqual(row["tmdb_overview"], overview)
+            self.assertEqual(row["tagline"], tagline)
+            self.assertEqual(row["llm_logline"], logline)
+
+            # Empty strings on re-upsert must not clobber existing plot text.
+            db.upsert_library_item(
+                {
+                    "rating_key": "rk-plot",
+                    "media_type": "movie",
+                    "title": "Blade Runner",
+                    "year": 1982,
+                    "tmdb_id": 78,
+                }
+            )
+            kept = db.library_item_by_id(item_id)
+            assert kept is not None
+            self.assertEqual(kept["tmdb_overview"], overview)
+            self.assertEqual(kept["tagline"], tagline)
+            self.assertEqual(kept["llm_logline"], logline)
 
 
 class PeopleCreditsTests(unittest.TestCase):
@@ -302,6 +349,11 @@ class ApplyTmdbEnrichmentTests(unittest.TestCase):
         self.assertEqual(row["production_companies"], ["Warner Bros. Pictures", "The Ladd Company"])
         self.assertEqual(row["cast"], ["Harrison Ford", "Rutger Hauer"])
         self.assertEqual(row["directors"], ["Ridley Scott"])
+        self.assertEqual(
+            row["tmdb_overview"],
+            "In a dystopian future, Deckard hunts synthetic humans.",
+        )
+        self.assertEqual(row["tagline"], "Man has made his match... now it's his problem.")
         structured = row["structured_credits"]
         self.assertEqual(len(structured), 3)
         self.assertEqual(structured[0]["tmdb_person_id"], 3)
@@ -334,6 +386,11 @@ class ApplyTmdbEnrichmentTests(unittest.TestCase):
         )
         self.assertEqual(row["release_date"], "1982-06-25")
         self.assertEqual(row["tmdb_collection_id"], 10)
+        self.assertEqual(
+            row["tmdb_overview"],
+            "In a dystopian future, Deckard hunts synthetic humans.",
+        )
+        self.assertEqual(row["tagline"], "Man has made his match... now it's his problem.")
         self.assertIn("structured_credits", row)
         self.assertGreaterEqual(len(row["structured_credits"]), 2)
 

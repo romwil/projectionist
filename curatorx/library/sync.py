@@ -327,6 +327,13 @@ def _apply_tmdb_enrichment(
     if companies:
         row["production_companies"] = companies
 
+    overview = str(details.get("overview") or "").strip()
+    if overview:
+        row["tmdb_overview"] = overview
+    tagline = str(details.get("tagline") or "").strip()
+    if tagline:
+        row["tagline"] = tagline
+
     if media_type == "movie":
         runtime = details.get("runtime")
         if runtime:
@@ -431,6 +438,8 @@ def _row_from_plex_item(
     status = ""
     networks: list[str] = []
     production_companies: list[str] = []
+    tmdb_overview = ""
+    tagline = ""
     structured_credits: list[dict] = []
 
     if tmdb and tmdb_id:
@@ -486,6 +495,8 @@ def _row_from_plex_item(
             status = row_stub.get("status") or ""
             networks = row_stub.get("networks") or []
             production_companies = row_stub.get("production_companies") or []
+            tmdb_overview = row_stub.get("tmdb_overview") or ""
+            tagline = row_stub.get("tagline") or ""
             structured_credits = row_stub.get("structured_credits") or []
         except RuntimeError as error:
             logger.debug(
@@ -554,6 +565,8 @@ def _row_from_plex_item(
         "status": status,
         "networks": networks,
         "production_companies": production_companies,
+        "tmdb_overview": tmdb_overview,
+        "tagline": tagline,
     }
     if structured_credits:
         result["structured_credits"] = structured_credits

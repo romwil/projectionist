@@ -333,6 +333,9 @@ class Database:
             self._migrate_recommendations(conn)
             self._migrate_library_metadata_enrichment(conn)
             self._migrate_people_credits(conn)
+            self._migrate_plot_text_columns(conn)
+            self._migrate_embeddings_model(conn)
+            self._migrate_item_neighbors(conn)
             self._seed_defaults(conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
@@ -505,6 +508,53 @@ class Database:
             );
             CREATE INDEX IF NOT EXISTS idx_credits_person ON credits(person_id);
             CREATE INDEX IF NOT EXISTS idx_credits_item ON credits(item_id);
+            """
+        )
+
+    def _migrate_plot_text_columns(self, conn: sqlite3.Connection) -> None:
+        """Layered plot text for embeddings (Stage 2): TMDB overview/tagline + optional LLM logline.
+
+        ``summary`` remains the Plex/local blurb.  ``tmdb_overview`` and ``tagline`` are
+        filled from TMDB during sync/trickle.  ``llm_logline`` stays empty unless an LLM
+        is configured and the optional idle task runs — never invent plot text.
+        """
+        cols = self._table_columns(conn, "library_items")
+        for name, typedef in {
+            "tmdb_overview": "TEXT DEFAULT ''",
+            "tagline": "TEXT DEFAULT ''",
+            "llm_logline": "TEXT DEFAULT ''",
+        }.items():
+            if name not in cols:
+                conn.execute(f"ALTER TABLE library_items ADD COLUMN {name} {typedef}")
+
+    def _migrate_embeddings_model(self, conn: sqlite3.Connection) -> None:
+        """Record which embedding model produced each vector (hygiene for rebuilds)."""
+        cols = self._table_columns(conn, "embeddings")
+        if "embedding_model" not in cols:
+            conn.execute("ALTER TABLE embeddings ADD COLUMN embedding_model TEXT DEFAULT ''")
+
+    def _migrate_item_neighbors(self, conn: sqlite3.Connection) -> None:
+        """Cached plot neighbors + surprise scores (Stage 3).
+
+        v1 fills this via pure-Python cosine over stored embeddings (idle trickle).
+        Future: optional sqlite-vec ANN index can prefilter candidates before scoring;
+        keep this table as the read cache either way so Explore/Plot Lab stay cheap.
+        """
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS item_neighbors (
+                item_id INTEGER NOT NULL,
+                neighbor_id INTEGER NOT NULL,
+                score REAL NOT NULL DEFAULT 0,
+                surprise_score REAL NOT NULL DEFAULT 0,
+                PRIMARY KEY (item_id, neighbor_id),
+                FOREIGN KEY(item_id) REFERENCES library_items(id) ON DELETE CASCADE,
+                FOREIGN KEY(neighbor_id) REFERENCES library_items(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_neighbors_item_score
+                ON item_neighbors(item_id, score DESC);
+            CREATE INDEX IF NOT EXISTS idx_neighbors_item_surprise
+                ON item_neighbors(item_id, surprise_score DESC);
             """
         )
 
@@ -1602,6 +1652,9 @@ class Database:
             item.get("status", "") or "",
             json.dumps(item.get("networks", [])),
             json.dumps(item.get("production_companies", [])),
+            item.get("tmdb_overview", "") or "",
+            item.get("tagline", "") or "",
+            item.get("llm_logline", "") or "",
             now,
         )
 
@@ -1618,8 +1671,9 @@ class Database:
                     release_date, first_air_date, last_air_date,
                     tmdb_collection_id, collection_name, status,
                     networks, production_companies,
+                    tmdb_overview, tagline, llm_logline,
                     updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(rating_key) DO UPDATE SET
                     media_type=excluded.media_type,
                     title=excluded.title,
@@ -1682,6 +1736,18 @@ class Database:
                     production_companies=CASE
                         WHEN excluded.production_companies != '[]' THEN excluded.production_companies
                         ELSE library_items.production_companies
+                    END,
+                    tmdb_overview=CASE
+                        WHEN excluded.tmdb_overview != '' THEN excluded.tmdb_overview
+                        ELSE library_items.tmdb_overview
+                    END,
+                    tagline=CASE
+                        WHEN excluded.tagline != '' THEN excluded.tagline
+                        ELSE library_items.tagline
+                    END,
+                    llm_logline=CASE
+                        WHEN excluded.llm_logline != '' THEN excluded.llm_logline
+                        ELSE library_items.llm_logline
                     END,
                     updated_at=excluded.updated_at
                 """
@@ -1911,18 +1977,20 @@ class Database:
             )
 
     def items_needing_metadata_enrichment(self, *, limit: int = 25) -> List[sqlite3.Row]:
-        """Library rows with a TMDB id but missing release/air dates (trickle backlog)."""
+        """Library rows with a TMDB id but missing dates and/or plot text (trickle backlog)."""
         with self.connect() as conn:
             return list(
                 conn.execute(
                     """
                     SELECT id, rating_key, media_type, title, tmdb_id,
-                           release_date, first_air_date, last_air_date
+                           release_date, first_air_date, last_air_date,
+                           tmdb_overview, tagline
                     FROM library_items
                     WHERE tmdb_id IS NOT NULL
                       AND (
                         (media_type = 'movie' AND (release_date IS NULL OR release_date = ''))
                         OR (media_type = 'show' AND (first_air_date IS NULL OR first_air_date = ''))
+                        OR tmdb_overview IS NULL OR tmdb_overview = ''
                       )
                     ORDER BY updated_at ASC
                     LIMIT ?
@@ -1937,38 +2005,211 @@ class Database:
     def set_embeddings(
         self,
         items: Sequence[Tuple[int, Sequence[float]]] | Sequence[Tuple[int, Sequence[float], str]],
+        *,
+        embedding_model: str = "",
     ) -> None:
         """Write many embedding vectors in a single transaction.
 
         Each item is ``(item_id, vector)`` or ``(item_id, vector, content_hash)``.
+        ``embedding_model`` records which model produced the batch (empty keeps prior).
         """
         if not items:
             return
 
-        normalized: list[Tuple[int, str, Optional[str]]] = []
+        model = str(embedding_model or "").strip()
+        normalized: list[Tuple[int, str, Optional[str], str]] = []
         for entry in items:
             if len(entry) == 3:
                 item_id, vector, content_hash = entry  # type: ignore[misc]
                 normalized.append(
-                    (int(item_id), json.dumps(list(vector)), str(content_hash or "") or None)
+                    (int(item_id), json.dumps(list(vector)), str(content_hash or "") or None, model)
                 )
             else:
                 item_id, vector = entry  # type: ignore[misc]
-                normalized.append((int(item_id), json.dumps(list(vector)), None))
+                normalized.append((int(item_id), json.dumps(list(vector)), None, model))
 
         def _write() -> None:
             with self.connect() as conn:
                 conn.executemany(
                     """
-                    INSERT INTO embeddings (item_id, vector, content_hash) VALUES (?, ?, ?)
+                    INSERT INTO embeddings (item_id, vector, content_hash, embedding_model)
+                    VALUES (?, ?, ?, ?)
                     ON CONFLICT(item_id) DO UPDATE SET
                         vector = excluded.vector,
-                        content_hash = COALESCE(excluded.content_hash, embeddings.content_hash)
+                        content_hash = COALESCE(excluded.content_hash, embeddings.content_hash),
+                        embedding_model = CASE
+                            WHEN excluded.embedding_model != '' THEN excluded.embedding_model
+                            ELSE embeddings.embedding_model
+                        END
                     """,
                     normalized,
                 )
 
         run_with_db_lock_retry(_write, label="set_embeddings")
+
+    def set_neighbors(
+        self,
+        item_id: int,
+        neighbors: Sequence[Tuple[int, float, float]],
+    ) -> None:
+        """Replace neighbor rows for ``item_id``.
+
+        Each neighbor is ``(neighbor_id, score, surprise_score)``.
+        """
+        seed = int(item_id)
+        rows = [
+            (seed, int(neighbor_id), float(score), float(surprise_score))
+            for neighbor_id, score, surprise_score in neighbors
+            if int(neighbor_id) != seed
+        ]
+
+        def _write() -> None:
+            with self.connect() as conn:
+                conn.execute("DELETE FROM item_neighbors WHERE item_id = ?", (seed,))
+                if rows:
+                    conn.executemany(
+                        """
+                        INSERT INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
+                        VALUES (?, ?, ?, ?)
+                        """,
+                        rows,
+                    )
+
+        run_with_db_lock_retry(_write, label="set_neighbors")
+
+    def get_neighbors(
+        self,
+        item_id: int,
+        *,
+        mode: str = "similar",
+        limit: int = 20,
+    ) -> List[sqlite3.Row]:
+        """Return cached neighbors ordered by cosine (``similar``) or surprise score."""
+        capped = min(max(1, int(limit or 20)), 100)
+        order_col = "surprise_score" if str(mode or "").strip().lower() == "surprising" else "score"
+        with self.connect() as conn:
+            return list(
+                conn.execute(
+                    f"""
+                    SELECT
+                        n.item_id,
+                        n.neighbor_id,
+                        n.score,
+                        n.surprise_score,
+                        li.rating_key,
+                        li.media_type,
+                        li.title,
+                        li.year,
+                        li.poster_url,
+                        li.backdrop_url,
+                        li.tmdb_id,
+                        li.tvdb_id,
+                        li.summary,
+                        li.genres,
+                        li.view_count,
+                        li.in_radarr,
+                        li.in_sonarr,
+                        li.runtime_minutes
+                    FROM item_neighbors n
+                    JOIN library_items li ON li.id = n.neighbor_id
+                    WHERE n.item_id = ?
+                    ORDER BY n.{order_col} DESC
+                    LIMIT ?
+                    """,
+                    (int(item_id), capped),
+                ).fetchall()
+            )
+
+    def items_needing_llm_logline(self, *, limit: int = 10) -> List[sqlite3.Row]:
+        """Rows with plot text but empty ``llm_logline`` (optional LLM enrichment backlog)."""
+        with self.connect() as conn:
+            return list(
+                conn.execute(
+                    """
+                    SELECT id, rating_key, media_type, title, year, summary,
+                           tmdb_overview, tagline, llm_logline
+                    FROM library_items
+                    WHERE (llm_logline IS NULL OR llm_logline = '')
+                      AND (
+                        (summary IS NOT NULL AND summary != '')
+                        OR (tmdb_overview IS NOT NULL AND tmdb_overview != '')
+                      )
+                    ORDER BY updated_at ASC
+                    LIMIT ?
+                    """,
+                    (max(1, int(limit)),),
+                ).fetchall()
+            )
+
+    def set_llm_logline(self, item_id: int, logline: str) -> None:
+        cleaned = str(logline or "").strip()
+        if not cleaned:
+            return
+
+        def _write() -> None:
+            with self.connect() as conn:
+                conn.execute(
+                    """
+                    UPDATE library_items
+                    SET llm_logline = ?, updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (cleaned, time.time(), int(item_id)),
+                )
+
+        run_with_db_lock_retry(_write, label="set_llm_logline")
+
+    def replace_facets_of_type(
+        self,
+        facet_type: str,
+        rows: Sequence[Tuple[int, str, str]],
+    ) -> int:
+        """Replace all facets of one type (e.g. motif) without touching other types."""
+        cleaned_type = str(facet_type or "").strip().lower()
+        if not cleaned_type:
+            return 0
+        normalized = [
+            (int(item_id), cleaned_type, str(value).strip())
+            for item_id, _ftype, value in rows
+            if str(value or "").strip()
+        ]
+
+        def _write() -> int:
+            with self.connect() as conn:
+                conn.execute(
+                    "DELETE FROM library_facets WHERE facet_type = ?",
+                    (cleaned_type,),
+                )
+                if normalized:
+                    conn.executemany(
+                        """
+                        INSERT INTO library_facets (item_id, facet_type, facet_value)
+                        VALUES (?, ?, ?)
+                        """,
+                        normalized,
+                    )
+            return len(normalized)
+
+        return run_with_db_lock_retry(_write, label="replace_facets_of_type")
+
+    def credit_person_ids_by_item(self, item_ids: Sequence[int]) -> Dict[int, set[int]]:
+        """Map library item_id → set of local people.id for Jaccard surprise scoring."""
+        ids = [int(i) for i in item_ids if i is not None]
+        if not ids:
+            return {}
+        out: Dict[int, set[int]] = {i: set() for i in ids}
+        placeholders = ", ".join("?" for _ in ids)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT item_id, person_id FROM credits
+                WHERE item_id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+        for row in rows:
+            out.setdefault(int(row["item_id"]), set()).add(int(row["person_id"]))
+        return out
 
     def embedding_content_hashes(self) -> Dict[int, str]:
         """Return item_id → content_hash for rows that have a stored hash."""
@@ -2324,11 +2565,14 @@ class Database:
             )
 
     def replace_library_facets(self, rows: Sequence[Tuple[int, str, str]]) -> int:
-        """Delete all facets and bulk-insert ``rows`` in a single transaction."""
+        """Bulk-replace sync-managed facets; preserve idle-derived types like ``motif``."""
 
         def _write() -> int:
             with self.connect() as conn:
-                conn.execute("DELETE FROM library_facets")
+                # Motifs come from summary_motifs idle task — do not wipe them on sync rebuild.
+                conn.execute(
+                    "DELETE FROM library_facets WHERE facet_type NOT IN ('motif')"
+                )
                 if rows:
                     conn.executemany(
                         """
