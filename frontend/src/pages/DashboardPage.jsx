@@ -175,20 +175,20 @@ export default function DashboardPage() {
   const staleAdds = hlth?.stale_adds ?? 0;
   const ratingCoverage = hlth?.rating_coverage_pct ?? 0;
 
-  const streakCount = streak.data?.streak ?? streak.data?.count ?? streak.data?.sessions ?? 0;
+  const streakCount = streak.data?.streak ?? streak.data?.session_count_30d ?? streak.data?.count ?? streak.data?.sessions ?? 0;
 
   const tvShows = Array.isArray(tv.data)
     ? tv.data
-    : tv.data?.shows ?? tv.data?.progress ?? [];
+    : tv.data?.shows ?? tv.data?.buckets ?? tv.data?.progress ?? [];
   const topTv = tvShows.slice(0, 5);
 
   const purgeCandidates = Array.isArray(purge.data)
     ? purge.data
-    : purge.data?.candidates ?? [];
+    : purge.data?.candidates ?? purge.data?.items ?? [];
 
   const recentReviews = Array.isArray(reviews.data)
     ? reviews.data
-    : reviews.data?.reviews ?? [];
+    : reviews.data?.reviews ?? reviews.data?.items ?? [];
 
   return (
     <div className="dash-page" data-testid="dashboard-page">
@@ -295,11 +295,13 @@ export default function DashboardPage() {
               {topTv.map((show) => (
                 <ProgressBar
                   key={show.title || show.name || show.show_title}
-                  value={show.completion ?? show.progress ?? 0}
+                  value={show.completion ?? show.completion_percent ?? show.progress ?? 0}
                   label={show.title || show.name || show.show_title || "Unknown"}
                   detail={show.detail || (show.seasons_watched != null
                     ? `${show.seasons_watched}/${show.seasons_total} seasons`
-                    : undefined)}
+                    : show.watched_episodes != null && show.total_episodes != null
+                      ? `${show.watched_episodes}/${show.total_episodes} episodes`
+                      : undefined)}
                 />
               ))}
             </div>
@@ -320,26 +322,29 @@ export default function DashboardPage() {
       <Panel title="Recent Preference Signals" loading={reviews.loading} error={reviews.error}>
         {recentReviews.length ? (
           <ul className="dash-timeline">
-            {recentReviews.slice(0, 10).map((r, i) => (
-              <li key={r.id ?? i} className="dash-timeline-item">
-                <span className="dash-timeline-icon">
-                  {r.rating ? "★" : r.dismissed ? "✕" : "♥"}
-                </span>
-                <div className="dash-timeline-body">
-                  <strong>{r.title || r.media_title || "Untitled"}</strong>
-                  {r.rating ? (
-                    <span className="dash-timeline-meta">{r.rating}/10</span>
-                  ) : null}
-                  {r.review_text ? (
-                    <span className="dash-timeline-detail">
-                      {r.review_text.length > 80
-                        ? r.review_text.slice(0, 77) + "…"
-                        : r.review_text}
-                    </span>
-                  ) : null}
-                </div>
-              </li>
-            ))}
+            {recentReviews.slice(0, 10).map((r, i) => {
+              const starVal = r.stars ?? r.rating;
+              return (
+                <li key={r.id ?? i} className="dash-timeline-item">
+                  <span className="dash-timeline-icon">
+                    {starVal ? "★" : r.dismissed ? "✕" : "♥"}
+                  </span>
+                  <div className="dash-timeline-body">
+                    <strong>{r.title || r.media_title || "Untitled"}</strong>
+                    {starVal ? (
+                      <span className="dash-timeline-meta">{starVal}/10</span>
+                    ) : null}
+                    {r.review_text ? (
+                      <span className="dash-timeline-detail">
+                        {r.review_text.length > 80
+                          ? r.review_text.slice(0, 77) + "…"
+                          : r.review_text}
+                      </span>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="dash-empty">No recent preference signals.</p>
@@ -351,9 +356,12 @@ export default function DashboardPage() {
 
 function extractAggData(raw) {
   if (!raw) return [];
-  const arr = Array.isArray(raw) ? raw : raw.groups ?? raw.data ?? raw.results ?? [];
+  const arr = Array.isArray(raw)
+    ? raw
+    : raw.buckets ?? raw.groups ?? raw.data ?? raw.results ?? [];
   return arr.map((d) => ({
-    label: d.label ?? d.group ?? d.name ?? d.decade ?? d.key ?? String(d.value ?? ""),
-    value: d.count ?? d.value ?? d.total ?? 0,
+    label:
+      d.label ?? d.group ?? d.name ?? d.decade ?? d.genre ?? d.bucket ?? d.key ?? String(d.value ?? ""),
+    value: d.count ?? d.total ?? 0,
   }));
 }

@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.7.11] — 2026-07-15
+
+### Fixed
+- Owner dashboard: Decade Distribution, Top Genres, Countries, Languages, and Runtime Distribution charts now populate correctly (frontend was reading `groups`/`data` instead of backend's `buckets`)
+- Owner dashboard: Purge Candidates table now shows structured data with file size, purge score, and reasons
+- Owner dashboard: Engagement Streak, TV Completion, and Reviews timeline panels now map correct field names from backend responses
+- Runtime Distribution chart shows human-readable labels instead of raw bucket names
+
 ## [1.7.10] — 2026-07-15
 
 ### Fixed

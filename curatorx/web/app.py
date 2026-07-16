@@ -116,7 +116,7 @@ from curatorx.persona import (
     persona_row_to_dict,
 )
 from curatorx.persona.presets import persona_ui_for, typing_phrases_for
-from curatorx.preferences.purge import suggest_purge_candidates
+from curatorx.preferences.purge import suggest_purge_candidates, suggest_purge_candidates_rich
 from curatorx.preferences.store import remember_preference
 from curatorx.reviews.store import (
     dismiss_prompt,
@@ -1277,10 +1277,10 @@ def library_purge_candidates(
     limit: int = 12,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    cards = suggest_purge_candidates(_db(), _settings(), limit=min(max(1, limit), 25))
+    items = suggest_purge_candidates_rich(_db(), _settings(), limit=min(max(1, limit), 25))
     payload = {
-        "count": len(cards),
-        "items": [card.model_dump() for card in cards],
+        "count": len(items),
+        "items": items,
     }
     return _sanitize_library_payload(payload, user)
 
