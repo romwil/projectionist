@@ -17,15 +17,94 @@ from curatorx.library.query import row_to_query_item
 
 DEFAULT_FEED_LIMIT = 12
 MAX_FEED_LIMIT = 48
+MAX_PAGE_LIMIT = 100
 MILESTONE_AGES = (5, 10, 15, 20, 25, 30, 40, 50, 75)
 
 
-def _cap_limit(limit: Optional[int], *, default: int = DEFAULT_FEED_LIMIT) -> int:
-    return min(max(1, int(limit if limit is not None else default)), MAX_FEED_LIMIT)
+def _cap_limit(
+    limit: Optional[int],
+    *,
+    default: int = DEFAULT_FEED_LIMIT,
+    max_limit: int = MAX_FEED_LIMIT,
+) -> int:
+    return min(max(1, int(limit if limit is not None else default)), max_limit)
+
+
+def _cap_offset(offset: Optional[int]) -> int:
+    return max(0, int(offset if offset is not None else 0))
+
+
+def _normalize_media_type(media_type: Optional[str]) -> Optional[str]:
+    normalized = str(media_type or "").strip().lower()
+    if normalized in {"movie", "movies"}:
+        return "movie"
+    if normalized in {"show", "shows", "tv"}:
+        return "show"
+    return None
 
 
 def _cap_days(days: Optional[int], *, default: int = 30) -> int:
     return min(max(1, int(days if days is not None else default)), 3650)
+
+
+def _recent_releases_where_sql(
+    earliest_iso: str,
+    today_iso: str,
+    *,
+    media_type: Optional[str] = None,
+) -> tuple[str, tuple[Any, ...]]:
+    """Shared WHERE clause for recent-releases count + page queries."""
+    media_filter = _normalize_media_type(media_type)
+    params: List[Any] = []
+    if media_filter == "movie":
+        return (
+            """
+            (release_date IS NOT NULL AND release_date != ''
+             AND release_date >= ? AND release_date <= ?)
+            """,
+            (earliest_iso, today_iso),
+        )
+    if media_filter == "show":
+        return (
+            """
+            (first_air_date IS NOT NULL AND first_air_date != ''
+             AND first_air_date >= ? AND first_air_date <= ?)
+            """,
+            (earliest_iso, today_iso),
+        )
+    params = (
+        earliest_iso,
+        today_iso,
+        earliest_iso,
+        today_iso,
+        earliest_iso,
+        today_iso,
+        earliest_iso,
+        today_iso,
+    )
+    return (
+        """
+        (
+            (media_type = 'movie'
+             AND release_date IS NOT NULL AND release_date != ''
+             AND release_date >= ? AND release_date <= ?)
+            OR
+            (media_type = 'show'
+             AND first_air_date IS NOT NULL AND first_air_date != ''
+             AND first_air_date >= ? AND first_air_date <= ?)
+            OR
+            (media_type NOT IN ('movie', 'show')
+             AND (
+               (release_date IS NOT NULL AND release_date != ''
+                AND release_date >= ? AND release_date <= ?)
+               OR
+               (first_air_date IS NOT NULL AND first_air_date != ''
+                AND first_air_date >= ? AND first_air_date <= ?)
+             ))
+        )
+        """,
+        params,
+    )
 
 
 def _parse_iso_date(raw: Any) -> Optional[date]:
@@ -68,20 +147,35 @@ def feed_recently_added(
     *,
     limit: int = DEFAULT_FEED_LIMIT,
     days: int = 30,
+    offset: int = 0,
+    media_type: Optional[str] = None,
 ) -> Dict[str, Any]:
-    capped = _cap_limit(limit)
+    capped = _cap_limit(limit, max_limit=MAX_PAGE_LIMIT)
+    off = _cap_offset(offset)
     window = _cap_days(days)
     cutoff = int(time.time()) - window * 86400
+    media_filter = _normalize_media_type(media_type)
+    where_parts = ["added_at IS NOT NULL", "added_at >= ?"]
+    params: List[Any] = [cutoff]
+    if media_filter:
+        where_parts.append("media_type = ?")
+        params.append(media_filter)
+    where_sql = " AND ".join(where_parts)
     with db.connect() as conn:
+        count_row = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM library_items WHERE {where_sql}",
+            tuple(params),
+        ).fetchone()
+        total = int(count_row["cnt"] or 0)
         rows = conn.execute(
-            """
+            f"""
             SELECT *
             FROM library_items
-            WHERE added_at IS NOT NULL AND added_at >= ?
+            WHERE {where_sql}
             ORDER BY added_at DESC, title ASC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            (cutoff, capped),
+            tuple(params) + (capped, off),
         ).fetchall()
     items = [_feed_item(row) for row in rows]
     note = None
@@ -94,7 +188,11 @@ def feed_recently_added(
         "feed": "recently-added",
         "days": window,
         "items": items,
-        "total": len(items),
+        "total": total,
+        "offset": off,
+        "limit": capped,
+        "has_more": off + len(items) < total,
+        "media_type": media_filter,
         "note": note,
     }
 
@@ -104,17 +202,21 @@ def feed_recent_releases(
     *,
     limit: int = DEFAULT_FEED_LIMIT,
     days: int = 90,
+    offset: int = 0,
+    media_type: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Titles whose release/first-air date falls within the last ``days``.
 
     Returns an honest empty list when the library has no enriched dates.
     """
-    capped = _cap_limit(limit)
+    capped = _cap_limit(limit, max_limit=MAX_PAGE_LIMIT)
+    off = _cap_offset(offset)
     window = _cap_days(days, default=90)
     today = date.today()
     earliest = date.fromordinal(max(date.min.toordinal(), today.toordinal() - window))
     earliest_iso = earliest.isoformat()
     today_iso = today.isoformat()
+    media_filter = _normalize_media_type(media_type)
 
     with db.connect() as conn:
         dated = conn.execute(
@@ -131,51 +233,38 @@ def feed_recent_releases(
                 "days": window,
                 "items": [],
                 "total": 0,
+                "offset": off,
+                "limit": capped,
+                "has_more": False,
+                "media_type": media_filter,
                 "note": (
                     "No release_date/first_air_date enriched yet — run library sync "
                     "or metadata_enrichment."
                 ),
             }
+        where_sql, where_params = _recent_releases_where_sql(
+            earliest_iso,
+            today_iso,
+            media_type=media_filter,
+        )
+        count_row = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM library_items WHERE {where_sql}",
+            where_params,
+        ).fetchone()
+        total = int(count_row["cnt"] or 0)
         rows = conn.execute(
-            """
+            f"""
             SELECT *
             FROM library_items
-            WHERE (
-                (media_type = 'movie'
-                 AND release_date IS NOT NULL AND release_date != ''
-                 AND release_date >= ? AND release_date <= ?)
-                OR
-                (media_type = 'show'
-                 AND first_air_date IS NOT NULL AND first_air_date != ''
-                 AND first_air_date >= ? AND first_air_date <= ?)
-                OR
-                (media_type NOT IN ('movie', 'show')
-                 AND (
-                   (release_date IS NOT NULL AND release_date != ''
-                    AND release_date >= ? AND release_date <= ?)
-                   OR
-                   (first_air_date IS NOT NULL AND first_air_date != ''
-                    AND first_air_date >= ? AND first_air_date <= ?)
-                 ))
-            )
+            WHERE {where_sql}
             ORDER BY COALESCE(
                 NULLIF(CASE WHEN media_type = 'show' THEN first_air_date ELSE release_date END, ''),
                 NULLIF(release_date, ''),
                 NULLIF(first_air_date, '')
             ) DESC, title ASC
-            LIMIT ?
+            LIMIT ? OFFSET ?
             """,
-            (
-                earliest_iso,
-                today_iso,
-                earliest_iso,
-                today_iso,
-                earliest_iso,
-                today_iso,
-                earliest_iso,
-                today_iso,
-                capped,
-            ),
+            where_params + (capped, off),
         ).fetchall()
 
     items = [_feed_item(row) for row in rows]
@@ -186,7 +275,11 @@ def feed_recent_releases(
         "feed": "recent-releases",
         "days": window,
         "items": items,
-        "total": len(items),
+        "total": total,
+        "offset": off,
+        "limit": capped,
+        "has_more": off + len(items) < total,
+        "media_type": media_filter,
         "note": note,
     }
 

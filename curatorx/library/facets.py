@@ -223,25 +223,50 @@ def library_facet_catalog(
     facet_type: str,
     *,
     limit: int = 50,
+    q: Optional[str] = None,
 ) -> Dict[str, Any]:
     normalized = facet_type.strip().lower()
     allowed = {"director", "actor", "keyword", "country", "language", "motif", "theme"}
     if normalized not in allowed:
         raise ValueError(f"facet_type must be one of: {', '.join(sorted(allowed))}")
     capped = min(max(1, limit), 100)
+    needle = " ".join(str(q or "").strip().split()).lower()
     if normalized in {"country", "language"}:
-        return _facet_catalog_from_items(db, normalized, limit=capped)
+        payload = _facet_catalog_from_items(db, normalized, limit=max(capped, 500) if needle else capped)
+        facets = payload["facets"]
+        if needle:
+            facets = [f for f in facets if needle in str(f.get("value") or "").lower()][:capped]
+        return {"facet_type": normalized, "facets": facets, "returned": len(facets), "q": needle or None}
     with db.connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT facet_value, COUNT(*) AS cnt
-            FROM library_facets
-            WHERE facet_type = ?
-            GROUP BY facet_value
-            ORDER BY cnt DESC, facet_value ASC
-            LIMIT ?
-            """,
-            (normalized, capped),
-        ).fetchall()
+        if needle:
+            rows = conn.execute(
+                """
+                SELECT facet_value, COUNT(*) AS cnt
+                FROM library_facets
+                WHERE facet_type = ?
+                  AND lower(facet_value) LIKE ?
+                GROUP BY facet_value
+                ORDER BY
+                  CASE WHEN lower(facet_value) = ? THEN 0
+                       WHEN lower(facet_value) LIKE ? THEN 1
+                       ELSE 2 END,
+                  cnt DESC,
+                  facet_value ASC
+                LIMIT ?
+                """,
+                (normalized, f"%{needle}%", needle, f"{needle}%", capped),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """
+                SELECT facet_value, COUNT(*) AS cnt
+                FROM library_facets
+                WHERE facet_type = ?
+                GROUP BY facet_value
+                ORDER BY cnt DESC, facet_value ASC
+                LIMIT ?
+                """,
+                (normalized, capped),
+            ).fetchall()
     facets = [{"value": str(r["facet_value"]), "count": int(r["cnt"])} for r in rows]
-    return {"facet_type": normalized, "facets": facets, "returned": len(facets)}
+    return {"facet_type": normalized, "facets": facets, "returned": len(facets), "q": needle or None}

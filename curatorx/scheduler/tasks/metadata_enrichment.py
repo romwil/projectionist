@@ -25,6 +25,7 @@ from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import Database
 from curatorx.library.sync import apply_tmdb_details_to_library_row
 from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
+from curatorx.scheduler.run_log import emit_task_event
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ async def run(
     tmdb = TMDBClient(api_key)
     enriched = 0
     errors = 0
+    emit_task_event(f"Enriching metadata for {len(backlog)} titles", batch_size=len(backlog))
 
     for idx, row in enumerate(backlog):
         if should_stop():
@@ -120,6 +122,12 @@ async def run(
         # Re-upsert by rating_key so COALESCE paths keep prior non-empty fields.
         db.upsert_library_item(patch)
         enriched += 1
+        if enriched == 1 or enriched % 5 == 0:
+            emit_task_event(
+                f"Enriched {enriched}/{len(backlog)}",
+                enriched=enriched,
+                errors=errors,
+            )
 
         if idx + 1 < len(backlog):
             await asyncio.sleep(REQUEST_PAUSE_SECONDS)

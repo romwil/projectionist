@@ -17,6 +17,7 @@ from curatorx.config_store import Settings
 from curatorx.library.db import Database
 from curatorx.library.health import compute_library_health
 from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
+from curatorx.scheduler.run_log import emit_task_event
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ async def run(
     if should_stop():
         return {"status": "interrupted"}
 
+    emit_task_event("Computing library health metrics")
     health = compute_library_health(db)
     db.set_config(CACHE_KEY, json.dumps(health))
 
@@ -37,6 +39,11 @@ async def run(
         "Health metrics cached: total=%s, unwatched=%s",
         health.get("total"),
         health.get("unwatched_count"),
+    )
+    emit_task_event(
+        f"Cached health metrics (total={health.get('total', 0)})",
+        total=health.get("total", 0),
+        unwatched=health.get("unwatched_count"),
     )
     return {"status": "completed", "total": health.get("total", 0)}
 

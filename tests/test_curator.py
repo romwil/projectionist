@@ -177,6 +177,19 @@ class DisplayableCardsTests(unittest.TestCase):
             self.assertEqual(len(filtered), 1)
             self.assertEqual(filtered[0].title, "Missing")
 
+    def test_cards_for_response_drops_shows_without_tvdb_on_arr_path(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            registry._recommendation_context = True
+            registry._cards = [
+                TitleCard(media_type="show", title="Ready", tmdb_id=10, tvdb_id=20),
+                TitleCard(media_type="show", title="No TVDB", tmdb_id=11),
+                TitleCard(media_type="movie", title="Film", tmdb_id=12),
+            ]
+            filtered = _cards_for_response(registry)
+            self.assertEqual([card.title for card in filtered], ["Ready", "Film"])
+
 
 if __name__ == "__main__":
     unittest.main()

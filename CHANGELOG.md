@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.8.3] — 2026-07-16
+
+Explore navigation and section drill-downs, Scheduled Tasks admin, avatar upload/cache, concurrent card adds, and agent library-search quality.
+
+### Added
+- **Scheduled Tasks** admin (`/admin/tasks`) — list tasks, last run, Run now, live monitor with pollable run log
+- Explore section pages for **Recently Added** / **Recent Releases** — All/Movies/TV filters, page sizes 20/40/100, pagination
+- Dedicated routes `/explore/tags` and `/explore/plot-lab`; hamburger **AppNav**; sidebar Explore button
+- Avatar cache/upload — Plex thumb → `/config/avatars`, Profile upload, serve `/api/auth/avatar/{id}`
+- Delete conversation from the sidebar thread list
+- Title Detail **Add/Request** for out-of-library titles; richer metadata (`release_date` / `first_air_date`)
+- Tag facet search via API `q` (server-side, not only on-screen chips)
+- LibraryMediaCard hover actions (Watch / Trailer / Recommend)
+- Unit coverage for scheduled tasks admin, avatars, facet search, library keyword search, turnstyle items, back nav, add concurrency
+
+### Changed
+- Direct card adds skip the tray confirmation path; adds run **concurrent / non-blocking**
+- Consistent **BackLink** / backNav (tag results → tags, not always chat)
+- Chat overflow containment after agent responses
+- Turnstyle Confirm/Expand counts align with addable shows (drop items without `tvdb_id`)
+
+### Fixed
+- Agent library search is **keyword/text-first** with semantic fallback only
+- Gap tool confident keyword resolution; TMDB title/id mismatch hardening
+
 ## [1.8.2] — 2026-07-16
 
 Hot-path latency, Surprise Me reliability, responsive Explore/recommendations, composer chrome, and scheduled purge-candidate caching.

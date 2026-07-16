@@ -61,6 +61,13 @@ class TitleDetail(TitleCard):
     trailer_youtube_key: str = ""
     plex_watch_url: str = ""
     plex_machine_id: str = ""
+    release_date: str = ""
+    first_air_date: str = ""
+    collection_name: str = ""
+    content_rating: str = ""
+    original_language: str = ""
+    countries: List[str] = Field(default_factory=list)
+    status: str = ""
 
 
 class ChatMessageBlock(BaseModel):

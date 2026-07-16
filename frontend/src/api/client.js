@@ -115,6 +115,26 @@ export async function patchAuthMe(payload) {
   });
 }
 
+/** Upload a profile picture (multipart). Returns `{ user, authenticated }`. */
+export async function uploadAuthAvatar(file) {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch(`${API}/auth/me/avatar`, {
+    method: "POST",
+    credentials: "include",
+    body,
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    const error = new Error(parseApiErrorBody(text, response.statusText));
+    error.status = response.status;
+    throw error;
+  }
+  return response.json();
+}
+
+export { resolveAvatarSrc } from "../lib/avatarSrc.js";
+
 export async function listHouseholdPeers() {
   return api("/household/peers");
 }
@@ -766,19 +786,33 @@ export async function getLibraryHealth() {
   return api("/library/health");
 }
 
-export async function getExploreFeedRecentlyAdded({ limit = 12, days = 30 } = {}) {
+export async function getExploreFeedRecentlyAdded({
+  limit = 12,
+  days = 30,
+  offset = 0,
+  mediaType,
+} = {}) {
   const params = new URLSearchParams({
     limit: String(limit),
     days: String(days),
+    offset: String(offset),
   });
+  if (mediaType) params.set("media_type", String(mediaType));
   return api(`/library/feeds/recently-added?${params}`);
 }
 
-export async function getExploreFeedRecentReleases({ limit = 12, days = 90 } = {}) {
+export async function getExploreFeedRecentReleases({
+  limit = 12,
+  days = 90,
+  offset = 0,
+  mediaType,
+} = {}) {
   const params = new URLSearchParams({
     limit: String(limit),
     days: String(days),
+    offset: String(offset),
   });
+  if (mediaType) params.set("media_type", String(mediaType));
   return api(`/library/feeds/recent-releases?${params}`);
 }
 
@@ -814,11 +848,13 @@ export async function queryLibrary(filters = {}) {
   return api(`/library/query?${params}`);
 }
 
-export async function getLibraryFacets(facetType, limit = 50) {
+export async function getLibraryFacets(facetType, limit = 50, q = "") {
   const params = new URLSearchParams({
     facet_type: String(facetType || ""),
     limit: String(limit),
   });
+  const query = String(q || "").trim();
+  if (query) params.set("q", query);
   return api(`/library/facets?${params}`);
 }
 
@@ -932,4 +968,36 @@ export async function confirmAction(token, confirmed = true) {
     method: "POST",
     body: JSON.stringify({ token, confirmed }),
   });
+}
+
+export async function listScheduledTasks() {
+  return api("/admin/scheduled-tasks");
+}
+
+export async function runScheduledTask(name, { wait = false } = {}) {
+  const query = wait ? "?wait=true" : "";
+  return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/run${query}`, {
+    method: "POST",
+  });
+}
+
+export async function updateScheduledTask(name, payload) {
+  return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function resetScheduledTaskQuarantine(name) {
+  return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/reset`, {
+    method: "POST",
+  });
+}
+
+export async function getScheduledTaskLog(name, { after_seq = 0, limit = 200 } = {}) {
+  const search = new URLSearchParams({
+    after_seq: String(after_seq || 0),
+    limit: String(limit || 200),
+  });
+  return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/log?${search}`);
 }

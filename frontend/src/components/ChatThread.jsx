@@ -1,4 +1,5 @@
 import { collectAddableFromMessage } from "../lib/addActions";
+import { filterDisplayableCards, turnstyleItemCount } from "../lib/turnstyleItems.js";
 import AgentAvatar from "./AgentAvatar";
 import ReviewPromptCard from "./ReviewPromptCard";
 import ReviewConflictBanner from "./ReviewConflictBanner";
@@ -8,10 +9,6 @@ import MessageReactions from "./MessageReactions";
 import TitleCard from "./TitleCard";
 import InlineAlert from "./InlineAlert";
 import MessageText from "./MessageText";
-
-function isDisplayableCard(item) {
-  return Boolean(item?.title || item?.tmdb_id || item?.tvdb_id || item?.rating_key);
-}
 
 function renderBulkConfirmActions(message, handlers, showTokenConfirm, viewportBlock) {
   const { radarr, sonarr, seerr } = collectAddableFromMessage(message, {
@@ -67,15 +64,22 @@ function renderBulkConfirmActions(message, handlers, showTokenConfirm, viewportB
   }
 
   if (viewportBlock) {
+    const viewportItems = filterDisplayableCards(viewportBlock.payload?.items);
+    const expandCount = turnstyleItemCount(viewportItems);
     actions.push(
       <button
         key="viewport"
         type="button"
         className="confirm-all-button viewport-expand-btn"
         data-testid="expand-title-cards"
-        onClick={() => handlers.onOpenViewport?.(viewportBlock.payload)}
+        onClick={() =>
+          handlers.onOpenViewport?.({
+            ...viewportBlock.payload,
+            items: viewportItems,
+          })
+        }
       >
-        Expand {viewportBlock.payload?.items?.length || 0} titles in turnstyle view
+        Expand {expandCount} titles in turnstyle view
       </button>
     );
   }
@@ -112,7 +116,9 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
     );
   }
   if (block.type === "title_cards") {
-    const items = (block.items || []).filter(isDisplayableCard).map((item) => enrichTitleCard(item, handlers.reviewLookup));
+    const items = filterDisplayableCards(block.items).map((item) =>
+      enrichTitleCard(item, handlers.reviewLookup),
+    );
     if (!items.length) return null;
     const isLastTitleCards = !blocks.slice(blockIndex + 1).some((entry) => entry.type === "title_cards");
     const nextViewport = blocks.slice(blockIndex + 1).find(
@@ -191,9 +197,15 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
     // Already rendered inline with the preceding title_cards bulk actions row
     const precedingHasTitleCards = blocks.slice(0, blockIndex).some((entry) => entry.type === "title_cards");
     if (precedingHasTitleCards) return null;
+    const viewportItems = filterDisplayableCards(block.payload?.items);
     return (
-      <button type="button" className="confirm-all-button viewport-expand-btn" data-testid="expand-title-cards" onClick={() => handlers.onOpenViewport?.(block.payload)}>
-        Expand {block.payload?.items?.length || 0} titles in turnstyle view
+      <button
+        type="button"
+        className="confirm-all-button viewport-expand-btn"
+        data-testid="expand-title-cards"
+        onClick={() => handlers.onOpenViewport?.({ ...block.payload, items: viewportItems })}
+      >
+        Expand {turnstyleItemCount(viewportItems)} titles in turnstyle view
       </button>
     );
   }
@@ -238,7 +250,7 @@ export default function ChatThread({
         return (
           <div
             key={message.id}
-            className={`message ${message.role}${streaming ? " is-streaming" : ""}`}
+            className={`message message-contained ${message.role}${streaming ? " is-streaming" : ""}`}
             data-testid={`chat-message-${message.role}`}
             data-message-id={message.id}
             data-message-role={message.role}

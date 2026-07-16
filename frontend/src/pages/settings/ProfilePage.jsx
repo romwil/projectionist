@@ -1,12 +1,13 @@
-import { useEffect, useState } from "react";
-import { getAuthMe, getFeatures, logout, patchAuthMe } from "../../api/client";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { getAuthMe, getFeatures, logout, patchAuthMe, uploadAuthAvatar } from "../../api/client";
+import UserAvatar from "../../components/UserAvatar";
 import {
   applyUiFontSize,
   applyUiTheme,
   normalizeUiFontSize,
   normalizeUiTheme,
 } from "../../lib/uiPrefs.js";
-import { useNavigate } from "react-router-dom";
 
 const FONT_OPTIONS = [
   { value: "small", label: "Small" },
@@ -28,8 +29,11 @@ export default function ProfilePage() {
   const [uiTheme, setUiTheme] = useState("system");
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [avatarBust, setAvatarBust] = useState("");
   const [requestPath, setRequestPath] = useState("direct");
   const [seerrLinked, setSeerrLinked] = useState(false);
+  const avatarInputRef = useRef(null);
 
   useEffect(() => {
     getAuthMe()
@@ -88,6 +92,24 @@ export default function ProfilePage() {
     navigate("/login", { replace: true });
   }
 
+  async function handleAvatarChange(event) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setUploadingAvatar(true);
+    setStatus(null);
+    try {
+      const result = await uploadAuthAvatar(file);
+      setUser(result.user);
+      setAvatarBust(String(Date.now()));
+      setStatus({ type: "success", message: "Profile photo updated." });
+    } catch (error) {
+      setStatus({ type: "error", message: error.message || "Could not upload photo." });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  }
+
   if (!user) {
     return (
       <section className="settings-section" data-testid="settings-profile">
@@ -105,17 +127,36 @@ export default function ProfilePage() {
       </header>
 
       <div className="settings-identity">
-        {user.avatar_url ? (
-          <img src={user.avatar_url} alt="" className="settings-avatar" />
-        ) : (
-          <span className="settings-avatar settings-avatar-fallback">
-            {(user.display_name || "U").slice(0, 2).toUpperCase()}
-          </span>
-        )}
+        <UserAvatar
+          user={user}
+          className="settings-avatar"
+          fallbackClassName="settings-avatar settings-avatar-fallback"
+          cacheBust={avatarBust}
+        />
         <div>
           <p className="settings-identity-name">{user.display_name}</p>
           {user.email ? <p className="settings-identity-meta">{user.email}</p> : null}
           <p className="settings-identity-meta">Role · {user.role}</p>
+          <div className="settings-avatar-actions">
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              hidden
+              data-testid="avatar-file-input"
+              onChange={handleAvatarChange}
+            />
+            <button
+              type="button"
+              className="ghost"
+              data-testid="avatar-upload-button"
+              disabled={uploadingAvatar}
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              {uploadingAvatar ? "Uploading…" : "Upload photo"}
+            </button>
+            <span className="field-help">JPEG, PNG, WebP, or GIF · max 2MB. Overrides a broken Plex avatar.</span>
+          </div>
         </div>
       </div>
 

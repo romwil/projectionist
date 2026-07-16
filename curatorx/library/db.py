@@ -1250,6 +1250,7 @@ class Database:
         preferred_name: Any = ...,
         ui_font_size: Any = ...,
         ui_theme: Any = ...,
+        avatar_url: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -1276,6 +1277,10 @@ class Database:
                 if "ui_theme" in cols:
                     updates.append("ui_theme = ?")
                     params.append(cleaned_theme)
+            if avatar_url is not ... and "avatar_url" in cols:
+                cleaned_avatar = (avatar_url or "").strip() or None
+                updates.append("avatar_url = ?")
+                params.append(cleaned_avatar)
             if updates:
                 params.append(user_id)
                 conn.execute(

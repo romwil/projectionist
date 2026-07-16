@@ -1140,5 +1140,44 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                     await execute_confirmed_action(db, settings, token)
 
 
+    @patch("curatorx.agent.tools.TMDBClient")
+    async def test_find_collection_gaps_unresolved_keywords(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.genre_list_movies.return_value = []
+        mock_tmdb.search_keywords.return_value = [{"id": 999, "name": "totally different"}]
+        mock_tmdb.discover_movies.return_value = [{"id": 1, "title": "Nope"}]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            result = await registry.execute(
+                "find_collection_gaps",
+                {"media_type": "movie", "keywords": "found footage, nonsense combo"},
+            )
+            payload = json.loads(result)
+            self.assertEqual(payload["returned"], 0)
+            self.assertTrue(payload.get("keywords_unresolved"))
+            mock_tmdb.discover_movies.assert_not_called()
+
+    @patch("curatorx.agent.tools.TMDBClient")
+    async def test_search_tmdb_rejects_mismatched_pinned_id(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.movie_details.return_value = {
+            "id": 11,
+            "title": "Star Wars",
+            "release_date": "1977-05-25",
+        }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            result = await registry.execute(
+                "search_tmdb",
+                {"media_type": "movie", "title": "The Matrix", "tmdb_id": 11},
+            )
+            payload = json.loads(result)
+            self.assertIn("error", payload)
+            self.assertIn("does not match", payload["error"])
+
 if __name__ == "__main__":
     unittest.main()

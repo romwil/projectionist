@@ -1158,6 +1158,84 @@ def build_tool_definitions(settings: Settings) -> List[Mapping[str, Any]]:
     ]
 
 
+
+def _normalize_title_key(value: Any) -> str:
+    return " ".join(str(value or "").strip().casefold().split())
+
+
+def _titles_roughly_match(expected: str, actual: str) -> bool:
+    """True when expected title aligns with actual (exact or containment)."""
+    left = _normalize_title_key(expected)
+    right = _normalize_title_key(actual)
+    if not left or not right:
+        return True
+    if left == right:
+        return True
+    if left in right or right in left:
+        return True
+    # Token overlap for minor punctuation differences.
+    left_tokens = {t for t in left.replace(":", " ").replace("-", " ").split() if t}
+    right_tokens = {t for t in right.replace(":", " ").replace("-", " ").split() if t}
+    if not left_tokens or not right_tokens:
+        return False
+    overlap = len(left_tokens & right_tokens) / max(len(left_tokens), len(right_tokens))
+    return overlap >= 0.6
+
+
+def _resolve_tmdb_keyword_ids(tmdb: TMDBClient, keywords_text: str) -> Dict[str, Any]:
+    """Resolve keyword phrases to TMDB ids, preferring exact name matches.
+
+    Empty/noisy combos that cannot be resolved return unresolved names instead of
+    silently discovering with a wrong first hit.
+    """
+    resolved: List[Dict[str, Any]] = []
+    unresolved: List[str] = []
+    for raw in str(keywords_text or "").split(","):
+        kw = raw.strip()
+        if not kw:
+            continue
+        if kw.isdigit():
+            resolved.append({"id": int(kw), "name": kw, "query": kw})
+            continue
+        results = tmdb.search_keywords(kw) or []
+        if not isinstance(results, list) or not results:
+            unresolved.append(kw)
+            continue
+        needle = kw.casefold()
+        exact = [
+            entry
+            for entry in results
+            if isinstance(entry, Mapping)
+            and str(entry.get("name") or "").strip().casefold() == needle
+        ]
+        chosen = exact[0] if exact else None
+        if chosen is None:
+            # Accept a strong prefix/containment hit; otherwise treat as unresolved
+            # to avoid AND-ing unrelated keyword ids into discover.
+            for entry in results:
+                if not isinstance(entry, Mapping):
+                    continue
+                name = str(entry.get("name") or "").strip().casefold()
+                if name.startswith(needle) or needle.startswith(name) or needle in name:
+                    chosen = entry
+                    break
+        if chosen is None or not chosen.get("id"):
+            unresolved.append(kw)
+            continue
+        resolved.append(
+            {
+                "id": int(chosen["id"]),
+                "name": str(chosen.get("name") or kw),
+                "query": kw,
+            }
+        )
+    return {
+        "resolved": resolved,
+        "unresolved": unresolved,
+        "keyword_ids": ",".join(str(entry["id"]) for entry in resolved) if resolved else None,
+    }
+
+
 def _tmdb_result_year(item: Mapping[str, Any]) -> Optional[int]:
     date = item.get("release_date") or item.get("first_air_date") or ""
     if not date:
@@ -1182,13 +1260,32 @@ def _rank_tmdb_search_results(
     When both ``title`` and ``year`` are set, exact title matches are preferred
     so that "Munich (2005)" pins Spielberg's film and not every same-year title
     containing "Munich" (e.g. "Munich Mambo").
+
+    When only ``title`` is set, exact title matches are ranked ahead of partial
+    hits so agents do not recommend unrelated IDs from a noisy search page.
     """
-    ordered = list(results)
+    ordered = [item for item in results if isinstance(item, Mapping)]
+    normalised = title.strip().casefold() if title else ""
     if year is None:
+        if not normalised:
+            return ordered
+        exact = [
+            item
+            for item in ordered
+            if str(item.get("title") or item.get("name") or "").strip().casefold() == normalised
+        ]
+        if exact:
+            return exact + [item for item in ordered if item not in exact]
+        close = [
+            item
+            for item in ordered
+            if _titles_roughly_match(normalised, str(item.get("title") or item.get("name") or ""))
+        ]
+        if close:
+            return close
         return ordered
     year_matched = [item for item in ordered if _tmdb_result_year(item) == year]
-    if title and year_matched:
-        normalised = title.strip().casefold()
+    if normalised and year_matched:
         exact = [
             item
             for item in year_matched
@@ -1778,19 +1875,31 @@ class ToolRegistry:
 
         keywords_text = str(args.get("keywords") or "").strip()
         keyword_ids: Optional[str] = None
+        keyword_meta: Dict[str, Any] = {"resolved": [], "unresolved": []}
         if keywords_text:
-            resolved_ids: List[str] = []
-            for kw in keywords_text.split(","):
-                kw = kw.strip()
-                if not kw:
-                    continue
-                if kw.isdigit():
-                    resolved_ids.append(kw)
-                else:
-                    kw_results = tmdb.search_keywords(kw)
-                    if kw_results:
-                        resolved_ids.append(str(kw_results[0]["id"]))
-            keyword_ids = ",".join(resolved_ids) if resolved_ids else None
+            keyword_meta = _resolve_tmdb_keyword_ids(tmdb, keywords_text)
+            unresolved = keyword_meta.get("unresolved") or []
+            resolved = keyword_meta.get("resolved") or []
+            # Harden against empty/noisy keyword combos: do not discover unfiltered
+            # (or with a partial wrong AND) when the user asked for keywords.
+            if unresolved or not resolved:
+                return json.dumps(
+                    {
+                        "total_matched": 0,
+                        "returned": 0,
+                        "offset": 0,
+                        "has_more": False,
+                        "items": [],
+                        "keywords_resolved": resolved,
+                        "keywords_unresolved": unresolved,
+                        "note": (
+                            "Could not resolve keyword filter to confident TMDB keyword ids. "
+                            "Try a single well-known keyword (e.g. found footage) or search_tmdb / "
+                            "query_library with keywords instead of inventing ids."
+                        ),
+                    }
+                )
+            keyword_ids = keyword_meta.get("keyword_ids")
 
         if media_type == "movie":
             results = tmdb.discover_movies(
@@ -1820,6 +1929,15 @@ class ToolRegistry:
             if len(cards) >= 12:
                 break
         _append_recommendation_cards(self, cards)
+        note = (
+            "TMDB titles missing from the library and not already queued in Radarr/Sonarr. "
+            "Do not re-propose already_queued / in_radarr / in_sonarr titles."
+        )
+        if keywords_text and not cards:
+            note = (
+                "Keyword discover returned no missing titles after ownership/queue filtering. "
+                "Broaden keywords or use search_tmdb with title+year — do not invent TMDB ids."
+            )
         return json.dumps(
             {
                 "total_matched": len(cards),
@@ -1827,10 +1945,8 @@ class ToolRegistry:
                 "offset": 0,
                 "has_more": False,
                 "items": [_card_to_tool_item(c) for c in cards],
-                "note": (
-                    "TMDB titles missing from the library and not already queued in Radarr/Sonarr. "
-                    "Do not re-propose already_queued / in_radarr / in_sonarr titles."
-                ),
+                "keywords_resolved": keyword_meta.get("resolved") or [],
+                "note": note,
             }
         )
 
@@ -2129,6 +2245,18 @@ class ToolRegistry:
                 return json.dumps({"error": str(error)})
             if not isinstance(details, Mapping) or not int(details.get("id") or 0):
                 return json.dumps({"error": f"TMDB {media_type} {pinned_tmdb_id} not found"})
+            actual_title = str(details.get("title") or details.get("name") or "")
+            if title and not _titles_roughly_match(title, actual_title):
+                return json.dumps(
+                    {
+                        "error": (
+                            f"tmdb_id {pinned_tmdb_id} resolves to '{actual_title}', "
+                            f"which does not match requested title '{title}'. "
+                            "Re-search by title+year instead of inventing ids."
+                        ),
+                        "items": [],
+                    }
+                )
             results = [details]
             total_matched = 1
         else:

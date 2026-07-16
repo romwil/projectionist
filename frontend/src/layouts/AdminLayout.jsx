@@ -7,6 +7,7 @@ export const ADMIN_NAV = [
   { to: "/admin/connections", id: "connections", label: "Connections" },
   { to: "/admin/libraries", id: "libraries", label: "Libraries" },
   { to: "/admin/sync", id: "sync", label: "Sync" },
+  { to: "/admin/tasks", id: "tasks", label: "Scheduled Tasks" },
   { to: "/admin/persona", id: "persona", label: "Persona" },
   { to: "/admin/household", id: "household", label: "Household" },
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },

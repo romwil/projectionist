@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.8.2 -->
+<!-- Unraid Community Applications template — CuratorX 1.8.3 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,11 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.8.3
+- Explore section pages (Recently Added / Recent Releases) with All/Movies/TV + page sizes; Tags and Plot Lab routes; AppNav hamburger
+- Scheduled Tasks admin (/admin/tasks) with Run now and live monitor; avatar cache/upload; delete conversation in sidebar
+- Concurrent non-blocking card adds; Title Detail Add/Request; turnstyle Confirm/Expand count alignment; agent keyword-first library search
+
 ### 1.8.2
 - Faster Title Detail (enrich flag, short external timeouts, rating-key index); Surprise Me loading/empty/error states
 - Explore/recommendations responsive layout; default persona on load; composer chrome (persona + mic/surprise/send)

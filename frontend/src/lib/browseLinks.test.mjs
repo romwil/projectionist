@@ -4,6 +4,7 @@ import {
   exploreCastPath,
   exploreDirectorsPath,
   exploreGenrePath,
+  exploreSectionPath,
   personPath,
   tagPath,
 } from "./browseLinks.js";
@@ -21,5 +22,10 @@ describe("browseLinks", () => {
     assert.equal(exploreGenrePath("Sci-Fi"), "/explore?genre=Sci-Fi");
     assert.equal(exploreCastPath("Keanu Reeves"), "/explore?cast=Keanu%20Reeves");
     assert.equal(exploreDirectorsPath("Lana Wachowski"), "/explore?directors=Lana%20Wachowski");
+    assert.equal(
+      exploreSectionPath("recently-added", { mediaType: "movie" }),
+      "/explore/section/recently-added?media_type=movie",
+    );
+    assert.equal(exploreSectionPath("recent-releases"), "/explore/section/recent-releases");
   });
 });

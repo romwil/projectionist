@@ -1,11 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { queryLibrary } from "../api/client";
-import { titleDetailPath } from "../lib/titleLinks.js";
+import AppNav, { AppNavToggle } from "../components/AppNav";
+import BackLink from "../components/BackLink";
+import LibraryMediaCard from "../components/LibraryMediaCard";
+import RecommendModal from "../components/RecommendModal";
+import { useAuthGate } from "../components/UserMenu";
+import { ROUTES } from "../lib/browseLinks.js";
 
 export default function TagPage() {
   const { tagName } = useParams();
   const decoded = decodeURIComponent(String(tagName || ""));
+  const { isOwner, multiUserEnabled } = useAuthGate();
+  const [navOpen, setNavOpen] = useState(false);
+  const [recommendItem, setRecommendItem] = useState(null);
   const [state, setState] = useState({ loading: true, items: [], error: "" });
 
   useEffect(() => {
@@ -35,21 +43,21 @@ export default function TagPage() {
 
   return (
     <div className="app-root tag-page" data-testid="tag-page">
+      <AppNav open={navOpen} onClose={() => setNavOpen(false)} isOwner={isOwner} />
       <header className="browse-page-header">
-        <Link to="/" className="title-detail-back">
-          ← Back to chat
-        </Link>
-        <Link to="/explore" className="app-topbar-link" data-testid="tag-back-explore">
-          Explore tags
+        <div className="browse-page-header-left">
+          <AppNavToggle open={navOpen} onClick={() => setNavOpen(true)} />
+          <BackLink fallbackTo={ROUTES.tags} testId="tag-back" />
+        </div>
+        <Link to={ROUTES.tags} className="app-topbar-link" data-testid="tag-back-explore">
+          Tag search
         </Link>
       </header>
 
       <section className="tag-hero" data-testid="tag-hero">
         <p className="person-eyebrow">Tag</p>
         <h1 data-testid="tag-name">{decoded || "Untitled tag"}</h1>
-        <p className="explore-section-subtitle">
-          Library titles tagged with this keyword
-        </p>
+        <p className="explore-section-subtitle">Library titles tagged with this keyword</p>
       </section>
 
       <section className="tag-results" data-testid="tag-results">
@@ -62,37 +70,24 @@ export default function TagPage() {
         ) : null}
         {state.items.length ? (
           <div className="explore-poster-wall">
-            {state.items.map((item) => {
-              const path = titleDetailPath({ ...item, in_library: true });
-              const key = item.id || item.rating_key || `${item.media_type}-${item.tmdb_id || item.title}`;
-              const body = (
-                <>
-                  <div className="explore-poster">
-                    {item.poster_url ? (
-                      <img src={item.poster_url} alt="" loading="lazy" />
-                    ) : (
-                      <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
-                    )}
-                  </div>
-                  <h3>{item.title || "Untitled"}</h3>
-                  {item.year ? <p className="explore-card-meta">{item.year}</p> : null}
-                </>
-              );
-              return (
-                <article key={key} className="explore-cinema-card" data-testid="tag-title-card">
-                  {path ? (
-                    <Link to={path} className="explore-cinema-card-link">
-                      {body}
-                    </Link>
-                  ) : (
-                    <div className="explore-cinema-card-link">{body}</div>
-                  )}
-                </article>
-              );
-            })}
+            {state.items.map((item) => (
+              <LibraryMediaCard
+                key={item.id || item.rating_key || `${item.media_type}-${item.tmdb_id || item.title}`}
+                item={item}
+                testId="tag-title-card"
+                showRecommend={multiUserEnabled}
+                onRecommend={multiUserEnabled ? setRecommendItem : undefined}
+              />
+            ))}
           </div>
         ) : null}
       </section>
+
+      <RecommendModal
+        item={recommendItem}
+        open={Boolean(recommendItem)}
+        onClose={() => setRecommendItem(null)}
+      />
     </div>
   );
 }

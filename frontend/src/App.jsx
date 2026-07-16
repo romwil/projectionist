@@ -5,6 +5,7 @@ import {
   addWatchlistPin,
   confirmAction,
   createThread,
+  deleteThread,
   dismissReviewPrompt,
   formatApiError,
   getActiveContext,
@@ -44,6 +45,11 @@ import {
   nextActivityPanelExpanded,
 } from "./lib/agentActivityLog.js";
 import { agentPulseTitle, resolveAgentPulse } from "./lib/agentPulse.js";
+import {
+  addItemKey,
+  withAddInFlight,
+  withoutAddInFlight,
+} from "./lib/addConcurrency.js";
 import {
   alreadyInArrMessage,
   buildProposeActionBody,
@@ -88,6 +94,7 @@ import NewReplyChip from "./components/NewReplyChip";
 import RecommendModal from "./components/RecommendModal";
 import RecommendationsInbox from "./components/RecommendationsInbox";
 import StatusDock from "./components/StatusDock";
+import AppNav, { AppNavToggle } from "./components/AppNav";
 import ThreadList from "./components/ThreadList";
 import TurnstyleResultsOverlay from "./components/TurnstyleResultsOverlay";
 import TypingIndicator from "./components/TypingIndicator";
@@ -140,6 +147,8 @@ export default function App() {
   const [pendingBulk, setPendingBulk] = useState(null);
   const [pendingTokens, setPendingTokens] = useState([]);
   const [addInProgress, setAddInProgress] = useState(false);
+  const addInFlightKeysRef = useRef(new Set());
+  const [appNavOpen, setAppNavOpen] = useState(false);
   const [addProgress, setAddProgress] = useState(null);
   const [addFeedback, setAddFeedback] = useState(null);
   const [input, setInput] = useState("");
@@ -384,6 +393,35 @@ export default function App() {
       console.error(error);
     }
   }, [defaultPersonaId, refreshThreads]);
+
+  const handleDeleteThread = useCallback(
+    async (session) => {
+      if (!session) return;
+      try {
+        await deleteThread(session);
+        const remaining = await refreshThreads();
+        if (session === activeSessionId) {
+          if (remaining.length) {
+            const nextId = remaining[0].id;
+            setActiveSession(nextId);
+            setActiveSessionId(nextId);
+            await loadThreadMessages(nextId);
+          } else {
+            const created = await createThread();
+            const nextId = created.session_id;
+            setActiveSession(nextId);
+            setActiveSessionId(nextId);
+            setMessages([]);
+            setMessageFeedback({});
+            await refreshThreads();
+          }
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    },
+    [activeSessionId, loadThreadMessages, refreshThreads],
+  );
 
   useKeyboardShortcuts({
     composerRef,
@@ -837,11 +875,55 @@ export default function App() {
     }
   }
 
-  function handleAdd(item, target) {
+  async function executeSingleAdd(item, target, { trackGlobal = false } = {}) {
+    const label = item.title || "this title";
+    const service = serviceLabelForTarget(target);
+    const body = buildProposeActionBody(item, target);
+    const key = addItemKey(item, target);
+
+    addInFlightKeysRef.current = withAddInFlight(addInFlightKeysRef.current, key);
+    if (trackGlobal) setAddInProgress(true);
+    try {
+      const proposal = await proposeAction(body);
+      if (isAlreadyInArr(proposal)) {
+        setAddFeedback({
+          type: "success",
+          message: alreadyInArrMessage(proposal, { label, service }),
+        });
+        return proposal;
+      }
+      const confirm = await confirmAction(proposal.confirmation_token);
+      if (isAlreadyInArr(confirm)) {
+        setAddFeedback({
+          type: "success",
+          message: alreadyInArrMessage(confirm, { label, service }),
+        });
+      } else {
+        setAddFeedback({
+          type: "success",
+          message:
+            target === "seerr"
+              ? `Requested "${label}" in Seerr.`
+              : `Added "${label}" to ${service}.`,
+        });
+      }
+      return confirm;
+    } catch (error) {
+      setAddFeedback({ type: "error", message: formatApiError(error) });
+      throw error;
+    } finally {
+      addInFlightKeysRef.current = withoutAddInFlight(addInFlightKeysRef.current, key);
+      if (trackGlobal) setAddInProgress(false);
+    }
+  }
+
+  async function handleAdd(item, target) {
+    // Per-card concurrent adds — do not globally block other cards.
     setAddFeedback(null);
     setPendingBulk(null);
     setPendingTokens([]);
-    setPendingAdd({ item, target });
+    setPendingAdd(null);
+    await executeSingleAdd(item, target, { trackGlobal: false });
   }
 
   function handleConfirmAllItems(items, target) {
@@ -1014,43 +1096,12 @@ export default function App() {
 
   async function confirmPendingAdd() {
     if (!pendingAdd || addInProgress) return;
-
     const { item, target } = pendingAdd;
-    const label = item.title || "this title";
-    const service = serviceLabelForTarget(target);
-    const body = buildProposeActionBody(item, target);
-
-    setAddInProgress(true);
     try {
-      const proposal = await proposeAction(body);
-      if (isAlreadyInArr(proposal)) {
-        setAddFeedback({
-          type: "success",
-          message: alreadyInArrMessage(proposal, { label, service }),
-        });
-        setPendingAdd(null);
-        return;
-      }
-      const confirm = await confirmAction(proposal.confirmation_token);
-      if (isAlreadyInArr(confirm)) {
-        setAddFeedback({
-          type: "success",
-          message: alreadyInArrMessage(confirm, { label, service }),
-        });
-      } else {
-        setAddFeedback({
-          type: "success",
-          message:
-            target === "seerr"
-              ? `Requested "${label}" in Seerr.`
-              : `Added "${label}" to ${service}.`,
-        });
-      }
+      await executeSingleAdd(item, target, { trackGlobal: true });
       setPendingAdd(null);
-    } catch (error) {
-      setAddFeedback({ type: "error", message: formatApiError(error) });
-    } finally {
-      setAddInProgress(false);
+    } catch {
+      // Feedback already set by executeSingleAdd.
     }
   }
 
@@ -1193,18 +1244,30 @@ export default function App() {
       className="app-root workspace"
       style={{ "--ambient-accent": ambientAccent }}
     >
+      <AppNav
+        open={appNavOpen}
+        onClose={() => setAppNavOpen(false)}
+        isOwner={isOwner}
+      />
       <header className={`app-topbar ${nightOwl ? "night-owl" : ""}`}>
         <div className="app-topbar-brand">
+          <AppNavToggle
+            open={appNavOpen}
+            onClick={() => setAppNavOpen(true)}
+            testId="app-nav-toggle"
+          />
           <button
             type="button"
-            className="app-topbar-menu ghost"
+            className="app-topbar-menu ghost app-topbar-threads"
             data-testid="mobile-nav-toggle"
             aria-label="Open conversations"
             aria-expanded={mobileNavOpen}
             aria-controls="workspace-sidebar"
             onClick={() => setMobileNavOpen(true)}
           >
-            <span aria-hidden="true">☰</span>
+            <span className="material-symbols-outlined" aria-hidden="true">
+              chat
+            </span>
           </button>
           <div className="app-topbar-titles">
             <h1>CuratorX</h1>
@@ -1341,12 +1404,23 @@ export default function App() {
               {sidebarCollapsed ? "»" : "«"}
             </button>
           </div>
+          <div className="sidebar-explore-panel" data-testid="sidebar-explore-panel">
+            <Link
+              to="/explore"
+              className="watchlist-panel-toggle ghost sidebar-explore-link"
+              data-testid="sidebar-explore"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Explore
+            </Link>
+          </div>
           <div className="workspace-sidebar-scroll">
             <ThreadList
               threads={threads}
               activeSessionId={activeSessionId}
               onSelect={switchThread}
               onCreate={handleCreateThread}
+              onDelete={handleDeleteThread}
               hideHeader
               personaLookup={personaLookup}
             />
@@ -1446,7 +1520,7 @@ export default function App() {
               onConfirmAllTokens={handleConfirmAllTokens}
               pendingTokenCount={pendingTokens.length}
               pendingTokenActions={pendingTokens}
-              actionsDisabled={addInProgress}
+              actionsDisabled={loading}
               onTogglePin={handleToggleWatchlistPin}
               onRecommend={multiUserEnabled ? handleRecommendTitle : undefined}
               watchlistLookup={watchlistLookup}
@@ -1659,7 +1733,7 @@ export default function App() {
           onConfirmAllItems={handleConfirmAllItems}
           onTogglePin={handleToggleWatchlistPin}
           watchlistLookup={watchlistLookup}
-          actionsDisabled={addInProgress}
+          actionsDisabled={loading}
           requestPath={requestPath}
           draggableToDock={dockDropEnabled}
         />

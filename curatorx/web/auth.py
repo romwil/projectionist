@@ -98,6 +98,8 @@ _ROLE_RANK = {"guest": 0, "member": 1, "owner": 2}
 
 
 def row_to_current_user(row) -> CurrentUser:
+    from curatorx.web.avatars import resolve_avatar_url
+
     keys = set(row.keys()) if hasattr(row, "keys") else set()
     avatar_url = None
     if "avatar_url" in keys and row["avatar_url"] is not None:
@@ -115,14 +117,15 @@ def row_to_current_user(row) -> CurrentUser:
         cleaned_theme = str(row["ui_theme"]).strip().lower()
         if cleaned_theme in {"lights_up", "lights_down", "system"}:
             ui_theme = cleaned_theme
+    user_id = str(row["id"])
     return CurrentUser(
-        id=str(row["id"]),
+        id=user_id,
         display_name=str(row["display_name"] or "User"),
         role=str(row["role"]),  # type: ignore[arg-type]
         email=str(row["email"]) if row["email"] is not None else None,
         plex_user_id=str(row["plex_user_id"]) if row["plex_user_id"] is not None else None,
         seerr_user_id=int(row["seerr_user_id"]) if row["seerr_user_id"] is not None else None,
-        avatar_url=avatar_url,
+        avatar_url=resolve_avatar_url(user_id, avatar_url),
         preferred_name=preferred_name,
         ui_font_size=ui_font_size,
         ui_theme=ui_theme,
@@ -433,13 +436,29 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
         if existing["seerr_permissions"] is not None:
             seerr_permissions = int(existing["seerr_permissions"])
 
+    # Prefer an existing local upload over re-pointing at a brittle Plex CDN URL.
+    from curatorx.web.avatars import (
+        cache_remote_avatar,
+        find_local_avatar_file,
+        local_avatar_api_path,
+        resolve_avatar_url,
+    )
+
+    stored_avatar = avatar_url
+    if find_local_avatar_file(user_id):
+        stored_avatar = local_avatar_api_path(user_id)
+    elif avatar_url:
+        cached = cache_remote_avatar(user_id, avatar_url)
+        if cached:
+            stored_avatar = cached
+
     user_row = db.upsert_plex_user(
         user_id=user_id,
         display_name=display_name,
         email=email,
         plex_user_id=plex_user_id,
         role=role,
-        avatar_url=avatar_url,
+        avatar_url=stored_avatar,
         seerr_user_id=seerr_user_id,
         seerr_permissions=seerr_permissions,
     )
@@ -451,6 +470,7 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
         maybe_pull_on_login(db, settings, user_id=str(user_row["id"]))
     except Exception:
         logger.debug("Could not persist/sync Plex watchlist token", exc_info=True)
+    resolved_avatar = resolve_avatar_url(str(user_row["id"]), user_row.get("avatar_url"))
     return CurrentUser(
         id=str(user_row["id"]),
         display_name=str(user_row["display_name"]),
@@ -458,7 +478,7 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
         email=user_row.get("email"),
         plex_user_id=user_row.get("plex_user_id"),
         seerr_user_id=user_row.get("seerr_user_id"),
-        avatar_url=user_row.get("avatar_url"),
+        avatar_url=resolved_avatar,
     )
 
 

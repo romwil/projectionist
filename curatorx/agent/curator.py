@@ -9,7 +9,7 @@ from typing import Any, AsyncIterator, Dict, List, Mapping, Optional
 
 from curatorx.agent.providers import get_chat_provider
 from curatorx.agent.tools import build_tool_definitions, ToolRegistry, build_system_prompt
-from curatorx.config_store import Settings
+from curatorx.config_store import Settings, uses_seerr_request_path
 from curatorx.library.db import DEFAULT_LENS_ID, Database
 from curatorx.models.schemas import TitleCard
 
@@ -25,15 +25,26 @@ def _displayable_cards(cards: List[TitleCard]) -> List[TitleCard]:
     return displayable
 
 
+def _actionable_recommendation_card(card: TitleCard, registry: ToolRegistry) -> bool:
+    """Keep only titles that can actually be added/requested (matches UI add gates)."""
+    if card.in_library or card.in_radarr or card.in_sonarr:
+        return False
+    seerr_path = uses_seerr_request_path(registry.settings, role=registry.user_role or "owner")
+    if seerr_path:
+        return bool(card.tmdb_id) and card.media_type in {"movie", "show"}
+    if card.media_type == "movie":
+        return bool(card.tmdb_id)
+    if card.media_type == "show":
+        # Sonarr add requires tvdb_id — drop TMDB-only shows so Confirm/Expand counts match.
+        return bool(card.tvdb_id)
+    return False
+
+
 def _cards_for_response(registry: ToolRegistry) -> List[TitleCard]:
     """Cards shown in title_cards blocks — drop owned/queued titles during add/recommend flows."""
     cards = registry.cards
     if registry.recommendation_context:
-        cards = [
-            card
-            for card in cards
-            if not card.in_library and not card.in_radarr and not card.in_sonarr
-        ]
+        cards = [card for card in cards if _actionable_recommendation_card(card, registry)]
     return _displayable_cards(cards)
 
 

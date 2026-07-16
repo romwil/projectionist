@@ -1,4 +1,93 @@
 /** Normalize Explore feed API payloads into a stable rail shape. */
+export const EXPLORE_PAGE_SIZES = [20, 40, 100];
+export const DEFAULT_EXPLORE_PAGE_SIZE = 20;
+
+export const EXPLORE_SECTIONS = {
+  "recently-added": {
+    id: "recently-added",
+    title: "Recently Added",
+    subtitle: "Fresh arrivals from the last 30 days",
+    defaultDays: 30,
+    supportsMediaType: true,
+    feed: "recently-added",
+  },
+  "recent-releases": {
+    id: "recent-releases",
+    title: "Recent Releases",
+    subtitle: "Library titles released in the last 90 days",
+    defaultDays: 90,
+    supportsMediaType: true,
+    feed: "recent-releases",
+  },
+};
+
+export function getExploreSectionConfig(sectionId) {
+  const key = String(sectionId || "").trim();
+  return EXPLORE_SECTIONS[key] || null;
+}
+
+export function normalizePageSize(raw, allowed = EXPLORE_PAGE_SIZES) {
+  const value = Number(raw);
+  return allowed.includes(value) ? value : DEFAULT_EXPLORE_PAGE_SIZE;
+}
+
+export function normalizeFeedOffset(raw) {
+  const value = Number(raw);
+  if (!Number.isFinite(value) || value < 0) return 0;
+  return Math.floor(value);
+}
+
+export function normalizeMediaTypeFilter(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value === "movie" || value === "movies") return "movie";
+  if (value === "show" || value === "shows" || value === "tv") return "show";
+  return null;
+}
+
+/** Parse section listing query params from URLSearchParams. */
+export function parseExploreSectionQuery(searchParams) {
+  const params = searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams);
+  return {
+    limit: normalizePageSize(params.get("limit")),
+    offset: normalizeFeedOffset(params.get("offset")),
+    mediaType: normalizeMediaTypeFilter(params.get("media_type")),
+  };
+}
+
+/** Build updated search params for section listing navigation. */
+export function buildExploreSectionQuery(current, updates = {}) {
+  const next = {
+    limit: current?.limit ?? DEFAULT_EXPLORE_PAGE_SIZE,
+    offset: current?.offset ?? 0,
+    mediaType: current?.mediaType ?? null,
+    ...updates,
+  };
+  const params = new URLSearchParams();
+  if (next.mediaType) params.set("media_type", next.mediaType);
+  if (next.limit !== DEFAULT_EXPLORE_PAGE_SIZE) params.set("limit", String(next.limit));
+  if (next.offset > 0) params.set("offset", String(next.offset));
+  return params;
+}
+
+export function feedPaginationSummary(payload) {
+  const total = Number(payload?.total) || 0;
+  const offset = normalizeFeedOffset(payload?.offset);
+  const limit = Number(payload?.limit) || DEFAULT_EXPLORE_PAGE_SIZE;
+  const returned = Array.isArray(payload?.items) ? payload.items.length : 0;
+  const page = limit > 0 ? Math.floor(offset / limit) + 1 : 1;
+  const pageCount = limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1;
+  return {
+    total,
+    offset,
+    limit,
+    returned,
+    page,
+    pageCount,
+    hasMore: Boolean(payload?.has_more) || offset + returned < total,
+    hasPrev: offset > 0,
+  };
+}
+
 export function normalizeFeed(payload, { fallbackNote = "Nothing to show yet." } = {}) {
   if (!payload || typeof payload !== "object") {
     return { items: [], note: fallbackNote, total: 0, meta: {} };

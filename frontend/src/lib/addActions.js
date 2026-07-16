@@ -84,7 +84,11 @@ export function collectAddableFromMessage(message, options = {}) {
   if (!message || message.role !== "assistant") {
     return { radarr: [], sonarr: [], seerr: [] };
   }
-  return groupAddableItems(collectTitleCardItems(message.blocks), options);
+  // Align Confirm counts with the same displayable set inline cards / turnstyle use.
+  const items = collectTitleCardItems(message.blocks).filter(
+    (item) => item?.title || item?.tmdb_id || item?.tvdb_id || item?.rating_key,
+  );
+  return groupAddableItems(items, options);
 }
 
 /** True when the latest assistant turn already hosts in-chat bulk confirm UI. */

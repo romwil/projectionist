@@ -1,16 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getAuthMe, getFeatures, logout } from "../api/client";
-
-function initials(name) {
-  const parts = String(name || "U")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
-  if (!parts.length) return "U";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
-}
+import UserAvatar from "./UserAvatar";
 
 export default function UserMenu() {
   const navigate = useNavigate();
@@ -56,11 +47,7 @@ export default function UserMenu() {
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
       >
-        {user.avatar_url ? (
-          <img src={user.avatar_url} alt="" className="user-menu-avatar" />
-        ) : (
-          <span className="user-menu-avatar user-menu-avatar-fallback">{initials(user.display_name)}</span>
-        )}
+        <UserAvatar user={user} />
         <span className="user-menu-name">{user.display_name}</span>
       </button>
       {open ? (

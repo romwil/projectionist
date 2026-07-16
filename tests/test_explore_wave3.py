@@ -69,6 +69,45 @@ class FeedHelperTests(unittest.TestCase):
             self.assertEqual(payload["items"][0]["title"], "New Arrival")
             self.assertIn("poster_url", payload["items"][0])
 
+    def test_recently_added_pagination_and_media_type(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            now = int(time.time())
+            for idx in range(5):
+                db.upsert_library_item(
+                    {
+                        "rating_key": f"movie-{idx}",
+                        "media_type": "movie",
+                        "title": f"Movie {idx}",
+                        "year": 2024,
+                        "added_at": now - idx * 60,
+                    }
+                )
+            for idx in range(3):
+                db.upsert_library_item(
+                    {
+                        "rating_key": f"show-{idx}",
+                        "media_type": "show",
+                        "title": f"Show {idx}",
+                        "year": 2024,
+                        "added_at": now - idx * 60,
+                    }
+                )
+            page = feed_recently_added(db, limit=2, offset=2, days=30)
+            self.assertEqual(page["total"], 8)
+            self.assertEqual(page["offset"], 2)
+            self.assertEqual(page["limit"], 2)
+            self.assertEqual(len(page["items"]), 2)
+            self.assertTrue(page["has_more"])
+
+            movies = feed_recently_added(db, limit=10, days=30, media_type="movie")
+            self.assertEqual(movies["total"], 5)
+            self.assertTrue(all(item["media_type"] == "movie" for item in movies["items"]))
+
+            shows = feed_recently_added(db, limit=10, days=30, media_type="show")
+            self.assertEqual(shows["total"], 3)
+            self.assertTrue(all(item["media_type"] == "show" for item in shows["items"]))
+
     def test_recent_releases_honest_empty_without_dates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
@@ -115,6 +154,52 @@ class FeedHelperTests(unittest.TestCase):
             self.assertEqual(payload["total"], 1)
             self.assertEqual(payload["items"][0]["title"], "Fresh Release")
             self.assertEqual(payload["items"][0]["release_date"], recent_iso)
+
+    def test_recent_releases_pagination_and_media_type(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            today = date.today()
+            recent_iso = (today.toordinal() - 5)
+            recent_iso = date.fromordinal(recent_iso).isoformat()
+            db.upsert_library_item(
+                {
+                    "rating_key": "movie-a",
+                    "media_type": "movie",
+                    "title": "Movie A",
+                    "year": today.year,
+                    "release_date": recent_iso,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "movie-b",
+                    "media_type": "movie",
+                    "title": "Movie B",
+                    "year": today.year,
+                    "release_date": recent_iso,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "show-a",
+                    "media_type": "show",
+                    "title": "Show A",
+                    "year": today.year,
+                    "first_air_date": recent_iso,
+                }
+            )
+            page = feed_recent_releases(db, limit=1, offset=1, days=30)
+            self.assertEqual(page["total"], 3)
+            self.assertEqual(len(page["items"]), 1)
+            self.assertTrue(page["has_more"])
+
+            movies = feed_recent_releases(db, limit=10, days=30, media_type="movie")
+            self.assertEqual(movies["total"], 2)
+            self.assertTrue(all(item["media_type"] == "movie" for item in movies["items"]))
+
+            shows = feed_recent_releases(db, limit=10, days=30, media_type="show")
+            self.assertEqual(shows["total"], 1)
+            self.assertEqual(shows["items"][0]["title"], "Show A")
 
     def test_on_this_day_calendar_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -319,6 +404,17 @@ class ExploreFeedApiTests(unittest.TestCase):
         releases = self.client.get("/api/library/feeds/recent-releases", params={"days": 30})
         self.assertEqual(releases.status_code, 200)
         self.assertEqual(releases.json()["feed"], "recent-releases")
+
+        paged = self.client.get(
+            "/api/library/feeds/recently-added",
+            params={"days": 7, "limit": 1, "offset": 0, "media_type": "movie"},
+        )
+        self.assertEqual(paged.status_code, 200)
+        body_paged = paged.json()
+        self.assertEqual(body_paged["feed"], "recently-added")
+        self.assertIn("total", body_paged)
+        self.assertIn("has_more", body_paged)
+        self.assertEqual(body_paged["media_type"], "movie")
 
         otd = self.client.get("/api/library/feeds/on-this-day")
         self.assertEqual(otd.status_code, 200)

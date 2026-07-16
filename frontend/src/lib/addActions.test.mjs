@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  collectAddableFromMessage,
   lastAssistantHasTitleCards,
   normalizePendingTokens,
   summarizePendingTokenActions,
@@ -111,4 +112,23 @@ test("normalizePendingTokens drops empty entries", () => {
   assert.deepEqual(normalizePendingTokens([null, {}, { token: "ok", action: "remove_arr" }]), [
     { token: "ok", action: "remove_arr" },
   ]);
+});
+
+test("collectAddableFromMessage ignores empty placeholder cards", () => {
+  const message = {
+    role: "assistant",
+    blocks: [
+      {
+        type: "title_cards",
+        items: [
+          { title: "Ready", media_type: "show", tvdb_id: 1 },
+          { media_type: "show" },
+          { title: "No TVDB", media_type: "show", tmdb_id: 2 },
+        ],
+      },
+    ],
+  };
+  const { sonarr } = collectAddableFromMessage(message, { requestPath: "arr" });
+  assert.equal(sonarr.length, 1);
+  assert.equal(sonarr[0].title, "Ready");
 });

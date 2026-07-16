@@ -9,6 +9,7 @@ import PrivacyPage from "./pages/PrivacyPage";
 import AboutPage from "./pages/AboutPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import DashboardPage from "./pages/DashboardPage";
+import ScheduledTasksPage from "./pages/ScheduledTasksPage";
 import AdminLayout from "./layouts/AdminLayout";
 import SettingsLayout from "./layouts/SettingsLayout";
 import ProfilePage from "./pages/settings/ProfilePage";
@@ -16,8 +17,11 @@ import VoicePage from "./pages/settings/VoicePage";
 import WatchlistSettingsPage from "./pages/settings/WatchlistSettingsPage";
 import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
 import ExplorePage from "./pages/ExplorePage";
+import ExploreSectionPage from "./pages/ExploreSectionPage";
 import PersonPage from "./pages/PersonPage";
 import TagPage from "./pages/TagPage";
+import TagsPage from "./pages/TagsPage";
+import PlotLabPage from "./pages/PlotLabPage";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
@@ -26,6 +30,9 @@ createRoot(document.getElementById("root")).render(
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/explore" element={<ExplorePage />} />
+        <Route path="/explore/tags" element={<TagsPage />} />
+        <Route path="/explore/plot-lab" element={<PlotLabPage />} />
+        <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/about" element={<AboutPage />} />
@@ -33,6 +40,8 @@ createRoot(document.getElementById("root")).render(
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="tasks" element={<ScheduledTasksPage />} />
+          <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
           <Route path=":section" element={<ConfigPage />} />
         </Route>
         <Route path="/settings" element={<SettingsLayout />}>

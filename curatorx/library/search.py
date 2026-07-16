@@ -7,7 +7,7 @@ from typing import List, Optional
 
 from curatorx.config_store import Settings
 from curatorx.library.db import Database
-from curatorx.library.query import filters_from_mapping, query_library_async
+from curatorx.library.query import filters_from_mapping, query_library, query_library_async
 from curatorx.models.schemas import TitleCard
 
 
@@ -39,6 +39,36 @@ def row_to_title_card(row, *, reason: str = "", facet_matches: Optional[List[str
     )
 
 
+def _cards_from_query_result(
+    db: Database,
+    result: dict,
+    *,
+    reason: str,
+    facet_matches: Optional[List[str]] = None,
+    limit: int,
+) -> List[TitleCard]:
+    cards: List[TitleCard] = []
+    for item in result.get("items", []):
+        row = db.library_item_by_id(int(item["id"])) if item.get("id") else None
+        if row is None:
+            continue
+        cards.append(row_to_title_card(row, reason=reason, facet_matches=facet_matches))
+        if len(cards) >= limit:
+            break
+    return cards
+
+
+def looks_like_facet_tag_query(query: str) -> bool:
+    """Heuristic: short multi-word / genre-like phrases often map to keyword facets."""
+    cleaned = " ".join(str(query or "").strip().split())
+    if not cleaned:
+        return False
+    # Avoid treating long plot sentences as tags.
+    if len(cleaned) > 48 or cleaned.count(" ") > 4:
+        return False
+    return True
+
+
 async def search_library(
     db: Database,
     settings: Settings,
@@ -47,19 +77,72 @@ async def search_library(
     media_type: Optional[str] = None,
     limit: int = 12,
 ) -> List[TitleCard]:
+    """Search the library, preferring keyword/facet and text matches over semantic noise.
+
+    Tag-style queries (e.g. \"found footage\") should hit ``library_facets`` first.
+    Semantic search runs only when keyword and title/summary matches are empty.
+    """
+    cleaned = " ".join(str(query or "").strip().split())
+    if not cleaned:
+        return []
+
+    capped = min(max(1, int(limit or 12)), 48)
+
+    # 1) Exact-ish keyword / facet match — highest precision for tag asks.
+    if looks_like_facet_tag_query(cleaned):
+        keyword_result = query_library(
+            db,
+            filters_from_mapping(
+                {
+                    "keywords": [cleaned],
+                    "media_type": media_type,
+                    "limit": capped,
+                    "sort": "title",
+                }
+            ),
+        )
+        if keyword_result.get("total_matched", 0) > 0:
+            return _cards_from_query_result(
+                db,
+                keyword_result,
+                reason="Library match (keyword)",
+                facet_matches=[f"Keyword: {cleaned}"],
+                limit=capped,
+            )
+
+    # 2) Title / summary substring match.
+    text_result = query_library(
+        db,
+        filters_from_mapping(
+            {
+                "query": cleaned,
+                "media_type": media_type,
+                "limit": capped,
+                "sort": "title",
+            }
+        ),
+    )
+    if text_result.get("total_matched", 0) > 0:
+        return _cards_from_query_result(
+            db,
+            text_result,
+            reason="Library match (text)",
+            limit=capped,
+        )
+
+    # 3) Semantic fallback only when structured matches came up empty.
     filters = filters_from_mapping(
         {
-            "semantic_query": query,
+            "semantic_query": cleaned,
             "media_type": media_type,
-            "limit": limit,
+            "limit": capped,
         }
     )
     result = await query_library_async(db, filters, settings)
-    cards: List[TitleCard] = []
-    for item in result.get("items", []):
-        row = db.library_item_by_id(int(item["id"])) if item.get("id") else None
-        if row is None:
-            continue
-        mode = result.get("search_mode", "semantic")
-        cards.append(row_to_title_card(row, reason=f"Library match ({mode})"))
-    return cards[:limit]
+    mode = result.get("search_mode", "semantic")
+    return _cards_from_query_result(
+        db,
+        result,
+        reason=f"Library match ({mode})",
+        limit=capped,
+    )

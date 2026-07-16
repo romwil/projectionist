@@ -1,74 +1,78 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   getExploreFeedOnThisDay,
   getExploreFeedRecentReleases,
   getExploreFeedRecentlyAdded,
-  getLibraryFacets,
   getLibraryHealth,
-  getLibraryMotifs,
-  getLibraryNeighbors,
   getLibraryOverview,
   queryLibrary,
 } from "../api/client";
-import { tagPath } from "../lib/browseLinks.js";
-import {
-  buildMotifQueryParams,
-  buildPulseStats,
-  normalizeFeed,
-  normalizeMotifFacets,
-  toggleMotifSelection,
-} from "../lib/exploreFeeds.js";
-import { titleDetailPath } from "../lib/titleLinks.js";
+import AppNav, { AppNavToggle } from "../components/AppNav";
+import BackLink from "../components/BackLink";
+import LibraryMediaCard from "../components/LibraryMediaCard";
+import RecommendModal from "../components/RecommendModal";
+import { useAuthGate } from "../components/UserMenu";
+import { ROUTES, exploreSectionPath } from "../lib/browseLinks.js";
+import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 
-function ExplorePosterCard({ item, meta, onSeed, seedLabel = "Surprise from this" }) {
-  const path = titleDetailPath({
-    ...item,
-    in_library: true,
-  });
-  const media = item.poster_url ? (
-    <img src={item.poster_url} alt="" loading="lazy" />
-  ) : (
-    <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
-  );
-  const body = (
-    <>
-      <div className="explore-poster">{media}</div>
-      <h3>{item.title || "Untitled"}</h3>
-      {item.year ? <p className="explore-card-meta">{item.year}</p> : null}
-      {meta ? <p className="explore-card-meta explore-card-context">{meta}</p> : null}
-    </>
-  );
+function ExplorePosterCard({ item, meta, onSeed, seedLabel = "Surprise from this", onRecommend, showRecommend }) {
   return (
-    <article className="explore-cinema-card" data-testid="explore-title-card">
-      {path ? (
-        <Link to={path} className="explore-cinema-card-link">
-          {body}
-        </Link>
-      ) : (
-        <div className="explore-cinema-card-link">{body}</div>
-      )}
-      {onSeed && item.id != null ? (
-        <button
-          type="button"
-          className="ghost explore-seed-btn"
-          data-testid="explore-seed-btn"
-          onClick={() => onSeed(item)}
-        >
-          {seedLabel}
-        </button>
-      ) : null}
-    </article>
+    <LibraryMediaCard
+      item={item}
+      meta={meta}
+      onSeed={onSeed}
+      seedLabel={seedLabel}
+      onRecommend={onRecommend}
+      showRecommend={showRecommend}
+    />
   );
 }
 
-function ExploreSection({ id, title, subtitle, children, empty, note }) {
+function ExploreSection({
+  id,
+  title,
+  subtitle,
+  children,
+  empty,
+  note,
+  titleHref,
+  mediaTypeLinks,
+}) {
   const message = empty || note || null;
   return (
     <section className="explore-section" data-testid={`explore-section-${id}`}>
       <header className="explore-section-header">
         <div>
-          <h2>{title}</h2>
+          <div className="explore-section-title-row">
+            <h2>
+              {titleHref ? (
+                <Link
+                  to={titleHref}
+                  className="explore-section-title-link"
+                  data-testid={`explore-section-link-${id}`}
+                >
+                  {title}
+                </Link>
+              ) : (
+                title
+              )}
+            </h2>
+            {mediaTypeLinks?.length ? (
+              <nav className="explore-section-type-links" aria-label={`${title} by type`}>
+                {mediaTypeLinks.map((link) => (
+                  <Link
+                    key={link.mediaType}
+                    to={link.href}
+                    className="explore-section-type-link"
+                    data-testid={`explore-section-type-${id}-${link.mediaType}`}
+                  >
+                    {link.label}
+                  </Link>
+                ))}
+              </nav>
+            ) : null}
+          </div>
           {subtitle ? <p className="explore-section-subtitle">{subtitle}</p> : null}
         </div>
       </header>
@@ -78,7 +82,7 @@ function ExploreSection({ id, title, subtitle, children, empty, note }) {
   );
 }
 
-function FeedRail({ testId, items, loading, cardMeta, onSeed }) {
+function FeedRail({ testId, items, loading, cardMeta, onSeed, onRecommend, showRecommend }) {
   if (loading) {
     return <p className="status status-secondary">Loading…</p>;
   }
@@ -91,6 +95,8 @@ function FeedRail({ testId, items, loading, cardMeta, onSeed }) {
           item={item}
           meta={cardMeta ? cardMeta(item) : item.anniversary_context || null}
           onSeed={onSeed}
+          onRecommend={onRecommend}
+          showRecommend={showRecommend}
         />
       ))}
     </div>
@@ -133,26 +139,15 @@ function useFeed(loader, deps = []) {
 }
 
 export default function ExplorePage() {
-  const navigate = useNavigate();
+  const { isOwner, multiUserEnabled } = useAuthGate();
   const [searchParams] = useSearchParams();
+  const [navOpen, setNavOpen] = useState(false);
+  const [recommendItem, setRecommendItem] = useState(null);
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
   const onThisDay = useFeed(() => getExploreFeedOnThisDay({ limit: 12 }), []);
 
   const [pulse, setPulse] = useState({ loading: true, stats: [], error: "" });
-  const [motifs, setMotifs] = useState([]);
-  const [motifsNote, setMotifsNote] = useState("");
-  const [motifsLoading, setMotifsLoading] = useState(true);
-  const [selectedMotifs, setSelectedMotifs] = useState([]);
-  const [motifWall, setMotifWall] = useState({ loading: false, items: [], note: null, error: "" });
-  const [seed, setSeed] = useState(null);
-  const [seedQuery, setSeedQuery] = useState("");
-  const [seedHits, setSeedHits] = useState([]);
-  const [neighbors, setNeighbors] = useState({ loading: false, items: [], note: null, error: "" });
-  const [tagFacets, setTagFacets] = useState([]);
-  const [tagsLoading, setTagsLoading] = useState(true);
-  const [tagsNote, setTagsNote] = useState("");
-  const [tagSearch, setTagSearch] = useState("");
   const [facetWall, setFacetWall] = useState({ loading: false, items: [], note: null, error: "", label: "" });
 
   useEffect(() => {
@@ -169,61 +164,6 @@ export default function ExplorePage() {
           stats: [],
           error: err.message || "Could not load library pulse.",
         });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setMotifsLoading(true);
-    getLibraryMotifs({ limit: 40 })
-      .then((data) => {
-        if (cancelled) return;
-        const facets = normalizeMotifFacets(data);
-        setMotifs(facets);
-        setMotifsNote(
-          facets.length
-            ? ""
-            : "No plot motifs yet — summary_motifs idle task has not populated facets.",
-        );
-        setMotifsLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setMotifs([]);
-        setMotifsNote(err.message || "Could not load motifs.");
-        setMotifsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setTagsLoading(true);
-    getLibraryFacets("keyword", 60)
-      .then((data) => {
-        if (cancelled) return;
-        const facets = Array.isArray(data?.facets) ? data.facets : [];
-        setTagFacets(
-          facets
-            .map((entry) => ({
-              value: String(entry.value || entry.name || "").trim(),
-              count: Number(entry.count || 0) || 0,
-            }))
-            .filter((entry) => entry.value),
-        );
-        setTagsNote(facets.length ? "" : "No keyword tags indexed yet.");
-        setTagsLoading(false);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setTagFacets([]);
-        setTagsNote(err.message || "Could not load tags.");
-        setTagsLoading(false);
       });
     return () => {
       cancelled = true;
@@ -279,96 +219,6 @@ export default function ExplorePage() {
     };
   }, [searchParams]);
 
-  useEffect(() => {
-    if (!selectedMotifs.length) {
-      setMotifWall({ loading: false, items: [], note: null, error: "" });
-      return undefined;
-    }
-    let cancelled = false;
-    setMotifWall((prev) => ({ ...prev, loading: true, error: "" }));
-    const params = buildMotifQueryParams(selectedMotifs, { limit: 24 });
-    queryLibrary(Object.fromEntries(params.entries()))
-      .then((data) => {
-        if (cancelled) return;
-        const items = Array.isArray(data?.items) ? data.items : [];
-        setMotifWall({
-          loading: false,
-          items,
-          note: items.length ? null : "No titles match the selected motifs.",
-          error: "",
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setMotifWall({
-          loading: false,
-          items: [],
-          note: null,
-          error: err.message || "Could not filter by motifs.",
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedMotifs]);
-
-  useEffect(() => {
-    if (!seed?.id) {
-      setNeighbors({ loading: false, items: [], note: null, error: "" });
-      return undefined;
-    }
-    let cancelled = false;
-    setNeighbors({ loading: true, items: [], note: null, error: "" });
-    getLibraryNeighbors(seed.id, { mode: "surprising", limit: 12 })
-      .then((data) => {
-        if (cancelled) return;
-        const normalized = normalizeFeed(data, {
-          fallbackNote: "Empty — plot_neighbors cache not built yet for this title.",
-        });
-        setNeighbors({
-          loading: false,
-          items: normalized.items,
-          note: normalized.note,
-          error: "",
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        setNeighbors({
-          loading: false,
-          items: [],
-          note: null,
-          error: err.message || "Could not load surprising neighbors.",
-        });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [seed]);
-
-  useEffect(() => {
-    const q = seedQuery.trim();
-    if (q.length < 2) {
-      setSeedHits([]);
-      return undefined;
-    }
-    let cancelled = false;
-    const timer = setTimeout(() => {
-      queryLibrary({ query: q, limit: 6 })
-        .then((data) => {
-          if (cancelled) return;
-          setSeedHits(Array.isArray(data?.items) ? data.items : []);
-        })
-        .catch(() => {
-          if (!cancelled) setSeedHits([]);
-        });
-    }, 220);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [seedQuery]);
-
   const otdSubtitle = useMemo(() => {
     const mode = onThisDay.meta?.mode;
     if (mode === "calendar") return "Release anniversaries sharing today’s date";
@@ -376,60 +226,65 @@ export default function ExplorePage() {
     return "Anniversary picks from your shelves";
   }, [onThisDay.meta?.mode]);
 
-  function handleToggleMotif(value) {
-    setSelectedMotifs((prev) => toggleMotifSelection(prev, value));
-  }
-
-  function handleSeed(item) {
-    setSeed(item);
-    setSeedQuery(item.title || "");
-    setSeedHits([]);
-  }
-
-  const filteredTagFacets = useMemo(() => {
-    const q = tagSearch.trim().toLowerCase();
-    if (!q) return tagFacets;
-    return tagFacets.filter((facet) => facet.value.toLowerCase().includes(q));
-  }, [tagFacets, tagSearch]);
-
-  function goToTag(name) {
-    const path = tagPath(name);
-    if (path) navigate(path);
-  }
-
-  function handleTagSearchSubmit(event) {
-    event.preventDefault();
-    const value = tagSearch.trim();
-    if (value) goToTag(value);
-  }
+  const recommendProps = multiUserEnabled
+    ? { showRecommend: true, onRecommend: setRecommendItem }
+    : { showRecommend: false };
 
   return (
     <div className="app-root explore-page" data-testid="explore-page">
+      <AppNav open={navOpen} onClose={() => setNavOpen(false)} isOwner={isOwner} />
       <header className="app-topbar">
         <div className="app-topbar-brand">
+          <AppNavToggle open={navOpen} onClick={() => setNavOpen(true)} />
           <div className="app-topbar-titles">
             <h1>Explore</h1>
             <p className="app-topbar-eyebrow">Browse your cinema</p>
           </div>
         </div>
         <div className="app-topbar-actions">
-          <Link to="/" className="app-topbar-link" data-testid="explore-back-chat">
-            Back to chat
-          </Link>
+          <BackLink fallbackTo={ROUTES.chat} testId="explore-back-chat" label="Back to chat" />
         </div>
       </header>
 
       <main className="explore-main">
+        <section className="explore-hub-links" data-testid="explore-hub-links">
+          <Link to={ROUTES.plotLab} className="explore-hub-card" data-testid="explore-hub-plot-lab">
+            <h2>Plot Lab</h2>
+            <p>Motifs, poster walls, and surprising narrative neighbors</p>
+          </Link>
+          <Link to={ROUTES.tags} className="explore-hub-card" data-testid="explore-hub-tags">
+            <h2>Tag search</h2>
+            <p>Find keyword tags across your full library index</p>
+          </Link>
+        </section>
+
         <ExploreSection
           id="recently-added"
           title="Recently Added"
           subtitle="Fresh arrivals from the last 30 days"
-          empty={recentlyAdded.error || (!recentlyAdded.loading && !recentlyAdded.items.length ? recentlyAdded.note : null)}
+          titleHref={exploreSectionPath("recently-added")}
+          mediaTypeLinks={[
+            {
+              mediaType: "movie",
+              label: "Movies",
+              href: exploreSectionPath("recently-added", { mediaType: "movie" }),
+            },
+            {
+              mediaType: "show",
+              label: "TV",
+              href: exploreSectionPath("recently-added", { mediaType: "show" }),
+            },
+          ]}
+          empty={
+            recentlyAdded.error ||
+            (!recentlyAdded.loading && !recentlyAdded.items.length ? recentlyAdded.note : null)
+          }
         >
           <FeedRail
             testId="explore-recently-added-rail"
             items={recentlyAdded.items}
             loading={recentlyAdded.loading}
+            {...recommendProps}
           />
         </ExploreSection>
 
@@ -437,6 +292,19 @@ export default function ExplorePage() {
           id="recent-releases"
           title="Recent Releases"
           subtitle="Library titles released in the last 90 days"
+          titleHref={exploreSectionPath("recent-releases")}
+          mediaTypeLinks={[
+            {
+              mediaType: "movie",
+              label: "Movies",
+              href: exploreSectionPath("recent-releases", { mediaType: "movie" }),
+            },
+            {
+              mediaType: "show",
+              label: "TV",
+              href: exploreSectionPath("recent-releases", { mediaType: "show" }),
+            },
+          ]}
           empty={
             recentReleases.error ||
             (!recentReleases.loading && !recentReleases.items.length ? recentReleases.note : null)
@@ -446,6 +314,7 @@ export default function ExplorePage() {
             testId="explore-recent-releases-rail"
             items={recentReleases.items}
             loading={recentReleases.loading}
+            {...recommendProps}
           />
         </ExploreSection>
 
@@ -475,14 +344,13 @@ export default function ExplorePage() {
           title="On This Day"
           subtitle={otdSubtitle}
           empty={onThisDay.error || (!onThisDay.loading && !onThisDay.items.length ? onThisDay.note : null)}
-          note={
-            onThisDay.items.length && onThisDay.note && !onThisDay.error ? onThisDay.note : null
-          }
+          note={onThisDay.items.length && onThisDay.note && !onThisDay.error ? onThisDay.note : null}
         >
           <FeedRail
             testId="explore-on-this-day-rail"
             items={onThisDay.items}
             loading={onThisDay.loading}
+            {...recommendProps}
           />
         </ExploreSection>
 
@@ -501,169 +369,20 @@ export default function ExplorePage() {
                   <ExplorePosterCard
                     key={item.id || item.rating_key || item.title}
                     item={item}
+                    {...recommendProps}
                   />
                 ))}
               </div>
             ) : null}
           </ExploreSection>
         ) : null}
-
-        <ExploreSection
-          id="tags"
-          title="Tags"
-          subtitle="Browse keyword tags from your library"
-          empty={tagsLoading ? null : tagsNote && !tagFacets.length ? tagsNote : null}
-        >
-          <form
-            className="explore-tag-search"
-            data-testid="explore-tag-search"
-            onSubmit={handleTagSearchSubmit}
-          >
-            <label className="explore-seed-label" htmlFor="explore-tag-input">
-              Find a tag
-            </label>
-            <div className="explore-tag-search-row">
-              <input
-                id="explore-tag-input"
-                className="explore-seed-input"
-                data-testid="explore-tag-input"
-                type="search"
-                placeholder="time travel, heist, found footage…"
-                value={tagSearch}
-                onChange={(e) => setTagSearch(e.target.value)}
-                autoComplete="off"
-              />
-              <button type="submit" className="ghost" data-testid="explore-tag-submit">
-                Open tag
-              </button>
-            </div>
-          </form>
-          {tagsLoading ? (
-            <p className="status status-secondary">Loading tags…</p>
-          ) : filteredTagFacets.length ? (
-            <div className="explore-motif-chips" data-testid="explore-tag-chips">
-              {filteredTagFacets.map((facet) => (
-                <button
-                  key={facet.value}
-                  type="button"
-                  className="explore-motif-chip"
-                  data-testid="explore-tag-chip"
-                  onClick={() => goToTag(facet.value)}
-                >
-                  {facet.value}
-                  {facet.count ? <span className="explore-motif-count">{facet.count}</span> : null}
-                </button>
-              ))}
-            </div>
-          ) : tagSearch.trim() ? (
-            <p className="explore-empty status status-secondary">
-              No matching facet chips — press Open tag to browse “{tagSearch.trim()}” anyway.
-            </p>
-          ) : null}
-        </ExploreSection>
-
-        <ExploreSection
-          id="plot-lab"
-          title="Plot Lab"
-          subtitle="Motifs, poster walls, and surprising narrative neighbors"
-          empty={motifsLoading ? null : motifsNote && !motifs.length ? motifsNote : null}
-        >
-          {motifsLoading ? (
-            <p className="status status-secondary">Loading motifs…</p>
-          ) : motifs.length ? (
-            <div className="explore-motif-chips" data-testid="explore-motif-chips">
-              {motifs.map((facet) => {
-                const active = selectedMotifs.includes(facet.value);
-                return (
-                  <button
-                    key={facet.value}
-                    type="button"
-                    className={`explore-motif-chip${active ? " is-active" : ""}`}
-                    data-testid="explore-motif-chip"
-                    aria-pressed={active}
-                    onClick={() => handleToggleMotif(facet.value)}
-                  >
-                    {facet.value}
-                    {facet.count ? <span className="explore-motif-count">{facet.count}</span> : null}
-                  </button>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {selectedMotifs.length ? (
-            <div className="explore-plot-lab-wall" data-testid="explore-motif-wall">
-              <h3 className="explore-plot-lab-heading">Motif wall</h3>
-              {motifWall.error || motifWall.note ? (
-                <p className="explore-empty status status-secondary">
-                  {motifWall.error || motifWall.note}
-                </p>
-              ) : null}
-              {motifWall.loading ? (
-                <p className="status status-secondary">Filtering titles…</p>
-              ) : motifWall.items.length ? (
-                <div className="explore-poster-wall">
-                  {motifWall.items.map((item) => (
-                    <ExplorePosterCard
-                      key={item.id || item.rating_key || item.title}
-                      item={item}
-                      onSeed={handleSeed}
-                    />
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="explore-seed-panel" data-testid="explore-seed-panel">
-            <h3 className="explore-plot-lab-heading">Surprising neighbors</h3>
-            <p className="explore-section-subtitle">
-              Pick a seed title to surface narrative oddballs from the plot cache.
-            </p>
-            <label className="explore-seed-label" htmlFor="explore-seed-input">
-              Seed title
-            </label>
-            <input
-              id="explore-seed-input"
-              className="explore-seed-input"
-              data-testid="explore-seed-input"
-              type="search"
-              placeholder="Search your library…"
-              value={seedQuery}
-              onChange={(e) => setSeedQuery(e.target.value)}
-              autoComplete="off"
-            />
-            {seedHits.length ? (
-              <ul className="explore-seed-hits" data-testid="explore-seed-hits">
-                {seedHits.map((item) => (
-                  <li key={item.id || item.rating_key || item.title}>
-                    <button type="button" onClick={() => handleSeed(item)}>
-                      {item.title}
-                      {item.year ? ` (${item.year})` : ""}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : null}
-            {seed ? (
-              <p className="explore-seed-active" data-testid="explore-seed-active">
-                Seed: <strong>{seed.title}</strong>
-                {seed.year ? ` (${seed.year})` : ""}
-              </p>
-            ) : null}
-            {neighbors.error || neighbors.note ? (
-              <p className="explore-empty status status-secondary">
-                {neighbors.error || neighbors.note}
-              </p>
-            ) : null}
-            <FeedRail
-              testId="explore-neighbors-rail"
-              items={neighbors.items}
-              loading={neighbors.loading}
-            />
-          </div>
-        </ExploreSection>
       </main>
+
+      <RecommendModal
+        item={recommendItem}
+        open={Boolean(recommendItem)}
+        onClose={() => setRecommendItem(null)}
+      />
     </div>
   );
 }

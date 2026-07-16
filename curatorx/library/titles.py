@@ -166,6 +166,10 @@ def _needs_tmdb_enrichment(detail: TitleDetail) -> bool:
         return True
     if not detail.keywords:
         return True
+    if detail.media_type == "movie" and not detail.release_date:
+        return True
+    if detail.media_type == "show" and not detail.first_air_date:
+        return True
     return False
 
 
@@ -180,6 +184,27 @@ def _apply_tmdb_movie_meta(detail: TitleDetail, meta: Mapping[str, Any], tmdb: T
         detail.backdrop_url = tmdb.backdrop_url(meta.get("backdrop_path"))
     if detail.runtime_minutes is None:
         detail.runtime_minutes = int((meta.get("runtime") or 0) or 0) or None
+    if not detail.release_date:
+        detail.release_date = str(meta.get("release_date") or "")[:10]
+    if not detail.collection_name:
+        collection = meta.get("belongs_to_collection") or {}
+        if isinstance(collection, dict):
+            detail.collection_name = str(collection.get("name") or "")
+    if not detail.original_language:
+        detail.original_language = str(meta.get("original_language") or "")
+    if not detail.content_rating:
+        # Prefer US certification when present in release_dates append; else skip.
+        detail.content_rating = str(meta.get("content_rating") or "")
+    if not detail.countries:
+        countries = meta.get("production_countries") or []
+        if isinstance(countries, list):
+            detail.countries = [
+                str(c.get("iso_3166_1") or c.get("name") or "").strip()
+                for c in countries
+                if isinstance(c, dict) and str(c.get("iso_3166_1") or c.get("name") or "").strip()
+            ]
+    if not detail.status:
+        detail.status = str(meta.get("status") or "")
     credits = meta.get("credits") or {}
     if isinstance(credits, dict):
         _apply_tmdb_credit_strings(detail, credits)
@@ -200,6 +225,16 @@ def _apply_tmdb_tv_meta(detail: TitleDetail, meta: Mapping[str, Any], tmdb: TMDB
         detail.poster_url = tmdb.poster_url(meta.get("poster_path"))
     if not detail.backdrop_url:
         detail.backdrop_url = tmdb.backdrop_url(meta.get("backdrop_path"))
+    if not detail.first_air_date:
+        detail.first_air_date = str(meta.get("first_air_date") or "")[:10]
+    if not detail.original_language:
+        detail.original_language = str(meta.get("original_language") or "")
+    if not detail.status:
+        detail.status = str(meta.get("status") or "")
+    if not detail.countries:
+        countries = meta.get("origin_country") or []
+        if isinstance(countries, list):
+            detail.countries = [str(c).strip() for c in countries if str(c).strip()]
     external = meta.get("external_ids") or {}
     if external.get("tvdb_id") and not detail.tvdb_id:
         detail.tvdb_id = int(external["tvdb_id"])
@@ -265,6 +300,28 @@ def get_title_detail(
         detail.last_viewed_at = row["last_viewed_at"]
         detail.in_radarr = bool(row["in_radarr"])
         detail.in_sonarr = bool(row["in_sonarr"])
+        keys = row.keys()
+        if "release_date" in keys and row["release_date"]:
+            detail.release_date = str(row["release_date"])[:10]
+        if "first_air_date" in keys and row["first_air_date"]:
+            detail.first_air_date = str(row["first_air_date"])[:10]
+        if "collection_name" in keys and row["collection_name"]:
+            detail.collection_name = str(row["collection_name"] or "")
+        if "content_rating" in keys and row["content_rating"]:
+            detail.content_rating = str(row["content_rating"] or "")
+        if "original_language" in keys and row["original_language"]:
+            detail.original_language = str(row["original_language"] or "")
+        if "status" in keys and row["status"]:
+            detail.status = str(row["status"] or "")
+        if "countries" in keys and row["countries"]:
+            try:
+                detail.countries = json.loads(row["countries"]) if isinstance(row["countries"], str) else list(row["countries"] or [])
+            except json.JSONDecodeError:
+                detail.countries = []
+        if "runtime_minutes" in keys and row["runtime_minutes"] and detail.runtime_minutes is None:
+            detail.runtime_minutes = int(row["runtime_minutes"])
+        if "vote_average" in keys and row["vote_average"] is not None and detail.rating is None:
+            detail.rating = float(row["vote_average"])
         try:
             item_id = int(row["id"])
         except (TypeError, ValueError, KeyError):

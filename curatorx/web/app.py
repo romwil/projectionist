@@ -15,8 +15,8 @@ from pathlib import Path
 import asyncio
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Request, Response
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -823,6 +823,8 @@ def patch_auth_me(
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     """Self-service profile updates (preferred conversation name, UI prefs)."""
+    from curatorx.web.avatars import resolve_avatar_url
+
     fields_set = getattr(payload, "model_fields_set", None) or getattr(payload, "__fields_set__", set())
     updates: Dict[str, Any] = {}
     if "preferred_name" in fields_set:
@@ -840,6 +842,48 @@ def patch_auth_me(
             status_code=404,
             detail=_safe_error_detail(error, "User not found"),
         ) from error
+    # Prefer resolved local avatar path when a cached/uploaded file exists.
+    updated["avatar_url"] = resolve_avatar_url(user.id, updated.get("avatar_url"))
+    return {"user": updated, "authenticated": True}
+
+
+@app.get("/api/auth/avatar/{user_id}")
+def get_user_avatar(user_id: str, user=Depends(get_current_user_dep)) -> FileResponse:
+    """Serve a locally stored avatar for an authenticated household user."""
+    from curatorx.web.avatars import find_local_avatar_file, media_type_for_avatar, safe_user_id
+
+    del user  # auth gate only
+    try:
+        safe_user_id(user_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    path = find_local_avatar_file(user_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="Avatar not found")
+    return FileResponse(path, media_type=media_type_for_avatar(path))
+
+
+@app.post("/api/auth/me/avatar")
+async def upload_my_avatar(
+    file: UploadFile = File(...),
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Upload a profile picture; stored under DATA_DIR/avatars/{user_id}.*."""
+    from curatorx.web.avatars import local_avatar_api_path, save_avatar_bytes
+
+    raw = await file.read()
+    try:
+        api_path = save_avatar_bytes(user.id, raw, file.content_type or "")
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    try:
+        updated = _db().update_user_profile(user.id, avatar_url=api_path)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=404,
+            detail=_safe_error_detail(error, "User not found"),
+        ) from error
+    updated["avatar_url"] = local_avatar_api_path(user.id)
     return {"user": updated, "authenticated": True}
 
 
@@ -1430,10 +1474,11 @@ def list_scheduled_tasks(user=Depends(require_role("owner"))) -> Dict[str, Any]:
     del user
     scheduler = _idle_scheduler()
     if scheduler is None:
-        return {"items": [], "idle": False}
+        return {"items": [], "idle": False, "running": None}
     return {
         "items": scheduler.get_task_states(),
         "idle": scheduler.is_idle(),
+        "running": scheduler._busy_task_name(),
     }
 
 
@@ -1460,16 +1505,58 @@ def update_scheduled_task(
 @app.post("/api/admin/scheduled-tasks/{name}/run")
 async def trigger_scheduled_task(
     name: str,
+    wait: bool = False,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
+    """Trigger a scheduled task. Default is fire-and-forget for live monitoring.
+
+    Pass ``wait=true`` to await completion and return the full task result.
+    """
     del user
     scheduler = _idle_scheduler()
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Scheduler not available")
-    result = await scheduler.trigger_task(name)
+    if wait:
+        result = await scheduler.trigger_task(name)
+    else:
+        result = scheduler.trigger_task_background(name)
+    if result.get("status") == "busy":
+        raise HTTPException(status_code=409, detail=result.get("error") or "Task already running")
     if result.get("error"):
         raise HTTPException(status_code=404, detail=result["error"])
     return result
+
+
+@app.get("/api/admin/scheduled-tasks/{name}/log")
+def get_scheduled_task_log(
+    name: str,
+    after_seq: int = 0,
+    limit: int = 200,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Poll buffered run events / progress lines for a scheduled task."""
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    payload = scheduler.get_task_run_log(name, after_seq=after_seq, limit=limit)
+    if payload.get("error"):
+        raise HTTPException(status_code=404, detail=payload["error"])
+    return payload
+
+
+@app.get("/api/admin/scheduled-tasks-log")
+def get_all_scheduled_task_logs(
+    after_seq: int = 0,
+    limit: int = 200,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Poll buffered run events across all scheduled tasks."""
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    return scheduler.get_task_run_log(None, after_seq=after_seq, limit=limit)
 
 
 @app.post("/api/admin/scheduled-tasks/{name}/reset")
@@ -1569,11 +1656,19 @@ def library_anniversaries_endpoint(
 def library_feed_recently_added(
     limit: int = 12,
     days: int = 30,
+    offset: int = 0,
+    media_type: Optional[str] = None,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     """Explore rail: titles added to the library within ``days``."""
     return _sanitize_library_payload(
-        feed_recently_added(_db(), limit=limit, days=days),
+        feed_recently_added(
+            _db(),
+            limit=limit,
+            days=days,
+            offset=offset,
+            media_type=media_type,
+        ),
         user,
     )
 
@@ -1582,11 +1677,19 @@ def library_feed_recently_added(
 def library_feed_recent_releases(
     limit: int = 12,
     days: int = 90,
+    offset: int = 0,
+    media_type: Optional[str] = None,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     """Explore rail: titles with release/first_air within ``days`` (honest empty)."""
     return _sanitize_library_payload(
-        feed_recent_releases(_db(), limit=limit, days=days),
+        feed_recent_releases(
+            _db(),
+            limit=limit,
+            days=days,
+            offset=offset,
+            media_type=media_type,
+        ),
         user,
     )
 
@@ -1839,11 +1942,12 @@ def library_aggregate_endpoint(
 def library_facets_endpoint(
     facet_type: str,
     limit: int = 50,
+    q: Optional[str] = None,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     try:
         return _sanitize_library_payload(
-            library_facet_catalog(_db(), facet_type, limit=limit),
+            library_facet_catalog(_db(), facet_type, limit=limit, q=q),
             user,
         )
     except ValueError as exc:

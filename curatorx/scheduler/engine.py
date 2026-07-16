@@ -50,6 +50,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from curatorx.config_store import Settings, load_merged_settings
 from curatorx.library.db import Database
+from curatorx.scheduler.run_log import TaskRunLogStore
 
 logger = logging.getLogger(__name__)
 
@@ -182,8 +183,19 @@ class IdleScheduler:
         self._quarantine: Dict[str, QuarantineInfo] = {}
         self._shutdown = False
         self._running_task: Optional[str] = None
+        self._running_started_at: Optional[float] = None
+        self._pending_trigger: Optional[str] = None
+        self._manual_tasks: set[asyncio.Task[Any]] = set()
+        self._run_log = TaskRunLogStore()
         self._task: Optional[asyncio.Task[None]] = None
         self._ensure_table()
+
+    def _busy_task_name(self) -> Optional[str]:
+        return self._running_task or self._pending_trigger
+
+    @property
+    def run_log(self) -> TaskRunLogStore:
+        return self._run_log
 
     # -- Public API ----------------------------------------------------------
 
@@ -249,17 +261,28 @@ class IdleScheduler:
                     "last_error": qinfo.last_error,
                     "remaining_seconds": qinfo.remaining_seconds,
                 }
+            running = self._running_task == state.name
+            last_meta = self._run_log.last_run(state.name) or {}
+            last_started_at = last_meta.get("started_at")
+            if last_started_at is None and state.last_run_at is not None and state.last_duration_ms is not None:
+                last_started_at = state.last_run_at - (state.last_duration_ms / 1000.0)
+            if running and self._running_started_at is not None:
+                last_started_at = self._running_started_at
             result.append(
                 {
                     "name": state.name,
+                    "id": state.name,
                     "enabled": state.enabled,
                     "run_interval_seconds": interval,
                     "last_run_at": state.last_run_at,
+                    "last_started_at": last_started_at,
+                    "last_finished_at": state.last_run_at,
                     "next_run_at": next_run,
                     "last_duration_ms": state.last_duration_ms,
                     "last_status": state.last_status,
                     "registered": defn is not None,
-                    "running": self._running_task == state.name,
+                    "running": running,
+                    "current_run": self._run_log.current_run(state.name) if running else None,
                     "overdue": (
                         state.enabled
                         and (
@@ -311,7 +334,71 @@ class IdleScheduler:
         defn = self._definitions.get(name)
         if defn is None or defn.run_fn is None:
             return {"error": f"Task '{name}' not found or has no run function"}
+        busy = self._busy_task_name()
+        if busy is not None:
+            return {
+                "error": f"Task '{busy}' is already running",
+                "status": "busy",
+                "running": busy,
+            }
         return await self._execute_task(defn, force=True)
+
+    def trigger_task_background(self, name: str) -> Dict[str, Any]:
+        """Start a manual task run without awaiting completion (for live monitoring)."""
+        defn = self._definitions.get(name)
+        if defn is None or defn.run_fn is None:
+            return {"error": f"Task '{name}' not found or has no run function"}
+        busy = self._busy_task_name()
+        if busy is not None:
+            return {
+                "error": f"Task '{busy}' is already running",
+                "status": "busy",
+                "running": busy,
+            }
+
+        self._pending_trigger = name
+
+        async def _runner() -> None:
+            try:
+                await self._execute_task(defn, force=True)
+            except Exception:
+                logger.exception("Background trigger for task '%s' crashed", name)
+            finally:
+                if self._pending_trigger == name:
+                    self._pending_trigger = None
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._pending_trigger = None
+            return {"error": "No event loop available to start background task"}
+
+        task = loop.create_task(_runner(), name=f"manual-task-{name}")
+        self._manual_tasks.add(task)
+        task.add_done_callback(self._manual_tasks.discard)
+        return {
+            "name": name,
+            "status": "started",
+            "accepted": True,
+            "running": name,
+        }
+
+    def get_task_run_log(
+        self,
+        name: Optional[str] = None,
+        *,
+        after_seq: int = 0,
+        limit: int = 200,
+    ) -> Dict[str, Any]:
+        """Return buffered run events for a task (or all tasks when name is None)."""
+        if name is not None and name not in self._definitions and name not in {
+            s.name for s in self._load_all_states()
+        }:
+            return {"error": f"Task '{name}' not found"}
+        payload = self._run_log.get_events(task=name, after_seq=after_seq, limit=limit)
+        payload["running"] = self._running_task
+        payload["idle"] = self.is_idle()
+        return payload
 
     def reset_quarantine(self, name: str) -> Optional[Dict[str, Any]]:
         """Clear quarantine state for a task, allowing it to run again.
@@ -491,7 +578,19 @@ class IdleScheduler:
         after ``QUARANTINE_THRESHOLD`` consecutive failures the task is quarantined.
         """
         assert defn.run_fn is not None
+        if self._running_task is not None and self._running_task != defn.name:
+            return {
+                "name": defn.name,
+                "status": "busy",
+                "error": f"Task '{self._running_task}' is already running",
+                "running": self._running_task,
+            }
+
         self._running_task = defn.name
+        self._running_started_at = time.time()
+        trigger = "manual" if force else "schedule"
+        run_id = self._run_log.start_run(defn.name, trigger=trigger)
+        emitter_token = self._run_log.bind_emitter(defn.name)
         logger.info("Scheduler: starting task '%s'%s", defn.name, " (manual)" if force else "")
         self._emit_progress(defn.name, "running")
 
@@ -529,6 +628,12 @@ class IdleScheduler:
             status = result.get("status", "completed") if isinstance(result, dict) else "completed"
             qinfo.record_success()
             self._record_run(defn.name, elapsed_ms, status)
+            self._run_log.end_run(
+                defn.name,
+                status=status,
+                duration_ms=elapsed_ms,
+                result=result if isinstance(result, dict) else None,
+            )
             self._emit_progress(defn.name, "completed")
             logger.info(
                 "Scheduler: task '%s' finished in %dms — %s",
@@ -536,7 +641,13 @@ class IdleScheduler:
                 elapsed_ms,
                 status,
             )
-            return {"name": defn.name, "status": status, "duration_ms": elapsed_ms, **(result or {})}
+            return {
+                "name": defn.name,
+                "status": status,
+                "duration_ms": elapsed_ms,
+                "run_id": run_id,
+                **(result or {}),
+            }
 
         except asyncio.TimeoutError:
             elapsed_ms = int((time.time() - start) * 1000)
@@ -556,8 +667,20 @@ class IdleScheduler:
                     error_msg,
                 )
             self._record_run(defn.name, elapsed_ms, f"error: {error_msg}")
+            self._run_log.end_run(
+                defn.name,
+                status="error",
+                duration_ms=elapsed_ms,
+                error=error_msg,
+            )
             self._emit_progress(defn.name, "error")
-            return {"name": defn.name, "status": "error", "duration_ms": elapsed_ms, "error": error_msg}
+            return {
+                "name": defn.name,
+                "status": "error",
+                "duration_ms": elapsed_ms,
+                "error": error_msg,
+                "run_id": run_id,
+            }
 
         except Exception as exc:
             elapsed_ms = int((time.time() - start) * 1000)
@@ -572,10 +695,24 @@ class IdleScheduler:
                     error_msg,
                 )
             self._record_run(defn.name, elapsed_ms, f"error: {exc}")
+            self._run_log.end_run(
+                defn.name,
+                status="error",
+                duration_ms=elapsed_ms,
+                error=error_msg,
+            )
             self._emit_progress(defn.name, "error")
-            return {"name": defn.name, "status": "error", "duration_ms": elapsed_ms, "error": error_msg}
+            return {
+                "name": defn.name,
+                "status": "error",
+                "duration_ms": elapsed_ms,
+                "error": error_msg,
+                "run_id": run_id,
+            }
         finally:
+            self._run_log.reset_emitter(emitter_token)
             self._running_task = None
+            self._running_started_at = None
 
     def _record_run(self, name: str, duration_ms: int, status: str) -> None:
         with self._db.connect() as conn:

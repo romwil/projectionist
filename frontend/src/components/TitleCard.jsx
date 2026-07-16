@@ -69,14 +69,17 @@ export default function TitleCard({
 }) {
   const [hovered, setHovered] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
+  const [addStatus, setAddStatus] = useState(null); // idle | loading | success | error
   const [plexHref, setPlexHref] = useState(() => String(item?.plex_watch_url || "").trim());
   const badge = item.in_library ? "In library" : item.in_radarr || item.in_sonarr ? "In queue" : "New";
   const matchLabel = formatMatchPercent(item);
   const userStars = item.user_stars;
   const useSeerr = requestPath === "seerr";
-  const canRequestSeerr = useSeerr && !item.in_library && item.tmdb_id;
-  const canAddRadarr = !useSeerr && !item.in_library && item.media_type === "movie" && item.tmdb_id;
-  const canAddSonarr = !useSeerr && !item.in_library && item.media_type === "show" && item.tvdb_id;
+  const canRequestSeerr = useSeerr && !item.in_library && item.tmdb_id && addStatus !== "success";
+  const canAddRadarr =
+    !useSeerr && !item.in_library && item.media_type === "movie" && item.tmdb_id && addStatus !== "success";
+  const canAddSonarr =
+    !useSeerr && !item.in_library && item.media_type === "show" && item.tvdb_id && addStatus !== "success";
   const showWatchPlex = canWatchOnPlex(item);
   const backdropUrl = item.backdrop_url || item.art || "";
   const showRing =
@@ -116,10 +119,24 @@ export default function TitleCard({
   }
 
   function handleAdd(target) {
-    return (event) => {
+    return async (event) => {
       event.stopPropagation();
-      onAdd?.(item, target);
+      if (addStatus === "loading") return;
+      setAddStatus("loading");
+      try {
+        await onAdd?.(item, target);
+        setAddStatus("success");
+      } catch {
+        setAddStatus("error");
+      }
     };
+  }
+
+  function addButtonLabel(idleLabel) {
+    if (addStatus === "loading") return "Adding…";
+    if (addStatus === "success") return "Added";
+    if (addStatus === "error") return "Retry";
+    return idleLabel;
   }
 
   function handleDismiss(event) {
@@ -160,19 +177,44 @@ export default function TitleCard({
         </button>
       ) : null}
       {canRequestSeerr ? (
-        <button type="button" data-testid="request-seerr-button" onClick={handleAdd("seerr")}>
-          Request in Seerr
+        <button
+          type="button"
+          data-testid="request-seerr-button"
+          disabled={addStatus === "loading"}
+          onClick={handleAdd("seerr")}
+        >
+          {addButtonLabel("Request in Seerr")}
         </button>
       ) : null}
       {canAddRadarr ? (
-        <button type="button" data-testid="add-radarr-button" onClick={handleAdd("radarr")}>
-          Add to Radarr
+        <button
+          type="button"
+          data-testid="add-radarr-button"
+          disabled={addStatus === "loading"}
+          onClick={handleAdd("radarr")}
+        >
+          {addButtonLabel("Add to Radarr")}
         </button>
       ) : null}
       {canAddSonarr ? (
-        <button type="button" data-testid="add-sonarr-button" onClick={handleAdd("sonarr")}>
-          Add to Sonarr
+        <button
+          type="button"
+          data-testid="add-sonarr-button"
+          disabled={addStatus === "loading"}
+          onClick={handleAdd("sonarr")}
+        >
+          {addButtonLabel("Add to Sonarr")}
         </button>
+      ) : null}
+      {addStatus === "success" ? (
+        <span className="title-card-add-status" data-testid="title-card-add-success">
+          Added
+        </span>
+      ) : null}
+      {addStatus === "error" ? (
+        <span className="title-card-add-status is-error" data-testid="title-card-add-error">
+          Failed
+        </span>
       ) : null}
     </>
   );

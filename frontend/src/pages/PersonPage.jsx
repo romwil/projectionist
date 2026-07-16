@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
+import BackLink from "../components/BackLink";
+import { ROUTES } from "../lib/backNav.js";
 import { getPerson } from "../api/client";
 import { titleDetailPath } from "../lib/titleLinks.js";
 
@@ -33,9 +35,7 @@ export default function PersonPage() {
     return (
       <div className="app-root person-page" data-testid="person-page">
         <header className="browse-page-header">
-          <Link to="/" className="title-detail-back">
-            ← Back to chat
-          </Link>
+          <BackLink fallbackTo={ROUTES.explore} />
         </header>
         <p className="error">{error}</p>
       </div>
@@ -59,9 +59,7 @@ export default function PersonPage() {
   return (
     <div className="app-root person-page" data-testid="person-page">
       <header className="browse-page-header">
-        <Link to="/" className="title-detail-back">
-          ← Back to chat
-        </Link>
+        <BackLink fallbackTo={ROUTES.explore} />
         <Link to="/explore" className="app-topbar-link">
           Explore
         </Link>

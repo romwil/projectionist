@@ -1,11 +1,8 @@
 import { useState } from "react";
 import { groupAddableItems } from "../lib/addActions";
+import { filterDisplayableCards } from "../lib/turnstyleItems.js";
 import ConfirmAllButton from "./ConfirmAllButton";
 import TitleCard from "./TitleCard";
-
-function isDisplayableCard(item) {
-  return Boolean(item?.title || item?.tmdb_id || item?.tvdb_id || item?.rating_key);
-}
 
 export default function TurnstyleResultsOverlay({
   payload,
@@ -20,9 +17,10 @@ export default function TurnstyleResultsOverlay({
   draggableToDock = false,
 }) {
   const [cinemaMode, setCinemaMode] = useState(false);
-  const items = (payload?.items || []).filter(isDisplayableCard);
+  const items = filterDisplayableCards(payload?.items);
   if (!items.length) return null;
 
+  // Bulk confirm counts use the same displayable candidate set as the track.
   const { radarr, sonarr, seerr } = groupAddableItems(items, { requestPath });
 
   return (

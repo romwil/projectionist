@@ -1,8 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { api, getFeatures } from "../api/client";
+import BackLink from "../components/BackLink";
+import {
+  api,
+  confirmAction,
+  formatApiError,
+  getFeatures,
+  proposeAction,
+} from "../api/client";
 import RecommendModal from "../components/RecommendModal";
 import {
+  alreadyInArrMessage,
+  buildProposeActionBody,
+  isAddableToRadarr,
+  isAddableToSonarr,
+  isAlreadyInArr,
+  isRequestableInSeerr,
+  requestPathFromFeatures,
+  serviceLabelForTarget,
+} from "../lib/addActions.js";
+import {
+  ROUTES,
   exploreCastPath,
   exploreDirectorsPath,
   exploreGenrePath,
@@ -46,6 +64,26 @@ function formatFileSize(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
+function formatReleaseDate(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  // Prefer full YYYY-MM-DD when available; fall back to year-only.
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (match) {
+    const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+    if (!Number.isNaN(date.getTime())) {
+      return date.toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        timeZone: "UTC",
+      });
+    }
+  }
+  if (/^\d{4}$/.test(raw)) return raw;
+  return raw.slice(0, 10);
+}
+
 function MetaTile({ label, value }) {
   if (!value) return null;
   return (
@@ -67,6 +105,9 @@ export default function TitleDetailPage() {
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [recommendOpen, setRecommendOpen] = useState(false);
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
+  const [requestPath, setRequestPath] = useState("arr");
+  const [addStatus, setAddStatus] = useState(null); // loading | success | error
+  const [addMessage, setAddMessage] = useState("");
   const carouselRef = useRef(null);
 
   useEffect(() => {
@@ -76,6 +117,8 @@ export default function TitleDetailPage() {
     setError("");
     setTrailerOpen(false);
     setRecommendOpen(false);
+    setAddStatus(null);
+    setAddMessage("");
 
     const controller = new AbortController();
     const enrichController = new AbortController();
@@ -131,9 +174,50 @@ export default function TitleDetailPage() {
 
   useEffect(() => {
     getFeatures()
-      .then((data) => setMultiUserEnabled(Boolean(data?.features?.multi_user_enabled)))
-      .catch(() => setMultiUserEnabled(false));
+      .then((data) => {
+        setMultiUserEnabled(Boolean(data?.features?.multi_user_enabled));
+        setRequestPath(requestPathFromFeatures(data));
+      })
+      .catch(() => {
+        setMultiUserEnabled(false);
+        setRequestPath("arr");
+      });
   }, []);
+
+  async function handleRequestAdd() {
+    if (!detail || addStatus === "loading" || addStatus === "success") return;
+    const target =
+      requestPath === "seerr"
+        ? "seerr"
+        : detail.media_type === "show"
+          ? "sonarr"
+          : "radarr";
+    const label = detail.title || "this title";
+    const service = serviceLabelForTarget(target);
+    setAddStatus("loading");
+    setAddMessage("");
+    try {
+      const proposal = await proposeAction(buildProposeActionBody(detail, target));
+      if (isAlreadyInArr(proposal)) {
+        setAddStatus("success");
+        setAddMessage(alreadyInArrMessage(proposal, { label, service }));
+        return;
+      }
+      const confirm = await confirmAction(proposal.confirmation_token);
+      if (isAlreadyInArr(confirm)) {
+        setAddStatus("success");
+        setAddMessage(alreadyInArrMessage(confirm, { label, service }));
+        return;
+      }
+      setAddStatus("success");
+      setAddMessage(
+        target === "seerr" ? `Requested "${label}" in Seerr.` : `Added "${label}" to ${service}.`,
+      );
+    } catch (err) {
+      setAddStatus("error");
+      setAddMessage(formatApiError(err));
+    }
+  }
 
   useEffect(() => {
     if (!trailerOpen) return undefined;
@@ -182,6 +266,15 @@ export default function TitleDetailPage() {
   );
   const directorCredit = directorCredits[0] || null;
   const genreChips = Array.isArray(detail.genres) ? detail.genres.slice(0, 2) : [];
+  const canRequestSeerr = requestPath === "seerr" && isRequestableInSeerr(detail);
+  const canAddRadarr = requestPath !== "seerr" && isAddableToRadarr(detail);
+  const canAddSonarr = requestPath !== "seerr" && isAddableToSonarr(detail);
+  const canAddOrRequest = canRequestSeerr || canAddRadarr || canAddSonarr;
+  const addCtaLabel = canRequestSeerr
+    ? "Request in Seerr"
+    : canAddSonarr
+      ? "Add to Sonarr"
+      : "Add to Radarr";
 
   function scrollCarousel(dir) {
     const node = carouselRef.current;
@@ -192,9 +285,7 @@ export default function TitleDetailPage() {
   return (
     <div className="title-page title-detail-skinned" data-testid="title-detail-page">
       <header className="title-detail-sticky-header">
-        <Link to="/" className="title-detail-back">
-          ← Back to chat
-        </Link>
+        <BackLink fallbackTo={ROUTES.explore} testId="title-detail-back" />
         <span className="title-detail-sticky-label">
           {detail.media_type === "movie" ? "Movie" : "TV Show"}
         </span>
@@ -251,6 +342,24 @@ export default function TitleDetailPage() {
                 Trailer
               </button>
             ) : null}
+            {canAddOrRequest ? (
+              <button
+                type="button"
+                className={`title-cta ${plexHref ? "title-cta-ghost" : "title-cta-primary"}`}
+                data-testid="title-detail-add-button"
+                disabled={addStatus === "loading" || addStatus === "success"}
+                onClick={handleRequestAdd}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  add_circle
+                </span>
+                {addStatus === "loading"
+                  ? "Adding…"
+                  : addStatus === "success"
+                    ? "Added"
+                    : addCtaLabel}
+              </button>
+            ) : null}
             {multiUserEnabled ? (
               <button
                 type="button"
@@ -265,6 +374,14 @@ export default function TitleDetailPage() {
               </button>
             ) : null}
           </div>
+          {addMessage ? (
+            <p
+              className={`title-detail-add-feedback ${addStatus === "error" ? "is-error" : ""}`}
+              data-testid="title-detail-add-feedback"
+            >
+              {addMessage}
+            </p>
+          ) : null}
         </div>
       </section>
 
@@ -305,7 +422,30 @@ export default function TitleDetailPage() {
 
         <aside className="title-detail-side">
           <div className="title-meta-grid">
+            <MetaTile
+              label="Released"
+              value={formatReleaseDate(
+                detail.media_type === "show"
+                  ? detail.first_air_date || detail.release_date
+                  : detail.release_date || detail.first_air_date,
+              )}
+            />
             <MetaTile label="Decade" value={decadeLabel(detail.year)} />
+            <MetaTile label="Collection" value={detail.collection_name || null} />
+            <MetaTile label="Rating" value={detail.content_rating || null} />
+            <MetaTile
+              label="Language"
+              value={detail.original_language ? detail.original_language.toUpperCase() : null}
+            />
+            <MetaTile
+              label="Countries"
+              value={
+                Array.isArray(detail.countries) && detail.countries.length
+                  ? detail.countries.slice(0, 4).join(", ")
+                  : null
+              }
+            />
+            <MetaTile label="Status" value={detail.status || null} />
             {directorCredit ? (
               <div className="title-meta-tile">
                 <span className="title-meta-tile-label">Director</span>

@@ -3,9 +3,15 @@ import test from "node:test";
 
 import {
   buildMotifQueryParams,
+  buildExploreSectionQuery,
   buildPulseStats,
+  feedPaginationSummary,
+  getExploreSectionConfig,
   normalizeFeed,
+  normalizeMediaTypeFilter,
   normalizeMotifFacets,
+  normalizePageSize,
+  parseExploreSectionQuery,
   toggleMotifSelection,
 } from "./exploreFeeds.js";
 
@@ -83,4 +89,45 @@ test("normalizeMotifFacets filters blank values", () => {
     { value: "heist", count: 3 },
     { value: "noir", count: 2 },
   ]);
+});
+
+test("parseExploreSectionQuery normalizes pagination and media type", () => {
+  const params = new URLSearchParams("media_type=tv&limit=40&offset=20");
+  assert.deepEqual(parseExploreSectionQuery(params), {
+    limit: 40,
+    offset: 20,
+    mediaType: "show",
+  });
+  assert.equal(normalizePageSize("99"), 20);
+  assert.equal(normalizeMediaTypeFilter("movies"), "movie");
+});
+
+test("buildExploreSectionQuery omits default limit and zero offset", () => {
+  const params = buildExploreSectionQuery(
+    { limit: 40, offset: 20, mediaType: "movie" },
+    { offset: 0 },
+  );
+  assert.equal(params.get("media_type"), "movie");
+  assert.equal(params.get("limit"), "40");
+  assert.equal(params.get("offset"), null);
+});
+
+test("feedPaginationSummary computes page metadata", () => {
+  const summary = feedPaginationSummary({
+    total: 45,
+    offset: 20,
+    limit: 20,
+    items: new Array(20).fill({}),
+    has_more: true,
+  });
+  assert.equal(summary.page, 2);
+  assert.equal(summary.pageCount, 3);
+  assert.equal(summary.hasMore, true);
+  assert.equal(summary.hasPrev, true);
+});
+
+test("getExploreSectionConfig resolves known sections", () => {
+  const config = getExploreSectionConfig("recent-releases");
+  assert.equal(config?.feed, "recent-releases");
+  assert.equal(getExploreSectionConfig("unknown"), null);
 });
