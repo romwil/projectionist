@@ -54,6 +54,7 @@ class LibraryFilters:
     cast: List[str] = field(default_factory=list)
     keywords: List[str] = field(default_factory=list)
     motifs: List[str] = field(default_factory=list)
+    themes: List[str] = field(default_factory=list)
     countries: List[str] = field(default_factory=list)
     content_ratings: List[str] = field(default_factory=list)
     original_language: Optional[str] = None
@@ -137,6 +138,7 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         cast=_parse_csv_list(data.get("cast")),
         keywords=_parse_csv_list(data.get("keywords")),
         motifs=_parse_csv_list(data.get("motifs")),
+        themes=_parse_csv_list(data.get("themes")),
         countries=_parse_csv_list(data.get("countries")),
         content_ratings=_parse_csv_list(data.get("content_ratings")),
         original_language=str(data["original_language"]).strip() if data.get("original_language") else None,
@@ -314,7 +316,7 @@ def row_to_query_item(row: Mapping[str, Any]) -> Dict[str, Any]:
         "tmdb_id": int(row["tmdb_id"]) if row["tmdb_id"] is not None else None,
         "tvdb_id": int(row["tvdb_id"]) if row["tvdb_id"] is not None else None,
         "rating_key": str(row["rating_key"] or ""),
-        "file_size": int(row["file_size"] or 0),
+        "file_size": int(row["file_size"] or 0) if "file_size" in keys else 0,
         "poster_url": str(row["poster_url"] or "") if "poster_url" in keys else "",
         "backdrop_url": str(row["backdrop_url"] or "") if "backdrop_url" in keys else "",
         "runtime_minutes": int(row["runtime_minutes"]) if "runtime_minutes" in keys and row["runtime_minutes"] is not None else None,
@@ -414,6 +416,10 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         params.extend(facet_params)
     if filters.motifs:
         facet_sql, facet_params = _facet_subquery("motif", filters.motifs)
+        clauses.append(facet_sql)
+        params.extend(facet_params)
+    if filters.themes:
+        facet_sql, facet_params = _facet_subquery("theme", filters.themes)
         clauses.append(facet_sql)
         params.extend(facet_params)
     if filters.countries:

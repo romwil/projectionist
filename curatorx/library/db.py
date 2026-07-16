@@ -336,6 +336,7 @@ class Database:
             self._migrate_plot_text_columns(conn)
             self._migrate_embeddings_model(conn)
             self._migrate_item_neighbors(conn)
+            self._migrate_title_relations(conn)
             self._seed_defaults(conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
@@ -555,6 +556,34 @@ class Database:
                 ON item_neighbors(item_id, score DESC);
             CREATE INDEX IF NOT EXISTS idx_neighbors_item_surprise
                 ON item_neighbors(item_id, surprise_score DESC);
+            """
+        )
+
+    def _migrate_title_relations(self, conn: sqlite3.Connection) -> None:
+        """Theme / franchise / crew relation graph (Stage 4 v1).
+
+        Collection edges are built from ``tmdb_collection_id`` without an LLM.
+        Optional mirrors: ``neighbor`` (from item_neighbors), ``shared_crew``.
+        Optional LLM themes write ``relation='llm_theme'`` or ``facet_type='theme'``.
+        """
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS title_relations (
+                from_id INTEGER NOT NULL,
+                to_id INTEGER NOT NULL,
+                relation TEXT NOT NULL,
+                weight REAL NOT NULL DEFAULT 1.0,
+                source TEXT NOT NULL DEFAULT '',
+                PRIMARY KEY (from_id, to_id, relation),
+                FOREIGN KEY(from_id) REFERENCES library_items(id) ON DELETE CASCADE,
+                FOREIGN KEY(to_id) REFERENCES library_items(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_title_relations_from
+                ON title_relations(from_id, relation);
+            CREATE INDEX IF NOT EXISTS idx_title_relations_to
+                ON title_relations(to_id, relation);
+            CREATE INDEX IF NOT EXISTS idx_title_relations_type
+                ON title_relations(relation);
             """
         )
 
@@ -2096,6 +2125,7 @@ class Database:
                         n.neighbor_id,
                         n.score,
                         n.surprise_score,
+                        li.id,
                         li.rating_key,
                         li.media_type,
                         li.title,
@@ -2117,6 +2147,96 @@ class Database:
                     LIMIT ?
                     """,
                     (int(item_id), capped),
+                ).fetchall()
+            )
+
+    def replace_relations_of_types(
+        self,
+        by_type: Mapping[str, Sequence[Tuple[int, int, str, float, str]]],
+    ) -> int:
+        """Replace all rows for the given relation types in one transaction."""
+
+        def _write() -> int:
+            total = 0
+            with self.connect() as conn:
+                for relation, rows in by_type.items():
+                    cleaned = str(relation or "").strip().lower()
+                    if not cleaned:
+                        continue
+                    conn.execute(
+                        "DELETE FROM title_relations WHERE relation = ?",
+                        (cleaned,),
+                    )
+                    normalized = [
+                        (
+                            int(from_id),
+                            int(to_id),
+                            cleaned,
+                            float(weight),
+                            str(source or ""),
+                        )
+                        for from_id, to_id, _rel, weight, source in rows
+                        if int(from_id) != int(to_id)
+                    ]
+                    if normalized:
+                        conn.executemany(
+                            """
+                            INSERT INTO title_relations
+                                (from_id, to_id, relation, weight, source)
+                            VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT(from_id, to_id, relation) DO UPDATE SET
+                                weight = excluded.weight,
+                                source = excluded.source
+                            """,
+                            normalized,
+                        )
+                    total += len(normalized)
+            return total
+
+        return run_with_db_lock_retry(_write, label="replace_relations_of_types")
+
+    def list_title_relations(
+        self,
+        item_id: int,
+        *,
+        relation: Optional[str] = None,
+        limit: int = 25,
+    ) -> List[sqlite3.Row]:
+        """Outgoing relations from ``item_id``, joined to the related title."""
+        capped = min(max(1, int(limit or 25)), 100)
+        params: list[Any] = [int(item_id)]
+        relation_clause = ""
+        if relation:
+            relation_clause = "AND r.relation = ?"
+            params.append(str(relation).strip().lower())
+        params.append(capped)
+        with self.connect() as conn:
+            return list(
+                conn.execute(
+                    f"""
+                    SELECT
+                        r.from_id,
+                        r.to_id,
+                        r.relation,
+                        r.weight,
+                        r.source,
+                        li.id,
+                        li.rating_key,
+                        li.media_type,
+                        li.title,
+                        li.year,
+                        li.poster_url,
+                        li.backdrop_url,
+                        li.tmdb_id,
+                        li.tvdb_id
+                    FROM title_relations r
+                    JOIN library_items li ON li.id = r.to_id
+                    WHERE r.from_id = ?
+                    {relation_clause}
+                    ORDER BY r.weight DESC, li.title ASC
+                    LIMIT ?
+                    """,
+                    tuple(params),
                 ).fetchall()
             )
 
@@ -2569,9 +2689,9 @@ class Database:
 
         def _write() -> int:
             with self.connect() as conn:
-                # Motifs come from summary_motifs idle task — do not wipe them on sync rebuild.
+                # Motifs/themes come from idle tasks — do not wipe them on sync rebuild.
                 conn.execute(
-                    "DELETE FROM library_facets WHERE facet_type NOT IN ('motif')"
+                    "DELETE FROM library_facets WHERE facet_type NOT IN ('motif', 'theme')"
                 )
                 if rows:
                     conn.executemany(

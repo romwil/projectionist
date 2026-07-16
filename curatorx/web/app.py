@@ -65,6 +65,12 @@ from curatorx.library.health import compute_library_health
 from curatorx.library.facets import ensure_library_facet_index
 from curatorx.library.episodes import query_episodes, summarize_tv_progress
 from curatorx.library.facets import library_facet_catalog
+from curatorx.library.feeds import (
+    feed_on_this_day,
+    feed_recent_releases,
+    feed_recently_added,
+    neighbors_payload,
+)
 from curatorx.library.query import (
     aggregate_library,
     filters_from_mapping,
@@ -1504,6 +1510,72 @@ def library_anniversaries_endpoint(
     return {"items": items, "count": len(items)}
 
 
+@app.get("/api/library/feeds/recently-added")
+def library_feed_recently_added(
+    limit: int = 12,
+    days: int = 30,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore rail: titles added to the library within ``days``."""
+    return _sanitize_library_payload(
+        feed_recently_added(_db(), limit=limit, days=days),
+        user,
+    )
+
+
+@app.get("/api/library/feeds/recent-releases")
+def library_feed_recent_releases(
+    limit: int = 12,
+    days: int = 90,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore rail: titles with release/first_air within ``days`` (honest empty)."""
+    return _sanitize_library_payload(
+        feed_recent_releases(_db(), limit=limit, days=days),
+        user,
+    )
+
+
+@app.get("/api/library/feeds/on-this-day")
+def library_feed_on_this_day(
+    limit: int = 12,
+    month: Optional[int] = None,
+    day: Optional[int] = None,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore On This Day — calendar dates when available, else milestone years."""
+    return _sanitize_library_payload(
+        feed_on_this_day(_db(), limit=limit, month=month, day=day),
+        user,
+    )
+
+
+@app.get("/api/library/neighbors/{item_id}")
+def library_neighbors_endpoint(
+    item_id: int,
+    mode: str = "similar",
+    limit: int = 12,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Cached plot neighbors by library item id (similar | surprising)."""
+    return _sanitize_library_payload(
+        neighbors_payload(_db(), item_id, mode=mode, limit=limit),
+        user,
+    )
+
+
+@app.get("/api/library/motifs")
+def library_motifs_endpoint(
+    limit: int = 50,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Motif facet catalog for Plot Lab chips."""
+    return _sanitize_library_payload(
+        library_facet_catalog(_db(), "motif", limit=limit),
+        user,
+    )
+
+
 @app.get("/api/library/quick-pick")
 def library_quick_pick_endpoint(
     max_runtime: Optional[int] = None,
@@ -1568,6 +1640,8 @@ async def library_query_endpoint(
     directors: Optional[str] = None,
     cast: Optional[str] = None,
     keywords: Optional[str] = None,
+    motifs: Optional[str] = None,
+    themes: Optional[str] = None,
     countries: Optional[str] = None,
     content_ratings: Optional[str] = None,
     original_language: Optional[str] = None,
@@ -1607,6 +1681,8 @@ async def library_query_endpoint(
             "directors": directors,
             "cast": cast,
             "keywords": keywords,
+            "motifs": motifs,
+            "themes": themes,
             "countries": countries,
             "content_ratings": content_ratings,
             "original_language": original_language,

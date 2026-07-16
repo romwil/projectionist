@@ -537,17 +537,105 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "get_facet_catalog",
-            "description": "List top directors, actors, keywords, countries, languages, or plot motifs in the owned library.",
+            "description": (
+                "List top directors, actors, keywords, countries, languages, plot motifs, "
+                "or themes in the owned library."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "facet_type": {
                         "type": "string",
-                        "enum": ["director", "actor", "keyword", "country", "language", "motif"],
+                        "enum": [
+                            "director",
+                            "actor",
+                            "keyword",
+                            "country",
+                            "language",
+                            "motif",
+                            "theme",
+                        ],
                     },
                     "limit": {"type": "integer"},
                 },
                 "required": ["facet_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_relations",
+            "description": (
+                "List title_relations edges from a seed library item (collection, neighbor, "
+                "shared_crew, or llm_theme). Prefer walk_relations for a shallow multi-hop walk."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "integer", "description": "Library item id"},
+                    "title": {
+                        "type": "string",
+                        "description": "Seed title lookup when item_id is unknown",
+                    },
+                    "relation": {
+                        "type": "string",
+                        "enum": ["collection", "neighbor", "shared_crew", "llm_theme"],
+                        "description": "Optional relation filter",
+                    },
+                    "limit": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "walk_relations",
+            "description": (
+                "Shallow BFS over title_relations from a seed (depth 1–2). Uses the idle "
+                "title_relations_refresh cache — empty means the graph has not been built yet."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "integer"},
+                    "title": {"type": "string"},
+                    "relation": {
+                        "type": "string",
+                        "enum": ["collection", "neighbor", "shared_crew", "llm_theme"],
+                    },
+                    "depth": {"type": "integer"},
+                    "limit": {"type": "integer"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "titles_by_person",
+            "description": (
+                "List in-library titles linked to a person via structured credits "
+                "(local person_id or TMDB person id)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "person_id": {
+                        "type": "integer",
+                        "description": "Local people.id",
+                    },
+                    "tmdb_person_id": {
+                        "type": "integer",
+                        "description": "TMDB person id",
+                    },
+                    "name": {
+                        "type": "string",
+                        "description": "Person name lookup when ids are unknown",
+                    },
+                    "limit": {"type": "integer"},
+                },
             },
         },
     },
@@ -1495,6 +1583,152 @@ class ToolRegistry:
         facet_type = str(args.get("facet_type") or "director")
         limit = int(args.get("limit") or 50)
         return json.dumps(library_facet_catalog(self.db, facet_type, limit=limit))
+
+    def _resolve_seed_library_row(self, args: Mapping[str, Any]):
+        seed_row = None
+        seed_id = args.get("item_id")
+        if seed_id is not None:
+            try:
+                seed_row = self.db.library_item_by_id(int(seed_id))
+            except (TypeError, ValueError):
+                seed_row = None
+        if seed_row is None:
+            title = str(args.get("title") or "").strip()
+            if not title:
+                return None
+            pattern = f"%{title.lower()}%"
+            with self.db.connect() as conn:
+                seed_row = conn.execute(
+                    """
+                    SELECT * FROM library_items
+                    WHERE lower(title) LIKE ?
+                    ORDER BY CASE WHEN lower(title) = ? THEN 0 ELSE 1 END, title
+                    LIMIT 1
+                    """,
+                    (pattern, title.lower()),
+                ).fetchone()
+        return seed_row
+
+    async def _tool_list_relations(self, args: Mapping[str, Any]) -> str:
+        from curatorx.library.relations import list_relations_for_item
+
+        seed_row = self._resolve_seed_library_row(args)
+        if seed_row is None:
+            return json.dumps({"error": "Provide item_id or title", "items": []})
+        relation = args.get("relation")
+        relation_s = str(relation).strip().lower() if relation else None
+        limit = min(max(1, int(args.get("limit") or 25)), 50)
+        payload = list_relations_for_item(
+            self.db,
+            int(seed_row["id"]),
+            relation=relation_s,
+            limit=limit,
+        )
+        payload["seed"] = {
+            "id": int(seed_row["id"]),
+            "title": str(seed_row["title"]),
+            "year": seed_row["year"],
+            "media_type": str(seed_row["media_type"]),
+        }
+        payload["note"] = (
+            "Relations come from title_relations_refresh (collection/neighbor/shared_crew). "
+            "Empty means the graph has not been built yet."
+        )
+        return json.dumps(payload)
+
+    async def _tool_walk_relations(self, args: Mapping[str, Any]) -> str:
+        from curatorx.library.relations import walk_relations
+
+        seed_row = self._resolve_seed_library_row(args)
+        if seed_row is None:
+            return json.dumps({"error": "Provide item_id or title", "items": []})
+        relation = args.get("relation")
+        relation_s = str(relation).strip().lower() if relation else None
+        payload = walk_relations(
+            self.db,
+            int(seed_row["id"]),
+            relation=relation_s,
+            depth=int(args.get("depth") or 1),
+            limit=int(args.get("limit") or 25),
+        )
+        payload["seed"] = {
+            "id": int(seed_row["id"]),
+            "title": str(seed_row["title"]),
+            "year": seed_row["year"],
+            "media_type": str(seed_row["media_type"]),
+        }
+        return json.dumps(payload)
+
+    async def _tool_titles_by_person(self, args: Mapping[str, Any]) -> str:
+        person_id = args.get("person_id")
+        tmdb_person_id = args.get("tmdb_person_id")
+        name = str(args.get("name") or "").strip()
+        limit = min(max(1, int(args.get("limit") or 25)), 100)
+
+        resolved_person_id = None
+        resolved_tmdb = None
+        person_name = name
+        if person_id is not None:
+            try:
+                resolved_person_id = int(person_id)
+            except (TypeError, ValueError):
+                resolved_person_id = None
+        if tmdb_person_id is not None:
+            try:
+                resolved_tmdb = int(tmdb_person_id)
+            except (TypeError, ValueError):
+                resolved_tmdb = None
+
+        if resolved_person_id is None and resolved_tmdb is None and name:
+            pattern = f"%{name.lower()}%"
+            with self.db.connect() as conn:
+                person = conn.execute(
+                    """
+                    SELECT id, tmdb_person_id, name FROM people
+                    WHERE lower(name) LIKE ?
+                    ORDER BY CASE WHEN lower(name) = ? THEN 0 ELSE 1 END, name
+                    LIMIT 1
+                    """,
+                    (pattern, name.lower()),
+                ).fetchone()
+            if person is not None:
+                resolved_person_id = int(person["id"])
+                person_name = str(person["name"] or name)
+                if person["tmdb_person_id"] is not None:
+                    resolved_tmdb = int(person["tmdb_person_id"])
+
+        if resolved_person_id is None and resolved_tmdb is None:
+            return json.dumps(
+                {"error": "Provide person_id, tmdb_person_id, or name", "items": []}
+            )
+
+        rows = self.db.list_library_titles_for_person(
+            person_id=resolved_person_id,
+            tmdb_person_id=resolved_tmdb if resolved_person_id is None else None,
+        )
+        cards = []
+        items = []
+        for row in rows[:limit]:
+            card = row_to_title_card(row)
+            cards.append(card)
+            payload = _card_to_tool_item(card)
+            payload["department"] = str(row["department"] or "") if "department" in row.keys() else ""
+            payload["job"] = str(row["job"] or "") if "job" in row.keys() else ""
+            payload["character"] = str(row["character"] or "") if "character" in row.keys() else ""
+            items.append(payload)
+        self._cards.extend(cards)
+        return json.dumps(
+            {
+                "person": {
+                    "person_id": resolved_person_id,
+                    "tmdb_person_id": resolved_tmdb,
+                    "name": person_name or None,
+                },
+                "items": items,
+                "returned": len(items),
+                "total_matched": len(rows),
+            }
+        )
 
     async def _tool_query_tv_episodes(self, args: Mapping[str, Any]) -> str:
         result = query_episodes(
