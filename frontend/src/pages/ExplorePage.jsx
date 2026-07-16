@@ -1,9 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../api/client";
+import {
+  getExploreFeedOnThisDay,
+  getExploreFeedRecentReleases,
+  getExploreFeedRecentlyAdded,
+  getLibraryHealth,
+  getLibraryMotifs,
+  getLibraryNeighbors,
+  getLibraryOverview,
+  queryLibrary,
+} from "../api/client";
+import {
+  buildMotifQueryParams,
+  buildPulseStats,
+  normalizeFeed,
+  normalizeMotifFacets,
+  toggleMotifSelection,
+} from "../lib/exploreFeeds.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 
-function ExplorePosterCard({ item }) {
+function ExplorePosterCard({ item, meta, onSeed, seedLabel = "Surprise from this" }) {
   const path = titleDetailPath({
     ...item,
     in_library: true,
@@ -18,23 +34,34 @@ function ExplorePosterCard({ item }) {
       <div className="explore-poster">{media}</div>
       <h3>{item.title || "Untitled"}</h3>
       {item.year ? <p className="explore-card-meta">{item.year}</p> : null}
+      {meta ? <p className="explore-card-meta explore-card-context">{meta}</p> : null}
     </>
   );
-  if (path) {
-    return (
-      <Link to={path} className="explore-cinema-card" data-testid="explore-title-card">
-        {body}
-      </Link>
-    );
-  }
   return (
     <article className="explore-cinema-card" data-testid="explore-title-card">
-      {body}
+      {path ? (
+        <Link to={path} className="explore-cinema-card-link">
+          {body}
+        </Link>
+      ) : (
+        <div className="explore-cinema-card-link">{body}</div>
+      )}
+      {onSeed && item.id != null ? (
+        <button
+          type="button"
+          className="ghost explore-seed-btn"
+          data-testid="explore-seed-btn"
+          onClick={() => onSeed(item)}
+        >
+          {seedLabel}
+        </button>
+      ) : null}
     </article>
   );
 }
 
-function ExploreSection({ id, title, subtitle, children, empty }) {
+function ExploreSection({ id, title, subtitle, children, empty, note }) {
+  const message = empty || note || null;
   return (
     <section className="explore-section" data-testid={`explore-section-${id}`}>
       <header className="explore-section-header">
@@ -43,53 +70,234 @@ function ExploreSection({ id, title, subtitle, children, empty }) {
           {subtitle ? <p className="explore-section-subtitle">{subtitle}</p> : null}
         </div>
       </header>
-      {empty ? <p className="explore-empty status status-secondary">{empty}</p> : null}
+      {message ? <p className="explore-empty status status-secondary">{message}</p> : null}
       {children}
     </section>
   );
 }
 
-function PlaceholderGrid({ label }) {
+function FeedRail({ testId, items, loading, cardMeta, onSeed }) {
+  if (loading) {
+    return <p className="status status-secondary">Loading…</p>;
+  }
+  if (!items.length) return null;
   return (
-    <div className="explore-placeholder-grid" aria-hidden="true">
-      {[0, 1, 2, 3].map((i) => (
-        <div key={i} className="explore-placeholder-card">
-          <div className="explore-placeholder-poster" />
-          <span>{label}</span>
-        </div>
+    <div className="explore-card-rail" data-testid={testId}>
+      {items.map((item) => (
+        <ExplorePosterCard
+          key={item.id || item.rating_key || `${item.media_type}-${item.tmdb_id || item.title}`}
+          item={item}
+          meta={cardMeta ? cardMeta(item) : item.anniversary_context || null}
+          onSeed={onSeed}
+        />
       ))}
     </div>
   );
 }
 
-export default function ExplorePage() {
-  const [recentlyAdded, setRecentlyAdded] = useState(null);
-  const [recentError, setRecentError] = useState("");
-
+function useFeed(loader, deps = []) {
+  const [state, setState] = useState({ loading: true, items: [], note: null, error: "" });
   useEffect(() => {
     let cancelled = false;
-    const params = new URLSearchParams({
-      sort: "added_at",
-      recently_added_days: "30",
-      limit: "12",
-    });
-    api(`/library/query?${params}`)
-      .then((data) => {
+    setState((prev) => ({ ...prev, loading: true, error: "" }));
+    loader()
+      .then((payload) => {
         if (cancelled) return;
-        setRecentlyAdded(Array.isArray(data?.items) ? data.items : []);
+        const normalized = normalizeFeed(payload);
+        setState({
+          loading: false,
+          items: normalized.items,
+          note: normalized.note,
+          error: "",
+          meta: normalized.meta,
+        });
       })
       .catch((err) => {
         if (cancelled) return;
-        setRecentlyAdded([]);
-        setRecentError(err.message || "Could not load recently added titles.");
+        setState({
+          loading: false,
+          items: [],
+          note: null,
+          error: err.message || "Could not load this feed.",
+          meta: {},
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+  return state;
+}
+
+export default function ExplorePage() {
+  const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
+  const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
+  const onThisDay = useFeed(() => getExploreFeedOnThisDay({ limit: 12 }), []);
+
+  const [pulse, setPulse] = useState({ loading: true, stats: [], error: "" });
+  const [motifs, setMotifs] = useState([]);
+  const [motifsNote, setMotifsNote] = useState("");
+  const [motifsLoading, setMotifsLoading] = useState(true);
+  const [selectedMotifs, setSelectedMotifs] = useState([]);
+  const [motifWall, setMotifWall] = useState({ loading: false, items: [], note: null, error: "" });
+  const [seed, setSeed] = useState(null);
+  const [seedQuery, setSeedQuery] = useState("");
+  const [seedHits, setSeedHits] = useState([]);
+  const [neighbors, setNeighbors] = useState({ loading: false, items: [], note: null, error: "" });
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.all([getLibraryOverview(), getLibraryHealth()])
+      .then(([overview, health]) => {
+        if (cancelled) return;
+        setPulse({ loading: false, stats: buildPulseStats(overview, health), error: "" });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setPulse({
+          loading: false,
+          stats: [],
+          error: err.message || "Could not load library pulse.",
+        });
       });
     return () => {
       cancelled = true;
     };
   }, []);
 
-  const recentLoading = recentlyAdded === null;
-  const recentItems = recentlyAdded || [];
+  useEffect(() => {
+    let cancelled = false;
+    setMotifsLoading(true);
+    getLibraryMotifs({ limit: 40 })
+      .then((data) => {
+        if (cancelled) return;
+        const facets = normalizeMotifFacets(data);
+        setMotifs(facets);
+        setMotifsNote(
+          facets.length
+            ? ""
+            : "No plot motifs yet — summary_motifs idle task has not populated facets.",
+        );
+        setMotifsLoading(false);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMotifs([]);
+        setMotifsNote(err.message || "Could not load motifs.");
+        setMotifsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!selectedMotifs.length) {
+      setMotifWall({ loading: false, items: [], note: null, error: "" });
+      return undefined;
+    }
+    let cancelled = false;
+    setMotifWall((prev) => ({ ...prev, loading: true, error: "" }));
+    const params = buildMotifQueryParams(selectedMotifs, { limit: 24 });
+    queryLibrary(Object.fromEntries(params.entries()))
+      .then((data) => {
+        if (cancelled) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        setMotifWall({
+          loading: false,
+          items,
+          note: items.length ? null : "No titles match the selected motifs.",
+          error: "",
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setMotifWall({
+          loading: false,
+          items: [],
+          note: null,
+          error: err.message || "Could not filter by motifs.",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedMotifs]);
+
+  useEffect(() => {
+    if (!seed?.id) {
+      setNeighbors({ loading: false, items: [], note: null, error: "" });
+      return undefined;
+    }
+    let cancelled = false;
+    setNeighbors({ loading: true, items: [], note: null, error: "" });
+    getLibraryNeighbors(seed.id, { mode: "surprising", limit: 12 })
+      .then((data) => {
+        if (cancelled) return;
+        const normalized = normalizeFeed(data, {
+          fallbackNote: "Empty — plot_neighbors cache not built yet for this title.",
+        });
+        setNeighbors({
+          loading: false,
+          items: normalized.items,
+          note: normalized.note,
+          error: "",
+        });
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setNeighbors({
+          loading: false,
+          items: [],
+          note: null,
+          error: err.message || "Could not load surprising neighbors.",
+        });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [seed]);
+
+  useEffect(() => {
+    const q = seedQuery.trim();
+    if (q.length < 2) {
+      setSeedHits([]);
+      return undefined;
+    }
+    let cancelled = false;
+    const timer = setTimeout(() => {
+      queryLibrary({ query: q, limit: 6 })
+        .then((data) => {
+          if (cancelled) return;
+          setSeedHits(Array.isArray(data?.items) ? data.items : []);
+        })
+        .catch(() => {
+          if (!cancelled) setSeedHits([]);
+        });
+    }, 220);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [seedQuery]);
+
+  const otdSubtitle = useMemo(() => {
+    const mode = onThisDay.meta?.mode;
+    if (mode === "calendar") return "Release anniversaries sharing today’s date";
+    if (mode === "milestone_fallback") return "Milestone-year picks from your shelves";
+    return "Anniversary picks from your shelves";
+  }, [onThisDay.meta?.mode]);
+
+  function handleToggleMotif(value) {
+    setSelectedMotifs((prev) => toggleMotifSelection(prev, value));
+  }
+
+  function handleSeed(item) {
+    setSeed(item);
+    setSeedQuery(item.title || "");
+    setSeedHits([]);
+  }
 
   return (
     <div className="app-root explore-page" data-testid="explore-page">
@@ -112,64 +320,168 @@ export default function ExplorePage() {
           id="recently-added"
           title="Recently Added"
           subtitle="Fresh arrivals from the last 30 days"
+          empty={recentlyAdded.error || (!recentlyAdded.loading && !recentlyAdded.items.length ? recentlyAdded.note : null)}
+        >
+          <FeedRail
+            testId="explore-recently-added-rail"
+            items={recentlyAdded.items}
+            loading={recentlyAdded.loading}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="recent-releases"
+          title="Recent Releases"
+          subtitle="Library titles released in the last 90 days"
           empty={
-            recentLoading
-              ? null
-              : recentError
-                ? recentError
-                : recentItems.length
-                  ? null
-                  : "No titles added in the last 30 days — or your library sync hasn’t recorded added dates yet."
+            recentReleases.error ||
+            (!recentReleases.loading && !recentReleases.items.length ? recentReleases.note : null)
           }
         >
-          {recentLoading ? (
-            <p className="status status-secondary">Loading recently added…</p>
-          ) : recentItems.length ? (
-            <div className="explore-card-rail" data-testid="explore-recently-added-rail">
-              {recentItems.map((item) => (
-                <ExplorePosterCard
-                  key={item.id || item.rating_key || `${item.media_type}-${item.tmdb_id || item.title}`}
-                  item={item}
-                />
+          <FeedRail
+            testId="explore-recent-releases-rail"
+            items={recentReleases.items}
+            loading={recentReleases.loading}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="library-pulse"
+          title="Library Pulse"
+          subtitle="A quick read on collection health"
+          empty={pulse.error || (!pulse.loading && !pulse.stats.length ? "No overview stats yet." : null)}
+        >
+          {pulse.loading ? (
+            <p className="status status-secondary">Loading pulse…</p>
+          ) : pulse.stats.length ? (
+            <div className="explore-pulse-grid" data-testid="explore-pulse-grid">
+              {pulse.stats.map((stat) => (
+                <div key={stat.id} className="explore-pulse-stat" data-testid={`explore-pulse-${stat.id}`}>
+                  <span className="explore-pulse-value">{stat.value}</span>
+                  <span className="explore-pulse-label">{stat.label}</span>
+                  {stat.detail ? <span className="explore-pulse-detail">{stat.detail}</span> : null}
+                </div>
               ))}
             </div>
           ) : null}
         </ExploreSection>
 
         <ExploreSection
-          id="recent-releases"
-          title="Recent Releases"
-          subtitle="Coming with release-date enrichment"
-          empty="Waiting on release-date data for Wave 3."
-        >
-          <PlaceholderGrid label="Soon" />
-        </ExploreSection>
-
-        <ExploreSection
-          id="library-pulse"
-          title="Library Pulse"
-          subtitle="Taste curves and collection health"
-          empty="Pulse charts land once aggregate Explore widgets ship."
-        >
-          <PlaceholderGrid label="Pulse" />
-        </ExploreSection>
-
-        <ExploreSection
           id="on-this-day"
           title="On This Day"
-          subtitle="Anniversary picks from your shelves"
-          empty="Anniversary browse moves here in a later wave — it’s already on the chat home."
+          subtitle={otdSubtitle}
+          empty={onThisDay.error || (!onThisDay.loading && !onThisDay.items.length ? onThisDay.note : null)}
+          note={
+            onThisDay.items.length && onThisDay.note && !onThisDay.error ? onThisDay.note : null
+          }
         >
-          <PlaceholderGrid label="OTD" />
+          <FeedRail
+            testId="explore-on-this-day-rail"
+            items={onThisDay.items}
+            loading={onThisDay.loading}
+          />
         </ExploreSection>
 
         <ExploreSection
           id="plot-lab"
           title="Plot Lab"
-          subtitle="Motifs, neighbors, and narrative twins"
-          empty="Plot Lab needs Stage 2/3 neighbor + motif APIs."
+          subtitle="Motifs, poster walls, and surprising narrative neighbors"
+          empty={motifsLoading ? null : motifsNote && !motifs.length ? motifsNote : null}
         >
-          <PlaceholderGrid label="Lab" />
+          {motifsLoading ? (
+            <p className="status status-secondary">Loading motifs…</p>
+          ) : motifs.length ? (
+            <div className="explore-motif-chips" data-testid="explore-motif-chips">
+              {motifs.map((facet) => {
+                const active = selectedMotifs.includes(facet.value);
+                return (
+                  <button
+                    key={facet.value}
+                    type="button"
+                    className={`explore-motif-chip${active ? " is-active" : ""}`}
+                    data-testid="explore-motif-chip"
+                    aria-pressed={active}
+                    onClick={() => handleToggleMotif(facet.value)}
+                  >
+                    {facet.value}
+                    {facet.count ? <span className="explore-motif-count">{facet.count}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {selectedMotifs.length ? (
+            <div className="explore-plot-lab-wall" data-testid="explore-motif-wall">
+              <h3 className="explore-plot-lab-heading">Motif wall</h3>
+              {motifWall.error || motifWall.note ? (
+                <p className="explore-empty status status-secondary">
+                  {motifWall.error || motifWall.note}
+                </p>
+              ) : null}
+              {motifWall.loading ? (
+                <p className="status status-secondary">Filtering titles…</p>
+              ) : motifWall.items.length ? (
+                <div className="explore-poster-wall">
+                  {motifWall.items.map((item) => (
+                    <ExplorePosterCard
+                      key={item.id || item.rating_key || item.title}
+                      item={item}
+                      onSeed={handleSeed}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="explore-seed-panel" data-testid="explore-seed-panel">
+            <h3 className="explore-plot-lab-heading">Surprising neighbors</h3>
+            <p className="explore-section-subtitle">
+              Pick a seed title to surface narrative oddballs from the plot cache.
+            </p>
+            <label className="explore-seed-label" htmlFor="explore-seed-input">
+              Seed title
+            </label>
+            <input
+              id="explore-seed-input"
+              className="explore-seed-input"
+              data-testid="explore-seed-input"
+              type="search"
+              placeholder="Search your library…"
+              value={seedQuery}
+              onChange={(e) => setSeedQuery(e.target.value)}
+              autoComplete="off"
+            />
+            {seedHits.length ? (
+              <ul className="explore-seed-hits" data-testid="explore-seed-hits">
+                {seedHits.map((item) => (
+                  <li key={item.id || item.rating_key || item.title}>
+                    <button type="button" onClick={() => handleSeed(item)}>
+                      {item.title}
+                      {item.year ? ` (${item.year})` : ""}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            {seed ? (
+              <p className="explore-seed-active" data-testid="explore-seed-active">
+                Seed: <strong>{seed.title}</strong>
+                {seed.year ? ` (${seed.year})` : ""}
+              </p>
+            ) : null}
+            {neighbors.error || neighbors.note ? (
+              <p className="explore-empty status status-secondary">
+                {neighbors.error || neighbors.note}
+              </p>
+            ) : null}
+            <FeedRail
+              testId="explore-neighbors-rail"
+              items={neighbors.items}
+              loading={neighbors.loading}
+            />
+          </div>
         </ExploreSection>
       </main>
     </div>

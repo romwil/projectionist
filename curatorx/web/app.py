@@ -730,6 +730,11 @@ def config_page() -> HTMLResponse:
     return _serve_index()
 
 
+@app.get("/explore", response_class=HTMLResponse)
+def explore_page() -> HTMLResponse:
+    return _serve_index()
+
+
 @app.get("/title/{media_type}/{item_id}", response_class=HTMLResponse)
 def title_page(media_type: str, item_id: str) -> HTMLResponse:
     return _serve_index()

@@ -766,6 +766,54 @@ export async function getLibraryHealth() {
   return api("/library/health");
 }
 
+export async function getExploreFeedRecentlyAdded({ limit = 12, days = 30 } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    days: String(days),
+  });
+  return api(`/library/feeds/recently-added?${params}`);
+}
+
+export async function getExploreFeedRecentReleases({ limit = 12, days = 90 } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    days: String(days),
+  });
+  return api(`/library/feeds/recent-releases?${params}`);
+}
+
+export async function getExploreFeedOnThisDay({ limit = 12 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/feeds/on-this-day?${params}`);
+}
+
+export async function getLibraryMotifs({ limit = 40 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/motifs?${params}`);
+}
+
+export async function getLibraryNeighbors(itemId, { mode = "similar", limit = 12 } = {}) {
+  const params = new URLSearchParams({
+    mode: String(mode || "similar"),
+    limit: String(limit),
+  });
+  return api(`/library/neighbors/${encodeURIComponent(itemId)}?${params}`);
+}
+
+export async function queryLibrary(filters = {}) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value == null || value === "") continue;
+    if (Array.isArray(value)) {
+      const joined = value.map((v) => String(v).trim()).filter(Boolean).join(",");
+      if (joined) params.set(key, joined);
+      continue;
+    }
+    params.set(key, String(value));
+  }
+  return api(`/library/query?${params}`);
+}
+
 export async function getPurgeCandidates() {
   return api("/library/purge-candidates");
 }

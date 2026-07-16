@@ -32,6 +32,7 @@ export default function TitleDetailPage() {
   const idType = searchParams.get("id_type") || "tmdb";
   const [detail, setDetail] = useState(null);
   const [neighbors, setNeighbors] = useState(null);
+  const [neighborMode, setNeighborMode] = useState("similar");
   const [error, setError] = useState("");
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [recommendOpen, setRecommendOpen] = useState(false);
@@ -41,6 +42,7 @@ export default function TitleDetailPage() {
   useEffect(() => {
     setDetail(null);
     setNeighbors(null);
+    setNeighborMode("similar");
     setError("");
     setTrailerOpen(false);
     setRecommendOpen(false);
@@ -48,13 +50,19 @@ export default function TitleDetailPage() {
     api(`/title/${mediaType}/${itemId}${query}`)
       .then(setDetail)
       .catch((err) => setError(err.message));
+  }, [mediaType, itemId, idType]);
 
-    const neighborQuery = new URLSearchParams({ limit: "12" });
+  useEffect(() => {
+    setNeighbors(null);
+    const neighborQuery = new URLSearchParams({
+      limit: "12",
+      mode: neighborMode === "surprising" ? "surprising" : "similar",
+    });
     if (idType && idType !== "tmdb") neighborQuery.set("id_type", idType);
     api(`/title/${mediaType}/${itemId}/neighbors?${neighborQuery}`)
       .then((data) => setNeighbors(Array.isArray(data?.items) ? data.items : []))
       .catch(() => setNeighbors([]));
-  }, [mediaType, itemId, idType]);
+  }, [mediaType, itemId, idType, neighborMode]);
 
   useEffect(() => {
     getFeatures()
@@ -263,6 +271,26 @@ export default function TitleDetailPage() {
           <div className="title-neighbors-header">
             <h2>More Like This</h2>
             <div className="title-neighbors-controls">
+              <div className="title-neighbors-modes" role="group" aria-label="Neighbor ranking">
+                <button
+                  type="button"
+                  className={`ghost title-neighbors-mode${neighborMode === "similar" ? " is-active" : ""}`}
+                  data-testid="title-neighbors-similar"
+                  aria-pressed={neighborMode === "similar"}
+                  onClick={() => setNeighborMode("similar")}
+                >
+                  Similar
+                </button>
+                <button
+                  type="button"
+                  className={`ghost title-neighbors-mode${neighborMode === "surprising" ? " is-active" : ""}`}
+                  data-testid="title-neighbors-surprising"
+                  aria-pressed={neighborMode === "surprising"}
+                  onClick={() => setNeighborMode("surprising")}
+                >
+                  Surprising
+                </button>
+              </div>
               <button
                 type="button"
                 className="ghost title-neighbors-nav"

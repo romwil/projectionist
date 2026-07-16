@@ -397,6 +397,7 @@ export async function mockCuratorApis(page: Page) {
         has_more: true,
         items: [
           {
+            id: 1,
             title: "Alien",
             year: 1979,
             media_type: "movie",
@@ -407,6 +408,121 @@ export async function mockCuratorApis(page: Page) {
             added_at: Math.floor(Date.now() / 1000) - 86400,
           },
         ],
+      }),
+    });
+  });
+
+  await page.route("**/api/library/feeds/recently-added**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        feed: "recently-added",
+        days: 30,
+        total: 1,
+        note: null,
+        items: [
+          {
+            id: 1,
+            title: "Alien",
+            year: 1979,
+            media_type: "movie",
+            tmdb_id: 348,
+            poster_url: "",
+            added_at: Math.floor(Date.now() / 1000) - 86400,
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route("**/api/library/feeds/recent-releases**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        feed: "recent-releases",
+        days: 90,
+        total: 0,
+        note: "No library titles released in the last 90 days.",
+        items: [],
+      }),
+    });
+  });
+
+  await page.route("**/api/library/feeds/on-this-day**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        feed: "on-this-day",
+        mode: "milestone_fallback",
+        total: 1,
+        note: "Showing milestone-year fallback.",
+        items: [
+          {
+            id: 2,
+            title: "Jaws",
+            year: 1975,
+            media_type: "movie",
+            tmdb_id: 578,
+            poster_url: "",
+            anniversary_context: "Released 50 years ago",
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route("**/api/library/motifs**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        facet_type: "motif",
+        returned: 2,
+        facets: [
+          { value: "creature feature", count: 4 },
+          { value: "time loop", count: 2 },
+        ],
+      }),
+    });
+  });
+
+  await page.route("**/api/library/neighbors/**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        item_id: 1,
+        mode: "surprising",
+        total: 1,
+        note: null,
+        items: [
+          {
+            id: 3,
+            title: "The Thing",
+            year: 1982,
+            media_type: "movie",
+            tmdb_id: 1091,
+            poster_url: "",
+            score: 0.7,
+            surprise_score: 0.9,
+          },
+        ],
+      }),
+    });
+  });
+
+  await page.route("**/api/library/health", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        total: 5276,
+        unwatched_pct: 41.2,
+        stale_adds: 88,
+        rating_coverage_pct: 22.5,
       }),
     });
   });

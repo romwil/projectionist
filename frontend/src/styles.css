@@ -6023,3 +6023,166 @@ button.ghost.inline-link {
       color-mix(in srgb, var(--accent) 8%, var(--surface))
     );
 }
+
+.explore-cinema-card-link {
+  text-decoration: none;
+  color: inherit;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.explore-card-context {
+  line-height: 1.35;
+}
+
+.explore-seed-btn {
+  font-size: var(--text-xs);
+  padding: var(--space-1) var(--space-2);
+  justify-self: start;
+}
+
+.explore-pulse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+}
+
+.explore-pulse-stat {
+  display: grid;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-2) 70%, transparent);
+}
+
+.explore-pulse-value {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  line-height: 1.1;
+}
+
+.explore-pulse-label {
+  color: var(--muted);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.explore-pulse-detail {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.explore-motif-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.explore-motif-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.explore-motif-chip.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  background: color-mix(in srgb, var(--accent) 16%, var(--surface));
+}
+
+.explore-motif-count {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.explore-plot-lab-heading {
+  margin: var(--space-5) 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.explore-poster-wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+  gap: var(--space-3);
+}
+
+.explore-poster-wall .explore-cinema-card {
+  min-width: 0;
+  max-width: none;
+}
+
+.explore-seed-panel {
+  margin-top: var(--space-4);
+}
+
+.explore-seed-label {
+  display: block;
+  margin-top: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.explore-seed-input {
+  width: min(420px, 100%);
+  margin-top: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+}
+
+.explore-seed-hits {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  width: min(420px, 100%);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.explore-seed-hits button {
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: var(--space-2) var(--space-3);
+  font: inherit;
+  cursor: pointer;
+}
+
+.explore-seed-hits button:hover {
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+}
+
+.explore-seed-active {
+  margin: var(--space-3) 0 0;
+  font-size: var(--text-sm);
+}
+
+.title-neighbors-modes {
+  display: inline-flex;
+  gap: var(--space-1);
+  margin-right: var(--space-2);
+}
+
+.title-neighbors-mode.is-active {
+  color: var(--accent);
+}

@@ -92,5 +92,7 @@ test.describe("Theme chrome", () => {
     await expect(page.getByTestId("explore-section-recently-added")).toBeVisible();
     await expect(page.getByTestId("explore-section-plot-lab")).toBeVisible();
     await expect(page.getByTestId("explore-recently-added-rail")).toBeVisible();
+    await expect(page.getByTestId("explore-motif-chips")).toBeVisible();
+    await expect(page.getByTestId("explore-pulse-grid")).toBeVisible();
   });
 });
