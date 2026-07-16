@@ -20,4 +20,4 @@ For the full MCP protocol surface and integration guide, see [MCP.md](MCP.md).
 - **MCP integration** — [MCP.md](MCP.md)
 - **Changelog** — [../CHANGELOG.md](../CHANGELOG.md)
 
-Primary About UI may live at `/about` in the app; this file is the short docs companion.
+Primary About UI lives at `/about` in the app (footer + Settings links; not top-nav). This file is the short docs companion.

@@ -1,6 +1,6 @@
 # CuratorX — Docker / Unraid
 
-Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Baseline image line: **`romwil/curatorx:1.3`** (pin `:1.3.0` when you need an exact build).
+Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Everyday tag: **`romwil/curatorx:latest`** (CA default). Pin **`:1.7`** or **`:1.7.13`** when you need a fixed line or exact build.
 
 ---
 
@@ -103,7 +103,7 @@ Install from the Community Applications template (`templates/curatorx.xml` or `u
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/curatorx/config` → `/config` |
-| **Image** | `romwil/curatorx:1.3` (or `:1.3.0` / `:latest`) — multi-arch amd64+arm64 |
+| **Image** | `romwil/curatorx:latest` (or `:1.7` / `:1.7.13`) — multi-arch amd64+arm64 |
 
 Optional advanced env (or generate in **Admin → Advanced**): `CURATORX_MCP_API_KEY` (privacy) and `CURATORX_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
@@ -150,7 +150,7 @@ Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use
 
 ```bash
 ./scripts/docker-release.sh <semver>          # also tags X.Y and latest
-./scripts/docker-release.sh 1.3.0 --also-line 1.3
+./scripts/docker-release.sh 1.7.13 --also-line 1.7
 ```
 
 The script builds with `--provenance=false --sbom=false` and pushes `:VERSION`, `:X.Y`, and `:latest`.

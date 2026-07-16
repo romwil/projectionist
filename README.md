@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
-[![Version](https://img.shields.io/badge/version-1.3.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.7.13-green.svg)](CHANGELOG.md)
 
 **A cinema-dark chat curator for your self-hosted Plex library.**
 
@@ -33,14 +33,15 @@ Homelab folks who already run **Plex** (and usually Radarr/Sonarr), want convers
 
 ## Highlights
 
-- **Cinema-dark chat workspace** — Fraunces + DM Sans, amber accent, poster-forward title cards, turnstyle recommendation strips, slash commands
-- **Library-grounded curator** — RAG over your indexed Plex library; explainable “why this?” on every card
+- **Cinema-dark chat workspace** — Fraunces + DM Sans, amber accent, poster-forward title cards, turnstyle strips, persona switching per conversation, slash commands
+- **Library-grounded curator** — RAG over your indexed Plex library; explainable “why this?”; title detail with trailer + **Watch on Plex**
 - **Confirm before you grab** — Radarr / Sonarr (and optional Seerr) writes need an explicit confirm in chat or the status dock
-- **Ratings & watchlists** — half-star reviews, optional sync to Plex stars, household watchlist pins
-- **Sync that survives restarts** — durable jobs with live phase / count / %; phase checkpoints resume unfinished work (≤72h); embeddings skip unchanged titles
-- **Household optional** — Overseerr-style **Sign in with Plex** (PIN); shared conversations and roles when you turn multi-user on
-- **BYOP LLM** — OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint
-- **Unraid-ready** — `romwil/curatorx`, single `/config` volume, Community Applications template
+- **Ratings, watchlists & household recommends** — 1–5★ reviews (optional Plex sync), Plex Discover watchlist pull, peer recommendations inbox
+- **Owner dashboard** — library composition charts, health gauges, multi-select purge, taste timeline
+- **Sync that survives restarts** — durable jobs with live phase / count / %; idle scheduler with circuit breaker; embeddings trickle in the background
+- **Household optional** — **Sign in with Plex** (PIN), optional local password and/or OIDC; roles when multi-user is on
+- **BYOP LLM** — OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint; true SSE token streaming
+- **Unraid-ready** — `romwil/curatorx:latest`, single `/config` volume, non-root container, Community Applications template
 
 CuratorX complements disk tools like [Reclaimspace](https://github.com/romwil/reclaimspace): Reclaimspace quarantines duplicate files; CuratorX helps you decide *what* deserves the space.
 
@@ -51,11 +52,11 @@ CuratorX complements disk tools like [Reclaimspace](https://github.com/romwil/re
 ### Docker Hub (recommended)
 
 ```bash
-docker pull romwil/curatorx:1.3
+docker pull romwil/curatorx:latest
 docker run -d --name curatorx \
   -p 8788:8788 \
   -v /path/to/curatorx/config:/config \
-  romwil/curatorx:1.3
+  romwil/curatorx:latest
 ```
 
 Open **http://localhost:8788** and complete the setup wizard (Name → Connections → Libraries).
@@ -87,15 +88,15 @@ Published multi-arch images (**amd64 + arm64**):
 
 | Tag | Use |
 |-----|-----|
-| [`romwil/curatorx:1.3.0`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
-| [`romwil/curatorx:1.3`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.3 line |
-| [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Newest stable |
+| [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Everyday Unraid / Compose (CA template default) |
+| [`romwil/curatorx:1.7`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.7 line |
+| [`romwil/curatorx:1.7.13`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
 
 **Unraid:** install from Community Applications using the template (`templates/curatorx.xml` / `unraid/curatorx.xml`; CA icons at `unraid/curatorx-icon.png` / `unraid/curatorx-icon-512.png`), or add the container manually:
 
 | Setting | Value |
 |---------|-------|
-| Repository | `romwil/curatorx:1.3` |
+| Repository | `romwil/curatorx:latest` |
 | Port | `8788` |
 | Config path | `/mnt/user/appdata/curatorx/config` → `/config` |
 
@@ -119,12 +120,12 @@ Default install is **single-owner** — no login screen. Household features are 
 
 | Flag | Default | Effect |
 |------|---------|--------|
-| `features.multi_user_enabled` | `false` | **Sign in with Plex** (PIN / link, Overseerr-style); owner vs member |
+| `features.multi_user_enabled` | `false` | Login + session cookies; owner vs member partitioning |
 | `features.seerr_enabled` | `false` | Seerr discovery / request path for members |
 
-OIDC and local username/password are not shipped — use Plex PIN login when multi-user is on. Token paste on `/login` is an advanced fallback only.
+Auth methods are opt-in: **Sign in with Plex** (PIN), **local password** (owner registration), and/or **OIDC** (Authelia, Authentik, Keycloak, etc.). The login page shows whatever is configured (`auth_methods` from `GET /api/features`). Plex token paste remains an advanced fallback.
 
-Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs/wiki/Seerr.md)
+Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs/wiki/Seerr.md) · [CONFIGURATION.md](docs/CONFIGURATION.md)
 
 ---
 
@@ -143,7 +144,8 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | [Data model](docs/DATA_MODEL.md) | SQLite schema |
 | [Configuration](docs/CONFIGURATION.md) | Env vars and settings |
 | [Docker / Unraid](docs/DOCKER.md) | Container deployment |
-| [Testing](docs/TESTING.md) | Unit, Playwright, CA checklist |
+| [Testing (e2e / CA)](docs/TESTING.md) | Playwright and CA release checklist |
+| [Value-based testing](TESTING.md) | How to write logic-level backend tests |
 | [Changelog](CHANGELOG.md) | Release notes |
 
 ---

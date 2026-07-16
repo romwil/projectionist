@@ -92,17 +92,18 @@ Default values (also in `config/settings.example.json`):
 
 **For most installs:** leave everything at the defaults. CuratorX behaves exactly as before — one implicit owner, no login, no Seerr calls.
 
-**To enable multi-user or Seerr later:** open **Config → Multi-user auth** and **Config → Seerr** (or edit `{DATA_DIR}/settings.json`), set `features.multi_user_enabled` to `true`, choose `auth.mode` (`plex` for Plex PIN login), and save. For Seerr, set `features.seerr_enabled` to `true`, add your Seerr URL and API key, and test the connection. The frontend reads `GET /api/features` to show or hide login, Seerr request buttons, and user-management UI.
+**To enable multi-user or Seerr later:** open **Admin → Multi-user auth** and **Admin → Seerr** (or edit `{DATA_DIR}/settings.json`), set `features.multi_user_enabled` to `true`, enable one or more of `auth.plex_login_enabled`, `auth.local_login_enabled`, and `auth.oidc_enabled` (set `auth.mode` to match your primary method), and save. For Seerr, set `features.seerr_enabled` to `true`, add your Seerr URL and API key, and test the connection. The frontend reads `GET /api/features` (`auth_methods`, flags) to show or hide login options, Seerr request buttons, and user-management UI.
 
-### Multi-user Plex login
+### Multi-user login
 
 When `features.multi_user_enabled` is `true`, CuratorX requires sign-in for the chat UI and enforces session auth on `/api/*` (allowlisted health/features/auth/webhooks). See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).
 
-1. **Enable in Admin** — Turn on **Enable multi-user auth** and set **Auth mode** to **Plex login**.
+1. **Enable in Admin** — Turn on **Enable multi-user auth** and choose login methods (Plex, local password, OIDC).
 2. **Set a session secret (required for any real deploy)** — Export `CURATORX_SESSION_SECRET` to a long random string in your container or `.env`. Without it, CuratorX auto-generates one under `DATA_DIR` (or refuses the public dev default for multi-user).
-3. **Sign in** — Open CuratorX; you are redirected to `/login`. Click **Sign in with Plex**. CuratorX opens the plex.tv link flow (same PIN/OAuth pattern as Overseerr / Seerr). After you approve in Plex, CuratorX stores a signed session cookie. Token paste remains an advanced fallback only.
-4. **Roles** — The first Plex account to sign in becomes **owner**. Later accounts start as **member**. Owners can promote/demote, disable, or remove users under **Admin → Users**. Chat, pending actions, watchlist, and reviews are partitioned by user.
-5. **Seerr bridge** — With Seerr enabled and **Link Plex users to Seerr on login** checked, CuratorX calls Seerr `POST /auth/plex` during login and stores `seerr_user_id` + permissions on the user row.
+3. **Sign in** — Open CuratorX; you are redirected to `/login`. Use a configured method. For Plex, CuratorX opens the plex.tv link flow; after approval, CuratorX stores a signed session cookie. Token paste remains an advanced fallback only.
+4. **Roles** — The first account to sign in becomes **owner**. Later accounts start as **member**. Owners can promote/demote, disable, or remove users under **Admin → Users**. Chat, pending actions, watchlist, recommendations, and reviews are partitioned by user.
+5. **Seerr bridge** — With Seerr enabled and **Link Plex users to Seerr on login** checked, CuratorX calls Seerr `POST /auth/plex` during Plex login and stores `seerr_user_id` + permissions on the user row.
+6. **OIDC** — Set `oidc_issuer_url`, `oidc_client_id`, `oidc_client_secret`, and `oidc_redirect_uri` (callback to your CuratorX URL). The authorize flow uses a CSRF `state` parameter.
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -110,14 +111,18 @@ When `features.multi_user_enabled` is `true`, CuratorX requires sign-in for the 
 | `POST /api/auth/plex/pin` | Start Plex PIN login; returns `auth_url` to open |
 | `GET /api/auth/plex/pin/{id}` | Poll PIN; when authorized, upsert user and set session cookie |
 | `POST /api/auth/plex` | Advanced: validate a pasted Plex auth token, upsert user, set session cookie |
+| `POST /api/auth/local/register` | Owner local-password registration (when enabled) |
+| `POST /api/auth/local/login` | Local password login |
+| `GET /api/auth/oidc/authorize` | Start OIDC (when enabled) |
+| `GET /api/auth/oidc/callback` | OIDC callback |
 | `POST /api/auth/logout` | Clear session cookie |
 | `GET /api/users` | List household users (owner only) |
 | `PATCH /api/users/{id}` | Change role (owner only) |
 
 **Proxy / Unraid notes**
 
-- No OAuth callback URL is required. The browser opens plex.tv; CuratorX polls plex.tv from the server.
-- Allow the CuratorX container outbound HTTPS to `plex.tv` / `app.plex.tv`.
+- **Plex PIN:** No OAuth callback URL is required. The browser opens plex.tv; CuratorX polls plex.tv from the server. Allow outbound HTTPS to `plex.tv` / `app.plex.tv`.
+- **OIDC:** Configure `oidc_redirect_uri` to your CuratorX callback URL (must be reachable by the IdP).
 - Serve CuratorX over HTTPS (or trusted LAN HTTP) as usual for the HttpOnly session cookie (`SameSite=Lax`).
 
 **Troubleshooting**

@@ -1,25 +1,25 @@
 # Installation
 
-CuratorX runs as a **single container**. Persist `/config` for `settings.json`, `curatorx.db`, and `jobs_state.json`.
+CuratorX runs as a **single container**. Persist `/config` for `settings.json`, `curatorx.db`, and `jobs_state.json`. The image runs as non-root user `curatorx` (UID/GID 1000); the entrypoint auto-fixes `/config` ownership on upgrade.
 
 ## Docker Hub (fastest)
 
 Multi-arch images (**linux/amd64** + **linux/arm64**):
 
 ```bash
-docker pull romwil/curatorx:1.3
+docker pull romwil/curatorx:latest
 
 docker run -d --name curatorx --restart unless-stopped \
   -p 8788:8788 \
   -v /path/to/curatorx/config:/config \
-  romwil/curatorx:1.3
+  romwil/curatorx:latest
 ```
 
 | Tag | Meaning |
 |-----|---------|
-| `romwil/curatorx:1.3.0` | Exact release |
-| `romwil/curatorx:1.3` | 1.3 line |
-| `romwil/curatorx:latest` | Newest stable |
+| `romwil/curatorx:latest` | Newest stable (CA template default) |
+| `romwil/curatorx:1.7` | 1.7 line |
+| `romwil/curatorx:1.7.13` | Exact release |
 
 Open **http://\<host\>:8788**.
 
@@ -33,7 +33,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Compose builds from the local `Dockerfile` by default. To run the published image instead, set the image to `romwil/curatorx:1.3` in `docker-compose.yml`.
+Compose builds from the local `Dockerfile` by default. To run the published image instead, set the image to `romwil/curatorx:latest` in `docker-compose.yml`.
 
 ## Local (dev)
 

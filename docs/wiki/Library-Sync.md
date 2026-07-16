@@ -24,7 +24,7 @@ Notes:
 
 ## Progress UI
 
-While a sync runs, the **status dock** (bottom-left of the chat workspace) and the Config **Library sync** card show:
+While a sync runs, the **status dock** (bottom of the conversation sidebar) and the Config **Library sync** card show:
 
 - Friendly phase label (Preparing, Scanning movies, Finishing · Building recommendations…, …)
 - Count hints when available (`120 of ~500`)

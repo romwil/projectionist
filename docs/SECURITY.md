@@ -1,19 +1,19 @@
 # CuratorX security assessment
 
-Living pen-test brief for operators on the current **1.3** product surface. Status values move between **Open**, **Mitigated**, and **Accepted** as findings land — residual notes describe what remains after mitigations.
+Living pen-test brief for operators on the current **1.7** product surface. Status values move between **Open**, **Mitigated**, and **Accepted** as findings land — residual notes describe what remains after mitigations.
 
 ## Scope
 
 | In scope | Out of scope (for this brief) |
 |----------|-------------------------------|
 | Web UI + FastAPI control plane (`curatorx/web/`) | Third-party Plex / *arr / Seerr / LLM hosts |
-| Optional multi-user Plex PIN auth + session cookies | Full OIDC / local-password auth (not shipped) |
-| Setup connection tests, chat, jobs, sync, *arr confirm tokens | Host OS / Unraid / Docker daemon hardening |
-| Plex webhook ingress | Supply-chain / dependency CVE hunting |
-| Dual-mode MCP + library privacy sanitizers | Multi-tenant SaaS isolation |
-| Default Docker / Unraid packaging assumptions | |
+| Optional multi-user auth (Plex PIN, local password, OIDC) + session cookies | Host OS / Unraid / Docker daemon hardening |
+| Setup connection tests, chat, jobs, sync, *arr confirm tokens | Supply-chain / dependency CVE hunting |
+| Plex webhook ingress | Multi-tenant SaaS isolation |
+| Dual-mode MCP + library privacy sanitizers | |
+| Default Docker / Unraid packaging assumptions (non-root `curatorx`) | |
 
-**Trust assumption:** CuratorX is a single-owner homelab app. With multi-user **off**, there is no login — anyone who can reach the HTTP port is an effective admin. With multi-user **on**, Sign in with Plex, session cookies, API middleware, and per-user chat/actions partitioning apply — still assume a trusted LAN for default single-owner mode.
+**Trust assumption:** CuratorX is a single-owner homelab app. With multi-user **off**, there is no login — anyone who can reach the HTTP port is an effective admin. With multi-user **on**, configured auth methods (Plex PIN / local / OIDC), session cookies, API middleware, and per-user chat/actions partitioning apply — still assume a trusted LAN for default single-owner mode.
 
 ## Threat model
 
@@ -31,7 +31,7 @@ Port-forwarding or exposing `8788` (or a reverse proxy without auth) exposes the
 
 ### Multi-user household
 
-When multi-user is enabled, middleware requires a session for almost all `/api/*` (allowlist: health, features, auth, webhooks). Chat, pending actions, watchlist, reviews, and preferences are scoped by `user_id`. Owner-only routes cover settings, setup tests, sync mutate, and persona/lens writes. Guests cannot request media / *arr writes. The shared library catalog remains household-wide; members see a public-content library browse schema.
+When multi-user is enabled, middleware requires a session for almost all `/api/*` (allowlist: health, features, auth, webhooks). Chat, pending actions, watchlist, reviews, and preferences are scoped by `user_id`. Owner-only routes cover settings, setup tests, sync mutate, and persona/lens writes. Guests cannot request media / *arr writes. The shared library catalog remains household-wide; members see a public-content library browse schema. Login may use Plex PIN, local password (PBKDF2), and/or OIDC depending on `auth_*` flags; `GET /api/features` exposes `auth_methods`.
 
 ```text
 SPA AuthGate ──no session──► /login

@@ -112,6 +112,10 @@ pytest tests/test_db_query_validation.py::TestTelemetrySummary::test_counts_grou
 
 Coverage is configured in `pyproject.toml` and runs automatically with `pytest`. The threshold is set to 10% (`--cov-fail-under=10`), which gives room to grow as tests are added.
 
+## Related
+
+- Playwright / CA release checklist: [docs/TESTING.md](docs/TESTING.md)
+
 ## Adding Tests for New Tools
 
 Every new `_tool_*` method in `curatorx/agent/tools.py` must have a corresponding value-based test before merging:

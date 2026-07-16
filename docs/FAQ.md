@@ -1,6 +1,6 @@
 # CuratorX FAQ
 
-Common questions for CuratorX **1.3**. Also mirrored under [wiki/FAQ.md](wiki/FAQ.md).
+Common questions for CuratorX **1.7**. Also mirrored under [wiki/FAQ.md](wiki/FAQ.md).
 
 ## What is CuratorX?
 
@@ -10,11 +10,11 @@ A cinema-dark, chat-first curator for self-hosted **Plex** libraries — and a r
 
 | Tag | When |
 |-----|------|
-| `romwil/curatorx:1.3` | Everyday Unraid / Compose |
-| `romwil/curatorx:1.3.0` | Pin an exact release |
-| `romwil/curatorx:latest` | Newest stable |
+| `romwil/curatorx:latest` | Everyday Unraid / Compose (CA template default) |
+| `romwil/curatorx:1.7` | Track the 1.7 line |
+| `romwil/curatorx:1.7.13` | Pin an exact release |
 
-Images are multi-arch (**amd64 + arm64**). See [wiki/Installation.md](wiki/Installation.md).
+Images are multi-arch (**amd64 + arm64**), run as non-root `curatorx` (UID/GID 1000). See [wiki/Installation.md](wiki/Installation.md).
 
 ## Where is my data stored?
 
@@ -34,17 +34,21 @@ For conversational curation, yes — or a reachable Ollama (or other OpenAI-comp
 
 ## Is multi-user / Seerr required?
 
-No. Defaults are single-owner, no login, Seerr off. Enable only if you need household **Sign in with Plex** or Seerr requests. See [wiki/Multi-User.md](wiki/Multi-User.md) and [wiki/Seerr.md](wiki/Seerr.md).
+No. Defaults are single-owner, no login, Seerr off. Enable only if you need household sign-in or Seerr requests. See [wiki/Multi-User.md](wiki/Multi-User.md) and [wiki/Seerr.md](wiki/Seerr.md).
 
 ## How do household users sign in?
 
-When multi-user is on, the primary path is **Sign in with Plex** — an Overseerr-style plex.tv PIN / link flow. Approve in Plex; CuratorX sets a session cookie. Pasting a token on `/login` is an advanced fallback only (Plex no longer shows a token UI for most accounts).
+When multi-user is on, the login page shows whichever methods you enabled:
 
-The **Plex server token** in Config is separate: it is for library sync, not household login.
+- **Sign in with Plex** — Overseerr-style plex.tv PIN / link flow (most common)
+- **Local password** — owner-registered accounts (PBKDF2)
+- **OIDC** — Authelia, Authentik, Keycloak, or other OIDC IdPs
+
+Pasting a Plex token on `/login` is an advanced fallback only. The **Plex server token** in Config is separate: it is for library sync, not household login.
 
 ## Does CuratorX support OIDC or local passwords?
 
-Not currently. When multi-user is enabled, authentication is **Plex PIN login** only.
+Yes (opt-in). Enable `features.multi_user_enabled`, then configure `auth.plex_login_enabled`, `auth.local_login_enabled`, and/or `auth.oidc_enabled` in Admin / `settings.json`. See [CONFIGURATION.md](CONFIGURATION.md).
 
 ## Will a sync survive a container restart?
 
@@ -52,11 +56,15 @@ Job **state** is persisted; an in-flight job is marked failed with *Interrupted 
 
 ## How do I watch sync progress?
 
-Status dock (bottom-left of chat) and Config → Library sync show phase, counts, and percent. Persona phrases are secondary and do not replace live progress.
+Status dock (**bottom of the conversation sidebar**) and Settings → Library sync show phase, counts, and percent. Persona phrases are secondary and do not replace live progress.
+
+## Where is About / Privacy?
+
+Subtle footer links on every layout, plus Settings. About is **not** in the top navigation bar.
 
 ## How is this different from Overseerr / Seerr?
 
-CuratorX is a **taste-aware curator** (RAG, persona, ratings, purge advice, confirmation-gated *arr*). Seerr is an optional request front-end for members — it complements CuratorX; it does not replace the owner chat loop.
+CuratorX is a **taste-aware curator** (RAG, persona, ratings, purge advice, confirmation-gated *arr*, owner dashboard). Seerr is an optional request front-end for members — it complements CuratorX; it does not replace the owner chat loop.
 
 ## Where is the privacy policy?
 
@@ -73,7 +81,7 @@ Keys must differ. Either (or both) enables HTTP `/mcp`. Generate/rotate in **Adm
 
 ## How does Plex watchlist sync work?
 
-Local watchlist pins can sync with Plex Discover when you enable sync in Settings. CuratorX stores an **encrypted** copy of your Sign-in-with-Plex account token for that purpose only — never the server library token as a stand-in. Re-sign in if the token is missing. See [PRIVACY.md](PRIVACY.md).
+Local watchlist pins can sync with Plex Discover when you enable sync in Settings. Refresh **pulls from Plex** then lists local pins. CuratorX stores an **encrypted** copy of your Sign-in-with-Plex account token for that purpose only — never the server library token as a stand-in. Re-sign in if the token is missing. See [PRIVACY.md](PRIVACY.md).
 
 ## Can CuratorX publish named lists to Plex Lists?
 
@@ -84,6 +92,7 @@ Local watchlist pins can sync with Plex Discover when you enable sync in Setting
 - [wiki/Home.md](wiki/Home.md) — wiki index
 - [PRIVACY.md](PRIVACY.md) / in-app `/privacy` — data use
 - [MCP.md](MCP.md) — dual-mode MCP keys and tools
+- [DESIGN.md](DESIGN.md) — UX layout, cards, dashboard, personas
 - [ONBOARDING.md](ONBOARDING.md) — first-run wizard
 - [TROUBLESHOOTING via wiki](wiki/Troubleshooting.md) — common failures
 - [CHANGELOG.md](../CHANGELOG.md) — release notes

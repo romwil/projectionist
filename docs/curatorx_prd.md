@@ -66,7 +66,7 @@ Migrations in `curatorx/library/db.py`:
 |--------------|------|
 | `derived_contexts` | Context shells (`context_hash`, `inferred_label`) for ambient scoping |
 | `integration_profiles` | View alias over `service_integrations` |
-| `system_telemetry_stream` | Interaction logging with context references (ingestion **Future**) |
+| `system_telemetry_stream` | Interaction logging with context references (**implemented** ingest + admin APIs) |
 | `service_integrations` | Certification status per service (unchanged) |
 
 Default derived context: `context_hash='general'`, label **General Exploration**.
@@ -92,13 +92,18 @@ Default derived context: `context_hash='general'`, label **General Exploration**
 
 ## 6. Deferred Work
 
-- Telemetry ingestion from playback streams
+Historical PRD backlog — several items below are **shipped in 1.7** (see [ARCHITECTURE.md](ARCHITECTURE.md) extension points):
+
+~~- Telemetry ingestion from playback streams~~ → **Implemented** (admin telemetry APIs)
+~~- True LLM SSE streaming~~ → **Implemented**
+~~- OIDC / local-password auth~~ → **Implemented** (opt-in)
+
+Still deferred / partial:
+
 - Full deprecation/removal of `curation_lenses` APIs
-- True LLM SSE streaming
-- OIDC / local-password auth
-- Agent blueprints scheduler
+- Agent blueprints richer scheduler wiring
 - Plex Lists publish (pending stable Plex Discover API)
-- Semantic embeddings over cached plot summaries — embed plot overviews into vectors for semantic search beyond metadata facets; enables natural language discovery like "films about isolation in confined spaces"
+- Deeper plot-semantic natural-language discovery beyond current library embeddings
 
 ---
 

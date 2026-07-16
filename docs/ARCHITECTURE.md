@@ -18,7 +18,7 @@ It is a **separate product** from [Reclaimspace](https://github.com/romwil/recla
 | **Self-hosted, BYOP LLM** | OpenAI-compatible, Anthropic, or Ollama |
 | **Homelab friendly** | Single Docker container, SQLite, Unraid template |
 
-Non-goals: cloud SaaS, automatic file deletion without confirmation, generic streaming-service recommendations, OIDC/local password auth. Multi-user auth (**Sign in with Plex** PIN), Seerr, and Plex collections are **optional** (off by default); see [CONFIGURATION.md](CONFIGURATION.md#feature-flags-optional-off-by-default).
+Non-goals: cloud SaaS, automatic file deletion without confirmation, generic streaming-service recommendations. Multi-user auth (**Sign in with Plex** PIN, optional **local password**, optional **OIDC**), Seerr, and Plex collections are **optional** (off by default); see [CONFIGURATION.md](CONFIGURATION.md#feature-flags-optional-off-by-default).
 
 ### Design thesis — MCP over local data
 
@@ -47,7 +47,7 @@ flowchart TB
 
     subgraph persona [Persona layer]
         Name[curator_name]
-        Sliders[bro_prof dipl_snark pass_auto]
+        Sliders[7 personality dimensions]
         Prompt[Hot-reload system prompt]
     end
 
@@ -379,7 +379,7 @@ Each scheduler task runs with a configurable timeout (default 5 minutes). A per-
 
 | Topic | Behavior |
 |-------|----------|
-| Authentication | **None by default** — single implicit owner on trusted LAN. With `features.multi_user_enabled`, **Sign in with Plex** PIN + session cookies; middleware protects `/api/*` (allowlist: health/features/auth/webhooks) |
+| Authentication | **None by default** — single implicit owner on trusted LAN. With `features.multi_user_enabled`, login via **Plex PIN**, optional **local password**, and/or **OIDC** (login page shows configured `auth_methods`); session cookies + middleware protect `/api/*` (allowlist: health/features/auth/webhooks) |
 | Roles | Owner-only: settings, setup tests, library sync mutate, persona/lens writes. Guests cannot request media / *arr writes |
 | Partitioning | Chat, pending actions, watchlist, reviews, preferences scoped by `user_id` when multi-user is on (shared library remains household-wide) |
 | Feature gates | `GET /api/features` exposes enabled flags; auth UI, Seerr, and Plex collection tools stay hidden until opted in |
@@ -394,22 +394,26 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 
 ---
 
-## Extension points (1.0+)
+## Extension points (1.7+)
 
 | Extension | Status |
 |-----------|--------|
 | Curation lenses | **Implemented** — CRUD, active lens, chat filter |
-| Persona sliders / presets | **Implemented** — DB-backed, hot-reload prompt |
-| Single chat workspace | **Implemented** — see [WEB_UI.md](WEB_UI.md) |
+| Persona templates / sliders | **Implemented** — 7 dimensions, per-conversation selector, hot-reload prompt |
+| Single chat workspace | **Implemented** — see [WEB_UI.md](WEB_UI.md) and [DESIGN.md](DESIGN.md) |
+| Owner dashboard | **Implemented** — `/admin/dashboard` composition, health, purge, taste |
+| Idle task scheduler | **Implemented** — embeddings, taste, health, anniversaries, warmup, retention; circuit breaker |
 | Durable sync jobs | **Implemented** — `jobs_state.json` + restart recovery |
 | Reviews + Plex sync | **Implemented** — personal stars, conflict detection, webhook prompts |
 | Plex webhooks | **Implemented** — near-completion rating queue; optional auth secret |
-| Agent blueprints | Schema present; scheduler wiring **Future** |
-| Interaction telemetry | Schema present; ingestion **Future** |
-| True LLM SSE streaming | **Future** |
-| OIDC / local auth | **Future** (not shipped) |
+| Interaction telemetry | **Implemented** — non-blocking ingest + admin summary/events APIs |
+| True LLM SSE streaming | **Implemented** — token/tool_call/done/error events |
+| OIDC / local auth | **Implemented** — opt-in alongside Plex PIN; see [CONFIGURATION.md](CONFIGURATION.md) |
+| Household recommendations | **Implemented** — peer recommend + unread inbox |
+| Non-root Docker | **Implemented** — `curatorx` UID/GID 1000 + entrypoint chown |
+| Agent blueprints | Schema present; richer scheduler wiring **Future** |
 | Plex Lists publish | **Future** (pending stable Plex Discover API) |
-| Semantic plot embeddings | **Future** — embed plot overviews into vectors for semantic search beyond metadata facets; enables natural language discovery like "films about isolation in confined spaces" |
+| Deeper plot-semantic search | **Partial** — library embeddings + trickle ingestion ship; richer NL “plot theme” discovery still evolving |
 
 ---
 

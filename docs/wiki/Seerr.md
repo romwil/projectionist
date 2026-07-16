@@ -28,6 +28,8 @@ Typical pattern: turn on **multi-user** + **seerr**, sign in with Plex, and let 
 ## What it does not do
 
 - Replace Radarr/Sonarr for the owner’s confirmation-gated add flow
-- Provide OIDC or Seerr-native login inside CuratorX
+## Not planned here
+
+- Provide Seerr-native login inside CuratorX (use CuratorX multi-user: Plex PIN, local password, and/or OIDC instead)
 
 See [Multi-User](Multi-User.md) and [../CONFIGURATION.md](../CONFIGURATION.md).

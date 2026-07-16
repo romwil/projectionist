@@ -1,12 +1,12 @@
 # CuratorX wiki
 
-In-repo documentation for operators deploying CuratorX **1.3** on Docker or Unraid.
+In-repo documentation for operators deploying CuratorX **1.7** on Docker or Unraid.
 
 ## What CuratorX is
 
 A cinema-dark chat curator for self-hosted Plex — and a **production-quality example of a privacy-first MCP (Model Context Protocol) interface** over local structured and unstructured data. CuratorX indexes your Plex library into a fast local SQLite store and exposes it to a BYO LLM via targeted MCP tool calls. Your Plex token, watch history, and collection details never leave your hardware.
 
-Features: library-grounded recommendations, confirm-gated Radarr/Sonarr adds, ratings and watchlists, optional household **Sign in with Plex**, dual-key MCP transport (privacy / full trust), and a single `/config` Docker volume. See [MCP.md](../MCP.md) for the protocol surface.
+Features: library-grounded recommendations, confirm-gated Radarr/Sonarr adds, ratings and watchlists, title detail / trailer / Watch on Plex, owner dashboard, optional household auth (Plex PIN, local password, OIDC), dual-key MCP transport (privacy / full trust), and a single `/config` Docker volume. See [MCP.md](../MCP.md) for the protocol surface.
 
 ## Pages
 
@@ -17,7 +17,7 @@ Features: library-grounded recommendations, confirm-gated Radarr/Sonarr adds, ra
 | [Unraid](Unraid.md) | Community Applications / template install |
 | [Configuration](Configuration.md) | Settings, env vars, feature flags |
 | [Library Sync](Library-Sync.md) | Indexing Plex, progress, checkpoints / resume |
-| [Multi-User](Multi-User.md) | Optional household auth (Sign in with Plex) |
+| [Multi-User](Multi-User.md) | Optional household auth (Plex / local / OIDC) |
 | [Seerr](Seerr.md) | Optional Seerr requests for members |
 | [Troubleshooting](Troubleshooting.md) | Common failures and fixes |
 | [FAQ](FAQ.md) | Short answers (mirrors [`../FAQ.md`](../FAQ.md)) |

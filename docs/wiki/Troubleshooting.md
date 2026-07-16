@@ -39,8 +39,9 @@
 ## Multi-user / Seerr
 
 - Features are off by default — enable flags explicitly
-- Sign-in is **Sign in with Plex** (PIN). OIDC/local login are not available
+- Sign-in methods: **Plex PIN**, optional **local password**, optional **OIDC** (configure in Admin)
 - Sync via `/sync` is blocked for members when multi-user is on — use Config as owner
-- If PIN login never completes, confirm outbound HTTPS to plex.tv from the container
+- If Plex PIN login never completes, confirm outbound HTTPS to plex.tv from the container
+- If the container fails on upgrade from a root-owned `/config`, ensure you are on **v1.7.3+** (entrypoint auto-chowns); check `docker logs` for permission messages
 
-More: [FAQ](FAQ.md) · [Library Sync](Library-Sync.md)
+More: [FAQ](FAQ.md) · [Library Sync](Library-Sync.md) · [../DOCKER.md](../DOCKER.md)

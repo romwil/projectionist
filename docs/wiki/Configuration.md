@@ -40,7 +40,7 @@ Supported LLM presets include OpenAI, Anthropic, Gemini, Groq, Mistral, Together
 }
 ```
 
-- **multi_user** — **Sign in with Plex** (PIN) gate; owner vs member. See [Multi-User](Multi-User.md).
+- **multi_user** — login gate (Plex PIN, optional local password, optional OIDC); owner vs member. See [Multi-User](Multi-User.md).
 - **seerr** — household request path. See [Seerr](Seerr.md).
 - **plex_collections** — allow curator-managed Plex collections (owner).
 

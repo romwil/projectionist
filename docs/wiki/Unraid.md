@@ -1,6 +1,6 @@
 # Unraid
 
-CuratorX is packaged for Unraid Community Applications as a single container with one config volume. Use the **1.3** image line (`romwil/curatorx:1.3` or pin `:1.3.0`).
+CuratorX is packaged for Unraid Community Applications as a single container with one config volume. The CA template uses **`romwil/curatorx:latest`**. Pin `:1.7` or `:1.7.13` if you prefer a fixed tag.
 
 CA packaging in this repo:
 
@@ -32,7 +32,7 @@ Resize from a larger master if needed: `sips -z 256 256 source.png --out unraid/
 
 | Field | Value |
 |-------|-------|
-| Repository | `romwil/curatorx:1.3` (or `:1.3.0` / `:latest`) |
+| Repository | `romwil/curatorx:latest` (or `:1.7` / `:1.7.13`) |
 | Host port | `8788` (or map freely) |
 | Config | `/mnt/user/appdata/curatorx/config` → `/config` |
 | TZ (advanced) | e.g. `America/New_York` — needed so preferred `library_sync_hour` matches wall clock |
@@ -47,9 +47,9 @@ Optional advanced env (or generate in **Admin → Advanced**): `CURATORX_MCP_API
 2. Finish **Admin / Settings** (Name → Connections → Libraries) — Plex server URL + server token, TMDB, LLM; optionally Radarr/Sonarr
 3. Map movie and TV Plex libraries
 4. Click **Sync library**
-5. Watch progress in the status dock (bottom-left of chat)
+5. Watch progress in the status dock (bottom of the conversation sidebar)
 
-Household **Sign in with Plex** (PIN) is optional — enable multi-user later if you need per-person chats/watchlists.
+Household sign-in is optional — enable multi-user later if you need per-person chats/watchlists (Plex PIN, local password, and/or OIDC).
 
 ## Networking tips
 
@@ -78,8 +78,10 @@ That includes `settings.json`, `curatorx.db`, and `jobs_state.json`.
 Pull a newer tag and recreate the container with the **same** `/config` mount. An interrupted sync job is marked failed; start sync again — phase checkpoints resume unfinished work when still valid (≤72h).
 
 ```bash
-docker pull romwil/curatorx:1.3
-# or pin: docker pull romwil/curatorx:1.3.0
+docker pull romwil/curatorx:latest
+# or pin: docker pull romwil/curatorx:1.7.13
 ```
+
+If Unraid does not detect a new image after Force Update, see the cache-busting notes in [../DOCKER.md](../DOCKER.md) (v1.7.10+ embeds a build timestamp so every release is a distinct image).
 
 See also: [Installation](Installation.md) · [Troubleshooting](Troubleshooting.md) · [../DOCKER.md](../DOCKER.md)

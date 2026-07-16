@@ -2,6 +2,8 @@
 
 CuratorX uses [Playwright](https://playwright.dev/) for browser tests against the full stack (FastAPI + built React SPA).
 
+For **value-based backend unit tests** (assert exact tool/SQL results, not just response shape), see the root [TESTING.md](../TESTING.md).
+
 ## CA release checklist
 
 Run these layers before tagging a Community Applications release. Default CI and local discover paths need **no** live Plex / Radarr / Sonarr / Seerr / LLM secrets.

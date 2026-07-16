@@ -10,10 +10,11 @@ This guide describes what you see after opening CuratorX in a browser — whethe
 
 1. **Open the app** — In your browser, go to the host and port where CuratorX is running (for example `http://your-unraid-ip:8788` or the URL in your compose file).
 2. **Setup banner** — If Plex, TMDB, or your LLM provider are not configured yet, a banner appears under the top bar: *Finish setup in Settings…* Click **Config** in the top bar to open the wizard.
-3. **Top bar** — **CuratorX** (display brand), your curator name, a small **agent pulse** (chat idle / thinking / error), quiet library counts, and a **Config** text link.
-4. **Conversation sidebar** — On the left, past chats and **New**. Collapse with `«` / `»` on smaller screens. The **status dock** (sync jobs, confirmations) lives at the bottom of this sidebar.
-5. **Main chat** — Full-width reading column: messages, title cards, ambient context tag, composer.
-6. **Status dock** — In the sidebar bottom: background jobs (library sync, etc.) and single-title Radarr/Sonarr confirms. Drop a title card onto the dock while dragging to queue an add — the drop hint appears only during drag.
+3. **Top bar** — **CuratorX** (display brand), your curator name, a small **agent pulse** (chat idle / thinking / error), quiet **Plex server name · movie/show counts**, optional streak / watchlist pins chips, **Admin** (owners) / **Settings**, and an optional avatar menu when multi-user is on. **About** is not in the top bar — use the page footer or Settings.
+4. **Conversation sidebar** — On the left, past chats and **New**. Collapse with `«` / `»` on smaller screens. The **watchlist panel** and **status dock** (sync jobs, confirmations) live at the bottom of this sidebar.
+5. **Main chat** — Wide reading column (~80%): recommendations inbox (multi-user), messages, title cards, ambient context tag, composer with persona selector.
+6. **Status dock** — In the sidebar bottom: background jobs (library sync, idle scheduler), and single-title Radarr/Sonarr confirms. Drop a title card onto the dock while dragging to queue an add — the drop hint appears only during drag.
+7. **Footer** — Subtle **Privacy** and **About** links on all layouts.
 
 There is **one workspace layout**. Visual language is **cinema dark** (near-black surfaces, amber accent, Fraunces + DM Sans). The old Turnstyle compact view and Immersive split view are removed.
 
@@ -23,24 +24,27 @@ There is **one workspace layout**. Visual language is **cinema dark** (near-blac
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ CuratorX          curator · 142 movies · 38 shows   Config  │  ← top bar
+│ CuratorX   curator · Server · 142 movies · 38 shows  Settings│  ← top bar
 ├──────────────┬──────────────────────────────────────────────┤
 │ Conversations│  chat + title cards                          │
 │  [ New ]     │                                              │
 │  • Thread 1  │                                              │
 │  • Thread 2  │                                              │
-│──────────────│  [ composer ]                     [ Send ]   │
+│──────────────│  [ persona ▾ ] [ composer ]        [ Send ]  │
+│ watchlist    │                                              │
 │ status dock  │                                              │
 └──────────────┴──────────────────────────────────────────────┘
+         Privacy · About  ← footer
 ```
 
 | Area | What it does |
 |------|----------------|
-| **Top bar** | Brand-first CuratorX + curator name, chat pulse, library counts, Config |
-| **Sidebar** | Thread list + pinned status dock |
-| **Chat workspace** | Full-width thread, scroll region, composer |
+| **Top bar** | Brand-first CuratorX + curator name, chat pulse, Plex server + library counts, pins / streak chips, Admin / Settings, optional UserMenu |
+| **Sidebar** | Thread list + watchlist panel + pinned status dock |
+| **Chat workspace** | Wide thread, scroll region, composer with PersonaSelector |
 | **Status dock** | Running jobs, add progress, drag-to-queue (sidebar bottom) |
 | **Results overlay** | Optional expand for large title-card sets |
+| **Footer** | Privacy and About |
 
 **Sync library** lives on the **Config** / **Settings** page (not the main chat sidebar). After onboarding, Settings shows a **Library sync** section with movie/show counts, last sync time, and live progress while a sync runs.
 
@@ -56,7 +60,13 @@ With `features.multi_user_enabled` left at `false` (the default), CuratorX runs 
 |-------|---------|
 | `/` | Curator chat — single workspace |
 | `/config` | First-run setup wizard or Settings |
-| `/title/{movie\|show}/{id}` | Title detail — backdrop hero, metadata, purge notes |
+| `/settings/*` | Profile (font size), lists, preferences |
+| `/admin/*` | Owner Admin shell (users, dashboard, advanced) |
+| `/admin/dashboard` | Owner library intelligence dashboard |
+| `/title/{movie\|show}/{id}` | Title detail — backdrop hero, trailer modal, Watch on Plex, purge notes |
+| `/privacy` | Privacy disclosure (no login) |
+| `/about` | About / version |
+| `/login` | Multi-user login (configured auth methods) |
 
 Session ID persists in `localStorage` for chat continuity across reloads.
 
@@ -83,7 +93,11 @@ On `/config` load, the UI fetches certification status and sequentially tests an
   - `Cmd/Ctrl+N` — new conversation
   - `Esc` — close results overlay
 - **Ambient tint** — The workspace background subtly shifts based on inferred conversation context (e.g. neo-noir, 1970s).
-- **Watchlist shelf** — Pin titles from any title card with the ☆ button. Pinned count appears in the top bar; open the list from the sidebar footer or the top-bar chip.
+- **Watchlist shelf** — Pin titles from any title card with the ☆ button. Pinned count appears in the top bar (click toggles the panel); open the list from the sidebar. Refresh pull-syncs from Plex Discover when configured. Click a pin to open title detail.
+- **Title detail** — Click poster/title on a card to open detail with optional YouTube trailer modal and **Watch on Plex** when in-library.
+- **Recommend** — When multi-user is on, send a title to household peers; unread items appear in a home inbox.
+- **Persona selector** — Switch persona per conversation from the composer; create custom personas with seven sliders.
+- **Font size** — Settings → Profile: small / medium / large.
 - **Card hover backdrop** — Hover a title card to see a blurred backdrop image when art is available.
 - **Cinema mode** — In the results overlay, toggle **Cinema mode** to enlarge cards and dim surrounding chrome.
 - **TV progress rings** — Show cards display a small ring for watched vs total episodes when that data is available.
@@ -96,7 +110,7 @@ On `/config` load, the UI fetches certification status and sequentially tests an
 
 ### Persona presets (for novices)
 
-CuratorX ships five **persona presets** — ready-made curator personalities you pick in **Config → Persona**. Each preset sets tone sliders, greeting copy, composer hints, review prompts, and a subtle UI accent. You can still rename your curator and fine-tune sliders afterward.
+CuratorX ships five **persona presets** — ready-made curator personalities. Switch them **per conversation** from the composer PersonaSelector, or manage defaults under **Admin → Persona**. Each preset sets tone sliders (seven dimensions), greeting copy, composer hints, review prompts, and a subtle UI accent. You can still rename your curator and fine-tune sliders afterward.
 
 | Preset | Vibe | Good if you want… |
 |--------|------|-------------------|
@@ -233,9 +247,9 @@ When `features.multi_user_enabled` is `true` in settings:
 
 1. The app loads `GET /api/features` and `GET /api/auth/me`.
 2. If features show multi-user mode and `/api/auth/me` returns **401**, the browser redirects to **`/login`**. API middleware also requires a session for almost all `/api/*` (see [SECURITY.md](SECURITY.md)).
-3. **Sign in with Plex** starts an Overseerr-style plex.tv PIN flow. Approve in the Plex window; CuratorX polls until authorized and stores a signed **HttpOnly** session cookie. Token paste is an advanced fallback only.
-4. After login, the main chat UI loads. The top bar shows an avatar menu with display name, role, and **Sign out**.
-5. **Owners** manage household users under **Admin**. **Members** use **Settings** for personal prefs; Seerr request buttons appear instead of Radarr/Sonarr adds when Seerr is enabled.
+3. Sign in with a configured method (**Plex PIN**, **local password**, and/or **OIDC**). For Plex, CuratorX starts an Overseerr-style plex.tv PIN flow. Approve in the Plex window; CuratorX polls until authorized and stores a signed **HttpOnly** session cookie. Token paste is an advanced fallback only.
+4. After login, the main chat UI loads. The top bar shows an avatar menu with display name, role, and **Sign out**. Privacy / About remain in the footer.
+5. **Owners** manage household users and the dashboard under **Admin**. **Members** use **Settings** for personal prefs (including font size); Seerr request buttons appear instead of Radarr/Sonarr adds when Seerr is enabled.
 
 When multi-user is **off** (default), there is no login screen and the bootstrap owner is used implicitly.
 
