@@ -3,6 +3,9 @@
 		{
 			"name": "mediacurator",
 			"path": "."
+		},
+		{
+			"path": "../../../../Volumes/appdata/curatorx"
 		}
 	],
 	"settings": {}

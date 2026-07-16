@@ -120,6 +120,25 @@ Or use the host LAN IP if `host.docker.internal` is unavailable.
 
 Full Unraid steps: [wiki/Unraid.md](wiki/Unraid.md).
 
+### Unraid rollout (automation)
+
+CA XML remains the human install source of truth. For pull/recreate rollouts (post-release testing, CI-style updates), keep files under appdata:
+
+| Path | Purpose |
+|------|---------|
+| `/mnt/user/appdata/curatorx/rollout.sh` | `docker pull` + stop/rm + `docker run` + log/health confirm (stock Unraid; no Compose required) |
+| `/mnt/user/appdata/curatorx/docker-compose.yml` | Optional reference / hosts that have Compose |
+| `/mnt/user/appdata/curatorx/config` | Bind-mounted `/config` — never wipe |
+
+```bash
+ssh automat
+cd /mnt/user/appdata/curatorx
+./rollout.sh           # :latest
+./rollout.sh 1.8.0     # pin a release tag
+```
+
+`rollout.sh` uses plain Docker CLI on Unraid (Compose is usually absent). If `docker compose` / `docker-compose` is available it prefers that instead. Same-named containers are stop/rm only — `./config` is never wiped. Optional seed env: copy `.env.example` → `.env` (secrets usually already live in `config/`).
+
 ---
 
 ## Troubleshooting
