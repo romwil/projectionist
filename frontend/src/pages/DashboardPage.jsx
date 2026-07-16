@@ -5,7 +5,7 @@ import {
   getLibraryHealth,
   getLibraryStats,
   getPurgeCandidates,
-  getTvProgress,
+  refreshPurgeCandidates,
   getEngagementStreak,
   listReviews,
   deletePurgeCandidates,
@@ -14,7 +14,6 @@ import {
 import BarChart from "../components/charts/BarChart";
 import DonutChart from "../components/charts/DonutChart";
 import Gauge from "../components/charts/Gauge";
-import ProgressBar from "../components/charts/ProgressBar";
 import { buildRuntimeBuckets, sortPurgeCandidates } from "../lib/dashboardCharts.js";
 
 function useDashData(fetcher) {
@@ -70,14 +69,37 @@ function formatBytes(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-function PurgeTable({ candidates, onRefresh }) {
+function formatPurgeGeneratedAt(generatedAt) {
+  if (generatedAt == null || generatedAt === "") return null;
+  const ms = typeof generatedAt === "number" ? generatedAt * 1000 : Date.parse(generatedAt);
+  if (!Number.isFinite(ms)) return null;
+  try {
+    return new Date(ms).toLocaleString();
+  } catch {
+    return null;
+  }
+}
+
+function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, onRefreshNow }) {
   const [sortKey, setSortKey] = useState("purge_score");
   const [sortDir, setSortDir] = useState("desc");
   const [selected, setSelected] = useState(new Set());
   const [confirmAction, setConfirmAction] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const sorted = sortPurgeCandidates(candidates, sortKey, sortDir);
   const displayed = sorted.slice(0, 20);
+  const generatedLabel = formatPurgeGeneratedAt(generatedAt);
+
+  async function handleRefreshNow() {
+    if (refreshing || !onRefreshNow) return;
+    setRefreshing(true);
+    try {
+      await onRefreshNow();
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   function handleSort(key) {
     if (sortKey === key) {
@@ -127,10 +149,37 @@ function PurgeTable({ candidates, onRefresh }) {
 
   const arrow = (key) => (sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "");
 
-  if (!sorted.length) return <p className="dash-empty">No purge candidates found.</p>;
-
   return (
     <div className="dash-purge-container">
+      <div className="dash-purge-toolbar">
+        <p className="dash-purge-meta" data-testid="purge-cache-meta">
+          {stale
+            ? "Cache empty — run Refresh now to compute candidates."
+            : generatedLabel
+              ? `Cached ${generatedLabel}`
+              : sorted.length
+                ? "Showing cached candidates"
+                : "No purge candidates in cache."}
+        </p>
+        <button
+          type="button"
+          className="dash-purge-btn dash-purge-btn--muted"
+          data-testid="purge-refresh-now"
+          disabled={refreshing}
+          onClick={handleRefreshNow}
+        >
+          {refreshing ? "Refreshing…" : "Refresh now"}
+        </button>
+      </div>
+
+      {!sorted.length ? (
+        <p className="dash-empty" data-testid="purge-empty">
+          {stale
+            ? "Purge candidates have not been computed yet."
+            : "No purge candidates found."}
+        </p>
+      ) : null}
+
       {selected.size > 0 && (
         <div className="dash-purge-actions">
           <button
@@ -178,48 +227,50 @@ function PurgeTable({ candidates, onRefresh }) {
         </div>
       )}
 
-      <div className="dash-table-wrap">
-        <table className="dash-table">
-          <thead>
-            <tr>
-              <th className="dash-table-check">
-                <input
-                  type="checkbox"
-                  checked={displayed.length > 0 && selected.size === displayed.length}
-                  onChange={toggleSelectAll}
-                  aria-label="Select all"
-                />
-              </th>
-              <th onClick={() => handleSort("title")}>Title{arrow("title")}</th>
-              <th onClick={() => handleSort("file_size")}>Size{arrow("file_size")}</th>
-              <th onClick={() => handleSort("last_watched")}>Last Watched{arrow("last_watched")}</th>
-              <th onClick={() => handleSort("taste_match")}>Taste %{arrow("taste_match")}</th>
-              <th onClick={() => handleSort("purge_score")}>Score{arrow("purge_score")}</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayed.map((c, i) => (
-              <tr key={c.rating_key || c.title + i} className={selected.has(c.rating_key) ? "dash-table-row--selected" : ""}>
-                <td className="dash-table-check">
+      {sorted.length ? (
+        <div className="dash-table-wrap">
+          <table className="dash-table">
+            <thead>
+              <tr>
+                <th className="dash-table-check">
                   <input
                     type="checkbox"
-                    checked={selected.has(c.rating_key)}
-                    onChange={() => toggleSelect(c.rating_key)}
-                    aria-label={`Select ${c.title}`}
+                    checked={displayed.length > 0 && selected.size === displayed.length}
+                    onChange={toggleSelectAll}
+                    aria-label="Select all"
                   />
-                </td>
-                <td className="dash-table-title">{c.title}</td>
-                <td>{formatBytes(c.file_size)}</td>
-                <td>{c.last_watched || "Never"}</td>
-                <td>{c.taste_match != null ? `${Math.round(c.taste_match)}%` : "—"}</td>
-                <td>{c.purge_score != null ? c.purge_score.toFixed(1) : "—"}</td>
-                <td className="dash-table-reason">{c.reason || "—"}</td>
+                </th>
+                <th onClick={() => handleSort("title")}>Title{arrow("title")}</th>
+                <th onClick={() => handleSort("file_size")}>Size{arrow("file_size")}</th>
+                <th onClick={() => handleSort("last_watched")}>Last Watched{arrow("last_watched")}</th>
+                <th onClick={() => handleSort("taste_match")}>Taste %{arrow("taste_match")}</th>
+                <th onClick={() => handleSort("purge_score")}>Score{arrow("purge_score")}</th>
+                <th>Reason</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {displayed.map((c, i) => (
+                <tr key={c.rating_key || c.title + i} className={selected.has(c.rating_key) ? "dash-table-row--selected" : ""}>
+                  <td className="dash-table-check">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(c.rating_key)}
+                      onChange={() => toggleSelect(c.rating_key)}
+                      aria-label={`Select ${c.title}`}
+                    />
+                  </td>
+                  <td className="dash-table-title">{c.title}</td>
+                  <td>{formatBytes(c.file_size)}</td>
+                  <td>{c.last_watched || "Never"}</td>
+                  <td>{c.taste_match != null ? `${Math.round(c.taste_match)}%` : "—"}</td>
+                  <td>{c.purge_score != null ? c.purge_score.toFixed(1) : "—"}</td>
+                  <td className="dash-table-reason">{c.reason || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -228,7 +279,6 @@ const fetchOverview = () => getLibraryOverview();
 const fetchHealth = () => getLibraryHealth();
 const fetchStats = () => getLibraryStats();
 const fetchPurge = () => getPurgeCandidates();
-const fetchTv = () => getTvProgress();
 const fetchStreak = () => getEngagementStreak();
 const fetchReviews = () => listReviews({ limit: 10, sort: "newest" });
 const fetchRuntimeAgg = () => getLibraryAggregate("runtime_bucket");
@@ -242,7 +292,6 @@ export default function DashboardPage() {
   const health = useDashData(fetchHealth);
   const stats = useDashData(fetchStats);
   const purge = useDashData(fetchPurge);
-  const tv = useDashData(fetchTv);
   const streak = useDashData(fetchStreak);
   const reviews = useDashData(fetchReviews);
   const runtimeAgg = useDashData(fetchRuntimeAgg);
@@ -251,12 +300,17 @@ export default function DashboardPage() {
   const countryAgg = useDashData(fetchCountryAgg);
   const languageAgg = useDashData(fetchLanguageAgg);
 
+  async function handlePurgeRefreshNow() {
+    const payload = await refreshPurgeCandidates();
+    purge.reload();
+    return payload;
+  }
+
   function refreshAll() {
     overview.reload();
     health.reload();
     stats.reload();
     purge.reload();
-    tv.reload();
     streak.reload();
     reviews.reload();
     runtimeAgg.reload();
@@ -285,14 +339,11 @@ export default function DashboardPage() {
 
   const streakCount = streak.data?.streak ?? streak.data?.session_count_30d ?? streak.data?.count ?? streak.data?.sessions ?? 0;
 
-  const tvShows = Array.isArray(tv.data)
-    ? tv.data
-    : tv.data?.shows ?? tv.data?.buckets ?? tv.data?.progress ?? [];
-  const topTv = tvShows.slice(0, 10);
-
   const purgeCandidates = Array.isArray(purge.data)
     ? purge.data
     : purge.data?.candidates ?? purge.data?.items ?? [];
+  const purgeStale = Boolean(purge.data && !Array.isArray(purge.data) && purge.data.stale);
+  const purgeGeneratedAt = Array.isArray(purge.data) ? null : purge.data?.generated_at ?? null;
 
   const recentReviews = Array.isArray(reviews.data)
     ? reviews.data
@@ -396,33 +447,18 @@ export default function DashboardPage() {
             accent="var(--accent)"
           />
         </Panel>
-
-        <Panel title="TV Completion" loading={tv.loading} error={tv.error}>
-          {topTv.length ? (
-            <div className="dash-tv-progress dash-tv-progress--expanded">
-              {topTv.map((show) => (
-                <ProgressBar
-                  key={show.title || show.name || show.show_title}
-                  value={show.completion ?? show.completion_percent ?? show.progress ?? 0}
-                  label={show.title || show.name || show.show_title || "Unknown"}
-                  detail={show.detail || (show.watched_episodes != null && show.total_episodes != null
-                    ? `${show.watched_episodes}/${show.total_episodes} episodes`
-                    : show.seasons_watched != null
-                      ? `${show.seasons_watched}/${show.seasons_total} seasons`
-                      : undefined)}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="dash-empty">No in-progress shows.</p>
-          )}
-        </Panel>
       </div>
 
       {/* ─── Panel 3: Storage Intelligence ─── */}
       <h2 className="dash-section-title">Storage Intelligence</h2>
       <Panel title="Purge Candidates" loading={purge.loading} error={purge.error}>
-        <PurgeTable candidates={purgeCandidates} onRefresh={purge.reload} />
+        <PurgeTable
+          candidates={purgeCandidates}
+          onRefresh={purge.reload}
+          stale={purgeStale}
+          generatedAt={purgeGeneratedAt}
+          onRefreshNow={handlePurgeRefreshNow}
+        />
       </Panel>
 
       {/* ─── Panel 4: Taste Profile ─── */}

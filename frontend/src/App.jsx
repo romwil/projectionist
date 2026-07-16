@@ -59,6 +59,8 @@ import { blendAmbientAccent } from "./lib/ambientAccent.js";
 import { shouldSubmitComposerOnEnter } from "./lib/composerKeyboard.js";
 import { createId } from "./lib/id.js";
 import { executeSlashCommand, parseSlashCommand } from "./lib/slashCommands.js";
+import { normalizeQuickPickError, normalizeQuickPickResult } from "./lib/quickPick.js";
+import { resolveActivePersonaId } from "./lib/resolveActivePersona.js";
 import {
   createKonamiTracker,
   easterEggAlreadyFired,
@@ -167,6 +169,7 @@ export default function App() {
   const [libraryGlance, setLibraryGlance] = useState(null);
   const [glanceShown, setGlanceShown] = useState(false);
   const [quickPick, setQuickPick] = useState(null);
+  const [quickPickLoading, setQuickPickLoading] = useState(false);
   const [personas, setPersonas] = useState([]);
   const [activePersonaId, setActivePersonaId] = useState(null);
   const [defaultPersonaId, setDefaultPersonaId] = useState(null);
@@ -279,11 +282,12 @@ export default function App() {
       const list = data.items || data || [];
       setPersonas(list);
       const def = list.find((p) => p.is_default);
-      if (def) setDefaultPersonaId(def.id);
-      return list;
+      const nextDefaultId = def?.id ?? null;
+      setDefaultPersonaId(nextDefaultId);
+      return { list, defaultPersonaId: nextDefaultId };
     } catch (error) {
       console.error(error);
-      return [];
+      return { list: [], defaultPersonaId: null };
     }
   }, []);
 
@@ -496,6 +500,21 @@ export default function App() {
     initializeThreads().catch(console.error);
   }, [loadThreadMessages, refreshThreads]);
 
+  // Ensure the persona dropdown reflects default / thread selection once both
+  // personas and the active thread are available (they load in parallel).
+  useEffect(() => {
+    if (!threadsReady || !personas.length) return;
+    const activeThread = threads.find((t) => t.id === activeSessionId);
+    setActivePersonaId((current) =>
+      resolveActivePersonaId({
+        activePersonaId: current,
+        threadPersonaId: activeThread?.persona_id || null,
+        defaultPersonaId,
+        personas,
+      }),
+    );
+  }, [threadsReady, personas, defaultPersonaId, activeSessionId, threads]);
+
   useEffect(() => {
     Promise.all([
       api("/setup/status").then(setSetup),
@@ -642,7 +661,7 @@ export default function App() {
 
   async function handleCreatePersona(data) {
     await createPersona(data);
-    const list = await refreshPersonas();
+    const { list } = await refreshPersonas();
     if (list.length === 1) setActivePersonaId(list[0].id);
   }
 
@@ -663,13 +682,15 @@ export default function App() {
   }
 
   async function handleQuickPick() {
+    if (quickPickLoading) return;
+    setQuickPickLoading(true);
     try {
       const result = await api("/library/quick-pick");
-      if (result?.item) {
-        setQuickPick(result);
-      }
-    } catch {
-      // graceful degradation
+      setQuickPick(normalizeQuickPickResult(result));
+    } catch (error) {
+      setQuickPick(normalizeQuickPickError(error, formatApiError));
+    } finally {
+      setQuickPickLoading(false);
     }
   }
 
@@ -1390,12 +1411,19 @@ export default function App() {
             {!showWelcomePanel && libraryGlance && !glanceShown ? (
               <LibraryGlanceCard snapshot={libraryGlance} onDismiss={handleDismissGlance} />
             ) : null}
-            {quickPick?.item ? (
+            {quickPickLoading || quickPick ? (
               <QuickPickCard
-                item={quickPick.item}
-                why={quickPick.why}
+                item={quickPick?.item}
+                why={quickPick?.why}
+                status={quickPick?.status}
+                message={quickPick?.message}
+                loading={quickPickLoading}
                 onRetry={handleQuickPick}
-                onTellMore={() => sendMessage(`Tell me more about ${quickPick.item.title}`)}
+                onTellMore={
+                  quickPick?.item?.title
+                    ? () => sendMessage(`Tell me more about ${quickPick.item.title}`)
+                    : undefined
+                }
                 onAdd={handleAdd}
                 onDismiss={() => setQuickPick(null)}
                 requestPath={requestPath}
@@ -1452,161 +1480,171 @@ export default function App() {
             }}
           >
             <div className="composer-shell">
-            <span className="ambient-context-tag" data-testid="ambient-context-tag">
-              ⧉ {contextLabel}
-            </span>
-            <InlineAlert type="error" message={chatError} />
-            <div className="composer-row">
-              {personas.length > 0 && (
-                <PersonaSelector
-                  personas={personas}
-                  activePersonaId={activePersonaId}
-                  onSelect={setActivePersonaId}
-                  onCreate={handleCreatePersona}
-                  onUpdate={handleUpdatePersona}
-                  onDelete={handleDeletePersona}
-                  onSetDefault={handleSetDefaultPersona}
-                  defaultPersonaId={defaultPersonaId}
-                />
-              )}
-              <textarea
-                ref={composerRef}
-                data-testid="composer-input"
-                value={input}
-                onChange={(event) => setInput(event.target.value)}
-                onKeyDown={(event) => {
-                  if (!konamiTrackerRef.current) {
-                    konamiTrackerRef.current = createKonamiTracker((kind) => {
-                      const name = persona?.curator_name || "Curator";
-                      const eggMessage = {
-                        id: createId(),
-                        role: "assistant",
-                        blocks: [{ type: "text", content: easterEggResponse(kind, name) }],
-                      };
-                      setMessages((prev) => [...prev, eggMessage]);
-                      speakAssistantMessage(eggMessage);
-                    });
-                  }
-                  konamiTrackerRef.current(event);
+              <span className="ambient-context-tag" data-testid="ambient-context-tag">
+                ⧉ {contextLabel}
+              </span>
+              <InlineAlert type="error" message={chatError} />
+              <div className="composer-chrome" data-testid="composer-chrome">
+                <textarea
+                  ref={composerRef}
+                  data-testid="composer-input"
+                  value={input}
+                  onChange={(event) => setInput(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (!konamiTrackerRef.current) {
+                      konamiTrackerRef.current = createKonamiTracker((kind) => {
+                        const name = persona?.curator_name || "Curator";
+                        const eggMessage = {
+                          id: createId(),
+                          role: "assistant",
+                          blocks: [{ type: "text", content: easterEggResponse(kind, name) }],
+                        };
+                        setMessages((prev) => [...prev, eggMessage]);
+                        speakAssistantMessage(eggMessage);
+                      });
+                    }
+                    konamiTrackerRef.current(event);
 
-                  const canSubmit = Boolean(input.trim()) && !loading && threadsReady;
-                  if (shouldSubmitComposerOnEnter(event, { canSubmit })) {
-                    event.preventDefault();
-                    sendMessage(input);
-                    return;
-                  }
-                  if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
-                    event.preventDefault();
-                  }
-                }}
-                placeholder={
-                  voiceListening
-                    ? "Listening…"
-                    : composerPlaceholder || "Describe what you're hunting for…"
-                }
-                rows={2}
-                disabled={loading || !threadsReady}
-              />
-              {showMic ? (
-                <button
-                  type="button"
-                  className={`composer-mic ghost ${voiceListening ? "is-listening" : ""}`}
-                  data-testid="composer-mic"
-                  aria-label={voiceListening ? "Stop dictation" : "Dictate with microphone"}
-                  aria-pressed={voiceListening}
-                  title={voiceListening ? "Stop dictation" : "Dictate"}
-                  disabled={loading || !threadsReady}
-                  onClick={toggleListening}
-                >
-                  <svg
-                    className="composer-mic-icon"
-                    width="18"
-                    height="18"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"
-                      fill="currentColor"
-                    />
-                    <path
-                      d="M17.5 11a5.5 5.5 0 0 1-11 0"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    />
-                    <path
-                      d="M12 16.5V20"
-                      stroke="currentColor"
-                      strokeWidth="1.8"
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                </button>
-              ) : null}
-              {voiceSpeaking || ttsMuted ? (
-                <button
-                  type="button"
-                  className={`composer-tts-mute ghost ${ttsMuted ? "is-muted" : ""}`}
-                  data-testid="composer-tts-mute"
-                  aria-label={ttsMuted ? "Unmute spoken replies" : "Mute spoken reply"}
-                  aria-pressed={ttsMuted}
-                  title={ttsMuted ? "Unmute replies" : "Mute reply"}
-                  onClick={() => {
-                    if (ttsMuted) unmuteTts();
-                    else muteTts();
+                    const canSubmit = Boolean(input.trim()) && !loading && threadsReady;
+                    if (shouldSubmitComposerOnEnter(event, { canSubmit })) {
+                      event.preventDefault();
+                      sendMessage(input);
+                      return;
+                    }
+                    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+                      event.preventDefault();
+                    }
                   }}
-                >
-                  {ttsMuted ? "Unmute" : "Mute"}
-                </button>
+                  placeholder={
+                    voiceListening
+                      ? "Listening…"
+                      : composerPlaceholder || "Describe what you're hunting for…"
+                  }
+                  rows={2}
+                  disabled={loading || !threadsReady}
+                />
+                <div className="composer-toolbar">
+                  <div className="composer-toolbar-left">
+                    {personas.length > 0 ? (
+                      <PersonaSelector
+                        personas={personas}
+                        activePersonaId={activePersonaId}
+                        onSelect={setActivePersonaId}
+                        onCreate={handleCreatePersona}
+                        onUpdate={handleUpdatePersona}
+                        onDelete={handleDeletePersona}
+                        onSetDefault={handleSetDefaultPersona}
+                        defaultPersonaId={defaultPersonaId}
+                      />
+                    ) : null}
+                  </div>
+                  <div className="composer-toolbar-right">
+                    {showMic ? (
+                      <button
+                        type="button"
+                        className={`composer-mic ghost ${voiceListening ? "is-listening" : ""}`}
+                        data-testid="composer-mic"
+                        aria-label={voiceListening ? "Stop dictation" : "Dictate with microphone"}
+                        aria-pressed={voiceListening}
+                        title={voiceListening ? "Stop dictation" : "Dictate"}
+                        disabled={loading || !threadsReady}
+                        onClick={toggleListening}
+                      >
+                        <svg
+                          className="composer-mic-icon"
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          aria-hidden="true"
+                        >
+                          <path
+                            d="M12 14a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v5a3 3 0 0 0 3 3Z"
+                            fill="currentColor"
+                          />
+                          <path
+                            d="M17.5 11a5.5 5.5 0 0 1-11 0"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                          <path
+                            d="M12 16.5V20"
+                            stroke="currentColor"
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                          />
+                        </svg>
+                      </button>
+                    ) : null}
+                    {voiceSpeaking || ttsMuted ? (
+                      <button
+                        type="button"
+                        className={`composer-tts-mute ghost ${ttsMuted ? "is-muted" : ""}`}
+                        data-testid="composer-tts-mute"
+                        aria-label={ttsMuted ? "Unmute spoken replies" : "Mute spoken reply"}
+                        aria-pressed={ttsMuted}
+                        title={ttsMuted ? "Unmute replies" : "Mute reply"}
+                        onClick={() => {
+                          if (ttsMuted) unmuteTts();
+                          else muteTts();
+                        }}
+                      >
+                        {ttsMuted ? "Unmute" : "Mute"}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className={`composer-surprise ghost ${quickPickLoading ? "is-loading" : ""}`}
+                      data-testid="surprise-me-button"
+                      disabled={loading || !threadsReady || quickPickLoading}
+                      aria-busy={quickPickLoading}
+                      aria-label={quickPickLoading ? "Picking a surprise…" : "Surprise me"}
+                      title="Surprise me — random pick"
+                      onClick={handleQuickPick}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.8" />
+                        <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
+                        <circle cx="15.5" cy="8.5" r="1.5" fill="currentColor" />
+                        <circle cx="8.5" cy="15.5" r="1.5" fill="currentColor" />
+                        <circle cx="15.5" cy="15.5" r="1.5" fill="currentColor" />
+                        <circle cx="12" cy="12" r="1.5" fill="currentColor" />
+                      </svg>
+                    </button>
+                    <button
+                      type="submit"
+                      className="composer-send"
+                      data-testid="send-button"
+                      disabled={loading || !threadsReady || !input.trim()}
+                      aria-label="Send"
+                      title="Send"
+                    >
+                      <svg
+                        className="composer-send-icon"
+                        width="18"
+                        height="18"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        aria-hidden="true"
+                      >
+                        <path
+                          d="M12 19V5M12 5l-5.5 5.5M12 5l5.5 5.5"
+                          stroke="currentColor"
+                          strokeWidth="2.2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
+              {voiceStatus ? (
+                <p className="composer-voice-status status status-secondary" data-testid="composer-voice-status">
+                  {voiceStatus}
+                </p>
               ) : null}
-              <button
-                type="button"
-                className="composer-surprise ghost"
-                data-testid="surprise-me-button"
-                disabled={loading || !threadsReady}
-                aria-label="Surprise me"
-                title="Surprise me — random pick"
-                onClick={handleQuickPick}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.8" />
-                  <circle cx="8.5" cy="8.5" r="1.5" fill="currentColor" />
-                  <circle cx="15.5" cy="8.5" r="1.5" fill="currentColor" />
-                  <circle cx="8.5" cy="15.5" r="1.5" fill="currentColor" />
-                  <circle cx="15.5" cy="15.5" r="1.5" fill="currentColor" />
-                  <circle cx="12" cy="12" r="1.5" fill="currentColor" />
-                </svg>
-              </button>
-              <button
-                type="submit"
-                className="composer-send"
-                data-testid="send-button"
-                disabled={loading || !threadsReady || !input.trim()}
-                aria-label="Send"
-                title="Send"
-              >
-                <svg
-                  className="composer-send-icon"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M3.4 20.4 21 12 3.4 3.6v6.6L15 12 3.4 13.8v6.6Z"
-                    fill="currentColor"
-                  />
-                </svg>
-              </button>
-            </div>
-            {voiceStatus ? (
-              <p className="composer-voice-status status status-secondary" data-testid="composer-voice-status">
-                {voiceStatus}
-              </p>
-            ) : null}
             </div>
           </form>
         </main>

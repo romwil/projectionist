@@ -459,7 +459,7 @@ export default function ConfigPage() {
           setStepIndex(firstIncompleteWizardStep(wizardData));
         }
       },
-    );
+    ).catch(console.error);
     getFeatures()
       .then((data) => setFeatureFlags(data))
       .catch(() => setFeatureFlags(null));

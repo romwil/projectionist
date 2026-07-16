@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.8.1 -->
+<!-- Unraid Community Applications template — CuratorX 1.8.2 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,12 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.8.2
+- Faster Title Detail (enrich flag, short external timeouts, rating-key index); Surprise Me loading/empty/error states
+- Explore/recommendations responsive layout; default persona on load; composer chrome (persona + mic/surprise/send)
+- Purge candidates scheduled cache + Refresh now; admin persona slider crash fix; chat media-strip scroll containment
+- Removed TV completion from admin dashboard
+
 ### 1.8.1
 - Person and tag browse pages; clickable cast/crew/genre/motif chips from Title Detail and Explore
 - Windows-native e2e/dev PowerShell helpers and cross-platform e2e server launcher

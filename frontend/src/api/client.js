@@ -835,6 +835,13 @@ export async function getPurgeCandidates() {
   return api("/library/purge-candidates");
 }
 
+export async function refreshPurgeCandidates(limit = 25) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/purge-candidates/refresh?${params}`, {
+    method: "POST",
+  });
+}
+
 export async function deletePurgeCandidates(ratingKeys) {
   return api("/library/purge-candidates/delete", {
     method: "POST",

@@ -44,10 +44,9 @@ class YoutubeTrailerKeyTests(unittest.TestCase):
 
 
 class TitleDetailTrailerTests(unittest.TestCase):
-    @patch("curatorx.library.titles.suggest_purge_candidates", return_value=[])
     @patch("curatorx.library.titles.cached_machine_identifier", return_value="machine-xyz")
     @patch("curatorx.library.titles.TMDBClient")
-    def test_detail_includes_trailer_and_plex_url(self, mock_tmdb_cls, _mock_machine, _mock_purge) -> None:
+    def test_detail_includes_trailer_and_plex_url(self, mock_tmdb_cls, _mock_machine) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {
             "title": "The Matrix",
@@ -93,6 +92,102 @@ class TitleDetailTrailerTests(unittest.TestCase):
             self.assertEqual(detail.rating_key, "rk-1")
             self.assertIn("machine-xyz", detail.plex_watch_url)
             self.assertIn("rk-1", detail.plex_watch_url)
+
+
+class TitleDetailHotPathTests(unittest.TestCase):
+    @patch("curatorx.preferences.purge._build_candidates")
+    @patch("curatorx.library.titles.cached_machine_identifier", return_value="machine-xyz")
+    @patch("curatorx.library.titles.TMDBClient")
+    def test_enrich_false_skips_external_calls(
+        self, mock_tmdb_cls, mock_machine, mock_purge_build
+    ) -> None:
+        settings = MagicMock()
+        settings.tmdb_api_key = "tmdb"
+        settings.fanart_api_key = "fanart"
+        settings.plex_url = "http://plex.local"
+        settings.plex_token = "token"
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "rk-fast",
+                    "media_type": "movie",
+                    "title": "Fast Local",
+                    "year": 2020,
+                    "tmdb_id": 42,
+                    "summary": "Local overview",
+                    "poster_url": "https://img/local.jpg",
+                }
+            )
+
+            detail = get_title_detail(
+                db, settings, media_type="movie", tmdb_id=42, enrich=False
+            )
+
+        self.assertEqual(detail.title, "Fast Local")
+        self.assertEqual(detail.poster_url, "https://img/local.jpg")
+        self.assertEqual(detail.purge_reason, "")
+        mock_tmdb_cls.assert_not_called()
+        mock_purge_build.assert_not_called()
+        mock_machine.assert_called_once()
+
+    @patch("curatorx.preferences.purge._build_candidates")
+    @patch("curatorx.library.titles.FanartClient")
+    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
+    @patch("curatorx.library.titles.TMDBClient")
+    def test_enrich_true_never_calls_purge_scoring(
+        self, mock_tmdb_cls, _mock_machine, _mock_fanart, mock_purge_build
+    ) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.movie_details.return_value = {
+            "title": "Enriched",
+            "overview": "From TMDB",
+            "vote_average": 7.1,
+            "poster_path": "/p.jpg",
+            "backdrop_path": "/b.jpg",
+            "runtime": 100,
+            "credits": {"cast": [], "crew": []},
+            "keywords": {"keywords": []},
+            "videos": {"results": []},
+        }
+        mock_tmdb.poster_url.return_value = "https://img/p.jpg"
+        mock_tmdb.backdrop_url.return_value = "https://img/b.jpg"
+        mock_tmdb_cls.youtube_trailer_key.return_value = ""
+
+        settings = MagicMock()
+        settings.tmdb_api_key = "tmdb"
+        settings.fanart_api_key = ""
+        settings.plex_url = ""
+        settings.plex_token = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            detail = get_title_detail(
+                db, settings, media_type="movie", tmdb_id=99, enrich=True
+            )
+
+        self.assertEqual(detail.title, "Enriched")
+        mock_purge_build.assert_not_called()
+        mock_tmdb_cls.assert_called_once()
+        self.assertEqual(mock_tmdb_cls.call_args.kwargs.get("timeout"), 5)
+
+    def test_library_item_by_rating_key_uses_index_lookup(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "rk-lookup",
+                    "media_type": "movie",
+                    "title": "Lookup",
+                    "year": 2011,
+                    "tmdb_id": 11,
+                }
+            )
+            row = db.library_item_by_rating_key("rk-lookup")
+            self.assertIsNotNone(row)
+            self.assertEqual(row["title"], "Lookup")
+            self.assertIsNone(db.library_item_by_rating_key(""))
 
 
 if __name__ == "__main__":

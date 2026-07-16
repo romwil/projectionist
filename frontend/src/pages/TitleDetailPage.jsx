@@ -76,10 +76,45 @@ export default function TitleDetailPage() {
     setError("");
     setTrailerOpen(false);
     setRecommendOpen(false);
-    const query = idType && idType !== "tmdb" ? `?id_type=${encodeURIComponent(idType)}` : "";
-    api(`/title/${mediaType}/${itemId}${query}`)
-      .then(setDetail)
-      .catch((err) => setError(err.message));
+
+    const controller = new AbortController();
+    const enrichController = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 12_000);
+
+    const params = new URLSearchParams();
+    if (idType && idType !== "tmdb") params.set("id_type", idType);
+    // First paint from local library data; TMDB trailer/rating fill in afterwards.
+    params.set("enrich", "0");
+    const query = params.toString() ? `?${params.toString()}` : "";
+
+    api(`/title/${mediaType}/${itemId}${query}`, { signal: controller.signal })
+      .then((data) => {
+        setDetail(data);
+        const enrichParams = new URLSearchParams(params);
+        enrichParams.set("enrich", "1");
+        // Progressive enrichment is best-effort; never replace a successful first paint with an error.
+        api(`/title/${mediaType}/${itemId}?${enrichParams.toString()}`, {
+          signal: enrichController.signal,
+        })
+          .then((enriched) => {
+            if (enriched) setDetail(enriched);
+          })
+          .catch(() => {});
+      })
+      .catch((err) => {
+        if (err?.name === "AbortError") {
+          setError("Timed out loading this title. Try again.");
+          return;
+        }
+        setError(err.message || "Failed to load title");
+      })
+      .finally(() => window.clearTimeout(timeoutId));
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      controller.abort();
+      enrichController.abort();
+    };
   }, [mediaType, itemId, idType]);
 
   useEffect(() => {

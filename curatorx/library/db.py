@@ -2437,6 +2437,16 @@ class Database:
                 (tmdb_id, media_type),
             ).fetchone()
 
+    def library_item_by_rating_key(self, rating_key: str) -> Optional[sqlite3.Row]:
+        key = str(rating_key or "").strip()
+        if not key:
+            return None
+        with self.connect() as conn:
+            return conn.execute(
+                "SELECT * FROM library_items WHERE rating_key = ?",
+                (key,),
+            ).fetchone()
+
     def library_item_by_id(self, item_id: int) -> Optional[sqlite3.Row]:
         with self.connect() as conn:
             return conn.execute(

@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.8.2] — 2026-07-16
+
+Hot-path latency, Surprise Me reliability, responsive Explore/recommendations, composer chrome, and scheduled purge-candidate caching.
+
+### Fixed
+- **Title Detail latency** — optional `enrich` flag; skip purge scoring on the hot path; short TMDB/Fanart/Plex timeouts; `library_item_by_rating_key` index lookup
+- **Surprise Me / quick-pick no-op** — loading/empty/error states; `COALESCE(view_count,0)=0`; genres hardening; agent tool alignment
+- Explore/recommendations responsive layout — contained rails/chips, auto-fit grid
+- Default persona selected on load (`resolveActivePersona`)
+- `/admin/persona` crash — defensive slider fields
+- Chat scroll containment — media strips scroll within the transcript
+
+### Changed
+- Composer redesign — Cursor-like chrome: persona dropdown + mic/surprise/circular send in toolbar
+- Removed TV completion from `/admin/dashboard`
+
+### Added
+- Purge candidates scheduled cache + **Refresh now** (`scheduler/tasks/purge_candidates.py`, refresh endpoint)
+- Unit coverage for quick-pick, `resolveActivePersona`, chat card scroll, purge cache, and title hot path
+
 ## [1.8.1] — 2026-07-16
 
 Person/tag browse surfaces on Explore and Title Detail, plus Windows-native e2e/dev tooling and Unraid rollout docs.

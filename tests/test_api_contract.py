@@ -1043,6 +1043,7 @@ class ApiContractTests(unittest.TestCase):
 
     def test_library_purge_candidates_endpoint(self) -> None:
         import curatorx.web.jobs as jobs
+        from curatorx.scheduler.tasks.purge_candidates import write_purge_candidates_cache
 
         db = jobs.get_job_manager().db
         db.upsert_library_item(
@@ -1055,11 +1056,24 @@ class ApiContractTests(unittest.TestCase):
                 "genres": ["Horror"],
             }
         )
+        # GET reads cache only — seed a cached payload for the contract check.
+        write_purge_candidates_cache(
+            db,
+            [
+                {
+                    "rating_key": "purge-1",
+                    "media_type": "movie",
+                    "title": "Big Unwatched",
+                    "purge_score": 2.5,
+                }
+            ],
+        )
         resp = self.client.get("/api/library/purge-candidates?limit=5")
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertGreaterEqual(body["count"], 1)
         self.assertTrue(body["items"][0]["title"])
+        self.assertFalse(body.get("stale"))
 
     def test_training_corpus_export(self) -> None:
         import curatorx.web.jobs as jobs

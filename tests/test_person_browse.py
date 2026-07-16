@@ -16,10 +16,9 @@ from curatorx.library.titles import get_title_detail
 
 
 class TitleDetailCreditsTests(unittest.TestCase):
-    @patch("curatorx.library.titles.suggest_purge_candidates", return_value=[])
     @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
     @patch("curatorx.library.titles.TMDBClient")
-    def test_prefers_db_credits_when_in_library(self, mock_tmdb_cls, _machine, _purge) -> None:
+    def test_prefers_db_credits_when_in_library(self, mock_tmdb_cls, _machine) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {
             "title": "Blade Runner",
@@ -86,10 +85,9 @@ class TitleDetailCreditsTests(unittest.TestCase):
             self.assertEqual(detail.directors, ["Ridley Scott"])
             self.assertEqual(detail.keywords, ["dystopia"])
 
-    @patch("curatorx.library.titles.suggest_purge_candidates", return_value=[])
     @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
     @patch("curatorx.library.titles.TMDBClient")
-    def test_tv_fills_cast_keywords_and_credits(self, mock_tmdb_cls, _machine, _purge) -> None:
+    def test_tv_fills_cast_keywords_and_credits(self, mock_tmdb_cls, _machine) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.tv_details.return_value = {
             "name": "The Wire",

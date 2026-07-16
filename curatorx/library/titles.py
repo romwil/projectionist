@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, List, Mapping, Optional
 
 from curatorx.config_store import Settings
@@ -11,7 +12,13 @@ from curatorx.connectors.plex import cached_machine_identifier, plex_watch_url
 from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import Database
 from curatorx.models.schemas import CreditPerson, TitleDetail
-from curatorx.preferences.purge import suggest_purge_candidates
+
+logger = logging.getLogger(__name__)
+
+# Keep title detail interactive: enrichment is optional and must not block for long.
+_TITLE_DETAIL_TMDB_TIMEOUT = 5
+_TITLE_DETAIL_FANART_TIMEOUT = 3
+_TITLE_DETAIL_PLEX_TIMEOUT = 2
 
 
 def _credit_from_db_row(row) -> CreditPerson:
@@ -145,6 +152,68 @@ def _apply_tmdb_credit_strings(detail: TitleDetail, credits_payload: Mapping[str
         ]
 
 
+def _needs_tmdb_enrichment(detail: TitleDetail) -> bool:
+    """True when local data is incomplete enough to justify a TMDB round-trip."""
+    if not detail.title or not detail.overview:
+        return True
+    if not detail.poster_url or not detail.backdrop_url:
+        return True
+    if detail.rating is None or detail.runtime_minutes is None:
+        return True
+    if not detail.trailer_youtube_key:
+        return True
+    if not detail.credits and not detail.cast and not detail.directors:
+        return True
+    if not detail.keywords:
+        return True
+    return False
+
+
+def _apply_tmdb_movie_meta(detail: TitleDetail, meta: Mapping[str, Any], tmdb: TMDBClient) -> None:
+    detail.title = detail.title or str(meta.get("title") or "")
+    detail.overview = detail.overview or str(meta.get("overview") or "")
+    if detail.rating is None:
+        detail.rating = float(meta.get("vote_average") or 0) or None
+    if not detail.poster_url:
+        detail.poster_url = tmdb.poster_url(meta.get("poster_path"))
+    if not detail.backdrop_url:
+        detail.backdrop_url = tmdb.backdrop_url(meta.get("backdrop_path"))
+    if detail.runtime_minutes is None:
+        detail.runtime_minutes = int((meta.get("runtime") or 0) or 0) or None
+    credits = meta.get("credits") or {}
+    if isinstance(credits, dict):
+        _apply_tmdb_credit_strings(detail, credits)
+        if not detail.credits:
+            detail.credits = _credits_from_tmdb(credits, tmdb=tmdb)
+    detail.keywords = detail.keywords or _keyword_names_from_tmdb(meta)
+    if not detail.trailer_youtube_key:
+        trailer_key = TMDBClient.youtube_trailer_key(meta)
+        detail.trailer_youtube_key = trailer_key if isinstance(trailer_key, str) else ""
+
+
+def _apply_tmdb_tv_meta(detail: TitleDetail, meta: Mapping[str, Any], tmdb: TMDBClient) -> None:
+    detail.title = detail.title or str(meta.get("name") or "")
+    detail.overview = detail.overview or str(meta.get("overview") or "")
+    if detail.rating is None:
+        detail.rating = float(meta.get("vote_average") or 0) or None
+    if not detail.poster_url:
+        detail.poster_url = tmdb.poster_url(meta.get("poster_path"))
+    if not detail.backdrop_url:
+        detail.backdrop_url = tmdb.backdrop_url(meta.get("backdrop_path"))
+    external = meta.get("external_ids") or {}
+    if external.get("tvdb_id") and not detail.tvdb_id:
+        detail.tvdb_id = int(external["tvdb_id"])
+    credits = meta.get("credits") or {}
+    if isinstance(credits, dict):
+        _apply_tmdb_credit_strings(detail, credits)
+        if not detail.credits:
+            detail.credits = _credits_from_tmdb(credits, tmdb=tmdb)
+    detail.keywords = detail.keywords or _keyword_names_from_tmdb(meta)
+    if not detail.trailer_youtube_key:
+        trailer_key = TMDBClient.youtube_trailer_key(meta)
+        detail.trailer_youtube_key = trailer_key if isinstance(trailer_key, str) else ""
+
+
 def get_title_detail(
     db: Database,
     settings: Settings,
@@ -153,13 +222,17 @@ def get_title_detail(
     tmdb_id: Optional[int] = None,
     tvdb_id: Optional[int] = None,
     rating_key: Optional[str] = None,
+    enrich: bool = True,
 ) -> TitleDetail:
+    """Assemble title detail from the local library, optionally enriching via TMDB/Fanart.
+
+    ``enrich=False`` returns local DB fields only (plus a cheap cached Plex watch URL).
+    Use that for first paint; pass ``enrich=True`` for trailer/rating/runtime fill-in.
+    Never runs full-library purge scoring on this path.
+    """
     row = None
     if rating_key:
-        for item in db.all_library_items():
-            if item["rating_key"] == rating_key:
-                row = item
-                break
+        row = db.library_item_by_rating_key(rating_key)
     if row is None and tmdb_id:
         row = db.library_item_by_tmdb(tmdb_id, media_type)
     if row is None and tvdb_id:
@@ -204,65 +277,41 @@ def get_title_detail(
             ]
 
     resolved_tmdb_id = detail.tmdb_id
-    if settings.tmdb_api_key and resolved_tmdb_id:
-        tmdb = TMDBClient(settings.tmdb_api_key)
+    if (
+        enrich
+        and settings.tmdb_api_key
+        and resolved_tmdb_id
+        and _needs_tmdb_enrichment(detail)
+    ):
+        tmdb = TMDBClient(settings.tmdb_api_key, timeout=_TITLE_DETAIL_TMDB_TIMEOUT)
         try:
             if media_type == "movie":
-                meta = tmdb.movie_details(resolved_tmdb_id)
-                detail.title = detail.title or str(meta.get("title") or "")
-                detail.overview = detail.overview or str(meta.get("overview") or "")
-                detail.rating = float(meta.get("vote_average") or 0) or None
-                if not detail.poster_url:
-                    detail.poster_url = tmdb.poster_url(meta.get("poster_path"))
-                if not detail.backdrop_url:
-                    detail.backdrop_url = tmdb.backdrop_url(meta.get("backdrop_path"))
-                detail.runtime_minutes = int((meta.get("runtime") or 0) or 0) or None
-                credits = meta.get("credits") or {}
-                if isinstance(credits, dict):
-                    _apply_tmdb_credit_strings(detail, credits)
-                    if not detail.credits:
-                        detail.credits = _credits_from_tmdb(credits, tmdb=tmdb)
-                detail.keywords = detail.keywords or _keyword_names_from_tmdb(meta)
-                trailer_key = TMDBClient.youtube_trailer_key(meta)
-                detail.trailer_youtube_key = trailer_key if isinstance(trailer_key, str) else ""
+                _apply_tmdb_movie_meta(detail, tmdb.movie_details(resolved_tmdb_id), tmdb)
             else:
-                meta = tmdb.tv_details(resolved_tmdb_id)
-                detail.title = detail.title or str(meta.get("name") or "")
-                detail.overview = detail.overview or str(meta.get("overview") or "")
-                detail.rating = float(meta.get("vote_average") or 0) or None
-                if not detail.poster_url:
-                    detail.poster_url = tmdb.poster_url(meta.get("poster_path"))
-                if not detail.backdrop_url:
-                    detail.backdrop_url = tmdb.backdrop_url(meta.get("backdrop_path"))
-                external = meta.get("external_ids") or {}
-                if external.get("tvdb_id"):
-                    detail.tvdb_id = int(external["tvdb_id"])
-                credits = meta.get("credits") or {}
-                if isinstance(credits, dict):
-                    _apply_tmdb_credit_strings(detail, credits)
-                    if not detail.credits:
-                        detail.credits = _credits_from_tmdb(credits, tmdb=tmdb)
-                detail.keywords = detail.keywords or _keyword_names_from_tmdb(meta)
-                trailer_key = TMDBClient.youtube_trailer_key(meta)
-                detail.trailer_youtube_key = trailer_key if isinstance(trailer_key, str) else ""
-        except RuntimeError:
-            pass
+                _apply_tmdb_tv_meta(detail, tmdb.tv_details(resolved_tmdb_id), tmdb)
+        except RuntimeError as exc:
+            logger.info("TMDB enrichment skipped for %s/%s: %s", media_type, resolved_tmdb_id, exc)
 
-    if settings.fanart_api_key and resolved_tmdb_id and media_type == "movie":
-        art = FanartClient(settings.fanart_api_key).movie(resolved_tmdb_id)
-        if not detail.poster_url:
-            detail.poster_url = FanartClient(settings.fanart_api_key).best_poster(art)
-
-    if row:
-        purge_cards = suggest_purge_candidates(db, settings, limit=100)
-        for card in purge_cards:
-            if card.rating_key == row["rating_key"]:
-                detail.purge_reason = card.recommendation_reason
-                detail.purge_score = 0.8
-                break
+    if (
+        enrich
+        and settings.fanart_api_key
+        and resolved_tmdb_id
+        and media_type == "movie"
+        and not detail.poster_url
+    ):
+        try:
+            fanart = FanartClient(settings.fanart_api_key, timeout=_TITLE_DETAIL_FANART_TIMEOUT)
+            art = fanart.movie(resolved_tmdb_id)
+            detail.poster_url = fanart.best_poster(art)
+        except RuntimeError as exc:
+            logger.info("Fanart enrichment skipped for movie/%s: %s", resolved_tmdb_id, exc)
 
     if detail.in_library and detail.rating_key:
-        machine_id = cached_machine_identifier(settings.plex_url, settings.plex_token)
+        machine_id = cached_machine_identifier(
+            settings.plex_url,
+            settings.plex_token,
+            timeout=_TITLE_DETAIL_PLEX_TIMEOUT,
+        )
         detail.plex_machine_id = machine_id
         detail.plex_watch_url = plex_watch_url(machine_id, detail.rating_key)
 

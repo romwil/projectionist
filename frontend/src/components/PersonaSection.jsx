@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { getPersonaPresets, putPersona } from "../api/client";
 import InlineAlert from "./InlineAlert";
 
+// Admin /api/persona (PersonaMetrics) only persists these three sliders.
+// Extra template axes (depth/obscurity/…) live on /api/personas templates.
 const PERSONA_FIELDS = [
   {
     key: "val_bro_prof",
@@ -27,39 +29,13 @@ const PERSONA_FIELDS = [
     help:
       "Controls how proactively the curator proposes next steps. Low = suggest and wait; high = concrete queue/purge plans and pattern callouts.",
   },
-  {
-    key: "val_depth",
-    label: "Depth",
-    low: "Quick picks",
-    high: "Deep dives",
-    help:
-      "Controls recommendation depth. Low = surface-level picks and quick lists; high = contextual deep dives with thematic reasoning.",
-  },
-  {
-    key: "val_obscurity",
-    label: "Obscurity",
-    low: "Mainstream",
-    high: "Niche",
-    help:
-      "Controls how far off the beaten path recommendations go. Low = popular crowd-pleasers; high = hidden gems and festival circuit picks.",
-  },
-  {
-    key: "val_verbosity",
-    label: "Verbosity",
-    low: "Concise",
-    high: "Detailed",
-    help:
-      "Controls response length. Low = short punchy answers; high = rich, detailed explanations with context and comparisons.",
-  },
-  {
-    key: "val_formality",
-    label: "Formality",
-    low: "Chatty",
-    high: "Structured",
-    help:
-      "Controls conversational register. Low = relaxed chat with slang; high = organized, well-structured prose.",
-  },
 ];
+
+function sliderValue(persona, key) {
+  const raw = persona?.[key];
+  const num = typeof raw === "number" ? raw : Number(raw);
+  return Number.isFinite(num) ? num : 0.5;
+}
 
 function isCustomMode(persona) {
   return persona?.persona_mode === "custom" || Boolean(String(persona?.persona_prompt_override || "").trim());
@@ -278,7 +254,7 @@ export default function PersonaSection({
                     ?
                   </button>
                 </span>
-                <span className="slider-value">{persona[key].toFixed(2)}</span>
+                <span className="slider-value">{sliderValue(persona, key).toFixed(2)}</span>
               </div>
               <p className="slider-help-text">{help}</p>
               <input
@@ -286,7 +262,7 @@ export default function PersonaSection({
                 min="0"
                 max="1"
                 step="0.01"
-                value={persona[key]}
+                value={sliderValue(persona, key)}
                 disabled={customMode || savingPersona}
                 data-testid={`persona-slider-${key}`}
                 onChange={(event) => handleSliderChange(key, Number(event.target.value))}

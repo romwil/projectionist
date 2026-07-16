@@ -226,6 +226,7 @@ export default function PersonaSelector({
           <span className="persona-dot" style={{ background: active.accent_color }} />
         )}
         <span className="persona-trigger-label">{active?.name || "Persona"}</span>
+        <span className="persona-trigger-chevron" aria-hidden="true">▾</span>
       </button>
 
       {open && (

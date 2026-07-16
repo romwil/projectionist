@@ -124,8 +124,12 @@ from curatorx.persona import (
     persona_row_to_dict,
 )
 from curatorx.persona.presets import persona_ui_for, typing_phrases_for
-from curatorx.preferences.purge import suggest_purge_candidates, suggest_purge_candidates_rich
 from curatorx.preferences.store import remember_preference
+from curatorx.scheduler.tasks.purge_candidates import (
+    drop_cached_purge_keys,
+    read_cached_purge_candidates,
+    recompute_purge_candidates,
+)
 from curatorx.reviews.store import (
     dismiss_prompt,
     get_reviews,
@@ -1341,11 +1345,37 @@ def library_purge_candidates(
     limit: int = 12,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    items = suggest_purge_candidates_rich(_db(), _settings(), limit=min(max(1, limit), 25))
-    payload = {
-        "count": len(items),
-        "items": items,
-    }
+    """Return cached purge candidates for a fast dashboard load.
+
+    When the cache is empty, returns an empty payload with ``stale=true``
+    instead of recomputing synchronously (use POST .../refresh for that).
+    """
+    del limit  # limit applied at cache-build time; kept for API compatibility
+    cached = read_cached_purge_candidates(_db())
+    if cached is None:
+        payload = {
+            "count": 0,
+            "items": [],
+            "generated_at": None,
+            "stale": True,
+            "cached": False,
+        }
+    else:
+        payload = cached
+    return _sanitize_library_payload(payload, user)
+
+
+@app.post("/api/library/purge-candidates/refresh")
+def refresh_library_purge_candidates(
+    limit: int = 25,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Force-recompute purge candidates and refresh the cache."""
+    payload = recompute_purge_candidates(
+        _db(),
+        _settings(),
+        limit=min(max(1, limit), 25),
+    )
     return _sanitize_library_payload(payload, user)
 
 
@@ -1357,7 +1387,10 @@ def delete_purge_candidates(
     rating_keys = payload.get("rating_keys", [])
     if not rating_keys or not isinstance(rating_keys, list):
         raise HTTPException(status_code=400, detail="rating_keys must be a non-empty list")
-    deleted = _db().delete_library_items_by_rating_keys(rating_keys)
+    db = _db()
+    deleted = db.delete_library_items_by_rating_keys(rating_keys)
+    drop_cached_purge_keys(db, [str(key) for key in rating_keys])
+    del user
     return {"deleted": deleted}
 
 
@@ -1369,7 +1402,10 @@ def dismiss_purge_candidates_endpoint(
     rating_keys = payload.get("rating_keys", [])
     if not rating_keys or not isinstance(rating_keys, list):
         raise HTTPException(status_code=400, detail="rating_keys must be a non-empty list")
-    dismissed = _db().dismiss_purge_candidates(rating_keys)
+    db = _db()
+    dismissed = db.dismiss_purge_candidates(rating_keys)
+    drop_cached_purge_keys(db, [str(key) for key in rating_keys])
+    del user
     return {"dismissed": dismissed}
 
 
@@ -1605,7 +1641,8 @@ def library_quick_pick_endpoint(
     del user
     db = _db()
 
-    where_clauses = ["view_count = 0"]
+    # Treat NULL view_count as unwatched (matches episode/query helpers).
+    where_clauses = ["COALESCE(view_count, 0) = 0"]
     params: list = []
     if max_runtime is not None:
         where_clauses.append("runtime_minutes IS NOT NULL AND runtime_minutes <= ?")
@@ -1635,17 +1672,28 @@ def library_quick_pick_endpoint(
     if not row:
         return {"item": None, "why": "No unwatched titles match the criteria."}
 
-    genres_list = json.loads(row["genres"]) if isinstance(row["genres"], str) else (row["genres"] or [])
+    genres_raw = row["genres"]
+    genres_list: list = []
+    if isinstance(genres_raw, list):
+        genres_list = genres_raw
+    elif isinstance(genres_raw, str) and genres_raw.strip():
+        try:
+            parsed = json.loads(genres_raw)
+            genres_list = parsed if isinstance(parsed, list) else []
+        except (TypeError, ValueError, json.JSONDecodeError):
+            genres_list = []
+
     runtime = row["runtime_minutes"]
     reason_parts = []
     if genres_list:
-        reason_parts.append(f"Matches your {genres_list[0].lower()} taste")
+        reason_parts.append(f"Matches your {str(genres_list[0]).lower()} taste")
     if runtime:
         reason_parts.append(f"{runtime} min")
     reason = " \u00b7 ".join(reason_parts) if reason_parts else "Unwatched pick for you"
 
-    item = dict(row)
+    item = {key: row[key] for key in row.keys()}
     item["genres"] = genres_list
+    item["view_count"] = int(item.get("view_count") or 0)
 
     return {"item": item, "why": reason}
 
@@ -2460,11 +2508,12 @@ def title_detail(
     media_type: str,
     item_id: str,
     id_type: str = "tmdb",
+    enrich: bool = True,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     settings = _settings()
     db = _db()
-    kwargs: Dict[str, Any] = {"media_type": media_type}
+    kwargs: Dict[str, Any] = {"media_type": media_type, "enrich": enrich}
     if id_type == "rating_key":
         kwargs["rating_key"] = item_id
     elif media_type == "show" and id_type == "tvdb":

@@ -1308,6 +1308,16 @@ button.watchlist-chip {
   letter-spacing: 0.02em;
 }
 
+.composer-chrome {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-2) var(--space-2);
+  border-radius: calc(var(--radius-lg) - 2px);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface);
+}
+
 .composer-row {
   display: flex;
   align-items: flex-end;
@@ -1315,25 +1325,56 @@ button.watchlist-chip {
   min-width: 0;
 }
 
+.composer-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: 0 var(--space-1);
+}
+
+.composer-toolbar-left,
+.composer-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.composer-toolbar-left {
+  flex: 1;
+}
+
+.composer-toolbar-right {
+  flex-shrink: 0;
+}
+
 .composer textarea {
   flex: 1;
   min-width: 0;
   width: 100%;
-  resize: vertical;
-  background: var(--surface);
+  resize: none;
+  min-height: 52px;
+  max-height: 180px;
+  background: transparent;
   color: var(--text);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius);
-  padding: var(--space-3) var(--space-4);
+  border: none;
+  border-radius: 0;
+  padding: var(--space-2) var(--space-3) 0;
   font-family: var(--font-body);
   font-size: var(--text-md);
   line-height: var(--leading-body);
-  transition: border-color 0.15s ease;
+  transition: none;
 }
 
 .composer textarea:focus {
   outline: none;
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  border-color: transparent;
+}
+
+.composer-chrome:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
 }
 
 .composer-send {
@@ -1341,10 +1382,22 @@ button.watchlist-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 34px;
+  height: 34px;
   padding: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
+  border: none;
+  background: var(--text);
+  color: var(--bg);
+}
+
+.composer-send:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.composer-send:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
 .composer-send-icon {
@@ -1357,10 +1410,10 @@ button.watchlist-chip {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  height: 40px;
-  padding: 0 10px;
-  border-radius: var(--radius-sm);
+  min-width: 34px;
+  height: 34px;
+  padding: 0 8px;
+  border-radius: 999px;
   color: var(--muted);
 }
 
@@ -1638,6 +1691,13 @@ button.watchlist-chip {
   margin-top: 10px;
 }
 
+.chat-scroll-region .review-batch-strip {
+  max-height: min(36vh, 300px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .review-prompt-lead {
   margin: 0 0 12px;
   line-height: 1.45;
@@ -1778,6 +1838,14 @@ button.watchlist-chip {
   overflow-y: visible;
   padding-bottom: var(--space-2);
   margin-top: var(--space-3);
+}
+
+.chat-scroll-region .inline-cards {
+  max-height: min(42vh, 360px);
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  align-content: flex-start;
 }
 
 .title-card {
@@ -2187,7 +2255,38 @@ button.watchlist-chip {
 }
 
 .viewport .turnstyle-track {
-  align-items: start;
+  display: grid;
+  grid-auto-flow: row;
+  /* auto-fit collapses empty tracks so 1–2 cards still fill the modal width */
+  grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+  grid-auto-columns: unset;
+  align-items: stretch;
+  overflow-x: visible;
+  gap: var(--space-4);
+}
+
+.viewport .title-card {
+  min-width: 0;
+  max-width: none;
+  width: 100%;
+}
+
+.viewport .title-card .card-body {
+  min-width: 0;
+}
+
+.viewport .title-card .card-body h3,
+.viewport .title-card .overview,
+.viewport .title-card .reason {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.viewport .title-card .overview {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .viewport .title-card .card-actions {
@@ -4203,15 +4302,28 @@ button.ghost.inline-link {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-3);
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   font-size: var(--text-xs);
   color: var(--muted);
   cursor: pointer;
-  transition: color 0.15s;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+  border: 1px solid transparent;
+  background: transparent;
+}
+
+.composer-chrome .persona-trigger {
+  border-color: color-mix(in srgb, var(--border) 80%, transparent);
+  background: color-mix(in srgb, var(--surface-raised) 70%, transparent);
 }
 
 .persona-trigger:hover {
   color: var(--text);
+}
+
+.persona-trigger-chevron {
+  font-size: 0.7em;
+  opacity: 0.7;
+  line-height: 1;
 }
 
 .persona-dot {
@@ -4773,6 +4885,20 @@ button.ghost.inline-link {
   gap: var(--space-4);
 }
 
+.dash-purge-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.dash-purge-meta {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
 .dash-purge-actions {
   display: flex;
   gap: var(--space-3);
@@ -5147,17 +5273,43 @@ button.ghost.inline-link {
   margin-top: var(--space-3);
 }
 
+.quick-pick-card.quick-pick-status {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.quick-pick-status-message {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+}
+
+.quick-pick-card.quick-pick-status.is-error .quick-pick-status-message {
+  color: var(--danger, #c45b5b);
+}
+
 /* ── Surprise Me Button ───────────────────────────────────── */
 
 .composer-surprise {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 34px;
+  height: 34px;
   padding: 6px;
-  border-radius: var(--radius-sm);
+  border-radius: 999px;
   color: var(--muted);
   transition: color 0.15s;
 }
 
 .composer-surprise:hover:not(:disabled) {
   color: var(--accent);
+}
+
+.composer-surprise.is-loading,
+.composer-surprise:disabled {
+  opacity: 0.55;
 }
 
 /* ── Night Owl runtime emphasis ───────────────────────────── */
@@ -5962,18 +6114,33 @@ a.title-credit-link:hover {
   box-shadow: 0 10px 28px color-mix(in srgb, var(--bg) 18%, transparent);
 }
 
+.explore-page {
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
 .explore-page .app-topbar {
   position: sticky;
   top: 0;
   z-index: 50;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .explore-main {
   width: min(var(--reading-column-max), 100%);
+  max-width: 100%;
+  min-width: 0;
   margin: 0 auto;
   padding: var(--space-6) var(--gutter) var(--space-8);
   display: grid;
   gap: var(--space-7);
+}
+
+.explore-section {
+  min-width: 0;
+  max-width: 100%;
 }
 
 .explore-section-header h2 {
@@ -5992,9 +6159,13 @@ a.title-credit-link:hover {
 .explore-card-rail {
   display: flex;
   gap: var(--space-4);
+  max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
+  overscroll-behavior-x: contain;
   padding: var(--space-3) 0;
   scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
 }
 
 .explore-cinema-card {
@@ -6120,12 +6291,15 @@ a.title-credit-link:hover {
   flex-wrap: wrap;
   gap: var(--space-2);
   margin-top: var(--space-3);
+  max-width: 100%;
+  min-width: 0;
 }
 
 .explore-motif-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  max-width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -6133,6 +6307,10 @@ a.title-credit-link:hover {
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-sm);
   cursor: pointer;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: normal;
+  text-align: left;
 }
 
 .explore-motif-chip.is-active {

@@ -3070,7 +3070,7 @@ class ToolRegistry:
         max_runtime = args.get("max_runtime_minutes")
         genres_filter = str(args.get("genres") or "").strip()
 
-        where_clauses = ["view_count = 0"]
+        where_clauses = ["COALESCE(view_count, 0) = 0"]
         params: List[Any] = []
         if max_runtime is not None:
             where_clauses.append("runtime_minutes IS NOT NULL AND runtime_minutes <= ?")
@@ -3100,16 +3100,28 @@ class ToolRegistry:
         if not row:
             return json.dumps({"error": "No unwatched titles match the criteria."})
 
-        genres_list = json.loads(row["genres"]) if isinstance(row["genres"], str) else (row["genres"] or [])
+        genres_raw = row["genres"]
+        genres_list: List[Any] = []
+        if isinstance(genres_raw, list):
+            genres_list = genres_raw
+        elif isinstance(genres_raw, str) and genres_raw.strip():
+            try:
+                parsed = json.loads(genres_raw)
+                genres_list = parsed if isinstance(parsed, list) else []
+            except (TypeError, ValueError, json.JSONDecodeError):
+                genres_list = []
         runtime = row["runtime_minutes"]
         reason_parts = []
         if genres_list:
-            reason_parts.append(f"Matches your {genres_list[0].lower()} taste")
+            reason_parts.append(f"Matches your {str(genres_list[0]).lower()} taste")
         if runtime:
             reason_parts.append(f"{runtime} min")
         reason = " · ".join(reason_parts) if reason_parts else "Unwatched pick for you"
 
-        card = row_to_title_card(dict(row), reason=reason)
+        # row_to_title_card expects genres as a JSON string (sqlite shape).
+        item = dict(row)
+        item["genres"] = json.dumps(genres_list)
+        card = row_to_title_card(item, reason=reason)
         self._cards.append(card)
 
         return json.dumps({

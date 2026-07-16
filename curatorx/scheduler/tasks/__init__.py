@@ -23,6 +23,7 @@ def register_all(scheduler: IdleScheduler) -> None:
         llm_theme_tagging,
         metadata_enrichment,
         plot_neighbors,
+        purge_candidates,
         recommendation_warmup,
         semantic_embeddings,
         summary_motifs,
@@ -43,3 +44,4 @@ def register_all(scheduler: IdleScheduler) -> None:
     llm_logline_enrichment.register(scheduler)
     title_relations_refresh.register(scheduler)
     llm_theme_tagging.register(scheduler)
+    purge_candidates.register(scheduler)
