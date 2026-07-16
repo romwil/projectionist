@@ -80,6 +80,30 @@ pip install -e ".[web]"
 cd frontend && npm install && npm run build && cd ..
 DATA_DIR=./config python -m curatorx.web
 ```
+### Windows (PowerShell)
+
+WSL/bash is not required. One-shot setup: `.\scripts\setup-dev.ps1`. Or from the repo root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -e ".[web]"
+cd frontend; npm install; npm run build; cd ..
+$env:DATA_DIR = ".\config"
+python -m curatorx.web
+```
+
+Or: `.\scripts\dev-server.ps1` (builds the frontend if needed; default **http://127.0.0.1:8788**).
+
+**Python:** Prefer python.org 3.12 (not Microsoft Store). Per-user install:
+
+```powershell
+winget install -e --id Python.Python.3.12 --scope user --accept-package-agreements --accept-source-agreements
+Remove-Item -Recurse -Force .venv -ErrorAction SilentlyContinue
+.\scripts\setup-dev.ps1
+```
+**E2E (mocked Playwright, port 8799):** `.\scripts\run-e2e.ps1` or `npm run test:e2e`. Playwright starts the app via `node scripts/start-e2e-server.mjs` (not bash). Avoid using **8788** for e2e if that port is an SSH tunnel to production.
+
 
 ---
 

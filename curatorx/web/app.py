@@ -60,6 +60,7 @@ from curatorx.connectors.plex_collections import list_collections as list_plex_c
 from curatorx.connectors.radarr import RadarrClient
 from curatorx.connectors.seerr import SeerrClient
 from curatorx.connectors.sonarr import SonarrClient
+from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import DEFAULT_LENS_ID
 from curatorx.library.health import compute_library_health
 from curatorx.library.facets import ensure_library_facet_index
@@ -78,6 +79,7 @@ from curatorx.library.query import (
     query_library,
     query_library_async,
 )
+from curatorx.library.search import row_to_title_card
 from curatorx.library.titles import get_title_detail
 from curatorx.models.schemas import (
     ActionConfirmRequest,
@@ -296,7 +298,7 @@ _SECURITY_HEADERS = {
         "default-src 'self'; "
         "img-src 'self' https://image.tmdb.org https://artworks.thetvdb.com "
         "https://assets.fanart.tv data:; "
-        "style-src 'self' 'unsafe-inline'; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
         "connect-src 'self'; "
         "frame-ancestors 'none'"
@@ -737,6 +739,18 @@ def explore_page() -> HTMLResponse:
 
 @app.get("/title/{media_type}/{item_id}", response_class=HTMLResponse)
 def title_page(media_type: str, item_id: str) -> HTMLResponse:
+    return _serve_index()
+
+
+@app.get("/person/{tmdb_person_id}", response_class=HTMLResponse)
+def person_page(tmdb_person_id: str) -> HTMLResponse:
+    del tmdb_person_id
+    return _serve_index()
+
+
+@app.get("/tag/{tag_name}", response_class=HTMLResponse)
+def tag_page(tag_name: str) -> HTMLResponse:
+    del tag_name
     return _serve_index()
 
 
@@ -2459,6 +2473,157 @@ def title_detail(
         kwargs["tmdb_id"] = int(item_id)
     detail = get_title_detail(db, settings, **kwargs)
     return _sanitize_library_payload(detail.model_dump(), user)
+
+
+def _library_titles_for_person_payload(
+    db,
+    *,
+    person_id: Optional[int] = None,
+    tmdb_person_id: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    rows = db.list_library_titles_for_person(
+        person_id=person_id,
+        tmdb_person_id=tmdb_person_id,
+    )
+    items: List[Dict[str, Any]] = []
+    for row in rows:
+        card = row_to_title_card(row)
+        payload = card.model_dump()
+        payload["id"] = int(row["id"]) if row["id"] is not None else None
+        payload["department"] = str(row["department"] or "") if "department" in row.keys() else ""
+        payload["job"] = str(row["job"] or "") if "job" in row.keys() else ""
+        payload["character"] = str(row["character"] or "") if "character" in row.keys() else ""
+        items.append(payload)
+    return items
+
+
+def _find_person_by_name(db, name: str):
+    pattern = f"%{name.lower()}%"
+    with db.connect() as conn:
+        return conn.execute(
+            """
+            SELECT id, tmdb_person_id, name, profile_url FROM people
+            WHERE lower(name) LIKE ?
+            ORDER BY CASE WHEN lower(name) = ? THEN 0 ELSE 1 END, name
+            LIMIT 1
+            """,
+            (pattern, name.lower()),
+        ).fetchone()
+
+
+@app.get("/api/person/resolve")
+def person_resolve(
+    name: str = "",
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    cleaned = str(name or "").strip()
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="name is required")
+    db = _db()
+    person = _find_person_by_name(db, cleaned)
+    if person is not None and person["tmdb_person_id"] is not None:
+        return _sanitize_library_payload(
+            {
+                "name": str(person["name"] or cleaned),
+                "tmdb_person_id": int(person["tmdb_person_id"]),
+                "person_id": int(person["id"]),
+                "library_only": False,
+            },
+            user,
+        )
+
+    titles: List[Dict[str, Any]] = []
+    person_id = int(person["id"]) if person is not None else None
+    person_name = str(person["name"] or cleaned) if person is not None else cleaned
+    if person_id is not None:
+        titles = _library_titles_for_person_payload(db, person_id=person_id)
+    if not titles:
+        # Fall back to facet cast/directors query when no credit rows / no people match.
+        for facet_key in ("cast", "directors"):
+            result = query_library(
+                db,
+                filters_from_mapping({facet_key: cleaned, "limit": 50}),
+            )
+            items = list(result.get("items") or [])
+            if items:
+                titles = items
+                break
+
+    if person is None and not titles:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    return _sanitize_library_payload(
+        {
+            "name": person_name,
+            "tmdb_person_id": None,
+            "person_id": person_id,
+            "library_only": True,
+            "titles": titles,
+            "returned": len(titles),
+        },
+        user,
+    )
+
+
+@app.get("/api/person/{tmdb_person_id}")
+def person_detail(
+    tmdb_person_id: int,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    settings = _settings()
+    db = _db()
+    tmdb_payload: Dict[str, Any] = {}
+    if settings.tmdb_api_key:
+        try:
+            client = TMDBClient(settings.tmdb_api_key)
+            raw = client.person_details(tmdb_person_id)
+            if isinstance(raw, dict) and raw.get("id"):
+                tmdb_payload = {
+                    "tmdb_person_id": int(raw.get("id") or tmdb_person_id),
+                    "name": str(raw.get("name") or "").strip(),
+                    "biography": str(raw.get("biography") or "").strip(),
+                    "birthday": str(raw.get("birthday") or "").strip() or None,
+                    "deathday": str(raw.get("deathday") or "").strip() or None,
+                    "place_of_birth": str(raw.get("place_of_birth") or "").strip() or None,
+                    "profile_url": client.profile_url(raw.get("profile_path"), size="w342"),
+                    "known_for_department": str(raw.get("known_for_department") or "").strip(),
+                }
+        except RuntimeError:
+            tmdb_payload = {}
+
+    titles = _library_titles_for_person_payload(db, tmdb_person_id=tmdb_person_id)
+    if not tmdb_payload and not titles:
+        raise HTTPException(status_code=404, detail="Person not found")
+
+    if not tmdb_payload:
+        # Local-only person known via credits.
+        with db.connect() as conn:
+            local = conn.execute(
+                """
+                SELECT id, name, profile_url FROM people
+                WHERE tmdb_person_id = ?
+                LIMIT 1
+                """,
+                (int(tmdb_person_id),),
+            ).fetchone()
+        tmdb_payload = {
+            "tmdb_person_id": int(tmdb_person_id),
+            "name": str(local["name"] or "Unknown") if local else "Unknown",
+            "biography": "",
+            "birthday": None,
+            "deathday": None,
+            "place_of_birth": None,
+            "profile_url": str(local["profile_url"] or "") if local else "",
+            "known_for_department": "",
+        }
+
+    payload = {
+        **tmdb_payload,
+        "titles": titles,
+        "returned": len(titles),
+        "in_library_count": len(titles),
+    }
+    return _sanitize_library_payload(payload, user)
 
 
 def _resolve_library_row_for_title(

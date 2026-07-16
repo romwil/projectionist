@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# Cross-platform (incl. Windows): node scripts/start-e2e-server.mjs
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

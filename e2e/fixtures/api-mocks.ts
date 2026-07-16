@@ -489,6 +489,28 @@ export async function mockCuratorApis(page: Page) {
     });
   });
 
+  await page.route("**/api/library/facets**", async (route: Route) => {
+    const url = new URL(route.request().url());
+    const facetType = url.searchParams.get("facet_type") || "keyword";
+    const facets =
+      facetType === "keyword"
+        ? [
+            { value: "cyberpunk", count: 6 },
+            { value: "time loop", count: 3 },
+            { value: "heist", count: 2 },
+          ]
+        : [];
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        facet_type: facetType,
+        returned: facets.length,
+        facets,
+      }),
+    });
+  });
+
   await page.route("**/api/library/neighbors/**", async (route: Route) => {
     await route.fulfill({
       status: 200,

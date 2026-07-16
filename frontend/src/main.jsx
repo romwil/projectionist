@@ -16,6 +16,8 @@ import VoicePage from "./pages/settings/VoicePage";
 import WatchlistSettingsPage from "./pages/settings/WatchlistSettingsPage";
 import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
 import ExplorePage from "./pages/ExplorePage";
+import PersonPage from "./pages/PersonPage";
+import TagPage from "./pages/TagPage";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
@@ -41,6 +43,8 @@ createRoot(document.getElementById("root")).render(
           <Route path="lists" element={<ListsSettingsPage />} />
         </Route>
         <Route path="/title/:mediaType/:itemId" element={<TitleDetailPage />} />
+        <Route path="/person/:tmdbPersonId" element={<PersonPage />} />
+        <Route path="/tag/:tagName" element={<TagPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
