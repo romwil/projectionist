@@ -2388,7 +2388,7 @@ async def chat_stream(
     Events emitted:
 
     - ``event: token``       — ``{"content": "word"}``
-    - ``event: tool_call``   — ``{"name": "search_library", "status": "start|complete"}``
+    - ``event: tool_call``   — ``{"name": "search_library", "status": "start|complete", "args"?, "summary"?}``
     - ``event: done``        — final message payload (same shape as POST /api/chat)
     - ``event: error``       — ``{"error": "description"}``
     """
@@ -2418,9 +2418,14 @@ async def chat_stream(
 
                 if event_type in ("tool_start", "tool_result"):
                     status = "start" if event_type == "tool_start" else "complete"
+                    payload = {"name": data.get("name"), "status": status}
+                    if event_type == "tool_start" and data.get("args") is not None:
+                        payload["args"] = data.get("args")
+                    if event_type == "tool_result" and data.get("summary") is not None:
+                        payload["summary"] = data.get("summary")
                     yield {
                         "event": "tool_call",
-                        "data": json.dumps({"name": data.get("name"), "status": status}),
+                        "data": json.dumps(payload),
                     }
                 else:
                     yield {"event": event_type, "data": chunk.strip()}

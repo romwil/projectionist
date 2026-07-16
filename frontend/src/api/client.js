@@ -523,7 +523,7 @@ export async function sendChat(message, lensId, { timeoutMs = CHAT_TIMEOUT_MS, s
  * @param {string}   [options.sessionId]
  * @param {string}   [options.personaId]
  * @param {function} [options.onToken]    - ({content}) per text token
- * @param {function} [options.onToolCall] - ({name, status}) on tool start/complete
+ * @param {function} [options.onToolCall] - ({name, status, args?, summary?}) on tool start/complete
  * @param {function} [options.onDone]     - (fullPayload) when finished
  * @param {function} [options.onError]    - ({error}) on stream error
  * @param {AbortSignal} [options.signal]  - abort controller signal

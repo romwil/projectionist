@@ -194,8 +194,10 @@ class ToolCallEventFormatTests(unittest.IsolatedAsyncioTestCase):
             tool_results = [e for e in events if e["type"] == "tool_result"]
             self.assertEqual(len(tool_starts), 1)
             self.assertEqual(tool_starts[0]["name"], "search_library")
+            self.assertEqual(tool_starts[0].get("args"), {"query": "noir"})
             self.assertEqual(len(tool_results), 1)
             self.assertEqual(tool_results[0]["name"], "search_library")
+            self.assertIn("Chinatown", tool_results[0].get("summary", ""))
 
             done = next(e for e in events if e["type"] == "done")
             self.assertEqual(done["message"]["blocks"][0]["content"], "Found noir films.")
@@ -326,26 +328,35 @@ class SSEEndpointEventMappingTests(unittest.TestCase):
     """Verify the SSE endpoint remaps tool_start/tool_result to tool_call."""
 
     def test_tool_start_maps_to_tool_call_start(self) -> None:
-        raw = json.dumps({"type": "tool_start", "name": "search_library"})
+        raw = json.dumps({"type": "tool_start", "name": "search_library", "args": {"query": "noir"}})
         data = json.loads(raw)
         event_type = data.get("type", "message")
         if event_type in ("tool_start", "tool_result"):
             status = "start" if event_type == "tool_start" else "complete"
             mapped_event = "tool_call"
             mapped_data = {"name": data.get("name"), "status": status}
+            if event_type == "tool_start" and data.get("args") is not None:
+                mapped_data["args"] = data.get("args")
+            if event_type == "tool_result" and data.get("summary") is not None:
+                mapped_data["summary"] = data.get("summary")
         else:
             mapped_event = event_type
             mapped_data = data
         self.assertEqual(mapped_event, "tool_call")
         self.assertEqual(mapped_data["name"], "search_library")
         self.assertEqual(mapped_data["status"], "start")
+        self.assertEqual(mapped_data["args"], {"query": "noir"})
 
     def test_tool_result_maps_to_tool_call_complete(self) -> None:
-        raw = json.dumps({"type": "tool_result", "name": "search_library"})
+        raw = json.dumps({"type": "tool_result", "name": "search_library", "summary": "[{...}]"})
         data = json.loads(raw)
         event_type = data.get("type", "message")
         status = "start" if event_type == "tool_start" else "complete"
+        mapped = {"name": data.get("name"), "status": status}
+        if data.get("summary") is not None:
+            mapped["summary"] = data.get("summary")
         self.assertEqual(status, "complete")
+        self.assertEqual(mapped["summary"], "[{...}]")
 
     def test_token_event_passes_through(self) -> None:
         raw = json.dumps({"type": "token", "content": "hello"})

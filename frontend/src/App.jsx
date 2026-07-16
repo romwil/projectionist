@@ -37,6 +37,12 @@ import {
   submitMessageFeedback,
   updatePersona,
 } from "./api/client";
+import {
+  activityEventFromToolCall,
+  appendActivityLog,
+  createActivityEvent,
+  nextActivityPanelExpanded,
+} from "./lib/agentActivityLog.js";
 import { agentPulseTitle, resolveAgentPulse } from "./lib/agentPulse.js";
 import {
   alreadyInArrMessage,
@@ -153,6 +159,8 @@ export default function App() {
   const [reviewLookup, setReviewLookup] = useState({});
   const [typingPhrases, setTypingPhrases] = useState([]);
   const [typingLabel, setTypingLabel] = useState("");
+  const [agentActivityLog, setAgentActivityLog] = useState([]);
+  const [activityPanelOpen, setActivityPanelOpen] = useState(false);
   const [composerPlaceholder, setComposerPlaceholder] = useState("");
   const [nightOwl, setNightOwl] = useState(isNightOwlHour);
   const [anniversaries, setAnniversaries] = useState([]);
@@ -165,6 +173,7 @@ export default function App() {
   const helpfulCountRef = useRef(0);
   const perfectPickPendingRef = useRef(false);
   const jobsRunningRef = useRef(false);
+  const tokenNoteLoggedRef = useRef(false);
   const composerRef = useRef(null);
   const konamiTrackerRef = useRef(null);
   const inputRef = useRef("");
@@ -334,6 +343,8 @@ export default function App() {
       setActiveSession(session);
       setActiveSessionId(session);
       setChatError("");
+      setAgentActivityLog([]);
+      setActivityPanelOpen(false);
       setPendingAdd(null);
       setPendingBulk(null);
       setPendingTokens([]);
@@ -560,7 +571,12 @@ export default function App() {
   useEffect(() => {
     if (!loading) return;
     const fallback = `${persona?.curator_name || "Curator"} is thinking`;
-    setTypingLabel(pickRandomPhrase(typingPhrases, fallback));
+    const phrase = pickRandomPhrase(typingPhrases, fallback);
+    setTypingLabel(phrase);
+    setAgentActivityLog((prev) => {
+      if (prev.some((entry) => entry.kind === "status")) return prev;
+      return appendActivityLog(prev, createActivityEvent({ kind: "status", label: phrase }));
+    });
   }, [loading, persona?.curator_name, typingPhrases]);
 
   useEffect(() => {
@@ -663,6 +679,9 @@ export default function App() {
     stopTts();
     setLoading(true);
     setChatError("");
+    tokenNoteLoggedRef.current = false;
+    setAgentActivityLog([]);
+    setActivityPanelOpen(false);
     const userMessage = {
       id: createId(),
       role: "user",
@@ -681,6 +700,7 @@ export default function App() {
       };
       setMessages((prev) => [...prev, eggMessage]);
       speakAssistantMessage(eggMessage);
+      setAgentActivityLog([]);
       setLoading(false);
       return;
     }
@@ -704,6 +724,8 @@ export default function App() {
       } catch (error) {
         appendChatError(formatApiError(error));
       } finally {
+        setAgentActivityLog([]);
+        setActivityPanelOpen(false);
         setLoading(false);
       }
       return;
@@ -725,6 +747,12 @@ export default function App() {
         onToken: ({ content }) => {
           streamAccumulated += content;
           const snapshot = streamAccumulated;
+          if (!tokenNoteLoggedRef.current && snapshot.trim()) {
+            tokenNoteLoggedRef.current = true;
+            setAgentActivityLog((prev) =>
+              appendActivityLog(prev, createActivityEvent({ kind: "token_note", label: "Writing response…" })),
+            );
+          }
           setMessages((prev) =>
             prev.map((msg) =>
               msg.id === streamPlaceholderId
@@ -733,10 +761,15 @@ export default function App() {
             ),
           );
         },
-        onToolCall: ({ name, status }) => {
+        onToolCall: ({ name, status, args, summary }) => {
+          setAgentActivityLog((prev) =>
+            appendActivityLog(prev, activityEventFromToolCall({ name, status, args, summary })),
+          );
           if (status === "start") {
-            const label = name.replace(/_/g, " ");
+            const label = String(name || "tool").replace(/_/g, " ");
             setTypingLabel(`Searching ${label}…`);
+          } else if (status === "complete") {
+            setTypingLabel(`${persona?.curator_name || "Curator"} is thinking`);
           }
         },
         onDone: (data) => {
@@ -755,6 +788,10 @@ export default function App() {
             setPendingBulk(null);
             setPendingAdd(null);
           }
+          setAgentActivityLog((prev) =>
+            appendActivityLog(prev, createActivityEvent({ kind: "status", label: "Response ready" })),
+          );
+          setActivityPanelOpen((open) => nextActivityPanelExpanded({ streamDone: true, expanded: open }));
           refreshJobs();
           refreshThreads();
           getActiveContext()
@@ -765,6 +802,7 @@ export default function App() {
           streamFailed = true;
           setMessages((prev) => prev.filter((msg) => msg.id !== streamPlaceholderId));
           appendChatError(error || "Chat stream failed");
+          setActivityPanelOpen((open) => nextActivityPanelExpanded({ streamDone: true, expanded: open }));
         },
       });
     } catch (error) {
@@ -772,6 +810,7 @@ export default function App() {
         setMessages((prev) => prev.filter((msg) => msg.id !== streamPlaceholderId));
         appendChatError(formatApiError(error));
       }
+      setActivityPanelOpen((open) => nextActivityPanelExpanded({ streamDone: true, expanded: open }));
     } finally {
       setLoading(false);
     }
@@ -1388,8 +1427,19 @@ export default function App() {
               draggableToDock={dockDropEnabled}
               onReviewConflictResolved={handleReviewConflictResolved}
             />
-            {loading && !messages.some((m) => m._streaming && m.blocks?.[0]?.content) ? (
-              <TypingIndicator label={typingLabel || `${curatorName} is thinking`} />
+            {loading || agentActivityLog.length > 0 ? (
+              <TypingIndicator
+                label={
+                  loading
+                    ? typingLabel || `${curatorName} is thinking`
+                    : "Agent activity"
+                }
+                activityLog={agentActivityLog}
+                expanded={activityPanelOpen}
+                onToggle={() => setActivityPanelOpen((open) => !open)}
+                interactive
+                streaming={loading}
+              />
             ) : null}
             <NewReplyChip visible={showNewReplyChip} onClick={() => scrollToLatestTurn("smooth")} />
           </div>

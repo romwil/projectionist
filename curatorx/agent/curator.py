@@ -325,8 +325,8 @@ async def stream_agent(
     Yields newline-delimited JSON events:
 
     - ``{"type": "token", "content": "…"}`` — incremental text token from the LLM
-    - ``{"type": "tool_start", "name": "…"}`` — tool execution begins
-    - ``{"type": "tool_result", "name": "…"}`` — tool execution completed
+    - ``{"type": "tool_start", "name": "…", "args": {…}}`` — tool execution begins
+    - ``{"type": "tool_result", "name": "…", "summary": "…"}`` — tool execution completed
     - ``{"type": "done", "message": {…}, …}`` — final assembled message
 
     Tool calls are fully buffered (the agent needs complete results before
@@ -449,10 +449,14 @@ async def stream_agent(
                 args = json.loads(fn.get("arguments") or "{}")
                 logger.debug("Stream agent tool call name=%s args=%s", name, args)
 
-                yield json.dumps({"type": "tool_start", "name": name}) + "\n"
+                brief_args = args if isinstance(args, dict) else {"value": args}
+                yield json.dumps({"type": "tool_start", "name": name, "args": brief_args}) + "\n"
                 result = await registry.execute(str(name), args)
                 messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
-                yield json.dumps({"type": "tool_result", "name": name}) + "\n"
+                summary = result if isinstance(result, str) else str(result)
+                if len(summary) > 240:
+                    summary = summary[:237] + "..."
+                yield json.dumps({"type": "tool_result", "name": name, "summary": summary}) + "\n"
         else:
             break
 

@@ -85,6 +85,63 @@ test.describe("Chat workspace", () => {
     await expect(page.getByTestId("typing-indicator")).toContainText(/weighing|thinking|Curator/i);
   });
 
+  test("thinking indicator expands agent activity log from tool events", async ({ page }) => {
+    await page.route("**/api/chat/stream**", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      const url = new URL(route.request().url());
+      const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
+      const toolStart = { name: "search_library", status: "start", args: { query: "noir" } };
+      const toolDone = {
+        name: "search_library",
+        status: "complete",
+        summary: '[{"title":"Chinatown"}]',
+      };
+      const done = {
+        type: "done",
+        session_id: sessionId,
+        message: {
+          id: "assistant-activity",
+          role: "assistant",
+          blocks: [{ type: "text", content: "Here is some noir." }],
+          created_at: Math.floor(Date.now() / 1000),
+          lens_id: "general",
+        },
+        pending_tokens: [],
+      };
+      const body = [
+        `event: tool_call\ndata: ${JSON.stringify(toolStart)}\n\n`,
+        `event: tool_call\ndata: ${JSON.stringify(toolDone)}\n\n`,
+        `event: done\ndata: ${JSON.stringify(done)}\n\n`,
+      ].join("");
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body,
+      });
+    });
+
+    await page.getByTestId("composer-input").fill("Show me noir");
+    await page.getByTestId("send-button").click();
+
+    await expect(page.getByTestId("chat-message-assistant")).toContainText("Here is some noir.");
+    const indicator = page.getByTestId("typing-indicator");
+    await expect(indicator).toBeVisible();
+    await expect(indicator).toContainText("Agent activity");
+    await expect(indicator).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByTestId("agent-activity-panel")).toHaveCount(0);
+
+    await indicator.click();
+    await expect(indicator).toHaveAttribute("aria-expanded", "true");
+    const panel = page.getByTestId("agent-activity-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel).toContainText(/search library/i);
+    await expect(panel).toContainText(/query=noir/i);
+    await expect(panel).toContainText(/Chinatown|done|Response ready/i);
+  });
+
   test("shows visible error when chat API fails", async ({ page }) => {
     await mockChatFailure(page, "LLM provider unavailable");
     await page.reload();
