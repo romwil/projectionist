@@ -258,7 +258,18 @@ test.describe("Title cards in chat", () => {
   });
 
   test("title card poster links to detail page", async ({ page }) => {
+    await page.route("**/api/title/movie/78/neighbors**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ items: [], total: 0 }),
+      });
+    });
     await page.route("**/api/title/movie/78**", async (route) => {
+      if (route.request().url().includes("/neighbors")) {
+        await route.continue();
+        return;
+      }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -270,6 +281,10 @@ test.describe("Title cards in chat", () => {
           overview: "A blade runner must pursue replicants.",
           trailer_youtube_key: "eogpIG53Cis",
           in_library: false,
+          recommendation_reason: "Neo-noir classic with rain-slicked neon.",
+          runtime_minutes: 117,
+          genres: ["Sci-Fi", "Thriller"],
+          directors: ["Ridley Scott"],
         }),
       });
     });
@@ -278,9 +293,12 @@ test.describe("Title cards in chat", () => {
 
     const card = page.getByTestId("chat-message-assistant").getByTestId("title-card").first();
     await expect(card.getByTestId("title-card-detail-link")).toHaveAttribute("href", "/title/movie/78");
+    await expect(page.getByTestId("agent-avatar").first()).toBeVisible();
     await card.getByTestId("title-card-title-link").click();
     await expect(page).toHaveURL(/\/title\/movie\/78$/);
     await expect(page.getByTestId("title-detail-page")).toContainText("Blade Runner");
+    await expect(page.getByTestId("title-detail-hero")).toBeVisible();
+    await expect(page.getByTestId("title-why-card")).toBeVisible();
     await page.getByTestId("watch-trailer-button").click();
     await expect(page.getByTestId("trailer-modal")).toBeVisible();
   });

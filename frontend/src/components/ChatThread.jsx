@@ -1,4 +1,5 @@
 import { collectAddableFromMessage } from "../lib/addActions";
+import AgentAvatar from "./AgentAvatar";
 import ReviewPromptCard from "./ReviewPromptCard";
 import ReviewConflictBanner from "./ReviewConflictBanner";
 import ConfirmAllButton from "./ConfirmAllButton";
@@ -231,59 +232,69 @@ export default function ChatThread({
   return (
     <div className="chat-thread">
       {showErrors && chatError ? <InlineAlert type="error" message={chatError} /> : null}
-      {messages.map((message) => (
-        <div
-          key={message.id}
-          className={`message ${message.role}`}
-          data-testid={`chat-message-${message.role}`}
-          data-message-id={message.id}
-          data-message-role={message.role}
-        >
-          <div className="message-inner">
-            {message.blocks.map((block, index) => (
-              <div key={index}>
-                {renderBlock(
-                  block,
-                  {
-                    onAdd,
-                    onDismiss,
-                    onOpenViewport,
-                    onConfirmAllItems,
-                    onConfirmAllTokens,
-                    pendingTokenCount: message.id === lastAssistantId ? pendingTokenCount : 0,
-                    pendingTokenActions: message.id === lastAssistantId ? pendingTokenActions : [],
-                    actionsDisabled,
-                    onTogglePin,
-                    onRecommend,
-                    watchlistLookup,
-                    reviewLookup,
-                    reviewPromptTemplates,
-                    curatorName,
-                    sessionId,
-                    onReviewSave,
-                    onReviewDismiss,
-                    onReviewConflictResolved,
-                    requestPath,
-                    draggableToDock,
-                  },
-                  message.role,
-                  message,
-                  index,
-                  message.blocks
-                )}
+      {messages.map((message) => {
+        const isAssistant = message.role === "assistant";
+        const streaming = Boolean(message._streaming);
+        return (
+          <div
+            key={message.id}
+            className={`message ${message.role}${streaming ? " is-streaming" : ""}`}
+            data-testid={`chat-message-${message.role}`}
+            data-message-id={message.id}
+            data-message-role={message.role}
+          >
+            {isAssistant ? (
+              <div className="message-agent-meta">
+                <AgentAvatar name={curatorName} streaming={streaming} />
+                <span className="message-agent-name">{curatorName}</span>
               </div>
-            ))}
-            {message.role === "assistant" ? (
-              <MessageReactions
-                messageId={message.id}
-                sessionId={sessionId}
-                initialFeedback={messageFeedback[message.id]}
-                onFeedbackChange={onFeedbackChange}
-              />
             ) : null}
+            <div className="message-inner">
+              {message.blocks.map((block, index) => (
+                <div key={index}>
+                  {renderBlock(
+                    block,
+                    {
+                      onAdd,
+                      onDismiss,
+                      onOpenViewport,
+                      onConfirmAllItems,
+                      onConfirmAllTokens,
+                      pendingTokenCount: message.id === lastAssistantId ? pendingTokenCount : 0,
+                      pendingTokenActions: message.id === lastAssistantId ? pendingTokenActions : [],
+                      actionsDisabled,
+                      onTogglePin,
+                      onRecommend,
+                      watchlistLookup,
+                      reviewLookup,
+                      reviewPromptTemplates,
+                      curatorName,
+                      sessionId,
+                      onReviewSave,
+                      onReviewDismiss,
+                      onReviewConflictResolved,
+                      requestPath,
+                      draggableToDock,
+                    },
+                    message.role,
+                    message,
+                    index,
+                    message.blocks
+                  )}
+                </div>
+              ))}
+              {isAssistant ? (
+                <MessageReactions
+                  messageId={message.id}
+                  sessionId={sessionId}
+                  initialFeedback={messageFeedback[message.id]}
+                  onFeedbackChange={onFeedbackChange}
+                />
+              ) : null}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

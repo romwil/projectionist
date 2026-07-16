@@ -1330,8 +1330,15 @@ export default function App() {
             ) : null}
             {showWelcomePanel ? (
               <>
-                {anniversaries.length > 0 ? (
-                  <OnThisDayCard items={anniversaries} accentColor={personaUi?.accent_hue} />
+                {(anniversaries.length > 0 || (libraryGlance && !glanceShown)) ? (
+                  <div className="home-bento" data-testid="home-bento">
+                    {anniversaries.length > 0 ? (
+                      <OnThisDayCard items={anniversaries} accentColor={personaUi?.accent_hue} />
+                    ) : null}
+                    {libraryGlance && !glanceShown ? (
+                      <LibraryGlanceCard snapshot={libraryGlance} onDismiss={handleDismissGlance} />
+                    ) : null}
+                  </div>
                 ) : null}
                 <WelcomePanel
                   curatorName={curatorName}
@@ -1341,7 +1348,7 @@ export default function App() {
                 />
               </>
             ) : null}
-            {libraryGlance && !glanceShown ? (
+            {!showWelcomePanel && libraryGlance && !glanceShown ? (
               <LibraryGlanceCard snapshot={libraryGlance} onDismiss={handleDismissGlance} />
             ) : null}
             {quickPick?.item ? (
@@ -1388,12 +1395,13 @@ export default function App() {
           </div>
 
           <form
-            className="composer"
+            className="composer composer-raised"
             onSubmit={(event) => {
               event.preventDefault();
               sendMessage(input);
             }}
           >
+            <div className="composer-shell">
             <span className="ambient-context-tag" data-testid="ambient-context-tag">
               ⧉ {contextLabel}
             </span>
@@ -1549,6 +1557,7 @@ export default function App() {
                 {voiceStatus}
               </p>
             ) : null}
+            </div>
           </form>
         </main>
       </div>

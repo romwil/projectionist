@@ -222,6 +222,53 @@ export async function mockCuratorApis(page: Page) {
     });
   });
 
+  await page.route("**/api/chat/stream**", async (route: Route) => {
+    if (route.request().method() !== "GET") {
+      await route.continue();
+      return;
+    }
+    const url = new URL(route.request().url());
+    const message = url.searchParams.get("message") || "hello";
+    const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
+    const thread = ensureMockThread(sessionId);
+    const now = nowSeconds();
+    const userMessage: MockMessage = {
+      id: `user-${now}`,
+      role: "user",
+      blocks: [{ type: "text", content: message }],
+      created_at: now,
+      lens_id: "general",
+    };
+    const assistantMessage: MockMessage = {
+      id: `assistant-${now}`,
+      role: "assistant",
+      blocks: [{ type: "text", content: `Echo: ${message}` }],
+      created_at: now + 1,
+      lens_id: "general",
+    };
+    const history = mockMessages.get(sessionId) || [];
+    history.push(userMessage, assistantMessage);
+    mockMessages.set(sessionId, history);
+    if (thread.thread_title === "New conversation") {
+      thread.thread_title = message.slice(0, 60);
+    }
+    thread.preview = message;
+    thread.message_count = history.length;
+    thread.updated_at = now + 1;
+
+    const payload = {
+      type: "done",
+      session_id: sessionId,
+      message: assistantMessage,
+      pending_tokens: [],
+    };
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `event: done\ndata: ${JSON.stringify(payload)}\n\n`,
+    });
+  });
+
   await page.route("**/api/chat/messages/*/feedback", async (route: Route) => {
     const request = route.request();
     if (request.method() !== "POST") {
@@ -356,9 +403,19 @@ export async function mockCuratorApis(page: Page) {
             genres: ["Horror", "Sci-Fi"],
             view_count: 2,
             tmdb_id: 348,
+            poster_url: "",
+            added_at: Math.floor(Date.now() / 1000) - 86400,
           },
         ],
       }),
+    });
+  });
+
+  await page.route("**/api/title/**/neighbors**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], total: 0 }),
     });
   });
 
@@ -514,6 +571,17 @@ export async function mockCuratorApis(page: Page) {
 export async function mockChatFailure(page: Page, detail = "LLM provider unavailable") {
   await page.route("**/api/chat", async (route: Route) => {
     if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ detail }),
+    });
+  });
+  await page.route("**/api/chat/stream**", async (route: Route) => {
+    if (route.request().method() !== "GET") {
       await route.continue();
       return;
     }

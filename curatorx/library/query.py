@@ -315,6 +315,8 @@ def row_to_query_item(row: Mapping[str, Any]) -> Dict[str, Any]:
         "tvdb_id": int(row["tvdb_id"]) if row["tvdb_id"] is not None else None,
         "rating_key": str(row["rating_key"] or ""),
         "file_size": int(row["file_size"] or 0),
+        "poster_url": str(row["poster_url"] or "") if "poster_url" in keys else "",
+        "backdrop_url": str(row["backdrop_url"] or "") if "backdrop_url" in keys else "",
         "runtime_minutes": int(row["runtime_minutes"]) if "runtime_minutes" in keys and row["runtime_minutes"] is not None else None,
         "vote_average": float(row["vote_average"]) if "vote_average" in keys and row["vote_average"] is not None else None,
         "content_rating": str(row["content_rating"] or "") if "content_rating" in keys else "",

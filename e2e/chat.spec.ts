@@ -52,15 +52,37 @@ test.describe("Chat workspace", () => {
   });
 
   test("shows typing indicator while waiting for response", async ({ page }) => {
-    await page.route("**/api/chat", async (route) => {
-      await new Promise((resolve) => setTimeout(resolve, 400));
-      await route.continue();
+    await page.route("**/api/chat/stream**", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.continue();
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const url = new URL(route.request().url());
+      const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
+      const payload = {
+        type: "done",
+        session_id: sessionId,
+        message: {
+          id: "assistant-slow",
+          role: "assistant",
+          blocks: [{ type: "text", content: "Slow reply ready." }],
+          created_at: Math.floor(Date.now() / 1000),
+          lens_id: "general",
+        },
+        pending_tokens: [],
+      };
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `event: done\ndata: ${JSON.stringify(payload)}\n\n`,
+      });
     });
 
     await page.getByTestId("composer-input").fill("Slow response test");
     await page.getByTestId("send-button").click();
     await expect(page.getByTestId("typing-indicator")).toBeVisible();
-    await expect(page.getByTestId("typing-indicator")).toContainText("thinking");
+    await expect(page.getByTestId("typing-indicator")).toContainText(/weighing|thinking|Curator/i);
   });
 
   test("shows visible error when chat API fails", async ({ page }) => {

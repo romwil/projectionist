@@ -2375,6 +2375,71 @@ def title_detail(
     return _sanitize_library_payload(detail.model_dump(), user)
 
 
+def _resolve_library_row_for_title(
+    db,
+    *,
+    media_type: str,
+    item_id: str,
+    id_type: str = "tmdb",
+):
+    if id_type == "rating_key":
+        for item in db.all_library_items():
+            if str(item["rating_key"] or "") == str(item_id):
+                return item
+        return None
+    if media_type == "show" and id_type == "tvdb":
+        return db.library_item_by_tvdb(int(item_id))
+    return db.library_item_by_tmdb(int(item_id), media_type)
+
+
+@app.get("/api/title/{media_type}/{item_id}/neighbors")
+def title_neighbors(
+    media_type: str,
+    item_id: str,
+    id_type: str = "tmdb",
+    mode: str = "similar",
+    limit: int = 12,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Return cached plot neighbors for a library title, or an empty list."""
+    db = _db()
+    row = _resolve_library_row_for_title(
+        db, media_type=media_type, item_id=item_id, id_type=id_type
+    )
+    if row is None:
+        return _sanitize_library_payload({"items": [], "total": 0}, user)
+    seed_id = int(row["id"])
+    capped = min(max(1, int(limit or 12)), 24)
+    neighbor_rows = db.get_neighbors(seed_id, mode=mode, limit=capped)
+    items: List[Dict[str, Any]] = []
+    for neighbor in neighbor_rows:
+        genres_raw = neighbor["genres"] if "genres" in neighbor.keys() else "[]"
+        try:
+            genres = json.loads(genres_raw) if genres_raw else []
+        except (TypeError, json.JSONDecodeError):
+            genres = []
+        if not isinstance(genres, list):
+            genres = []
+        score = float(neighbor["score"] or 0)
+        items.append(
+            {
+                "media_type": str(neighbor["media_type"] or media_type),
+                "title": str(neighbor["title"] or ""),
+                "year": int(neighbor["year"]) if neighbor["year"] is not None else None,
+                "tmdb_id": int(neighbor["tmdb_id"]) if neighbor["tmdb_id"] is not None else None,
+                "tvdb_id": int(neighbor["tvdb_id"]) if neighbor["tvdb_id"] is not None else None,
+                "rating_key": str(neighbor["rating_key"] or ""),
+                "poster_url": str(neighbor["poster_url"] or ""),
+                "overview": str(neighbor["summary"] or ""),
+                "genres": [str(g) for g in genres if g],
+                "in_library": True,
+                "score": score,
+                "match_score": score,
+            }
+        )
+    return _sanitize_library_payload({"items": items, "total": len(items)}, user)
+
+
 @app.post("/api/actions/propose")
 def propose_action(payload: Dict[str, Any], user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     import uuid as uuid_mod

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getPlexMachineId } from "../api/client";
 import { setTitleCardDragData } from "../lib/easterEggs.js";
+import { formatMatchPercent } from "../lib/matchScore.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
@@ -70,6 +71,7 @@ export default function TitleCard({
   const [whyOpen, setWhyOpen] = useState(false);
   const [plexHref, setPlexHref] = useState(() => String(item?.plex_watch_url || "").trim());
   const badge = item.in_library ? "In library" : item.in_radarr || item.in_sonarr ? "In queue" : "New";
+  const matchLabel = formatMatchPercent(item);
   const userStars = item.user_stars;
   const useSeerr = requestPath === "seerr";
   const canRequestSeerr = useSeerr && !item.in_library && item.tmdb_id;
@@ -181,6 +183,10 @@ export default function TitleCard({
     <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
   );
 
+  const showCompactOverlay = Boolean(
+    watchPlexAction || onRecommend || canRequestSeerr || canAddRadarr || canAddSonarr
+  );
+
   return (
     <article
       className={`title-card ${compact ? "compact" : ""} ${hovered && backdropUrl ? "has-hover-backdrop" : ""}`}
@@ -211,6 +217,11 @@ export default function TitleCard({
           posterMedia
         )}
         <span className="badge">{badge}</span>
+        {matchLabel ? (
+          <span className="title-card-match-badge" data-testid="title-card-match-badge">
+            {matchLabel}
+          </span>
+        ) : null}
         {userStars ? (
           <span className="user-review-badge" data-testid="user-review-badge" title={`You rated ${userStars}/5`}>
             {Number(userStars) % 1 === 0 ? "★".repeat(userStars) : `${userStars}★`}
@@ -234,7 +245,7 @@ export default function TitleCard({
             {isPinned ? "★" : "☆"}
           </button>
         ) : null}
-        {compact && (watchPlexAction || onRecommend || canRequestSeerr || canAddRadarr || canAddSonarr) ? (
+        {compact && showCompactOverlay ? (
           <div className="title-card-overlay-actions">{addActions}</div>
         ) : null}
       </div>

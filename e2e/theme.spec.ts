@@ -81,7 +81,7 @@ test.describe("Theme chrome", () => {
     await expect(page.getByTestId("logout-button")).toBeVisible();
   });
 
-  test("explore icon navigates to explore stub", async ({ page }) => {
+  test("explore icon navigates to explore shell", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto("/");
     await page.getByTestId("composer-input").waitFor();
@@ -89,5 +89,8 @@ test.describe("Theme chrome", () => {
     await expect(explore).toBeVisible();
     await explore.click();
     await expect(page.getByTestId("explore-page")).toBeVisible();
+    await expect(page.getByTestId("explore-section-recently-added")).toBeVisible();
+    await expect(page.getByTestId("explore-section-plot-lab")).toBeVisible();
+    await expect(page.getByTestId("explore-recently-added-rail")).toBeVisible();
   });
 });
