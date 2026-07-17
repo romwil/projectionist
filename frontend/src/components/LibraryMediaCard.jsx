@@ -114,28 +114,32 @@ export default function LibraryMediaCard({
     <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
   );
 
-  const showHoverActions = Boolean(
-    (showWatch && plexHref) || item?.tmdb_id || item?.rating_key || (showRecommend && onRecommend),
+  const showCornerActions = Boolean(
+    item?.tmdb_id || item?.rating_key || (showRecommend && onRecommend),
   );
 
-  const hoverActions = showHoverActions ? (
+  // Play stays centered and always visible for in-library titles (does not share the
+  // top-left corner with multi-select checkboxes).
+  const playAction =
+    showWatch && plexHref ? (
+      <a
+        href={plexHref}
+        className="explore-hover-icon explore-hover-icon-watch is-always-on"
+        data-testid="explore-watch-plex"
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label="Watch on Plex"
+        title="Watch on Plex"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">
+          play_arrow
+        </span>
+      </a>
+    ) : null;
+
+  const cornerActions = showCornerActions ? (
     <div className="explore-card-hover-actions" data-testid="explore-card-hover-actions">
-      {showWatch && plexHref ? (
-        <a
-          href={plexHref}
-          className="explore-hover-icon explore-hover-icon-watch"
-          data-testid="explore-watch-plex"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="Watch on Plex"
-          title="Watch on Plex"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">
-            play_arrow
-          </span>
-        </a>
-      ) : null}
       {item?.tmdb_id || item?.rating_key ? (
         <button
           type="button"
@@ -227,7 +231,8 @@ export default function LibraryMediaCard({
     >
       <div className="explore-poster">
         {posterNode}
-        {hoverActions}
+        {playAction}
+        {cornerActions}
       </div>
       {titleNode}
 

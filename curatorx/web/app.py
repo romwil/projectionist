@@ -3173,10 +3173,10 @@ def list_watchlist(
     db = _db()
     items = db.list_watchlist_pins(user_id=user_id)
     if enrich and items:
-        from curatorx.watchlist.curate import enrich_watchlist_pins
+        from curatorx.watchlist.curate import attach_watchlist_posters, enrich_watchlist_pins
 
         items = enrich_watchlist_pins(db, items)
-        _attach_watchlist_posters(db, items)
+        attach_watchlist_posters(db, items)
     return WatchlistListResponse(
         items=[WatchlistPin(**item) for item in items],
         count=len(items),
@@ -3185,37 +3185,9 @@ def list_watchlist(
 
 def _attach_watchlist_posters(db, items: List[Dict[str, Any]]) -> None:
     """Fill poster_url + year for enriched watchlist pins from the library index."""
-    pending = [item for item in items if not (item.get("poster_url") and item.get("year"))]
-    if not pending:
-        return
-    with db.connect() as conn:
-        for item in pending:
-            media_type = str(item.get("media_type") or "movie")
-            tmdb_id = item.get("tmdb_id")
-            tvdb_id = item.get("tvdb_id")
-            row = None
-            if media_type == "movie" and tmdb_id is not None:
-                row = conn.execute(
-                    "SELECT poster_url, year FROM library_items WHERE media_type='movie' AND tmdb_id=? LIMIT 1",
-                    (int(tmdb_id),),
-                ).fetchone()
-            elif media_type == "show" and tvdb_id is not None:
-                row = conn.execute(
-                    "SELECT poster_url, year FROM library_items WHERE media_type='show' AND tvdb_id=? LIMIT 1",
-                    (int(tvdb_id),),
-                ).fetchone()
-            elif media_type == "show" and tmdb_id is not None:
-                row = conn.execute(
-                    "SELECT poster_url, year FROM library_items WHERE media_type='show' AND tmdb_id=? LIMIT 1",
-                    (int(tmdb_id),),
-                ).fetchone()
-            if row is None:
-                continue
-            keys = set(row.keys())
-            if not item.get("poster_url") and "poster_url" in keys and row["poster_url"]:
-                item["poster_url"] = str(row["poster_url"])
-            if not item.get("year") and "year" in keys and row["year"] is not None:
-                item["year"] = int(row["year"])
+    from curatorx.watchlist.curate import attach_watchlist_posters
+
+    attach_watchlist_posters(db, items)
 
 
 @app.get("/api/watchlist/sync")

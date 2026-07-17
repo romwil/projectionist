@@ -1,6 +1,28 @@
 {
-  "generated_at": "2026-07-17T05:14:32Z",
+  "generated_at": "2026-07-17T20:30:26Z",
   "releases": [
+    {
+      "version": "1.8.7",
+      "date": "2026-07-17",
+      "summary": "Sidebar conversation layout polish, turnstile Why? collapsed by default, faster watchlist loads, and consistent centered Play on in-library posters.",
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Conversation list no longer stretches uneven gaps between threads; items stay top-aligned with consistent spacing.",
+            "Turnstile **Why this?** stays collapsed by default (reason/overview no longer pretends to be expanded).",
+            "Watchlist page load: skip Plex pull on open; enrich large lists with bulk library lookups instead of per-pin queries."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Sidebar: **+** new-thread control shares the Conversations header row with collapse; Explore and Watchlist are full-width nav buttons.",
+            "Poster actions: centered always-on Play for in-library titles (clears the multi-select checkbox corner); trailer/recommend stay as hover corners; person filmography uses the same card actions."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.6",
       "date": "2026-07-17",

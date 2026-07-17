@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 from curatorx.library.db import Database
 
 
 def enrich_watchlist_pins(db: Database, pins: List[Mapping[str, Any]]) -> List[Dict[str, Any]]:
+    """Attach in_library / rating_key / watched flags (and poster/year when known).
+
+    Uses a small number of bulk library lookups so large watchlists stay fast.
+    """
     owned_movies = db.owned_tmdb_ids("movie")
     owned_shows_tmdb = db.owned_tmdb_ids("show")
     owned_tvdb = db.owned_tvdb_ids()
+    library_by_key = _bulk_library_lookup(db, pins)
+
     enriched: List[Dict[str, Any]] = []
     for pin in pins:
         item = dict(pin)
@@ -27,15 +33,132 @@ def enrich_watchlist_pins(db: Database, pins: List[Mapping[str, Any]]) -> List[D
                 in_library = True
         item["in_library"] = in_library
         view_count = 0
-        if in_library:
-            row = _lookup_library_row(db, media_type=media_type, tmdb_id=tmdb_id, tvdb_id=tvdb_id)
-            if row is not None:
-                view_count = int(row["view_count"] or 0)
+        row = _row_for_pin(library_by_key, media_type=media_type, tmdb_id=tmdb_id, tvdb_id=tvdb_id)
+        if row is not None:
+            view_count = int(row.get("view_count") or 0)
+            if row.get("rating_key"):
                 item["rating_key"] = row["rating_key"]
+            if not item.get("poster_url") and row.get("poster_url"):
+                item["poster_url"] = str(row["poster_url"])
+            if item.get("year") is None and row.get("year") is not None:
+                item["year"] = int(row["year"])
         item["view_count"] = view_count
         item["watched"] = view_count > 0
         enriched.append(item)
     return enriched
+
+
+def attach_watchlist_posters(db: Database, items: List[Dict[str, Any]]) -> None:
+    """Fill missing poster_url + year from the library index (bulk)."""
+    pending = [item for item in items if not (item.get("poster_url") and item.get("year"))]
+    if not pending:
+        return
+    library_by_key = _bulk_library_lookup(db, pending)
+    for item in pending:
+        row = _row_for_pin(
+            library_by_key,
+            media_type=str(item.get("media_type") or "movie"),
+            tmdb_id=item.get("tmdb_id"),
+            tvdb_id=item.get("tvdb_id"),
+        )
+        if row is None:
+            continue
+        if not item.get("poster_url") and row.get("poster_url"):
+            item["poster_url"] = str(row["poster_url"])
+        if item.get("year") is None and row.get("year") is not None:
+            item["year"] = int(row["year"])
+
+
+def _row_for_pin(
+    library_by_key: Dict[Tuple[str, str, int], Dict[str, Any]],
+    *,
+    media_type: str,
+    tmdb_id: Optional[int],
+    tvdb_id: Optional[int],
+) -> Optional[Dict[str, Any]]:
+    if media_type == "movie" and tmdb_id is not None:
+        return library_by_key.get(("movie", "tmdb", int(tmdb_id)))
+    if media_type == "show":
+        if tvdb_id is not None:
+            hit = library_by_key.get(("show", "tvdb", int(tvdb_id)))
+            if hit is not None:
+                return hit
+        if tmdb_id is not None:
+            return library_by_key.get(("show", "tmdb", int(tmdb_id)))
+    return None
+
+
+def _bulk_library_lookup(
+    db: Database, pins: List[Mapping[str, Any]]
+) -> Dict[Tuple[str, str, int], Dict[str, Any]]:
+    movie_tmdbs: List[int] = []
+    show_tvdbs: List[int] = []
+    show_tmdbs: List[int] = []
+    for pin in pins:
+        media_type = str(pin.get("media_type") or "movie")
+        tmdb_id = pin.get("tmdb_id")
+        tvdb_id = pin.get("tvdb_id")
+        if media_type == "movie" and tmdb_id is not None:
+            movie_tmdbs.append(int(tmdb_id))
+        elif media_type == "show":
+            if tvdb_id is not None:
+                show_tvdbs.append(int(tvdb_id))
+            if tmdb_id is not None:
+                show_tmdbs.append(int(tmdb_id))
+
+    movie_tmdbs = sorted(set(movie_tmdbs))
+    show_tvdbs = sorted(set(show_tvdbs))
+    show_tmdbs = sorted(set(show_tmdbs))
+    out: Dict[Tuple[str, str, int], Dict[str, Any]] = {}
+    if not movie_tmdbs and not show_tvdbs and not show_tmdbs:
+        return out
+
+    with db.connect() as conn:
+        if movie_tmdbs:
+            placeholders = ",".join("?" * len(movie_tmdbs))
+            rows = conn.execute(
+                f"""
+                SELECT media_type, tmdb_id, tvdb_id, rating_key, view_count, poster_url, year
+                FROM library_items
+                WHERE media_type = 'movie' AND tmdb_id IN ({placeholders})
+                """,
+                movie_tmdbs,
+            ).fetchall()
+            for row in rows:
+                if row["tmdb_id"] is None:
+                    continue
+                out[("movie", "tmdb", int(row["tmdb_id"]))] = dict(row)
+        if show_tvdbs:
+            placeholders = ",".join("?" * len(show_tvdbs))
+            rows = conn.execute(
+                f"""
+                SELECT media_type, tmdb_id, tvdb_id, rating_key, view_count, poster_url, year
+                FROM library_items
+                WHERE media_type = 'show' AND tvdb_id IN ({placeholders})
+                """,
+                show_tvdbs,
+            ).fetchall()
+            for row in rows:
+                if row["tvdb_id"] is None:
+                    continue
+                out[("show", "tvdb", int(row["tvdb_id"]))] = dict(row)
+        if show_tmdbs:
+            placeholders = ",".join("?" * len(show_tmdbs))
+            rows = conn.execute(
+                f"""
+                SELECT media_type, tmdb_id, tvdb_id, rating_key, view_count, poster_url, year
+                FROM library_items
+                WHERE media_type = 'show' AND tmdb_id IN ({placeholders})
+                """,
+                show_tmdbs,
+            ).fetchall()
+            for row in rows:
+                if row["tmdb_id"] is None:
+                    continue
+                key = ("show", "tmdb", int(row["tmdb_id"]))
+                # Prefer a tvdb match already recorded for the same show.
+                out.setdefault(key, dict(row))
+    return out
 
 
 def _lookup_library_row(
@@ -45,35 +168,12 @@ def _lookup_library_row(
     tmdb_id: Optional[int],
     tvdb_id: Optional[int],
 ):
-    with db.connect() as conn:
-        if media_type == "movie" and tmdb_id is not None:
-            return conn.execute(
-                """
-                SELECT rating_key, view_count FROM library_items
-                WHERE media_type = 'movie' AND tmdb_id = ?
-                LIMIT 1
-                """,
-                (int(tmdb_id),),
-            ).fetchone()
-        if media_type == "show" and tvdb_id is not None:
-            return conn.execute(
-                """
-                SELECT rating_key, view_count FROM library_items
-                WHERE media_type = 'show' AND tvdb_id = ?
-                LIMIT 1
-                """,
-                (int(tvdb_id),),
-            ).fetchone()
-        if media_type == "show" and tmdb_id is not None:
-            return conn.execute(
-                """
-                SELECT rating_key, view_count FROM library_items
-                WHERE media_type = 'show' AND tmdb_id = ?
-                LIMIT 1
-                """,
-                (int(tmdb_id),),
-            ).fetchone()
-    return None
+    """Legacy single-row lookup kept for callers/tests; prefer bulk path above."""
+    hits = _bulk_library_lookup(
+        db,
+        [{"media_type": media_type, "tmdb_id": tmdb_id, "tvdb_id": tvdb_id}],
+    )
+    return _row_for_pin(hits, media_type=media_type, tmdb_id=tmdb_id, tvdb_id=tvdb_id)
 
 
 def curate_watchlist(

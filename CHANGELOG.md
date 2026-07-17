@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [1.8.7] — 2026-07-17
+
+Sidebar conversation layout polish, turnstile Why? collapsed by default, faster watchlist loads, and consistent centered Play on in-library posters.
+
+### Fixed
+- Conversation list no longer stretches uneven gaps between threads; items stay top-aligned with consistent spacing.
+- Turnstile **Why this?** stays collapsed by default (reason/overview no longer pretends to be expanded).
+- Watchlist page load: skip Plex pull on open; enrich large lists with bulk library lookups instead of per-pin queries.
+
+### Changed
+- Sidebar: **+** new-thread control shares the Conversations header row with collapse; Explore and Watchlist are full-width nav buttons.
+- Poster actions: centered always-on Play for in-library titles (clears the multi-select checkbox corner); trailer/recommend stay as hover corners; person filmography uses the same card actions.
+
 ## [1.8.6] — 2026-07-17
 
 Security hardening (proxy-aware rate limits, OpenAPI off by default), pentest protocol v1.0, Scheduled Tasks cadence/ETA controls, Discover watchlist GUID enrichment, person-page credit grouping, and Plot Lab motif Why?.

@@ -63,7 +63,8 @@ export default function WatchlistPage() {
   }, []);
 
   useEffect(() => {
-    refresh({ pull: true });
+    // Local enriched list first — Plex pull belongs on Refresh / Sync settings.
+    refresh({ pull: false });
   }, [refresh]);
 
   const sortedItems = useMemo(

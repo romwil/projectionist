@@ -28,7 +28,10 @@ describe("explore and recommendations responsive layout", () => {
 
   it("keeps poster hover actions as corner icons on the poster", () => {
     assert.match(styles, /\.explore-poster\s*\{[^}]*position:\s*relative/s);
-    assert.match(styles, /\.explore-hover-icon-watch\s*\{[^}]*top:/s);
+    assert.match(
+      styles,
+      /\.explore-hover-icon-watch\s*\{[^}]*top:\s*50%;[^}]*left:\s*50%;[^}]*transform:\s*translate\(-50%,\s*-50%\)/s,
+    );
     assert.match(styles, /\.explore-hover-icon-trailer\s*\{[^}]*right:/s);
     assert.match(styles, /\.explore-hover-icon-recommend\s*\{[^}]*bottom:/s);
     assert.doesNotMatch(styles, /\.explore-card-hover-actions\s*\{[^}]*bottom:\s*3\.4rem/s);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import BackLink from "../components/BackLink";
+import LibraryMediaCard from "../components/LibraryMediaCard";
 import { getPerson } from "../api/client";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
@@ -9,7 +10,6 @@ import {
   groupPersonTitles,
   libraryOwnedPercent,
 } from "../lib/personBrowse.js";
-import { titleDetailPath } from "../lib/titleLinks.js";
 
 const BIO_PREVIEW = 420;
 
@@ -176,20 +176,14 @@ export default function PersonPage() {
         {titles.length ? (
           <div className="explore-poster-wall person-title-grid">
             {titles.map((item) => {
-              const path = titleDetailPath({ ...item, in_library: true });
               const credits = Array.isArray(item.credits) ? item.credits : [];
               const key = `${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`;
-              const body = (
-                <>
-                  <div className="explore-poster">
-                    {item.poster_url ? (
-                      <img src={item.poster_url} alt="" loading="lazy" />
-                    ) : (
-                      <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
-                    )}
-                  </div>
-                  <h3>{item.title || "Untitled"}</h3>
-                  {item.year ? <p className="explore-card-meta">{item.year}</p> : null}
+              return (
+                <div key={key} className="person-title-card-wrap">
+                  <LibraryMediaCard
+                    item={{ ...item, in_library: true }}
+                    testId="person-title-card"
+                  />
                   {credits.length ? (
                     <ul className="person-credit-list" data-testid="person-credit-list">
                       {credits.map((credit) => (
@@ -202,18 +196,7 @@ export default function PersonPage() {
                       ))}
                     </ul>
                   ) : null}
-                </>
-              );
-              return (
-                <article key={key} className="explore-cinema-card" data-testid="person-title-card">
-                  {path ? (
-                    <Link to={path} className="explore-cinema-card-link">
-                      {body}
-                    </Link>
-                  ) : (
-                    <div className="explore-cinema-card-link">{body}</div>
-                  )}
-                </article>
+                </div>
               );
             })}
           </div>

@@ -1444,16 +1444,28 @@ export default function App() {
           ) : null}
           <div className="workspace-sidebar-top">
             <p className="eyebrow workspace-sidebar-eyebrow">Conversations</p>
-            <button
-              type="button"
-              className="workspace-sidebar-toggle ghost"
-              data-testid="sidebar-rail-toggle"
-              onClick={toggleSidebarRail}
-              aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              {sidebarCollapsed ? "»" : "«"}
-            </button>
+            <div className="workspace-sidebar-top-actions">
+              <button
+                type="button"
+                className="ghost thread-new-btn"
+                data-testid="new-thread"
+                aria-label="New conversation"
+                title="New conversation"
+                onClick={handleCreateThread}
+              >
+                +
+              </button>
+              <button
+                type="button"
+                className="workspace-sidebar-toggle ghost"
+                data-testid="sidebar-rail-toggle"
+                onClick={toggleSidebarRail}
+                aria-label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+                title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+              >
+                {sidebarCollapsed ? "»" : "«"}
+              </button>
+            </div>
           </div>
           <ThreadList
             threads={threads}
@@ -1476,7 +1488,7 @@ export default function App() {
           <div className="sidebar-bottom-actions" data-testid="sidebar-bottom-actions">
             <Link
               to="/explore"
-              className="watchlist-panel-toggle ghost sidebar-bottom-link"
+              className="sidebar-nav-btn"
               data-testid="sidebar-explore"
               onClick={() => setMobileNavOpen(false)}
             >

@@ -341,14 +341,16 @@ export default function TitleCard({
             {item.runtime_minutes} min
           </p>
         ) : null}
-        {!compact && item.overview ? <p className="overview">{item.overview.slice(0, 160)}…</p> : null}
-        {whyReason && !whyOpen ? <p className="reason">{whyReason}</p> : null}
+        {!compact && item.overview && !hasWhyDetail ? (
+          <p className="overview">{item.overview.slice(0, 160)}…</p>
+        ) : null}
         {hasWhyDetail ? (
           <div className="title-card-why">
             <button
               type="button"
               className="ghost title-card-why-toggle"
               data-testid="title-card-why-toggle"
+              aria-expanded={whyOpen}
               onClick={(event) => {
                 event.stopPropagation();
                 setWhyOpen((open) => !open);
@@ -359,6 +361,9 @@ export default function TitleCard({
             {whyOpen ? (
               <div className="title-card-why-detail" data-testid="title-card-why-detail">
                 {whyReason ? <p>{whyReason}</p> : null}
+                {!whyReason && item.overview ? (
+                  <p className="overview">{item.overview.slice(0, 220)}…</p>
+                ) : null}
                 {facetMatches.length ? (
                   <ul>
                     {facetMatches.map((match) => (

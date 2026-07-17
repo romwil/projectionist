@@ -31,17 +31,18 @@ export default function ThreadList({
 
   return (
     <div className={`thread-list ${compact ? "compact" : ""}`} data-testid="thread-list">
-      {hideHeader ? (
-        <div className="thread-list-toolbar">
-          <button type="button" className="ghost thread-new-btn" data-testid="new-thread" onClick={onCreate}>
-            New
-          </button>
-        </div>
-      ) : (
+      {hideHeader ? null : (
         <div className="thread-list-header">
           <p className="eyebrow">Conversations</p>
-          <button type="button" className="ghost thread-new-btn" data-testid="new-thread" onClick={onCreate}>
-            New
+          <button
+            type="button"
+            className="ghost thread-new-btn"
+            data-testid="new-thread"
+            aria-label="New conversation"
+            title="New conversation"
+            onClick={onCreate}
+          >
+            +
           </button>
         </div>
       )}
