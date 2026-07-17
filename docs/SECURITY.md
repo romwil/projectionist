@@ -70,6 +70,8 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 | **S11** | Medium | Settings JSON stores API keys in plaintext under `/config`. | Read volume / backup / host filesystem → fleet credentials. | **Open** | Protect `/config` permissions and backups; treat volume as secret material. |
 | **S12** | Low | Docs understated multi-user API enforcement. | Operators misread network-peer risk. | **Mitigated** | Docs + middleware aligned for multi-user. |
 | **S13** | Low | Final Docker image runs as root (no `USER`). | Container breakout has root inside the image. | **Mitigated** | Entrypoint script auto-chowns `/config` to `curatorx` (UID/GID 1000) and drops privileges via `gosu`. Compatible with existing root-owned volumes and Kubernetes `runAsUser`. |
+| **S14** | High | Rate limiter trusted `X-Forwarded-For` on direct LAN binds. | Rotate spoofed IPs to bypass auth throttles / PIN brute force. | **Mitigated** | Ignore forwarded headers unless `CURATORX_TRUST_PROXY_HEADERS=1`; set that only behind a trusted reverse proxy. |
+| **S15** | Medium | FastAPI served `/docs` and `/openapi.json` without auth. | Map mutate endpoints and auth deps from the LAN. | **Mitigated** | Docs disabled by default; set `CURATORX_EXPOSE_OPENAPI=1` for local development only. |
 | **P1** | High | Library payloads emitted live `X-Plex-Token` in thumbs. | Privacy MCP / member browse exfiltrates server token. | **Mitigated** | Sanitizer allowlists `image.tmdb.org` only. |
 | **P2** | High | Privacy MCP returned `rating_key` and other PMS ids. | Correlate titles to PMS items / probe the media stack. | **Mitigated** | Public schema drops infra ids; privacy mode rejects rating_key title lookups. |
 | **P3** | Medium | Privacy / member APIs exposed telemetry, size, *arr flags. | Household inventory leaks to limited apps / members. | **Mitigated** | Public schema drops telemetry/arr/size; optional `watch_state` enum only. |
@@ -87,12 +89,19 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 4. Keep the host on a **trusted LAN segment**; multi-user is household identity, not internet multi-tenant isolation.
 5. Restrict who can mount/read the `/config` volume.
 6. Prefer a **privacy MCP key** for shared/third-party clients; only mint `CURATORX_MCP_FULL_API_KEY` for trusted in-stack automation (keys must differ).
+7. Leave **`CURATORX_TRUST_PROXY_HEADERS` unset** on direct LAN binds; enable only when a trusted reverse proxy sets client IP headers.
+8. Keep **`CURATORX_EXPOSE_OPENAPI` unset** in production; use it only for local API exploration.
+
+## Penetration-test protocol
+
+Repeatable full-platform engagements: [docs/security/pentests/README.md](security/pentests/README.md) (Protocol v1.0, harness under `scripts/security/pentest/`). Baseline run: [2026-07-platform-full](security/pentests/2026-07-platform-full/).
 
 ## Related docs
 
 - [PRIVACY.md](PRIVACY.md) — plain-language privacy & data use (household + owner; in-app at `/privacy`)
 - [MCP.md](MCP.md) — dual-mode MCP keys, schemas, TMDB image policy
 - [TESTING.md](TESTING.md) — API authz regression (`tests/test_api_authz.py`)
+- [security/pentests/README.md](security/pentests/README.md) — repeatable penetration-test protocol
 - [CONFIGURATION.md](CONFIGURATION.md) — feature flags and session secret
 - [WEB_UI.md](WEB_UI.md) — UI login vs API surface
 - [wiki/Home.md](wiki/Home.md) — operator wiki index

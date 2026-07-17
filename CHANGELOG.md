@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Security
+- Ignore `X-Forwarded-For` for rate limiting unless `CURATORX_TRUST_PROXY_HEADERS=1` (fixes LAN auth throttle bypass — finding S14 / TC-AUTH-RL-01).
+- Hide FastAPI `/docs`, `/redoc`, and `/openapi.json` unless `CURATORX_EXPOSE_OPENAPI=1` (finding S15 / TC-PERIM-05).
+
+### Added
+- Repeatable penetration-test protocol v1.0: `docs/security/pentests/`, harness `scripts/security/pentest/`, baseline engagement `2026-07-platform-full/`.
+
 ## [1.8.5] — 2026-07-16
 
 Watchlist explore page, title detail drawer and polish, Settings/Admin UX, Plex Discover pagination, bulk library delete, watched-state controls, and scheduled-task outcome messaging.

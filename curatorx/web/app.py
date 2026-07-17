@@ -291,7 +291,28 @@ async def lifespan(_app: FastAPI):
     logger.info("CuratorX shutdown complete")
 
 
-app = FastAPI(title="CuratorX", version=__version__, lifespan=lifespan)
+def _openapi_exposed() -> bool:
+    """Expose Swagger/ReDoc only when explicitly enabled (pentest / dev)."""
+    return os.environ.get("CURATORX_EXPOSE_OPENAPI", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+_openapi_url = "/openapi.json" if _openapi_exposed() else None
+_docs_url = "/docs" if _openapi_exposed() else None
+_redoc_url = "/redoc" if _openapi_exposed() else None
+
+app = FastAPI(
+    title="CuratorX",
+    version=__version__,
+    lifespan=lifespan,
+    openapi_url=_openapi_url,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+)
 app.middleware("http")(multi_user_api_auth_middleware)
 
 

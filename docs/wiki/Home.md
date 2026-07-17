@@ -23,6 +23,7 @@ Features: library-grounded recommendations, Explore feeds, title detail with nei
 | [FAQ](FAQ.md) | Short answers (mirrors [`../FAQ.md`](../FAQ.md)) |
 | [Privacy](../PRIVACY.md) | What data CuratorX stores and who can see it (also `/privacy` in the UI) |
 | [Security](../SECURITY.md) | Threat model + living findings checklist (pen-test brief) |
+| [Penetration tests](../security/pentests/README.md) | Repeatable Protocol v1.0 + engagement archives |
 
 ## Related guides
 
@@ -30,6 +31,7 @@ Features: library-grounded recommendations, Explore feeds, title detail with nei
 - [../WEB_UI.md](../WEB_UI.md) — single workspace UI
 - [../DOCKER.md](../DOCKER.md) — Mac / Compose / Unraid notes
 - [../PRIVACY.md](../PRIVACY.md) — privacy & data use (household + owner)
-- [../SECURITY.md](../SECURITY.md) — security assessment (S1–S13)
+- [../SECURITY.md](../SECURITY.md) — security assessment (S1–S15)
+- [../security/pentests/README.md](../security/pentests/README.md) — penetration-test protocol v1.0
 - [../TESTING.md](../TESTING.md) — CA release test checklist
 - [../../CHANGELOG.md](../../CHANGELOG.md) — release notes

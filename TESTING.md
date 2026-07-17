@@ -141,6 +141,17 @@ pytest tests/test_db_query_validation.py::TestTelemetrySummary::test_counts_grou
 
 Coverage is configured in `pyproject.toml` and runs automatically with `pytest`. The threshold is set to 10% (`--cov-fail-under=10`), which gives room to grow as tests are added.
 
+## Security / penetration tests
+
+Periodic full-platform engagements use **Protocol v1.0**:
+
+```bash
+python3 scripts/security/pentest/run-checklist.py
+python3 scripts/security/pentest/generate-surface-matrix.py
+```
+
+See [docs/security/pentests/README.md](docs/security/pentests/README.md). Focused regressions: `tests/test_api_authz.py`, `tests/test_security_headers.py`, `tests/test_rate_limit.py`, MCP privacy suites.
+
 ## Related
 
 - Playwright / CA release checklist: [docs/TESTING.md](docs/TESTING.md)

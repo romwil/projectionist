@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections import defaultdict, deque
 from typing import Deque, Dict, Tuple
 
 from fastapi import HTTPException, Request
+
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
 
 
 class SlidingWindowRateLimiter:
@@ -39,10 +42,21 @@ class SlidingWindowRateLimiter:
 _limiter = SlidingWindowRateLimiter()
 
 
+def trust_proxy_headers() -> bool:
+    """True when CuratorX sits behind a trusted reverse proxy.
+
+    Without this flag, ``X-Forwarded-For`` is ignored for rate limiting so
+    clients cannot rotate spoofed IPs to bypass auth throttles on a direct
+    LAN bind (default homelab deployment).
+    """
+    return os.environ.get("CURATORX_TRUST_PROXY_HEADERS", "").strip().lower() in _TRUTHY
+
+
 def client_ip(request: Request) -> str:
-    forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
-    if forwarded:
-        return forwarded
+    if trust_proxy_headers():
+        forwarded = (request.headers.get("x-forwarded-for") or "").split(",")[0].strip()
+        if forwarded:
+            return forwarded
     if request.client and request.client.host:
         return request.client.host
     return "unknown"

@@ -107,6 +107,19 @@ class SecurityHeadersTests(unittest.TestCase):
         missing = expected - set(headers.keys())
         self.assertFalse(missing, f"Missing security headers: {missing}")
 
+    def test_openapi_docs_hidden_by_default(self) -> None:
+        os.environ.pop("CURATORX_EXPOSE_OPENAPI", None)
+        import curatorx.web.jobs as jobs
+
+        jobs._manager = None
+        import curatorx.web.app as app_mod
+
+        importlib.reload(app_mod)
+        client = TestClient(app_mod.app)
+        for path in ("/docs", "/redoc", "/openapi.json"):
+            resp = client.get(path)
+            self.assertEqual(resp.status_code, 404, path)
+
 
 if __name__ == "__main__":
     unittest.main()

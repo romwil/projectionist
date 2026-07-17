@@ -15,6 +15,7 @@ Run these layers before tagging a Community Applications release. Default CI and
 | Focused CA suite | `.venv/bin/python -m unittest tests.test_ca_release -v` | No |
 | Frontend unit | `cd frontend && npm run test:unit` (includes theme prefs + matchScore) | No |
 | Mocked Playwright | `npm run test:e2e` | No |
+| Security pentest checklist (optional) | `python3 scripts/security/pentest/run-checklist.py` | No |
 | Live service ping (optional) | `CURATORX_LIVE_INTEGRATION=1 …` (below) | Yes |
 | Live stack Playwright (optional) | `npm run test:e2e:live-stack` | Running server |
 

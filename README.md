@@ -161,6 +161,7 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | **[Wiki home](docs/wiki/Home.md)** | In-repo wiki index |
 | [Privacy](docs/PRIVACY.md) | Data use (household + owner); in-app `/privacy` |
 | [Security](docs/SECURITY.md) | Threat model and findings checklist |
+| [Penetration tests](docs/security/pentests/README.md) | Repeatable Protocol v1.0 + harness |
 | [FAQ](docs/FAQ.md) | Common questions |
 | [Onboarding](docs/ONBOARDING.md) | First-run checklist |
 | [Web UI](docs/WEB_UI.md) | Workspace layout and routes |
