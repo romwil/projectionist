@@ -137,5 +137,9 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Pre-builds cached recommendation rails (top genres, recent unwatched, "
+                "highly rated unwatched) so Explore and chat answers stay snappy."
+            ),
         )
     )

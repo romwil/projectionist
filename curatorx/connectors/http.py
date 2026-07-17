@@ -198,10 +198,30 @@ def optional_int(value: Optional[str]) -> Optional[int]:
         return int(float(value))
 
 
+def _numeric_provider_id(raw: str) -> Optional[str]:
+    """Normalize Plex provider id paths to a bare numeric id.
+
+    Discover / modern Plex Guids often look like ``tmdb://movie/550`` or
+    ``tvdb://series/81189`` rather than ``tmdb://550``.
+    """
+    cleaned = str(raw or "").strip().split("?")[0].strip("/")
+    if not cleaned:
+        return None
+    if cleaned.isdigit():
+        return cleaned
+    # Prefer the last slash-separated segment when it is numeric.
+    tail = cleaned.rsplit("/", 1)[-1]
+    if tail.isdigit():
+        return tail
+    return None
+
+
 def _provider_id_from_guid(guid: str, marker: str, key: str, result: dict[str, str]) -> None:
     if key in result or marker not in guid:
         return
-    result[key] = guid.split(marker, 1)[-1].split("?")[0]
+    numeric = _numeric_provider_id(guid.split(marker, 1)[-1])
+    if numeric:
+        result[key] = numeric
 
 
 def parse_plex_guid(guid: str) -> dict[str, str]:

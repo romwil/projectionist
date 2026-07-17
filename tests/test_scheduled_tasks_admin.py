@@ -412,6 +412,32 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         denied_log = bare.get("/api/admin/scheduled-tasks/health_metrics/log")
         self.assertEqual(denied_log.status_code, 403)
 
+    def test_list_includes_description_and_interval_update(self) -> None:
+        self._write_settings(multi_user=False)
+        listed = self.client.get("/api/admin/scheduled-tasks")
+        self.assertEqual(listed.status_code, 200, listed.text)
+        items = listed.json()["items"]
+        meta = next(item for item in items if item["name"] == "metadata_enrichment")
+        self.assertTrue(meta.get("description"))
+        self.assertEqual(meta.get("items_per_cycle"), 25)
+        self.assertEqual(meta.get("progress_scope"), "metadata_backlog")
+        self.assertIsInstance(meta.get("progress"), dict)
+        self.assertIn("remaining_items", meta["progress"])
+
+        updated = self.client.put(
+            "/api/admin/scheduled-tasks/metadata_enrichment",
+            json={"run_interval_seconds": 3600},
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        body = updated.json()
+        self.assertEqual(body["run_interval_seconds"], 3600)
+        self.assertTrue(body.get("description"))
+        self.assertEqual(body["progress"]["items_per_cycle"], 25)
+        # ETA should reflect the new cadence (remaining * interval / batch).
+        remaining = int(body["progress"]["remaining_items"])
+        cycles = 0 if remaining == 0 else (remaining + 24) // 25
+        self.assertEqual(body["progress"]["estimated_seconds"], cycles * 3600)
+
 
 if __name__ == "__main__":
     unittest.main()

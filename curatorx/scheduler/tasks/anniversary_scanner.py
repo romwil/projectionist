@@ -146,12 +146,15 @@ async def run(
 
 
 def register(scheduler: IdleScheduler) -> None:
-    _ensure_table_at_import = True
     scheduler.register(
         TaskDefinition(
             name="anniversary_scanner",
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Scans the library once per day for release-date anniversaries and "
+                "“watched on this day” moments used by On This Day."
+            ),
         )
     )

@@ -157,5 +157,12 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "When an LLM API key is configured, writes short narrative loglines used "
+                f"in embedding text. Processes about {DEFAULT_BATCH_SIZE} titles per run; "
+                "skips cleanly when no LLM is configured."
+            ),
+            items_per_cycle=DEFAULT_BATCH_SIZE,
+            progress_scope="llm_logline_backlog",
         )
     )

@@ -145,5 +145,12 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Builds semantic embeddings from plot summaries for similarity search and "
+                f"Plot Lab. Caps each run at {MAX_ITEMS_PER_CYCLE} titles so large libraries "
+                "catch up gradually without pegging the host."
+            ),
+            items_per_cycle=MAX_ITEMS_PER_CYCLE,
+            progress_scope="embeddings_pending",
         )
     )

@@ -155,5 +155,12 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Trickles through titles that have a TMDB id but still lack release/air "
+                f"dates or plot text. Processes about {DEFAULT_BATCH_SIZE} titles per run "
+                "with paced TMDB requests so free-tier limits stay safe."
+            ),
+            items_per_cycle=DEFAULT_BATCH_SIZE,
+            progress_scope="metadata_backlog",
         )
     )

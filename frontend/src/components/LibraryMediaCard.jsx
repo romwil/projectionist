@@ -35,9 +35,11 @@ export default function LibraryMediaCard({
   onRecommend,
   showRecommend = false,
   onOpenDetail,
+  motifWhy = null,
   testId = "explore-title-card",
 }) {
   const [hovered, setHovered] = useState(false);
+  const [whyOpen, setWhyOpen] = useState(false);
   const [plexHref, setPlexHref] = useState(() => String(item?.plex_watch_url || "").trim());
   const [trailerKey, setTrailerKey] = useState(() => String(item?.trailer_youtube_key || "").trim());
   const [trailerOpen, setTrailerOpen] = useState(false);
@@ -45,6 +47,10 @@ export default function LibraryMediaCard({
 
   const path = titleDetailPath({ ...item, in_library: true });
   const showWatch = canWatchOnPlex(item);
+
+  useEffect(() => {
+    setWhyOpen(false);
+  }, [item?.id, item?.rating_key, motifWhy?.summary]);
 
   useEffect(() => {
     const provided = String(item?.plex_watch_url || "").trim();
@@ -234,6 +240,40 @@ export default function LibraryMediaCard({
         >
           {seedLabel}
         </button>
+      ) : null}
+
+      {motifWhy ? (
+        <div className="explore-motif-why" data-testid="explore-motif-why">
+          <button
+            type="button"
+            className="ghost explore-motif-why-btn"
+            data-testid="explore-motif-why-btn"
+            aria-expanded={whyOpen}
+            onClick={() => setWhyOpen((open) => !open)}
+          >
+            {whyOpen ? "Hide why" : "Why?"}
+          </button>
+          {whyOpen ? (
+            <div className="explore-motif-why-detail" data-testid="explore-motif-why-detail">
+              <p>{motifWhy.summary}</p>
+              {motifWhy.matched?.length ? (
+                <p className="explore-motif-why-matched">
+                  Motifs: {motifWhy.matched.join(" · ")}
+                </p>
+              ) : null}
+              {motifWhy.excerpts?.length ? (
+                <ul className="explore-motif-why-excerpts">
+                  {motifWhy.excerpts.map((entry) => (
+                    <li key={`${entry.motif}-${entry.excerpt}`}>
+                      <strong>{entry.motif}</strong>
+                      <span>{entry.excerpt}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
       ) : null}
 
       {trailerOpen && trailerKey ? (

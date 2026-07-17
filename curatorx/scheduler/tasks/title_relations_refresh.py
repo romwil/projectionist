@@ -53,5 +53,10 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Rebuilds title-to-title relations (collections, neighbors, shared crew) "
+                "from local library data. Completes as a full rebuild each run — no "
+                "trickle backlog."
+            ),
         )
     )

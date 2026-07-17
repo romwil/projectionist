@@ -3,7 +3,9 @@ import { describe, it } from "node:test";
 import {
   creditRoleBucket,
   filterPersonTitles,
+  groupPersonTitles,
   libraryOwnedPercent,
+  personTitleKey,
 } from "./personBrowse.js";
 
 describe("personBrowse", () => {
@@ -20,6 +22,32 @@ describe("personBrowse", () => {
     assert.equal(filterPersonTitles(titles, "director").length, 1);
     assert.equal(filterPersonTitles(titles, "cast")[0].title, "B");
     assert.equal(filterPersonTitles(titles, "all").length, 2);
+  });
+
+  it("collapses repeated media pieces into one entry with aggregated credits", () => {
+    const titles = [
+      { media_type: "movie", tmdb_id: 7446, title: "Tropic Thunder", year: 2008, character: "Tugg Speedman" },
+      { media_type: "movie", tmdb_id: 7446, title: "Tropic Thunder", job: "Director" },
+      { media_type: "movie", tmdb_id: 7446, title: "Tropic Thunder", job: "Producer", poster_url: "/p.jpg" },
+      { media_type: "movie", tmdb_id: 7446, title: "Tropic Thunder", job: "Director" },
+      { media_type: "movie", tmdb_id: 550, title: "Fight Club", character: "Narrator" },
+    ];
+    const grouped = groupPersonTitles(titles);
+    assert.equal(grouped.length, 2);
+    const thunder = grouped[0];
+    assert.equal(thunder.title, "Tropic Thunder");
+    assert.deepEqual(thunder.credits, ["Tugg Speedman", "Director", "Producer"]);
+    assert.equal(thunder.poster_url, "/p.jpg");
+    assert.equal(grouped[1].credits[0], "Narrator");
+  });
+
+  it("keys media by tmdb id, rating key, then title/year", () => {
+    assert.equal(personTitleKey({ media_type: "movie", tmdb_id: 7446 }), "movie:tmdb:7446");
+    assert.equal(personTitleKey({ media_type: "show", rating_key: "abc" }), "show:rk:abc");
+    assert.equal(
+      personTitleKey({ media_type: "movie", title: "Solaris", year: 1972 }),
+      "movie:title:solaris:1972",
+    );
   });
 
   it("computes owned percent when filmography total exists", () => {

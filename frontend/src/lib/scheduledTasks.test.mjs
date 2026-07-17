@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   WARM_EXPLORE_TASKS,
+  estimateThroughputEta,
   formatDurationMs,
+  formatEtaDuration,
   formatInterval,
   formatLastOutcomeLine,
   formatLogLine,
@@ -10,6 +12,7 @@ import {
   formatRunSummaryLine,
   formatTaskLastRun,
   formatTaskLastRunDetail,
+  formatThroughputEstimate,
   isTaskRunning,
   resolveLastOutcome,
   resolveRunMetrics,
@@ -121,5 +124,25 @@ describe("scheduledTasks helpers", () => {
       ["metadata_enrichment", "plot_neighbors"],
     );
     assert.match(formatTaskLastRun({ last_status: "completed", last_finished_at: null }), /Succeeded/);
+  });
+
+  it("estimates throughput ETA when cadence changes", () => {
+    const progress = {
+      remaining_items: 100,
+      items_per_cycle: 25,
+      scope_label: "titles still missing TMDB dates/plot",
+    };
+    const atSixHours = estimateThroughputEta(progress, 21600);
+    assert.equal(atSixHours.estimated_cycles, 4);
+    assert.equal(atSixHours.estimated_seconds, 86400);
+    const atOneDay = estimateThroughputEta(progress, 86400);
+    assert.equal(atOneDay.estimated_seconds, 345600);
+    assert.match(formatThroughputEstimate(atSixHours), /≈ ~1d/);
+    assert.equal(
+      formatThroughputEstimate({ ...progress, remaining_items: 0, estimated_seconds: 0 }),
+      "Caught up — no titles still missing TMDB dates/plot right now.",
+    );
+    assert.equal(formatEtaDuration(0), "caught up");
+    assert.equal(formatEtaDuration(90 * 86400), "~3mo");
   });
 });

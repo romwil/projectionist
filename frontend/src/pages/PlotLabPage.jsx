@@ -22,6 +22,7 @@ import {
   normalizeMediaTypeFilter,
   normalizeMotifFacets,
   normalizePageSize,
+  resolveMotifWhy,
   toggleMotifSelection,
 } from "../lib/exploreFeeds.js";
 
@@ -354,6 +355,12 @@ export default function PlotLabPage() {
         {selectedMotifs.length ? (
           <div className="explore-plot-lab-wall" data-testid="explore-motif-wall">
             <h3 className="explore-plot-lab-heading">Motif wall</h3>
+            {selectedMotifs.length > 1 ? (
+              <p className="explore-section-subtitle" data-testid="plot-lab-intersection-hint">
+                Titles matching all selected motifs ({selectedMotifs.join(" · ")}).
+                Tap Why? on a poster for plot excerpts.
+              </p>
+            ) : null}
             {motifWall.error || motifWall.note ? (
               <p className="explore-empty status status-secondary">
                 {motifWall.error || motifWall.note}
@@ -377,6 +384,7 @@ export default function PlotLabPage() {
                       onSeed={handleSeed}
                       showRecommend={multiUserEnabled}
                       onRecommend={multiUserEnabled ? setRecommendItem : undefined}
+                      motifWhy={resolveMotifWhy(item, selectedMotifs)}
                     />
                   ))}
                 </div>

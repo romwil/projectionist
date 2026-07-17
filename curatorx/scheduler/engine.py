@@ -50,6 +50,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from curatorx.config_store import Settings, load_merged_settings
 from curatorx.library.db import Database
+from curatorx.scheduler.progress import progress_for_definition
 from curatorx.scheduler.run_log import TaskRunLogStore
 from curatorx.scheduler.run_outcome import build_run_summary
 
@@ -74,6 +75,14 @@ class TaskDefinition:
     run_fn: Optional[
         Callable[[Database, Settings, Callable[[], bool]], Awaitable[Dict[str, Any]]]
     ] = None
+    # Owner-facing copy shown when the task is selected in Admin → Scheduled Tasks.
+    description: str = ""
+    # When set, this task trickles through a backlog/library at ``items_per_cycle``
+    # items per run. Used with ``progress_scope`` to estimate wall-clock catch-up.
+    items_per_cycle: Optional[int] = None
+    # How to count remaining work for ETA:
+    #   metadata_backlog | llm_logline_backlog | embeddings_pending | embeddings_pass
+    progress_scope: Optional[str] = None
 
 
 @dataclass
@@ -302,12 +311,20 @@ class IdleScheduler:
                 last_started_at = self._running_started_at
             if last_run_summary is None and state.last_run_summary:
                 last_run_summary = state.last_run_summary
+            progress = progress_for_definition(self._db, defn, interval_seconds=interval)
             result.append(
                 {
                     "name": state.name,
                     "id": state.name,
                     "enabled": state.enabled,
                     "run_interval_seconds": interval,
+                    "default_run_interval_seconds": (
+                        defn.run_interval_seconds if defn is not None else interval
+                    ),
+                    "description": (defn.description if defn is not None else "") or "",
+                    "items_per_cycle": defn.items_per_cycle if defn is not None else None,
+                    "progress_scope": defn.progress_scope if defn is not None else None,
+                    "progress": progress,
                     "last_run_at": last_run_at,
                     "last_started_at": last_started_at,
                     "last_finished_at": last_run_at,
@@ -356,17 +373,16 @@ class IdleScheduler:
             if run_interval_seconds is not None:
                 updates.append("run_interval_seconds = ?")
                 params.append(max(60, run_interval_seconds))
-            if not updates:
-                return self._row_to_dict(row)
-            params.append(name)
-            conn.execute(
-                f"UPDATE scheduled_tasks SET {', '.join(updates)} WHERE name = ?",
-                params,
-            )
-            updated = conn.execute(
-                "SELECT * FROM scheduled_tasks WHERE name = ?", (name,)
-            ).fetchone()
-            return self._row_to_dict(updated) if updated else None
+            if updates:
+                params.append(name)
+                conn.execute(
+                    f"UPDATE scheduled_tasks SET {', '.join(updates)} WHERE name = ?",
+                    params,
+                )
+        for item in self.get_task_states():
+            if item["name"] == name:
+                return item
+        return None
 
     async def trigger_task(self, name: str) -> Dict[str, Any]:
         """Manually trigger a task regardless of idle state or schedule."""

@@ -112,5 +112,9 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Prunes old telemetry and anniversary rows past their retention windows "
+                "to keep the SQLite database from growing without bound."
+            ),
         )
     )

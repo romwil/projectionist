@@ -64,5 +64,10 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Reserved for controlled-vocab LLM theme/trope tagging. Currently skips "
+                "(no key, or stub pending) so Explore can wire to theme facets later "
+                "without blocking motif and relation data."
+            ),
         )
     )

@@ -2,12 +2,24 @@
 
 ## [Unreleased]
 
+## [1.8.6] — 2026-07-17
+
+Security hardening (proxy-aware rate limits, OpenAPI off by default), pentest protocol v1.0, Scheduled Tasks cadence/ETA controls, Discover watchlist GUID enrichment, person-page credit grouping, and Plot Lab motif Why?.
+
 ### Security
 - Ignore `X-Forwarded-For` for rate limiting unless `CURATORX_TRUST_PROXY_HEADERS=1` (fixes LAN auth throttle bypass — finding S14 / TC-AUTH-RL-01).
 - Hide FastAPI `/docs`, `/redoc`, and `/openapi.json` unless `CURATORX_EXPOSE_OPENAPI=1` (finding S15 / TC-PERIM-05).
 
 ### Added
 - Repeatable penetration-test protocol v1.0: `docs/security/pentests/`, harness `scripts/security/pentest/` (bootstrap, loopback mocks, checklists, runners), baseline engagement `2026-07-platform-full/` (29 pass / 0 fail / 1 skip).
+- Admin **Scheduled Tasks**: selected-task description, owner frequency controls (presets + custom hours), and live library/backlog throughput ETAs that update as cadence is adjusted.
+
+### Fixed
+- **Plex Discover watchlist sync**: request Guids (`includeGuids=1`), prefer JSON list payloads, parse typed provider paths (`tmdb://movie/550`), and enrich missing TMDB/TVDB via metadata lookup — fixes “Pulled N · unresolved N” when Discover only returned `plex://` keys.
+- **Person page filmography**: collapse repeated poster cards for the same title into a single card with all credits (e.g. actor role + Director/Producer/Writer) listed underneath, instead of one card per credit.
+
+### Changed
+- **Plot Lab motif wall**: multi-motif selection is now an intersection (AND), matching tag browse; each poster gets a **Why?** control explaining the match with selected motifs and plot-summary excerpts.
 
 ## [1.8.5] — 2026-07-16
 

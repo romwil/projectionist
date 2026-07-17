@@ -1568,7 +1568,7 @@ def export_training_corpus(user=Depends(require_role("owner"))) -> JSONResponse:
 
 class ScheduledTaskUpdatePayload(BaseModel):
     enabled: Optional[bool] = None
-    run_interval_seconds: Optional[int] = Field(default=None, ge=60)
+    run_interval_seconds: Optional[int] = Field(default=None, ge=60, le=2_592_000)
 
 
 @app.get("/api/admin/scheduled-tasks")

@@ -7,12 +7,14 @@ import {
   updateScheduledTask,
 } from "../api/client";
 import {
+  CADENCE_PRESETS,
+  estimateThroughputEta,
   formatDurationMs,
   formatEpoch,
   formatInterval,
   formatLastOutcomeLine,
   formatLogLine,
-  formatRunSummaryLine,
+  formatThroughputEstimate,
   formatTaskLastRun,
   formatTaskLastRunDetail,
   isTaskRunning,
@@ -25,6 +27,8 @@ import {
 
 const POLL_IDLE_MS = 5000;
 const POLL_ACTIVE_MS = 1200;
+const MIN_INTERVAL_SECONDS = 60;
+const MAX_INTERVAL_SECONDS = 30 * 86400;
 
 export default function ScheduledTasksPage() {
   const [items, setItems] = useState([]);
@@ -42,6 +46,8 @@ export default function ScheduledTasksPage() {
   const [warmStatus, setWarmStatus] = useState("");
   const [warming, setWarming] = useState(false);
   const [optimisticStart, setOptimisticStart] = useState(null);
+  const [draftInterval, setDraftInterval] = useState(null);
+  const [customHours, setCustomHours] = useState("");
   const logEndRef = useRef(null);
   const latestSeqRef = useRef(0);
   const warmExploreNames = useMemo(() => resolveWarmExploreTasks(items), [items]);
@@ -50,6 +56,28 @@ export default function ScheduledTasksPage() {
     () => items.find((item) => item.name === selectedName) || null,
     [items, selectedName],
   );
+
+  useEffect(() => {
+    if (!selected) {
+      setDraftInterval(null);
+      setCustomHours("");
+      return;
+    }
+    const seconds = Number(selected.run_interval_seconds) || MIN_INTERVAL_SECONDS;
+    setDraftInterval(seconds);
+    const preset = CADENCE_PRESETS.some((item) => item.seconds === seconds);
+    setCustomHours(preset ? "" : String(Math.round((seconds / 3600) * 100) / 100));
+  }, [selectedName, selected?.run_interval_seconds]);
+
+  const liveProgress = useMemo(
+    () => estimateThroughputEta(selected?.progress, draftInterval ?? selected?.run_interval_seconds),
+    [selected?.progress, draftInterval, selected?.run_interval_seconds],
+  );
+
+  const cadenceDirty =
+    selected != null &&
+    draftInterval != null &&
+    Number(draftInterval) !== Number(selected.run_interval_seconds);
 
   const selectedOutcome = useMemo(() => {
     if (!selected && !lastRun) {
@@ -252,6 +280,42 @@ export default function ScheduledTasksPage() {
     });
   }
 
+  function clampInterval(seconds) {
+    const value = Math.round(Number(seconds));
+    if (!Number.isFinite(value)) return MIN_INTERVAL_SECONDS;
+    return Math.min(MAX_INTERVAL_SECONDS, Math.max(MIN_INTERVAL_SECONDS, value));
+  }
+
+  function handleCadencePreset(seconds) {
+    setDraftInterval(clampInterval(seconds));
+    setCustomHours("");
+  }
+
+  function handleCustomHoursChange(value) {
+    setCustomHours(value);
+    const hours = Number(value);
+    if (!Number.isFinite(hours) || hours <= 0) return;
+    setDraftInterval(clampInterval(hours * 3600));
+  }
+
+  function handleSaveCadence() {
+    if (!selected || draftInterval == null) return;
+    const next = clampInterval(draftInterval);
+    return withBusy(selected.name, async () => {
+      await updateScheduledTask(selected.name, { run_interval_seconds: next });
+    });
+  }
+
+  function handleResetCadence() {
+    if (!selected) return;
+    const fallback =
+      Number(selected.default_run_interval_seconds) ||
+      Number(selected.run_interval_seconds) ||
+      MIN_INTERVAL_SECONDS;
+    setDraftInterval(clampInterval(fallback));
+    setCustomHours("");
+  }
+
   function handleResetQuarantine(name) {
     return withBusy(name, async () => {
       await resetScheduledTaskQuarantine(name);
@@ -445,6 +509,14 @@ export default function ScheduledTasksPage() {
                         )
                       : "Select a task to monitor output"}
                 </p>
+                {selected?.description ? (
+                  <p
+                    className="scheduled-task-description"
+                    data-testid="task-description"
+                  >
+                    {selected.description}
+                  </p>
+                ) : null}
                 {!currentRun && selectedOutcome.summaryLine ? (
                   <p className="scheduled-task-meta" data-testid="task-last-summary">
                     {selectedOutcome.summaryLine}
@@ -467,6 +539,89 @@ export default function ScheduledTasksPage() {
                 Refresh log
               </button>
             </div>
+
+            {selected ? (
+              <div className="scheduled-task-cadence" data-testid="task-cadence-panel">
+                <div className="scheduled-task-cadence-header">
+                  <h4 className="scheduled-task-cadence-title">Frequency</h4>
+                  <span className="scheduled-task-meta">
+                    Current {formatInterval(selected.run_interval_seconds)}
+                    {cadenceDirty
+                      ? ` · draft ${formatInterval(draftInterval)}`
+                      : ""}
+                  </span>
+                </div>
+                <div
+                  className="scheduled-task-cadence-presets"
+                  role="group"
+                  aria-label="Cadence presets"
+                >
+                  {CADENCE_PRESETS.map((preset) => {
+                    const active = Number(draftInterval) === preset.seconds;
+                    return (
+                      <button
+                        key={preset.seconds}
+                        type="button"
+                        className={`ghost scheduled-task-cadence-preset${active ? " is-active" : ""}`}
+                        data-testid={`cadence-preset-${preset.label}`}
+                        disabled={busyNames.has(selected.name)}
+                        onClick={() => handleCadencePreset(preset.seconds)}
+                      >
+                        {preset.label}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="scheduled-task-cadence-custom">
+                  <label htmlFor="task-cadence-hours">
+                    Custom hours
+                    <input
+                      id="task-cadence-hours"
+                      type="number"
+                      min="0.02"
+                      max="720"
+                      step="0.25"
+                      inputMode="decimal"
+                      value={customHours}
+                      data-testid="cadence-custom-hours"
+                      disabled={busyNames.has(selected.name)}
+                      onChange={(event) => handleCustomHoursChange(event.target.value)}
+                      placeholder="e.g. 3"
+                    />
+                  </label>
+                  <div className="scheduled-task-cadence-actions">
+                    <button
+                      type="button"
+                      className="ghost"
+                      data-testid="cadence-reset"
+                      disabled={busyNames.has(selected.name)}
+                      onClick={handleResetCadence}
+                    >
+                      Reset default
+                    </button>
+                    <button
+                      type="button"
+                      data-testid="cadence-save"
+                      disabled={
+                        busyNames.has(selected.name) || !cadenceDirty || draftInterval == null
+                      }
+                      onClick={handleSaveCadence}
+                    >
+                      Save frequency
+                    </button>
+                  </div>
+                </div>
+                {liveProgress ? (
+                  <p
+                    className="scheduled-task-throughput"
+                    data-testid="task-throughput-estimate"
+                  >
+                    {formatThroughputEstimate(liveProgress)}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="scheduled-tasks-log" data-testid="task-log">
               {displayEvents.length ? (
                 displayEvents.map((event) => (

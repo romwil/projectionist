@@ -95,5 +95,12 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Caches plot-neighbor links and surprise scores from embeddings for Explore "
+                f"and Plot Lab. Rotates through about {SEEDS_PER_CYCLE} seed titles per run "
+                "until the whole embedded library has been refreshed."
+            ),
+            items_per_cycle=SEEDS_PER_CYCLE,
+            progress_scope="embeddings_pass",
         )
     )

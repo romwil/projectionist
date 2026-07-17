@@ -119,5 +119,9 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Recomputes taste-profile weights from reviews, preference facts, and "
+                "feedback so recommendations stay aligned with what you actually like."
+            ),
         )
     )

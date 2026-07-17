@@ -6,6 +6,7 @@ import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import {
   filterPersonTitles,
+  groupPersonTitles,
   libraryOwnedPercent,
 } from "../lib/personBrowse.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
@@ -17,15 +18,6 @@ const ROLE_FILTERS = [
   { id: "cast", label: "Cast" },
   { id: "director", label: "Director" },
 ];
-
-function roleLabel(item) {
-  const character = String(item?.character || "").trim();
-  if (character) return character;
-  const job = String(item?.job || "").trim();
-  if (job) return job;
-  const department = String(item?.department || "").trim();
-  return department || null;
-}
 
 export default function PersonPage() {
   const { tmdbPersonId } = useParams();
@@ -45,7 +37,7 @@ export default function PersonPage() {
   }, [tmdbPersonId]);
 
   const titles = useMemo(
-    () => filterPersonTitles(person?.titles, roleFilter),
+    () => groupPersonTitles(filterPersonTitles(person?.titles, roleFilter)),
     [person, roleFilter],
   );
   const owned = person ? libraryOwnedPercent(person) : null;
@@ -185,8 +177,8 @@ export default function PersonPage() {
           <div className="explore-poster-wall person-title-grid">
             {titles.map((item) => {
               const path = titleDetailPath({ ...item, in_library: true });
-              const role = roleLabel(item);
-              const key = `${item.media_type}-${item.tmdb_id || item.rating_key || item.title}-${role || ""}`;
+              const credits = Array.isArray(item.credits) ? item.credits : [];
+              const key = `${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`;
               const body = (
                 <>
                   <div className="explore-poster">
@@ -198,7 +190,18 @@ export default function PersonPage() {
                   </div>
                   <h3>{item.title || "Untitled"}</h3>
                   {item.year ? <p className="explore-card-meta">{item.year}</p> : null}
-                  {role ? <p className="explore-card-meta explore-card-context">{role}</p> : null}
+                  {credits.length ? (
+                    <ul className="person-credit-list" data-testid="person-credit-list">
+                      {credits.map((credit) => (
+                        <li
+                          key={credit}
+                          className="explore-card-meta explore-card-context person-credit"
+                        >
+                          {credit}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                 </>
               );
               return (

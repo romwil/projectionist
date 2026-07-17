@@ -15,13 +15,18 @@ class HttpHelperTests(unittest.TestCase):
         ids = parse_plex_guid("tmdb://11974")
         self.assertEqual(ids["tmdb_id"], "11974")
 
+    def test_parse_plex_guid_typed_paths(self) -> None:
+        self.assertEqual(parse_plex_guid("tmdb://movie/550")["tmdb_id"], "550")
+        self.assertEqual(parse_plex_guid("tmdb://tv/1396")["tmdb_id"], "1396")
+        self.assertEqual(parse_plex_guid("tvdb://series/81189")["tvdb_id"], "81189")
+
     def test_merge_plex_provider_ids_from_guid_children(self) -> None:
         from curatorx.connectors.http import merge_plex_provider_ids
 
         ids = merge_plex_provider_ids(
             "plex://movie/5d7768374de0ee001fccc04a",
             "imdb://tt0096734",
-            "tmdb://11974",
+            "tmdb://movie/11974",
             "tvdb://5869",
         )
         self.assertEqual(ids["tmdb_id"], "11974")

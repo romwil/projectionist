@@ -290,6 +290,12 @@ def build_facet_match_details(
         matches.append(f"Title/summary: {filters.query}")
     if filters.fts_query:
         matches.append(f"Full-text: {filters.fts_query}")
+    if filters.motifs:
+        for motif in filters.motifs:
+            matches.append(f"Motif: {motif}")
+    if filters.themes:
+        for theme in filters.themes:
+            matches.append(f"Theme: {theme}")
 
     if matches:
         reason = "Matches your query — " + "; ".join(matches[:4])
@@ -423,13 +429,16 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         clauses.append("lower(collection_name) = ?")
         params.append(filters.collection_name.lower())
     if filters.motifs:
-        facet_sql, facet_params = _facet_subquery("motif", filters.motifs)
-        clauses.append(facet_sql)
-        params.extend(facet_params)
+        # Multiple motifs are AND so Plot Lab walls show true intersections.
+        for motif in filters.motifs:
+            facet_sql, facet_params = _facet_subquery("motif", [motif])
+            clauses.append(facet_sql)
+            params.extend(facet_params)
     if filters.themes:
-        facet_sql, facet_params = _facet_subquery("theme", filters.themes)
-        clauses.append(facet_sql)
-        params.extend(facet_params)
+        for theme in filters.themes:
+            facet_sql, facet_params = _facet_subquery("theme", [theme])
+            clauses.append(facet_sql)
+            params.extend(facet_params)
     if filters.countries:
         country_clauses = []
         for country in filters.countries:
@@ -583,6 +592,8 @@ async def query_library_async(
         row_by_id = {int(r["id"]): r for r in rows}
         ordered_rows = [row_by_id[item_id] for item_id in page_ids if item_id in row_by_id]
         items = [row_to_query_item(row) for row in ordered_rows]
+        if filters.motifs:
+            attach_motif_why(db, items, filters.motifs)
         returned = len(items)
         return {
             "total_matched": total_matched,
@@ -602,6 +613,8 @@ async def query_library_async(
         offset=offset,
     )
     items = [row_to_query_item(row) for row in rows]
+    if filters.motifs:
+        attach_motif_why(db, items, filters.motifs)
     returned = len(items)
     payload = {
         "total_matched": total_matched,
@@ -615,6 +628,101 @@ async def query_library_async(
     elif filters.semantic_query:
         payload["search_mode"] = "semantic_unavailable"
     return payload
+
+
+def _excerpt_around(text: str, needle: str, *, radius: int = 72) -> str:
+    """Return a short plot window centered on the first case-insensitive needle hit."""
+    body = " ".join(str(text or "").split())
+    token = str(needle or "").strip()
+    if not body or not token:
+        return ""
+    lower = body.lower()
+    idx = lower.find(token.lower())
+    if idx < 0:
+        return ""
+    start = max(0, idx - radius)
+    end = min(len(body), idx + len(token) + radius)
+    excerpt = body[start:end].strip()
+    if start > 0:
+        excerpt = "…" + excerpt
+    if end < len(body):
+        excerpt = excerpt + "…"
+    return excerpt
+
+
+def build_motif_why(
+    selected_motifs: List[str],
+    item_motif_values: List[str],
+    *,
+    plot_text: str = "",
+) -> Dict[str, Any]:
+    """Explain why a title appears for the selected Plot Lab motifs."""
+    selected = [str(m).strip() for m in (selected_motifs or []) if str(m).strip()]
+    owned = [str(v).strip() for v in (item_motif_values or []) if str(v).strip()]
+    owned_lower = [v.lower() for v in owned]
+    matched: List[str] = []
+    missed: List[str] = []
+    for motif in selected:
+        needle = motif.lower()
+        if any(needle == value or needle in value for value in owned_lower):
+            matched.append(motif)
+        else:
+            missed.append(motif)
+
+    excerpts: List[Dict[str, str]] = []
+    for motif in matched:
+        excerpt = _excerpt_around(plot_text, motif)
+        if excerpt:
+            excerpts.append({"motif": motif, "excerpt": excerpt})
+
+    if not selected:
+        summary = "No motifs selected."
+    elif not matched:
+        summary = "Selected motifs are not attached to this title’s plot facets."
+    elif len(matched) == len(selected):
+        if len(matched) == 1:
+            summary = f"Selected because its plot motifs include “{matched[0]}”."
+        else:
+            joined = ", ".join(f"“{m}”" for m in matched)
+            summary = f"Selected because its plot motifs include all of {joined}."
+    else:
+        joined = ", ".join(f"“{m}”" for m in matched)
+        summary = f"Matches {joined} among the selected motifs."
+
+    return {
+        "matched_motifs": matched,
+        "missed_motifs": missed,
+        "excerpts": excerpts,
+        "summary": summary,
+    }
+
+
+def attach_motif_why(
+    db: Database,
+    items: List[Dict[str, Any]],
+    selected_motifs: List[str],
+) -> None:
+    """Mutate query items in place with motif match explanations."""
+    selected = [str(m).strip() for m in (selected_motifs or []) if str(m).strip()]
+    if not selected or not items:
+        return
+    ids = [int(item["id"]) for item in items if item.get("id") is not None]
+    motifs_by_id = db.facet_values_for_items(ids, "motif")
+    plots_by_id = db.plot_text_for_items(ids)
+    for item in items:
+        item_id = item.get("id")
+        if item_id is None:
+            continue
+        key = int(item_id)
+        why = build_motif_why(
+            selected,
+            motifs_by_id.get(key) or [],
+            plot_text=plots_by_id.get(key) or "",
+        )
+        item["matched_motifs"] = why["matched_motifs"]
+        item["missed_motifs"] = why["missed_motifs"]
+        item["motif_excerpts"] = why["excerpts"]
+        item["motif_why"] = why["summary"]
 
 
 def query_library(db: Database, filters: LibraryFilters) -> Dict[str, Any]:
@@ -631,6 +739,8 @@ def query_library(db: Database, filters: LibraryFilters) -> Dict[str, Any]:
         offset=offset,
     )
     items = [row_to_query_item(row) for row in rows]
+    if filters.motifs:
+        attach_motif_why(db, items, filters.motifs)
     returned = len(items)
     payload = {
         "total_matched": total_matched,

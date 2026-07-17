@@ -2052,28 +2052,40 @@ class Database:
                 ).fetchall()
             )
 
+    _METADATA_ENRICHMENT_WHERE = """
+        tmdb_id IS NOT NULL
+        AND (
+          (media_type = 'movie' AND (release_date IS NULL OR release_date = ''))
+          OR (media_type = 'show' AND (first_air_date IS NULL OR first_air_date = ''))
+          OR tmdb_overview IS NULL OR tmdb_overview = ''
+        )
+    """
+
     def items_needing_metadata_enrichment(self, *, limit: int = 25) -> List[sqlite3.Row]:
         """Library rows with a TMDB id but missing dates and/or plot text (trickle backlog)."""
         with self.connect() as conn:
             return list(
                 conn.execute(
-                    """
+                    f"""
                     SELECT id, rating_key, media_type, title, tmdb_id,
                            release_date, first_air_date, last_air_date,
                            tmdb_overview, tagline
                     FROM library_items
-                    WHERE tmdb_id IS NOT NULL
-                      AND (
-                        (media_type = 'movie' AND (release_date IS NULL OR release_date = ''))
-                        OR (media_type = 'show' AND (first_air_date IS NULL OR first_air_date = ''))
-                        OR tmdb_overview IS NULL OR tmdb_overview = ''
-                      )
+                    WHERE {self._METADATA_ENRICHMENT_WHERE}
                     ORDER BY updated_at ASC
                     LIMIT ?
                     """,
                     (max(1, int(limit)),),
                 ).fetchall()
             )
+
+    def count_items_needing_metadata_enrichment(self) -> int:
+        """Count titles still waiting on the metadata enrichment trickle."""
+        with self.connect() as conn:
+            row = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM library_items WHERE {self._METADATA_ENRICHMENT_WHERE}"
+            ).fetchone()
+            return int(row["cnt"] if row else 0)
 
     def set_embedding(self, item_id: int, vector: Sequence[float]) -> None:
         self.set_embeddings([(item_id, vector)])
@@ -2287,26 +2299,59 @@ class Database:
                 ).fetchall()
             )
 
+    _LLM_LOGLINE_WHERE = """
+        (llm_logline IS NULL OR llm_logline = '')
+        AND (
+          (summary IS NOT NULL AND summary != '')
+          OR (tmdb_overview IS NOT NULL AND tmdb_overview != '')
+        )
+    """
+
     def items_needing_llm_logline(self, *, limit: int = 10) -> List[sqlite3.Row]:
         """Rows with plot text but empty ``llm_logline`` (optional LLM enrichment backlog)."""
         with self.connect() as conn:
             return list(
                 conn.execute(
-                    """
+                    f"""
                     SELECT id, rating_key, media_type, title, year, summary,
                            tmdb_overview, tagline, llm_logline
                     FROM library_items
-                    WHERE (llm_logline IS NULL OR llm_logline = '')
-                      AND (
-                        (summary IS NOT NULL AND summary != '')
-                        OR (tmdb_overview IS NOT NULL AND tmdb_overview != '')
-                      )
+                    WHERE {self._LLM_LOGLINE_WHERE}
                     ORDER BY updated_at ASC
                     LIMIT ?
                     """,
                     (max(1, int(limit)),),
                 ).fetchall()
             )
+
+    def count_items_needing_llm_logline(self) -> int:
+        """Count titles still waiting on the LLM logline trickle."""
+        with self.connect() as conn:
+            row = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM library_items WHERE {self._LLM_LOGLINE_WHERE}"
+            ).fetchone()
+            return int(row["cnt"] if row else 0)
+
+    def count_items_needing_embeddings(self) -> int:
+        """Count titles with plot text that do not yet have an embedding row."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM library_items li
+                WHERE TRIM(COALESCE(li.summary, '')) != ''
+                  AND NOT EXISTS (
+                    SELECT 1 FROM embeddings e WHERE e.item_id = li.id
+                  )
+                """
+            ).fetchone()
+            return int(row["cnt"] if row else 0)
+
+    def count_embeddings(self) -> int:
+        """Count stored embedding vectors (used for neighbor full-pass ETA)."""
+        with self.connect() as conn:
+            row = conn.execute("SELECT COUNT(*) AS cnt FROM embeddings").fetchone()
+            return int(row["cnt"] if row else 0)
 
     def set_llm_logline(self, item_id: int, logline: str) -> None:
         cleaned = str(logline or "").strip()
@@ -2358,6 +2403,64 @@ class Database:
             return len(normalized)
 
         return run_with_db_lock_retry(_write, label="replace_facets_of_type")
+
+    def facet_values_for_items(
+        self,
+        item_ids: Sequence[int],
+        facet_type: str,
+    ) -> Dict[int, List[str]]:
+        """Return ``item_id → [facet_value, ...]`` for one facet type."""
+        ids = [int(i) for i in item_ids if i is not None]
+        cleaned_type = str(facet_type or "").strip().lower()
+        out: Dict[int, List[str]] = {i: [] for i in ids}
+        if not ids or not cleaned_type:
+            return out
+        placeholders = ", ".join("?" for _ in ids)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT item_id, facet_value
+                FROM library_facets
+                WHERE facet_type = ?
+                  AND item_id IN ({placeholders})
+                ORDER BY facet_value ASC
+                """,
+                (cleaned_type, *ids),
+            ).fetchall()
+        for row in rows:
+            item_id = int(row["item_id"])
+            value = str(row["facet_value"] or "").strip()
+            if value and item_id in out:
+                out[item_id].append(value)
+        return out
+
+    def plot_text_for_items(self, item_ids: Sequence[int]) -> Dict[int, str]:
+        """Return ``item_id → summary + overview`` text used for motif extraction."""
+        ids = [int(i) for i in item_ids if i is not None]
+        if not ids:
+            return {}
+        placeholders = ", ".join("?" for _ in ids)
+        with self.connect() as conn:
+            cols = {row[1] for row in conn.execute("PRAGMA table_info(library_items)")}
+            overview_select = (
+                "tmdb_overview" if "tmdb_overview" in cols else "'' AS tmdb_overview"
+            )
+            rows = conn.execute(
+                f"""
+                SELECT id, summary, {overview_select}
+                FROM library_items
+                WHERE id IN ({placeholders})
+                """,
+                ids,
+            ).fetchall()
+        out: Dict[int, str] = {}
+        for row in rows:
+            parts = [
+                str(row["summary"] or "").strip(),
+                str(row["tmdb_overview"] or "").strip(),
+            ]
+            out[int(row["id"])] = "\n".join(part for part in parts if part)
+        return out
 
     def credit_person_ids_by_item(self, item_ids: Sequence[int]) -> Dict[int, set[int]]:
         """Map library item_id → set of local people.id for Jaccard surprise scoring."""

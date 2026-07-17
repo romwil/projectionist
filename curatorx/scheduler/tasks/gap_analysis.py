@@ -182,5 +182,10 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Looks up TMDB filmographies for your most-represented directors and "
+                "caches collection gaps (titles you’re missing). Requires a TMDB API key; "
+                "runs weekly by default."
+            ),
         )
     )

@@ -55,5 +55,9 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Pre-computes library health metrics and caches them so the Admin "
+                "dashboard and health API do not rescan the full library on every request."
+            ),
         )
     )

@@ -17,6 +17,15 @@ const TASK_LABELS = {
   title_relations_refresh: "Title relations refresh",
 };
 
+/** Cadence presets for the owner frequency control (seconds). */
+export const CADENCE_PRESETS = [
+  { label: "1h", seconds: 3600 },
+  { label: "6h", seconds: 21600 },
+  { label: "12h", seconds: 43200 },
+  { label: "1d", seconds: 86400 },
+  { label: "7d", seconds: 604800 },
+];
+
 /** Tasks that warm Explore rails / Plot Lab / neighbors (fire-and-forget sequence). */
 export const WARM_EXPLORE_TASKS = [
   "metadata_enrichment",
@@ -61,6 +70,77 @@ export function formatInterval(seconds) {
   }
   const days = value / 86400;
   return Number.isInteger(days) ? `${days}d` : `${days.toFixed(1)}d`;
+}
+
+/** Human ETA for trickle backlog / full-pass estimates. */
+export function formatEtaDuration(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) return "—";
+  if (value === 0) return "caught up";
+  if (value < 3600) {
+    const mins = Math.max(1, Math.round(value / 60));
+    return `~${mins}m`;
+  }
+  if (value < 86400) {
+    const hours = value / 3600;
+    const rounded = hours >= 10 ? Math.round(hours) : Math.round(hours * 10) / 10;
+    return `~${rounded}h`;
+  }
+  const days = value / 86400;
+  if (days < 14) {
+    const rounded = days >= 3 ? Math.round(days) : Math.round(days * 10) / 10;
+    return `~${rounded}d`;
+  }
+  if (days < 60) {
+    return `~${Math.round(days)}d`;
+  }
+  const weeks = days / 7;
+  if (weeks < 12) {
+    return `~${Math.round(weeks)}w`;
+  }
+  const months = days / 30;
+  return `~${Math.round(months)}mo`;
+}
+
+/**
+ * Recompute trickle ETA when the owner adjusts cadence locally.
+ * Uses remaining_items + items_per_cycle from the API progress payload.
+ */
+export function estimateThroughputEta(progress, intervalSeconds) {
+  if (!progress) return null;
+  const remaining = Number(progress.remaining_items);
+  const perCycle = Number(progress.items_per_cycle);
+  const interval = Number(intervalSeconds);
+  if (!Number.isFinite(remaining) || remaining < 0) return null;
+  if (!Number.isFinite(perCycle) || perCycle <= 0) return null;
+  if (!Number.isFinite(interval) || interval < 60) return null;
+  const cycles = remaining === 0 ? 0 : Math.ceil(remaining / perCycle);
+  return {
+    ...progress,
+    estimated_cycles: cycles,
+    estimated_seconds: cycles * interval,
+  };
+}
+
+/** One-line owner-facing throughput summary. */
+export function formatThroughputEstimate(progress) {
+  if (!progress) return "";
+  const remaining = Number(progress.remaining_items);
+  const perCycle = Number(progress.items_per_cycle);
+  const eta = formatEtaDuration(progress.estimated_seconds);
+  const scope = progress.scope_label || "remaining work";
+  if (!Number.isFinite(remaining) || !Number.isFinite(perCycle)) return "";
+  if (remaining === 0) {
+    return `Caught up — no ${scope} right now.`;
+  }
+  const cycles = Number(progress.estimated_cycles);
+  const cycleBit = Number.isFinite(cycles)
+    ? `${cycles} cycle${cycles === 1 ? "" : "s"}`
+    : "several cycles";
+  return (
+    `About ${remaining.toLocaleString()} ${scope} · ${perCycle}/run · ` +
+    `${cycleBit} ≈ ${eta} at this cadence`
+  );
 }
 
 export function formatDurationMs(ms) {

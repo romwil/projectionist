@@ -15,6 +15,7 @@ import {
   normalizePageSize,
   ownerEmptyStateCta,
   parseExploreSectionQuery,
+  resolveMotifWhy,
   sortExploreSectionItems,
   toggleMotifSelection,
 } from "./exploreFeeds.js";
@@ -82,6 +83,27 @@ test("buildMotifQueryParams normalizes tv media type and page size", () => {
   const params = buildMotifQueryParams(["comedy"], { limit: 99, mediaType: "tv" });
   assert.equal(params.get("limit"), "20");
   assert.equal(params.get("media_type"), "show");
+});
+
+test("resolveMotifWhy prefers server motif payload", () => {
+  const why = resolveMotifWhy(
+    {
+      matched_motifs: ["extinction", "pennsylvania"],
+      motif_why: 'Selected because its plot motifs include all of “extinction”, “pennsylvania”.',
+      motif_excerpts: [
+        { motif: "extinction", excerpt: "…risk of extinction…" },
+        { motif: "pennsylvania", excerpt: "…rural Pennsylvania…" },
+      ],
+    },
+    ["extinction", "pennsylvania"],
+  );
+  assert.equal(why.matched.length, 2);
+  assert.match(why.summary, /extinction/);
+  assert.equal(why.excerpts[0].motif, "extinction");
+});
+
+test("resolveMotifWhy returns null without motif payload", () => {
+  assert.equal(resolveMotifWhy({ title: "X" }, ["heist"]), null);
 });
 
 test("formatTotalRuntimeMinutes uses days and hours for large totals", () => {

@@ -39,45 +39,92 @@ class WatchlistDiscoverHelpersTests(unittest.TestCase):
 
     def test_fetch_watchlist_paginates_full_list(self) -> None:
         """A large Discover watchlist force-paginates; we must page through all."""
-        import xml.etree.ElementTree as ET
-
         from curatorx.watchlist import plex_discover
 
         total = 230
         page_size = 100
 
-        def fake_request_xml(url, *, headers=None, timeout=30):
+        def fake_request_json(url, *, headers=None, timeout=30):
             start = 0
             for part in url.split("?", 1)[-1].split("&"):
                 if part.startswith("X-Plex-Container-Start="):
                     start = int(part.split("=", 1)[1])
-            container = ET.Element("MediaContainer", {"totalSize": str(total)})
+            self.assertIn("includeGuids=1", url)
             end = min(start + page_size, total)
+            metadata = []
             for idx in range(start, end):
-                ET.SubElement(
-                    container,
-                    "Video",
+                metadata.append(
                     {
                         "type": "movie",
                         "title": f"Movie {idx}",
                         "guid": f"plex://movie/key{idx}",
                         "ratingKey": f"key{idx}",
-                    },
+                        "Guid": [{"id": f"tmdb://movie/{1000 + idx}"}],
+                    }
                 )
-                # Attach a tmdb Guid child so the item resolves.
-                child = container[-1]
-                ET.SubElement(child, "Guid", {"id": f"tmdb://{1000 + idx}"})
-            return container
+            return {
+                "MediaContainer": {
+                    "totalSize": total,
+                    "size": len(metadata),
+                    "Metadata": metadata,
+                }
+            }
 
         with patch(
-            "curatorx.watchlist.plex_discover.request_xml",
-            side_effect=fake_request_xml,
+            "curatorx.watchlist.plex_discover.request_json",
+            side_effect=fake_request_json,
         ):
-            items = plex_discover.fetch_watchlist("token", page_size=page_size)
+            items = plex_discover.fetch_watchlist(
+                "token", page_size=page_size, enrich_missing_ids=False
+            )
 
         self.assertEqual(len(items), total)
         self.assertEqual(items[0]["tmdb_id"], 1000)
         self.assertEqual(items[-1]["tmdb_id"], 1000 + total - 1)
+
+    def test_fetch_watchlist_enriches_missing_provider_ids(self) -> None:
+        from curatorx.watchlist import plex_discover
+
+        def fake_request_json(url, *, headers=None, timeout=30):
+            if "/library/metadata/" in url:
+                self.assertIn("includeGuids=1", url)
+                return {
+                    "MediaContainer": {
+                        "Metadata": [
+                            {
+                                "type": "movie",
+                                "title": "Inception",
+                                "guid": "plex://movie/abc",
+                                "ratingKey": "abc",
+                                "Guid": [{"id": "tmdb://movie/27205"}],
+                            }
+                        ]
+                    }
+                }
+            return {
+                "MediaContainer": {
+                    "totalSize": 1,
+                    "size": 1,
+                    "Metadata": [
+                        {
+                            "type": "movie",
+                            "title": "Inception",
+                            "guid": "plex://movie/abc",
+                            "ratingKey": "abc",
+                            # List payload missing Guids — the regression we hit in prod.
+                        }
+                    ],
+                }
+            }
+
+        with patch(
+            "curatorx.watchlist.plex_discover.request_json",
+            side_effect=fake_request_json,
+        ):
+            items = plex_discover.fetch_watchlist("token", enrich_missing_ids=True)
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["tmdb_id"], 27205)
 
 
 class WatchlistSyncUnitTests(unittest.TestCase):

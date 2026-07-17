@@ -221,6 +221,41 @@ export function buildMotifQueryParams(
   return params;
 }
 
+/**
+ * Normalize Plot Lab “Why?” payload from a library query item.
+ * Prefers server-attached motif_why / excerpts when present.
+ */
+export function resolveMotifWhy(item, selectedMotifs = []) {
+  if (!item || typeof item !== "object") return null;
+  const matched = Array.isArray(item.matched_motifs)
+    ? item.matched_motifs.map((m) => String(m || "").trim()).filter(Boolean)
+    : [];
+  const selected = (Array.isArray(selectedMotifs) ? selectedMotifs : [])
+    .map((m) => String(m || "").trim())
+    .filter(Boolean);
+  const excerpts = Array.isArray(item.motif_excerpts)
+    ? item.motif_excerpts
+        .map((entry) => ({
+          motif: String(entry?.motif || "").trim(),
+          excerpt: String(entry?.excerpt || "").trim(),
+        }))
+        .filter((entry) => entry.motif && entry.excerpt)
+    : [];
+  const summary = String(item.motif_why || "").trim();
+  if (!matched.length && !summary && selected.length < 1) return null;
+  if (!matched.length && !summary) return null;
+  return {
+    matched,
+    selected,
+    excerpts,
+    summary:
+      summary ||
+      (matched.length
+        ? `Selected because its plot motifs include ${matched.map((m) => `“${m}”`).join(", ")}.`
+        : "Selected motifs are linked via plot facets."),
+  };
+}
+
 /** Format library total runtime for Pulse (days/hours when large). */
 export function formatTotalRuntimeMinutes(minutes) {
   const total = Math.round(Number(minutes));

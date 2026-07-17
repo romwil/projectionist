@@ -120,5 +120,9 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Pre-computes purge candidate recommendations from watch history and "
+                "library age, then caches them for the Admin dashboard."
+            ),
         )
     )

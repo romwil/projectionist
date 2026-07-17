@@ -216,5 +216,9 @@ def register(scheduler: IdleScheduler) -> None:
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
+            description=(
+                "Extracts motif facets from plot summaries across the whole library in "
+                "one pass and writes them for Plot Lab / Explore motif walls."
+            ),
         )
     )
