@@ -81,6 +81,7 @@ export function useAuthGate() {
   const [authReady, setAuthReady] = useState(false);
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
   const [isOwner, setIsOwner] = useState(true);
+  const [role, setRole] = useState("owner");
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +95,7 @@ export function useAuthGate() {
         setMultiUserEnabled(enabled);
         if (!enabled) {
           setIsOwner(true);
+          setRole("owner");
           setAuthReady(true);
           try {
             const me = await getAuthMe();
@@ -118,7 +120,9 @@ export function useAuthGate() {
           if (me.user.ui_font_size) applyUiFontSize(me.user.ui_font_size);
           if (me.user.ui_theme) applyUiTheme(me.user.ui_theme);
         }
-        setIsOwner(me.user?.role === "owner");
+        const nextRole = String(me.user?.role || "guest").toLowerCase();
+        setRole(nextRole === "owner" || nextRole === "member" || nextRole === "guest" ? nextRole : "guest");
+        setIsOwner(nextRole === "owner");
         setAuthReady(true);
       } catch {
         if (cancelled) return;
@@ -128,6 +132,7 @@ export function useAuthGate() {
           return;
         }
         setIsOwner(true);
+        setRole("owner");
         setAuthReady(true);
       }
     }
@@ -138,5 +143,5 @@ export function useAuthGate() {
     };
   }, [navigate]);
 
-  return { authReady, multiUserEnabled, isOwner };
+  return { authReady, multiUserEnabled, isOwner, role };
 }

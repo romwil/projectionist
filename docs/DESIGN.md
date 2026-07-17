@@ -47,16 +47,19 @@ Accent stays a single **amber/gold** (no blue→violet gradients). Display type 
 
 ## Single workspace layout
 
-CuratorX serves one React application (`frontend/src/App.jsx`):
+CuratorX serves one React application (`frontend/src/App.jsx`) with a shared **AppShell** chrome on authenticated browse/detail routes:
 
 | Region | Contents |
 |--------|----------|
+| **Hamburger AppNav** | Primary navigation drawer (☰) on chat and AppShell pages: Chat, Explore, Plot Lab, Tags, **Watchlist** (opens the chat pin panel), Settings, Admin (owners), About. |
 | **Top bar** | CuratorX brand, curator name, agent pulse; **Plex server name** + movie/show counts; icon chrome for **Explore**, theme cycle, watchlist pins, Admin/Settings; optional streak chip; optional **UserMenu** when multi-user is on. No About link in the top bar. |
 | **Sidebar** | Conversation list + New thread + **Watchlist panel** + **status dock** (bottom of rail) |
 | **Chat column** | Recommendations inbox (multi-user), welcome / On This Day / Library Glance / Quick Pick, thread with **AgentAvatar** + ambient context tag (⧉), title cards, composer with **PersonaSelector** + Surprise Me |
-| **Explore** | Separate hub at `/explore` — cinema browse rails (not a second “app mode”) |
+| **Explore** | Hub at `/explore` with children (Tags, Plot Lab, section pages) — cinema browse, not a second “app mode” |
 | **Results overlay** | Optional horizontal expand for large card sets (“Cinema mode”) |
-| **Footer** | Subtle **Privacy** and **About** links on all layouts (chat, Admin, Settings, Explore) |
+| **Footer** | Subtle **Privacy** and **About** links on all layouts (chat, Admin, Settings, Explore). **What’s New** may surface as a lightweight release modal (separate from AppNav). |
+
+Leaf pages (title detail, person, tag, Explore section) keep **BackLink** *plus* AppShell — never BackLink instead of the shell.
 
 ### Visual state tokens
 
@@ -75,7 +78,7 @@ Inline and turnstyle cards share the same affordances:
 
 | Action | Behavior |
 |--------|----------|
-| **Click title / poster** | Navigate to `/title/{movie\|show}/{id}` — sticky back header, backdrop hero, synopsis, meta tiles, cast/tags |
+| **Click title / poster** | Navigate to `/title/{movie\|show}/{id}` — AppShell sticky header (AppNav + BackLink), backdrop hero, synopsis, meta tiles, cast/tags |
 | **Watch trailer** | YouTube trailer modal when `trailer_youtube_key` is present |
 | **Watch on Plex** | Shown when the title is in-library (`rating_key`); opens Plex deep link |
 | **More Like This** | Horizontal neighbor carousel from cached `item_neighbors` (empty until idle `plot_neighbors` ran) |
@@ -95,24 +98,38 @@ Assistant messages show a circular **AgentAvatar** (curator initial) beside the 
 
 ## Explore hub
 
-Route: `/explore` (top-bar cinema icon → Explore; “Back to chat” returns home).
+Route: `/explore` (AppNav / top-bar cinema icon → Explore; “Back to chat” returns home).
 
-| Section | Role |
-|---------|------|
+Explore is a **hub** with primary children:
+
+| Child | Route | Role |
+|-------|-------|------|
+| **Feeds (hub)** | `/explore` | Recently Added, Recent Releases, Library Pulse, On This Day rails |
+| **Tags** | `/explore/tags` (+ `/tag/:name`) | Keyword facet search → tag wall |
+| **Plot Lab** | `/explore/plot-lab` | Motif chips → filtered poster wall; seed search → neighbor rail |
+| **Section pages** | `/explore/section/:sectionId` | Paginated drill-down for a single feed |
+
+| Hub section | Role |
+|-------------|------|
 | **Recently Added** | `/api/library/feeds/recently-added` (`added_at` window) |
 | **Recent Releases** | `/api/library/feeds/recent-releases` — honest empty until ISO dates enriched |
 | **Library Pulse** | Compact stats from overview + health (not a second dashboard) |
 | **On This Day** | `/api/library/feeds/on-this-day` (calendar mode or milestone fallback) |
-| **Plot Lab** | Motif chips → filtered poster wall; seed search → neighbor rail (`similar` / surprise) |
 
-Explore is browse-first; chat remains the primary curation loop. Empty rails show API `note` text (sync hasn’t recorded dates, neighbors not materialized yet) rather than inventing filler.
+Explore is browse-first; chat remains the primary curation loop. Empty rails show API `note` text (sync hasn’t recorded dates, neighbors not materialized yet) rather than inventing filler. Person pages (`/person/:id`) and title detail sit under the same AppShell chrome.
 
 ---
 
 ## Watchlist
 
-- Pins live in the sidebar panel and as a top-bar count chip (click toggles the panel).
-- Refresh **pull-syncs from Plex Discover** when a Sign-in-with-Plex account token is available, then lists local pins.
+Two surfaces, one job each:
+
+| Surface | Job |
+|---------|-----|
+| **Chat Watchlist panel** | Quick pins — sidebar list + top-bar ★ chip (toggle). AppNav **Watchlist** opens this panel (or navigates to `/?watchlist=1`). |
+| **Settings → Watchlist** | Sync/token only — Plex Discover pull/push, enable flags, Sync now. Not the pin browser. |
+
+- Refresh **pull-syncs from Plex Discover** when a Sign-in-with-Plex account token is available, then lists local pins in the panel.
 - Watchlist rows **click through to title detail**.
 - Agent tools: `query_watchlist`, `add_to_watchlist`, `remove_from_watchlist`, `curate_watchlist`, `critique_watchlist`.
 
@@ -270,13 +287,14 @@ Purge remains advisory in chat; *arr remove requires confirmation. Owners can al
 
 Theme tokens in `frontend/src/styles.css` (`html[data-theme="lights-down|lights-up"]`):
 
-- Top bar + sidebar + chat column as one composition; Explore uses the same top-bar language
+- **AppShell** — shared hamburger AppNav + brand-consistent header on Explore, Tags, Plot Lab, tag/person/section, and title detail (chat keeps its richer workspace top bar)
+- Top bar + sidebar + chat column as one composition; browse routes reuse the same amber / Fraunces / DM Sans language
 - Icon-first top-bar actions (Material Symbols) with tooltips — fewer text nav chips
 - Title cards with poster, reason text, optional “Why this?”, and library / Plex / recommend actions
-- Title detail as a full-bleed hero composition (not a card stack)
+- Title detail as a full-bleed hero composition (not a card stack), with sticky header that includes AppNav + BackLink
 - Status dock anchored at the **bottom of the conversation sidebar**
 - User chat bubbles use a warm-tinted background; assistant rows include AgentAvatar
-- Footer Privacy / About — never compete with brand in the top bar
+- Footer Privacy / About — never compete with brand in the top bar; What’s New is optional overlay chrome, not a top-bar chip
 
 Typography and accent colors follow persona presets where configured; avoid treating persona flavor as operational status.
 

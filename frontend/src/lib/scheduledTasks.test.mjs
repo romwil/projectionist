@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  WARM_EXPLORE_TASKS,
   formatDurationMs,
   formatInterval,
   formatLogLine,
+  formatTaskLastRun,
   isTaskRunning,
+  resolveWarmExploreTasks,
   summarizeLastStatus,
   taskDisplayName,
   taskRowTone,
@@ -50,5 +53,18 @@ describe("scheduledTasks helpers", () => {
     });
     assert.match(line, /INFO/);
     assert.match(line, /Started \(manual\)/);
+  });
+
+  it("resolves Warm Explore preset against available tasks", () => {
+    assert.ok(WARM_EXPLORE_TASKS.includes("plot_neighbors"));
+    assert.deepEqual(
+      resolveWarmExploreTasks([
+        { name: "plot_neighbors" },
+        { name: "health_metrics" },
+        { name: "metadata_enrichment" },
+      ]),
+      ["metadata_enrichment", "plot_neighbors"],
+    );
+    assert.match(formatTaskLastRun({ last_status: "completed", last_finished_at: null }), /Succeeded/);
   });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getPlexMachineId } from "../api/client";
+import { itemNeedsAddGuidance, resolveAddCapability } from "../lib/addActions.js";
 import { setTitleCardDragData } from "../lib/easterEggs.js";
 import { formatMatchPercent } from "../lib/matchScore.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
@@ -65,6 +66,8 @@ export default function TitleCard({
   pinRecord = null,
   compact = false,
   requestPath = "arr",
+  userRole,
+  multiUserEnabled = true,
   draggableToDock = false,
 }) {
   const [hovered, setHovered] = useState(false);
@@ -74,12 +77,23 @@ export default function TitleCard({
   const badge = item.in_library ? "In library" : item.in_radarr || item.in_sonarr ? "In queue" : "New";
   const matchLabel = formatMatchPercent(item);
   const userStars = item.user_stars;
-  const useSeerr = requestPath === "seerr";
-  const canRequestSeerr = useSeerr && !item.in_library && item.tmdb_id && addStatus !== "success";
+  const capability = resolveAddCapability({ role: userRole, requestPath, multiUserEnabled });
+  const canRequestSeerr =
+    capability.canRequest && !item.in_library && item.tmdb_id && addStatus !== "success";
   const canAddRadarr =
-    !useSeerr && !item.in_library && item.media_type === "movie" && item.tmdb_id && addStatus !== "success";
+    capability.canAdd &&
+    !item.in_library &&
+    item.media_type === "movie" &&
+    item.tmdb_id &&
+    addStatus !== "success";
   const canAddSonarr =
-    !useSeerr && !item.in_library && item.media_type === "show" && item.tvdb_id && addStatus !== "success";
+    capability.canAdd &&
+    !item.in_library &&
+    item.media_type === "show" &&
+    item.tvdb_id &&
+    addStatus !== "success";
+  const showAskOwner =
+    capability.showGuidedCopy && itemNeedsAddGuidance(item) && addStatus !== "success";
   const showWatchPlex = canWatchOnPlex(item);
   const backdropUrl = item.backdrop_url || item.art || "";
   const showRing =
@@ -206,6 +220,15 @@ export default function TitleCard({
           {addButtonLabel("Add to Sonarr")}
         </button>
       ) : null}
+      {showAskOwner ? (
+        <span
+          className="title-card-add-guidance"
+          data-testid="ask-owner-guidance"
+          title="Guests cannot request or add media"
+        >
+          {capability.guidedCopy}
+        </span>
+      ) : null}
       {addStatus === "success" ? (
         <span className="title-card-add-status" data-testid="title-card-add-success">
           Added
@@ -226,7 +249,12 @@ export default function TitleCard({
   );
 
   const showCompactOverlay = Boolean(
-    watchPlexAction || onRecommend || canRequestSeerr || canAddRadarr || canAddSonarr
+    watchPlexAction ||
+      onRecommend ||
+      canRequestSeerr ||
+      canAddRadarr ||
+      canAddSonarr ||
+      showAskOwner,
   );
 
   return (

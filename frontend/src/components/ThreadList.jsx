@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { relativeTime } from "../api/client";
+import { filterThreads } from "../lib/threadFilter.js";
 
 export default function ThreadList({
   threads = [],
@@ -13,6 +14,9 @@ export default function ThreadList({
 }) {
   const [confirmId, setConfirmId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [query, setQuery] = useState("");
+
+  const visibleThreads = useMemo(() => filterThreads(threads, query), [threads, query]);
 
   async function handleDelete(threadId) {
     if (!onDelete || deletingId) return;
@@ -42,11 +46,28 @@ export default function ThreadList({
         </div>
       )}
 
+      <label className="thread-search" data-testid="thread-search">
+        <span className="sr-only">Search conversations</span>
+        <input
+          type="search"
+          className="thread-search-input"
+          data-testid="thread-search-input"
+          placeholder="Search threads…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          autoComplete="off"
+        />
+      </label>
+
       {threads.length === 0 ? (
         <p className="thread-empty">No conversations yet.</p>
+      ) : visibleThreads.length === 0 ? (
+        <p className="thread-empty" data-testid="thread-search-empty">
+          No conversations match “{query.trim()}”.
+        </p>
       ) : (
         <ul className="thread-items">
-          {threads.map((thread) => {
+          {visibleThreads.map((thread) => {
             const isActive = thread.id === activeSessionId;
             const persona = thread.persona_id ? personaLookup[thread.persona_id] : null;
             const confirming = confirmId === thread.id;

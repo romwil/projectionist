@@ -436,6 +436,59 @@ class LibraryQueryTests(unittest.TestCase):
             result = query_library(db, LibraryFilters(sort="file_size", limit=5))
             self.assertEqual(result["items"][0]["title"], "Large")
 
+    def test_query_collection_name_filter(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "a1",
+                    "media_type": "movie",
+                    "title": "Alien",
+                    "collection_name": "Alien Collection",
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "a2",
+                    "media_type": "movie",
+                    "title": "Other",
+                    "collection_name": "Something Else",
+                }
+            )
+            result = query_library(
+                db,
+                LibraryFilters(collection_name="Alien Collection"),
+            )
+            self.assertEqual(result["total_matched"], 1)
+            self.assertEqual(result["items"][0]["title"], "Alien")
+            self.assertEqual(result["items"][0]["collection_name"], "Alien Collection")
+
+    def test_query_keywords_and_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            from curatorx.library.facets import rebuild_library_facets
+
+            db.upsert_library_item(
+                {
+                    "rating_key": "both",
+                    "media_type": "movie",
+                    "title": "Both Tags",
+                    "keywords": ["heist", "noir"],
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "one",
+                    "media_type": "movie",
+                    "title": "One Tag",
+                    "keywords": ["heist"],
+                }
+            )
+            rebuild_library_facets(db)
+            both = query_library(db, LibraryFilters(keywords=["heist", "noir"]))
+            titles = {item["title"] for item in both["items"]}
+            self.assertEqual(titles, {"Both Tags"})
+
     def test_legacy_db_migrates_added_at_column_and_index(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "legacy.db"

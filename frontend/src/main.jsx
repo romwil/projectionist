@@ -22,11 +22,13 @@ import PersonPage from "./pages/PersonPage";
 import TagPage from "./pages/TagPage";
 import TagsPage from "./pages/TagsPage";
 import PlotLabPage from "./pages/PlotLabPage";
+import WhatsNewGate from "./components/WhatsNewGate";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
+      <WhatsNewGate />
       <Routes>
         <Route path="/" element={<App />} />
         <Route path="/explore" element={<ExplorePage />} />

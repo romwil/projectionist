@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.8.3 -->
+<!-- Unraid Community Applications template — CuratorX 1.8.4 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,13 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.8.4
+- AppShell chrome on Explore/Tags/Plot Lab/tag/person/section/title; AppNav Watchlist → chat pin panel
+- What’s New modal + About release notes; generate-release-notes.sh wired into docker-release
+- Guest Ask owner CTAs; owner empty Explore rails → /admin/tasks; Warm Explore preset
+- Title reviews/TV progress/collection; person filter/%; tags AND/sort; section sort/bulk pin; thread search; delete undo; Tonight strip
+- Serve SPA HTML for /explore/tags, /explore/plot-lab, and section drill-downs (full page loads)
+
 ### 1.8.3
 - Explore section pages (Recently Added / Recent Releases) with All/Movies/TV + page sizes; Tags and Plot Lab routes; AppNav hamburger
 - Scheduled Tasks admin (/admin/tasks) with Run now and live monitor; avatar cache/upload; delete conversation in sidebar

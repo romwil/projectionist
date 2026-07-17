@@ -47,6 +47,9 @@ TAGS=(
   -t "${IMAGE}:latest"
 )
 
+echo "Generating release notes from CHANGELOG.md (require ## [${VERSION}])"
+./scripts/generate-release-notes.sh --require-version "${VERSION}"
+
 echo "Building ${IMAGE}:${VERSION} (+ :${ALSO_LINE} :latest) for ${PLATFORMS}"
 echo "Flags: --provenance=false --sbom=false"
 

@@ -14,6 +14,8 @@ export default function TurnstyleResultsOverlay({
   watchlistLookup,
   actionsDisabled = false,
   requestPath = "arr",
+  userRole,
+  multiUserEnabled = true,
   draggableToDock = false,
 }) {
   const [cinemaMode, setCinemaMode] = useState(false);
@@ -21,7 +23,11 @@ export default function TurnstyleResultsOverlay({
   if (!items.length) return null;
 
   // Bulk confirm counts use the same displayable candidate set as the track.
-  const { radarr, sonarr, seerr } = groupAddableItems(items, { requestPath });
+  const { radarr, sonarr, seerr } = groupAddableItems(items, {
+    requestPath,
+    role: userRole,
+    multiUserEnabled,
+  });
 
   return (
     <div
@@ -90,6 +96,8 @@ export default function TurnstyleResultsOverlay({
               key={`${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`}
               item={item}
               requestPath={requestPath}
+              userRole={userRole}
+              multiUserEnabled={multiUserEnabled}
               onAdd={onAdd}
               onDismiss={onDismiss}
               onTogglePin={item.card_kind === "purge" ? undefined : onTogglePin}

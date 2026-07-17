@@ -12,6 +12,9 @@ test.describe("Explore hub", () => {
     await page.goto("/explore");
     await expect(page.getByTestId("explore-page")).toBeVisible();
 
+    await expect(page.getByTestId("explore-hub-plot-lab")).toBeVisible();
+    await expect(page.getByTestId("explore-hub-tags")).toBeVisible();
+
     await expect(page.getByTestId("explore-recently-added-rail")).toBeVisible();
     await expect(page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card")).toContainText(
       "Alien",
@@ -27,6 +30,10 @@ test.describe("Explore hub", () => {
     await expect(page.getByTestId("explore-on-this-day-rail")).toBeVisible();
     await expect(page.getByTestId("explore-on-this-day-rail")).toContainText("Jaws");
 
+    await page.getByTestId("explore-hub-plot-lab").click();
+    await expect(page).toHaveURL(/\/explore\/plot-lab$/);
+    await expect(page.getByTestId("plot-lab-page")).toBeVisible();
+
     await expect(page.getByTestId("explore-motif-chips")).toBeVisible();
     const chip = page.getByTestId("explore-motif-chip").first();
     await chip.click();
@@ -39,6 +46,7 @@ test.describe("Explore hub", () => {
     await expect(page.getByTestId("explore-seed-active")).toContainText("Alien");
     await expect(page.getByTestId("explore-neighbors-rail")).toContainText("The Thing");
 
+    await page.goto("/explore");
     await page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card").first().click();
     await expect(page).toHaveURL(/\/title\/movie\/348/);
   });

@@ -322,6 +322,16 @@ def get_title_detail(
             detail.runtime_minutes = int(row["runtime_minutes"])
         if "vote_average" in keys and row["vote_average"] is not None and detail.rating is None:
             detail.rating = float(row["vote_average"])
+        if "total_episode_count" in keys and row["total_episode_count"] is not None:
+            try:
+                detail.total_episode_count = int(row["total_episode_count"])
+            except (TypeError, ValueError):
+                pass
+        if "unwatched_episode_count" in keys and row["unwatched_episode_count"] is not None:
+            try:
+                detail.unwatched_episode_count = int(row["unwatched_episode_count"])
+            except (TypeError, ValueError):
+                pass
         try:
             item_id = int(row["id"])
         except (TypeError, ValueError, KeyError):

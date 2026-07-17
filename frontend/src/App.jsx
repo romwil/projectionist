@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   api,
   addWatchlistPin,
@@ -24,6 +24,7 @@ import {
   listWatchlist,
   markRecommendationsSeen,
   proposeAction,
+  queryLibrary,
   removeWatchlistPin,
   runWatchlistSync,
   saveReview,
@@ -85,6 +86,16 @@ import {
   themeControlIcon,
   themePreferenceLabel,
 } from "./lib/uiPrefs.js";
+import {
+  isRateFlowRequest,
+  isWatchlistPanelRequest,
+  stripRateFlowParam,
+  stripWatchlistPanelParam,
+} from "./lib/backNav.js";
+import {
+  normalizeTonightItems,
+  tonightStripVisible,
+} from "./lib/tonightStrip.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import ChatThread from "./components/ChatThread";
 import InlineAlert from "./components/InlineAlert";
@@ -96,8 +107,10 @@ import RecommendationsInbox from "./components/RecommendationsInbox";
 import StatusDock from "./components/StatusDock";
 import AppNav, { AppNavToggle } from "./components/AppNav";
 import ThreadList from "./components/ThreadList";
+import TonightStrip from "./components/TonightStrip";
 import TurnstyleResultsOverlay from "./components/TurnstyleResultsOverlay";
 import TypingIndicator from "./components/TypingIndicator";
+import UndoToast from "./components/UndoToast";
 import WatchlistPanel from "./components/WatchlistPanel";
 import WelcomePanel from "./components/WelcomePanel";
 import OnThisDayCard from "./components/OnThisDayCard";
@@ -110,7 +123,9 @@ import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import useVoiceMode from "./hooks/useVoiceMode.js";
 
 const SIDEBAR_RAIL_KEY = "curatorx.sidebar.rail";
+const TONIGHT_STRIP_DISMISS_KEY = "curatorx.tonightStrip.dismissed";
 const ADD_FEEDBACK_DISMISS_MS = 5000;
+const THREAD_DELETE_UNDO_MS = 6000;
 const PERFECT_PICK_ACK =
   "\n\n*(You're on a roll with these picks — I'll keep that momentum going.)*";
 
@@ -135,7 +150,8 @@ function appendPerfectPickAck(message) {
 }
 
 export default function App() {
-  const { authReady, multiUserEnabled, isOwner } = useAuthGate();
+  const { authReady, multiUserEnabled, isOwner, role: userRole } = useAuthGate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
   const [messages, setMessages] = useState([]);
   const [messageFeedback, setMessageFeedback] = useState({});
@@ -179,6 +195,16 @@ export default function App() {
   const [glanceShown, setGlanceShown] = useState(false);
   const [quickPick, setQuickPick] = useState(null);
   const [quickPickLoading, setQuickPickLoading] = useState(false);
+  const [tonightItems, setTonightItems] = useState([]);
+  const [tonightLoading, setTonightLoading] = useState(false);
+  const [tonightDismissed, setTonightDismissed] = useState(() => {
+    try {
+      return sessionStorage.getItem(TONIGHT_STRIP_DISMISS_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [undoToast, setUndoToast] = useState(null);
   const [personas, setPersonas] = useState([]);
   const [activePersonaId, setActivePersonaId] = useState(null);
   const [defaultPersonaId, setDefaultPersonaId] = useState(null);
@@ -189,6 +215,8 @@ export default function App() {
   const composerRef = useRef(null);
   const konamiTrackerRef = useRef(null);
   const inputRef = useRef("");
+  const pendingDeleteRef = useRef(null);
+  const rateFlowStartedRef = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return sessionStorage.getItem(SIDEBAR_RAIL_KEY) === "true";
@@ -197,6 +225,32 @@ export default function App() {
     }
   });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isWatchlistPanelRequest(searchParams)) return;
+    setWatchlistOpen(true);
+    setSearchParams(stripWatchlistPanelParam(searchParams), { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (tonightDismissed || !threadsReady) return undefined;
+    let cancelled = false;
+    setTonightLoading(true);
+    queryLibrary({ unwatched_only: true, sort: "added_at", limit: 3 })
+      .then((data) => {
+        if (cancelled) return;
+        setTonightItems(normalizeTonightItems(data));
+      })
+      .catch(() => {
+        if (!cancelled) setTonightItems([]);
+      })
+      .finally(() => {
+        if (!cancelled) setTonightLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [threadsReady, tonightDismissed]);
 
   inputRef.current = input;
 
@@ -394,19 +448,58 @@ export default function App() {
     }
   }, [defaultPersonaId, refreshThreads]);
 
+  const commitPendingDelete = useCallback(async () => {
+    const pending = pendingDeleteRef.current;
+    if (!pending) return;
+    pendingDeleteRef.current = null;
+    setUndoToast(null);
+    try {
+      await deleteThread(pending.session);
+      await refreshThreads();
+    } catch (error) {
+      console.error(error);
+      // Restore on failure.
+      setThreads((prev) => {
+        if (prev.some((thread) => thread.id === pending.thread.id)) return prev;
+        return [pending.thread, ...prev];
+      });
+    }
+  }, [refreshThreads]);
+
+  const handleUndoDeleteThread = useCallback(() => {
+    const pending = pendingDeleteRef.current;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    pendingDeleteRef.current = null;
+    setUndoToast(null);
+    setThreads((prev) => {
+      if (prev.some((thread) => thread.id === pending.thread.id)) return prev;
+      return [pending.thread, ...prev];
+    });
+  }, []);
+
   const handleDeleteThread = useCallback(
     async (session) => {
       if (!session) return;
-      try {
-        await deleteThread(session);
-        const remaining = await refreshThreads();
-        if (session === activeSessionId) {
-          if (remaining.length) {
-            const nextId = remaining[0].id;
-            setActiveSession(nextId);
-            setActiveSessionId(nextId);
-            await loadThreadMessages(nextId);
-          } else {
+      // Flush any prior pending delete first.
+      if (pendingDeleteRef.current) {
+        clearTimeout(pendingDeleteRef.current.timer);
+        await commitPendingDelete();
+      }
+      const thread = threads.find((item) => item.id === session);
+      if (!thread) return;
+
+      const remaining = threads.filter((item) => item.id !== session);
+      setThreads(remaining);
+
+      if (session === activeSessionId) {
+        if (remaining.length) {
+          const nextId = remaining[0].id;
+          setActiveSession(nextId);
+          setActiveSessionId(nextId);
+          await loadThreadMessages(nextId);
+        } else {
+          try {
             const created = await createThread();
             const nextId = created.session_id;
             setActiveSession(nextId);
@@ -414,13 +507,25 @@ export default function App() {
             setMessages([]);
             setMessageFeedback({});
             await refreshThreads();
+          } catch (error) {
+            console.error(error);
           }
         }
-      } catch (error) {
-        console.error(error);
       }
+
+      const timer = setTimeout(() => {
+        commitPendingDelete();
+      }, THREAD_DELETE_UNDO_MS);
+      pendingDeleteRef.current = { session, thread, timer };
+      setUndoToast({ message: "Conversation deleted" });
     },
-    [activeSessionId, loadThreadMessages, refreshThreads],
+    [
+      activeSessionId,
+      commitPendingDelete,
+      loadThreadMessages,
+      refreshThreads,
+      threads,
+    ],
   );
 
   useKeyboardShortcuts({
@@ -875,6 +980,22 @@ export default function App() {
     }
   }
 
+  useEffect(() => {
+    if (!threadsReady || loading || rateFlowStartedRef.current) return;
+    if (!isRateFlowRequest(searchParams)) return;
+    rateFlowStartedRef.current = true;
+    setSearchParams(stripRateFlowParam(searchParams), { replace: true });
+    sendMessage("/rate");
+  }, [threadsReady, loading, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingDeleteRef.current?.timer) {
+        clearTimeout(pendingDeleteRef.current.timer);
+      }
+    };
+  }, []);
+
   async function executeSingleAdd(item, target, { trackGlobal = false } = {}) {
     const label = item.title || "this title";
     const service = serviceLabelForTarget(target);
@@ -1248,6 +1369,7 @@ export default function App() {
         open={appNavOpen}
         onClose={() => setAppNavOpen(false)}
         isOwner={isOwner}
+        onOpenWatchlist={() => setWatchlistOpen(true)}
       />
       <header className={`app-topbar ${nightOwl ? "night-owl" : ""}`}>
         <div className="app-topbar-brand">
@@ -1501,6 +1623,8 @@ export default function App() {
                 onAdd={handleAdd}
                 onDismiss={() => setQuickPick(null)}
                 requestPath={requestPath}
+                userRole={userRole}
+                multiUserEnabled={multiUserEnabled}
               />
             ) : null}
             <ChatThread
@@ -1525,6 +1649,8 @@ export default function App() {
               onRecommend={multiUserEnabled ? handleRecommendTitle : undefined}
               watchlistLookup={watchlistLookup}
               requestPath={requestPath}
+              userRole={userRole}
+              multiUserEnabled={multiUserEnabled}
               showErrors={false}
               draggableToDock={dockDropEnabled}
               onReviewConflictResolved={handleReviewConflictResolved}
@@ -1545,6 +1671,37 @@ export default function App() {
             ) : null}
             <NewReplyChip visible={showNewReplyChip} onClick={() => scrollToLatestTurn("smooth")} />
           </div>
+
+          {tonightStripVisible(tonightItems, {
+            loading: tonightLoading,
+            dismissed: tonightDismissed,
+          }) ? (
+            <TonightStrip
+              items={tonightItems}
+              loading={tonightLoading}
+              onDismiss={() => {
+                setTonightDismissed(true);
+                try {
+                  sessionStorage.setItem(TONIGHT_STRIP_DISMISS_KEY, "1");
+                } catch {
+                  // sessionStorage unavailable
+                }
+              }}
+              onPick={(item) => {
+                if (item?.title) sendMessage(`Tell me more about ${item.title}`);
+              }}
+            />
+          ) : null}
+
+          {undoToast ? (
+            <UndoToast
+              message={undoToast.message}
+              onUndo={handleUndoDeleteThread}
+              onDismiss={() => {
+                commitPendingDelete();
+              }}
+            />
+          ) : null}
 
           <form
             className="composer composer-raised"
@@ -1735,6 +1892,8 @@ export default function App() {
           watchlistLookup={watchlistLookup}
           actionsDisabled={loading}
           requestPath={requestPath}
+          userRole={userRole}
+          multiUserEnabled={multiUserEnabled}
           draggableToDock={dockDropEnabled}
         />
       ) : null}

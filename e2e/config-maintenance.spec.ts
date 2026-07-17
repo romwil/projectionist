@@ -12,7 +12,7 @@ test.describe("Admin maintenance dashboard", () => {
   test("shows overview when onboarding is complete", async ({ page }) => {
     await page.goto("/admin/overview");
     await page.getByTestId("maintenance-dashboard").waitFor();
-    await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
     await expect(page.getByTestId("maintenance-dashboard")).toBeVisible();
     await expect(page.getByTestId("wizard-nav")).toHaveCount(0);
     await expect(page.getByTestId("admin-rail")).toBeVisible();

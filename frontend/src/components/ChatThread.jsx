@@ -13,6 +13,8 @@ import MessageText from "./MessageText";
 function renderBulkConfirmActions(message, handlers, showTokenConfirm, viewportBlock) {
   const { radarr, sonarr, seerr } = collectAddableFromMessage(message, {
     requestPath: handlers.requestPath,
+    role: handlers.userRole,
+    multiUserEnabled: handlers.multiUserEnabled,
   });
   const actions = [];
 
@@ -112,6 +114,8 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
         onAdd={handlers.onAdd}
         onDismiss={handlers.onDismiss}
         requestPath={handlers.requestPath}
+        userRole={handlers.userRole}
+        multiUserEnabled={handlers.multiUserEnabled}
       />
     );
   }
@@ -133,6 +137,8 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
               item={item}
               compact
               requestPath={handlers.requestPath}
+              userRole={handlers.userRole}
+              multiUserEnabled={handlers.multiUserEnabled}
               onAdd={handlers.onAdd}
               onDismiss={handlers.onDismiss}
               onTogglePin={item.card_kind === "purge" ? undefined : handlers.onTogglePin}
@@ -236,6 +242,8 @@ export default function ChatThread({
   onRecommend,
   watchlistLookup,
   requestPath = "arr",
+  userRole,
+  multiUserEnabled = true,
   showErrors = true,
   draggableToDock = false,
 }) {
@@ -286,6 +294,8 @@ export default function ChatThread({
                       onReviewDismiss,
                       onReviewConflictResolved,
                       requestPath,
+                      userRole,
+                      multiUserEnabled,
                       draggableToDock,
                     },
                     message.role,

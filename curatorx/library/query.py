@@ -57,6 +57,7 @@ class LibraryFilters:
     themes: List[str] = field(default_factory=list)
     countries: List[str] = field(default_factory=list)
     content_ratings: List[str] = field(default_factory=list)
+    collection_name: Optional[str] = None
     original_language: Optional[str] = None
     query: Optional[str] = None
     fts_query: Optional[str] = None
@@ -141,6 +142,7 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         themes=_parse_csv_list(data.get("themes")),
         countries=_parse_csv_list(data.get("countries")),
         content_ratings=_parse_csv_list(data.get("content_ratings")),
+        collection_name=str(data["collection_name"]).strip() if data.get("collection_name") else None,
         original_language=str(data["original_language"]).strip() if data.get("original_language") else None,
         query=str(data["query"]).strip() if data.get("query") else None,
         fts_query=str(data["fts_query"]).strip() if data.get("fts_query") else None,
@@ -324,6 +326,7 @@ def row_to_query_item(row: Mapping[str, Any]) -> Dict[str, Any]:
         "content_rating": str(row["content_rating"] or "") if "content_rating" in keys else "",
         "original_language": str(row["original_language"] or "") if "original_language" in keys else "",
         "countries": _parse_json_list(row["countries"]) if "countries" in keys else [],
+        "collection_name": str(row["collection_name"] or "") if "collection_name" in keys else "",
         "unwatched_episode_count": unwatched_eps,
         "total_episode_count": total_eps,
         "in_radarr": bool(row["in_radarr"]) if "in_radarr" in keys else False,
@@ -411,9 +414,14 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         clauses.append(facet_sql)
         params.extend(facet_params)
     if filters.keywords:
-        facet_sql, facet_params = _facet_subquery("keyword", filters.keywords)
-        clauses.append(facet_sql)
-        params.extend(facet_params)
+        # Multiple keywords are AND (each tag must match) for tag browse filters.
+        for keyword in filters.keywords:
+            facet_sql, facet_params = _facet_subquery("keyword", [keyword])
+            clauses.append(facet_sql)
+            params.extend(facet_params)
+    if filters.collection_name:
+        clauses.append("lower(collection_name) = ?")
+        params.append(filters.collection_name.lower())
     if filters.motifs:
         facet_sql, facet_params = _facet_subquery("motif", filters.motifs)
         clauses.append(facet_sql)

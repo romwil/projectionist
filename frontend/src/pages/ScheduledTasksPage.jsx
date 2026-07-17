@@ -11,7 +11,9 @@ import {
   formatEpoch,
   formatInterval,
   formatLogLine,
+  formatTaskLastRun,
   isTaskRunning,
+  resolveWarmExploreTasks,
   summarizeLastStatus,
   taskDisplayName,
   taskRowTone,
@@ -33,8 +35,11 @@ export default function ScheduledTasksPage() {
   const [currentRun, setCurrentRun] = useState(null);
   const [lastRun, setLastRun] = useState(null);
   const [busyNames, setBusyNames] = useState(() => new Set());
+  const [warmStatus, setWarmStatus] = useState("");
+  const [warming, setWarming] = useState(false);
   const logEndRef = useRef(null);
   const latestSeqRef = useRef(0);
+  const warmExploreNames = useMemo(() => resolveWarmExploreTasks(items), [items]);
 
   const selected = useMemo(
     () => items.find((item) => item.name === selectedName) || null,
@@ -171,6 +176,30 @@ export default function ScheduledTasksPage() {
     });
   }
 
+  async function handleWarmExplore() {
+    if (warming || !warmExploreNames.length || running) return;
+    setWarming(true);
+    setActionError("");
+    setWarmStatus("Starting Warm Explore…");
+    const started = [];
+    try {
+      for (const name of warmExploreNames) {
+        await runScheduledTask(name);
+        started.push(taskDisplayName(name));
+        setWarmStatus(`Triggered ${started.join(", ")}`);
+        // Brief gap so the scheduler can accept the next fire-and-forget run.
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+      setWarmStatus(`Warm Explore queued: ${started.join(", ")}`);
+      await refreshList();
+    } catch (err) {
+      setActionError(err.message || "Warm Explore failed");
+      setWarmStatus("");
+    } finally {
+      setWarming(false);
+    }
+  }
+
   return (
     <div className="scheduled-tasks-page" data-testid="scheduled-tasks-page">
       <header className="dash-header">
@@ -181,10 +210,31 @@ export default function ScheduledTasksPage() {
             Idle scheduler {idle ? "is idle" : "is waiting for idle"}
             {running ? ` · running ${taskDisplayName(running)}` : ""}
           </p>
+          {warmStatus ? (
+            <p className="status status-secondary" data-testid="warm-explore-status">
+              {warmStatus}
+            </p>
+          ) : null}
         </div>
-        <button type="button" className="ghost" onClick={() => refreshList()} data-testid="tasks-refresh">
-          Refresh
-        </button>
+        <div className="scheduled-tasks-header-actions">
+          <button
+            type="button"
+            className="ghost"
+            data-testid="warm-explore-preset"
+            disabled={warming || !warmExploreNames.length || Boolean(running)}
+            title={
+              warmExploreNames.length
+                ? `Runs: ${warmExploreNames.map(taskDisplayName).join(", ")}`
+                : "No Warm Explore tasks available"
+            }
+            onClick={handleWarmExplore}
+          >
+            {warming ? "Warming…" : "Warm Explore"}
+          </button>
+          <button type="button" className="ghost" onClick={() => refreshList()} data-testid="tasks-refresh">
+            Refresh
+          </button>
+        </div>
       </header>
 
       {error ? <p className="dash-panel-error" data-testid="tasks-error">{error}</p> : null}
@@ -240,8 +290,8 @@ export default function ScheduledTasksPage() {
                                   : "Disabled"}
                           </span>
                         </td>
-                        <td>
-                          <div>{formatEpoch(task.last_finished_at ?? task.last_run_at)}</div>
+                        <td data-testid={`task-last-run-${task.name}`}>
+                          <div>{formatTaskLastRun(task)}</div>
                           {task.last_started_at ? (
                             <div className="scheduled-task-meta">
                               Started {formatEpoch(task.last_started_at)}

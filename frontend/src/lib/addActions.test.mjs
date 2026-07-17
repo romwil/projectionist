@@ -3,8 +3,12 @@ import test from "node:test";
 
 import {
   collectAddableFromMessage,
+  groupAddableItems,
+  guestAddGuidance,
   lastAssistantHasTitleCards,
   normalizePendingTokens,
+  normalizeUserRole,
+  resolveAddCapability,
   summarizePendingTokenActions,
   tokenConfirmButtonLabel,
   tokenConfirmFailureMessage,
@@ -131,4 +135,42 @@ test("collectAddableFromMessage ignores empty placeholder cards", () => {
   const { sonarr } = collectAddableFromMessage(message, { requestPath: "arr" });
   assert.equal(sonarr.length, 1);
   assert.equal(sonarr[0].title, "Ready");
+});
+
+test("normalizeUserRole treats single-user as owner", () => {
+  assert.equal(normalizeUserRole("guest", { multiUserEnabled: false }), "owner");
+  assert.equal(normalizeUserRole("member"), "member");
+  assert.equal(normalizeUserRole("guest"), "guest");
+});
+
+test("resolveAddCapability hides guest adds and keeps member Seerr requests", () => {
+  const guest = resolveAddCapability({ role: "guest", requestPath: "seerr" });
+  assert.equal(guest.canAdd, false);
+  assert.equal(guest.canRequest, false);
+  assert.equal(guest.showGuidedCopy, true);
+  assert.equal(guest.guidedCopy, guestAddGuidance());
+
+  const memberSeerr = resolveAddCapability({ role: "member", requestPath: "seerr" });
+  assert.equal(memberSeerr.canAdd, false);
+  assert.equal(memberSeerr.canRequest, true);
+  assert.equal(memberSeerr.showGuidedCopy, false);
+
+  const ownerArr = resolveAddCapability({ role: "owner", requestPath: "arr" });
+  assert.equal(ownerArr.canAdd, true);
+  assert.equal(ownerArr.canRequest, false);
+});
+
+test("groupAddableItems returns empty groups for guests", () => {
+  const items = [
+    { title: "Dune", media_type: "movie", tmdb_id: 1 },
+    { title: "Severance", media_type: "show", tvdb_id: 2, tmdb_id: 3 },
+  ];
+  assert.deepEqual(groupAddableItems(items, { requestPath: "arr", role: "guest" }), {
+    radarr: [],
+    sonarr: [],
+    seerr: [],
+  });
+  const member = groupAddableItems(items, { requestPath: "seerr", role: "member" });
+  assert.equal(member.seerr.length, 2);
+  assert.equal(member.radarr.length, 0);
 });

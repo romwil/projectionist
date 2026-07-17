@@ -155,10 +155,8 @@ test.describe("Title cards in chat", () => {
     await expect(chatCard).toContainText("Blade Runner");
     await chatCard.getByTestId("add-radarr-button").click();
 
-    const banner = page.getByTestId("add-action-banner");
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText("Blade Runner");
-    await expect(banner).toContainText("Radarr");
+    // Direct concurrent adds skip the tray confirmation banner.
+    await expect(page.getByTestId("add-action-feedback")).toContainText('Added "Blade Runner" to Radarr');
   });
 
   test("turnstyle overlay Add button is clickable", async ({ page }) => {
@@ -169,9 +167,7 @@ test.describe("Title cards in chat", () => {
     await expect(overlay).toBeVisible();
     await overlay.getByTestId("add-radarr-button").first().click();
 
-    const banner = page.getByTestId("add-action-banner");
-    await expect(banner).toBeVisible();
-    await expect(banner).toContainText("Blade Runner");
+    await expect(page.getByTestId("add-action-feedback")).toContainText('Added "Blade Runner" to Radarr');
   });
 
   test("confirming add shows success feedback and calls propose/confirm APIs", async ({ page }) => {
@@ -199,9 +195,6 @@ test.describe("Title cards in chat", () => {
     await sendMockChat(page);
     await page.getByTestId("chat-message-assistant").getByTestId("add-radarr-button").first().click();
 
-    await expect(page.getByTestId("add-action-banner")).toBeVisible();
-    await page.getByTestId("add-action-confirm").click();
-
     await expect(page.getByTestId("add-action-feedback")).toContainText('Added "Blade Runner" to Radarr');
     expect(proposeRequests).toHaveLength(1);
     expect(confirmRequests).toHaveLength(1);
@@ -220,10 +213,8 @@ test.describe("Title cards in chat", () => {
 
     await sendMockChat(page);
     await page.getByTestId("chat-message-assistant").getByTestId("add-radarr-button").first().click();
-    await page.getByTestId("add-action-confirm").click();
 
     await expect(page.getByTestId("add-action-feedback")).toContainText("Radarr is not configured");
-    await expect(page.getByTestId("add-action-banner")).toBeVisible();
   });
 
   test("confirm all button adds every title in one batch", async ({ page }) => {

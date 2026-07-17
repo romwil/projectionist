@@ -8,11 +8,12 @@ import {
   getLibraryOverview,
   queryLibrary,
 } from "../api/client";
-import AppNav, { AppNavToggle } from "../components/AppNav";
 import BackLink from "../components/BackLink";
 import LibraryMediaCard from "../components/LibraryMediaCard";
+import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
+import AppShell from "../layouts/AppShell";
 import { ROUTES, exploreSectionPath } from "../lib/browseLinks.js";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 
@@ -38,8 +39,11 @@ function ExploreSection({
   note,
   titleHref,
   mediaTypeLinks,
+  isOwner = false,
 }) {
   const message = empty || note || null;
+  // Owner task CTAs only for true empties — not informational notes on populated rails.
+  const ownerCtaNote = empty || null;
   return (
     <section className="explore-section" data-testid={`explore-section-${id}`}>
       <header className="explore-section-header">
@@ -76,7 +80,12 @@ function ExploreSection({
           {subtitle ? <p className="explore-section-subtitle">{subtitle}</p> : null}
         </div>
       </header>
-      {message ? <p className="explore-empty status status-secondary">{message}</p> : null}
+      {message ? (
+        <div className="explore-empty-block">
+          <p className="explore-empty status status-secondary">{message}</p>
+          <OwnerEmptyStateCta note={ownerCtaNote} isOwner={isOwner} />
+        </div>
+      ) : null}
       {children}
     </section>
   );
@@ -141,7 +150,6 @@ function useFeed(loader, deps = []) {
 export default function ExplorePage() {
   const { isOwner, multiUserEnabled } = useAuthGate();
   const [searchParams] = useSearchParams();
-  const [navOpen, setNavOpen] = useState(false);
   const [recommendItem, setRecommendItem] = useState(null);
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
@@ -231,21 +239,13 @@ export default function ExplorePage() {
     : { showRecommend: false };
 
   return (
-    <div className="app-root explore-page" data-testid="explore-page">
-      <AppNav open={navOpen} onClose={() => setNavOpen(false)} isOwner={isOwner} />
-      <header className="app-topbar">
-        <div className="app-topbar-brand">
-          <AppNavToggle open={navOpen} onClick={() => setNavOpen(true)} />
-          <div className="app-topbar-titles">
-            <h1>Explore</h1>
-            <p className="app-topbar-eyebrow">Browse your cinema</p>
-          </div>
-        </div>
-        <div className="app-topbar-actions">
-          <BackLink fallbackTo={ROUTES.chat} testId="explore-back-chat" label="Back to chat" />
-        </div>
-      </header>
-
+    <AppShell
+      className="app-root explore-page"
+      testId="explore-page"
+      title="Explore"
+      eyebrow="Browse your cinema"
+      actions={<BackLink fallbackTo={ROUTES.chat} testId="explore-back-chat" label="Back to chat" />}
+    >
       <main className="explore-main">
         <section className="explore-hub-links" data-testid="explore-hub-links">
           <Link to={ROUTES.plotLab} className="explore-hub-card" data-testid="explore-hub-plot-lab">
@@ -263,6 +263,7 @@ export default function ExplorePage() {
           title="Recently Added"
           subtitle="Fresh arrivals from the last 30 days"
           titleHref={exploreSectionPath("recently-added")}
+          isOwner={isOwner}
           mediaTypeLinks={[
             {
               mediaType: "movie",
@@ -293,6 +294,7 @@ export default function ExplorePage() {
           title="Recent Releases"
           subtitle="Library titles released in the last 90 days"
           titleHref={exploreSectionPath("recent-releases")}
+          isOwner={isOwner}
           mediaTypeLinks={[
             {
               mediaType: "movie",
@@ -322,6 +324,7 @@ export default function ExplorePage() {
           id="library-pulse"
           title="Library Pulse"
           subtitle="A quick read on collection health"
+          isOwner={isOwner}
           empty={pulse.error || (!pulse.loading && !pulse.stats.length ? "No overview stats yet." : null)}
         >
           {pulse.loading ? (
@@ -343,6 +346,7 @@ export default function ExplorePage() {
           id="on-this-day"
           title="On This Day"
           subtitle={otdSubtitle}
+          isOwner={isOwner}
           empty={onThisDay.error || (!onThisDay.loading && !onThisDay.items.length ? onThisDay.note : null)}
           note={onThisDay.items.length && onThisDay.note && !onThisDay.error ? onThisDay.note : null}
         >
@@ -359,6 +363,7 @@ export default function ExplorePage() {
             id="facet-filter"
             title={facetWall.label}
             subtitle="Deep-link filter from title detail"
+            isOwner={isOwner}
             empty={facetWall.error || facetWall.note}
           >
             {facetWall.loading ? (
@@ -383,6 +388,6 @@ export default function ExplorePage() {
         open={Boolean(recommendItem)}
         onClose={() => setRecommendItem(null)}
       />
-    </div>
+    </AppShell>
   );
 }

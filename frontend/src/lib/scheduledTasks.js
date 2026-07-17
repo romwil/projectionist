@@ -17,6 +17,30 @@ const TASK_LABELS = {
   title_relations_refresh: "Title relations refresh",
 };
 
+/** Tasks that warm Explore rails / Plot Lab / neighbors (fire-and-forget sequence). */
+export const WARM_EXPLORE_TASKS = [
+  "metadata_enrichment",
+  "summary_motifs",
+  "plot_neighbors",
+  "title_relations_refresh",
+  "semantic_embeddings",
+];
+
+/** Resolve which Warm Explore tasks exist in the current scheduler list. */
+export function resolveWarmExploreTasks(items) {
+  const available = new Set((Array.isArray(items) ? items : []).map((t) => t?.name).filter(Boolean));
+  return WARM_EXPLORE_TASKS.filter((name) => available.has(name));
+}
+
+/** Compact last-run summary already present on list/log payloads. */
+export function formatTaskLastRun(task) {
+  if (!task) return "Never run";
+  const when = task.last_finished_at ?? task.last_run_at;
+  const status = summarizeLastStatus(task.last_status);
+  if (when == null || when === "") return status === "Never run" ? "Never run" : status;
+  return `${status} · ${formatEpoch(when)}`;
+}
+
 export function taskDisplayName(name) {
   if (!name) return "Unknown task";
   if (TASK_LABELS[name]) return TASK_LABELS[name];

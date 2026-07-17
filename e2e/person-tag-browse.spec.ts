@@ -163,14 +163,14 @@ test.describe("Person and tag browse", () => {
       });
     });
 
-    await page.goto("/explore");
+    await page.goto("/explore/tags");
     await expect(page.getByTestId("explore-tag-chips")).toBeVisible();
     await page.getByTestId("explore-tag-chip").filter({ hasText: "time loop" }).click();
     await expect(page).toHaveURL(/\/tag\/time%20loop$/);
     await expect(page.getByTestId("tag-page")).toBeVisible();
     await expect(page.getByTestId("tag-title-card")).toContainText("Primer");
 
-    await page.goto("/explore");
+    await page.goto("/explore/tags");
     await page.getByTestId("explore-tag-input").fill("found footage");
     await page.getByTestId("explore-tag-submit").click();
     await expect(page).toHaveURL(/\/tag\/found%20footage$/);

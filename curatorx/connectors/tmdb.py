@@ -64,9 +64,41 @@ class TMDBClient:
         )
         return payload if isinstance(payload, dict) else {}
 
-    def person_details(self, person_id: int) -> Mapping[str, Any]:
-        payload = request_json(self._url(f"/person/{int(person_id)}"), timeout=self.timeout)
+    def person_details(
+        self,
+        person_id: int,
+        *,
+        append_to_response: Optional[str] = None,
+    ) -> Mapping[str, Any]:
+        params: dict[str, Any] = {}
+        if append_to_response:
+            params["append_to_response"] = append_to_response
+        payload = request_json(
+            self._url(f"/person/{int(person_id)}", **params),
+            timeout=self.timeout,
+        )
         return payload if isinstance(payload, dict) else {}
+
+    @staticmethod
+    def filmography_total_from_combined_credits(payload: Mapping[str, Any]) -> Optional[int]:
+        """Count unique movie+TV credits from a person payload with combined_credits."""
+        block = payload.get("combined_credits") if isinstance(payload, dict) else None
+        if not isinstance(block, dict):
+            return None
+        seen: set[str] = set()
+        for key in ("cast", "crew"):
+            entries = block.get(key)
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                media = str(entry.get("media_type") or "").strip().lower()
+                credit_id = entry.get("id")
+                if credit_id is None:
+                    continue
+                seen.add(f"{media}:{int(credit_id)}")
+        return len(seen) if seen else 0
 
     def profile_url(self, path: Optional[str], size: str = "w185") -> str:
         return self.poster_url(path, size=size)

@@ -1,6 +1,34 @@
 /** Normalize Explore feed API payloads into a stable rail shape. */
 export const EXPLORE_PAGE_SIZES = [20, 40, 100];
 export const DEFAULT_EXPLORE_PAGE_SIZE = 20;
+export const ADMIN_TASKS_PATH = "/admin/tasks";
+
+/** Notes that mean idle caches / enrichment have not warmed yet (owner can fix in tasks). */
+const OWNER_EMPTY_CTA_RULES = [
+  { test: /plot_neighbors|neighbors cache|not built yet/i, label: "Warm Explore" },
+  { test: /summary_motifs|plot motifs/i, label: "Run enrichment" },
+  {
+    test: /metadata_enrichment|not enriched|enrich release|release dates|release_date|first_air_date/i,
+    label: "Run enrichment",
+  },
+  { test: /library sync|added_at yet/i, label: "Open Scheduled Tasks" },
+];
+
+/**
+ * Owner-only primary CTA for honest empty rails that need cache/enrichment work.
+ * Members/guests get the note only — no admin deep link.
+ */
+export function ownerEmptyStateCta(note, { isOwner = false } = {}) {
+  if (!isOwner) return null;
+  const text = String(note || "").trim();
+  if (!text) return null;
+  for (const rule of OWNER_EMPTY_CTA_RULES) {
+    if (rule.test.test(text)) {
+      return { label: rule.label, href: ADMIN_TASKS_PATH };
+    }
+  }
+  return null;
+}
 
 export const EXPLORE_SECTIONS = {
   "recently-added": {
@@ -44,6 +72,55 @@ export function normalizeMediaTypeFilter(raw) {
   return null;
 }
 
+/** Client-side section result sorts (feeds keep server order as default). */
+export const EXPLORE_SECTION_SORTS = [
+  { id: "default", label: "Default" },
+  { id: "title", label: "Title" },
+  { id: "year", label: "Year" },
+  { id: "rating", label: "Rating" },
+];
+
+export function normalizeSectionSort(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  return EXPLORE_SECTION_SORTS.some((opt) => opt.id === value) ? value : "default";
+}
+
+/** Sort a page of feed items without mutating the input. */
+export function sortExploreSectionItems(items, sortId) {
+  const list = Array.isArray(items) ? items.slice() : [];
+  const sort = normalizeSectionSort(sortId);
+  if (sort === "default") return list;
+  list.sort((a, b) => {
+    if (sort === "title") {
+      return String(a?.title || "").localeCompare(String(b?.title || ""), undefined, {
+        sensitivity: "base",
+      });
+    }
+    if (sort === "year") {
+      const ay = Number(a?.year);
+      const by = Number(b?.year);
+      const aMissing = !Number.isFinite(ay);
+      const bMissing = !Number.isFinite(by);
+      if (aMissing && bMissing) return String(a?.title || "").localeCompare(String(b?.title || ""));
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      return by - ay;
+    }
+    if (sort === "rating") {
+      const ar = Number(a?.rating ?? a?.vote_average);
+      const br = Number(b?.rating ?? b?.vote_average);
+      const aMissing = !Number.isFinite(ar);
+      const bMissing = !Number.isFinite(br);
+      if (aMissing && bMissing) return String(a?.title || "").localeCompare(String(b?.title || ""));
+      if (aMissing) return 1;
+      if (bMissing) return -1;
+      return br - ar;
+    }
+    return 0;
+  });
+  return list;
+}
+
 /** Parse section listing query params from URLSearchParams. */
 export function parseExploreSectionQuery(searchParams) {
   const params = searchParams instanceof URLSearchParams ? searchParams : new URLSearchParams(searchParams);
@@ -51,6 +128,7 @@ export function parseExploreSectionQuery(searchParams) {
     limit: normalizePageSize(params.get("limit")),
     offset: normalizeFeedOffset(params.get("offset")),
     mediaType: normalizeMediaTypeFilter(params.get("media_type")),
+    sort: normalizeSectionSort(params.get("sort")),
   };
 }
 
@@ -60,12 +138,14 @@ export function buildExploreSectionQuery(current, updates = {}) {
     limit: current?.limit ?? DEFAULT_EXPLORE_PAGE_SIZE,
     offset: current?.offset ?? 0,
     mediaType: current?.mediaType ?? null,
+    sort: current?.sort ?? "default",
     ...updates,
   };
   const params = new URLSearchParams();
   if (next.mediaType) params.set("media_type", next.mediaType);
   if (next.limit !== DEFAULT_EXPLORE_PAGE_SIZE) params.set("limit", String(next.limit));
   if (next.offset > 0) params.set("offset", String(next.offset));
+  if (next.sort && next.sort !== "default") params.set("sort", next.sort);
   return params;
 }
 

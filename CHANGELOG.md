@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.8.4] — 2026-07-16
+
+Shared AppShell chrome and Watchlist IA, What’s New release notes, capability/empty CTAs, and Explore/page completeness across title, person, tags, and chat.
+
+### Added
+- Shared **AppShell** (hamburger AppNav + header) on Explore, Tags, Plot Lab, tag/person/section, and title detail; DESIGN docs for hub children and Watchlist surfaces
+- AppNav **Watchlist** opens the chat pin panel (`/?watchlist=1`); Settings → Watchlist stays sync/token only
+- **What’s New** modal after upgrades; About release-notes panel; `scripts/generate-release-notes.sh` + docker-release hook → `frontend/public/release-notes.json`
+- Guest **Ask owner** guidance on add/request CTAs; owner empty Explore rails deep-link to `/admin/tasks`
+- Title Detail: reviews CTA, TV episode progress chip, collection peers rail
+- Person browse: role filter + library-owned % (TMDB combined credits)
+- Tags: multi-tag **AND** paths + sort; section pages: sort + bulk pin; Scheduled Tasks **Warm Explore** preset
+- Chat: thread search, delete-thread undo toast, compact **Tonight** strip above the composer
+- Library query `collection_name` filter; keyword facets AND-combined for tag browse
+- Unit coverage for release notes, tonight strip, thread filter, title extras, person browse helpers, tag AND paths, explore empty CTAs
+
+### Changed
+- Leaf browse/detail pages keep BackLink *plus* AppShell (never BackLink instead of chrome)
+- Explore empty-state copy stays honest; owners get a Scheduled Tasks CTA when caches are cold
+
+### Fixed
+- Serve SPA HTML for `/explore/tags`, `/explore/plot-lab`, and `/explore/section/{id}` (full page loads no longer 404)
+
 ## [1.8.3] — 2026-07-16
 
 Explore navigation and section drill-downs, Scheduled Tasks admin, avatar upload/cache, concurrent card adds, and agent library-search quality.

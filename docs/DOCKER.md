@@ -134,7 +134,7 @@ CA XML remains the human install source of truth. For pull/recreate rollouts (po
 ssh automat
 cd /mnt/user/appdata/curatorx
 ./rollout.sh           # :latest
-./rollout.sh 1.8.3     # pin a release tag
+./rollout.sh 1.8.4     # pin a release tag
 ```
 
 `rollout.sh` uses plain Docker CLI on Unraid (Compose is usually absent). If `docker compose` / `docker-compose` is available it prefers that instead. Same-named containers are stop/rm only — `./config` is never wiped. Optional seed env: copy `.env.example` → `.env` (secrets usually already live in `config/`).
@@ -171,6 +171,8 @@ Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use
 ./scripts/docker-release.sh <semver>          # also tags X.Y and latest
 ./scripts/docker-release.sh 1.7.13 --also-line 1.7
 ```
+
+**Release checklist (notes):** ensure `CHANGELOG.md` has a `## [X.Y.Z] — YYYY-MM-DD` heading for the release version. The release script runs `scripts/generate-release-notes.sh --require-version <semver>` **before** `docker buildx` and fails if that heading is missing. Output is `frontend/public/release-notes.json` (served as `/release-notes.json` for What’s New / About).
 
 The script builds with `--provenance=false --sbom=false` and pushes `:VERSION`, `:X.Y`, and `:latest`.
 

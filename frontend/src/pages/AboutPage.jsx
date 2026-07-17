@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getHealth } from "../api/client";
+import ReleaseNotesPanel from "../components/ReleaseNotesPanel";
+import { fetchReleaseNotes, normalizeReleaseNotes } from "../lib/releaseNotes.js";
 
 const GITHUB_URL = "https://github.com/romwil/curatorx";
 const DOCKER_HUB_URL = "https://hub.docker.com/r/romwil/curatorx";
@@ -8,11 +10,31 @@ const DOCS_URL = `${GITHUB_URL}/tree/main/docs`;
 
 export default function AboutPage() {
   const [version, setVersion] = useState("");
+  const [releases, setReleases] = useState([]);
+  const [notesError, setNotesError] = useState("");
 
   useEffect(() => {
     getHealth()
       .then((data) => setVersion(data?.version || ""))
       .catch(() => setVersion(""));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchReleaseNotes()
+      .then((payload) => {
+        if (cancelled) return;
+        setReleases(normalizeReleaseNotes(payload));
+        setNotesError("");
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setReleases([]);
+        setNotesError("Could not load release notes.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
@@ -27,6 +49,10 @@ export default function AboutPage() {
         {version ? (
           <p className="editorial-meta" data-testid="about-version">
             Version {version}
+            {" · "}
+            <a href="#release-notes" className="about-whats-new-link" data-testid="about-whats-new-link">
+              What’s new
+            </a>
           </p>
         ) : null}
       </header>
@@ -42,6 +68,23 @@ export default function AboutPage() {
           Owners configure the stack once. Household members sign in with Plex. Nobody has to pretend this
           is a SaaS marketing site.
         </p>
+      </section>
+
+      <section className="editorial-section about-release-notes" id="release-notes">
+        <h2>Release notes</h2>
+        <p className="editorial-meta">Full history from CHANGELOG — newest first.</p>
+        {notesError ? (
+          <p className="error" data-testid="about-release-notes-error">
+            {notesError}
+          </p>
+        ) : (
+          <ReleaseNotesPanel
+            releases={releases}
+            showJumpLinks
+            scrollable
+            testId="about-release-notes"
+          />
+        )}
       </section>
 
       <section className="editorial-section">

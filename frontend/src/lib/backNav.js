@@ -5,11 +5,56 @@ export const ROUTES = {
   explore: "/explore",
   tags: "/explore/tags",
   plotLab: "/explore/plot-lab",
+  /** Sync/token settings only — pin list lives in the chat Watchlist panel. */
   watchlistSettings: "/settings/watchlist",
   settings: "/settings",
   admin: "/admin",
   about: "/about",
 };
+
+/** Query flag that opens the chat Watchlist panel when landing on `/`. */
+export const WATCHLIST_PANEL_PARAM = "watchlist";
+
+/** Query flag that opens the /rate review batch flow in chat. */
+export const RATE_FLOW_PARAM = "rate";
+
+/** Deep-link to chat with the Watchlist panel open. */
+export function watchlistPanelHref() {
+  return `${ROUTES.chat}?${WATCHLIST_PANEL_PARAM}=1`;
+}
+
+/** Deep-link to chat that triggers the rate / review batch flow. */
+export function rateFlowHref() {
+  return `${ROUTES.chat}?${RATE_FLOW_PARAM}=1`;
+}
+
+/** True when URL search asks to open the Watchlist panel. */
+export function isWatchlistPanelRequest(searchParams) {
+  if (!searchParams || typeof searchParams.get !== "function") return false;
+  const value = String(searchParams.get(WATCHLIST_PANEL_PARAM) || "").toLowerCase();
+  return value === "1" || value === "open" || value === "true";
+}
+
+/** True when URL search asks to open the rate flow. */
+export function isRateFlowRequest(searchParams) {
+  if (!searchParams || typeof searchParams.get !== "function") return false;
+  const value = String(searchParams.get(RATE_FLOW_PARAM) || "").toLowerCase();
+  return value === "1" || value === "open" || value === "true";
+}
+
+/** Return a copy of search params without the Watchlist panel flag. */
+export function stripWatchlistPanelParam(searchParams) {
+  const next = new URLSearchParams(searchParams);
+  next.delete(WATCHLIST_PANEL_PARAM);
+  return next;
+}
+
+/** Return a copy of search params without the rate-flow flag. */
+export function stripRateFlowParam(searchParams) {
+  const next = new URLSearchParams(searchParams);
+  next.delete(RATE_FLOW_PARAM);
+  return next;
+}
 
 /**
  * Resolve a "back" destination from optional location state + fallback.

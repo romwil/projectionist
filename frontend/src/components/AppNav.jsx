@@ -1,13 +1,13 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ROUTES } from "../lib/backNav.js";
+import { ROUTES, watchlistPanelHref } from "../lib/backNav.js";
 
 const NAV_ITEMS = [
-  { to: ROUTES.chat, label: "Chat", testId: "app-nav-chat" },
-  { to: ROUTES.explore, label: "Explore", testId: "app-nav-explore" },
-  { to: ROUTES.plotLab, label: "Plot Lab", testId: "app-nav-plot-lab" },
-  { to: ROUTES.tags, label: "Tags", testId: "app-nav-tags" },
-  { to: ROUTES.watchlistSettings, label: "Watchlist", testId: "app-nav-watchlist" },
+  { id: "chat", to: ROUTES.chat, label: "Chat", testId: "app-nav-chat" },
+  { id: "explore", to: ROUTES.explore, label: "Explore", testId: "app-nav-explore" },
+  { id: "plot-lab", to: ROUTES.plotLab, label: "Plot Lab", testId: "app-nav-plot-lab" },
+  { id: "tags", to: ROUTES.tags, label: "Tags", testId: "app-nav-tags" },
+  { id: "watchlist", kind: "watchlist", label: "Watchlist", testId: "app-nav-watchlist" },
 ];
 
 export default function AppNav({
@@ -15,6 +15,7 @@ export default function AppNav({
   onClose,
   isOwner = false,
   showSettings = true,
+  onOpenWatchlist,
 }) {
   const location = useLocation();
   const panelRef = useRef(null);
@@ -43,12 +44,23 @@ export default function AppNav({
 
   const items = [...NAV_ITEMS];
   if (showSettings) {
-    items.push({ to: ROUTES.settings, label: "Settings", testId: "app-nav-settings" });
+    items.push({ id: "settings", to: ROUTES.settings, label: "Settings", testId: "app-nav-settings" });
   }
   if (isOwner) {
-    items.push({ to: ROUTES.admin, label: "Admin", testId: "app-nav-admin" });
+    items.push({ id: "admin", to: ROUTES.admin, label: "Admin", testId: "app-nav-admin" });
   }
-  items.push({ to: ROUTES.about, label: "About", testId: "app-nav-about" });
+  items.push({ id: "about", to: ROUTES.about, label: "About", testId: "app-nav-about" });
+
+  function handleWatchlistClick(event) {
+    const onChat = location.pathname === "/" || location.pathname === "";
+    if (onChat && typeof onOpenWatchlist === "function") {
+      event.preventDefault();
+      onOpenWatchlist();
+      onClose?.();
+      return;
+    }
+    onClose?.();
+  }
 
   return (
     <div className="app-nav-layer" data-testid="app-nav-layer">
@@ -79,12 +91,26 @@ export default function AppNav({
         </div>
         <ul className="app-nav-list">
           {items.map((item) => {
+            if (item.kind === "watchlist") {
+              return (
+                <li key={item.id}>
+                  <Link
+                    to={watchlistPanelHref()}
+                    className="app-nav-link"
+                    data-testid={item.testId}
+                    onClick={handleWatchlistClick}
+                  >
+                    {item.label}
+                  </Link>
+                </li>
+              );
+            }
             const active =
               item.to === ROUTES.chat
                 ? location.pathname === "/"
                 : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
             return (
-              <li key={item.to}>
+              <li key={item.id}>
                 <Link
                   to={item.to}
                   className={`app-nav-link${active ? " is-active" : ""}`}

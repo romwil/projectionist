@@ -12,6 +12,8 @@ export default function QuickPickCard({
   onAdd,
   onDismiss,
   requestPath = "arr",
+  userRole,
+  multiUserEnabled = true,
 }) {
   const [revealed, setRevealed] = useState(false);
 
@@ -66,7 +68,14 @@ export default function QuickPickCard({
       <span className="quick-pick-badge" data-testid="quick-pick-badge">
         Picked for you
       </span>
-      <TitleCard item={item} onAdd={onAdd} onDismiss={onDismiss} requestPath={requestPath} />
+      <TitleCard
+        item={item}
+        onAdd={onAdd}
+        onDismiss={onDismiss}
+        requestPath={requestPath}
+        userRole={userRole}
+        multiUserEnabled={multiUserEnabled}
+      />
       {why ? <p className="quick-pick-why">{why}</p> : null}
       <div className="quick-pick-actions">
         {onRetry ? (

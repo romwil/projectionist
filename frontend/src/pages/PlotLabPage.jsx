@@ -5,11 +5,12 @@ import {
   getLibraryNeighbors,
   queryLibrary,
 } from "../api/client";
-import AppNav, { AppNavToggle } from "../components/AppNav";
 import BackLink from "../components/BackLink";
 import LibraryMediaCard from "../components/LibraryMediaCard";
+import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
+import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
 import {
   buildMotifQueryParams,
@@ -38,7 +39,6 @@ function FeedRail({ testId, items, loading }) {
 
 export default function PlotLabPage() {
   const { isOwner, multiUserEnabled } = useAuthGate();
-  const [navOpen, setNavOpen] = useState(false);
   const [motifs, setMotifs] = useState([]);
   const [motifsNote, setMotifsNote] = useState("");
   const [motifsLoading, setMotifsLoading] = useState(true);
@@ -177,26 +177,21 @@ export default function PlotLabPage() {
   }
 
   return (
-    <div className="app-root explore-page plot-lab-page" data-testid="plot-lab-page">
-      <AppNav open={navOpen} onClose={() => setNavOpen(false)} isOwner={isOwner} />
-      <header className="app-topbar">
-        <div className="app-topbar-brand">
-          <AppNavToggle open={navOpen} onClick={() => setNavOpen(true)} />
-          <div className="app-topbar-titles">
-            <h1>Plot Lab</h1>
-            <p className="app-topbar-eyebrow">Motifs, poster walls, and surprising narrative neighbors</p>
-          </div>
-        </div>
-        <div className="app-topbar-actions">
-          <BackLink fallbackTo={ROUTES.explore} testId="plot-lab-back" />
-        </div>
-      </header>
-
+    <AppShell
+      className="app-root explore-page plot-lab-page"
+      testId="plot-lab-page"
+      title="Plot Lab"
+      eyebrow="Motifs, poster walls, and surprising narrative neighbors"
+      actions={<BackLink fallbackTo={ROUTES.explore} testId="plot-lab-back" />}
+    >
       <main className="explore-main">
         {motifsLoading ? (
           <p className="status status-secondary">Loading motifs…</p>
         ) : motifsNote && !motifs.length ? (
-          <p className="explore-empty status status-secondary">{motifsNote}</p>
+          <div className="explore-empty-block">
+            <p className="explore-empty status status-secondary">{motifsNote}</p>
+            <OwnerEmptyStateCta note={motifsNote} isOwner={isOwner} />
+          </div>
         ) : null}
 
         {motifs.length ? (
@@ -283,9 +278,14 @@ export default function PlotLabPage() {
             </p>
           ) : null}
           {neighbors.error || neighbors.note ? (
-            <p className="explore-empty status status-secondary">
-              {neighbors.error || neighbors.note}
-            </p>
+            <div className="explore-empty-block">
+              <p className="explore-empty status status-secondary">
+                {neighbors.error || neighbors.note}
+              </p>
+              {!neighbors.error && !neighbors.items.length ? (
+                <OwnerEmptyStateCta note={neighbors.note} isOwner={isOwner} />
+              ) : null}
+            </div>
           ) : null}
           <FeedRail
             testId="explore-neighbors-rail"
@@ -309,6 +309,6 @@ export default function PlotLabPage() {
         open={Boolean(recommendItem)}
         onClose={() => setRecommendItem(null)}
       />
-    </div>
+    </AppShell>
   );
 }

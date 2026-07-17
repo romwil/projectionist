@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  ADMIN_TASKS_PATH,
   buildMotifQueryParams,
   buildExploreSectionQuery,
   buildPulseStats,
@@ -11,7 +12,9 @@ import {
   normalizeMediaTypeFilter,
   normalizeMotifFacets,
   normalizePageSize,
+  ownerEmptyStateCta,
   parseExploreSectionQuery,
+  sortExploreSectionItems,
   toggleMotifSelection,
 } from "./exploreFeeds.js";
 
@@ -97,6 +100,7 @@ test("parseExploreSectionQuery normalizes pagination and media type", () => {
     limit: 40,
     offset: 20,
     mediaType: "show",
+    sort: "default",
   });
   assert.equal(normalizePageSize("99"), 20);
   assert.equal(normalizeMediaTypeFilter("movies"), "movie");
@@ -110,6 +114,21 @@ test("buildExploreSectionQuery omits default limit and zero offset", () => {
   assert.equal(params.get("media_type"), "movie");
   assert.equal(params.get("limit"), "40");
   assert.equal(params.get("offset"), null);
+});
+
+test("sortExploreSectionItems sorts by year desc", () => {
+  const sorted = sortExploreSectionItems(
+    [
+      { title: "B", year: 1990 },
+      { title: "A", year: 2000 },
+      { title: "C", year: null },
+    ],
+    "year",
+  );
+  assert.deepEqual(
+    sorted.map((item) => item.title),
+    ["A", "B", "C"],
+  );
 });
 
 test("feedPaginationSummary computes page metadata", () => {
@@ -130,4 +149,32 @@ test("getExploreSectionConfig resolves known sections", () => {
   const config = getExploreSectionConfig("recent-releases");
   assert.equal(config?.feed, "recent-releases");
   assert.equal(getExploreSectionConfig("unknown"), null);
+});
+
+test("ownerEmptyStateCta deep-links owners to Scheduled Tasks for cold caches", () => {
+  assert.equal(ownerEmptyStateCta("Empty — plot_neighbors cache not built yet for this title."), null);
+  assert.deepEqual(
+    ownerEmptyStateCta("Empty — plot_neighbors cache not built yet for this title.", {
+      isOwner: true,
+    }),
+    { label: "Warm Explore", href: ADMIN_TASKS_PATH },
+  );
+  assert.deepEqual(
+    ownerEmptyStateCta(
+      "No release_date/first_air_date enriched yet — run library sync or metadata_enrichment.",
+      { isOwner: true },
+    ),
+    { label: "Run enrichment", href: ADMIN_TASKS_PATH },
+  );
+  assert.deepEqual(
+    ownerEmptyStateCta(
+      "No plot motifs yet — summary_motifs idle task has not populated facets.",
+      { isOwner: true },
+    ),
+    { label: "Run enrichment", href: ADMIN_TASKS_PATH },
+  );
+  assert.equal(
+    ownerEmptyStateCta("No titles match the selected motifs.", { isOwner: true }),
+    null,
+  );
 });

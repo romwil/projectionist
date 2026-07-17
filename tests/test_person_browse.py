@@ -87,6 +87,33 @@ class TitleDetailCreditsTests(unittest.TestCase):
 
     @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
     @patch("curatorx.library.titles.TMDBClient")
+    def test_show_detail_includes_episode_progress(self, mock_tmdb_cls, _machine) -> None:
+        mock_tmdb_cls.return_value.tv_details.return_value = {}
+        mock_tmdb_cls.youtube_trailer_key.return_value = ""
+        settings = MagicMock()
+        settings.tmdb_api_key = ""
+        settings.fanart_api_key = ""
+        settings.plex_url = ""
+        settings.plex_token = ""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "rk-show",
+                    "media_type": "show",
+                    "title": "The Wire",
+                    "year": 2002,
+                    "tmdb_id": 1438,
+                    "total_episode_count": 60,
+                    "unwatched_episode_count": 12,
+                }
+            )
+            detail = get_title_detail(db, settings, media_type="show", tmdb_id=1438, enrich=False)
+            self.assertEqual(detail.total_episode_count, 60)
+            self.assertEqual(detail.unwatched_episode_count, 12)
+
+    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
+    @patch("curatorx.library.titles.TMDBClient")
     def test_tv_fills_cast_keywords_and_credits(self, mock_tmdb_cls, _machine) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.tv_details.return_value = {
@@ -161,8 +188,21 @@ class PersonApiTests(unittest.TestCase):
             "place_of_birth": "Oklahoma",
             "profile_path": "/pitt.jpg",
             "known_for_department": "Acting",
+            "combined_credits": {
+                "cast": [
+                    {"id": 550, "media_type": "movie"},
+                    {"id": 680, "media_type": "movie"},
+                    {"id": 680, "media_type": "movie"},
+                ],
+                "crew": [{"id": 78, "media_type": "movie"}],
+            },
         }
         mock_tmdb.profile_url.return_value = "https://image.tmdb.org/t/p/w342/pitt.jpg"
+        from curatorx.connectors.tmdb import TMDBClient as RealTMDBClient
+
+        mock_tmdb_cls.filmography_total_from_combined_credits = staticmethod(
+            RealTMDBClient.filmography_total_from_combined_credits
+        )
 
         with patch.object(self.app_mod, "_settings") as mock_settings:
             settings = MagicMock()
@@ -200,6 +240,9 @@ class PersonApiTests(unittest.TestCase):
             self.assertEqual(payload["returned"], 1)
             self.assertEqual(payload["titles"][0]["title"], "Fight Club")
             self.assertEqual(payload["titles"][0]["character"], "Tyler Durden")
+            self.assertEqual(payload["filmography_total"], 3)
+            self.assertEqual(payload["in_library_count"], 1)
+            self.assertEqual(payload["library_owned_pct"], 33)
 
     def test_person_api_404_when_unknown(self) -> None:
         with patch.object(self.app_mod, "_settings") as mock_settings:

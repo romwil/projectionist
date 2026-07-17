@@ -3,7 +3,10 @@ import { describe, it } from "node:test";
 import {
   ROUTES,
   backLabelForPath,
+  isWatchlistPanelRequest,
   resolveBackTarget,
+  stripWatchlistPanelParam,
+  watchlistPanelHref,
   withReturnTo,
 } from "./backNav.js";
 
@@ -37,5 +40,25 @@ describe("withReturnTo", () => {
     assert.deepEqual(withReturnTo("/explore", "?genre=Horror"), {
       from: "/explore?genre=Horror",
     });
+  });
+});
+
+describe("watchlist panel deep link", () => {
+  it("builds chat href that opens the panel", () => {
+    assert.equal(watchlistPanelHref(), "/?watchlist=1");
+  });
+
+  it("detects open request values", () => {
+    assert.equal(isWatchlistPanelRequest(new URLSearchParams("watchlist=1")), true);
+    assert.equal(isWatchlistPanelRequest(new URLSearchParams("watchlist=open")), true);
+    assert.equal(isWatchlistPanelRequest(new URLSearchParams("watchlist=true")), true);
+    assert.equal(isWatchlistPanelRequest(new URLSearchParams("watchlist=0")), false);
+    assert.equal(isWatchlistPanelRequest(new URLSearchParams("")), false);
+  });
+
+  it("strips the panel flag without dropping other params", () => {
+    const next = stripWatchlistPanelParam(new URLSearchParams("watchlist=1&foo=bar"));
+    assert.equal(next.get("watchlist"), null);
+    assert.equal(next.get("foo"), "bar");
   });
 });

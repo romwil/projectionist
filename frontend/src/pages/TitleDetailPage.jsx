@@ -7,8 +7,10 @@ import {
   formatApiError,
   getFeatures,
   proposeAction,
+  queryLibrary,
 } from "../api/client";
 import RecommendModal from "../components/RecommendModal";
+import AppShell from "../layouts/AppShell";
 import {
   alreadyInArrMessage,
   buildProposeActionBody,
@@ -16,9 +18,13 @@ import {
   isAddableToSonarr,
   isAlreadyInArr,
   isRequestableInSeerr,
+  itemNeedsAddGuidance,
+  normalizeUserRole,
   requestPathFromFeatures,
+  resolveAddCapability,
   serviceLabelForTarget,
 } from "../lib/addActions.js";
+import { rateFlowHref } from "../lib/backNav.js";
 import {
   ROUTES,
   exploreCastPath,
@@ -28,6 +34,11 @@ import {
   tagPath,
 } from "../lib/browseLinks.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
+import {
+  filterCollectionPeers,
+  formatTvProgress,
+  reviewsCtaForDetail,
+} from "../lib/titleDetailExtras.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 
 function creditLink(credit) {
@@ -105,9 +116,11 @@ export default function TitleDetailPage() {
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [recommendOpen, setRecommendOpen] = useState(false);
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
+  const [userRole, setUserRole] = useState("owner");
   const [requestPath, setRequestPath] = useState("arr");
   const [addStatus, setAddStatus] = useState(null); // loading | success | error
   const [addMessage, setAddMessage] = useState("");
+  const [collectionPeers, setCollectionPeers] = useState([]);
   const carouselRef = useRef(null);
 
   useEffect(() => {
@@ -175,16 +188,45 @@ export default function TitleDetailPage() {
   useEffect(() => {
     getFeatures()
       .then((data) => {
-        setMultiUserEnabled(Boolean(data?.features?.multi_user_enabled));
+        const enabled = Boolean(data?.features?.multi_user_enabled);
+        setMultiUserEnabled(enabled);
         setRequestPath(requestPathFromFeatures(data));
+        setUserRole(normalizeUserRole(data?.user?.role, { multiUserEnabled: enabled }));
       })
       .catch(() => {
         setMultiUserEnabled(false);
+        setUserRole("owner");
         setRequestPath("arr");
       });
   }, []);
 
+  useEffect(() => {
+    const name = String(detail?.collection_name || "").trim();
+    if (!name) {
+      setCollectionPeers([]);
+      return undefined;
+    }
+    let cancelled = false;
+    queryLibrary({ collection_name: name, limit: 16, sort: "year" })
+      .then((data) => {
+        if (cancelled) return;
+        setCollectionPeers(filterCollectionPeers(data?.items || [], detail, { limit: 12 }));
+      })
+      .catch(() => {
+        if (!cancelled) setCollectionPeers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail]);
+
   async function handleRequestAdd() {
+    const capability = resolveAddCapability({
+      role: userRole,
+      requestPath,
+      multiUserEnabled,
+    });
+    if (!capability.canAdd && !capability.canRequest) return;
     if (!detail || addStatus === "loading" || addStatus === "success") return;
     const target =
       requestPath === "seerr"
@@ -228,8 +270,30 @@ export default function TitleDetailPage() {
     return () => document.removeEventListener("keydown", onKey);
   }, [trailerOpen]);
 
-  if (error) return <p className="error">{error}</p>;
-  if (!detail) return <p className="title-detail-loading">Loading…</p>;
+  if (error) {
+    return (
+      <AppShell
+        className="title-page title-detail-skinned"
+        testId="title-detail-page"
+        variant="sticky"
+        leading={<BackLink fallbackTo={ROUTES.explore} testId="title-detail-back" />}
+      >
+        <p className="error">{error}</p>
+      </AppShell>
+    );
+  }
+  if (!detail) {
+    return (
+      <AppShell
+        className="title-page title-detail-skinned"
+        testId="title-detail-page"
+        variant="sticky"
+        leading={<BackLink fallbackTo={ROUTES.explore} testId="title-detail-back" />}
+      >
+        <p className="title-detail-loading">Loading…</p>
+      </AppShell>
+    );
+  }
 
   const trailerKey = String(detail.trailer_youtube_key || "").trim();
   const plexHref =
@@ -241,6 +305,13 @@ export default function TitleDetailPage() {
   const runtimeLabel = detail.runtime_minutes ? `${detail.runtime_minutes} mins` : null;
   const sizeLabel = formatFileSize(detail.file_size_bytes);
   const showNeighbors = Array.isArray(neighbors) && neighbors.length > 0;
+  const tvProgress = detail.media_type === "show" ? formatTvProgress(detail) : null;
+  const reviewsCta = reviewsCtaForDetail(detail);
+  const releaseDateLabel = formatReleaseDate(
+    detail.media_type === "show"
+      ? detail.first_air_date || detail.release_date
+      : detail.release_date || detail.first_air_date,
+  );
 
   const credits = (() => {
     const raw = Array.isArray(detail.credits) ? detail.credits : [];
@@ -266,10 +337,16 @@ export default function TitleDetailPage() {
   );
   const directorCredit = directorCredits[0] || null;
   const genreChips = Array.isArray(detail.genres) ? detail.genres.slice(0, 2) : [];
-  const canRequestSeerr = requestPath === "seerr" && isRequestableInSeerr(detail);
-  const canAddRadarr = requestPath !== "seerr" && isAddableToRadarr(detail);
-  const canAddSonarr = requestPath !== "seerr" && isAddableToSonarr(detail);
+  const addCapability = resolveAddCapability({
+    role: userRole,
+    requestPath,
+    multiUserEnabled,
+  });
+  const canRequestSeerr = addCapability.canRequest && isRequestableInSeerr(detail);
+  const canAddRadarr = addCapability.canAdd && isAddableToRadarr(detail);
+  const canAddSonarr = addCapability.canAdd && isAddableToSonarr(detail);
   const canAddOrRequest = canRequestSeerr || canAddRadarr || canAddSonarr;
+  const showAskOwner = addCapability.showGuidedCopy && itemNeedsAddGuidance(detail);
   const addCtaLabel = canRequestSeerr
     ? "Request in Seerr"
     : canAddSonarr
@@ -283,14 +360,17 @@ export default function TitleDetailPage() {
   }
 
   return (
-    <div className="title-page title-detail-skinned" data-testid="title-detail-page">
-      <header className="title-detail-sticky-header">
-        <BackLink fallbackTo={ROUTES.explore} testId="title-detail-back" />
+    <AppShell
+      className="title-page title-detail-skinned"
+      testId="title-detail-page"
+      variant="sticky"
+      leading={<BackLink fallbackTo={ROUTES.explore} testId="title-detail-back" />}
+      actions={
         <span className="title-detail-sticky-label">
           {detail.media_type === "movie" ? "Movie" : "TV Show"}
         </span>
-      </header>
-
+      }
+    >
       <section
         className="title-detail-hero"
         style={detail.backdrop_url ? { "--title-backdrop": `url(${detail.backdrop_url})` } : undefined}
@@ -300,12 +380,22 @@ export default function TitleDetailPage() {
         <div className="title-detail-hero-inner">
           <div className="title-detail-chips">
             {detail.year ? <span className="title-chip">{detail.year}</span> : null}
+            {releaseDateLabel ? (
+              <span className="title-chip" data-testid="title-release-chip">
+                {releaseDateLabel}
+              </span>
+            ) : null}
             {runtimeLabel ? (
               <span className="title-chip title-chip-accent">
                 <span className="material-symbols-outlined" aria-hidden="true">
                   schedule
                 </span>
                 {runtimeLabel}
+              </span>
+            ) : null}
+            {tvProgress ? (
+              <span className="title-chip title-chip-accent" data-testid="title-tv-progress-chip">
+                {tvProgress.label}
               </span>
             ) : null}
             {detail.in_library ? <span className="title-chip title-chip-success">In library</span> : null}
@@ -342,6 +432,18 @@ export default function TitleDetailPage() {
                 Trailer
               </button>
             ) : null}
+            {reviewsCta?.kind === "rate" ? (
+              <Link
+                to={rateFlowHref()}
+                className="title-cta title-cta-ghost"
+                data-testid="title-reviews-cta"
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  rate_review
+                </span>
+                {reviewsCta.label}
+              </Link>
+            ) : null}
             {canAddOrRequest ? (
               <button
                 type="button"
@@ -359,6 +461,18 @@ export default function TitleDetailPage() {
                     ? "Added"
                     : addCtaLabel}
               </button>
+            ) : null}
+            {showAskOwner ? (
+              <span
+                className="title-cta title-cta-ghost title-cta-disabled"
+                data-testid="title-detail-ask-owner"
+                title="Guests cannot request or add media"
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  lock
+                </span>
+                {addCapability.guidedCopy}
+              </span>
             ) : null}
             {multiUserEnabled ? (
               <button
@@ -422,16 +536,15 @@ export default function TitleDetailPage() {
 
         <aside className="title-detail-side">
           <div className="title-meta-grid">
-            <MetaTile
-              label="Released"
-              value={formatReleaseDate(
-                detail.media_type === "show"
-                  ? detail.first_air_date || detail.release_date
-                  : detail.release_date || detail.first_air_date,
-              )}
-            />
+            <MetaTile label="Released" value={releaseDateLabel} />
             <MetaTile label="Decade" value={decadeLabel(detail.year)} />
             <MetaTile label="Collection" value={detail.collection_name || null} />
+            {tvProgress ? (
+              <MetaTile label="Progress" value={tvProgress.label} />
+            ) : null}
+            {reviewsCta?.kind === "rated" ? (
+              <MetaTile label="Your rating" value={reviewsCta.label.replace(/^Your rating:\s*/, "")} />
+            ) : null}
             <MetaTile label="Rating" value={detail.content_rating || null} />
             <MetaTile
               label="Language"
@@ -531,6 +644,50 @@ export default function TitleDetailPage() {
           ) : null}
         </aside>
       </section>
+
+      {collectionPeers.length ? (
+        <section className="title-neighbors title-collection-rail" data-testid="title-collection-rail">
+          <div className="title-neighbors-header">
+            <h2>More in {detail.collection_name}</h2>
+          </div>
+          <div className="title-neighbors-track">
+            {collectionPeers.map((item) => {
+              const path = titleDetailPath(item);
+              const card = (
+                <>
+                  <div className="title-neighbor-poster">
+                    {item.poster_url ? (
+                      <img src={item.poster_url} alt="" loading="lazy" />
+                    ) : (
+                      <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
+                    )}
+                  </div>
+                  <h3>{item.title}</h3>
+                  {item.year ? <p className="title-neighbor-year">{item.year}</p> : null}
+                </>
+              );
+              return path ? (
+                <Link
+                  key={`${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`}
+                  to={path}
+                  className="title-neighbor-card"
+                  data-testid="title-collection-peer"
+                >
+                  {card}
+                </Link>
+              ) : (
+                <div
+                  key={`${item.media_type}-${item.title}`}
+                  className="title-neighbor-card"
+                  data-testid="title-collection-peer"
+                >
+                  {card}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
       {showNeighbors ? (
         <section className="title-neighbors" data-testid="title-neighbors">
@@ -650,6 +807,6 @@ export default function TitleDetailPage() {
         open={recommendOpen}
         onClose={() => setRecommendOpen(false)}
       />
-    </div>
+    </AppShell>
   );
 }

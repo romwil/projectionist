@@ -737,7 +737,11 @@ def config_page() -> HTMLResponse:
 
 
 @app.get("/explore", response_class=HTMLResponse)
-def explore_page() -> HTMLResponse:
+@app.get("/explore/tags", response_class=HTMLResponse)
+@app.get("/explore/plot-lab", response_class=HTMLResponse)
+@app.get("/explore/section/{section_id}", response_class=HTMLResponse)
+def explore_page(section_id: str = "") -> HTMLResponse:
+    del section_id
     return _serve_index()
 
 
@@ -1814,6 +1818,7 @@ async def library_query_endpoint(
     themes: Optional[str] = None,
     countries: Optional[str] = None,
     content_ratings: Optional[str] = None,
+    collection_name: Optional[str] = None,
     original_language: Optional[str] = None,
     query: Optional[str] = None,
     fts_query: Optional[str] = None,
@@ -1855,6 +1860,7 @@ async def library_query_endpoint(
             "themes": themes,
             "countries": countries,
             "content_ratings": content_ratings,
+            "collection_name": collection_name,
             "original_language": original_language,
             "query": query,
             "fts_query": fts_query,
@@ -2726,10 +2732,14 @@ def person_detail(
     settings = _settings()
     db = _db()
     tmdb_payload: Dict[str, Any] = {}
+    filmography_total: Optional[int] = None
     if settings.tmdb_api_key:
         try:
             client = TMDBClient(settings.tmdb_api_key)
-            raw = client.person_details(tmdb_person_id)
+            raw = client.person_details(
+                tmdb_person_id,
+                append_to_response="combined_credits",
+            )
             if isinstance(raw, dict) and raw.get("id"):
                 tmdb_payload = {
                     "tmdb_person_id": int(raw.get("id") or tmdb_person_id),
@@ -2741,6 +2751,7 @@ def person_detail(
                     "profile_url": client.profile_url(raw.get("profile_path"), size="w342"),
                     "known_for_department": str(raw.get("known_for_department") or "").strip(),
                 }
+                filmography_total = TMDBClient.filmography_total_from_combined_credits(raw)
         except RuntimeError:
             tmdb_payload = {}
 
@@ -2770,11 +2781,23 @@ def person_detail(
             "known_for_department": "",
         }
 
+    # Dedupe library titles that appear under multiple credit roles.
+    unique_library = {
+        (item.get("media_type"), item.get("tmdb_id") or item.get("rating_key") or item.get("title"))
+        for item in titles
+    }
+    in_library_count = len(unique_library)
+    library_owned_pct = None
+    if filmography_total and filmography_total > 0:
+        library_owned_pct = min(100, round((in_library_count / filmography_total) * 100))
+
     payload = {
         **tmdb_payload,
         "titles": titles,
         "returned": len(titles),
-        "in_library_count": len(titles),
+        "in_library_count": in_library_count,
+        "filmography_total": filmography_total,
+        "library_owned_pct": library_owned_pct,
     }
     return _sanitize_library_payload(payload, user)
 

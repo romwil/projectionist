@@ -22,6 +22,65 @@ export function requestPathFromFeatures(features) {
   return usesSeerrRequestPath(features) ? "seerr" : "arr";
 }
 
+/** Normalize household role; single-user / unknown defaults to owner (full capability). */
+export function normalizeUserRole(role, { multiUserEnabled = true } = {}) {
+  if (!multiUserEnabled) return "owner";
+  const value = String(role || "").trim().toLowerCase();
+  if (value === "owner" || value === "member" || value === "guest") return value;
+  return "owner";
+}
+
+/** Guests match agent tool denial — no *arr / Seerr / collection writes. */
+export function canProposeMediaActions(role, options = {}) {
+  return normalizeUserRole(role, options) !== "guest";
+}
+
+export function guestAddGuidance() {
+  return "Ask owner";
+}
+
+/**
+ * Capability for Add / Request CTAs given role + requestPathFromFeatures.
+ * Members on the Seerr path may request; guests get guided copy instead of dead buttons.
+ */
+export function resolveAddCapability({
+  role,
+  requestPath = "arr",
+  multiUserEnabled = true,
+} = {}) {
+  const normalized = normalizeUserRole(role, { multiUserEnabled });
+  const path = requestPath === "seerr" ? "seerr" : "arr";
+  if (normalized === "guest") {
+    return {
+      role: normalized,
+      requestPath: path,
+      canAdd: false,
+      canRequest: false,
+      showGuidedCopy: true,
+      guidedCopy: guestAddGuidance(),
+    };
+  }
+  const useSeerr = path === "seerr";
+  return {
+    role: normalized,
+    requestPath: path,
+    canAdd: !useSeerr,
+    canRequest: useSeerr,
+    showGuidedCopy: false,
+    guidedCopy: null,
+  };
+}
+
+/** True when a non-library title would otherwise show an Add/Request affordance. */
+export function itemNeedsAddGuidance(item) {
+  return Boolean(
+    item &&
+      !item.in_library &&
+      (item.tmdb_id || item.tvdb_id) &&
+      (item.media_type === "movie" || item.media_type === "show" || !item.media_type),
+  );
+}
+
 export function serviceLabelForTarget(target) {
   if (target === "seerr") return "Seerr";
   if (target === "sonarr") return "Sonarr";
@@ -58,7 +117,13 @@ export function alreadyInArrMessage(response, { label, service }) {
   return response?.message || `"${label}" is already in ${service}.`;
 }
 
-export function groupAddableItems(items = [], { requestPath = "arr" } = {}) {
+export function groupAddableItems(
+  items = [],
+  { requestPath = "arr", role, multiUserEnabled = true } = {},
+) {
+  if (!canProposeMediaActions(role, { multiUserEnabled })) {
+    return { radarr: [], sonarr: [], seerr: [] };
+  }
   if (requestPath === "seerr") {
     const seerr = items.filter(isRequestableInSeerr);
     return { radarr: [], sonarr: [], seerr };

@@ -1,25 +1,36 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { queryLibrary } from "../api/client";
-import AppNav, { AppNavToggle } from "../components/AppNav";
 import BackLink from "../components/BackLink";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
+import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
+import {
+  TAG_SORT_OPTIONS,
+  normalizeTagSort,
+  parseAndTags,
+} from "../lib/tagSearch.js";
 
 export default function TagPage() {
   const { tagName } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const decoded = decodeURIComponent(String(tagName || ""));
-  const { isOwner, multiUserEnabled } = useAuthGate();
-  const [navOpen, setNavOpen] = useState(false);
+  const andTags = useMemo(() => parseAndTags(searchParams), [searchParams]);
+  const keywords = useMemo(
+    () => [decoded, ...andTags].map((t) => t.trim()).filter(Boolean),
+    [decoded, andTags],
+  );
+  const sort = normalizeTagSort(searchParams.get("sort"));
+  const { multiUserEnabled } = useAuthGate();
   const [recommendItem, setRecommendItem] = useState(null);
   const [state, setState] = useState({ loading: true, items: [], error: "" });
 
   useEffect(() => {
     let cancelled = false;
     setState({ loading: true, items: [], error: "" });
-    queryLibrary({ keywords: [decoded], limit: 48, sort: "title" })
+    queryLibrary({ keywords, limit: 48, sort })
       .then((data) => {
         if (cancelled) return;
         setState({
@@ -39,25 +50,48 @@ export default function TagPage() {
     return () => {
       cancelled = true;
     };
-  }, [decoded]);
+  }, [keywords, sort]);
+
+  function handleSortChange(nextSort) {
+    const params = new URLSearchParams(searchParams);
+    const normalized = normalizeTagSort(nextSort);
+    if (normalized === "title") params.delete("sort");
+    else params.set("sort", normalized);
+    setSearchParams(params, { replace: true });
+  }
 
   return (
-    <div className="app-root tag-page" data-testid="tag-page">
-      <AppNav open={navOpen} onClose={() => setNavOpen(false)} isOwner={isOwner} />
-      <header className="browse-page-header">
-        <div className="browse-page-header-left">
-          <AppNavToggle open={navOpen} onClick={() => setNavOpen(true)} />
-          <BackLink fallbackTo={ROUTES.tags} testId="tag-back" />
-        </div>
+    <AppShell
+      className="app-root tag-page"
+      testId="tag-page"
+      variant="browse"
+      leading={<BackLink fallbackTo={ROUTES.tags} testId="tag-back" />}
+      actions={
         <Link to={ROUTES.tags} className="app-topbar-link" data-testid="tag-back-explore">
           Tag search
         </Link>
-      </header>
-
+      }
+    >
       <section className="tag-hero" data-testid="tag-hero">
-        <p className="person-eyebrow">Tag</p>
-        <h1 data-testid="tag-name">{decoded || "Untitled tag"}</h1>
-        <p className="explore-section-subtitle">Library titles tagged with this keyword</p>
+        <p className="person-eyebrow">Tag{keywords.length > 1 ? "s (AND)" : ""}</p>
+        <h1 data-testid="tag-name">{keywords.join(" + ") || "Untitled tag"}</h1>
+        <p className="explore-section-subtitle">
+          Library titles tagged with {keywords.length > 1 ? "all of these keywords" : "this keyword"}
+        </p>
+        <label className="tag-sort-control">
+          <span>Sort</span>
+          <select
+            value={sort}
+            data-testid="tag-sort"
+            onChange={(event) => handleSortChange(event.target.value)}
+          >
+            {TAG_SORT_OPTIONS.map((opt) => (
+              <option key={opt.id} value={opt.sort}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </section>
 
       <section className="tag-results" data-testid="tag-results">
@@ -65,7 +99,7 @@ export default function TagPage() {
         {state.error ? <p className="error">{state.error}</p> : null}
         {!state.loading && !state.error && !state.items.length ? (
           <p className="explore-empty status status-secondary" data-testid="tag-empty">
-            No library titles match this tag yet.
+            No library titles match {keywords.length > 1 ? "these tags" : "this tag"} yet.
           </p>
         ) : null}
         {state.items.length ? (
@@ -88,6 +122,6 @@ export default function TagPage() {
         open={Boolean(recommendItem)}
         onClose={() => setRecommendItem(null)}
       />
-    </div>
+    </AppShell>
   );
 }

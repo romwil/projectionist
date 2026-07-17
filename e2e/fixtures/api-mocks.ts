@@ -589,6 +589,7 @@ export async function mockCuratorApis(page: Page) {
       contentType: "application/json",
       body: JSON.stringify({
         features: { multi_user_enabled: false, seerr_enabled: false, plex_collections_enabled: false },
+        auth_methods: [],
         auth: {
           mode: "disabled",
           plex_login_enabled: true,
@@ -749,6 +750,7 @@ type FeatureFlags = {
 };
 
 export async function mockFeatures(page: Page, features: FeatureFlags = {}) {
+  const multiUser = Boolean(features.multi_user_enabled);
   await page.route("**/api/features", async (route: Route) => {
     await route.fulfill({
       status: 200,
@@ -760,8 +762,9 @@ export async function mockFeatures(page: Page, features: FeatureFlags = {}) {
           plex_collections_enabled: false,
           ...features,
         },
+        auth_methods: multiUser ? ["plex"] : [],
         auth: {
-          mode: features.multi_user_enabled ? "plex" : "disabled",
+          mode: multiUser ? "plex" : "disabled",
           plex_login_enabled: true,
           oidc_enabled: false,
           local_login_enabled: false,
@@ -947,46 +950,58 @@ export function runningLibrarySyncJob(overrides: Record<string, unknown> = {}) {
   };
 }
 
-export async function mockReviewConflictChat(page: Page) {
-  await page.route("**/api/chat", async (route: Route) => {
-    if (route.request().method() !== "POST") {
+function sseDonePayload(sessionId: string, message: Record<string, unknown>, pendingTokens: unknown[] = []) {
+  const payload = {
+    type: "done",
+    session_id: sessionId,
+    message,
+    pending_tokens: pendingTokens,
+  };
+  return `event: done\ndata: ${JSON.stringify(payload)}\n\n`;
+}
+
+/** Override the default echo stream with a custom assistant message (SSE done event). */
+export async function mockChatStreamMessage(
+  page: Page,
+  buildMessage: (sessionId: string) => Record<string, unknown>,
+) {
+  await page.route("**/api/chat/stream**", async (route: Route) => {
+    if (route.request().method() !== "GET") {
       await route.continue();
       return;
     }
-    let sessionId = crypto.randomUUID().replace(/-/g, "");
-    try {
-      const body = route.request().postDataJSON() as { session_id?: string };
-      sessionId = body.session_id || sessionId;
-    } catch {
-      // ignore
-    }
-    const assistantMessage = {
-      id: "assistant-conflict",
-      role: "assistant",
-      blocks: [
-        { type: "text", content: "Saved your review locally. Plex has a different rating — choose below." },
-        {
-          type: "plex_rating_conflict",
-          payload: {
-            review: {
-              title: "Inception",
-              media_type: "movie",
-              stars: 5,
-              rating_key: "rk-1",
-              tmdb_id: 27205,
-            },
-            plex_stars: 3,
-            submitted_stars: 5,
-          },
-        },
-      ],
-      created_at: Math.floor(Date.now() / 1000),
-      lens_id: "general",
-    };
+    const url = new URL(route.request().url());
+    const sessionId = url.searchParams.get("session_id") || crypto.randomUUID().replace(/-/g, "");
     await route.fulfill({
       status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ session_id: sessionId, message: assistantMessage }),
+      contentType: "text/event-stream",
+      body: sseDonePayload(sessionId, buildMessage(sessionId)),
     });
   });
+}
+
+export async function mockReviewConflictChat(page: Page) {
+  await mockChatStreamMessage(page, () => ({
+    id: "assistant-conflict",
+    role: "assistant",
+    blocks: [
+      { type: "text", content: "Saved your review locally. Plex has a different rating — choose below." },
+      {
+        type: "plex_rating_conflict",
+        payload: {
+          review: {
+            title: "Inception",
+            media_type: "movie",
+            stars: 5,
+            rating_key: "rk-1",
+            tmdb_id: 27205,
+          },
+          plex_stars: 3,
+          submitted_stars: 5,
+        },
+      },
+    ],
+    created_at: Math.floor(Date.now() / 1000),
+    lens_id: "general",
+  }));
 }
