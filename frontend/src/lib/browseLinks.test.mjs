@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  decadeYearRange,
   exploreCastPath,
+  exploreCountryPath,
+  exploreDecadePath,
   exploreDirectorsPath,
   exploreGenrePath,
+  exploreLanguagePath,
   exploreSectionPath,
   personPath,
   tagPath,
@@ -22,6 +26,10 @@ describe("browseLinks", () => {
     assert.equal(exploreGenrePath("Sci-Fi"), "/explore?genre=Sci-Fi");
     assert.equal(exploreCastPath("Keanu Reeves"), "/explore?cast=Keanu%20Reeves");
     assert.equal(exploreDirectorsPath("Lana Wachowski"), "/explore?directors=Lana%20Wachowski");
+    assert.equal(exploreDecadePath("2020s"), "/explore?decade=2020s");
+    assert.equal(exploreLanguagePath("hi"), "/explore?language=hi");
+    assert.equal(exploreCountryPath("India"), "/explore?country=India");
+    assert.deepEqual(decadeYearRange("1970s"), { year_from: 1970, year_to: 1979 });
     assert.equal(
       exploreSectionPath("recently-added", { mediaType: "movie" }),
       "/explore/section/recently-added?media_type=movie",

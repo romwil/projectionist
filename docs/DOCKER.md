@@ -1,6 +1,6 @@
 # CuratorX — Docker / Unraid
 
-Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Everyday tag: **`romwil/curatorx:latest`** (CA default). Pin **`:1.7`** or **`:1.7.13`** when you need a fixed line or exact build.
+Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Everyday tag: **`romwil/curatorx:latest`** (CA default). Pin **`:1.8`** or **`:1.8.5`** when you need a fixed line or exact build.
 
 ---
 
@@ -103,7 +103,7 @@ Install from the Community Applications template (`templates/curatorx.xml` or `u
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/curatorx/config` → `/config` |
-| **Image** | `romwil/curatorx:latest` (or `:1.7` / `:1.7.13`) — multi-arch amd64+arm64 |
+| **Image** | `romwil/curatorx:latest` (or `:1.8` / `:1.8.5`) — multi-arch amd64+arm64 |
 
 Optional advanced env (or generate in **Admin → Advanced**): `CURATORX_MCP_API_KEY` (privacy) and `CURATORX_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
@@ -134,7 +134,7 @@ CA XML remains the human install source of truth. For pull/recreate rollouts (po
 ssh automat
 cd /mnt/user/appdata/curatorx
 ./rollout.sh           # :latest
-./rollout.sh 1.8.4     # pin a release tag
+./rollout.sh 1.8.5     # pin a release tag
 ```
 
 `rollout.sh` uses plain Docker CLI on Unraid (Compose is usually absent). If `docker compose` / `docker-compose` is available it prefers that instead. Same-named containers are stop/rm only — `./config` is never wiped. Optional seed env: copy `.env.example` → `.env` (secrets usually already live in `config/`).
@@ -160,6 +160,16 @@ You can verify you have the correct build by checking the startup log or running
 ```bash
 docker exec curatorx cat /app/.build-info
 ```
+
+### Trailer says “This content is blocked”
+
+CuratorX permits its privacy-enhanced YouTube player with:
+
+```text
+frame-src https://www.youtube.com https://www.youtube-nocookie.com
+```
+
+If Unraid, Caddy, Nginx Proxy Manager, Cloudflare, or another reverse proxy replaces or adds a `Content-Security-Policy` header, include those origins in that proxy policy's `frame-src` directive too. Browsers enforce every CSP header they receive, so adding a second permissive policy does not cancel a stricter one; update or remove the proxy's conflicting policy. The trailer modal also provides **Open on YouTube** as a fallback when an upstream policy cannot be changed.
 
 ---
 

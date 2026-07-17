@@ -268,6 +268,19 @@ class ReviewApiTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 422)
 
+    def test_create_review_accepts_half_stars(self) -> None:
+        resp = self.client.post(
+            "/api/reviews",
+            json={
+                "title": "Heat",
+                "media_type": "movie",
+                "stars": 4.5,
+                "rating_key": "heat-half",
+            },
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["stars"], 4.5)
+
 
 if __name__ == "__main__":
     unittest.main()

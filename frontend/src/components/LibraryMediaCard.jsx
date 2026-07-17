@@ -34,6 +34,7 @@ export default function LibraryMediaCard({
   seedLabel = "Surprise from this",
   onRecommend,
   showRecommend = false,
+  onOpenDetail,
   testId = "explore-title-card",
 }) {
   const [hovered, setHovered] = useState(false);
@@ -111,14 +112,105 @@ export default function LibraryMediaCard({
     (showWatch && plexHref) || item?.tmdb_id || item?.rating_key || (showRecommend && onRecommend),
   );
 
-  const body = (
+  const hoverActions = showHoverActions ? (
+    <div className="explore-card-hover-actions" data-testid="explore-card-hover-actions">
+      {showWatch && plexHref ? (
+        <a
+          href={plexHref}
+          className="explore-hover-icon explore-hover-icon-watch"
+          data-testid="explore-watch-plex"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Watch on Plex"
+          title="Watch on Plex"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            play_arrow
+          </span>
+        </a>
+      ) : null}
+      {item?.tmdb_id || item?.rating_key ? (
+        <button
+          type="button"
+          className="explore-hover-icon explore-hover-icon-trailer"
+          data-testid="explore-view-trailer"
+          disabled={trailerLoading}
+          aria-label={trailerLoading ? "Loading trailer" : "Watch trailer"}
+          title="Trailer"
+          onClick={handleTrailer}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            {trailerLoading ? "progress_activity" : "movie"}
+          </span>
+        </button>
+      ) : null}
+      {showRecommend && onRecommend ? (
+        <button
+          type="button"
+          className="explore-hover-icon explore-hover-icon-recommend"
+          data-testid="explore-recommend"
+          aria-label="Recommend"
+          title="Recommend"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onRecommend(item);
+          }}
+        >
+          <span className="material-symbols-outlined" aria-hidden="true">
+            recommend
+          </span>
+        </button>
+      ) : null}
+    </div>
+  ) : null;
+
+  const titleBlock = (
     <>
-      <div className="explore-poster">{media}</div>
       <h3>{item.title || "Untitled"}</h3>
       {item.year ? <p className="explore-card-meta">{item.year}</p> : null}
       {meta ? <p className="explore-card-meta explore-card-context">{meta}</p> : null}
     </>
   );
+
+  function handleOpenDetail(event) {
+    if (!onOpenDetail) return;
+    event.preventDefault();
+    onOpenDetail(item, event);
+  }
+
+  const posterNode =
+    path && onOpenDetail ? (
+      <button
+        type="button"
+        className="explore-poster-link explore-poster-button"
+        tabIndex={-1}
+        aria-hidden="true"
+        onClick={handleOpenDetail}
+      >
+        {media}
+      </button>
+    ) : path ? (
+      <Link to={path} className="explore-poster-link" tabIndex={-1} aria-hidden="true">
+        {media}
+      </Link>
+    ) : (
+      media
+    );
+
+  const titleNode =
+    path && onOpenDetail ? (
+      <button type="button" className="explore-cinema-card-link explore-cinema-card-button" onClick={handleOpenDetail}>
+        {titleBlock}
+      </button>
+    ) : path ? (
+      <Link to={path} className="explore-cinema-card-link">
+        {titleBlock}
+      </Link>
+    ) : (
+      <div className="explore-cinema-card-link">{titleBlock}</div>
+    );
 
   return (
     <article
@@ -127,55 +219,11 @@ export default function LibraryMediaCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      {path ? (
-        <Link to={path} className="explore-cinema-card-link">
-          {body}
-        </Link>
-      ) : (
-        <div className="explore-cinema-card-link">{body}</div>
-      )}
-
-      {showHoverActions ? (
-        <div className="explore-card-hover-actions" data-testid="explore-card-hover-actions">
-          {showWatch && plexHref ? (
-            <a
-              href={plexHref}
-              className="explore-hover-btn"
-              data-testid="explore-watch-plex"
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(event) => event.stopPropagation()}
-            >
-              Watch
-            </a>
-          ) : null}
-          {item?.tmdb_id || item?.rating_key ? (
-            <button
-              type="button"
-              className="explore-hover-btn"
-              data-testid="explore-view-trailer"
-              disabled={trailerLoading}
-              onClick={handleTrailer}
-            >
-              {trailerLoading ? "…" : "Trailer"}
-            </button>
-          ) : null}
-          {showRecommend && onRecommend ? (
-            <button
-              type="button"
-              className="explore-hover-btn"
-              data-testid="explore-recommend"
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                onRecommend(item);
-              }}
-            >
-              Recommend
-            </button>
-          ) : null}
-        </div>
-      ) : null}
+      <div className="explore-poster">
+        {posterNode}
+        {hoverActions}
+      </div>
+      {titleNode}
 
       {onSeed && item.id != null ? (
         <button
@@ -204,20 +252,31 @@ export default function LibraryMediaCard({
           >
             <div className="trailer-modal-header">
               <h2>{item.title || "Trailer"}</h2>
-              <button
-                type="button"
-                className="ghost"
-                data-testid="close-explore-trailer"
-                onClick={() => setTrailerOpen(false)}
-              >
-                Close
-              </button>
+              <div className="trailer-modal-actions">
+                <a
+                  className="btn-link ghost"
+                  href={`https://www.youtube.com/watch?v=${encodeURIComponent(trailerKey)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  Open on YouTube
+                </a>
+                <button
+                  type="button"
+                  className="ghost"
+                  data-testid="close-explore-trailer"
+                  onClick={() => setTrailerOpen(false)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
             <div className="trailer-modal-frame">
               <iframe
                 title={`${item.title || "Title"} trailer`}
-                src={`https://www.youtube.com/embed/${encodeURIComponent(trailerKey)}?autoplay=1&rel=0`}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}?autoplay=1&rel=0`}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                referrerPolicy="strict-origin-when-cross-origin"
                 allowFullScreen
               />
             </div>

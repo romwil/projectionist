@@ -43,6 +43,34 @@ export function exploreDirectorsPath(name) {
   return `/explore?directors=${encodeURIComponent(cleaned)}`;
 }
 
+export function exploreDecadePath(decadeLabel) {
+  const label = String(decadeLabel || "").trim();
+  if (!/^\d{4}s$/.test(label)) return null;
+  return `/explore?decade=${encodeURIComponent(label)}`;
+}
+
+export function exploreLanguagePath(languageCode) {
+  const code = String(languageCode || "").trim().toLowerCase().split("-")[0];
+  if (!code) return null;
+  return `/explore?language=${encodeURIComponent(code)}`;
+}
+
+export function exploreCountryPath(countryName) {
+  const name = String(countryName || "").trim();
+  if (!name) return null;
+  return `/explore?country=${encodeURIComponent(name)}`;
+}
+
+/** year_from / year_to for library query from a decade label like "2020s". */
+export function decadeYearRange(decadeLabel) {
+  const label = String(decadeLabel || "").trim();
+  const match = /^(\d{4})s$/.exec(label);
+  if (!match) return null;
+  const start = Number(match[1]);
+  if (!Number.isFinite(start)) return null;
+  return { year_from: start, year_to: start + 9 };
+}
+
 /** Drill-down path for an Explore hub section (e.g. recently-added). */
 export function exploreSectionPath(sectionId, { mediaType, limit, offset } = {}) {
   const id = String(sectionId || "").trim();

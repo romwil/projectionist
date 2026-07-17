@@ -4,9 +4,15 @@ import {
   WARM_EXPLORE_TASKS,
   formatDurationMs,
   formatInterval,
+  formatLastOutcomeLine,
   formatLogLine,
+  formatOutcomeReason,
+  formatRunSummaryLine,
   formatTaskLastRun,
+  formatTaskLastRunDetail,
   isTaskRunning,
+  resolveLastOutcome,
+  resolveRunMetrics,
   resolveWarmExploreTasks,
   summarizeLastStatus,
   taskDisplayName,
@@ -30,6 +36,7 @@ describe("scheduledTasks helpers", () => {
 
   it("summarizes status and running state", () => {
     assert.equal(summarizeLastStatus("completed"), "Succeeded");
+    assert.equal(summarizeLastStatus("skipped"), "Skipped");
     assert.equal(summarizeLastStatus("error: boom"), "Failed");
     assert.equal(summarizeLastStatus(null), "Never run");
     assert.equal(isTaskRunning({ running: true }), true);
@@ -37,10 +44,50 @@ describe("scheduledTasks helpers", () => {
     assert.equal(isTaskRunning({ running: false }), false);
   });
 
+  it("formats skip/fail outcome reasons", () => {
+    assert.equal(
+      formatOutcomeReason({ outcome_reason: "OpenAI/LLM API key not configured" }),
+      "OpenAI/LLM API key not configured",
+    );
+    assert.match(
+      formatLastOutcomeLine({
+        last_status: "skipped",
+        last_finished_at: 1_700_000_000,
+        last_outcome_reason: "Theme tagging is not implemented yet (stub task)",
+      }),
+      /Skipped · .* — Theme tagging is not implemented yet/,
+    );
+    assert.equal(
+      resolveLastOutcome({ last_status: "skipped", summary: { note: "Nothing to tag" } }).reason,
+      "Nothing to tag",
+    );
+  });
+
+  it("formats run summary lines and last-run detail", () => {
+    assert.equal(
+      formatRunSummaryLine({
+        last_run_summary_line: "5 enriched · 0 errors",
+      }),
+      "5 enriched · 0 errors",
+    );
+    assert.equal(
+      formatTaskLastRunDetail({
+        last_status: "completed",
+        last_run_summary: { summary_line: "3 caches warmed · 120 library items" },
+      }),
+      "3 caches warmed · 120 library items",
+    );
+    assert.deepEqual(
+      resolveRunMetrics({ last_run_summary: { metrics: { enriched: 2 } } }),
+      { enriched: 2 },
+    );
+  });
+
   it("picks row tone from task state", () => {
     assert.equal(taskRowTone({ running: true }), "running");
     assert.equal(taskRowTone({ quarantine: { is_quarantined: true } }), "quarantined");
     assert.equal(taskRowTone({ last_status: "error: x" }), "error");
+    assert.equal(taskRowTone({ last_status: "skipped" }), "skipped");
     assert.equal(taskRowTone({ enabled: false }), "disabled");
     assert.equal(taskRowTone({ enabled: true, overdue: true }), "overdue");
   });
@@ -53,6 +100,14 @@ describe("scheduledTasks helpers", () => {
     });
     assert.match(line, /INFO/);
     assert.match(line, /Started \(manual\)/);
+
+    const skipped = formatLogLine({
+      ts: 1_700_000_001,
+      level: "status",
+      message: "Skipped — OpenAI/LLM API key not configured",
+      data: { outcome_reason: "OpenAI/LLM API key not configured" },
+    });
+    assert.match(skipped, /Skipped — OpenAI\/LLM API key not configured/);
   });
 
   it("resolves Warm Explore preset against available tasks", () => {

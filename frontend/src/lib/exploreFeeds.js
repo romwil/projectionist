@@ -150,7 +150,7 @@ export function buildExploreSectionQuery(current, updates = {}) {
 }
 
 export function feedPaginationSummary(payload) {
-  const total = Number(payload?.total) || 0;
+  const total = Number(payload?.total ?? payload?.total_matched) || 0;
   const offset = normalizeFeedOffset(payload?.offset);
   const limit = Number(payload?.limit) || DEFAULT_EXPLORE_PAGE_SIZE;
   const returned = Array.isArray(payload?.items) ? payload.items.length : 0;
@@ -197,20 +197,106 @@ export function toggleMotifSelection(selected, value) {
   return [...list, key];
 }
 
+/** Page sizes for Plot Lab motif walls (library query max is 50). */
+export const PLOT_LAB_PAGE_SIZES = [20, 40, 50];
+export const DEFAULT_PLOT_LAB_PAGE_SIZE = 20;
+export const PLOT_LAB_MOTIF_CATALOG_LIMIT = 160;
+
 /** Build library query params for motif-filtered poster walls. */
-export function buildMotifQueryParams(motifs, { limit = 24 } = {}) {
+export function buildMotifQueryParams(
+  motifs,
+  { limit = DEFAULT_PLOT_LAB_PAGE_SIZE, offset = 0, mediaType = null } = {},
+) {
   const params = new URLSearchParams();
-  params.set("limit", String(Math.min(Math.max(1, limit), 48)));
+  const pageSize = normalizePageSize(limit, PLOT_LAB_PAGE_SIZES);
+  const pageOffset = normalizeFeedOffset(offset);
+  params.set("limit", String(pageSize));
+  if (pageOffset > 0) params.set("offset", String(pageOffset));
   const cleaned = (Array.isArray(motifs) ? motifs : [])
     .map((m) => String(m || "").trim())
     .filter(Boolean);
   if (cleaned.length) params.set("motifs", cleaned.join(","));
+  const media = normalizeMediaTypeFilter(mediaType);
+  if (media) params.set("media_type", media);
   return params;
+}
+
+/** Format library total runtime for Pulse (days/hours when large). */
+export function formatTotalRuntimeMinutes(minutes) {
+  const total = Math.round(Number(minutes));
+  if (!Number.isFinite(total) || total <= 0) return null;
+  const days = Math.floor(total / 1440);
+  const hours = Math.floor((total % 1440) / 60);
+  const mins = total % 60;
+  if (days > 0) {
+    return hours > 0 ? `${days}d ${hours}h` : `${days}d`;
+  }
+  if (hours > 0) {
+    return mins > 0 ? `${hours}h ${mins}m` : `${hours}h`;
+  }
+  return `${mins}m`;
+}
+
+function mediaTypeSlice(payload, mediaType) {
+  const byType = payload?.by_media_type;
+  if (!byType || typeof byType !== "object") return null;
+  const slice = byType[mediaType];
+  return slice && typeof slice === "object" ? slice : null;
+}
+
+function buildMediaPulseCard(id, label, count, overviewSlice, healthSlice) {
+  if (count == null) return null;
+  const metrics = [];
+
+  const unwatchedPct = healthSlice?.unwatched_pct;
+  if (unwatchedPct != null) {
+    metrics.push({
+      id: "unwatched",
+      label: "Unwatched",
+      value: `${Number(unwatchedPct).toFixed(0)}%`,
+    });
+  }
+
+  if (healthSlice?.stale_adds != null) {
+    metrics.push({
+      id: "stale",
+      label: "Stale adds",
+      value: String(healthSlice.stale_adds),
+      detail: "Added 90+ days ago, never watched",
+    });
+  }
+
+  const topGenre = overviewSlice?.top_genre;
+  if (topGenre?.genre) {
+    metrics.push({
+      id: "genre",
+      label: "Top genre",
+      value: String(topGenre.genre),
+      detail: topGenre.count != null ? `${topGenre.count} titles` : undefined,
+    });
+  }
+
+  const runtimeLabel = formatTotalRuntimeMinutes(overviewSlice?.total_runtime_minutes);
+  if (runtimeLabel) {
+    metrics.push({
+      id: "runtime",
+      label: "Total runtime",
+      value: runtimeLabel,
+    });
+  }
+
+  return {
+    id,
+    label,
+    value: String(count),
+    kind: "media",
+    metrics,
+  };
 }
 
 /**
  * Editorial Library Pulse stats from overview + health payloads.
- * Returns a short list suitable for a compact strip (not a full dashboard).
+ * Titles summary plus richer Movies/Shows cards with per-type breakdowns.
  */
 export function buildPulseStats(overview, health) {
   const ov = overview && typeof overview === "object" ? overview : {};
@@ -219,52 +305,33 @@ export function buildPulseStats(overview, health) {
 
   const total = ov.total ?? hl.total;
   if (total != null) {
-    stats.push({ id: "total", label: "Titles", value: String(total) });
-  }
-  if (ov.movies != null) {
-    stats.push({ id: "movies", label: "Movies", value: String(ov.movies) });
-  }
-  if (ov.shows != null) {
-    stats.push({ id: "shows", label: "Shows", value: String(ov.shows) });
+    stats.push({ id: "total", label: "Titles", value: String(total), kind: "summary" });
   }
 
-  const unwatchedPct = hl.unwatched_pct ?? ov.unwatched_pct;
-  if (unwatchedPct != null) {
-    stats.push({
-      id: "unwatched",
-      label: "Unwatched",
-      value: `${Number(unwatchedPct).toFixed(0)}%`,
-    });
-  }
+  const movieOv = mediaTypeSlice(ov, "movie");
+  const showOv = mediaTypeSlice(ov, "show");
+  const movieHl = mediaTypeSlice(hl, "movie");
+  const showHl = mediaTypeSlice(hl, "show");
 
-  if (hl.stale_adds != null) {
-    stats.push({
-      id: "stale",
-      label: "Stale adds",
-      value: String(hl.stale_adds),
-      detail: "Added 90+ days ago, never watched",
-    });
-  }
+  const moviesCard = buildMediaPulseCard(
+    "movies",
+    "Movies",
+    ov.movies ?? movieOv?.count ?? movieHl?.total,
+    movieOv,
+    movieHl,
+  );
+  if (moviesCard) stats.push(moviesCard);
 
-  const topGenre = Array.isArray(ov.top_genres) && ov.top_genres[0];
-  if (topGenre?.genre) {
-    stats.push({
-      id: "genre",
-      label: "Top genre",
-      value: String(topGenre.genre),
-      detail: topGenre.count != null ? `${topGenre.count} titles` : undefined,
-    });
-  }
+  const showsCard = buildMediaPulseCard(
+    "shows",
+    "Shows",
+    ov.shows ?? showOv?.count ?? showHl?.total,
+    showOv,
+    showHl,
+  );
+  if (showsCard) stats.push(showsCard);
 
-  if (ov.avg_runtime_minutes != null) {
-    stats.push({
-      id: "runtime",
-      label: "Avg runtime",
-      value: `${Math.round(Number(ov.avg_runtime_minutes))}m`,
-    });
-  }
-
-  return stats.slice(0, 7);
+  return stats;
 }
 
 /** Extract motif chip list from `/api/library/motifs` (or facets catalog). */

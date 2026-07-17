@@ -7,7 +7,13 @@ export default function UndoToast({
 }) {
   if (!message) return null;
   return (
-    <div className="undo-toast" data-testid="undo-toast" role="status">
+    <div
+      className="undo-toast"
+      data-testid="undo-toast"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
       <span className="undo-toast-message">{message}</span>
       <div className="undo-toast-actions">
         {onUndo ? (

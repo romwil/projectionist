@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   api,
   addWatchlistPin,
@@ -10,7 +10,6 @@ import {
   formatApiError,
   getActiveContext,
   getAuthMe,
-  getEngagementStreak,
   getFeatures,
   patchAuthMe,
   getThreadFeedback,
@@ -24,7 +23,6 @@ import {
   listWatchlist,
   markRecommendationsSeen,
   proposeAction,
-  queryLibrary,
   removeWatchlistPin,
   runWatchlistSync,
   saveReview,
@@ -45,7 +43,7 @@ import {
   createActivityEvent,
   nextActivityPanelExpanded,
 } from "./lib/agentActivityLog.js";
-import { agentPulseTitle, resolveAgentPulse } from "./lib/agentPulse.js";
+import { resolveAgentPulse } from "./lib/agentPulse.js";
 import {
   addItemKey,
   withAddInFlight,
@@ -89,13 +87,10 @@ import {
 import {
   isRateFlowRequest,
   isWatchlistPanelRequest,
+  ROUTES,
   stripRateFlowParam,
   stripWatchlistPanelParam,
 } from "./lib/backNav.js";
-import {
-  normalizeTonightItems,
-  tonightStripVisible,
-} from "./lib/tonightStrip.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import ChatThread from "./components/ChatThread";
 import InlineAlert from "./components/InlineAlert";
@@ -106,8 +101,8 @@ import RecommendModal from "./components/RecommendModal";
 import RecommendationsInbox from "./components/RecommendationsInbox";
 import StatusDock from "./components/StatusDock";
 import AppNav, { AppNavToggle } from "./components/AppNav";
+import CuratorXBrand from "./components/CuratorXBrand";
 import ThreadList from "./components/ThreadList";
-import TonightStrip from "./components/TonightStrip";
 import TurnstyleResultsOverlay from "./components/TurnstyleResultsOverlay";
 import TypingIndicator from "./components/TypingIndicator";
 import UndoToast from "./components/UndoToast";
@@ -123,7 +118,6 @@ import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import useVoiceMode from "./hooks/useVoiceMode.js";
 
 const SIDEBAR_RAIL_KEY = "curatorx.sidebar.rail";
-const TONIGHT_STRIP_DISMISS_KEY = "curatorx.tonightStrip.dismissed";
 const ADD_FEEDBACK_DISMISS_MS = 5000;
 const THREAD_DELETE_UNDO_MS = 6000;
 const PERFECT_PICK_ACK =
@@ -151,6 +145,7 @@ function appendPerfectPickAck(message) {
 
 export default function App() {
   const { authReady, multiUserEnabled, isOwner, role: userRole } = useAuthGate();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
   const [messages, setMessages] = useState([]);
@@ -178,10 +173,8 @@ export default function App() {
   const [activeContext, setActiveContext] = useState(null);
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [watchlistPins, setWatchlistPins] = useState([]);
-  const [watchlistOpen, setWatchlistOpen] = useState(false);
   const [recommendItem, setRecommendItem] = useState(null);
   const [incomingRecommendations, setIncomingRecommendations] = useState([]);
-  const [sessionStreak, setSessionStreak] = useState(0);
   const [reviewPrompts, setReviewPrompts] = useState([]);
   const [reviewLookup, setReviewLookup] = useState({});
   const [typingPhrases, setTypingPhrases] = useState([]);
@@ -195,19 +188,11 @@ export default function App() {
   const [glanceShown, setGlanceShown] = useState(false);
   const [quickPick, setQuickPick] = useState(null);
   const [quickPickLoading, setQuickPickLoading] = useState(false);
-  const [tonightItems, setTonightItems] = useState([]);
-  const [tonightLoading, setTonightLoading] = useState(false);
-  const [tonightDismissed, setTonightDismissed] = useState(() => {
-    try {
-      return sessionStorage.getItem(TONIGHT_STRIP_DISMISS_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
   const [undoToast, setUndoToast] = useState(null);
   const [personas, setPersonas] = useState([]);
   const [activePersonaId, setActivePersonaId] = useState(null);
   const [defaultPersonaId, setDefaultPersonaId] = useState(null);
+  const [authUser, setAuthUser] = useState(null);
   const helpfulCountRef = useRef(0);
   const perfectPickPendingRef = useRef(false);
   const jobsRunningRef = useRef(false);
@@ -228,29 +213,9 @@ export default function App() {
 
   useEffect(() => {
     if (!isWatchlistPanelRequest(searchParams)) return;
-    setWatchlistOpen(true);
     setSearchParams(stripWatchlistPanelParam(searchParams), { replace: true });
-  }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
-    if (tonightDismissed || !threadsReady) return undefined;
-    let cancelled = false;
-    setTonightLoading(true);
-    queryLibrary({ unwatched_only: true, sort: "added_at", limit: 3 })
-      .then((data) => {
-        if (cancelled) return;
-        setTonightItems(normalizeTonightItems(data));
-      })
-      .catch(() => {
-        if (!cancelled) setTonightItems([]);
-      })
-      .finally(() => {
-        if (!cancelled) setTonightLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [threadsReady, tonightDismissed]);
+    navigate(ROUTES.watchlist);
+  }, [searchParams, setSearchParams, navigate]);
 
   inputRef.current = input;
 
@@ -326,12 +291,6 @@ export default function App() {
       .then((data) => setIncomingRecommendations(data.items || []))
       .catch(() => setIncomingRecommendations([]));
   }, [multiUserEnabled]);
-
-  const refreshStreak = useCallback(() => {
-    getEngagementStreak()
-      .then((data) => setSessionStreak(data.session_count_30d || 0))
-      .catch(console.error);
-  }, []);
 
   const refreshTypingPhrases = useCallback(() => {
     getTypingPhrases()
@@ -672,13 +631,13 @@ export default function App() {
     }).catch(() => {});
     refreshJobs();
     refreshWatchlist();
-    refreshStreak();
     refreshTypingPhrases();
     refreshPersonas();
     refreshRecommendations();
     applyUiTheme(loadStoredUiTheme());
     getAuthMe()
       .then((payload) => {
+        if (payload?.user) setAuthUser(payload.user);
         if (payload?.user?.ui_font_size) {
           applyUiFontSize(payload.user.ui_font_size);
         }
@@ -700,7 +659,6 @@ export default function App() {
     refreshPersonas,
     refreshRecommendations,
     refreshReviewData,
-    refreshStreak,
     refreshTypingPhrases,
     refreshWatchlist,
   ]);
@@ -876,6 +834,7 @@ export default function App() {
           api,
           getFeatures,
           curatorName: persona?.curator_name || "Curator",
+          user: reviewUserContext,
         });
         setMessages((prev) => [...prev, assistantMessage]);
         speakAssistantMessage(assistantMessage);
@@ -981,12 +940,12 @@ export default function App() {
   }
 
   useEffect(() => {
-    if (!threadsReady || loading || rateFlowStartedRef.current) return;
+    if (!authReady || !threadsReady || loading || rateFlowStartedRef.current) return;
     if (!isRateFlowRequest(searchParams)) return;
     rateFlowStartedRef.current = true;
     setSearchParams(stripRateFlowParam(searchParams), { replace: true });
     sendMessage("/rate");
-  }, [threadsReady, loading, searchParams, setSearchParams]);
+  }, [authReady, threadsReady, loading, searchParams, setSearchParams]);
 
   useEffect(() => {
     return () => {
@@ -1327,9 +1286,7 @@ export default function App() {
   }
 
   const agentPulse = resolveAgentPulse({ loading, chatError });
-  const agentPulseLabel = agentPulseTitle(agentPulse, chatError);
   const curatorName = persona?.curator_name || "Curator";
-  const presetTagline = personaUi?.preset_tagline || "";
   const radarrConnected = Boolean(setup?.checks?.radarr?.ok);
   const sonarrConnected = Boolean(setup?.checks?.sonarr?.ok);
   const dockDropEnabled =
@@ -1339,6 +1296,10 @@ export default function App() {
     [personas],
   );
   const watchlistLookup = buildWatchlistLookup(watchlistPins);
+  const reviewUserContext = useMemo(
+    () => authUser || features?.user || null,
+    [authUser, features?.user],
+  );
   const contextLabel = activeContext?.inferred_label || "Exploring…";
   const ambientAccent = blendAmbientAccent(
     activeContext?.context_hash,
@@ -1369,7 +1330,6 @@ export default function App() {
         open={appNavOpen}
         onClose={() => setAppNavOpen(false)}
         isOwner={isOwner}
-        onOpenWatchlist={() => setWatchlistOpen(true)}
       />
       <header className={`app-topbar ${nightOwl ? "night-owl" : ""}`}>
         <div className="app-topbar-brand">
@@ -1391,47 +1351,9 @@ export default function App() {
               chat
             </span>
           </button>
-          <div className="app-topbar-titles">
-            <h1>CuratorX</h1>
-            <p
-              className="app-topbar-eyebrow"
-              title={presetTagline || undefined}
-              data-testid="curator-name-eyebrow"
-            >
-              {curatorName}
-            </p>
-          </div>
-          <span
-            className={`agent-pulse ${agentPulse}`}
-            title={agentPulseLabel}
-            aria-label={agentPulseLabel}
-            data-testid="agent-pulse"
-          />
+          <CuratorXBrand pulse={agentPulse} chatError={chatError} />
         </div>
         <div className="app-topbar-actions">
-          {stats ? (
-            <span className="stat-chip app-topbar-meta" data-testid="library-stats-chip">
-              {stats.plex_server_name
-                ? `${stats.plex_server_name} · ${stats.movies} movies · ${stats.shows} shows`
-                : `${stats.movies} movies · ${stats.shows} shows`}
-            </span>
-          ) : null}
-          {sessionStreak >= 3 ? (
-            <span className="stat-chip streak-chip app-topbar-meta" data-testid="curator-streak-chip" title="Conversations in the last 30 days">
-              {sessionStreak} chats this month
-            </span>
-          ) : null}
-          {watchlistPins.length ? (
-            <button
-              type="button"
-              className="stat-chip watchlist-chip app-topbar-meta"
-              data-testid="watchlist-topbar-chip"
-              title="Watchlist pins — click to toggle panel"
-              onClick={() => setWatchlistOpen((open) => !open)}
-            >
-              ★ {watchlistPins.length} pinned
-            </button>
-          ) : null}
           <Link
             to="/explore"
             className="app-topbar-icon"
@@ -1513,6 +1435,13 @@ export default function App() {
           className={`workspace-sidebar ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileNavOpen ? "mobile-nav-open" : ""}`}
           data-testid="workspace-sidebar"
         >
+          {stats ? (
+            <p className="workspace-sidebar-library" data-testid="library-stats-chip">
+              {stats.plex_server_name
+                ? `${stats.plex_server_name} · ${stats.movies} movies · ${stats.shows} shows`
+                : `${stats.movies} movies · ${stats.shows} shows`}
+            </p>
+          ) : null}
           <div className="workspace-sidebar-top">
             <p className="eyebrow workspace-sidebar-eyebrow">Conversations</p>
             <button
@@ -1526,33 +1455,35 @@ export default function App() {
               {sidebarCollapsed ? "»" : "«"}
             </button>
           </div>
-          <div className="sidebar-explore-panel" data-testid="sidebar-explore-panel">
+          <ThreadList
+            threads={threads}
+            activeSessionId={activeSessionId}
+            onSelect={switchThread}
+            onCreate={handleCreateThread}
+            onDelete={handleDeleteThread}
+            hideHeader
+            personaLookup={personaLookup}
+          />
+          {undoToast ? (
+            <UndoToast
+              message={undoToast.message}
+              onUndo={handleUndoDeleteThread}
+              onDismiss={() => {
+                commitPendingDelete();
+              }}
+            />
+          ) : null}
+          <div className="sidebar-bottom-actions" data-testid="sidebar-bottom-actions">
             <Link
               to="/explore"
-              className="watchlist-panel-toggle ghost sidebar-explore-link"
+              className="watchlist-panel-toggle ghost sidebar-bottom-link"
               data-testid="sidebar-explore"
               onClick={() => setMobileNavOpen(false)}
             >
               Explore
             </Link>
+            <WatchlistPanel count={watchlistPins.length} />
           </div>
-          <div className="workspace-sidebar-scroll">
-            <ThreadList
-              threads={threads}
-              activeSessionId={activeSessionId}
-              onSelect={switchThread}
-              onCreate={handleCreateThread}
-              onDelete={handleDeleteThread}
-              hideHeader
-              personaLookup={personaLookup}
-            />
-          </div>
-          <WatchlistPanel
-            pins={watchlistPins}
-            open={watchlistOpen}
-            onToggle={() => setWatchlistOpen((open) => !open)}
-            onRemove={(pin) => handleToggleWatchlistPin(pin, pin)}
-          />
           <StatusDock
             jobs={jobs}
             jobStatusPhrases={personaUi?.job_status_phrases}
@@ -1671,37 +1602,6 @@ export default function App() {
             ) : null}
             <NewReplyChip visible={showNewReplyChip} onClick={() => scrollToLatestTurn("smooth")} />
           </div>
-
-          {tonightStripVisible(tonightItems, {
-            loading: tonightLoading,
-            dismissed: tonightDismissed,
-          }) ? (
-            <TonightStrip
-              items={tonightItems}
-              loading={tonightLoading}
-              onDismiss={() => {
-                setTonightDismissed(true);
-                try {
-                  sessionStorage.setItem(TONIGHT_STRIP_DISMISS_KEY, "1");
-                } catch {
-                  // sessionStorage unavailable
-                }
-              }}
-              onPick={(item) => {
-                if (item?.title) sendMessage(`Tell me more about ${item.title}`);
-              }}
-            />
-          ) : null}
-
-          {undoToast ? (
-            <UndoToast
-              message={undoToast.message}
-              onUndo={handleUndoDeleteThread}
-              onDismiss={() => {
-                commitPendingDelete();
-              }}
-            />
-          ) : null}
 
           <form
             className="composer composer-raised"

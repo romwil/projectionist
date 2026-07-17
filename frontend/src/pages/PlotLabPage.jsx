@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   getLibraryMotifs,
@@ -13,11 +13,23 @@ import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
 import {
+  DEFAULT_PLOT_LAB_PAGE_SIZE,
+  PLOT_LAB_MOTIF_CATALOG_LIMIT,
+  PLOT_LAB_PAGE_SIZES,
   buildMotifQueryParams,
+  feedPaginationSummary,
   normalizeFeed,
+  normalizeMediaTypeFilter,
   normalizeMotifFacets,
+  normalizePageSize,
   toggleMotifSelection,
 } from "../lib/exploreFeeds.js";
+
+const MEDIA_TABS = [
+  { id: "all", label: "All", mediaType: null },
+  { id: "movie", label: "Movies", mediaType: "movie" },
+  { id: "show", label: "TV Shows", mediaType: "show" },
+];
 
 function FeedRail({ testId, items, loading }) {
   if (loading) {
@@ -37,13 +49,72 @@ function FeedRail({ testId, items, loading }) {
   );
 }
 
+function MotifWallPagination({ summary, pageSize, onPageChange, onPageSizeChange }) {
+  if (!summary.total && !summary.returned) return null;
+  const from = summary.total ? summary.offset + 1 : 0;
+  const to = summary.offset + summary.returned;
+  return (
+    <div className="explore-section-pagination plot-lab-pagination" data-testid="plot-lab-pagination">
+      <p className="explore-section-pagination-summary" data-testid="plot-lab-page-summary">
+        Showing {from}–{to} of {summary.total}
+        {summary.pageCount > 1 ? ` · Page ${summary.page} of ${summary.pageCount}` : ""}
+      </p>
+      <div className="explore-section-pagination-controls">
+        <label className="explore-section-page-size">
+          <span>Per page</span>
+          <select
+            value={pageSize}
+            data-testid="plot-lab-page-size"
+            onChange={(event) => onPageSizeChange(Number(event.target.value))}
+          >
+            {PLOT_LAB_PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="explore-section-page-nav">
+          <button
+            type="button"
+            className="ghost"
+            data-testid="plot-lab-prev"
+            disabled={!summary.hasPrev}
+            onClick={() => onPageChange(summary.page - 1)}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            data-testid="plot-lab-next"
+            disabled={!summary.hasMore}
+            onClick={() => onPageChange(summary.page + 1)}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function PlotLabPage() {
   const { isOwner, multiUserEnabled } = useAuthGate();
   const [motifs, setMotifs] = useState([]);
   const [motifsNote, setMotifsNote] = useState("");
   const [motifsLoading, setMotifsLoading] = useState(true);
   const [selectedMotifs, setSelectedMotifs] = useState([]);
-  const [motifWall, setMotifWall] = useState({ loading: false, items: [], note: null, error: "" });
+  const [mediaType, setMediaType] = useState(null);
+  const [pageSize, setPageSize] = useState(DEFAULT_PLOT_LAB_PAGE_SIZE);
+  const [offset, setOffset] = useState(0);
+  const [motifWall, setMotifWall] = useState({
+    loading: false,
+    items: [],
+    note: null,
+    error: "",
+    payload: null,
+  });
   const [seed, setSeed] = useState(null);
   const [seedQuery, setSeedQuery] = useState("");
   const [seedHits, setSeedHits] = useState([]);
@@ -53,7 +124,7 @@ export default function PlotLabPage() {
   useEffect(() => {
     let cancelled = false;
     setMotifsLoading(true);
-    getLibraryMotifs({ limit: 40 })
+    getLibraryMotifs({ limit: PLOT_LAB_MOTIF_CATALOG_LIMIT })
       .then((data) => {
         if (cancelled) return;
         const facets = normalizeMotifFacets(data);
@@ -78,12 +149,16 @@ export default function PlotLabPage() {
 
   useEffect(() => {
     if (!selectedMotifs.length) {
-      setMotifWall({ loading: false, items: [], note: null, error: "" });
+      setMotifWall({ loading: false, items: [], note: null, error: "", payload: null });
       return undefined;
     }
     let cancelled = false;
     setMotifWall((prev) => ({ ...prev, loading: true, error: "" }));
-    const params = buildMotifQueryParams(selectedMotifs, { limit: 24 });
+    const params = buildMotifQueryParams(selectedMotifs, {
+      limit: pageSize,
+      offset,
+      mediaType,
+    });
     queryLibrary(Object.fromEntries(params.entries()))
       .then((data) => {
         if (cancelled) return;
@@ -93,6 +168,7 @@ export default function PlotLabPage() {
           items,
           note: items.length ? null : "No titles match the selected motifs.",
           error: "",
+          payload: data,
         });
       })
       .catch((err) => {
@@ -102,12 +178,13 @@ export default function PlotLabPage() {
           items: [],
           note: null,
           error: err.message || "Could not filter by motifs.",
+          payload: null,
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [selectedMotifs]);
+  }, [selectedMotifs, mediaType, pageSize, offset]);
 
   useEffect(() => {
     if (!seed?.id) {
@@ -151,7 +228,10 @@ export default function PlotLabPage() {
     }
     let cancelled = false;
     const timer = setTimeout(() => {
-      queryLibrary({ query: q, limit: 6 })
+      const filters = { query: q, limit: 6 };
+      const media = normalizeMediaTypeFilter(mediaType);
+      if (media) filters.media_type = media;
+      queryLibrary(filters)
         .then((data) => {
           if (cancelled) return;
           setSeedHits(Array.isArray(data?.items) ? data.items : []);
@@ -164,10 +244,41 @@ export default function PlotLabPage() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [seedQuery]);
+  }, [seedQuery, mediaType]);
+
+  const wallSummary = useMemo(
+    () =>
+      feedPaginationSummary({
+        ...(motifWall.payload || {}),
+        items: motifWall.items,
+        total: motifWall.payload?.total_matched ?? motifWall.payload?.total ?? 0,
+        offset,
+        limit: pageSize,
+      }),
+    [motifWall.items, motifWall.payload, offset, pageSize],
+  );
+
+  const activeMediaTab =
+    MEDIA_TABS.find((tab) => tab.mediaType === mediaType)?.id || "all";
 
   function handleToggleMotif(value) {
     setSelectedMotifs((prev) => toggleMotifSelection(prev, value));
+    setOffset(0);
+  }
+
+  function handleMediaTab(nextType) {
+    setMediaType(normalizeMediaTypeFilter(nextType));
+    setOffset(0);
+  }
+
+  function handlePageSizeChange(nextSize) {
+    setPageSize(normalizePageSize(nextSize, PLOT_LAB_PAGE_SIZES));
+    setOffset(0);
+  }
+
+  function handlePageChange(page) {
+    const nextPage = Math.max(1, page);
+    setOffset((nextPage - 1) * pageSize);
   }
 
   function handleSeed(item) {
@@ -195,24 +306,49 @@ export default function PlotLabPage() {
         ) : null}
 
         {motifs.length ? (
-          <div className="explore-motif-chips" data-testid="explore-motif-chips">
-            {motifs.map((facet) => {
-              const active = selectedMotifs.includes(facet.value);
-              return (
+          <>
+            <div
+              className="explore-media-tabs plot-lab-media-tabs"
+              role="tablist"
+              aria-label="Media type"
+              data-testid="plot-lab-media-tabs"
+            >
+              {MEDIA_TABS.map((tab) => (
                 <button
-                  key={facet.value}
+                  key={tab.id}
                   type="button"
-                  className={`explore-motif-chip${active ? " is-active" : ""}`}
-                  data-testid="explore-motif-chip"
-                  aria-pressed={active}
-                  onClick={() => handleToggleMotif(facet.value)}
+                  role="tab"
+                  aria-selected={activeMediaTab === tab.id}
+                  className={`explore-media-tab${activeMediaTab === tab.id ? " is-active" : ""}`}
+                  data-testid={`plot-lab-tab-${tab.id}`}
+                  onClick={() => handleMediaTab(tab.mediaType)}
                 >
-                  {facet.value}
-                  {facet.count ? <span className="explore-motif-count">{facet.count}</span> : null}
+                  {tab.label}
                 </button>
-              );
-            })}
-          </div>
+              ))}
+            </div>
+            <div
+              className="explore-motif-chips explore-motif-chips-scroll"
+              data-testid="explore-motif-chips"
+            >
+              {motifs.map((facet) => {
+                const active = selectedMotifs.includes(facet.value);
+                return (
+                  <button
+                    key={facet.value}
+                    type="button"
+                    className={`explore-motif-chip${active ? " is-active" : ""}`}
+                    data-testid="explore-motif-chip"
+                    aria-pressed={active}
+                    onClick={() => handleToggleMotif(facet.value)}
+                  >
+                    {facet.value}
+                    {facet.count ? <span className="explore-motif-count">{facet.count}</span> : null}
+                  </button>
+                );
+              })}
+            </div>
+          </>
         ) : null}
 
         {selectedMotifs.length ? (
@@ -226,17 +362,31 @@ export default function PlotLabPage() {
             {motifWall.loading ? (
               <p className="status status-secondary">Filtering titles…</p>
             ) : motifWall.items.length ? (
-              <div className="explore-poster-wall">
-                {motifWall.items.map((item) => (
-                  <LibraryMediaCard
-                    key={item.id || item.rating_key || item.title}
-                    item={item}
-                    onSeed={handleSeed}
-                    showRecommend={multiUserEnabled}
-                    onRecommend={multiUserEnabled ? setRecommendItem : undefined}
-                  />
-                ))}
-              </div>
+              <>
+                <MotifWallPagination
+                  summary={wallSummary}
+                  pageSize={pageSize}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+                <div className="explore-poster-wall">
+                  {motifWall.items.map((item) => (
+                    <LibraryMediaCard
+                      key={item.id || item.rating_key || item.title}
+                      item={item}
+                      onSeed={handleSeed}
+                      showRecommend={multiUserEnabled}
+                      onRecommend={multiUserEnabled ? setRecommendItem : undefined}
+                    />
+                  ))}
+                </div>
+                <MotifWallPagination
+                  summary={wallSummary}
+                  pageSize={pageSize}
+                  onPageChange={handlePageChange}
+                  onPageSizeChange={handlePageSizeChange}
+                />
+              </>
             ) : null}
           </div>
         ) : null}

@@ -2,14 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   addWatchlistPin,
+  deleteLibraryItems,
   getExploreFeedRecentReleases,
   getExploreFeedRecentlyAdded,
 } from "../api/client";
 import BackLink from "../components/BackLink.jsx";
+import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
 import LibraryMediaCard from "../components/LibraryMediaCard.jsx";
+import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { exploreSectionPath } from "../lib/browseLinks.js";
 import { ROUTES } from "../lib/backNav.js";
+import { partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
 import {
   EXPLORE_PAGE_SIZES,
   EXPLORE_SECTION_SORTS,
@@ -37,34 +41,43 @@ function itemKey(item) {
   return `${item?.media_type || ""}:${item?.tmdb_id || item?.rating_key || item?.title || ""}`;
 }
 
-function SectionPagination({ summary, onPageChange, onPageSizeChange, pageSize }) {
+function SectionPagination({ summary, onPageChange, onPageSizeChange, pageSize, compact = false }) {
   if (!summary.total && !summary.returned) return null;
+  const suffix = compact ? "-footer" : "";
   return (
-    <div className="explore-section-pagination" data-testid="explore-section-pagination">
-      <p className="explore-section-pagination-summary" data-testid="explore-section-page-summary">
+    <div
+      className={`explore-section-pagination${compact ? " is-compact" : ""}`}
+      data-testid={`explore-section-pagination${suffix}`}
+    >
+      <p
+        className="explore-section-pagination-summary"
+        data-testid={`explore-section-page-summary${suffix}`}
+      >
         Page {summary.page} of {summary.pageCount}
         {summary.total ? ` · ${summary.total} titles` : ""}
       </p>
       <div className="explore-section-pagination-controls">
-        <label className="explore-section-page-size">
-          <span>Per page</span>
-          <select
-            value={pageSize}
-            data-testid="explore-section-page-size"
-            onChange={(event) => onPageSizeChange(Number(event.target.value))}
-          >
-            {EXPLORE_PAGE_SIZES.map((size) => (
-              <option key={size} value={size}>
-                {size}
-              </option>
-            ))}
-          </select>
-        </label>
+        {compact ? null : (
+          <label className="explore-section-page-size">
+            <span>Per page</span>
+            <select
+              value={pageSize}
+              data-testid="explore-section-page-size"
+              onChange={(event) => onPageSizeChange(Number(event.target.value))}
+            >
+              {EXPLORE_PAGE_SIZES.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <div className="explore-section-page-nav">
           <button
             type="button"
             className="ghost"
-            data-testid="explore-section-prev"
+            data-testid={`explore-section-prev${suffix}`}
             disabled={!summary.hasPrev}
             onClick={() => onPageChange(summary.page - 1)}
           >
@@ -73,7 +86,7 @@ function SectionPagination({ summary, onPageChange, onPageSizeChange, pageSize }
           <button
             type="button"
             className="ghost"
-            data-testid="explore-section-next"
+            data-testid={`explore-section-next${suffix}`}
             disabled={!summary.hasMore}
             onClick={() => onPageChange(summary.page + 1)}
           >
@@ -89,6 +102,7 @@ export default function ExploreSectionPage() {
   const { sectionId } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { isOwner } = useAuthGate();
   const config = getExploreSectionConfig(sectionId);
   const query = useMemo(() => parseExploreSectionQuery(searchParams), [searchParams]);
   const [state, setState] = useState({
@@ -99,8 +113,11 @@ export default function ExploreSectionPage() {
     payload: null,
   });
   const [selected, setSelected] = useState(() => new Set());
-  const [pinStatus, setPinStatus] = useState("");
+  const [actionStatus, setActionStatus] = useState("");
   const [pinning, setPinning] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     if (!config) return undefined;
@@ -109,7 +126,9 @@ export default function ExploreSectionPage() {
     let cancelled = false;
     setState((prev) => ({ ...prev, loading: true, error: "" }));
     setSelected(new Set());
-    setPinStatus("");
+    setActionStatus("");
+    setDeleteOpen(false);
+    setDeleteError("");
     loader({
       limit: query.limit,
       offset: query.offset,
@@ -157,6 +176,11 @@ export default function ExploreSectionPage() {
     [sortedItems],
   );
 
+  const deletePartition = useMemo(
+    () => partitionBulkDeleteSelection(sortedItems, selected, itemKey),
+    [sortedItems, selected],
+  );
+
   function updateQuery(updates) {
     const params = buildExploreSectionQuery(query, updates);
     setSearchParams(params, { replace: true });
@@ -199,7 +223,7 @@ export default function ExploreSectionPage() {
     const targets = sortedItems.filter((item) => selected.has(itemKey(item)) && allowWatchlistPin(item));
     if (!targets.length) return;
     setPinning(true);
-    setPinStatus("");
+    setActionStatus("");
     let ok = 0;
     let failed = 0;
     for (const item of targets) {
@@ -216,12 +240,57 @@ export default function ExploreSectionPage() {
       }
     }
     setPinning(false);
-    setPinStatus(
+    setActionStatus(
       failed
         ? `Pinned ${ok}; ${failed} failed.`
         : `Pinned ${ok} title${ok === 1 ? "" : "s"} to watchlist.`,
     );
     setSelected(new Set());
+  }
+
+  function openBulkDelete() {
+    if (!isOwner || !selected.size) return;
+    setDeleteError("");
+    setDeleteOpen(true);
+  }
+
+  async function handleBulkDeleteConfirm() {
+    if (!isOwner || deleting) return;
+    const { ratingKeys, titles } = deletePartition;
+    if (!ratingKeys.length) return;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const result = await deleteLibraryItems(ratingKeys);
+      const deletedCount = Number(result?.deleted) || 0;
+      const drop = new Set(ratingKeys);
+      setState((prev) => {
+        const nextItems = prev.items.filter((item) => {
+          const key = String(item?.rating_key || item?.plex_rating_key || "").trim();
+          return !key || !drop.has(key);
+        });
+        const prevTotal = Number(prev.payload?.total);
+        const nextTotal = Number.isFinite(prevTotal)
+          ? Math.max(0, prevTotal - deletedCount)
+          : nextItems.length;
+        return {
+          ...prev,
+          items: nextItems,
+          payload: prev.payload ? { ...prev.payload, items: nextItems, total: nextTotal } : prev.payload,
+        };
+      });
+      setSelected(new Set());
+      setDeleteOpen(false);
+      setActionStatus(
+        deletedCount
+          ? `Removed ${deletedCount} title${deletedCount === 1 ? "" : "s"} from the CuratorX library index.`
+          : `No matching library records for ${titles.length} selected title${titles.length === 1 ? "" : "s"}.`,
+      );
+    } catch (err) {
+      setDeleteError(err.message || "Could not delete selected titles.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   if (!config) {
@@ -244,6 +313,7 @@ export default function ExploreSectionPage() {
 
   const activeTab =
     MEDIA_TABS.find((tab) => tab.mediaType === query.mediaType)?.id || "all";
+  const showToolbarPagination = Boolean(summary.total || summary.returned);
 
   return (
     <AppShell
@@ -287,62 +357,122 @@ export default function ExploreSectionPage() {
       ) : null}
 
       <div className="explore-section-toolbar" data-testid="explore-section-toolbar">
-        <label className="explore-section-sort">
-          <span>Sort</span>
-          <select
-            value={query.sort || "default"}
-            data-testid="explore-section-sort"
-            onChange={(event) => updateQuery({ sort: event.target.value, offset: query.offset })}
-          >
-            {EXPLORE_SECTION_SORTS.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="explore-section-bulk" data-testid="explore-section-bulk">
-          <button
-            type="button"
-            className="ghost"
-            data-testid="explore-section-select-all"
-            disabled={!pinnableKeys.size}
-            onClick={selectAllOnPage}
-          >
-            Select page
-          </button>
-          <button
-            type="button"
-            className="ghost"
-            data-testid="explore-section-clear-selection"
-            disabled={!selected.size}
-            onClick={clearSelection}
-          >
-            Clear
-          </button>
-          <button
-            type="button"
-            className="ghost"
-            data-testid="explore-section-bulk-pin"
-            disabled={!selected.size || pinning}
-            onClick={handleBulkPin}
-          >
-            {pinning ? "Pinning…" : `Pin ${selected.size || ""} to watchlist`.trim()}
-          </button>
+        <div className="explore-section-toolbar-row">
+          <div className="explore-section-toolbar-primary">
+            <label className="explore-section-sort">
+              <span>Sort</span>
+              <select
+                value={query.sort || "default"}
+                data-testid="explore-section-sort"
+                onChange={(event) => updateQuery({ sort: event.target.value, offset: query.offset })}
+              >
+                {EXPLORE_SECTION_SORTS.map((opt) => (
+                  <option key={opt.id} value={opt.id}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {showToolbarPagination ? (
+              <label className="explore-section-page-size">
+                <span>Per page</span>
+                <select
+                  value={query.limit}
+                  data-testid="explore-section-page-size"
+                  onChange={(event) => handlePageSizeChange(Number(event.target.value))}
+                >
+                  {EXPLORE_PAGE_SIZES.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
+            {selected.size ? (
+              <p className="explore-section-selection-summary" data-testid="explore-section-selection-summary">
+                {selected.size} selected
+                {isOwner && deletePartition.unavailable.length
+                  ? ` · ${deletePartition.unavailable.length} not deletable`
+                  : ""}
+              </p>
+            ) : null}
+          </div>
+          <div className="explore-section-bulk" data-testid="explore-section-bulk">
+            <button
+              type="button"
+              className="ghost"
+              data-testid="explore-section-select-all"
+              disabled={!pinnableKeys.size}
+              onClick={selectAllOnPage}
+            >
+              Select page
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              data-testid="explore-section-clear-selection"
+              disabled={!selected.size}
+              onClick={clearSelection}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              data-testid="explore-section-bulk-pin"
+              disabled={!selected.size || pinning}
+              onClick={handleBulkPin}
+            >
+              {pinning ? "Pinning…" : `Pin ${selected.size || ""} to watchlist`.trim()}
+            </button>
+            {isOwner ? (
+              <button
+                type="button"
+                className="btn-danger"
+                data-testid="explore-section-bulk-delete"
+                disabled={!selected.size || !deletePartition.ratingKeys.length || deleting}
+                onClick={openBulkDelete}
+              >
+                Delete
+              </button>
+            ) : null}
+          </div>
         </div>
+        {showToolbarPagination ? (
+          <div className="explore-section-toolbar-row explore-section-toolbar-nav">
+            <p className="explore-section-pagination-summary" data-testid="explore-section-page-summary">
+              Page {summary.page} of {summary.pageCount}
+              {summary.total ? ` · ${summary.total} titles` : ""}
+            </p>
+            <div className="explore-section-page-nav">
+              <button
+                type="button"
+                className="ghost"
+                data-testid="explore-section-prev"
+                disabled={!summary.hasPrev}
+                onClick={() => handlePageChange(summary.page - 1)}
+              >
+                Previous
+              </button>
+              <button
+                type="button"
+                className="ghost"
+                data-testid="explore-section-next"
+                disabled={!summary.hasMore}
+                onClick={() => handlePageChange(summary.page + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
-      {pinStatus ? (
-        <p className="status status-secondary" data-testid="explore-section-pin-status">
-          {pinStatus}
+      {actionStatus ? (
+        <p className="status status-secondary explore-section-action-status" data-testid="explore-section-pin-status">
+          {actionStatus}
         </p>
       ) : null}
-
-      <SectionPagination
-        summary={summary}
-        pageSize={query.limit}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-      />
 
       <section className="explore-section-results" data-testid="explore-section-results">
         {state.loading ? <p className="status status-secondary">Loading…</p> : null}
@@ -387,6 +517,7 @@ export default function ExploreSectionPage() {
         pageSize={query.limit}
         onPageChange={handlePageChange}
         onPageSizeChange={handlePageSizeChange}
+        compact
       />
 
       {query.mediaType ? (
@@ -401,6 +532,20 @@ export default function ExploreSectionPage() {
           </button>
         </p>
       ) : null}
+
+      <BulkLibraryDeleteDialog
+        open={deleteOpen}
+        titles={deletePartition.titles}
+        unavailableCount={deletePartition.unavailable.length}
+        loading={deleting}
+        error={deleteError}
+        onCancel={() => {
+          if (deleting) return;
+          setDeleteOpen(false);
+          setDeleteError("");
+        }}
+        onConfirm={handleBulkDeleteConfirm}
+      />
     </AppShell>
   );
 }

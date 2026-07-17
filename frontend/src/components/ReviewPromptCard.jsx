@@ -1,6 +1,9 @@
 import { useState } from "react";
-
-const STAR_STEPS = [0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5];
+import {
+  formatStarsLabel,
+  starFillForValue,
+  starValueFromKey,
+} from "../lib/starRating.js";
 
 const DEFAULT_NEAR_COMPLETE_TEMPLATE =
   "{curator_name} noticed you're {pct}% through **{title}**. Quick rating while it's fresh?";
@@ -22,11 +25,7 @@ export function formatReviewPromptMessage(
     .replaceAll("{template_key}", templateKey);
 }
 
-export function formatStarsLabel(stars) {
-  const value = Number(stars);
-  if (!Number.isFinite(value) || value <= 0) return "";
-  return Number.isInteger(value) ? String(value) : value.toFixed(1);
-}
+export { formatStarsLabel };
 
 export function StarRatingPicker({
   value,
@@ -37,43 +36,68 @@ export function StarRatingPicker({
 }) {
   const [hover, setHover] = useState(0);
   const display = hover || value || 0;
+  const current = Number(value) || 0;
+
+  function commit(next) {
+    if (disabled) return;
+    onChange?.(next);
+  }
+
+  function handleKeyDown(event) {
+    if (disabled) return;
+    const next = starValueFromKey(event.key, current);
+    if (next == null) return;
+    event.preventDefault();
+    commit(next);
+  }
 
   return (
     <div
       className={`review-star-picker ${compact ? "compact" : ""}`}
-      role="group"
+      role="slider"
+      tabIndex={disabled ? -1 : 0}
       aria-label={label}
+      aria-valuemin={0.5}
+      aria-valuemax={5}
+      aria-valuenow={current || undefined}
+      aria-valuetext={current ? `${formatStarsLabel(current)} stars` : "No rating"}
+      aria-disabled={disabled || undefined}
+      data-testid="review-star-picker"
+      onKeyDown={handleKeyDown}
       onMouseLeave={() => setHover(0)}
     >
-      {STAR_STEPS.filter((step) => Number.isInteger(step)).map((full) => {
+      {[1, 2, 3, 4, 5].map((full) => {
         const half = full - 0.5;
-        const fill = display >= full ? "full" : display >= half ? "half" : "empty";
+        const fill = starFillForValue(display, full);
         return (
-          <span key={full} className="review-star-unit">
+          <span key={full} className="review-star-unit" data-testid={`review-star-unit-${full}`}>
+            <span className={`review-star-glyph ${fill}`} aria-hidden="true">
+              ★
+            </span>
             <button
               type="button"
-              className="review-star-half left"
+              className="review-star-hit left"
               data-testid={`review-star-${half}`}
               aria-label={`${half} stars`}
-              aria-pressed={value === half}
+              aria-pressed={current === half}
               disabled={disabled}
+              tabIndex={-1}
               onMouseEnter={() => setHover(half)}
               onFocus={() => setHover(half)}
-              onClick={() => onChange?.(half)}
+              onClick={() => commit(half)}
             />
             <button
               type="button"
-              className={`review-star-button ${fill}`}
+              className="review-star-hit right"
               data-testid={`review-star-${full}`}
               aria-label={`${full} star${full === 1 ? "" : "s"}`}
-              aria-pressed={value >= full}
+              aria-pressed={current === full}
               disabled={disabled}
+              tabIndex={-1}
               onMouseEnter={() => setHover(full)}
               onFocus={() => setHover(full)}
-              onClick={() => onChange?.(full)}
-            >
-              ★
-            </button>
+              onClick={() => commit(full)}
+            />
           </span>
         );
       })}
@@ -139,7 +163,10 @@ export default function ReviewPromptCard({
   async function handleKeepPlexRating() {
     setPlexConflict(null);
     setSaving(false);
-    if (!String(prompt.id || "").startsWith("slash-rate-") && !String(prompt.id || "").startsWith("viewed-unrated-")) {
+    if (
+      !String(prompt.id || "").startsWith("slash-rate-") &&
+      !String(prompt.id || "").startsWith("viewed-unrated-")
+    ) {
       await onDismissed?.(prompt);
     }
   }

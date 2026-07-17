@@ -15,6 +15,13 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Deque, Dict, List, Optional
 
+from curatorx.scheduler.run_outcome import (
+    _is_error_status,
+    build_run_summary,
+    extract_outcome_detail,
+    format_run_outcome_message,
+)
+
 
 MAX_EVENTS = 1000
 MAX_EVENTS_PER_TASK = 400
@@ -116,21 +123,15 @@ class TaskRunLogStore:
             run_id = self._current.run_id if self._current and self._current.task == task else ""
             started_at = self._current.started_at if self._current and self._current.task == task else None
             finished_at = time.time()
-            summary: Dict[str, Any] = {
-                "status": status,
-                "duration_ms": duration_ms,
-            }
-            if error:
-                summary["error"] = error
-            if isinstance(result, dict):
-                # Keep payload small for the monitor UI.
-                for key in ("status", "enriched", "errors", "caches_built", "found", "reason", "count", "processed"):
-                    if key in result:
-                        summary[key] = result[key]
-            level = "error" if status == "error" or (error is not None) else "status"
-            message = f"Finished — {status}"
-            if error:
-                message = f"Failed — {error}"
+            run_summary = build_run_summary(status, error=error, result=result)
+            summary = extract_outcome_detail(status, error=error, result=result)
+            summary["duration_ms"] = duration_ms
+            if run_summary.get("summary_line"):
+                summary["summary_line"] = run_summary["summary_line"]
+            if run_summary.get("metrics"):
+                summary["metrics"] = run_summary["metrics"]
+            level = "error" if _is_error_status(status) or (error is not None) else "status"
+            message = format_run_outcome_message(status, error=error, result=result)
             self._append_unlocked(task, run_id or "unknown", level, message, summary)
             self._last_by_task[task] = {
                 "run_id": run_id or None,
@@ -139,6 +140,9 @@ class TaskRunLogStore:
                 "status": status,
                 "duration_ms": duration_ms,
                 "error": error,
+                "outcome_reason": run_summary.get("outcome_reason") or summary.get("outcome_reason"),
+                "summary_line": run_summary.get("summary_line"),
+                "metrics": run_summary.get("metrics") or {},
                 "summary": summary,
             }
             if self._current and self._current.task == task:

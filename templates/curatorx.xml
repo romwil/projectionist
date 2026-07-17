@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.8.4 -->
+<!-- Unraid Community Applications template — CuratorX 1.8.5 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,12 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.8.5
+- Watchlist explore page (/watchlist) with bulk Remove/Delete and TitleDetailDrawer; Settings → Watchlist sync prefs only
+- Plex Discover watchlist sync paginates full list; title detail watched-state, reviews, trailer CSP, bulk delete
+- Settings card redesign; Admin Advanced panel cards; scheduled-task skip/summary messaging
+- CuratorX brand/activity X; sidebar toast placement; removed Tonight strip; Plot Lab filters/pagination
+
 ### 1.8.4
 - AppShell chrome on Explore/Tags/Plot Lab/tag/person/section/title; AppNav Watchlist → chat pin panel
 - What’s New modal + About release notes; generate-release-notes.sh wired into docker-release

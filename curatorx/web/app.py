@@ -81,6 +81,7 @@ from curatorx.library.query import (
 )
 from curatorx.library.search import row_to_title_card
 from curatorx.library.titles import get_title_detail
+from curatorx.library.watch_state import set_library_item_watched, sync_watched_to_plex
 from curatorx.models.schemas import (
     ActionConfirmRequest,
     ActiveLensPayload,
@@ -305,6 +306,7 @@ _SECURITY_HEADERS = {
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
         "connect-src 'self'; "
+        "frame-src https://www.youtube.com https://www.youtube-nocookie.com; "
         "frame-ancestors 'none'"
     ),
     "Referrer-Policy": "strict-origin-when-cross-origin",
@@ -443,6 +445,11 @@ class AuthMeUpdatePayload(BaseModel):
     preferred_name: Optional[str] = Field(default=None, max_length=80)
     ui_font_size: Optional[str] = Field(default=None, pattern="^(small|medium|large)$")
     ui_theme: Optional[str] = Field(default=None, pattern="^(lights_up|lights_down|system)$")
+
+
+class LibraryItemWatchedPayload(BaseModel):
+    rating_key: str = Field(min_length=1, max_length=64)
+    watched: bool = True
 
 
 class RecommendPayload(BaseModel):
@@ -694,6 +701,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
         payload["user"] = {
             "id": user.id,
             "display_name": user.display_name,
+            "preferred_name": user.preferred_name,
             "role": user.role,
             "seerr_user_id": user.seerr_user_id,
             "avatar_url": user.avatar_url,
@@ -742,6 +750,11 @@ def config_page() -> HTMLResponse:
 @app.get("/explore/section/{section_id}", response_class=HTMLResponse)
 def explore_page(section_id: str = "") -> HTMLResponse:
     del section_id
+    return _serve_index()
+
+
+@app.get("/watchlist", response_class=HTMLResponse)
+def watchlist_page() -> HTMLResponse:
     return _serve_index()
 
 
@@ -1427,17 +1440,81 @@ def refresh_library_purge_candidates(
     return _sanitize_library_payload(payload, user)
 
 
+def _normalize_rating_keys(payload: Dict[str, Any]) -> List[str]:
+    rating_keys = payload.get("rating_keys", [])
+    if not rating_keys or not isinstance(rating_keys, list):
+        raise HTTPException(status_code=400, detail="rating_keys must be a non-empty list")
+    keys = [str(key).strip() for key in rating_keys if str(key).strip()]
+    if not keys:
+        raise HTTPException(status_code=400, detail="rating_keys must be a non-empty list")
+    return keys
+
+
+@app.post("/api/library/items/delete")
+def delete_library_items(
+    payload: Dict[str, Any],
+    user=Depends(require_role("owner")),
+):
+    """Owner-only: remove CuratorX library index records by rating_key.
+
+    Does not delete Plex media files. Titles still present in Plex may return
+    on the next library sync.
+    """
+    keys = _normalize_rating_keys(payload)
+    db = _db()
+    deleted = db.delete_library_items_by_rating_keys(keys)
+    drop_cached_purge_keys(db, keys)
+    del user
+    return {"deleted": deleted}
+
+
+@app.post("/api/library/items/watched")
+def set_library_item_watched_endpoint(
+    payload: LibraryItemWatchedPayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Mark an in-library title watched/unwatched locally and on Plex when configured.
+
+    Guests are blocked when multi-user is enabled. Plex uses the caller's
+    Sign-in-with-Plex token when present; otherwise the server ``plex_token``
+    (admin/account watched state — household-wide).
+    """
+    settings = _settings()
+    if settings.features.multi_user_enabled and user.role == "guest":
+        raise HTTPException(status_code=403, detail="Guests cannot change watched state")
+
+    db = _db()
+    try:
+        item = set_library_item_watched(
+            db,
+            payload.rating_key,
+            watched=payload.watched,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=404 if "not found" in str(error).lower() else 400,
+            detail=_safe_error_detail(error, "Could not update watched state"),
+        ) from error
+
+    plex = sync_watched_to_plex(
+        db,
+        settings,
+        payload.rating_key,
+        watched=payload.watched,
+        user_id=_scoped_user_id(user) or user.id,
+    )
+    return {**item, **plex}
+
+
 @app.post("/api/library/purge-candidates/delete")
 def delete_purge_candidates(
     payload: Dict[str, Any],
     user=Depends(require_role("owner")),
 ):
-    rating_keys = payload.get("rating_keys", [])
-    if not rating_keys or not isinstance(rating_keys, list):
-        raise HTTPException(status_code=400, detail="rating_keys must be a non-empty list")
+    keys = _normalize_rating_keys(payload)
     db = _db()
-    deleted = db.delete_library_items_by_rating_keys(rating_keys)
-    drop_cached_purge_keys(db, [str(key) for key in rating_keys])
+    deleted = db.delete_library_items_by_rating_keys(keys)
+    drop_cached_purge_keys(db, keys)
     del user
     return {"deleted": deleted}
 
@@ -3067,13 +3144,57 @@ def get_engagement_streak() -> EngagementStreakResponse:
 
 
 @app.get("/api/watchlist", response_model=WatchlistListResponse)
-def list_watchlist(user=Depends(get_current_user_dep)) -> WatchlistListResponse:
+def list_watchlist(
+    enrich: bool = False,
+    user=Depends(get_current_user_dep),
+) -> WatchlistListResponse:
     user_id = user.id if _settings().features.multi_user_enabled else None
-    items = _db().list_watchlist_pins(user_id=user_id)
+    db = _db()
+    items = db.list_watchlist_pins(user_id=user_id)
+    if enrich and items:
+        from curatorx.watchlist.curate import enrich_watchlist_pins
+
+        items = enrich_watchlist_pins(db, items)
+        _attach_watchlist_posters(db, items)
     return WatchlistListResponse(
         items=[WatchlistPin(**item) for item in items],
         count=len(items),
     )
+
+
+def _attach_watchlist_posters(db, items: List[Dict[str, Any]]) -> None:
+    """Fill poster_url + year for enriched watchlist pins from the library index."""
+    pending = [item for item in items if not (item.get("poster_url") and item.get("year"))]
+    if not pending:
+        return
+    with db.connect() as conn:
+        for item in pending:
+            media_type = str(item.get("media_type") or "movie")
+            tmdb_id = item.get("tmdb_id")
+            tvdb_id = item.get("tvdb_id")
+            row = None
+            if media_type == "movie" and tmdb_id is not None:
+                row = conn.execute(
+                    "SELECT poster_url, year FROM library_items WHERE media_type='movie' AND tmdb_id=? LIMIT 1",
+                    (int(tmdb_id),),
+                ).fetchone()
+            elif media_type == "show" and tvdb_id is not None:
+                row = conn.execute(
+                    "SELECT poster_url, year FROM library_items WHERE media_type='show' AND tvdb_id=? LIMIT 1",
+                    (int(tvdb_id),),
+                ).fetchone()
+            elif media_type == "show" and tmdb_id is not None:
+                row = conn.execute(
+                    "SELECT poster_url, year FROM library_items WHERE media_type='show' AND tmdb_id=? LIMIT 1",
+                    (int(tmdb_id),),
+                ).fetchone()
+            if row is None:
+                continue
+            keys = set(row.keys())
+            if not item.get("poster_url") and "poster_url" in keys and row["poster_url"]:
+                item["poster_url"] = str(row["poster_url"])
+            if not item.get("year") and "year" in keys and row["year"] is not None:
+                item["year"] = int(row["year"])
 
 
 @app.get("/api/watchlist/sync")
@@ -3484,14 +3605,18 @@ def create_review(
         replace_plex_rating=payload.replace_plex_rating,
     )
     if saved.get("reason") == "plex_rating_conflict":
-        plex_stars = int(saved["plex_stars"])
+        plex_stars = float(saved["plex_stars"])
+        submitted_stars = float(saved["submitted_stars"])
+        plex_label = (
+            str(int(plex_stars)) if plex_stars == int(plex_stars) else str(plex_stars)
+        )
         raise HTTPException(
             status_code=409,
             detail={
                 "code": "plex_rating_conflict",
                 "plex_stars": plex_stars,
-                "submitted_stars": int(saved["submitted_stars"]),
-                "message": f"Plex has {plex_stars}★ — keep or replace?",
+                "submitted_stars": submitted_stars,
+                "message": f"Plex has {plex_label}★ — keep or replace?",
                 "review": saved,
             },
         )

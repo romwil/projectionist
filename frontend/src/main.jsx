@@ -16,6 +16,7 @@ import ProfilePage from "./pages/settings/ProfilePage";
 import VoicePage from "./pages/settings/VoicePage";
 import WatchlistSettingsPage from "./pages/settings/WatchlistSettingsPage";
 import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
+import WatchlistPage from "./pages/WatchlistPage";
 import ExplorePage from "./pages/ExplorePage";
 import ExploreSectionPage from "./pages/ExploreSectionPage";
 import PersonPage from "./pages/PersonPage";
@@ -35,6 +36,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/explore/tags" element={<TagsPage />} />
         <Route path="/explore/plot-lab" element={<PlotLabPage />} />
         <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
+        <Route path="/watchlist" element={<WatchlistPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/about" element={<AboutPage />} />

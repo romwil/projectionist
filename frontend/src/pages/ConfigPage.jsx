@@ -29,6 +29,7 @@ import {
   testService,
   updateUserRole,
 } from "../api/client";
+import AdvancedSettings from "../components/AdvancedSettings";
 import PersonaSection from "../components/PersonaSection";
 import {
   formatLastSyncRelative,
@@ -89,12 +90,7 @@ const FIELD_LABELS = {
   tv_page_size: "TV titles per sync page",
   library_enrich_workers: "Parallel enrich workers",
   library_sync_hour: "Preferred sync hour",
-  mcp_tmdb_poster_size: "MCP poster size",
-  mcp_tmdb_backdrop_size: "MCP backdrop size",
 };
-
-const MCP_POSTER_SIZES = ["w185", "w342", "w500", "w780"];
-const MCP_BACKDROP_SIZES = ["w300", "w780", "w1280", "original"];
 
 const FIELD_PLACEHOLDERS = {
   plex_url: "http://192.168.1.50:32400",
@@ -113,8 +109,6 @@ const FIELD_HELP = {
   movies_root: "Host path Radarr uses for movies (advanced; usually matches Radarr).",
   tv_root: "Host path Sonarr uses for TV (advanced; usually matches Sonarr).",
   library_enrich_workers: "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
-  mcp_tmdb_poster_size: "TMDB CDN size for MCP / privacy poster URLs (image.tmdb.org).",
-  mcp_tmdb_backdrop_size: "TMDB CDN size for MCP / privacy backdrop URLs.",
 };
 
 function fieldLabel(field) {
@@ -348,7 +342,6 @@ export default function ConfigPage() {
   const [onboardingHints, setOnboardingHints] = useState([]);
   const [savingPersona, setSavingPersona] = useState(false);
   const [plexCollapsed, setPlexCollapsed] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(() => section === "advanced");
   const [visibleSecrets, setVisibleSecrets] = useState({});
   const [libraryStats, setLibraryStats] = useState(null);
   const [libraryHealth, setLibraryHealth] = useState(null);
@@ -363,10 +356,6 @@ export default function ConfigPage() {
   const [mcpKeyBusy, setMcpKeyBusy] = useState(null);
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
-
-  useEffect(() => {
-    setAdvancedOpen(section === "advanced");
-  }, [section]);
 
   useEffect(() => {
     if (typeof setWizardMode === "function") {
@@ -1033,77 +1022,6 @@ export default function ConfigPage() {
     } catch {
       setActionFeedback("mcp", "error", "Could not copy — select the key and copy manually.");
     }
-  }
-
-  function renderMcpKeyRow(which) {
-    const field = which === "privacy" ? "mcp_api_key" : "mcp_full_api_key";
-    const envName = which === "privacy" ? "CURATORX_MCP_API_KEY" : "CURATORX_MCP_FULL_API_KEY";
-    const title = which === "privacy" ? "Privacy MCP key" : "Full MCP key";
-    const blurb =
-      which === "privacy"
-        ? "Share with limited apps — public content schema, read-only tools."
-        : "Trusted in-stack only — internal library fields + confirm-gated *arr propose tools. Must differ from the privacy key.";
-    const configured = Boolean(settings?.[`${field}_set`]);
-    const hint = settings?.[`${field}_hint`] || "";
-    const source = settings?.[`${field}_source`] || "";
-    const revealed = mcpRevealedKeys[which] || "";
-    return (
-      <div className="mcp-key-row" data-testid={`mcp-key-${which}`}>
-        <div className="mcp-key-row-head">
-          <h4>{title}</h4>
-          <code className="mcp-key-env">{envName}</code>
-        </div>
-        <p className="wizard-note">{blurb}</p>
-        <p className="mcp-key-status" data-testid={`mcp-key-${which}-status`}>
-          {configured ? (
-            <>
-              Configured
-              {hint ? (
-                <>
-                  {" "}
-                  (<code>{hint}</code>)
-                </>
-              ) : null}
-              {source ? ` · source: ${source}` : null}
-            </>
-          ) : (
-            "Not set — HTTP /mcp disabled for this mode until you rotate or set the env var."
-          )}
-        </p>
-        {revealed ? (
-          <label className="mcp-key-reveal">
-            <span>New key (copy now)</span>
-            <div className="mcp-key-reveal-row">
-              <input type="text" readOnly value={revealed} data-testid={`mcp-key-${which}-revealed`} />
-              <button type="button" className="ghost" onClick={() => copyMcpKey(which)}>
-                Copy
-              </button>
-            </div>
-          </label>
-        ) : null}
-        <div className="config-actions">
-          <button
-            type="button"
-            data-testid={`mcp-key-${which}-rotate`}
-            disabled={Boolean(mcpKeyBusy)}
-            onClick={() => handleRotateMcpKey(which)}
-          >
-            {mcpKeyBusy === `rotate-${which}` ? "Regenerating…" : configured ? "Regenerate" : "Generate"}
-          </button>
-          {configured && source !== "env" ? (
-            <button
-              type="button"
-              className="ghost"
-              data-testid={`mcp-key-${which}-clear`}
-              disabled={Boolean(mcpKeyBusy)}
-              onClick={() => handleClearMcpKey(which)}
-            >
-              Clear
-            </button>
-          ) : null}
-        </div>
-      </div>
-    );
   }
 
   if (sectionParam && !ADMIN_SECTIONS.has(sectionParam)) {
@@ -2170,156 +2088,26 @@ export default function ConfigPage() {
         ) : null}
 
         {showSection("advanced") ? (
-        <section className="config-section config-section-collapsible">
-          <button
-            type="button"
-            className="collapsible-header"
-            data-testid="advanced-toggle"
-            aria-expanded={advancedOpen}
-            onClick={() => setAdvancedOpen((open) => !open)}
-          >
-            <h2>Advanced</h2>
-            <span className="collapsible-chevron">{advancedOpen ? "▾" : "▸"}</span>
-          </button>
-          {advancedOpen ? (
-            <div className="collapsible-body">
-              <div className="config-section-sub">
-                <h3>Disk paths &amp; sync schedule</h3>
-                <p className="wizard-note">
-                  Most Unraid users can leave these alone. Adjust only if auto-sync timing or folder paths need a tweak.
-                </p>
-                <div className="config-grid">
-                  {[
-                    "movies_root",
-                    "tv_root",
-                    "radarr_root_folder",
-                    "sonarr_root_folder",
-                    "library_sync_interval_hours",
-                    "tv_page_size",
-                    "library_enrich_workers",
-                  ].map((key) => (
-                    <label key={key}>
-                      <span>{fieldLabel(key)}</span>
-                      <input
-                        type="text"
-                        value={settings[key] ?? ""}
-                        onChange={(event) =>
-                          updateSettings({
-                            [key]:
-                              key.endsWith("_hours") ||
-                              key === "tv_page_size" ||
-                              key === "library_enrich_workers"
-                                ? Number(event.target.value || 0)
-                                : event.target.value,
-                          })
-                        }
-                      />
-                      {FIELD_HELP[key] ? (
-                        <span className="wizard-note field-help">{FIELD_HELP[key]}</span>
-                      ) : null}
-                    </label>
-                  ))}
-                  <label>
-                    <span>{fieldLabel("library_sync_hour")}</span>
-                    <select
-                      data-testid="library-sync-hour"
-                      value={
-                        settings.library_sync_hour === null ||
-                        settings.library_sync_hour === undefined
-                          ? ""
-                          : String(settings.library_sync_hour)
-                      }
-                      onChange={(event) => {
-                        const raw = event.target.value;
-                        updateSettings({
-                          library_sync_hour: raw === "" ? null : Number(raw),
-                        });
-                      }}
-                    >
-                      <option value="">Any time (interval only)</option>
-                      {Array.from({ length: 24 }, (_, hour) => (
-                        <option key={hour} value={hour}>
-                          {String(hour).padStart(2, "0")}:00 (local)
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <p className="slider-help-text" style={{ marginTop: "0.5rem" }}>
-                  Preferred hour uses the container&apos;s local clock. On Unraid, set the{" "}
-                  <code>TZ</code> variable (for example <code>America/New_York</code>) if the hour looks wrong.
-                </p>
-                <div className="config-actions">
-                  <button type="button" onClick={handleSaveSettings}>
-                    Save settings
-                  </button>
-                </div>
-                <InlineAlert type={actionAlert?.area === "save" ? actionAlert.type : null} message={actionAlert?.area === "save" ? actionAlert.message : null} />
-              </div>
-
-              <div className="config-section-sub" data-testid="advanced-mcp">
-                <h3>MCP (Model Context Protocol)</h3>
-                <p className="wizard-note">
-                  Dual-mode HTTP MCP at <code>/mcp</code>. Present{" "}
-                  <code>X-CuratorX-MCP-Key</code> (or Bearer). Keys must differ. Regenerating writes{" "}
-                  <code>settings.json</code> (overrides Unraid/env until you remove the file value).
-                  See <Link to="/privacy">Privacy</Link> and operator docs for exposure tables.
-                </p>
-                {renderMcpKeyRow("privacy")}
-                {renderMcpKeyRow("full")}
-                <InlineAlert
-                  type={actionAlert?.area === "mcp" ? actionAlert.type : null}
-                  message={actionAlert?.area === "mcp" ? actionAlert.message : null}
-                />
-                <h4 className="mcp-image-heading">TMDB image sizes</h4>
-                <p className="wizard-note">
-                  Poster/backdrop URLs emitted to MCP and member public schemas use the TMDB CDN only.
-                </p>
-                <div className="config-grid">
-                  <label>
-                    <span>{fieldLabel("mcp_tmdb_poster_size")}</span>
-                    <select
-                      data-testid="mcp-tmdb-poster-size"
-                      value={settings.mcp_tmdb_poster_size || "w500"}
-                      onChange={(event) =>
-                        updateSettings({ mcp_tmdb_poster_size: event.target.value })
-                      }
-                    >
-                      {MCP_POSTER_SIZES.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="wizard-note field-help">{FIELD_HELP.mcp_tmdb_poster_size}</span>
-                  </label>
-                  <label>
-                    <span>{fieldLabel("mcp_tmdb_backdrop_size")}</span>
-                    <select
-                      data-testid="mcp-tmdb-backdrop-size"
-                      value={settings.mcp_tmdb_backdrop_size || "w1280"}
-                      onChange={(event) =>
-                        updateSettings({ mcp_tmdb_backdrop_size: event.target.value })
-                      }
-                    >
-                      {MCP_BACKDROP_SIZES.map((size) => (
-                        <option key={size} value={size}>
-                          {size}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="wizard-note field-help">{FIELD_HELP.mcp_tmdb_backdrop_size}</span>
-                  </label>
-                </div>
-                <div className="config-actions">
-                  <button type="button" data-testid="mcp-image-sizes-save" onClick={handleSaveSettings}>
-                    Save image sizes
-                  </button>
-                </div>
-              </div>
-            </div>
-          ) : null}
-        </section>
+          <AdvancedSettings
+            settings={settings}
+            updateSettings={updateSettings}
+            onSavePathsAndSync={handleSaveSettings}
+            onRotateMcpKey={handleRotateMcpKey}
+            onClearMcpKey={handleClearMcpKey}
+            onCopyMcpKey={copyMcpKey}
+            mcpRevealedKeys={mcpRevealedKeys}
+            mcpKeyBusy={mcpKeyBusy}
+            saveAlert={
+              actionAlert?.area === "save"
+                ? { type: actionAlert.type, message: actionAlert.message }
+                : null
+            }
+            mcpAlert={
+              actionAlert?.area === "mcp"
+                ? { type: actionAlert.type, message: actionAlert.message }
+                : null
+            }
+          />
         ) : null}
 
         {appVersion && showSection("overview") ? (

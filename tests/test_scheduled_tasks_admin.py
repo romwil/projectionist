@@ -19,6 +19,12 @@ from curatorx.config_store import Settings
 from curatorx.library.db import Database
 from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
 from curatorx.scheduler.run_log import TaskRunLogStore, emit_task_event
+from curatorx.scheduler.run_outcome import (
+    build_run_summary,
+    extract_outcome_detail,
+    format_run_outcome_message,
+)
+from curatorx.scheduler.tasks import llm_theme_tagging
 from curatorx.web.rate_limit import clear_rate_limits
 from curatorx.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
 
@@ -41,6 +47,24 @@ async def _slow_task(
             return {"status": "interrupted"}
         await asyncio.sleep(0.05)
     return {"status": "completed"}
+
+
+async def _skipped_task(
+    db: Database, settings: Settings, should_stop: Callable[[], bool]
+) -> Dict[str, Any]:
+    del db, settings, should_stop
+    return {
+        "status": "skipped",
+        "reason": "no_llm_api_key",
+        "note": "LLM theme tagging stays empty until an LLM is configured.",
+    }
+
+
+async def _metrics_task(
+    db: Database, settings: Settings, should_stop: Callable[[], bool]
+) -> Dict[str, Any]:
+    del db, settings, should_stop
+    return {"status": "completed", "enriched": 5, "errors": 0, "has_more": True}
 
 
 class TaskRunLogStoreTests(unittest.TestCase):
@@ -72,6 +96,112 @@ class TaskRunLogStoreTests(unittest.TestCase):
         latest = first["latest_seq"]
         second = store.get_events(task="a", after_seq=latest)
         self.assertEqual(second["events"], [])
+
+    def test_end_run_includes_skip_reason_in_message(self) -> None:
+        store = TaskRunLogStore()
+        store.start_run("theme", trigger="manual")
+        store.end_run(
+            "theme",
+            status="skipped",
+            duration_ms=3,
+            result={
+                "status": "skipped",
+                "reason": "no_llm_api_key",
+                "note": "LLM theme tagging stays empty until an LLM is configured.",
+            },
+        )
+        payload = store.get_events(task="theme", after_seq=0)
+        finished = [event for event in payload["events"] if "Skipped" in event["message"]]
+        self.assertEqual(len(finished), 1)
+        self.assertIn("LLM theme tagging stays empty", finished[0]["message"])
+        self.assertEqual(payload["last_run"]["status"], "skipped")
+        self.assertIn("LLM theme tagging stays empty", payload["last_run"]["outcome_reason"])
+        self.assertIn("LLM theme tagging stays empty", payload["last_run"]["summary_line"])
+
+    def test_end_run_includes_metrics_summary(self) -> None:
+        store = TaskRunLogStore()
+        store.start_run("meta", trigger="manual")
+        store.end_run(
+            "meta",
+            status="completed",
+            duration_ms=1200,
+            result={"status": "completed", "enriched": 5, "errors": 1},
+        )
+        payload = store.get_events(task="meta", after_seq=0)
+        finished = [event for event in payload["events"] if "succeeded" in event["message"]]
+        self.assertEqual(len(finished), 1)
+        self.assertIn("enriched", finished[0]["message"])
+        self.assertEqual(payload["last_run"]["metrics"]["enriched"], 5)
+        self.assertIn("5 enriched", payload["last_run"]["summary_line"])
+
+
+class RunOutcomeFormattingTests(unittest.TestCase):
+    def test_format_skip_message_prefers_note(self) -> None:
+        message = format_run_outcome_message(
+            "skipped",
+            result={"reason": "stub_pending", "note": "Theme tagging stub"},
+        )
+        self.assertEqual(message, "Skipped — Theme tagging stub")
+
+    def test_build_run_summary_for_completed_metrics(self) -> None:
+        summary = build_run_summary(
+            "completed",
+            result={"status": "completed", "caches_built": 3, "library_size": 120},
+        )
+        self.assertIn("3 caches warmed", summary["summary_line"])
+        self.assertEqual(summary["metrics"]["caches_built"], 3)
+
+    def test_build_run_summary_for_title_relations(self) -> None:
+        summary = build_run_summary(
+            "completed",
+            result={
+                "status": "completed",
+                "collection": 10,
+                "neighbor": 4,
+                "shared_crew": 2,
+                "total": 16,
+            },
+        )
+        self.assertIn("collection links", summary["summary_line"])
+        self.assertEqual(summary["metrics"]["total"], 16)
+
+    def test_error_statuses_align_message_summary_and_detail(self) -> None:
+        for status in ("error", "error_timeout", "error: boom"):
+            with self.subTest(status=status):
+                result = {"status": status}
+                detail = extract_outcome_detail(status, result=result)
+                summary = build_run_summary(status, result=result)
+                message = format_run_outcome_message(status, result=result)
+
+                self.assertEqual(detail.get("outcome_reason"), "Task failed")
+                self.assertEqual(summary["summary_line"], "Task failed")
+                self.assertEqual(message, "Failed — Task failed")
+
+        with self.subTest(status="error", error="connection reset"):
+            result = {"status": "error", "error": "from result"}
+            detail = extract_outcome_detail("error", error="connection reset", result=result)
+            summary = build_run_summary("error", error="connection reset", result=result)
+            message = format_run_outcome_message("error", error="connection reset", result=result)
+
+            self.assertEqual(detail.get("outcome_reason"), "connection reset")
+            self.assertEqual(summary["summary_line"], "connection reset")
+            self.assertEqual(message, "Failed — connection reset")
+
+        with self.subTest(status="error", result_error="from result"):
+            result = {"status": "error", "error": "from result"}
+            detail = extract_outcome_detail("error", result=result)
+            summary = build_run_summary("error", result=result)
+            message = format_run_outcome_message("error", result=result)
+
+            self.assertEqual(detail.get("outcome_reason"), "from result")
+            self.assertEqual(summary["summary_line"], "from result")
+            self.assertEqual(message, "Failed — from result")
+
+    def test_non_error_statuses_do_not_format_as_failed(self) -> None:
+        for status in ("completed", "skipped", "interrupted"):
+            with self.subTest(status=status):
+                message = format_run_outcome_message(status)
+                self.assertFalse(message.startswith("Failed —"))
 
 
 class SchedulerRunLogIntegrationTests(unittest.TestCase):
@@ -119,6 +249,51 @@ class SchedulerRunLogIntegrationTests(unittest.TestCase):
                     await asyncio.sleep(0.02)
 
             asyncio.run(_exercise())
+
+    def test_trigger_skipped_persists_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            scheduler = IdleScheduler(db, Path(tmp))
+            scheduler.register(
+                TaskDefinition(name="skipped_demo", run_interval_seconds=3600, run_fn=_skipped_task)
+            )
+            result = asyncio.run(scheduler.trigger_task("skipped_demo"))
+            self.assertEqual(result["status"], "skipped")
+            states = scheduler.get_task_states()
+            demo = next(item for item in states if item["name"] == "skipped_demo")
+            self.assertEqual(demo["last_status"], "skipped")
+            self.assertIn("LLM theme tagging stays empty", demo["last_outcome_reason"] or "")
+            log = scheduler.get_task_run_log("skipped_demo")
+            finished = [event for event in log["events"] if event["message"].startswith("Skipped —")]
+            self.assertEqual(len(finished), 1)
+
+    def test_llm_theme_tagging_manual_skip_reason(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            scheduler = IdleScheduler(db, Path(tmp))
+            llm_theme_tagging.register(scheduler)
+            result = asyncio.run(scheduler.trigger_task("llm_theme_tagging"))
+            self.assertEqual(result["status"], "skipped")
+            self.assertEqual(result["reason"], "no_llm_api_key")
+            states = scheduler.get_task_states()
+            theme = next(item for item in states if item["name"] == "llm_theme_tagging")
+            self.assertEqual(theme["last_status"], "skipped")
+            self.assertTrue(theme["last_outcome_reason"])
+
+    def test_trigger_persists_run_summary(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            scheduler = IdleScheduler(db, Path(tmp))
+            scheduler.register(
+                TaskDefinition(name="metrics", run_interval_seconds=3600, run_fn=_metrics_task)
+            )
+            result = asyncio.run(scheduler.trigger_task("metrics"))
+            self.assertEqual(result["status"], "completed")
+            states = scheduler.get_task_states()
+            metrics = next(item for item in states if item["name"] == "metrics")
+            self.assertEqual(metrics["last_status"], "completed")
+            self.assertIn("5 enriched", metrics["last_run_summary_line"] or "")
+            self.assertEqual(metrics["last_run_summary"]["metrics"]["enriched"], 5)
 
 
 class ScheduledTasksAdminApiTests(unittest.TestCase):

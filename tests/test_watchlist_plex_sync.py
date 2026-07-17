@@ -37,6 +37,48 @@ class WatchlistDiscoverHelpersTests(unittest.TestCase):
             "5d7768294eefaa001fabe8b3",
         )
 
+    def test_fetch_watchlist_paginates_full_list(self) -> None:
+        """A large Discover watchlist force-paginates; we must page through all."""
+        import xml.etree.ElementTree as ET
+
+        from curatorx.watchlist import plex_discover
+
+        total = 230
+        page_size = 100
+
+        def fake_request_xml(url, *, headers=None, timeout=30):
+            start = 0
+            for part in url.split("?", 1)[-1].split("&"):
+                if part.startswith("X-Plex-Container-Start="):
+                    start = int(part.split("=", 1)[1])
+            container = ET.Element("MediaContainer", {"totalSize": str(total)})
+            end = min(start + page_size, total)
+            for idx in range(start, end):
+                ET.SubElement(
+                    container,
+                    "Video",
+                    {
+                        "type": "movie",
+                        "title": f"Movie {idx}",
+                        "guid": f"plex://movie/key{idx}",
+                        "ratingKey": f"key{idx}",
+                    },
+                )
+                # Attach a tmdb Guid child so the item resolves.
+                child = container[-1]
+                ET.SubElement(child, "Guid", {"id": f"tmdb://{1000 + idx}"})
+            return container
+
+        with patch(
+            "curatorx.watchlist.plex_discover.request_xml",
+            side_effect=fake_request_xml,
+        ):
+            items = plex_discover.fetch_watchlist("token", page_size=page_size)
+
+        self.assertEqual(len(items), total)
+        self.assertEqual(items[0]["tmdb_id"], 1000)
+        self.assertEqual(items[-1]["tmdb_id"], 1000 + total - 1)
+
 
 class WatchlistSyncUnitTests(unittest.TestCase):
     def test_missing_token_status(self) -> None:
@@ -95,6 +137,54 @@ class WatchlistSyncUnitTests(unittest.TestCase):
             self.assertEqual(len(pins), 1)
             self.assertEqual(pins[0]["tmdb_id"], 27205)
             self.assertEqual(pins[0]["plex_rating_key"], "abc123")
+
+    def test_pull_reports_counts_and_stores_stats(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "lib.db")
+            db.ensure_seed_data()
+            user = db.upsert_plex_user(
+                user_id="plex-2",
+                display_name="Will",
+                email=None,
+                plex_user_id="2",
+                role="owner",
+            )
+            with patch.dict("os.environ", {"DATA_DIR": tmp, "CURATORX_SESSION_SECRET": "unit-test-secret"}):
+                from curatorx.web.session_tokens import clear_session_secret_cache
+
+                clear_session_secret_cache()
+                try:
+                    db.set_user_plex_token_enc(user["id"], encrypt_plex_token("token"))
+                    remote = [
+                        {"title": "Inception", "media_type": "movie", "tmdb_id": 27205, "tvdb_id": None, "plex_rating_key": "a"},
+                        {"title": "Arrival", "media_type": "movie", "tmdb_id": 329865, "tvdb_id": None, "plex_rating_key": "b"},
+                        # Unresolvable: no tmdb/tvdb id.
+                        {"title": "Mystery", "media_type": "movie", "tmdb_id": None, "tvdb_id": None, "plex_rating_key": "c"},
+                    ]
+                    settings = Settings(features=FeatureFlags(multi_user_enabled=True))
+                    with patch(
+                        "curatorx.watchlist.plex_discover.fetch_watchlist",
+                        return_value=remote,
+                    ):
+                        first = sync_watchlist_with_plex(
+                            db, settings, user_id=user["id"], direction="pull"
+                        )
+                        self.assertEqual(first["pull_added"], 2)
+                        self.assertEqual(first["pull_unresolved"], 1)
+                        self.assertEqual(first["pull_total"], 3)
+
+                        # Second pull: existing pins count as updated, not added.
+                        second = sync_watchlist_with_plex(
+                            db, settings, user_id=user["id"], direction="pull"
+                        )
+                        self.assertEqual(second["pull_added"], 0)
+                        self.assertEqual(second["pull_updated"], 2)
+
+                    status = get_watchlist_sync_status(db, settings, user_id=user["id"])
+                    self.assertEqual(status["last_pull_total"], 3)
+                    self.assertEqual(status["last_pull_unresolved"], 1)
+                finally:
+                    clear_session_secret_cache()
 
     def test_curate_and_critique(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

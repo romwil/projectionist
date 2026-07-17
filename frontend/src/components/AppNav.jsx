@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { ROUTES, watchlistPanelHref } from "../lib/backNav.js";
+import { ROUTES, watchlistBrowseHref } from "../lib/backNav.js";
 
 const NAV_ITEMS = [
   { id: "chat", to: ROUTES.chat, label: "Chat", testId: "app-nav-chat" },
@@ -15,7 +15,6 @@ export default function AppNav({
   onClose,
   isOwner = false,
   showSettings = true,
-  onOpenWatchlist,
 }) {
   const location = useLocation();
   const panelRef = useRef(null);
@@ -51,14 +50,7 @@ export default function AppNav({
   }
   items.push({ id: "about", to: ROUTES.about, label: "About", testId: "app-nav-about" });
 
-  function handleWatchlistClick(event) {
-    const onChat = location.pathname === "/" || location.pathname === "";
-    if (onChat && typeof onOpenWatchlist === "function") {
-      event.preventDefault();
-      onOpenWatchlist();
-      onClose?.();
-      return;
-    }
+  function handleWatchlistClick() {
     onClose?.();
   }
 
@@ -95,7 +87,7 @@ export default function AppNav({
               return (
                 <li key={item.id}>
                   <Link
-                    to={watchlistPanelHref()}
+                    to={watchlistBrowseHref()}
                     className="app-nav-link"
                     data-testid={item.testId}
                     onClick={handleWatchlistClick}

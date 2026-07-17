@@ -14,7 +14,8 @@ import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
-import { ROUTES, exploreSectionPath } from "../lib/browseLinks.js";
+import { ROUTES, decadeYearRange, exploreSectionPath } from "../lib/browseLinks.js";
+import { formatLanguageName } from "../lib/languageNames.js";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 
 function ExplorePosterCard({ item, meta, onSeed, seedLabel = "Surprise from this", onRecommend, showRecommend }) {
@@ -182,7 +183,10 @@ export default function ExplorePage() {
     const genre = String(searchParams.get("genre") || "").trim();
     const cast = String(searchParams.get("cast") || "").trim();
     const directors = String(searchParams.get("directors") || "").trim();
-    if (!genre && !cast && !directors) {
+    const decade = String(searchParams.get("decade") || "").trim();
+    const language = String(searchParams.get("language") || "").trim();
+    const country = String(searchParams.get("country") || "").trim();
+    if (!genre && !cast && !directors && !decade && !language && !country) {
       setFacetWall({ loading: false, items: [], note: null, error: "", label: "" });
       return undefined;
     }
@@ -197,6 +201,19 @@ export default function ExplorePage() {
     } else if (directors) {
       filters.directors = [directors];
       label = `Director: ${directors}`;
+    } else if (decade) {
+      const range = decadeYearRange(decade);
+      if (range) {
+        filters.year_from = range.year_from;
+        filters.year_to = range.year_to;
+      }
+      label = `Decade: ${decade}`;
+    } else if (language) {
+      filters.original_language = language.toLowerCase();
+      label = `Language: ${formatLanguageName(language)}`;
+    } else if (country) {
+      filters.countries = [country];
+      label = `Country: ${country}`;
     }
     let cancelled = false;
     setFacetWall({ loading: true, items: [], note: null, error: "", label });
@@ -330,14 +347,46 @@ export default function ExplorePage() {
           {pulse.loading ? (
             <p className="status status-secondary">Loading pulse…</p>
           ) : pulse.stats.length ? (
-            <div className="explore-pulse-grid" data-testid="explore-pulse-grid">
-              {pulse.stats.map((stat) => (
-                <div key={stat.id} className="explore-pulse-stat" data-testid={`explore-pulse-${stat.id}`}>
-                  <span className="explore-pulse-value">{stat.value}</span>
-                  <span className="explore-pulse-label">{stat.label}</span>
-                  {stat.detail ? <span className="explore-pulse-detail">{stat.detail}</span> : null}
-                </div>
-              ))}
+            <div className="explore-pulse" data-testid="explore-pulse-grid">
+              {pulse.stats
+                .filter((stat) => stat.kind === "summary")
+                .map((stat) => (
+                  <p key={stat.id} className="explore-pulse-summary" data-testid={`explore-pulse-${stat.id}`}>
+                    <span className="explore-pulse-summary-value">{stat.value}</span>
+                    <span className="explore-pulse-summary-label">{stat.label}</span>
+                  </p>
+                ))}
+              <div className="explore-pulse-grid">
+                {pulse.stats
+                  .filter((stat) => stat.kind !== "summary")
+                  .map((stat) => (
+                    <div
+                      key={stat.id}
+                      className="explore-pulse-media-card"
+                      data-testid={`explore-pulse-${stat.id}`}
+                    >
+                      <div className="explore-pulse-media-header">
+                        <span className="explore-pulse-value">{stat.value}</span>
+                        <span className="explore-pulse-label">{stat.label}</span>
+                      </div>
+                      {stat.metrics?.length ? (
+                        <dl className="explore-pulse-metrics">
+                          {stat.metrics.map((metric) => (
+                            <div
+                              key={metric.id}
+                              className="explore-pulse-metric"
+                              data-testid={`explore-pulse-${stat.id}-${metric.id}`}
+                              title={metric.detail || undefined}
+                            >
+                              <dt>{metric.label}</dt>
+                              <dd>{metric.value}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : null}
+                    </div>
+                  ))}
+              </div>
             </div>
           ) : null}
         </ExploreSection>

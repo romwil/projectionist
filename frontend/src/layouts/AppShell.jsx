@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
 import AppNav, { AppNavToggle } from "../components/AppNav";
 import { useAuthGate } from "../components/UserMenu";
+import { libraryDeleteNoticeFromState } from "../lib/bulkLibraryDelete.js";
 
 /**
  * Shared chrome for authenticated browse / detail routes.
@@ -24,7 +26,14 @@ export default function AppShell({
   showTitles = true,
 }) {
   const { isOwner } = useAuthGate();
+  const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
+  const [libraryDeleteNotice, setLibraryDeleteNotice] = useState("");
+
+  useEffect(() => {
+    const notice = libraryDeleteNoticeFromState(location.state);
+    if (notice) setLibraryDeleteNotice(notice);
+  }, [location.key, location.state]);
 
   const headerClass =
     headerClassName ||
@@ -55,6 +64,19 @@ export default function AppShell({
           variant === "topbar" ? <div className="app-topbar-actions">{actions}</div> : actions
         ) : null}
       </header>
+      {libraryDeleteNotice ? (
+        <p className="app-shell-flash status status-secondary" data-testid="library-delete-notice">
+          <span>{libraryDeleteNotice}</span>
+          <button
+            type="button"
+            className="ghost"
+            data-testid="library-delete-notice-dismiss"
+            onClick={() => setLibraryDeleteNotice("")}
+          >
+            Dismiss
+          </button>
+        </p>
+      ) : null}
       {children}
     </div>
   );

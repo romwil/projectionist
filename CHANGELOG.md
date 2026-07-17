@@ -1,5 +1,41 @@
 # Changelog
 
+## [Unreleased]
+
+## [1.8.5] — 2026-07-16
+
+Watchlist explore page, title detail drawer and polish, Settings/Admin UX, Plex Discover pagination, bulk library delete, watched-state controls, and scheduled-task outcome messaging.
+
+### Changed
+- **Settings redesign** (Profile, Voice, Watchlist): shared card layout (`SettingsPanel` / `SettingsPageHeader` / toggle-switch `SettingsToggle`) with constrained content width, short section leads, and Fraunces page titles / DM Sans section headings — replaces sparse left-aligned checkboxes
+- **Watchlist IA split**: Settings → Watchlist is **sync preferences only** (Plex Discover toggles, Sync now, token + pull stats); the media list moved to `/watchlist`
+- Sidebar **Watchlist (N)** and AppNav **Watchlist** route to `/watchlist` (legacy `/?watchlist=1` deep links redirect)
+- Admin **Advanced**: disk paths, sync, and MCP keys in panel cards with aligned forms, scoped save actions, and compact MCP key rows; TMDB image-size controls removed from the UI (still in `settings.json` / API)
+- Chat top bar: **CuratorX** wordmark links home; agent activity on the **X** (idle/thinking/error); removed curator name under the logo
+- Title detail polish: decade/genre/language/country meta drill-ins, unified accent links, MPAA chip, language full names, TMDB score chip (`TMDB ★`), merged year/release chip; removed Type/Rating sidebar tiles
+- Library Pulse: per-type Movies/Shows cards (unwatched, stale adds, top genre, runtime)
+- Removed compact **Tonight** strip above the composer (agent watch-tonight tools unchanged)
+- Sidebar **Explore** moved to a full-width button above **Watchlist**; library totals moved to sidebar; removed streak/pinned blurbs from top bar
+- Plot Lab: longer motif chips, All/Movies/TV filter, motif-wall pagination, corner poster action icons
+
+### Added
+- **Watchlist explore page** (`/watchlist`): poster/title grid with multi-select bulk **Remove** (soft unpin) and owner-only **Delete** (typed `DELETE`, library index only); **TitleDetailDrawer** with **Open full page**; `?enrich=1` list API
+- Settings → Watchlist shows last-pull stats (`Pulled N · added M · unresolved K`) after Sync now
+- Admin Dashboard purge candidates and Explore section multi-select: owner-only bulk **Delete** (typed `DELETE`)
+- Title detail owner **Delete** and **Mark watched/unwatched** for in-library titles (CuratorX `view_count` + Plex scrobble)
+- Trailer modals: privacy-enhanced YouTube embeds under app CSP with external fallback
+
+### Fixed
+- **Plex Discover watchlist sync**: paginates full watchlist (`X-Plex-Container-Start/Size`) instead of first page only; sync reports pulled/added/updated/unresolved counts
+- Delete-thread undo toast docks in conversations sidebar with theme-aware styling
+- Admin config typography: DM Sans section headings; Fraunces for rail/page titles
+- Explore multi-select toolbar contained at ~1024px; poster hover actions no longer cover title text
+- `/rate` review prompt uses logged-in user name; half-star ratings in review prompts and title detail
+- Title detail **Leave a Review** opens in-place editor; trailer CSP note for reverse-proxy operators
+- Admin Scheduled Tasks: human-readable skip/fail reasons, last-run impact summaries, immediate Started log line; `error_timeout` and other `error*` statuses format consistently in messages, summaries, and outcome detail
+- Chat workspace crash on load: restore missing `isRateFlowRequest` import used by the `?rate=1` deep-link effect
+- Watched-state DB writes: `last_viewed_at` as INTEGER epoch seconds and `updated_at` as REAL, matching `library_items` column conventions
+
 ## [1.8.4] — 2026-07-16
 
 Shared AppShell chrome and Watchlist IA, What’s New release notes, capability/empty CTAs, and Explore/page completeness across title, person, tags, and chat.

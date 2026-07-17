@@ -5,22 +5,28 @@ export const ROUTES = {
   explore: "/explore",
   tags: "/explore/tags",
   plotLab: "/explore/plot-lab",
-  /** Sync/token settings only — pin list lives in the chat Watchlist panel. */
+  watchlist: "/watchlist",
+  /** Sync/token settings only — browse pins on /watchlist. */
   watchlistSettings: "/settings/watchlist",
   settings: "/settings",
   admin: "/admin",
   about: "/about",
 };
 
-/** Query flag that opens the chat Watchlist panel when landing on `/`. */
+/** @deprecated Use ROUTES.watchlist — kept for legacy deep links. */
 export const WATCHLIST_PANEL_PARAM = "watchlist";
+
+/** @deprecated Opens chat with legacy panel flag; redirects to /watchlist in App. */
+export function watchlistPanelHref() {
+  return `${ROUTES.chat}?${WATCHLIST_PANEL_PARAM}=1`;
+}
 
 /** Query flag that opens the /rate review batch flow in chat. */
 export const RATE_FLOW_PARAM = "rate";
 
-/** Deep-link to chat with the Watchlist panel open. */
-export function watchlistPanelHref() {
-  return `${ROUTES.chat}?${WATCHLIST_PANEL_PARAM}=1`;
+/** Deep-link to the watchlist browse page. */
+export function watchlistBrowseHref() {
+  return ROUTES.watchlist;
 }
 
 /** Deep-link to chat that triggers the rate / review batch flow. */
@@ -76,6 +82,7 @@ export function backLabelForPath(path, { defaultLabel = "Back" } = {}) {
     return "Back to tag search";
   }
   if (normalized === ROUTES.plotLab) return "Back to Plot Lab";
+  if (normalized === ROUTES.watchlist) return "Back to chat";
   if (normalized.startsWith("/explore/section/")) return "Back to Explore";
   if (normalized.startsWith("/tag/")) return "Back to tag";
   if (normalized.startsWith("/person/")) return "Back to person";

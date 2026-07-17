@@ -11,6 +11,16 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable, Dict, Generator, Iterable, List, Mapping, Optional, Sequence, Tuple, TypeVar
 
+def _optional_int_col(row: sqlite3.Row, keys: set, name: str) -> Optional[int]:
+    """Read an optional integer column that may be missing on older schemas."""
+    if name in keys and row[name] is not None:
+        try:
+            return int(row[name])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
 DEFAULT_LENS_ID = "general"
 DEFAULT_CONTEXT_HASH = "general"
 DEFAULT_PERSONA_ID = "current_profile"
@@ -687,6 +697,10 @@ class Database:
                 "watchlist_pull_on_login": "INTEGER NOT NULL DEFAULT 1",
                 "watchlist_push_on_pin": "INTEGER NOT NULL DEFAULT 1",
                 "watchlist_last_synced_at": "REAL",
+                "watchlist_last_pull_total": "INTEGER",
+                "watchlist_last_pull_added": "INTEGER",
+                "watchlist_last_pull_updated": "INTEGER",
+                "watchlist_last_pull_unresolved": "INTEGER",
             }.items():
                 if name not in user_cols:
                     conn.execute(f"ALTER TABLE users ADD COLUMN {name} {typedef}")
@@ -1413,6 +1427,12 @@ class Database:
                 if "watchlist_last_synced_at" in keys and row["watchlist_last_synced_at"] is not None
                 else None
             ),
+            "watchlist_last_pull_total": _optional_int_col(row, keys, "watchlist_last_pull_total"),
+            "watchlist_last_pull_added": _optional_int_col(row, keys, "watchlist_last_pull_added"),
+            "watchlist_last_pull_updated": _optional_int_col(row, keys, "watchlist_last_pull_updated"),
+            "watchlist_last_pull_unresolved": _optional_int_col(
+                row, keys, "watchlist_last_pull_unresolved"
+            ),
         }
 
     def update_watchlist_sync_prefs(
@@ -1444,13 +1464,35 @@ class Database:
                 )
         return self.get_watchlist_sync_prefs(user_id)
 
-    def mark_watchlist_synced(self, user_id: str, *, synced_at: Optional[float] = None) -> None:
+    def mark_watchlist_synced(
+        self,
+        user_id: str,
+        *,
+        synced_at: Optional[float] = None,
+        pull_total: Optional[int] = None,
+        pull_added: Optional[int] = None,
+        pull_updated: Optional[int] = None,
+        pull_unresolved: Optional[int] = None,
+    ) -> None:
         stamp = time.time() if synced_at is None else float(synced_at)
         with self.connect() as conn:
+            cols = self._table_columns(conn, "users")
             conn.execute(
                 "UPDATE users SET watchlist_last_synced_at = ? WHERE id = ?",
                 (stamp, user_id),
             )
+            stat_updates = {
+                "watchlist_last_pull_total": pull_total,
+                "watchlist_last_pull_added": pull_added,
+                "watchlist_last_pull_updated": pull_updated,
+                "watchlist_last_pull_unresolved": pull_unresolved,
+            }
+            for column, value in stat_updates.items():
+                if value is not None and column in cols:
+                    conn.execute(
+                        f"UPDATE users SET {column} = ? WHERE id = ?",
+                        (int(value), user_id),
+                    )
 
     def _row_to_user(self, row: sqlite3.Row) -> Dict[str, Any]:
         keys = set(row.keys()) if hasattr(row, "keys") else set()

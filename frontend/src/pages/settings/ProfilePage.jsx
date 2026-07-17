@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { getAuthMe, getFeatures, logout, patchAuthMe, uploadAuthAvatar } from "../../api/client";
+import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
+import SettingsPanel from "../../components/settings/SettingsPanel";
 import UserAvatar from "../../components/UserAvatar";
 import {
   applyUiFontSize,
@@ -112,76 +114,80 @@ export default function ProfilePage() {
 
   if (!user) {
     return (
-      <section className="settings-section" data-testid="settings-profile">
-        <h2>Profile</h2>
+      <div className="settings-stack" data-testid="settings-profile">
+        <SettingsPageHeader title="Profile">Loading profile…</SettingsPageHeader>
         <p className="status status-secondary">Loading profile…</p>
-      </section>
+      </div>
     );
   }
 
   return (
-    <section className="settings-section" data-testid="settings-profile">
-      <header className="settings-section-header">
-        <h2>Profile</h2>
-        <p>How you appear to CuratorX. Preferred name is what the curator calls you in chat.</p>
-      </header>
+    <div className="settings-stack" data-testid="settings-profile">
+      <SettingsPageHeader title="Profile" testId="settings-profile-header">
+        How you appear to CuratorX. Preferred name is what the curator calls you in chat.
+      </SettingsPageHeader>
 
-      <div className="settings-identity">
-        <UserAvatar
-          user={user}
-          className="settings-avatar"
-          fallbackClassName="settings-avatar settings-avatar-fallback"
-          cacheBust={avatarBust}
-        />
-        <div>
-          <p className="settings-identity-name">{user.display_name}</p>
-          {user.email ? <p className="settings-identity-meta">{user.email}</p> : null}
-          <p className="settings-identity-meta">Role · {user.role}</p>
-          <div className="settings-avatar-actions">
-            <input
-              ref={avatarInputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp,image/gif"
-              hidden
-              data-testid="avatar-file-input"
-              onChange={handleAvatarChange}
-            />
-            <button
-              type="button"
-              className="ghost"
-              data-testid="avatar-upload-button"
-              disabled={uploadingAvatar}
-              onClick={() => avatarInputRef.current?.click()}
-            >
-              {uploadingAvatar ? "Uploading…" : "Upload photo"}
-            </button>
-            <span className="field-help">JPEG, PNG, WebP, or GIF · max 2MB. Overrides a broken Plex avatar.</span>
+      <SettingsPanel title="Identity" testId="settings-profile-identity">
+        <div className="settings-identity">
+          <UserAvatar
+            user={user}
+            className="settings-avatar"
+            fallbackClassName="settings-avatar settings-avatar-fallback"
+            cacheBust={avatarBust}
+          />
+          <div>
+            <p className="settings-identity-name">{user.display_name}</p>
+            {user.email ? <p className="settings-identity-meta">{user.email}</p> : null}
+            <p className="settings-identity-meta">Role · {user.role}</p>
+            <div className="settings-avatar-actions">
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif"
+                hidden
+                data-testid="avatar-file-input"
+                onChange={handleAvatarChange}
+              />
+              <button
+                type="button"
+                className="ghost"
+                data-testid="avatar-upload-button"
+                disabled={uploadingAvatar}
+                onClick={() => avatarInputRef.current?.click()}
+              >
+                {uploadingAvatar ? "Uploading…" : "Upload photo"}
+              </button>
+              <span className="field-help">
+                JPEG, PNG, WebP, or GIF · max 2MB. Overrides a broken Plex avatar.
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      </SettingsPanel>
 
       <form className="settings-form" onSubmit={handleSave}>
-        <label>
-          <span>Preferred name</span>
-          <input
-            type="text"
-            data-testid="preferred-name-input"
-            value={preferredName}
-            maxLength={80}
-            placeholder={user.display_name || "How should we address you?"}
-            onChange={(event) => setPreferredName(event.target.value)}
-          />
-          <span className="field-help">
-            Falls back to your Plex display name when empty. Separate from server admin identity.
-          </span>
-        </label>
+        <SettingsPanel title="Chat name" testId="settings-profile-name">
+          <label>
+            <span>Preferred name</span>
+            <input
+              type="text"
+              data-testid="preferred-name-input"
+              value={preferredName}
+              maxLength={80}
+              placeholder={user.display_name || "How should we address you?"}
+              onChange={(event) => setPreferredName(event.target.value)}
+            />
+            <span className="field-help">
+              Falls back to your Plex display name when empty. Separate from server admin identity.
+            </span>
+          </label>
+        </SettingsPanel>
 
-        <fieldset className="settings-ui-theme" data-testid="ui-theme-fieldset">
-          <legend>Appearance</legend>
-          <p className="field-help">
-            Lights Up is gallery paper; Lights Down is the cinema chamber. Match system follows your
-            OS preference.
-          </p>
+        <SettingsPanel
+          title="Appearance"
+          lead="Lights Up is gallery paper; Lights Down is the cinema chamber. Match system follows your OS preference."
+          testId="ui-theme-fieldset"
+        >
           <div className="settings-ui-theme-options" role="radiogroup" aria-label="Appearance theme">
             {THEME_OPTIONS.map((option) => (
               <label
@@ -203,14 +209,19 @@ export default function ProfilePage() {
               </label>
             ))}
           </div>
-        </fieldset>
+        </SettingsPanel>
 
-        <fieldset className="settings-font-size" data-testid="font-size-fieldset">
-          <legend>Text size</legend>
-          <p className="field-help">Scales UI text across CuratorX. Default is medium.</p>
+        <SettingsPanel
+          title="Text size"
+          lead="Scales UI text across CuratorX. Default is medium."
+          testId="font-size-fieldset"
+        >
           <div className="settings-font-size-options" role="radiogroup" aria-label="Text size">
             {FONT_OPTIONS.map((option) => (
-              <label key={option.value} className={`settings-font-option ${fontSize === option.value ? "selected" : ""}`}>
+              <label
+                key={option.value}
+                className={`settings-font-option ${fontSize === option.value ? "selected" : ""}`}
+              >
                 <input
                   type="radio"
                   name="ui-font-size"
@@ -226,9 +237,9 @@ export default function ProfilePage() {
               </label>
             ))}
           </div>
-        </fieldset>
+        </SettingsPanel>
 
-        <div className="config-actions">
+        <div className="settings-actions">
           <button type="submit" data-testid="preferred-name-save" disabled={saving}>
             {saving ? "Saving…" : "Save profile"}
           </button>
@@ -241,21 +252,20 @@ export default function ProfilePage() {
         </p>
       ) : null}
 
-      <div className="settings-subsection">
-        <h3>Requests</h3>
+      <SettingsPanel title="Requests" testId="settings-profile-requests">
         <p className="status status-secondary">
           Request path: <strong>{requestPath}</strong>
           {requestPath === "seerr" ? (
             <> · Seerr {seerrLinked ? "linked" : "not linked — re-sign in with Plex to refresh"}</>
           ) : null}
         </p>
-      </div>
+      </SettingsPanel>
 
-      <div className="config-actions">
+      <div className="settings-actions">
         <button type="button" className="ghost" data-testid="settings-sign-out" onClick={handleSignOut}>
           Sign out
         </button>
       </div>
-    </section>
+    </div>
   );
 }

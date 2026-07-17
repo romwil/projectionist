@@ -57,6 +57,14 @@ class SecurityHeadersTests(unittest.TestCase):
         self.assertIn("img-src", csp)
         self.assertIn("image.tmdb.org", csp)
 
+    def test_content_security_policy_allows_youtube_trailer_frames(self) -> None:
+        headers = self._get_health_headers()
+        csp = headers.get("content-security-policy", "")
+        self.assertIn(
+            "frame-src https://www.youtube.com https://www.youtube-nocookie.com",
+            csp,
+        )
+
     def test_referrer_policy(self) -> None:
         headers = self._get_health_headers()
         self.assertEqual(

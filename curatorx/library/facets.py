@@ -229,7 +229,7 @@ def library_facet_catalog(
     allowed = {"director", "actor", "keyword", "country", "language", "motif", "theme"}
     if normalized not in allowed:
         raise ValueError(f"facet_type must be one of: {', '.join(sorted(allowed))}")
-    capped = min(max(1, limit), 100)
+    capped = min(max(1, limit), 200)
     needle = " ".join(str(q or "").strip().split()).lower()
     if normalized in {"country", "language"}:
         payload = _facet_catalog_from_items(db, normalized, limit=max(capped, 500) if needle else capped)

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { agentPulseTitle, resolveAgentPulse } from "./agentPulse.js";
+import { agentPulseTitle, curatorxBrandAriaLabel, resolveAgentPulse } from "./agentPulse.js";
 
 test("resolveAgentPulse ignores jobs and stays idle by default", () => {
   assert.equal(resolveAgentPulse(), "idle");
@@ -38,4 +38,17 @@ test("agentPulseTitle truncates long chat errors", () => {
   assert.match(title, /^Agent error: /);
   assert.ok(title.length <= "Agent error: ".length + 120);
   assert.ok(title.endsWith("..."));
+});
+
+test("agentPulseTitle treats running like thinking", () => {
+  assert.equal(agentPulseTitle("running"), "Agent thinking");
+});
+
+test("curatorxBrandAriaLabel prefixes home label with activity status", () => {
+  assert.equal(curatorxBrandAriaLabel("idle"), "CuratorX home — Agent idle");
+  assert.equal(curatorxBrandAriaLabel("thinking"), "CuratorX home — Agent thinking");
+  assert.equal(
+    curatorxBrandAriaLabel("error", "Request timed out"),
+    "CuratorX home — Agent error: Request timed out",
+  );
 });

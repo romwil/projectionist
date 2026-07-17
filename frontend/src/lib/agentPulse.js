@@ -18,6 +18,10 @@ export function agentPulseTitle(pulse, chatError = "") {
     }
     return "Agent error";
   }
-  if (pulse === "thinking") return "Agent thinking";
+  if (pulse === "thinking" || pulse === "running") return "Agent thinking";
   return "Agent idle";
+}
+
+export function curatorxBrandAriaLabel(pulse, chatError = "") {
+  return `CuratorX home — ${agentPulseTitle(pulse, chatError)}`;
 }

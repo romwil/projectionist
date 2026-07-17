@@ -76,18 +76,46 @@ def _parse_watchlist_element(element: ET.Element) -> Optional[Dict[str, Any]]:
     }
 
 
-def fetch_watchlist(token: str, *, timeout: int = 30) -> List[Dict[str, Any]]:
-    """Pull the account Discover watchlist."""
-    url = (
-        f"{DISCOVER_BASE}/library/sections/watchlist/all"
-        f"?{urllib.parse.urlencode({'includeCollections': 1, 'includeExternalMedia': 1})}"
-    )
-    root = request_xml(url, headers=_headers(token), timeout=timeout)
+def fetch_watchlist(
+    token: str,
+    *,
+    timeout: int = 30,
+    page_size: int = 100,
+    max_items: int = 5000,
+) -> List[Dict[str, Any]]:
+    """Pull the full account Discover watchlist.
+
+    The Discover endpoint force-paginates large watchlists, so we page through
+    with ``X-Plex-Container-Start`` / ``X-Plex-Container-Size`` until the server
+    stops returning full pages. Without this, only the first page (a handful of
+    items) is ever imported.
+    """
     items: List[Dict[str, Any]] = []
-    for element in list(root):
-        parsed = _parse_watchlist_element(element)
-        if parsed:
-            items.append(parsed)
+    start = 0
+    while True:
+        params = {
+            "includeCollections": 1,
+            "includeExternalMedia": 1,
+            "X-Plex-Container-Start": start,
+            "X-Plex-Container-Size": page_size,
+        }
+        url = f"{DISCOVER_BASE}/library/sections/watchlist/all?{urllib.parse.urlencode(params)}"
+        root = request_xml(url, headers=_headers(token), timeout=timeout)
+        children = list(root)
+        for element in children:
+            parsed = _parse_watchlist_element(element)
+            if parsed:
+                items.append(parsed)
+
+        returned = len(children)
+        total = optional_int(root.attrib.get("totalSize") or root.attrib.get("size"))
+        start += page_size
+        if returned < page_size:
+            break
+        if total is not None and start >= total:
+            break
+        if len(items) >= max_items:
+            break
     return items
 
 

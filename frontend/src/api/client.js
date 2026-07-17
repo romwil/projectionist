@@ -400,8 +400,8 @@ export async function putSystemConfig(values) {
   });
 }
 
-export async function listWatchlist() {
-  return api("/watchlist");
+export async function listWatchlist({ enrich = false } = {}) {
+  return api(`/watchlist${enrich ? "?enrich=1" : ""}`);
 }
 
 export async function addWatchlistPin(payload) {
@@ -821,7 +821,7 @@ export async function getExploreFeedOnThisDay({ limit = 12 } = {}) {
   return api(`/library/feeds/on-this-day?${params}`);
 }
 
-export async function getLibraryMotifs({ limit = 40 } = {}) {
+export async function getLibraryMotifs({ limit = 160 } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   return api(`/library/motifs?${params}`);
 }
@@ -882,6 +882,22 @@ export async function deletePurgeCandidates(ratingKeys) {
   return api("/library/purge-candidates/delete", {
     method: "POST",
     body: JSON.stringify({ rating_keys: ratingKeys }),
+  });
+}
+
+/** Owner-only: remove CuratorX library index rows by rating_key (not Plex files). */
+export async function deleteLibraryItems(ratingKeys) {
+  return api("/library/items/delete", {
+    method: "POST",
+    body: JSON.stringify({ rating_keys: ratingKeys }),
+  });
+}
+
+/** Mark an in-library title watched/unwatched (updates CuratorX + Plex when configured). */
+export async function setLibraryItemWatched(ratingKey, watched = true) {
+  return api("/library/items/watched", {
+    method: "POST",
+    body: JSON.stringify({ rating_key: ratingKey, watched: Boolean(watched) }),
   });
 }
 

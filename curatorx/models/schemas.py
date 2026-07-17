@@ -289,6 +289,13 @@ class WatchlistPin(BaseModel):
     title: str
     created_at: float
     plex_rating_key: Optional[str] = None
+    # Enrichment (populated when the list is requested with ?enrich=1)
+    poster_url: Optional[str] = None
+    year: Optional[int] = None
+    rating_key: Optional[str] = None
+    in_library: Optional[bool] = None
+    watched: Optional[bool] = None
+    view_count: Optional[int] = None
 
 
 class WatchlistCreate(BaseModel):

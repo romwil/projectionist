@@ -10,9 +10,13 @@ import {
   formatDurationMs,
   formatEpoch,
   formatInterval,
+  formatLastOutcomeLine,
   formatLogLine,
+  formatRunSummaryLine,
   formatTaskLastRun,
+  formatTaskLastRunDetail,
   isTaskRunning,
+  resolveLastOutcome,
   resolveWarmExploreTasks,
   summarizeLastStatus,
   taskDisplayName,
@@ -37,6 +41,7 @@ export default function ScheduledTasksPage() {
   const [busyNames, setBusyNames] = useState(() => new Set());
   const [warmStatus, setWarmStatus] = useState("");
   const [warming, setWarming] = useState(false);
+  const [optimisticStart, setOptimisticStart] = useState(null);
   const logEndRef = useRef(null);
   const latestSeqRef = useRef(0);
   const warmExploreNames = useMemo(() => resolveWarmExploreTasks(items), [items]);
@@ -45,6 +50,30 @@ export default function ScheduledTasksPage() {
     () => items.find((item) => item.name === selectedName) || null,
     [items, selectedName],
   );
+
+  const selectedOutcome = useMemo(() => {
+    if (!selected && !lastRun) {
+      return { status: null, reason: "", summaryLine: "", when: null, metrics: {} };
+    }
+    const merged = {
+      ...(selected || {}),
+      ...(lastRun
+        ? {
+            last_status: lastRun.status ?? selected?.last_status,
+            last_finished_at: lastRun.finished_at ?? selected?.last_finished_at,
+            last_outcome_reason: lastRun.outcome_reason ?? selected?.last_outcome_reason,
+            last_run_summary_line: lastRun.summary_line,
+            last_run_summary: {
+              summary_line: lastRun.summary_line,
+              metrics: lastRun.metrics,
+              outcome_reason: lastRun.outcome_reason,
+              status: lastRun.status,
+            },
+          }
+        : {}),
+    };
+    return resolveLastOutcome(merged);
+  }, [lastRun, selected]);
 
   const refreshList = useCallback(async () => {
     try {
@@ -115,10 +144,62 @@ export default function ScheduledTasksPage() {
     setLatestSeq(0);
     setCurrentRun(null);
     setLastRun(null);
+    setOptimisticStart(null);
     if (selectedName) {
       refreshLog({ reset: true });
     }
   }, [selectedName, refreshLog]);
+
+  // Drop the optimistic "Started" line once a real start event lands for this task.
+  useEffect(() => {
+    if (!optimisticStart) return;
+    const hasRealStart = events.some(
+      (event) =>
+        event.task === optimisticStart.task &&
+        String(event.message || "").startsWith("Started"),
+    );
+    const startedAfter =
+      currentRun &&
+      currentRun.task === optimisticStart.task &&
+      Number(currentRun.started_at) >= optimisticStart.ts - 5;
+    if (hasRealStart || startedAfter) {
+      setOptimisticStart(null);
+    }
+  }, [events, currentRun, optimisticStart]);
+
+  // Synthetic log lines shown immediately after Run now, or when a running task
+  // is selected before its first real event has been polled.
+  const displayEvents = useMemo(() => {
+    const hasStart = events.some((event) =>
+      String(event.message || "").startsWith("Started"),
+    );
+    if (hasStart) return events;
+    const synthetic = [];
+    if (optimisticStart && optimisticStart.task === selectedName) {
+      synthetic.push({
+        seq: -1,
+        ts: optimisticStart.ts,
+        task: optimisticStart.task,
+        level: "status",
+        message: "Started (manual)",
+        optimistic: true,
+      });
+    } else if (
+      currentRun &&
+      currentRun.task === selectedName &&
+      !events.length
+    ) {
+      synthetic.push({
+        seq: -1,
+        ts: currentRun.started_at,
+        task: currentRun.task,
+        level: "status",
+        message: `Started (${currentRun.trigger || "schedule"})`,
+        optimistic: true,
+      });
+    }
+    return [...synthetic, ...events];
+  }, [events, optimisticStart, currentRun, selectedName]);
 
   useEffect(() => {
     const active = Boolean(running) || Boolean(currentRun);
@@ -132,7 +213,7 @@ export default function ScheduledTasksPage() {
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [events]);
+  }, [displayEvents]);
 
   async function withBusy(name, fn) {
     setBusyNames((prev) => new Set(prev).add(name));
@@ -157,8 +238,9 @@ export default function ScheduledTasksPage() {
   }
 
   function handleRun(name) {
+    setSelectedName(name);
+    setOptimisticStart({ task: name, ts: Date.now() / 1000 });
     return withBusy(name, async () => {
-      setSelectedName(name);
       await runScheduledTask(name);
       await refreshLog({ reset: true });
     });
@@ -292,9 +374,12 @@ export default function ScheduledTasksPage() {
                         </td>
                         <td data-testid={`task-last-run-${task.name}`}>
                           <div>{formatTaskLastRun(task)}</div>
-                          {task.last_started_at ? (
-                            <div className="scheduled-task-meta">
-                              Started {formatEpoch(task.last_started_at)}
+                          {formatTaskLastRunDetail(task) ? (
+                            <div
+                              className="scheduled-task-meta"
+                              title={formatTaskLastRunDetail(task)}
+                            >
+                              {formatTaskLastRunDetail(task)}
                             </div>
                           ) : null}
                         </td>
@@ -349,10 +434,28 @@ export default function ScheduledTasksPage() {
                 <p className="status status-secondary">
                   {currentRun
                     ? `Running · started ${formatEpoch(currentRun.started_at)} · ${formatDurationMs(currentRun.elapsed_ms)}`
-                    : lastRun
-                      ? `Last ${summarizeLastStatus(lastRun.status)} · ${formatEpoch(lastRun.finished_at)}`
+                    : selectedOutcome.status
+                      ? formatLastOutcomeLine(
+                          lastRun || {
+                            ...selected,
+                            last_status: selectedOutcome.status,
+                            last_finished_at: selectedOutcome.when,
+                            last_outcome_reason: selectedOutcome.reason,
+                          },
+                        )
                       : "Select a task to monitor output"}
                 </p>
+                {!currentRun && selectedOutcome.summaryLine ? (
+                  <p className="scheduled-task-meta" data-testid="task-last-summary">
+                    {selectedOutcome.summaryLine}
+                  </p>
+                ) : null}
+                {!currentRun && selected ? (
+                  <p className="scheduled-task-meta">
+                    Run now starts immediately. Skipped means nothing to do or a precondition
+                    failed — see the reason in the log below.
+                  </p>
+                ) : null}
               </div>
               <button
                 type="button"
@@ -365,23 +468,35 @@ export default function ScheduledTasksPage() {
               </button>
             </div>
             <div className="scheduled-tasks-log" data-testid="task-log">
-              {events.length ? (
-                events.map((event) => (
+              {displayEvents.length ? (
+                displayEvents.map((event) => (
                   <div
-                    key={event.seq}
-                    className={`scheduled-tasks-log-line level-${event.level || "info"}`}
+                    key={`${event.seq}-${event.ts}`}
+                    className={`scheduled-tasks-log-line level-${event.level || "info"}${
+                      event.optimistic ? " is-optimistic" : ""
+                    }`}
                     data-testid={`task-log-line-${event.seq}`}
                   >
                     {formatLogLine(event)}
                   </div>
                 ))
               ) : (
-                <p className="dash-empty">No run output yet for this task.</p>
+                <p className="dash-empty">
+                  No run output yet for this task. Use Run now to start a manual run; skipped
+                  lines include a reason when the job exits early.
+                </p>
               )}
               <div ref={logEndRef} />
             </div>
             <p className="scheduled-tasks-log-meta">
-              {latestSeq ? `${events.length} lines · seq ${latestSeq}` : "Waiting for events"}
+              {displayEvents.length || latestSeq
+                ? `${displayEvents.length} lines${latestSeq ? ` · seq ${latestSeq}` : ""}`
+                : optimisticStart || currentRun
+                  ? "Starting…"
+                  : "Waiting for events"}
+              {selectedOutcome.summaryLine && !currentRun
+                ? ` · ${selectedOutcome.summaryLine}`
+                : ""}
               {selected?.quarantine?.last_error
                 ? ` · last error: ${selected.quarantine.last_error}`
                 : ""}

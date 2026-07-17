@@ -1012,6 +1012,35 @@ def _aggregate_decade_genre(db: Database, where_sql: str, params: List[Any]) -> 
     return {"group_by": "decade_genre", "buckets": buckets}
 
 
+def _top_genre_for_media_type(db: Database, media_type: str) -> Optional[Dict[str, Any]]:
+    genre_agg = aggregate_library(
+        db,
+        "genre",
+        LibraryFilters(media_type=media_type, limit=MAX_QUERY_LIMIT),
+        top_examples=0,
+    )
+    buckets = genre_agg.get("buckets") or []
+    if not buckets:
+        return None
+    top = buckets[0]
+    return {"genre": top["genre"], "count": int(top["count"])}
+
+
+def _media_type_overview(
+    *,
+    count: int,
+    total_runtime_minutes: Optional[float],
+    top_genre: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    return {
+        "count": int(count),
+        "top_genre": top_genre,
+        "total_runtime_minutes": (
+            int(round(float(total_runtime_minutes))) if total_runtime_minutes else None
+        ),
+    }
+
+
 def compute_library_overview(db: Database) -> Dict[str, Any]:
     with db.connect() as conn:
         total = conn.execute("SELECT COUNT(*) AS cnt FROM library_items").fetchone()["cnt"]
@@ -1033,6 +1062,21 @@ def compute_library_overview(db: Database) -> Dict[str, Any]:
         avg_runtime = conn.execute(
             "SELECT AVG(runtime_minutes) AS avg_runtime FROM library_items WHERE runtime_minutes IS NOT NULL"
         ).fetchone()["avg_runtime"]
+        total_runtime = conn.execute(
+            "SELECT SUM(runtime_minutes) AS total_runtime FROM library_items WHERE runtime_minutes IS NOT NULL"
+        ).fetchone()["total_runtime"]
+        movies_total_runtime = conn.execute(
+            """
+            SELECT SUM(runtime_minutes) AS total_runtime FROM library_items
+            WHERE media_type = 'movie' AND runtime_minutes IS NOT NULL
+            """
+        ).fetchone()["total_runtime"]
+        shows_total_runtime = conn.execute(
+            """
+            SELECT SUM(runtime_minutes) AS total_runtime FROM library_items
+            WHERE media_type = 'show' AND runtime_minutes IS NOT NULL
+            """
+        ).fetchone()["total_runtime"]
         unwatched_movies = conn.execute(
             """
             SELECT COUNT(*) AS cnt FROM library_items
@@ -1061,6 +1105,8 @@ def compute_library_overview(db: Database) -> Dict[str, Any]:
         {"genre": b["genre"], "count": b["count"]}
         for b in genre_agg.get("buckets", [])[:10]
     ]
+    movies_top_genre = _top_genre_for_media_type(db, "movie")
+    shows_top_genre = _top_genre_for_media_type(db, "show")
     director_catalog = library_facet_catalog(db, "director", limit=10)
     top_directors = director_catalog.get("facets", [])
     country_catalog = library_facet_catalog(db, "country", limit=10)
@@ -1077,6 +1123,19 @@ def compute_library_overview(db: Database) -> Dict[str, Any]:
         "top_countries": top_countries,
         "top_languages": top_languages,
         "avg_runtime_minutes": round(float(avg_runtime), 1) if avg_runtime else None,
+        "total_runtime_minutes": int(round(float(total_runtime))) if total_runtime else None,
+        "by_media_type": {
+            "movie": _media_type_overview(
+                count=int(movies),
+                total_runtime_minutes=movies_total_runtime,
+                top_genre=movies_top_genre,
+            ),
+            "show": _media_type_overview(
+                count=int(shows),
+                total_runtime_minutes=shows_total_runtime,
+                top_genre=shows_top_genre,
+            ),
+        },
         "unwatched_movies": int(unwatched_movies),
         "in_progress_shows": int(in_progress_shows),
         "generated_at": time.time(),
@@ -1094,7 +1153,10 @@ def library_overview(db: Database, *, use_cache: bool = True) -> Dict[str, Any]:
         raw = db.get_sync_state(OVERVIEW_CACHE_KEY)
         if raw:
             try:
-                return json.loads(raw)
+                cached = json.loads(raw)
+                # Soft-refresh when older caches predate per-type pulse fields.
+                if isinstance(cached, dict) and "by_media_type" in cached:
+                    return cached
             except json.JSONDecodeError:
                 pass
     return refresh_library_overview_cache(db)

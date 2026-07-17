@@ -51,9 +51,9 @@ CuratorX serves one React application (`frontend/src/App.jsx`) with a shared **A
 
 | Region | Contents |
 |--------|----------|
-| **Hamburger AppNav** | Primary navigation drawer (☰) on chat and AppShell pages: Chat, Explore, Plot Lab, Tags, **Watchlist** (opens the chat pin panel), Settings, Admin (owners), About. |
+| **Hamburger AppNav** | Primary navigation drawer (☰) on chat and AppShell pages: Chat, Explore, Plot Lab, Tags, **Watchlist** (opens the `/watchlist` explore page), Settings, Admin (owners), About. |
 | **Top bar** | CuratorX brand, curator name, agent pulse; **Plex server name** + movie/show counts; icon chrome for **Explore**, theme cycle, watchlist pins, Admin/Settings; optional streak chip; optional **UserMenu** when multi-user is on. No About link in the top bar. |
-| **Sidebar** | Conversation list + New thread + **Watchlist panel** + **status dock** (bottom of rail) |
+| **Sidebar** | Conversation list + New thread + **Watchlist (N)** button (→ `/watchlist`) + **status dock** (bottom of rail) |
 | **Chat column** | Recommendations inbox (multi-user), welcome / On This Day / Library Glance / Quick Pick, thread with **AgentAvatar** + ambient context tag (⧉), title cards, composer with **PersonaSelector** + Surprise Me |
 | **Explore** | Hub at `/explore` with children (Tags, Plot Lab, section pages) — cinema browse, not a second “app mode” |
 | **Results overlay** | Optional horizontal expand for large card sets (“Cinema mode”) |
@@ -126,11 +126,12 @@ Two surfaces, one job each:
 
 | Surface | Job |
 |---------|-----|
-| **Chat Watchlist panel** | Quick pins — sidebar list + top-bar ★ chip (toggle). AppNav **Watchlist** opens this panel (or navigates to `/?watchlist=1`). |
-| **Settings → Watchlist** | Sync/token only — Plex Discover pull/push, enable flags, Sync now. Not the pin browser. |
+| **Watchlist page (`/watchlist`)** | Full media explore list — poster/title grid of merged Plex Discover + local pins, multi-select bulk toolbar (**Remove** = unpin/soft; owner-only **Delete** = library index delete with typed `DELETE` confirm), title click opens the right-docked **TitleDetailDrawer** (with **Open full page**). Sidebar **Watchlist (N)** button and AppNav **Watchlist** both route here. |
+| **Settings → Watchlist** | Sync/token only — Plex Discover pull/push toggles, enable flags, Sync now, and pull stats (`Pulled N · unresolved M`). Links to the Watchlist page; not the pin browser. |
 
-- Refresh **pull-syncs from Plex Discover** when a Sign-in-with-Plex account token is available, then lists local pins in the panel.
-- Watchlist rows **click through to title detail**.
+- The Watchlist page **pull-syncs from Plex Discover** on load when a Sign-in-with-Plex account token is available, then lists local + imported pins.
+- Plex Discover pull **paginates the full watchlist** (`X-Plex-Container-Start/Size`) so large watchlists import completely, not just the first page.
+- Watchlist rows open **title detail** (drawer first, full page from the drawer).
 - Agent tools: `query_watchlist`, `add_to_watchlist`, `remove_from_watchlist`, `curate_watchlist`, `critique_watchlist`.
 
 ---
@@ -142,7 +143,7 @@ Owners open **Admin → Dashboard** (`/admin/dashboard`) for library intelligenc
 | Panel | Contents |
 |-------|----------|
 | **Composition** | Decade, top genres, movies vs shows, countries, languages, runtime distribution |
-| **Health & engagement** | Unwatched %, stale adds, **rating coverage** (watched titles with reviews), curator streak, **TV completion** (top 10 shows with episode counts) |
+| **Health & engagement** | Unwatched %, stale adds, **rating coverage** (watched titles with reviews), curator streak |
 | **Storage** | Purge candidates table — multi-select checkboxes, **Delete Selected** / **Dismiss Selected** with confirmation |
 | **Taste profile** | Recent reviews / preference signals with stars on a **/5** scale |
 

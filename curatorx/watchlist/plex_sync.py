@@ -14,6 +14,18 @@ from curatorx.watchlist import plex_discover
 logger = logging.getLogger(__name__)
 
 
+def _pin_identity_key(item: Mapping[str, Any]) -> tuple:
+    """Stable dedupe key matching the watchlist_pins unique identity index."""
+    media_type = str(item.get("media_type") or "movie")
+    tmdb_id = item.get("tmdb_id")
+    tvdb_id = item.get("tvdb_id")
+    return (
+        media_type,
+        int(tmdb_id) if tmdb_id is not None else None,
+        int(tvdb_id) if tvdb_id is not None else None,
+    )
+
+
 def resolve_account_token(
     db: Database,
     settings: Settings,
@@ -79,6 +91,10 @@ def get_watchlist_sync_status(
         "pull_on_login": pull_on_login,
         "push_on_pin": push_on_pin,
         "last_synced_at": last_synced_at,
+        "last_pull_total": prefs.get("watchlist_last_pull_total"),
+        "last_pull_added": prefs.get("watchlist_last_pull_added"),
+        "last_pull_updated": prefs.get("watchlist_last_pull_updated"),
+        "last_pull_unresolved": prefs.get("watchlist_last_pull_unresolved"),
         "has_plex_token": token_ok,
         "has_account_token": bool(resolved.get("has_account_token")),
         "token_source": resolved.get("source"),
@@ -141,6 +157,10 @@ def sync_watchlist_with_plex(
 
     pulled = 0
     pushed = 0
+    pull_added = 0
+    pull_updated = 0
+    pull_unresolved = 0
+    pull_total = 0
     errors: list[str] = []
     mode = (direction or "both").strip().lower()
 
@@ -151,7 +171,18 @@ def sync_watchlist_with_plex(
             logger.warning("Watchlist pull failed: %s", error)
             errors.append(f"pull:{error}")
             remote = []
+        pull_total = len(remote)
+        existing_keys = {
+            _pin_identity_key(pin) for pin in db.list_watchlist_pins(user_id=scoped_id)
+        }
         for item in remote:
+            # Items without any resolvable provider ID can't be deduplicated or
+            # linked to library titles — count them as unresolved rather than
+            # inserting a colliding NULL/NULL row.
+            if item.get("tmdb_id") is None and item.get("tvdb_id") is None:
+                pull_unresolved += 1
+                continue
+            identity = _pin_identity_key(item)
             try:
                 db.add_watchlist_pin(
                     pin_id=str(uuid.uuid4()),
@@ -163,7 +194,13 @@ def sync_watchlist_with_plex(
                     plex_rating_key=item.get("plex_rating_key"),
                 )
                 pulled += 1
+                if identity in existing_keys:
+                    pull_updated += 1
+                else:
+                    pull_added += 1
+                    existing_keys.add(identity)
             except ValueError:
+                pull_unresolved += 1
                 continue
             except Exception as error:  # noqa: BLE001
                 errors.append(f"pull_item:{error}")
@@ -190,7 +227,14 @@ def sync_watchlist_with_plex(
 
     stamp_user = resolved.get("user_id") or user_id
     if stamp_user:
-        db.mark_watchlist_synced(stamp_user)
+        pull_ran = mode in {"both", "pull"}
+        db.mark_watchlist_synced(
+            stamp_user,
+            pull_total=pull_total if pull_ran else None,
+            pull_added=pull_added if pull_ran else None,
+            pull_updated=pull_updated if pull_ran else None,
+            pull_unresolved=pull_unresolved if pull_ran else None,
+        )
 
     return {
         **get_watchlist_sync_status(db, settings, user_id=user_id),
@@ -198,6 +242,10 @@ def sync_watchlist_with_plex(
         "reason": None if not errors else "partial",
         "pulled": pulled,
         "pushed": pushed,
+        "pull_added": pull_added,
+        "pull_updated": pull_updated,
+        "pull_unresolved": pull_unresolved,
+        "pull_total": pull_total,
         "errors": errors[:20],
     }
 

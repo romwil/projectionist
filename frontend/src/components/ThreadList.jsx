@@ -59,15 +59,16 @@ export default function ThreadList({
         />
       </label>
 
-      {threads.length === 0 ? (
-        <p className="thread-empty">No conversations yet.</p>
-      ) : visibleThreads.length === 0 ? (
-        <p className="thread-empty" data-testid="thread-search-empty">
-          No conversations match “{query.trim()}”.
-        </p>
-      ) : (
-        <ul className="thread-items">
-          {visibleThreads.map((thread) => {
+      <div className="thread-items-scroll" data-testid="thread-items-scroll">
+        {threads.length === 0 ? (
+          <p className="thread-empty">No conversations yet.</p>
+        ) : visibleThreads.length === 0 ? (
+          <p className="thread-empty" data-testid="thread-search-empty">
+            No conversations match “{query.trim()}”.
+          </p>
+        ) : (
+          <ul className="thread-items">
+            {visibleThreads.map((thread) => {
             const isActive = thread.id === activeSessionId;
             const persona = thread.persona_id ? personaLookup[thread.persona_id] : null;
             const confirming = confirmId === thread.id;
@@ -132,8 +133,9 @@ export default function ThreadList({
               </li>
             );
           })}
-        </ul>
-      )}
+          </ul>
+        )}
+      </div>
     </div>
   );
 }

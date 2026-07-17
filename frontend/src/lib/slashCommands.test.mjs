@@ -220,10 +220,33 @@ test("/rate without args returns a review batch strip", async () => {
   };
   const message = await executeSlashCommand(
     { command: "rate", args: "", raw: "/rate" },
-    { api, curatorName: "Jefferson" },
+    { api, curatorName: "Jefferson", user: { preferred_name: "Will" } },
   );
+  assert.match(message.blocks[0].content, /^Will —/);
   assert.match(message.blocks[0].content, /half-stars/i);
+  assert.doesNotMatch(message.blocks[0].content, /Jefferson/);
   assert.equal(message.blocks[1].type, "review_batch");
   assert.equal(message.blocks[1].payload.prompts[0].title, "Heat");
   assert.equal(calls[0].path.includes("/reviews/to-rate"), true);
+});
+
+test("/rate lead uses preferred_name and never curator name", async () => {
+  const api = async (path) => {
+    if (path.startsWith("/reviews/to-rate")) {
+      return { items: [{ id: "1", title: "Heat", media_type: "movie" }], count: 1 };
+    }
+    throw new Error(`unexpected ${path}`);
+  };
+  const named = await executeSlashCommand(
+    { command: "rate", args: "", raw: "/rate" },
+    { api, curatorName: "Jefferson", user: { preferred_name: "Will", display_name: "wrompala" } },
+  );
+  assert.match(named.blocks[0].content, /^Will —/);
+
+  const neutral = await executeSlashCommand(
+    { command: "rate", args: "", raw: "/rate" },
+    { api, curatorName: "Jefferson", user: null },
+  );
+  assert.match(neutral.blocks[0].content, /^Rate what you've watched/);
+  assert.doesNotMatch(neutral.blocks[0].content, /Jefferson|Curator/);
 });

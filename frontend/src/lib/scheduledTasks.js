@@ -34,11 +34,7 @@ export function resolveWarmExploreTasks(items) {
 
 /** Compact last-run summary already present on list/log payloads. */
 export function formatTaskLastRun(task) {
-  if (!task) return "Never run";
-  const when = task.last_finished_at ?? task.last_run_at;
-  const status = summarizeLastStatus(task.last_status);
-  if (when == null || when === "") return status === "Never run" ? "Never run" : status;
-  return `${status} · ${formatEpoch(when)}`;
+  return formatLastOutcomeLine(task);
 }
 
 export function taskDisplayName(name) {
@@ -98,6 +94,88 @@ export function summarizeLastStatus(status) {
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
+/** Human-readable detail for skipped/failed/interrupted outcomes. */
+export function formatOutcomeReason(taskOrRun) {
+  if (!taskOrRun) return "";
+  const reason = String(taskOrRun.outcome_reason || taskOrRun.last_outcome_reason || "").trim();
+  if (reason) return reason;
+  const summary = taskOrRun.summary;
+  if (summary?.outcome_reason) return String(summary.outcome_reason).trim();
+  if (summary?.note) return String(summary.note).trim();
+  if (summary?.reason) return String(summary.reason).replace(/_/g, " ");
+  if (taskOrRun.error) return String(taskOrRun.error).trim();
+  return "";
+}
+
+/** Prefer the freshest last-run fields exposed by list/log APIs. */
+export function resolveLastOutcome(task) {
+  if (!task) {
+    return { status: null, reason: "", summaryLine: "", when: null, metrics: {} };
+  }
+  const status = task.last_status ?? task.status ?? null;
+  const when = task.last_finished_at ?? task.finished_at ?? task.last_run_at ?? null;
+  const summaryLine = formatRunSummaryLine(task);
+  return {
+    status,
+    reason: formatOutcomeReason(task),
+    summaryLine,
+    when,
+    metrics: resolveRunMetrics(task),
+  };
+}
+
+/** Structured counters from the last run, when available. */
+export function resolveRunMetrics(taskOrRun) {
+  const summary = taskOrRun?.last_run_summary || taskOrRun?.summary;
+  if (summary?.metrics && typeof summary.metrics === "object") {
+    return summary.metrics;
+  }
+  if (taskOrRun?.metrics && typeof taskOrRun.metrics === "object") {
+    return taskOrRun.metrics;
+  }
+  return {};
+}
+
+/** One-line impact summary for list rows and monitor footer. */
+export function formatRunSummaryLine(taskOrRun) {
+  if (!taskOrRun) return "";
+  const direct = String(
+    taskOrRun.last_run_summary_line || taskOrRun.summary_line || "",
+  ).trim();
+  if (direct) return direct;
+  const summary = taskOrRun.last_run_summary || taskOrRun.summary;
+  if (summary?.summary_line) return String(summary.summary_line).trim();
+  const status = String(taskOrRun.last_status || taskOrRun.status || "");
+  if (status === "skipped" || status.startsWith("error")) {
+    return formatOutcomeReason(taskOrRun);
+  }
+  return "";
+}
+
+/** Secondary line under LAST RUN — summary metrics, skip reason, or started time. */
+export function formatTaskLastRunDetail(task) {
+  if (!task) return "";
+  if (isTaskRunning(task)) return "";
+  const summaryLine = formatRunSummaryLine(task);
+  if (summaryLine) return summaryLine;
+  if (task.last_started_at) {
+    return `Started ${formatEpoch(task.last_started_at)}`;
+  }
+  return "";
+}
+
+export function formatLastOutcomeLine(task) {
+  const { status, reason, when } = resolveLastOutcome(task);
+  const label = summarizeLastStatus(status);
+  if (label === "Never run") return "Never run";
+  const whenText = when != null && when !== "" ? formatEpoch(when) : null;
+  const base = whenText ? `${label} · ${whenText}` : label;
+  if ((status === "skipped" || String(status || "").startsWith("error")) && reason) {
+    return `${base} — ${reason}`;
+  }
+  return base;
+}
+
 export function isTaskRunning(task) {
   return Boolean(task?.running || task?.current_run);
 }
@@ -107,6 +185,7 @@ export function taskRowTone(task) {
   if (task?.quarantine?.is_quarantined) return "quarantined";
   const status = String(task?.last_status || "");
   if (status.startsWith("error")) return "error";
+  if (status === "skipped") return "skipped";
   if (!task?.enabled) return "disabled";
   if (task?.overdue) return "overdue";
   return "ok";
@@ -116,5 +195,13 @@ export function formatLogLine(event) {
   if (!event) return "";
   const time = formatEpoch(event.ts);
   const level = String(event.level || "info").toUpperCase();
-  return `[${time}] ${level}  ${event.message || ""}`;
+  const data = event.data || {};
+  const summaryLine = String(data.summary_line || "").trim();
+  const reason = formatOutcomeReason(data);
+  const base = `[${time}] ${level}  ${event.message || ""}`;
+  const extra = summaryLine || reason;
+  if (extra && !String(event.message || "").includes(extra)) {
+    return `${base} — ${extra}`;
+  }
+  return base;
 }

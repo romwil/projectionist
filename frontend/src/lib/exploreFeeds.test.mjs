@@ -7,6 +7,7 @@ import {
   buildExploreSectionQuery,
   buildPulseStats,
   feedPaginationSummary,
+  formatTotalRuntimeMinutes,
   getExploreSectionConfig,
   normalizeFeed,
   normalizeMediaTypeFilter,
@@ -52,36 +53,100 @@ test("toggleMotifSelection adds and removes", () => {
 });
 
 test("buildMotifQueryParams encodes motifs csv", () => {
-  const params = buildMotifQueryParams(["time loop", "found family"], { limit: 24 });
-  assert.equal(params.get("limit"), "24");
+  const params = buildMotifQueryParams(["time loop", "found family"], { limit: 40 });
+  assert.equal(params.get("limit"), "40");
   assert.equal(params.get("motifs"), "time loop,found family");
+  assert.equal(params.get("offset"), null);
+  assert.equal(params.get("media_type"), null);
 });
 
 test("buildMotifQueryParams omits motifs when empty", () => {
-  const params = buildMotifQueryParams([], { limit: 12 });
-  assert.equal(params.get("limit"), "12");
+  const params = buildMotifQueryParams([], { limit: 20 });
+  assert.equal(params.get("limit"), "20");
   assert.equal(params.get("motifs"), null);
 });
 
-test("buildPulseStats picks editorial overview + health fields", () => {
+test("buildMotifQueryParams includes media type and offset", () => {
+  const params = buildMotifQueryParams(["heist"], {
+    limit: 50,
+    offset: 50,
+    mediaType: "movie",
+  });
+  assert.equal(params.get("limit"), "50");
+  assert.equal(params.get("offset"), "50");
+  assert.equal(params.get("media_type"), "movie");
+  assert.equal(params.get("motifs"), "heist");
+});
+
+test("buildMotifQueryParams normalizes tv media type and page size", () => {
+  const params = buildMotifQueryParams(["comedy"], { limit: 99, mediaType: "tv" });
+  assert.equal(params.get("limit"), "20");
+  assert.equal(params.get("media_type"), "show");
+});
+
+test("formatTotalRuntimeMinutes uses days and hours for large totals", () => {
+  assert.equal(formatTotalRuntimeMinutes(45), "45m");
+  assert.equal(formatTotalRuntimeMinutes(125), "2h 5m");
+  assert.equal(formatTotalRuntimeMinutes(1440), "1d");
+  assert.equal(formatTotalRuntimeMinutes(1500), "1d 1h");
+  assert.equal(formatTotalRuntimeMinutes(0), null);
+  assert.equal(formatTotalRuntimeMinutes(null), null);
+});
+
+test("buildPulseStats groups Movies/Shows with per-type metrics", () => {
   const stats = buildPulseStats(
     {
       total: 100,
       movies: 80,
       shows: 20,
-      top_genres: [{ genre: "Drama", count: 40 }],
-      avg_runtime_minutes: 112.4,
+      by_media_type: {
+        movie: {
+          count: 80,
+          top_genre: { genre: "Drama", count: 30 },
+          total_runtime_minutes: 9600,
+        },
+        show: {
+          count: 20,
+          top_genre: { genre: "Comedy", count: 8 },
+          total_runtime_minutes: 2400,
+        },
+      },
     },
-    { unwatched_pct: 33.3, stale_adds: 12 },
+    {
+      unwatched_pct: 33.3,
+      stale_adds: 12,
+      by_media_type: {
+        movie: { total: 80, unwatched_pct: 25, stale_adds: 10 },
+        show: { total: 20, unwatched_pct: 50, stale_adds: 2 },
+      },
+    },
   );
   const byId = Object.fromEntries(stats.map((s) => [s.id, s]));
+  assert.equal(byId.total.kind, "summary");
   assert.equal(byId.total.value, "100");
+  assert.equal(byId.movies.kind, "media");
   assert.equal(byId.movies.value, "80");
-  assert.equal(byId.unwatched.value, "33%");
-  assert.equal(byId.stale.value, "12");
-  assert.equal(byId.genre.value, "Drama");
-  assert.equal(byId.runtime.value, "112m");
-  assert.ok(stats.length <= 7);
+  assert.equal(byId.shows.value, "20");
+  const movieMetrics = Object.fromEntries(byId.movies.metrics.map((m) => [m.id, m]));
+  assert.equal(movieMetrics.unwatched.value, "25%");
+  assert.equal(movieMetrics.stale.value, "10");
+  assert.equal(movieMetrics.genre.value, "Drama");
+  assert.equal(movieMetrics.runtime.value, "6d 16h");
+  const showMetrics = Object.fromEntries(byId.shows.metrics.map((m) => [m.id, m]));
+  assert.equal(showMetrics.unwatched.value, "50%");
+  assert.equal(showMetrics.genre.value, "Comedy");
+  assert.equal(showMetrics.runtime.value, "1d 16h");
+  assert.equal(stats.length, 3);
+  assert.ok(!byId.unwatched);
+  assert.ok(!byId.genre);
+});
+
+test("buildPulseStats still returns media cards without by_media_type", () => {
+  const stats = buildPulseStats({ total: 5, movies: 3, shows: 2 }, {});
+  const byId = Object.fromEntries(stats.map((s) => [s.id, s]));
+  assert.equal(byId.movies.value, "3");
+  assert.deepEqual(byId.movies.metrics, []);
+  assert.equal(byId.shows.value, "2");
 });
 
 test("normalizeMotifFacets filters blank values", () => {
@@ -143,6 +208,20 @@ test("feedPaginationSummary computes page metadata", () => {
   assert.equal(summary.pageCount, 3);
   assert.equal(summary.hasMore, true);
   assert.equal(summary.hasPrev, true);
+});
+
+test("feedPaginationSummary accepts total_matched from library query", () => {
+  const summary = feedPaginationSummary({
+    total_matched: 90,
+    offset: 40,
+    limit: 40,
+    items: new Array(40).fill({}),
+    has_more: true,
+  });
+  assert.equal(summary.total, 90);
+  assert.equal(summary.page, 2);
+  assert.equal(summary.pageCount, 3);
+  assert.equal(summary.hasMore, true);
 });
 
 test("getExploreSectionConfig resolves known sections", () => {

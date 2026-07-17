@@ -51,6 +51,7 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 from curatorx.config_store import Settings, load_merged_settings
 from curatorx.library.db import Database
 from curatorx.scheduler.run_log import TaskRunLogStore
+from curatorx.scheduler.run_outcome import build_run_summary
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,8 @@ class TaskState:
     run_interval_seconds: int = 3600
     last_duration_ms: Optional[int] = None
     last_status: Optional[str] = None
+    last_outcome_reason: Optional[str] = None
+    last_run_summary: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -263,23 +266,59 @@ class IdleScheduler:
                 }
             running = self._running_task == state.name
             last_meta = self._run_log.last_run(state.name) or {}
+            last_status = state.last_status
+            last_duration_ms = state.last_duration_ms
+            last_run_at = state.last_run_at
+            last_outcome_reason = state.last_outcome_reason
+            last_run_summary = state.last_run_summary
             last_started_at = last_meta.get("started_at")
-            if last_started_at is None and state.last_run_at is not None and state.last_duration_ms is not None:
-                last_started_at = state.last_run_at - (state.last_duration_ms / 1000.0)
+            finished_at = last_meta.get("finished_at")
+            if finished_at is not None and (
+                last_run_at is None or float(finished_at) >= float(last_run_at)
+            ):
+                meta_status = last_meta.get("status")
+                if meta_status and not (
+                    last_status
+                    and last_status != meta_status
+                    and last_status.startswith(meta_status)
+                ):
+                    # Keep a more detailed persisted status (e.g. "error: <detail>")
+                    # instead of clobbering it with the run-log's canonical code.
+                    last_status = meta_status
+                if last_meta.get("duration_ms") is not None:
+                    last_duration_ms = last_meta.get("duration_ms")
+                last_run_at = float(finished_at)
+                last_outcome_reason = last_meta.get("outcome_reason") or last_outcome_reason
+                if last_meta.get("summary_line") or last_meta.get("metrics"):
+                    last_run_summary = {
+                        "summary_line": last_meta.get("summary_line"),
+                        "metrics": last_meta.get("metrics") or {},
+                        "outcome_reason": last_meta.get("outcome_reason"),
+                        "status": last_meta.get("status"),
+                    }
+            if last_started_at is None and last_run_at is not None and last_duration_ms is not None:
+                last_started_at = last_run_at - (last_duration_ms / 1000.0)
             if running and self._running_started_at is not None:
                 last_started_at = self._running_started_at
+            if last_run_summary is None and state.last_run_summary:
+                last_run_summary = state.last_run_summary
             result.append(
                 {
                     "name": state.name,
                     "id": state.name,
                     "enabled": state.enabled,
                     "run_interval_seconds": interval,
-                    "last_run_at": state.last_run_at,
+                    "last_run_at": last_run_at,
                     "last_started_at": last_started_at,
-                    "last_finished_at": state.last_run_at,
+                    "last_finished_at": last_run_at,
                     "next_run_at": next_run,
-                    "last_duration_ms": state.last_duration_ms,
-                    "last_status": state.last_status,
+                    "last_duration_ms": last_duration_ms,
+                    "last_status": last_status,
+                    "last_outcome_reason": last_outcome_reason,
+                    "last_run_summary": last_run_summary,
+                    "last_run_summary_line": (
+                        (last_run_summary or {}).get("summary_line") if last_run_summary else None
+                    ),
                     "registered": defn is not None,
                     "running": running,
                     "current_run": self._run_log.current_run(state.name) if running else None,
@@ -433,10 +472,24 @@ class IdleScheduler:
                     enabled INTEGER DEFAULT 1,
                     run_interval_seconds INTEGER NOT NULL,
                     last_duration_ms INTEGER,
-                    last_status TEXT
+                    last_status TEXT,
+                    last_outcome_reason TEXT,
+                    last_run_summary TEXT
                 )
                 """
             )
+            columns = {
+                str(row[1])
+                for row in conn.execute("PRAGMA table_info(scheduled_tasks)").fetchall()
+            }
+            if "last_outcome_reason" not in columns:
+                conn.execute(
+                    "ALTER TABLE scheduled_tasks ADD COLUMN last_outcome_reason TEXT"
+                )
+            if "last_run_summary" not in columns:
+                conn.execute(
+                    "ALTER TABLE scheduled_tasks ADD COLUMN last_run_summary TEXT"
+                )
 
     def _upsert_task_state(self, defn: TaskDefinition) -> None:
         with self._db.connect() as conn:
@@ -470,6 +523,15 @@ class IdleScheduler:
                 last_run_at = float(raw)
             except (ValueError, TypeError):
                 pass
+        last_run_summary: Optional[Dict[str, Any]] = None
+        raw_summary = row["last_run_summary"] if "last_run_summary" in row.keys() else None
+        if raw_summary:
+            try:
+                parsed = json.loads(str(raw_summary))
+                if isinstance(parsed, dict):
+                    last_run_summary = parsed
+            except (json.JSONDecodeError, TypeError, ValueError):
+                pass
         return TaskState(
             name=str(row["name"]),
             last_run_at=last_run_at,
@@ -477,6 +539,10 @@ class IdleScheduler:
             run_interval_seconds=int(row["run_interval_seconds"]),
             last_duration_ms=int(row["last_duration_ms"]) if row["last_duration_ms"] is not None else None,
             last_status=str(row["last_status"]) if row["last_status"] is not None else None,
+            last_outcome_reason=(
+                str(row["last_outcome_reason"]) if row["last_outcome_reason"] is not None else None
+            ),
+            last_run_summary=last_run_summary,
         )
 
     def _row_to_dict(self, row: Any) -> Dict[str, Any]:
@@ -626,15 +692,26 @@ class IdleScheduler:
             elapsed_ms = int((time.time() - start) * 1000)
 
             status = result.get("status", "completed") if isinstance(result, dict) else "completed"
+            run_summary = build_run_summary(
+                status,
+                result=result if isinstance(result, dict) else None,
+            )
+            outcome_reason = run_summary.get("outcome_reason")
             qinfo.record_success()
-            self._record_run(defn.name, elapsed_ms, status)
+            self._record_run(
+                defn.name,
+                elapsed_ms,
+                status,
+                outcome_reason=outcome_reason,
+                run_summary=run_summary,
+            )
             self._run_log.end_run(
                 defn.name,
                 status=status,
                 duration_ms=elapsed_ms,
                 result=result if isinstance(result, dict) else None,
             )
-            self._emit_progress(defn.name, "completed")
+            self._emit_progress(defn.name, status)
             logger.info(
                 "Scheduler: task '%s' finished in %dms — %s",
                 defn.name,
@@ -666,7 +743,13 @@ class IdleScheduler:
                     qinfo.consecutive_failures,
                     error_msg,
                 )
-            self._record_run(defn.name, elapsed_ms, f"error: {error_msg}")
+            self._record_run(
+                defn.name,
+                elapsed_ms,
+                f"error: {error_msg}",
+                outcome_reason=error_msg,
+                run_summary=build_run_summary("error", error=error_msg),
+            )
             self._run_log.end_run(
                 defn.name,
                 status="error",
@@ -694,7 +777,13 @@ class IdleScheduler:
                     qinfo.consecutive_failures,
                     error_msg,
                 )
-            self._record_run(defn.name, elapsed_ms, f"error: {exc}")
+            self._record_run(
+                defn.name,
+                elapsed_ms,
+                f"error: {exc}",
+                outcome_reason=error_msg,
+                run_summary=build_run_summary("error", error=error_msg),
+            )
             self._run_log.end_run(
                 defn.name,
                 status="error",
@@ -714,15 +803,41 @@ class IdleScheduler:
             self._running_task = None
             self._running_started_at = None
 
-    def _record_run(self, name: str, duration_ms: int, status: str) -> None:
+    def _record_run(
+        self,
+        name: str,
+        duration_ms: int,
+        status: str,
+        *,
+        outcome_reason: Optional[str] = None,
+        run_summary: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        summary_payload: Optional[str] = None
+        if isinstance(run_summary, dict) and run_summary.get("summary_line"):
+            summary_payload = json.dumps(
+                {
+                    "summary_line": run_summary.get("summary_line"),
+                    "metrics": run_summary.get("metrics") or {},
+                    "outcome_reason": run_summary.get("outcome_reason"),
+                    "status": run_summary.get("status") or status,
+                }
+            )
         with self._db.connect() as conn:
             conn.execute(
                 """
                 UPDATE scheduled_tasks
-                SET last_run_at = ?, last_duration_ms = ?, last_status = ?
+                SET last_run_at = ?, last_duration_ms = ?, last_status = ?,
+                    last_outcome_reason = ?, last_run_summary = ?
                 WHERE name = ?
                 """,
-                (str(time.time()), duration_ms, status[:200], name),
+                (
+                    str(time.time()),
+                    duration_ms,
+                    status[:200],
+                    outcome_reason[:500] if outcome_reason else None,
+                    summary_payload,
+                    name,
+                ),
             )
 
     def _emit_progress(self, task_name: str, status: str) -> None:

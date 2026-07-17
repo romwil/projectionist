@@ -288,6 +288,30 @@ class PlexClient:
         url = f"{self.base_url}/:/rate?{query}&X-Plex-Token={urllib.parse.quote(self.token)}"
         request_empty(url, method="PUT", timeout=self.timeout)
 
+    def scrobble(self, rating_key: str) -> None:
+        """Mark a library item watched on Plex (`/:/scrobble`)."""
+        self._set_watched_state(rating_key, watched=True)
+
+    def unscrobble(self, rating_key: str) -> None:
+        """Mark a library item unwatched on Plex (`/:/unscrobble`)."""
+        self._set_watched_state(rating_key, watched=False)
+
+    def _set_watched_state(self, rating_key: str, *, watched: bool) -> None:
+        key = str(rating_key or "").strip()
+        if not key:
+            raise ValueError("rating_key is required")
+        action = "scrobble" if watched else "unscrobble"
+        query = urllib.parse.urlencode(
+            {
+                "identifier": PLEX_LIBRARY_IDENTIFIER,
+                "key": key,
+            }
+        )
+        # Short timeout: UI waits on this path; failures are surfaced to the client.
+        timeout = min(int(self.timeout or 30), 10)
+        url = f"{self.base_url}/:/{action}?{query}&X-Plex-Token={urllib.parse.quote(self.token)}"
+        request_empty(url, method="GET", timeout=timeout)
+
     def thumb_url(self, path: str) -> str:
         if not path:
             return ""

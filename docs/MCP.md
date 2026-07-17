@@ -38,7 +38,7 @@ pip install "curatorx[mcp]"
 
 ## Images (TMDB CDN)
 
-Emitted `poster_url` / `backdrop_url` are allowlisted to `https://image.tmdb.org/t/p/{size}/…` only. Configurable sizes in **Admin → Advanced** (persisted in `settings.json`):
+Emitted `poster_url` / `backdrop_url` are allowlisted to `https://image.tmdb.org/t/p/{size}/…` only. Defaults are usually fine; power users can set sizes via `settings.json` or `PUT /api/settings` (not shown on Admin → Advanced):
 
 - `mcp_tmdb_poster_size` (default `w500`; allow `w185` / `w342` / `w500` / `w780`)
 - `mcp_tmdb_backdrop_size` (default `w1280`; allow `w300` / `w780` / `w1280` / `original`)

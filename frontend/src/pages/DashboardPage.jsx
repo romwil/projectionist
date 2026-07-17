@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getLibraryOverview,
   getLibraryAggregate,
@@ -14,7 +14,9 @@ import {
 import BarChart from "../components/charts/BarChart";
 import DonutChart from "../components/charts/DonutChart";
 import Gauge from "../components/charts/Gauge";
+import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import { buildRuntimeBuckets, sortPurgeCandidates } from "../lib/dashboardCharts.js";
+import { titleDetailTargetFromPurgeCandidate } from "../lib/titleDetailDrawer.js";
 
 function useDashData(fetcher) {
   const [data, setData] = useState(null);
@@ -87,6 +89,8 @@ function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, 
   const [confirmAction, setConfirmAction] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [drawerTarget, setDrawerTarget] = useState(null);
+  const titleTriggerRef = useRef(null);
   const sorted = sortPurgeCandidates(candidates, sortKey, sortDir);
   const displayed = sorted.slice(0, 20);
   const generatedLabel = formatPurgeGeneratedAt(generatedAt);
@@ -259,7 +263,25 @@ function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, 
                       aria-label={`Select ${c.title}`}
                     />
                   </td>
-                  <td className="dash-table-title">{c.title}</td>
+                  <td className="dash-table-title">
+                    {titleDetailTargetFromPurgeCandidate(c) ? (
+                      <button
+                        type="button"
+                        className="dash-table-title-btn"
+                        data-testid="purge-candidate-title"
+                        onClick={(event) => {
+                          const target = titleDetailTargetFromPurgeCandidate(c);
+                          if (!target) return;
+                          titleTriggerRef.current = event.currentTarget;
+                          setDrawerTarget(target);
+                        }}
+                      >
+                        {c.title}
+                      </button>
+                    ) : (
+                      c.title
+                    )}
+                  </td>
                   <td>{formatBytes(c.file_size)}</td>
                   <td>{c.last_watched || "Never"}</td>
                   <td>{c.taste_match != null ? `${Math.round(c.taste_match)}%` : "—"}</td>
@@ -271,6 +293,14 @@ function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, 
           </table>
         </div>
       ) : null}
+
+      <TitleDetailDrawer
+        open={Boolean(drawerTarget)}
+        target={drawerTarget}
+        returnFocusRef={titleTriggerRef}
+        onClose={() => setDrawerTarget(null)}
+        onDeleted={() => onRefresh?.()}
+      />
     </div>
   );
 }

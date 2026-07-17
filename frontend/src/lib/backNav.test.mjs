@@ -6,6 +6,7 @@ import {
   isWatchlistPanelRequest,
   resolveBackTarget,
   stripWatchlistPanelParam,
+  watchlistBrowseHref,
   watchlistPanelHref,
   withReturnTo,
 } from "./backNav.js";
@@ -43,7 +44,18 @@ describe("withReturnTo", () => {
   });
 });
 
-describe("watchlist panel deep link", () => {
+describe("watchlist browse route", () => {
+  it("exposes a dedicated /watchlist route", () => {
+    assert.equal(ROUTES.watchlist, "/watchlist");
+    assert.equal(watchlistBrowseHref(), "/watchlist");
+  });
+
+  it("labels the watchlist page back link", () => {
+    assert.equal(backLabelForPath("/watchlist"), "Back to chat");
+  });
+});
+
+describe("watchlist panel deep link (legacy)", () => {
   it("builds chat href that opens the panel", () => {
     assert.equal(watchlistPanelHref(), "/?watchlist=1");
   });

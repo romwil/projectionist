@@ -1,5 +1,10 @@
 import { createId } from "./id.js";
 import { formatLastSyncRelative } from "./jobProgress.js";
+import {
+  formatRateBatchLead,
+  formatRateTitleLead,
+  resolveReviewAddressName,
+} from "./reviewIdentity.js";
 
 function reviewPromptBlock(prompt, options = {}) {
   return {
@@ -178,10 +183,15 @@ async function resolveRateTarget(api, titleQuery) {
   };
 }
 
-export async function executeSlashCommand(parsed, { api, getFeatures, curatorName = "Curator" } = {}) {
+export async function executeSlashCommand(
+  parsed,
+  { api, getFeatures, curatorName = "Curator", user = null } = {},
+) {
   if (!parsed?.command) {
     return assistantBlock("Type `/help` to see available slash commands.");
   }
+
+  const reviewUserName = resolveReviewAddressName(user);
 
   switch (parsed.command) {
     case "help": {
@@ -214,19 +224,15 @@ export async function executeSlashCommand(parsed, { api, getFeatures, curatorNam
         if (!prompts.length) {
           return assistantBlock("Nothing recent to rate — your viewed titles already have reviews.");
         }
-        return assistantBlock(
-          `${curatorName} — tap stars on anything you've watched (half-stars welcome):`,
-          [reviewBatchBlock(prompts)],
-        );
+        return assistantBlock(formatRateBatchLead(reviewUserName), [reviewBatchBlock(prompts)]);
       }
       const resolved = await resolveRateTarget(api, parsed.args);
       if (resolved.error) {
         return assistantBlock(resolved.error);
       }
-      return assistantBlock(
-        `${curatorName} — quick take on **${resolved.prompt.title}**?`,
-        [reviewPromptBlock(resolved.prompt)]
-      );
+      return assistantBlock(formatRateTitleLead(reviewUserName, resolved.prompt.title), [
+        reviewPromptBlock(resolved.prompt),
+      ]);
     }
 
     case "purge": {

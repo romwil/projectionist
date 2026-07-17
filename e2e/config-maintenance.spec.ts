@@ -56,7 +56,8 @@ test.describe("Admin maintenance dashboard", () => {
     await expect(page.getByTestId("plex-library-mapping")).toBeVisible();
 
     await page.goto("/admin/advanced");
-    await expect(page.getByTestId("advanced-toggle")).toBeVisible();
+    await expect(page.getByTestId("advanced-settings")).toBeVisible();
+    await expect(page.getByTestId("advanced-mcp")).toBeVisible();
   });
 
   test("library sync card is on sync route", async ({ page }) => {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   formatApiError,
   getWatchlistSync,
@@ -6,6 +7,23 @@ import {
   runWatchlistSync,
   updateWatchlistSync,
 } from "../../api/client";
+import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
+import SettingsPanel from "../../components/settings/SettingsPanel";
+import SettingsToggle from "../../components/settings/SettingsToggle";
+import { ROUTES } from "../../lib/backNav.js";
+
+function formatSyncStats(status) {
+  if (!status || status.last_pull_total == null) return null;
+  const parts = [`Pulled ${status.last_pull_total}`];
+  if (status.last_pull_added != null) parts.push(`added ${status.last_pull_added}`);
+  if (status.last_pull_updated != null && status.last_pull_updated > 0) {
+    parts.push(`updated ${status.last_pull_updated}`);
+  }
+  if (status.last_pull_unresolved != null && status.last_pull_unresolved > 0) {
+    parts.push(`unresolved ${status.last_pull_unresolved}`);
+  }
+  return parts.join(" · ");
+}
 
 export default function WatchlistSettingsPage() {
   const [status, setStatus] = useState(null);
@@ -56,10 +74,21 @@ export default function WatchlistSettingsPage() {
           type: "error",
           text: result.message || "Re-sign in with Plex to sync your Discover watchlist.",
         });
+      } else if (Array.isArray(result.errors) && result.errors.length) {
+        const stats = formatSyncStats(result);
+        setMessage({
+          type: "error",
+          text: stats
+            ? `Sync finished with issues — ${stats}. ${result.errors[0]}`
+            : `Sync finished with issues: ${result.errors[0]}`,
+        });
       } else {
+        const stats = formatSyncStats(result);
         setMessage({
           type: "success",
-          text: `Synced — pulled ${result.pulled ?? 0}, pushed ${result.pushed ?? 0}.`,
+          text: stats
+            ? `Synced — ${stats}, pushed ${result.pushed ?? 0}.`
+            : `Synced — pulled ${result.pulled ?? 0}, pushed ${result.pushed ?? 0}.`,
         });
       }
     } catch (error) {
@@ -71,78 +100,87 @@ export default function WatchlistSettingsPage() {
 
   if (loading && !status) {
     return (
-      <section className="settings-section" data-testid="settings-watchlist">
-        <h2>Watchlist</h2>
+      <div className="settings-stack" data-testid="settings-watchlist">
+        <SettingsPageHeader title="Watchlist">Loading sync status…</SettingsPageHeader>
         <p className="status status-secondary">Loading sync status…</p>
-      </section>
+      </div>
     );
   }
 
+  const lastSyncStats = formatSyncStats(status);
+
   return (
-    <section className="settings-section" data-testid="settings-watchlist">
-      <header className="settings-section-header">
-        <h2>Watchlist</h2>
-        <p>
-          Pins live in chat. When sync is on, CuratorX pulls your Plex Discover watchlist and pushes
-          local pins using your personal Sign-in-with-Plex token.
-        </p>
-      </header>
+    <div className="settings-stack" data-testid="settings-watchlist">
+      <SettingsPageHeader title="Watchlist" testId="settings-watchlist-header">
+        Sync preferences for your Plex Discover watchlist. Browse and manage pinned titles on the{" "}
+        <Link to={ROUTES.watchlist}>Watchlist page</Link>.
+      </SettingsPageHeader>
 
-      <div className="settings-subsection" data-testid="watchlist-sync-panel">
-        <h3>Plex Discover sync</h3>
-        <p className="status status-secondary" data-testid="watchlist-sync-token-status">
-          {status?.has_account_token
-            ? "Account token on file from Sign in with Plex."
-            : status?.has_plex_token
-              ? status.message || "Using server Plex token (prefer Sign in with Plex)."
-              : status?.message || "Re-sign in with Plex to sync your Discover watchlist."}
+      <SettingsPanel
+        title="Plex Discover sync"
+        lead="Uses your Sign-in-with-Plex account token to pull Discover watchlist items into CuratorX and optionally push local pins back."
+        testId="watchlist-sync-panel"
+        footer={
+          <>
+            <button
+              type="button"
+              data-testid="watchlist-sync-now"
+              disabled={syncing || !status?.enabled}
+              onClick={handleSyncNow}
+            >
+              {syncing ? "Syncing…" : "Sync now"}
+            </button>
+            <Link to={ROUTES.watchlist} className="settings-inline-link" data-testid="watchlist-open-list">
+              Open watchlist
+            </Link>
+          </>
+        }
+      >
+        <p className="settings-kv" data-testid="watchlist-sync-token-status">
+          <span className="settings-kv-label">Token</span>
+          <span>
+            {status?.has_account_token
+              ? "Account token on file from Sign in with Plex."
+              : status?.has_plex_token
+                ? status.message || "Using server Plex token (prefer Sign in with Plex)."
+                : status?.message || "Re-sign in with Plex to sync your Discover watchlist."}
+          </span>
         </p>
-        <p className="status status-secondary" data-testid="watchlist-last-synced">
-          Last synced:{" "}
-          {status?.last_synced_at ? relativeTime(status.last_synced_at) : "never"}
+        <p className="settings-kv" data-testid="watchlist-last-synced">
+          <span className="settings-kv-label">Last synced</span>
+          <span>{status?.last_synced_at ? relativeTime(status.last_synced_at) : "never"}</span>
         </p>
+        {lastSyncStats ? (
+          <p className="settings-kv" data-testid="watchlist-last-sync-stats">
+            <span className="settings-kv-label">Last pull</span>
+            <span>{lastSyncStats}</span>
+          </p>
+        ) : null}
 
-        <label className="settings-toggle-row">
-          <input
-            type="checkbox"
-            data-testid="watchlist-sync-enabled"
-            checked={Boolean(status?.enabled)}
-            disabled={saving}
-            onChange={(event) => patchSettings({ enabled: event.target.checked })}
-          />
-          <span>Enable sync with Plex Discover watchlist</span>
-        </label>
-        <label className="settings-toggle-row">
-          <input
-            type="checkbox"
-            data-testid="watchlist-pull-on-login"
-            checked={Boolean(status?.pull_on_login)}
-            disabled={saving || !status?.enabled}
-            onChange={(event) => patchSettings({ pull_on_login: event.target.checked })}
-          />
-          <span>Pull from Plex on login</span>
-        </label>
-        <label className="settings-toggle-row">
-          <input
-            type="checkbox"
-            data-testid="watchlist-push-on-pin"
-            checked={Boolean(status?.push_on_pin)}
-            disabled={saving || !status?.enabled}
-            onChange={(event) => patchSettings({ push_on_pin: event.target.checked })}
-          />
-          <span>Push pins to Plex when added or removed</span>
-        </label>
-
-        <div className="config-actions">
-          <button
-            type="button"
-            data-testid="watchlist-sync-now"
-            disabled={syncing || !status?.enabled}
-            onClick={handleSyncNow}
-          >
-            {syncing ? "Syncing…" : "Sync now"}
-          </button>
-        </div>
+        <SettingsToggle
+          testId="watchlist-sync-enabled"
+          id="watchlist-sync-enabled"
+          checked={Boolean(status?.enabled)}
+          disabled={saving}
+          label="Enable sync with Plex Discover watchlist"
+          onChange={(value) => patchSettings({ enabled: value })}
+        />
+        <SettingsToggle
+          testId="watchlist-pull-on-login"
+          id="watchlist-pull-on-login"
+          checked={Boolean(status?.pull_on_login)}
+          disabled={saving || !status?.enabled}
+          label="Pull from Plex on login"
+          onChange={(value) => patchSettings({ pull_on_login: value })}
+        />
+        <SettingsToggle
+          testId="watchlist-push-on-pin"
+          id="watchlist-push-on-pin"
+          checked={Boolean(status?.push_on_pin)}
+          disabled={saving || !status?.enabled}
+          label="Push pins to Plex when added or removed"
+          onChange={(value) => patchSettings({ push_on_pin: value })}
+        />
 
         {Array.isArray(status?.limitations) && status.limitations.length ? (
           <ul className="settings-footnote-list" data-testid="watchlist-sync-limitations">
@@ -151,7 +189,7 @@ export default function WatchlistSettingsPage() {
             ))}
           </ul>
         ) : null}
-      </div>
+      </SettingsPanel>
 
       {message ? (
         <p
@@ -161,6 +199,6 @@ export default function WatchlistSettingsPage() {
           {message.text}
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }

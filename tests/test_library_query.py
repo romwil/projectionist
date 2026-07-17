@@ -120,6 +120,58 @@ class LibraryQueryTests(unittest.TestCase):
             decades = {d["decade"]: d["count"] for d in overview["decades"]}
             self.assertIn("1970s", decades)
 
+    def test_compute_overview_by_media_type(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "m1",
+                    "media_type": "movie",
+                    "title": "Alien",
+                    "year": 1979,
+                    "genres": ["Horror", "Sci-Fi"],
+                    "runtime_minutes": 117,
+                    "view_count": 0,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "m2",
+                    "media_type": "movie",
+                    "title": "Star Wars",
+                    "year": 1977,
+                    "genres": ["Sci-Fi"],
+                    "runtime_minutes": 121,
+                    "view_count": 1,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "s1",
+                    "media_type": "show",
+                    "title": "Twilight Zone",
+                    "year": 1959,
+                    "genres": ["Drama"],
+                    "runtime_minutes": 30,
+                    "view_count": 0,
+                }
+            )
+            overview = compute_library_overview(db)
+            self.assertEqual(overview["movies"], 2)
+            self.assertEqual(overview["shows"], 1)
+            self.assertEqual(overview["total_runtime_minutes"], 268)
+            self.assertEqual(overview["avg_runtime_minutes"], round(268 / 3, 1))
+            movie = overview["by_media_type"]["movie"]
+            show = overview["by_media_type"]["show"]
+            self.assertEqual(movie["count"], 2)
+            self.assertEqual(movie["total_runtime_minutes"], 238)
+            self.assertEqual(movie["top_genre"]["genre"], "Sci-Fi")
+            self.assertEqual(movie["top_genre"]["count"], 2)
+            self.assertEqual(show["count"], 1)
+            self.assertEqual(show["total_runtime_minutes"], 30)
+            self.assertEqual(show["top_genre"]["genre"], "Drama")
+            self.assertEqual(show["top_genre"]["count"], 1)
+
     def test_query_runtime_filter(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
