@@ -7,7 +7,7 @@
 - Hide FastAPI `/docs`, `/redoc`, and `/openapi.json` unless `CURATORX_EXPOSE_OPENAPI=1` (finding S15 / TC-PERIM-05).
 
 ### Added
-- Repeatable penetration-test protocol v1.0: `docs/security/pentests/`, harness `scripts/security/pentest/`, baseline engagement `2026-07-platform-full/`.
+- Repeatable penetration-test protocol v1.0: `docs/security/pentests/`, harness `scripts/security/pentest/` (bootstrap, loopback mocks, checklists, runners), baseline engagement `2026-07-platform-full/` (29 pass / 0 fail / 1 skip).
 
 ## [1.8.5] — 2026-07-16
 
