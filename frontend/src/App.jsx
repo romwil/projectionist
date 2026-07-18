@@ -64,7 +64,11 @@ import { blendAmbientAccent } from "./lib/ambientAccent.js";
 import { shouldSubmitComposerOnEnter } from "./lib/composerKeyboard.js";
 import { createId } from "./lib/id.js";
 import { executeSlashCommand, parseSlashCommand } from "./lib/slashCommands.js";
-import { normalizeQuickPickError, normalizeQuickPickResult } from "./lib/quickPick.js";
+import {
+  normalizeQuickPickError,
+  normalizeQuickPickResult,
+  quickPickToAssistantMessage,
+} from "./lib/quickPick.js";
 import { resolveActivePersonaId } from "./lib/resolveActivePersona.js";
 import {
   createKonamiTracker,
@@ -87,7 +91,9 @@ import {
 import {
   isRateFlowRequest,
   isWatchlistPanelRequest,
+  recommendLikePrompt,
   ROUTES,
+  stripRecommendLikeParam,
   stripRateFlowParam,
   stripWatchlistPanelParam,
 } from "./lib/backNav.js";
@@ -110,7 +116,6 @@ import WatchlistPanel from "./components/WatchlistPanel";
 import WelcomePanel from "./components/WelcomePanel";
 import OnThisDayCard from "./components/OnThisDayCard";
 import LibraryGlanceCard from "./components/LibraryGlanceCard";
-import QuickPickCard from "./components/QuickPickCard";
 import UserMenu, { useAuthGate } from "./components/UserMenu";
 import { reviewPromptBlock } from "./components/ReviewPromptCard";
 import useChatScroll from "./hooks/useChatScroll";
@@ -186,7 +191,6 @@ export default function App() {
   const [anniversaries, setAnniversaries] = useState([]);
   const [libraryGlance, setLibraryGlance] = useState(null);
   const [glanceShown, setGlanceShown] = useState(false);
-  const [quickPick, setQuickPick] = useState(null);
   const [quickPickLoading, setQuickPickLoading] = useState(false);
   const [undoToast, setUndoToast] = useState(null);
   const [personas, setPersonas] = useState([]);
@@ -198,11 +202,11 @@ export default function App() {
   const jobsRunningRef = useRef(false);
   const tokenNoteLoggedRef = useRef(false);
   const composerRef = useRef(null);
-  const quickPickAnchorRef = useRef(null);
   const konamiTrackerRef = useRef(null);
   const inputRef = useRef("");
   const pendingDeleteRef = useRef(null);
   const rateFlowStartedRef = useRef(false);
+  const recommendLikeStartedRef = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return sessionStorage.getItem(SIDEBAR_RAIL_KEY) === "true";
@@ -788,24 +792,23 @@ export default function App() {
     setQuickPickLoading(true);
     try {
       const result = await api("/library/quick-pick");
-      setQuickPick(normalizeQuickPickResult(result));
+      const message = {
+        id: createId(),
+        ...quickPickToAssistantMessage(normalizeQuickPickResult(result)),
+      };
+      setMessages((prev) => [...prev, message]);
+      speakAssistantMessage(message);
     } catch (error) {
-      setQuickPick(normalizeQuickPickError(error, formatApiError));
+      const message = {
+        id: createId(),
+        ...quickPickToAssistantMessage(normalizeQuickPickError(error, formatApiError)),
+      };
+      setMessages((prev) => [...prev, message]);
+      speakAssistantMessage(message);
     } finally {
       setQuickPickLoading(false);
     }
   }
-
-  // Surprise Me renders near the composer (below the transcript). Scroll it into
-  // view so a long chat history never makes the pick look like a silent no-op.
-  useEffect(() => {
-    if (!quickPickLoading && !quickPick) return;
-    const el = quickPickAnchorRef.current;
-    if (!el) return;
-    requestAnimationFrame(() => {
-      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    });
-  }, [quickPickLoading, quickPick]);
 
   async function sendMessage(text) {
     if (!text.trim() || loading) return;
@@ -957,6 +960,18 @@ export default function App() {
     rateFlowStartedRef.current = true;
     setSearchParams(stripRateFlowParam(searchParams), { replace: true });
     sendMessage("/rate");
+  }, [authReady, threadsReady, loading, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!authReady || !threadsReady || loading || recommendLikeStartedRef.current) return;
+    const prompt = recommendLikePrompt(searchParams);
+    if (!prompt) {
+      recommendLikeStartedRef.current = false;
+      return;
+    }
+    recommendLikeStartedRef.current = true;
+    setSearchParams(stripRecommendLikeParam(searchParams), { replace: true });
+    sendMessage(prompt);
   }, [authReady, threadsReady, loading, searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -1592,28 +1607,6 @@ export default function App() {
               draggableToDock={dockDropEnabled}
               onReviewConflictResolved={handleReviewConflictResolved}
             />
-            {quickPickLoading || quickPick ? (
-              <div ref={quickPickAnchorRef} data-testid="quick-pick-anchor">
-                <QuickPickCard
-                  item={quickPick?.item}
-                  why={quickPick?.why}
-                  status={quickPick?.status}
-                  message={quickPick?.message}
-                  loading={quickPickLoading}
-                  onRetry={handleQuickPick}
-                  onTellMore={
-                    quickPick?.item?.title
-                      ? () => sendMessage(`Tell me more about ${quickPick.item.title}`)
-                      : undefined
-                  }
-                  onAdd={handleAdd}
-                  onDismiss={() => setQuickPick(null)}
-                  requestPath={requestPath}
-                  userRole={userRole}
-                  multiUserEnabled={multiUserEnabled}
-                />
-              </div>
-            ) : null}
             {loading || agentActivityLog.length > 0 ? (
               <TypingIndicator
                 label={

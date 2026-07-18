@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
-[![Version](https://img.shields.io/badge/version-1.8.14-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.8.15-green.svg)](CHANGELOG.md)
 
 **Agentic access to your structured + unstructured local media data — chat curator, Explore hub, and privacy-first MCP for self-hosted Plex.**
 
@@ -115,7 +115,7 @@ Published multi-arch images (**amd64 + arm64**):
 |-----|-----|
 | [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Everyday Unraid / Compose (CA template default) |
 | [`romwil/curatorx:1.8`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.8 line |
-| [`romwil/curatorx:1.8.14`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
+| [`romwil/curatorx:1.8.15`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
 
 **Unraid:** install from Community Applications using the template (`templates/curatorx.xml` / `unraid/curatorx.xml`; CA icons at `unraid/curatorx-icon.png` / `unraid/curatorx-icon-512.png`), or add the container manually:
 

@@ -13,6 +13,7 @@ export default function MediaListView({
   onSeed,
   onTogglePin,
   getItemKey,
+  cardProps = {},
 }) {
   return <div className="media-list-view" role="table" aria-label="Titles">
     <div className="media-list-row media-list-header" role="row">
@@ -23,6 +24,7 @@ export default function MediaListView({
     {items.map((item) => {
       const key = getItemKey?.(item) || String(item.id || item.rating_key || item.plex_rating_key || `${item.media_type}:${item.tmdb_id || item.title}`);
       const path = titleDetailPath({ ...item, in_library: true });
+      const itemCardProps = typeof cardProps === "function" ? cardProps(item) : cardProps;
       return <div className="media-list-row" role="row" key={key}>
         {selectable ? <label><input type="checkbox" checked={selected?.has(key)} onChange={() => onToggleSelect?.(item)} /><span className="sr-only">Select {item.title}</span></label> : null}
         {columns.map((column) => <span key={column} role="cell" data-column={column}>
@@ -31,7 +33,13 @@ export default function MediaListView({
               column === "watch_state" ? (item.watched ? "Watched" : item.view_offset ? "In progress" : "Unwatched") :
                 item[column] ?? "—"}
         </span>)}
-        <PosterActionMenu item={item} onRecommend={onRecommend} onSeed={onSeed} onTogglePin={onTogglePin} />
+        <PosterActionMenu
+          item={item}
+          onRecommend={onRecommend}
+          onSeed={onSeed}
+          onTogglePin={onTogglePin}
+          {...itemCardProps}
+        />
       </div>;
     })}
   </div>;

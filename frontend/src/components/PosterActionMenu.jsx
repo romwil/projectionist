@@ -9,6 +9,7 @@ import {
 } from "../api/client";
 import { useAuthGate } from "./UserMenu";
 import ReportMediaIssueModal from "./ReportMediaIssueModal";
+import { recommendLikeHref } from "../lib/backNav.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 
 export default function PosterActionMenu({
@@ -103,13 +104,14 @@ export default function PosterActionMenu({
     {open ? <div className="poster-action-popover" role="menu">
       {detailPath ? <Link to={detailPath} onClick={() => setOpen(false)}>Open details</Link> : null}
       {plexHref ? <a href={plexHref} target="_blank" rel="noopener noreferrer">Watch on Plex</a> : null}
-      <button type="button" onClick={togglePin}>{pinned ? "Unpin watchlist" : "Pin to watchlist"}</button>
-      {listId && onRemoveFromList ? <button type="button" onClick={async () => { await onRemoveFromList(listId, listItemId); onRemovedFromList?.(); }}>Remove from this playlist</button> : null}
+      <button type="button" onClick={togglePin}>{pinned ? "Remove from watchlist" : "Add to watchlist"}</button>
+      {listId && onRemoveFromList ? <button type="button" onClick={async () => { await onRemoveFromList(listId, listItemId); onRemovedFromList?.(); }}>Remove from this collection</button> : null}
       <button type="button" onClick={openLists}>Add to list or playlist…</button>
       {listOpen ? <div className="poster-action-submenu">
         {lists.length ? lists.map((list) => <button key={list.id} type="button" onClick={() => addToList(list)}>{list.name} <span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span></button>) : <span>No lists yet</span>}
       </div> : null}
       {onRecommend && multiUserEnabled ? <button type="button" onClick={() => { onRecommend(item); setOpen(false); }}>Recommend</button> : null}
+      {item?.title ? <Link to={recommendLikeHref(item)} onClick={() => setOpen(false)}>Recommend like this in chat</Link> : null}
       {onSeed ? <button type="button" onClick={() => { onSeed(item); setOpen(false); }}>More like this</button> : null}
       {motifWhy ? <button type="button" onClick={() => { setStatus(motifWhy.summary || "This title matches the current context."); }}>Why this?</button> : null}
       <button type="button" onClick={() => setReportOpen(true)}>Report issue…</button>

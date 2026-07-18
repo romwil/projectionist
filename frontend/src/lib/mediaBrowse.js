@@ -110,3 +110,23 @@ export function libraryExportHref(state, columns = []) {
   if (columns.length) params.set("columns", columns.join(","));
   return `/api/library/export.csv?${params.toString()}`;
 }
+
+/** Serialize the currently visible local collection without widening its scope. */
+export function mediaBrowseRowsToCsv(items, columns) {
+  const quote = (value) => {
+    const isList = Array.isArray(value);
+    const text = isList ? value.join(" · ") : String(value ?? "");
+    return isList || /[",\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
+  };
+  const valueFor = (item, column) => {
+    if (column === "watch_state") {
+      return item?.watched ? "Watched" : item?.view_offset ? "In progress" : "Unwatched";
+    }
+    if (column === "vote_average") return item?.vote_average ?? item?.rating ?? "";
+    return item?.[column] ?? "";
+  };
+  return [
+    columns.join(","),
+    ...(items || []).map((item) => columns.map((column) => quote(valueFor(item, column))).join(",")),
+  ].join("\n");
+}

@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.8.15] — 2026-07-18
+
+Browse actions and Surprise Me now follow the same compact recommendation language across CuratorX.
+
+### Changed
+- Watchlist and named list/playlist walls now offer the shared current-page CSV menu alongside Poster/List, sort, filters, and columns. Household recommendation actions are available there as on other browse walls.
+- The shared ⋮ action grip uses clear watchlist wording and adds **Recommend like this in chat**, which seeds Chat with the selected title, year, and media type for a related-picks conversation.
+- **Surprise Me** now appends one compact recommendation card followed immediately by its rationale in the chat transcript; it no longer renders a separate full-bleed card near the composer.
+
+### Documentation
+- Help explains why short Explore rails, Plot Lab’s neighbor strip, and credit-annotated person filmographies intentionally remain context-dense exceptions rather than duplicate browse toolbars.
+
 ## [1.8.14] — 2026-07-18
 
 Explore feed browsing now uses the same visible controls as the rest of CuratorX.

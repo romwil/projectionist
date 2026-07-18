@@ -28,6 +28,11 @@ export function watchlistPanelHref() {
 /** Query flag that opens the /rate review batch flow in chat. */
 export const RATE_FLOW_PARAM = "rate";
 
+/** Chat deep-link parameters for discussing recommendations like one title. */
+export const RECOMMEND_LIKE_PARAM = "recommend_like";
+const RECOMMEND_LIKE_YEAR_PARAM = "year";
+const RECOMMEND_LIKE_TYPE_PARAM = "type";
+
 /** Deep-link to the watchlist browse page. */
 export function watchlistBrowseHref() {
   return ROUTES.watchlist;
@@ -36,6 +41,29 @@ export function watchlistBrowseHref() {
 /** Deep-link to chat that triggers the rate / review batch flow. */
 export function rateFlowHref() {
   return `${ROUTES.chat}?${RATE_FLOW_PARAM}=1`;
+}
+
+/** Deep-link to chat and seed a discussion based on a library title. */
+export function recommendLikeHref(item) {
+  const params = new URLSearchParams();
+  const title = String(item?.title || "").trim();
+  if (!title) return ROUTES.chat;
+  params.set(RECOMMEND_LIKE_PARAM, title);
+  if (item?.year) params.set(RECOMMEND_LIKE_YEAR_PARAM, String(item.year));
+  if (item?.media_type) params.set(RECOMMEND_LIKE_TYPE_PARAM, String(item.media_type));
+  return `${ROUTES.chat}?${params.toString()}`;
+}
+
+/** Build the user-visible seeded request from a recommendation-like URL. */
+export function recommendLikePrompt(searchParams) {
+  if (!searchParams || typeof searchParams.get !== "function") return "";
+  const title = String(searchParams.get(RECOMMEND_LIKE_PARAM) || "").trim();
+  if (!title) return "";
+  const details = [
+    String(searchParams.get(RECOMMEND_LIKE_YEAR_PARAM) || "").trim(),
+    String(searchParams.get(RECOMMEND_LIKE_TYPE_PARAM) || "").trim(),
+  ].filter(Boolean);
+  return `Recommend titles like "${title}"${details.length ? ` (${details.join(", ")})` : ""} and help me discuss what makes it work.`;
 }
 
 /** True when URL search asks to open the Watchlist panel. */
@@ -63,6 +91,15 @@ export function stripWatchlistPanelParam(searchParams) {
 export function stripRateFlowParam(searchParams) {
   const next = new URLSearchParams(searchParams);
   next.delete(RATE_FLOW_PARAM);
+  return next;
+}
+
+/** Return a copy without the one-shot recommend-like chat seed. */
+export function stripRecommendLikeParam(searchParams) {
+  const next = new URLSearchParams(searchParams);
+  next.delete(RECOMMEND_LIKE_PARAM);
+  next.delete(RECOMMEND_LIKE_YEAR_PARAM);
+  next.delete(RECOMMEND_LIKE_TYPE_PARAM);
   return next;
 }
 

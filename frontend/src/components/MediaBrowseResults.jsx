@@ -12,7 +12,15 @@ export default function MediaBrowseResults({
   getItemKey,
 }) {
   if (state.view === "list") {
-    return <MediaListView items={items} columns={columns} selected={selected} onToggleSelect={onToggleSelect} selectable={selectable} getItemKey={getItemKey} {...cardProps} />;
+    return <MediaListView
+      items={items}
+      columns={columns}
+      selected={selected}
+      onToggleSelect={onToggleSelect}
+      selectable={selectable}
+      getItemKey={getItemKey}
+      cardProps={cardProps}
+    />;
   }
   return <div className="explore-poster-wall media-browse-poster-wall">
     {items.map((item) => {

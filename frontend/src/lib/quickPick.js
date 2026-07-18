@@ -73,3 +73,27 @@ export function normalizeQuickPickError(error, formatError) {
     message,
   };
 }
+
+/**
+ * Convert a Surprise Me result into the same compact recommendation blocks used
+ * by the chat transcript. Keeping the explanation after the card preserves the
+ * recommendation → rationale reading order without a bespoke hero treatment.
+ */
+export function quickPickToAssistantMessage(pick) {
+  if (pick?.status === "ready" && pick.item) {
+    return {
+      role: "assistant",
+      blocks: [
+        { type: "title_cards", items: [pick.item] },
+        {
+          type: "text",
+          content: pick.why || "A random unwatched pick from your library for tonight.",
+        },
+      ],
+    };
+  }
+  return {
+    role: "assistant",
+    blocks: [{ type: "text", content: pick?.message || QUICK_PICK_ERROR_FALLBACK }],
+  };
+}

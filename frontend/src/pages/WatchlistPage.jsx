@@ -11,12 +11,13 @@ import BackLink from "../components/BackLink";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
+import RecommendModal from "../components/RecommendModal";
 import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import { partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
-import { buildMediaBrowseParams, parseMediaBrowse } from "../lib/mediaBrowse.js";
+import { buildMediaBrowseParams, mediaBrowseRowsToCsv, parseMediaBrowse } from "../lib/mediaBrowse.js";
 import { titleDetailTargetFromItem } from "../lib/titleDetailDrawer.js";
 
 function pinKey(pin) {
@@ -32,7 +33,7 @@ function pinToCardItem(pin) {
 }
 
 export default function WatchlistPage() {
-  const { isOwner } = useAuthGate();
+  const { isOwner, multiUserEnabled } = useAuthGate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ loading: true, items: [], error: "" });
   const [columns, setColumns] = useState(null);
@@ -43,6 +44,7 @@ export default function WatchlistPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [drawerTarget, setDrawerTarget] = useState(null);
+  const [recommendItem, setRecommendItem] = useState(null);
   const titleTriggerRef = useRef(null);
 
   const refresh = useCallback(async ({ pull = false } = {}) => {
@@ -118,6 +120,16 @@ export default function WatchlistPage() {
     setSearchParams(buildMediaBrowseParams(browse, patch), { replace: true });
   }
 
+  function exportCurrentPage(exportColumns) {
+    const blob = new Blob([mediaBrowseRowsToCsv(cardItems, exportColumns)], { type: "text/csv;charset=utf-8" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = "watchlist.csv";
+    link.click();
+    URL.revokeObjectURL(href);
+  }
+
   async function handleBulkRemove() {
     if (!selected.size || removing) return;
     const targets = sortedItems.filter((pin) => selected.has(pinKey(pin)));
@@ -141,6 +153,14 @@ export default function WatchlistPage() {
         ? `Removed ${ok}; ${failed} failed.`
         : `Removed ${ok} title${ok === 1 ? "" : "s"} from your watchlist.`,
     );
+    await refresh();
+  }
+
+  async function handleToggleCardPin(card) {
+    const pin = sortedItems.find((item) => pinKey(item) === pinKey(card));
+    if (!pin) return;
+    await removeWatchlistPin(pin.id);
+    setActionStatus("Removed from your watchlist.");
     await refresh();
   }
 
@@ -211,7 +231,8 @@ export default function WatchlistPage() {
           columns={columns}
           onColumnsChange={setColumns}
           columnScope="watchlist"
-          exportEnabled={false}
+          exportItems
+          onExport={exportCurrentPage}
         />
         <div className="explore-section-toolbar-row">
           <div className="explore-section-toolbar-primary">
@@ -311,6 +332,10 @@ export default function WatchlistPage() {
             }}
             cardProps={{
               testId: "watchlist-title-card",
+              pinned: true,
+              onTogglePin: handleToggleCardPin,
+              showRecommend: multiUserEnabled,
+              onRecommend: multiUserEnabled ? setRecommendItem : undefined,
               onOpenDetail: (card, event) => {
                 const pin = sortedItems.find((item) => pinKey(item) === pinKey(card));
                 if (pin && titleDetailTargetFromItem(card)) handleOpenDrawer(pin, event.currentTarget);
@@ -340,6 +365,11 @@ export default function WatchlistPage() {
         returnFocusRef={titleTriggerRef}
         onClose={() => setDrawerTarget(null)}
         onDeleted={() => refresh()}
+      />
+      <RecommendModal
+        item={recommendItem}
+        open={Boolean(recommendItem)}
+        onClose={() => setRecommendItem(null)}
       />
     </AppShell>
   );

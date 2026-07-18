@@ -60,7 +60,7 @@ If chips are missing or a wall is empty, see [Why walls feel sparse](#why-motif-
 
 ### Browse controls, lists, and issue reports
 
-Poster walls default to the visual browse view, while **List** view makes scanning metadata and watch state faster. Sort, filters, and CSV export deliberately use the same current query so a shared link, a visible wall, and an exported research slice mean the same thing.
+Poster walls default to the visual browse view, while **List** view makes scanning metadata and watch state faster. Sort, filters, columns, and CSV export deliberately use the same current query so a shared link, a visible wall, and an exported research slice mean the same thing. Watchlist and named collections export their current visible membership; library-query walls keep the same visibility rules as the source query.
 
 Use a **watchlist** for personal “remember this” pins. Use a **list** for a durable curated shelf; use a **playlist** for a deliberate viewing sequence. They share the same collection engine, but express different intent so a future watch does not get confused with a planned program.
 
@@ -70,7 +70,9 @@ The ⋮ grip on posters and list rows keeps common actions in one location. **Re
 
 Start broad on an Explore, Tag, Plot Lab, Watchlist, or collection wall, then narrow deliberately: choose a media type or watch state, select a year or genre when that surface offers it, choose a sort direction, and switch to **List** when you want to compare facts instead of artwork. The controls keep that choice in the URL where the wall supports it, so refresh and sharing do not silently reset a research slice. **Export CSV** is not an unrestricted database dump: library-query results export the active query under the same member visibility rules as the wall, while an Explore feed exports only its current loaded page and visible columns.
 
-The small **⋮ action grip** is deliberately repeated on posters, title-card overlays, and list rows. It puts “open details,” Plex playback when available, watchlist pinning, list/playlist membership, discovery, and issue reporting in the same place whether you are browsing with a mouse, keyboard, or touch. It is an action launcher, not a bypass around permissions: owner-only index operations stay owner-only, and a report is never a hidden repair button.
+The small **⋮ action grip** is deliberately repeated on posters, title-card overlays, and list rows. It puts “open details,” Plex playback when available, watchlist pinning, list/playlist membership, household recommendations, **Recommend like this in chat**, discovery, and issue reporting in the same place whether you are browsing with a mouse, keyboard, or touch. “Recommend like this” opens Chat with the title and year as context, then sends a request to discuss the title and find related picks. It is an action launcher, not a bypass around permissions: owner-only index operations stay owner-only, and a report is never a hidden repair button.
+
+The small horizontal rails on the Explore hub and Plot Lab’s **Surprising neighbors**, plus a person’s credit-annotated filmography, intentionally stay context-dense rather than repeating a full browse toolbar in every short embedded strip. They still use the same card/grip actions; choose the linked full Explore section, Tag, or Plot wall when you need filters, List view, or CSV.
 
 #### Lists, playlists, and watchlist are different promises
 

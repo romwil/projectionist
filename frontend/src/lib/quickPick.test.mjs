@@ -7,6 +7,7 @@ import {
   normalizeQuickPickError,
   normalizeQuickPickGenres,
   normalizeQuickPickResult,
+  quickPickToAssistantMessage,
 } from "./quickPick.js";
 
 test("normalizeQuickPickResult keeps a successful pick", () => {
@@ -78,4 +79,30 @@ test("normalizeQuickPickResult coerces genres JSON string for TitleCard safety",
 test("normalizeQuickPickGenres returns empty array for malformed JSON", () => {
   assert.deepEqual(normalizeQuickPickGenres("not-json"), []);
   assert.deepEqual(normalizeQuickPickGenres(null), []);
+});
+
+test("quickPickToAssistantMessage renders a compact title-card block followed by its why", () => {
+  const pick = normalizeQuickPickResult({
+    item: { title: "Arrival", media_type: "movie", rating_key: "1" },
+    why: "A thoughtful first-contact mystery for tonight.",
+  });
+
+  assert.deepEqual(quickPickToAssistantMessage(pick), {
+    role: "assistant",
+    blocks: [
+      { type: "title_cards", items: [pick.item] },
+      { type: "text", content: "A thoughtful first-contact mystery for tonight." },
+    ],
+  });
+});
+
+test("quickPickToAssistantMessage gives empty and failed picks a clear agent reply", () => {
+  assert.deepEqual(quickPickToAssistantMessage({
+    status: "empty",
+    item: null,
+    message: "Nothing unwatched fits.",
+  }), {
+    role: "assistant",
+    blocks: [{ type: "text", content: "Nothing unwatched fits." }],
+  });
 });

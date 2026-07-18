@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  RECOMMEND_LIKE_PARAM,
   ROUTES,
   backLabelForPath,
+  recommendLikeHref,
+  recommendLikePrompt,
   isWatchlistPanelRequest,
   resolveBackTarget,
+  stripRecommendLikeParam,
   stripWatchlistPanelParam,
   watchlistBrowseHref,
   watchlistPanelHref,
@@ -78,6 +82,29 @@ describe("watchlist panel deep link (legacy)", () => {
   it("strips the panel flag without dropping other params", () => {
     const next = stripWatchlistPanelParam(new URLSearchParams("watchlist=1&foo=bar"));
     assert.equal(next.get("watchlist"), null);
+    assert.equal(next.get("foo"), "bar");
+  });
+});
+
+describe("recommend like chat deep link", () => {
+  it("preserves a concise media context in the chat URL", () => {
+    assert.equal(
+      recommendLikeHref({ title: "Arrival", year: 2016, media_type: "movie" }),
+      "/?recommend_like=Arrival&year=2016&type=movie",
+    );
+  });
+
+  it("builds an agent-ready prompt and removes only its parameters", () => {
+    const params = new URLSearchParams("recommend_like=Arrival&year=2016&type=movie&foo=bar");
+    assert.equal(RECOMMEND_LIKE_PARAM, "recommend_like");
+    assert.equal(
+      recommendLikePrompt(params),
+      'Recommend titles like "Arrival" (2016, movie) and help me discuss what makes it work.',
+    );
+    const next = stripRecommendLikeParam(params);
+    assert.equal(next.get("recommend_like"), null);
+    assert.equal(next.get("year"), null);
+    assert.equal(next.get("type"), null);
     assert.equal(next.get("foo"), "bar");
   });
 });

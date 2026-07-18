@@ -1,18 +1,22 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
-import { getCuratedList, listCuratedLists } from "../api/client";
+import { deleteCuratedListItem, getCuratedList, listCuratedLists } from "../api/client";
 import BackLink from "../components/BackLink";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
+import RecommendModal from "../components/RecommendModal";
+import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
-import { buildMediaBrowseParams, parseMediaBrowse } from "../lib/mediaBrowse.js";
+import { buildMediaBrowseParams, mediaBrowseRowsToCsv, parseMediaBrowse } from "../lib/mediaBrowse.js";
 
 export default function ListsPage() {
   const { listId } = useParams();
+  const { multiUserEnabled } = useAuthGate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ loading: true, lists: [], list: null, error: "" });
   const [columns, setColumns] = useState(null);
+  const [recommendItem, setRecommendItem] = useState(null);
   const browse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
   useEffect(() => {
     let cancelled = false;
@@ -25,7 +29,7 @@ export default function ListsPage() {
   }, [listId]);
   const items = useMemo(() => {
     const source = (state.list?.items || [])
-      .map((entry) => entry.media || entry)
+      .map((entry) => ({ ...(entry.media || entry), _listItemId: entry.id }))
       .filter((item) => !browse.media_type || item?.media_type === browse.media_type)
       .filter((item) => !browse.year || String(item?.year || "") === String(browse.year))
       .filter((item) => !browse.watch_state || (
@@ -45,6 +49,29 @@ export default function ListsPage() {
     setSearchParams(buildMediaBrowseParams(browse, patch), { replace: true });
   }
 
+  function exportCurrentPage(exportColumns) {
+    const blob = new Blob([mediaBrowseRowsToCsv(items, exportColumns)], { type: "text/csv;charset=utf-8" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `${state.list?.name || "collection"}.csv`;
+    link.click();
+    URL.revokeObjectURL(href);
+  }
+
+  async function removeFromCollection(collectionId, itemId) {
+    await deleteCuratedListItem(collectionId, itemId);
+    setState((current) => ({
+      ...current,
+      list: current.list
+        ? {
+          ...current.list,
+          items: current.list.items.filter((entry) => String(entry.id) !== String(itemId)),
+        }
+        : current.list,
+    }));
+  }
+
   return <AppShell className="app-root lists-page" testId="lists-page" variant="browse" leading={<BackLink fallbackTo={ROUTES.explore} />}>
     <section className="explore-section-hero"><p className="person-eyebrow">{listId ? state.list?.list_kind || "List" : "Collections"}</p><h1>{listId ? state.list?.name || "List" : "Lists & playlists"}</h1><p className="explore-section-subtitle">Lists are intentional CuratorX shelves. Watchlist pins answer “keep this in mind”; playlists answer “play these together.”</p></section>
     {state.loading ? <p className="status status-secondary">Loading…</p> : null}
@@ -58,17 +85,30 @@ export default function ListsPage() {
           columns={columns}
           onColumnsChange={setColumns}
           columnScope={`list-${listId}`}
-          exportEnabled={false}
+          exportItems
+          onExport={exportCurrentPage}
         />
         {items.length ? (
           <MediaBrowseResults
             state={browse}
             items={items}
             columns={columns || undefined}
-            cardProps={{ testId: "list-title-card" }}
+            cardProps={(item) => ({
+              testId: "list-title-card",
+              showRecommend: multiUserEnabled,
+              onRecommend: multiUserEnabled ? setRecommendItem : undefined,
+              listId,
+              listItemId: item._listItemId,
+              onRemoveFromList: removeFromCollection,
+            })}
           />
         ) : <p className="explore-empty status status-secondary">This {state.list?.list_kind === "playlist" ? "playlist" : "list"} has no titles yet.</p>}
       </section>
     ) : null}
+    <RecommendModal
+      item={recommendItem}
+      open={Boolean(recommendItem)}
+      onClose={() => setRecommendItem(null)}
+    />
   </AppShell>;
 }

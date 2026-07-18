@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildMediaBrowseParams,
   libraryExportHref,
+  mediaBrowseRowsToCsv,
   parseMediaBrowse,
   queryFiltersFromBrowse,
 } from "./mediaBrowse.js";
@@ -28,4 +29,14 @@ test("browse query and export preserve current filters", () => {
   });
   assert.equal(buildMediaBrowseParams(state).get("year"), "1999");
   assert.match(libraryExportHref(state, ["title", "year"]), /columns=title%2Cyear/);
+});
+
+test("mediaBrowseRowsToCsv serializes visible columns safely", () => {
+  assert.equal(
+    mediaBrowseRowsToCsv(
+      [{ title: 'A "quoted" title', genres: ["Drama", "Sci-Fi"], watched: true }],
+      ["title", "genres", "watch_state"],
+    ),
+    'title,genres,watch_state\n"A ""quoted"" title","Drama · Sci-Fi",Watched',
+  );
 });
