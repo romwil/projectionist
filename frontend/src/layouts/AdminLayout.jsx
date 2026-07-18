@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { getAuthMe, getFeatures } from "../api/client";
+import AppNav, { AppNavToggle } from "../components/AppNav";
 
 export const ADMIN_NAV = [
   { to: "/admin/overview", id: "overview", label: "Overview" },
@@ -21,6 +22,7 @@ export default function AdminLayout() {
   const [allowed, setAllowed] = useState(false);
   const [wizardMode, setWizardMode] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [appNavOpen, setAppNavOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -80,18 +82,26 @@ export default function AdminLayout() {
       className={`admin-shell ${wizardMode ? "admin-shell-wizard" : ""} ${drawerOpen ? "admin-drawer-open" : ""}`}
       data-testid="admin-layout"
     >
+      <AppNav open={appNavOpen} onClose={() => setAppNavOpen(false)} isOwner />
       {!wizardMode ? (
         <>
-          <button
-            type="button"
-            className="admin-drawer-toggle"
-            data-testid="admin-drawer-toggle"
-            aria-expanded={drawerOpen}
-            aria-controls="admin-nav"
-            onClick={() => setDrawerOpen((open) => !open)}
-          >
-            {drawerOpen ? "Close menu" : "Admin menu"}
-          </button>
+          <header className="shell-app-chrome" data-testid="admin-app-chrome">
+            <AppNavToggle
+              open={appNavOpen}
+              onClick={() => setAppNavOpen(true)}
+              testId="admin-app-nav-toggle"
+            />
+            <button
+              type="button"
+              className="admin-drawer-toggle"
+              data-testid="admin-drawer-toggle"
+              aria-expanded={drawerOpen}
+              aria-controls="admin-nav"
+              onClick={() => setDrawerOpen((open) => !open)}
+            >
+              {drawerOpen ? "Close menu" : "Admin menu"}
+            </button>
+          </header>
           {drawerOpen ? (
             <button
               type="button"

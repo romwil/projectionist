@@ -1,7 +1,10 @@
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import privacyMarkdown from "@docs/PRIVACY.md?raw";
+import BackLink from "../components/BackLink";
+import AppShell from "../layouts/AppShell";
+import { ROUTES } from "../lib/backNav.js";
 
 const GITHUB_DOCS_BASE = "https://github.com/romwil/curatorx/tree/main/docs";
 
@@ -110,12 +113,16 @@ export default function PrivacyPage() {
   const markdown = typeof privacyMarkdown === "string" && privacyMarkdown.trim() ? privacyMarkdown : "";
 
   return (
-    <div className="privacy-page" data-testid="privacy-page" data-source="docs">
-      <header className="privacy-topbar">
-        <Link to="/" className="privacy-brand">
-          CuratorX
-        </Link>
-        <nav className="privacy-topnav" aria-label="Privacy shortcuts">
+    <AppShell
+      className="app-root explore-page privacy-page"
+      testId="privacy-page"
+      requireAuth={false}
+      title="Privacy"
+      eyebrow="How CuratorX handles your data"
+      actions={<BackLink fallbackTo={ROUTES.chat} testId="privacy-back" label="Back to chat" />}
+    >
+      <main className="explore-main privacy-main">
+        <nav className="privacy-jump-nav help-jump-nav" aria-label="Privacy shortcuts">
           <a href="#household-members">Household</a>
           <a href="#server-owners">Owners</a>
           <a href="#mcp">MCP</a>
@@ -123,27 +130,16 @@ export default function PrivacyPage() {
           <Link to="/about">About</Link>
           <Link to="/login">Login</Link>
         </nav>
-      </header>
-
-      <article className="privacy-article privacy-prose" data-testid="privacy-content">
-        {markdown ? (
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-            {markdown}
-          </ReactMarkdown>
-        ) : (
-          <p className="status status-secondary">Privacy disclosure is unavailable.</p>
-        )}
-      </article>
-
-      <footer className="privacy-footer">
-        <Link to="/help">Help</Link>
-        {" · "}
-        <Link to="/about">About</Link>
-        {" · "}
-        <Link to="/settings">Settings</Link>
-        {" · "}
-        <Link to="/">Chat</Link>
-      </footer>
-    </div>
+        <article className="privacy-article privacy-prose" data-testid="privacy-content" data-source="docs">
+          {markdown ? (
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {markdown}
+            </ReactMarkdown>
+          ) : (
+            <p className="status status-secondary">Privacy disclosure is unavailable.</p>
+          )}
+        </article>
+      </main>
+    </AppShell>
   );
 }

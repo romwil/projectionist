@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.8.12] — 2026-07-18
+
+AppNav hamburger on every core shell (chat, browse, Settings, Admin, Privacy); chat footer links move into the drawer.
+
+### Changed
+- **AppNav hamburger** is always reachable on chat (desktop + mobile), watchlist/person/title browse shells, Settings, Admin, and Privacy — same drawer as Explore/Help/About. Chat no longer shows the Help · Privacy · About footer trio (those live in AppNav). Privacy joins Help/About in the menu and uses AppShell chrome.
+
 ## [1.8.11] — 2026-07-18
 
 Watched poster badges, Revisit These rail, and durable Unraid update hygiene after Force Update 0 B no-ops.

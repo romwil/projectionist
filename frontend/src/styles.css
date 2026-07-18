@@ -200,8 +200,22 @@ a {
   z-index: 50;
 }
 
+/* Mobile-only conversations toggle on chat (sidebar covers this on desktop). */
 .app-topbar-menu {
   display: none;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  flex-shrink: 0;
+  font-size: 1.125rem;
+  line-height: 1;
+}
+
+/* Primary AppNav hamburger — always reachable on chat + AppShell + settings/admin. */
+.app-nav-toggle {
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   min-width: 44px;
@@ -4039,61 +4053,24 @@ button.ghost.inline-link {
   min-height: 100vh;
 }
 
-/* Public privacy disclosure — long-form cinema measure */
-.privacy-page {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background:
-    radial-gradient(ellipse 90% 45% at 50% -15%, #1a1612 0%, transparent 55%),
-    linear-gradient(180deg, #0a0b0f 0%, var(--bg) 40%);
-  color: var(--text);
-}
-
-.privacy-topbar {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-4);
-  padding: var(--space-4) var(--space-6);
-  border-bottom: 1px solid var(--border-subtle);
-  background: rgba(7, 8, 11, 0.88);
-  backdrop-filter: blur(10px);
-}
-
-.privacy-brand {
-  font-family: var(--font-display);
-  font-size: var(--text-xl);
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  color: var(--text);
-  text-decoration: none;
-}
-
-.privacy-topnav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3) var(--space-4);
-  font-size: var(--text-sm);
-}
-
-.privacy-topnav a {
-  color: var(--muted);
-  text-decoration: none;
-}
-
-.privacy-topnav a:hover {
-  color: var(--accent);
-}
-
-.privacy-article.privacy-prose {
+/* Privacy — AppShell + explore reading column (same chrome as Help / About) */
+.privacy-page .privacy-main {
   width: min(65ch, 100%);
   margin: 0 auto;
-  padding: var(--space-8) var(--space-6) var(--space-6);
-  flex: 1;
+}
+
+.privacy-page .privacy-jump-nav {
+  margin-bottom: var(--space-4);
+}
+
+.privacy-page .privacy-article.privacy-prose {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+.privacy-page .privacy-article.privacy-prose h1 {
+  display: none;
 }
 
 .privacy-prose h1,
@@ -4156,24 +4133,6 @@ button.ghost.inline-link {
   white-space: nowrap;
 }
 
-.privacy-footer {
-  width: min(65ch, 100%);
-  margin: 0 auto;
-  padding: var(--space-4) var(--space-6) var(--space-8);
-  color: var(--muted);
-  font-size: var(--text-sm);
-  border-top: 1px solid var(--border-subtle);
-}
-
-.privacy-footer a {
-  color: var(--accent);
-}
-
-.privacy-footer code {
-  font-family: var(--font-mono);
-  font-size: 0.9em;
-}
-
 .keyboard-help-privacy {
   margin-top: var(--space-3);
 }
@@ -4194,6 +4153,7 @@ button.ghost.inline-link {
 .settings-shell {
   display: grid;
   grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
   min-height: 100vh;
   background:
     radial-gradient(ellipse 70% 40% at 10% -5%, #16130f 0%, transparent 50%),
@@ -4202,6 +4162,17 @@ button.ghost.inline-link {
 
 .admin-shell-wizard {
   grid-template-columns: 1fr;
+  grid-template-rows: 1fr auto;
+}
+
+.admin-shell-wizard > .admin-main {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.admin-shell-wizard > .app-footer {
+  grid-column: 1;
+  grid-row: 2;
 }
 
 .admin-shell-loading,
@@ -4209,6 +4180,38 @@ button.ghost.inline-link {
   display: grid;
   place-items: center;
   min-height: 100vh;
+}
+
+.shell-app-chrome {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(8px);
+}
+
+.admin-shell > .admin-rail,
+.settings-shell > .settings-rail {
+  grid-column: 1;
+  grid-row: 2;
+}
+
+.admin-shell > .admin-main,
+.settings-shell > .settings-main {
+  grid-column: 2;
+  grid-row: 2;
+}
+
+.admin-shell > .app-footer,
+.settings-shell > .app-footer {
+  grid-column: 1 / -1;
+  grid-row: 3;
 }
 
 .admin-rail,
@@ -5032,17 +5035,25 @@ button.ghost.inline-link {
     grid-template-columns: 1fr;
   }
 
+  .shell-app-chrome {
+    padding-top: max(var(--space-2), env(safe-area-inset-top));
+    padding-left: max(var(--space-3), env(safe-area-inset-left));
+    padding-right: max(var(--space-3), env(safe-area-inset-right));
+  }
+
   .admin-drawer-toggle,
   .settings-drawer-toggle {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    position: sticky;
-    top: 0;
-    z-index: 30;
-    margin: var(--space-3) var(--space-4) 0;
     min-height: 44px;
     width: fit-content;
+  }
+
+  .admin-shell > .admin-main,
+  .settings-shell > .settings-main {
+    grid-column: 1;
+    grid-row: 2;
   }
 
   .admin-rail,
@@ -5054,6 +5065,8 @@ button.ghost.inline-link {
     transform: translateX(-105%);
     transition: transform 0.2s ease;
     box-shadow: 8px 0 32px rgba(0, 0, 0, 0.45);
+    grid-column: unset;
+    grid-row: unset;
   }
 
   .admin-drawer-open .admin-rail,
@@ -7235,11 +7248,6 @@ a.title-credit-link:hover {
   z-index: 50;
   max-width: 100%;
   min-width: 0;
-}
-
-/* Browse shells keep AppNav reachable on desktop (chat uses workspace chrome). */
-.explore-page .app-topbar-menu {
-  display: inline-flex;
 }
 
 .explore-main {

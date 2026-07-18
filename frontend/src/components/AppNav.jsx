@@ -1,14 +1,8 @@
 import { useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
+import { buildAppNavItems } from "../lib/appNavItems.js";
 import { ROUTES, watchlistBrowseHref } from "../lib/backNav.js";
-
-const NAV_ITEMS = [
-  { id: "chat", to: ROUTES.chat, label: "Chat", testId: "app-nav-chat" },
-  { id: "explore", to: ROUTES.explore, label: "Explore", testId: "app-nav-explore" },
-  { id: "plot-lab", to: ROUTES.plotLab, label: "Plot Lab", testId: "app-nav-plot-lab" },
-  { id: "tags", to: ROUTES.tags, label: "Tags", testId: "app-nav-tags" },
-  { id: "watchlist", kind: "watchlist", label: "Watchlist", testId: "app-nav-watchlist" },
-];
 
 export default function AppNav({
   open,
@@ -41,21 +35,13 @@ export default function AppNav({
 
   if (!open) return null;
 
-  const items = [...NAV_ITEMS];
-  if (showSettings) {
-    items.push({ id: "settings", to: ROUTES.settings, label: "Settings", testId: "app-nav-settings" });
-  }
-  if (isOwner) {
-    items.push({ id: "admin", to: ROUTES.admin, label: "Admin", testId: "app-nav-admin" });
-  }
-  items.push({ id: "help", to: ROUTES.help, label: "Help", testId: "app-nav-help" });
-  items.push({ id: "about", to: ROUTES.about, label: "About", testId: "app-nav-about" });
+  const items = buildAppNavItems({ isOwner, showSettings });
 
   function handleWatchlistClick() {
     onClose?.();
   }
 
-  return (
+  return createPortal(
     <div className="app-nav-layer" data-testid="app-nav-layer">
       <button
         type="button"
@@ -117,7 +103,8 @@ export default function AppNav({
           })}
         </ul>
       </nav>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -125,7 +112,7 @@ export function AppNavToggle({ open, onClick, testId = "app-nav-toggle" }) {
   return (
     <button
       type="button"
-      className="app-topbar-menu ghost"
+      className="app-nav-toggle ghost"
       data-testid={testId}
       aria-label="Open navigation menu"
       aria-expanded={open}

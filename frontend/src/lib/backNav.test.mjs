@@ -33,6 +33,13 @@ describe("backLabelForPath", () => {
     assert.equal(backLabelForPath("/explore/section/recently-added"), "Back to Explore");
     assert.equal(backLabelForPath("/explore"), "Back to Explore");
     assert.equal(backLabelForPath("/"), "Back to chat");
+    assert.equal(backLabelForPath("/privacy"), "Back to Privacy");
+  });
+});
+
+describe("ROUTES.privacy", () => {
+  it("exposes the privacy disclosure path", () => {
+    assert.equal(ROUTES.privacy, "/privacy");
   });
 });
 

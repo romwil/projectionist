@@ -1837,14 +1837,6 @@ export default function App() {
         open={Boolean(recommendItem)}
         onClose={() => setRecommendItem(null)}
       />
-
-      <footer className="app-footer" data-testid="app-footer">
-        <Link to="/help" className="app-footer-link">Help</Link>
-        <span className="app-footer-sep">·</span>
-        <Link to="/privacy" className="app-footer-link">Privacy</Link>
-        <span className="app-footer-sep">·</span>
-        <Link to="/about" className="app-footer-link">About</Link>
-      </footer>
     </div>
   );
 }

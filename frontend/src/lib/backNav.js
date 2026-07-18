@@ -14,6 +14,7 @@ export const ROUTES = {
   adminDashboard: "/admin/dashboard",
   about: "/about",
   help: "/help",
+  privacy: "/privacy",
 };
 
 /** @deprecated Use ROUTES.watchlist — kept for legacy deep links. */
@@ -93,6 +94,7 @@ export function backLabelForPath(path, { defaultLabel = "Back" } = {}) {
   if (normalized.startsWith("/settings")) return "Back to settings";
   if (normalized.startsWith("/admin")) return "Back to admin";
   if (normalized === ROUTES.help) return "Back to Help";
+  if (normalized === ROUTES.privacy) return "Back to Privacy";
   if (normalized === ROUTES.about) return "Back to About";
   return defaultLabel;
 }

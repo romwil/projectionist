@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { getAuthMe, getFeatures } from "../api/client";
+import AppNav, { AppNavToggle } from "../components/AppNav";
 
 export const SETTINGS_NAV = [
   { to: "/settings/profile", id: "profile", label: "Profile" },
@@ -13,6 +14,7 @@ export default function SettingsLayout() {
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [appNavOpen, setAppNavOpen] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
@@ -68,16 +70,24 @@ export default function SettingsLayout() {
       className={`settings-shell ${drawerOpen ? "settings-drawer-open" : ""}`}
       data-testid="settings-layout"
     >
-      <button
-        type="button"
-        className="settings-drawer-toggle"
-        data-testid="settings-drawer-toggle"
-        aria-expanded={drawerOpen}
-        aria-controls="settings-nav"
-        onClick={() => setDrawerOpen((open) => !open)}
-      >
-        {drawerOpen ? "Close menu" : "Settings menu"}
-      </button>
+      <AppNav open={appNavOpen} onClose={() => setAppNavOpen(false)} isOwner={isOwner} />
+      <header className="shell-app-chrome" data-testid="settings-app-chrome">
+        <AppNavToggle
+          open={appNavOpen}
+          onClick={() => setAppNavOpen(true)}
+          testId="settings-app-nav-toggle"
+        />
+        <button
+          type="button"
+          className="settings-drawer-toggle"
+          data-testid="settings-drawer-toggle"
+          aria-expanded={drawerOpen}
+          aria-controls="settings-nav"
+          onClick={() => setDrawerOpen((open) => !open)}
+        >
+          {drawerOpen ? "Close menu" : "Settings menu"}
+        </button>
+      </header>
       {drawerOpen ? (
         <button
           type="button"
