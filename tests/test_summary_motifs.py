@@ -27,9 +27,21 @@ class MotifNormalizationTests(unittest.TestCase):
         )
         self.assertIn("bride", tokens)
         self.assertIn("coma", tokens)
-        self.assertIn("the bride", tokens)
         self.assertIn("death list", tokens)
         self.assertNotIn("the", tokens)
+        self.assertNotIn("the bride", tokens)
+
+    def test_tokenize_drops_syntactic_fragments_but_keeps_content_phrases(self) -> None:
+        tokens = tokenize_plot_text(
+            "And Chloe enters Wicked Wonderland, but little changes. "
+            "Its power threatens the royal wedding while Max saves Cinderella."
+        )
+        self.assertNotIn("and chloe", tokens)
+        self.assertNotIn("but little", tokens)
+        self.assertNotIn("its power", tokens)
+        self.assertNotIn("max saves", tokens)
+        self.assertIn("wicked wonderland", tokens)
+        self.assertIn("royal wedding", tokens)
 
     def test_tokenize_uses_tagline_and_logline(self) -> None:
         tokens = tokenize_plot_text(

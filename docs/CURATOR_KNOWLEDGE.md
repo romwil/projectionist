@@ -14,12 +14,12 @@ Most titles arrive with a **Plex summary** and, after enrichment, a **TMDB overv
 
 ### Case study: Kill Bill · bride ∩ coma
 
-*Kill Bill: Vol. 1* plot text literally mentions **the Bride** and a **coma**. Yet Plot Lab can still fail a `bride` + `coma` intersection. As of current motif extraction:
+*Kill Bill: Vol. 1* plot text literally mentions **the Bride** and a **coma**. Yet Plot Lab can still fail a `bride` + `coma` intersection. Current motif extraction:
 
-1. Motifs are **unigram** tokens from `summary` + `tmdb_overview` only (tagline / keywords are not yet in the motif pipeline).
+1. Motifs are normalized **unigrams** and content-word **bigrams** from the layered summary, overview, tagline, long synopsis, and optional logline. Grammar fragments such as `and chloe` or `its power` are rejected, while useful compounds such as `wicked wonderland` remain.
 2. Document-frequency filtering keeps uncommon-but-shared terms (`df ≥ 2`, not ultra-common).
-3. Each title keeps at most **8** motifs (`MAX_MOTIFS_PER_ITEM`), preferring rarer tokens — so “bride” can lose the slot race to other rare words.
-4. Possessives are not normalized (`bride's` ≠ `bride`), so Vol. 2 may store a different token than Vol. 1.
+3. Each title keeps at most **18** motifs (`MAX_MOTIFS_PER_ITEM`), preferring rarer candidates and contentful phrases — so “bride” can still lose the slot race to other rare words.
+4. Possessives are normalized (`bride's` → `bride`), so Vol. 2 can store the same token.
 5. Plot Lab’s motif wall is an **AND** over those facet rows. Missing one chip → empty wall, even when the library “knows” the film in free text or TMDB keywords (`revenge`, `martial arts`, …).
 
 **Takeaway:** Sparse walls are often a **representation / intersection** problem, not an empty library. Keywords and raw plot text are richer than the motif chip set today.
@@ -192,7 +192,7 @@ After a full library sync on a multi-thousand-title library:
 | Plex summary | High coverage from PMS | Stable |
 | TMDB overview / tagline / keywords | Climbs via sync + `metadata_enrichment` trickle | Near-complete over days |
 | Embeddings | Climb via `semantic_embeddings` trickle | Often reaches ~100% of titles |
-| Motifs | Appear after `summary_motifs` full pass | ~most titles with ≤8 chips each |
+| Motifs | Appear after `summary_motifs` full pass | ~most titles with ≤18 quality-filtered chips each |
 | Neighbor edges | Lag embeddings — each title needs a materialization pass | Can remain underbuilt for a long time if cadence is slow |
 | LLM loglines | Very sparse by design | Only trickle when provider configured |
 
@@ -204,6 +204,10 @@ Practical owner habits:
 2. In **Admin → Scheduled Tasks**, confirm knowledge tasks are enabled; tighten cadence for `metadata_enrichment`, `plot_neighbors`, and `summary_motifs` after large imports.
 3. Use **Warm Explore** (when offered) to fire the enrichment sequence without waiting for natural idle.
 4. Re-check Plot Lab motif catalog and a seed title’s neighbors after several cycles.
+
+When an upgrade changes motif extraction, run `summary_motifs` once from **Admin →
+Scheduled Tasks** (or wait for its next schedule). It replaces the existing `motif`
+facets from current plot text; a full library reindex is unnecessary.
 
 ---
 

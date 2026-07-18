@@ -32,10 +32,16 @@ logger = logging.getLogger(__name__)
 INTERVAL_SECONDS = 86400  # 24 hours
 TOKEN_RE = re.compile(r"[a-z][a-z']{1,}")
 # Drop ultra-common English filler that survives DF thresholds in short blurbs.
+# These terms are also disallowed in either position of a bigram: adjacent
+# summary text such as "and Chloe" is syntax, not a discoverable motif.
 STOPWORDS = frozenset(
     {
         "the",
+        "a",
+        "an",
         "and",
+        "or",
+        "nor",
         "for",
         "with",
         "from",
@@ -148,6 +154,15 @@ STOPWORDS = frozenset(
         "our",
         "your",
         "you",
+        "their",
+        "these",
+        "those",
+        "whose",
+        "save",
+        "saves",
+        "saved",
+        "change",
+        "changes",
     }
 )
 MAX_DF_FRACTION = 0.20
@@ -225,14 +240,19 @@ def tokenize_plot_text(*parts: str) -> Set[str]:
                 continue
             tokens.add(token)
         for left, right in zip(ordered, ordered[1:]):
-            # Prefer content+content; allow stopword+content for phrases like "the bride".
-            if left in STOPWORDS and right in STOPWORDS:
+            # A bigram must be two content words.  Stopword-leading fragments
+            # ("and Chloe", "its power") reflect grammar rather than a useful
+            # Plot Lab concept, and stopword-ending fragments are no better.
+            if left in STOPWORDS or right in STOPWORDS:
                 continue
-            if left in STOPWORDS and right not in STOPWORDS:
-                tokens.add(f"{left} {right}")
-            elif left not in STOPWORDS and right not in STOPWORDS:
-                tokens.add(f"{left} {right}")
+            tokens.add(f"{left} {right}")
     return tokens
+
+
+def _motif_rank(token: str, df: Counter[str]) -> Tuple[int, int, str]:
+    """Rank by rarity, then prefer a surviving content phrase to a unigram."""
+    content_score = 2 if " " in token else 1
+    return (df[token], -content_score, token)
 
 
 def _row_plot_parts(row: Mapping[str, Any]) -> Tuple[str, str, str, str, str]:
@@ -264,7 +284,7 @@ def _select_motifs_for_item(
     # Prefer exact stem matches, then tokens whose unigram equals a keyword stem.
     keyword_exact = sorted(
         {t for t in candidates if t in keyword_stems_for_item},
-        key=lambda t: (df[t], t),
+        key=lambda t: _motif_rank(t, df),
     )
     keyword_related = sorted(
         (
@@ -272,14 +292,14 @@ def _select_motifs_for_item(
             for t in keyword_hits
             if t not in keyword_stems_for_item
         ),
-        key=lambda t: (df[t], t),
+        key=lambda t: _motif_rank(t, df),
     )
     guaranteed = (keyword_exact + keyword_related)[:MAX_KEYWORD_BONUS_PER_ITEM]
     guaranteed_set = set(guaranteed)
 
     rare = sorted(
         (t for t in candidates if t not in guaranteed_set),
-        key=lambda t: (df[t], 0 if " " in t else 1, t),
+        key=lambda t: _motif_rank(t, df),
     )[:MAX_RARE_MOTIFS_PER_ITEM]
 
     selected = rare + guaranteed

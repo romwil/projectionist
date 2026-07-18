@@ -120,7 +120,7 @@ Knowledge-related tasks: `metadata_enrichment`, `semantic_embeddings`, `summary_
 |--------|-------------|
 | Overviews / keywords | Climb via sync + metadata trickle |
 | Embeddings | Trickle to near-full coverage |
-| Motifs | Appear after `summary_motifs` runs |
+| Motifs | Appear after `summary_motifs` runs; re-run it after upgrades that improve motif extraction |
 | Neighbor edges | Often lag embeddings — patience or tighter `plot_neighbors` cadence |
 | LLM loglines | Sparse by design |
 | Themes / long synopsis | Appear only after those optional enrichers run |
@@ -132,6 +132,14 @@ Knowledge-related tasks: `metadata_enrichment`, `semantic_embeddings`, `summary_
 - API: `GET /api/library/knowledge-coverage` (also nested under `/api/library/stats`).
 
 Honest empty “More Like This” / Plot Lab notes mean caches are cold. Owners get a deep link to Scheduled Tasks; members see the note only.
+
+### Refreshing Plot Lab motifs after an update
+
+Motifs are materialized facet rows, not live query results. When a release improves
+motif quality, an owner should open **Admin → Scheduled Tasks** (`/admin/tasks`) and
+run `summary_motifs` once (or wait for its next idle run). The task safely replaces
+only motif facets from the existing layered plot text; no full library reindex is
+needed.
 
 ### Telemetry & tuning
 

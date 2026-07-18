@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.8.19] — 2026-07-18
+
+### Fixed
+- Plot Lab motif extraction now rejects stopword-led and stopword-ended summary fragments (for example `and chloe` and `its power`) while retaining contentful phrases such as `wicked wonderland`. Existing libraries refresh their motif facets on the next `summary_motifs` run, or when an owner runs that task from Admin → Scheduled Tasks.
+
 ## [1.8.18] — 2026-07-18
 
 ### Fixed
