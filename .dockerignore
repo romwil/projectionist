@@ -19,6 +19,7 @@ config/
 !README.md
 docs/**
 !docs/PRIVACY.md
+!docs/HELP.md
 tests/
 unraid/
 templates/
