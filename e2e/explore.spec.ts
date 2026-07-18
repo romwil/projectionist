@@ -50,4 +50,19 @@ test.describe("Explore hub", () => {
     await page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card").first().click();
     await expect(page).toHaveURL(/\/title\/movie\/348/);
   });
+
+  test("deep-linked facet walls use shared browse controls", async ({ page }) => {
+    await page.goto("/explore?genre=Sci-Fi");
+
+    const facet = page.getByTestId("explore-section-facet-filter");
+    await expect(facet).toContainText("Genre: Sci-Fi");
+    await expect(page.getByTestId("explore-facet-toolbar").getByTestId("media-browse-controls")).toBeVisible();
+    await expect(page.getByTestId("explore-facet-wall").getByTestId("explore-facet-title-card")).toContainText("Alien");
+
+    await page.getByRole("button", { name: "List" }).click();
+    await expect(page).toHaveURL(/genre=Sci-Fi.*view=list|view=list.*genre=Sci-Fi/);
+
+    await page.getByRole("button", { name: "Export CSV" }).click();
+    await expect(page.getByRole("button", { name: "Current page · visible columns" })).toBeVisible();
+  });
 });

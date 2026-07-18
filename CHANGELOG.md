@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.8.16] — 2026-07-18
+
+### Fixed
+- Deep-linked Explore facet walls now use the shared browse controls, Poster/List results, current-page CSV export, and the same card action grip as full Tag, Explore section, Watchlist, and collection views.
+
+### Documentation
+- Help now calls out deep-linked Explore facets as full browse walls; only short contextual rails and credit-annotated person filmography remain intentional toolbar exceptions.
+
 ## [1.8.15] — 2026-07-18
 
 Browse actions and Surprise Me now follow the same compact recommendation language across CuratorX.

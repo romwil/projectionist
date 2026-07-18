@@ -12,6 +12,8 @@ import {
 import BackLink from "../components/BackLink";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import LibraryMediaCard from "../components/LibraryMediaCard";
+import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowseResults from "../components/MediaBrowseResults";
 import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
@@ -19,6 +21,12 @@ import AppShell from "../layouts/AppShell";
 import { ROUTES, decadeYearRange, exploreSectionPath } from "../lib/browseLinks.js";
 import { formatLanguageName } from "../lib/languageNames.js";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
+import {
+  buildMediaBrowseParams,
+  mediaBrowseRowsToCsv,
+  parseMediaBrowse,
+  queryFiltersFromBrowse,
+} from "../lib/mediaBrowse.js";
 
 function ExplorePosterCard({ item, meta, onSeed, seedLabel = "Surprise from this", onRecommend, showRecommend }) {
   return (
@@ -115,6 +123,16 @@ function FeedRail({ testId, items, loading, cardMeta, onSeed, onRecommend, showR
   );
 }
 
+function matchesFacetBrowse(item, browse) {
+  if (browse.year && String(item?.year || "") !== String(browse.year)) return false;
+  if (!browse.watch_state) return true;
+  const watched = Boolean(item?.watched || Number(item?.view_count) > 0);
+  const inProgress = Boolean(item?.view_offset || item?.view_offset_ms);
+  if (browse.watch_state === "watched") return watched;
+  if (browse.watch_state === "in_progress") return inProgress;
+  return !watched;
+}
+
 function useFeed(loader, deps = []) {
   const [state, setState] = useState({ loading: true, items: [], note: null, error: "" });
   useEffect(() => {
@@ -152,12 +170,14 @@ function useFeed(loader, deps = []) {
 
 export default function ExplorePage() {
   const { isOwner, multiUserEnabled } = useAuthGate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [recommendItem, setRecommendItem] = useState(null);
+  const [facetColumns, setFacetColumns] = useState(null);
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
   const revisitThese = useFeed(() => getExploreFeedRevisitThese({ limit: 20, idleDays: 60 }), []);
   const onThisDay = useFeed(() => getExploreFeedOnThisDay({ limit: 12 }), []);
+  const facetBrowse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
 
   const [pulse, setPulse] = useState({ loading: true, stats: [], error: "" });
   const [facetWall, setFacetWall] = useState({ loading: false, items: [], note: null, error: "", label: "" });
@@ -193,10 +213,10 @@ export default function ExplorePage() {
       setFacetWall({ loading: false, items: [], note: null, error: "", label: "" });
       return undefined;
     }
-    const filters = { limit: 24 };
+    const filters = queryFiltersFromBrowse(facetBrowse);
     let label = "";
     if (genre) {
-      filters.genres = [genre];
+      filters.genres = [...new Set([genre, ...(facetBrowse.genres || [])])];
       label = `Genre: ${genre}`;
     } else if (cast) {
       filters.cast = [cast];
@@ -245,7 +265,7 @@ export default function ExplorePage() {
     return () => {
       cancelled = true;
     };
-  }, [searchParams]);
+  }, [facetBrowse, searchParams]);
 
   const otdSubtitle = useMemo(() => {
     const mode = onThisDay.meta?.mode;
@@ -257,6 +277,36 @@ export default function ExplorePage() {
   const recommendProps = multiUserEnabled
     ? { showRecommend: true, onRecommend: setRecommendItem }
     : { showRecommend: false };
+
+  const facetFilterOptions = useMemo(() => ({
+    years: [...new Set(facetWall.items.map((item) => item.year).filter(Boolean))].sort((a, b) => b - a),
+    genres: [...new Set(facetWall.items.flatMap((item) => item.genres || []).filter(Boolean))].sort(),
+  }), [facetWall.items]);
+  const facetItems = useMemo(
+    () => facetWall.items.filter((item) => matchesFacetBrowse(item, facetBrowse)),
+    [facetWall.items, facetBrowse],
+  );
+
+  function handleFacetBrowseChange(patch) {
+    const params = new URLSearchParams(searchParams);
+    for (const key of ["view", "sort", "sort_dir", "limit", "offset", "media_type", "watch_state", "year", "genres", "keywords"]) {
+      params.delete(key);
+    }
+    for (const [key, value] of buildMediaBrowseParams(facetBrowse, patch)) {
+      params.set(key, value);
+    }
+    setSearchParams(params, { replace: true });
+  }
+
+  function exportFacetPage(columns) {
+    const blob = new Blob([mediaBrowseRowsToCsv(facetItems, columns)], { type: "text/csv;charset=utf-8" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = "explore-facet.csv";
+    link.click();
+    URL.revokeObjectURL(href);
+  }
 
   return (
     <AppShell
@@ -440,16 +490,29 @@ export default function ExplorePage() {
           >
             {facetWall.loading ? (
               <p className="status status-secondary">Loading titles…</p>
-            ) : facetWall.items.length ? (
-              <div className="explore-poster-wall" data-testid="explore-facet-wall">
-                {facetWall.items.map((item) => (
-                  <ExplorePosterCard
-                    key={item.id || item.rating_key || item.title}
-                    item={item}
-                    {...recommendProps}
+            ) : facetItems.length ? (
+              <>
+                <div className="explore-section-toolbar" data-testid="explore-facet-toolbar">
+                  <MediaBrowseControls
+                    state={facetBrowse}
+                    onChange={handleFacetBrowseChange}
+                    columns={facetColumns}
+                    onColumnsChange={setFacetColumns}
+                    columnScope="explore-facet"
+                    filterOptions={facetFilterOptions}
+                    exportItems
+                    onExport={exportFacetPage}
                   />
-                ))}
-              </div>
+                </div>
+                <div data-testid="explore-facet-wall">
+                  <MediaBrowseResults
+                    state={facetBrowse}
+                    items={facetItems}
+                    columns={facetColumns || undefined}
+                    cardProps={{ testId: "explore-facet-title-card", ...recommendProps }}
+                  />
+                </div>
+              </>
             ) : null}
           </ExploreSection>
         ) : null}
