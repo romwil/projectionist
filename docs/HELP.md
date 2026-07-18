@@ -110,14 +110,16 @@ Admin shows last-run outcome, durable run history, measured items/hour, owner-se
 
 Chat needs an LLM (or Ollama). Library sync, TMDB enrichment, motifs from existing text, keyword→theme mapping, and neighbor materialization do **not** require inventing plot with GPT. Prefer free layers first — details in the [knowledge guide](CURATOR_KNOWLEDGE.md#what-requires-llm-vs-free-sources).
 
-### Owner: optional long synopsis
+### Owner: long synopsis (Wikipedia by default)
 
-To deepen plot text without LLM spend:
+Wikipedia is the default long-synopsis source because it is free, needs no API key, and deepens plot text without an LLM. Fresh installs start trickle-filling automatically (and first-start bootstrap may run `long_synopsis_enrichment` once if it has never run).
 
-1. Set `long_synopsis_source` in `{DATA_DIR}/settings.json` (or `CURATORX_LONG_SYNOPSIS_SOURCE`) to `wikipedia`, `omdb`, or `auto`.
-2. For OMDb (or `auto` fallback), set `omdb_api_key` / `OMDB_API_KEY`.
-3. Leave the task enabled under **Admin → Scheduled Tasks** (`long_synopsis_enrichment`) — it skips cleanly when the source is off.
-4. Themes: trigger `keyword_theme_tagging` (no key). Plot Lab shows theme chips once facets exist.
+1. Default is already `wikipedia` when the setting is missing/unset.
+2. To turn the trickle off, set `long_synopsis_source` to **`off`** in `{DATA_DIR}/settings.json` (or `CURATORX_LONG_SYNOPSIS_SOURCE=off`). Empty / `none` / `disabled` also disable.
+3. For OMDb (or `auto` fallback), set `omdb_api_key` / `OMDB_API_KEY` and `long_synopsis_source` to `omdb` or `auto`.
+4. Themes: `keyword_theme_tagging` needs no key. Plot Lab shows theme chips once facets exist.
+
+**First-start bootstrap:** after the idle scheduler starts, never-run foundational tasks (`metadata_enrichment` if backlog, `summary_motifs`, `keyword_theme_tagging`, synopsis when enabled, embeddings only if the store is empty) run once in sequence so coverage does not wait days. See [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md#first-start-idle-bootstrap).
 
 ---
 

@@ -35,7 +35,7 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 |---------|---------|-------------|
 | Fanart.tv key | `FANART_API_KEY` | Rich poster/backdrop art |
 | TVDB key | `TVDB_API_KEY` | TV metadata parity (client present; sync wiring partial) |
-| Long synopsis source | `CURATORX_LONG_SYNOPSIS_SOURCE` | Opt-in idle long plots: blank/off (default), `wikipedia`, `omdb`, or `auto`. Never overwrites Plex/TMDB. |
+| Long synopsis source | `CURATORX_LONG_SYNOPSIS_SOURCE` | Idle long plots. Default **`wikipedia`** (free, no key, deeper plot without LLM). Prefer **`off`** to disable (also empty/`none`/`disabled`). Or `omdb` / `auto`. Never overwrites Plex/TMDB. |
 | OMDb API key | `OMDB_API_KEY` | Required only when synopsis source is `omdb` (or `auto` fallback). Free OMDb key. |
 | Tautulli URL / key | `TAUTULLI_URL`, `TAUTULLI_API_KEY` | Watch stats for purge scoring |
 | Radarr root folder | `RADARR_ROOT_FOLDER` | Default path for movie adds |
@@ -336,9 +336,11 @@ API keys and tokens are never written to logs (URLs and error bodies are redacte
 | Batch (`items_per_cycle`) | Persisted for metadata / embeddings / neighbors / LLM logline / long synopsis; auto-tune adjusts after successful runs |
 | History / rate | `GET …/history`, `GET …/rate`; list payload includes measured items/hour when history exists |
 
-### Optional long synopsis (owner)
+### Long synopsis (owner)
 
-Idle task `long_synopsis_enrichment` fills nullable `library_items.long_synopsis` + `synopsis_source` from Wikipedia (no key) or OMDb (key). It skips with `no_synopsis_source_configured` until you opt in.
+Idle task `long_synopsis_enrichment` fills nullable `library_items.long_synopsis` + `synopsis_source` from Wikipedia (no key) or OMDb (key).
+
+**Why Wikipedia is the default:** it is free, needs no API key, and adds deeper plot text without spending LLM tokens. Fresh installs and settings files that omit the key use `wikipedia`. If you previously saved an explicit empty string, that stays disabled (same as `off`).
 
 ```json
 {
@@ -347,7 +349,25 @@ Idle task `long_synopsis_enrichment` fills nullable `library_items.long_synopsis
 }
 ```
 
-Or env: `CURATORX_LONG_SYNOPSIS_SOURCE=wikipedia` / `auto` / `omdb` and optional `OMDB_API_KEY=…`. Then enable/trigger the task under **Admin → Scheduled Tasks**. Themes do not need keys — run `keyword_theme_tagging` (offline from TMDB keywords already in the DB).
+Disable with preferred value `off` (also `none` / `disabled` / empty):
+
+```json
+{ "long_synopsis_source": "off" }
+```
+
+Or env: `CURATORX_LONG_SYNOPSIS_SOURCE=wikipedia` / `off` / `auto` / `omdb` and optional `OMDB_API_KEY=…`. Themes do not need keys — `keyword_theme_tagging` maps TMDB keywords already in the DB.
+
+### First-start idle bootstrap
+
+On IdleScheduler start, if foundational knowledge tasks have **never run** (`last_run_at` null), CuratorX runs a one-shot sequenced bootstrap instead of waiting for multi-day intervals:
+
+1. `metadata_enrichment` (only if metadata backlog > 0)
+2. `summary_motifs`
+3. `keyword_theme_tagging`
+4. `long_synopsis_enrichment` (only if source is enabled — Wikipedia by default)
+5. `semantic_embeddings` (only if zero embeddings exist and titles still need them)
+
+Tasks run **one after another** (not in parallel). Progress is stored under `idle_bootstrap_queue` / `idle_bootstrap_completed` in `curator_system_config` so restarts resume once and do not loop forever. Logs look like `bootstrap: running summary_motifs because never run` (history trigger=`bootstrap`). Existing installs where those tasks already ran mark completed immediately with nothing to do.
 
 ---
 

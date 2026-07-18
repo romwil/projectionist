@@ -111,7 +111,7 @@ const FIELD_HELP = {
   omdb_api_key:
     "Optional. Used only when long synopsis source is omdb or auto. Never overwrites Plex/TMDB blurbs.",
   long_synopsis_source:
-    "Optional idle long synopses: leave blank (off), or wikipedia / omdb / auto. Wikipedia needs no key.",
+    "Defaults to wikipedia (free, no key, deeper plot without LLM). Set to off to disable, or omdb / auto.",
   tautulli_url: "Optional: watch history for purge suggestions and “what we’ve been watching”.",
   movies_root: "Host path Radarr uses for movies (advanced; usually matches Radarr).",
   tv_root: "Host path Sonarr uses for TV (advanced; usually matches Sonarr).",

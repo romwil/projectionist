@@ -17,7 +17,7 @@
   "tvdb_api_key": "",
   "fanart_api_key": "",
   "omdb_api_key": "",
-  "long_synopsis_source": "",
+  "long_synopsis_source": "wikipedia",
   "tautulli_url": "",
   "tautulli_api_key": "",
   "llm_provider": "openai",

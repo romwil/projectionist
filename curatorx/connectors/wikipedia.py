@@ -1,7 +1,7 @@
-"""Wikipedia extract client for optional long-synopsis enrichment.
+"""Wikipedia extract client for long-synopsis enrichment.
 
-Uses the free MediaWiki Action API (no API key). Operators must opt in via
-``long_synopsis_source`` — we never invent plot text.
+Uses the free MediaWiki Action API (no API key). Default ``long_synopsis_source``
+is ``wikipedia``; set ``off`` to disable. We never invent plot text.
 """
 
 from __future__ import annotations

@@ -535,8 +535,9 @@ class Settings:
     tvdb_api_key: str = ""
     fanart_api_key: str = ""
     omdb_api_key: str = ""
-    # Optional long-synopsis idle source: "", "wikipedia", "omdb", or "auto".
-    long_synopsis_source: str = ""
+    # Long-synopsis idle source: "wikipedia" (default), "omdb", "auto", or "off".
+    # Missing/unset → wikipedia. Explicit empty / off / none / disabled → trickle off.
+    long_synopsis_source: str = "wikipedia"
     tautulli_url: str = ""
     tautulli_api_key: str = ""
     llm_provider: str = "openai"

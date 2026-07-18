@@ -1,6 +1,26 @@
 {
-  "generated_at": "2026-07-18T01:24:46Z",
+  "generated_at": "2026-07-18T01:41:57Z",
   "releases": [
+    {
+      "version": "1.8.10",
+      "date": "2026-07-17",
+      "summary": "Wikipedia-default long synopsis and first-start idle bootstrap so fresh installs gain plot depth without waiting days or spending LLM tokens.",
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**First-start idle bootstrap**: on IdleScheduler start, never-run foundational tasks run once in sequence (`metadata_enrichment` if backlog → `summary_motifs` → `keyword_theme_tagging` → `long_synopsis_enrichment` when source enabled → `semantic_embeddings` only if zero embeddings). Persists `idle_bootstrap_completed` / queue so restarts do not loop. Logs/history use trigger `bootstrap`."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "**`long_synopsis_source` defaults to `wikipedia`** (free, no API key, deeper plot without LLM). Missing/unset → wikipedia; explicit empty or preferred **`off`** (also `none`/`disabled`) disables the trickle.",
+            "Docs (`CONFIGURATION`, `CURATOR_KNOWLEDGE`, `HELP`) explain why Wikipedia is default and why first-start sequencing exists."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.9",
       "date": "2026-07-17",

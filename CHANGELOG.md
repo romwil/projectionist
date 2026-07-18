@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.8.10] — 2026-07-17
+
+Wikipedia-default long synopsis and first-start idle bootstrap so fresh installs gain plot depth without waiting days or spending LLM tokens.
+
+### Added
+- **First-start idle bootstrap**: on IdleScheduler start, never-run foundational tasks run once in sequence (`metadata_enrichment` if backlog → `summary_motifs` → `keyword_theme_tagging` → `long_synopsis_enrichment` when source enabled → `semantic_embeddings` only if zero embeddings). Persists `idle_bootstrap_completed` / queue so restarts do not loop. Logs/history use trigger `bootstrap`.
+
+### Changed
+- **`long_synopsis_source` defaults to `wikipedia`** (free, no API key, deeper plot without LLM). Missing/unset → wikipedia; explicit empty or preferred **`off`** (also `none`/`disabled`) disables the trickle.
+- Docs (`CONFIGURATION`, `CURATOR_KNOWLEDGE`, `HELP`) explain why Wikipedia is default and why first-start sequencing exists.
+
 ## [1.8.9] — 2026-07-17
 
 Library knowledge Wave 2: optional long synopsis enrichment, free keyword→theme facets, knowledge coverage UI across Admin/Explore/Tasks, Plot knowledge on title detail, and Plot Lab theme chips.

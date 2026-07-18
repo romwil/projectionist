@@ -755,7 +755,11 @@ class IdleScheduler:
         return task.result()
 
     async def _execute_task(
-        self, defn: TaskDefinition, *, force: bool = False
+        self,
+        defn: TaskDefinition,
+        *,
+        force: bool = False,
+        trigger: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Run a single task with timeout watchdog and failure tracking.
 
@@ -779,10 +783,12 @@ class IdleScheduler:
 
         self._running_task = defn.name
         self._running_started_at = time.time()
-        trigger = "manual" if force else "schedule"
+        if trigger is None:
+            trigger = "manual" if force else "schedule"
         run_id = self._run_log.start_run(defn.name, trigger=trigger)
         emitter_token = self._run_log.bind_emitter(defn.name)
-        logger.info("Scheduler: starting task '%s'%s", defn.name, " (manual)" if force else "")
+        trigger_label = f" ({trigger})" if trigger != "schedule" else ""
+        logger.info("Scheduler: starting task '%s'%s", defn.name, trigger_label)
         self._emit_progress(defn.name, "running")
 
         hb = _HeartbeatHandle()
@@ -1099,6 +1105,13 @@ class IdleScheduler:
         """Main scheduler loop — poll for idle and run stale tasks."""
         await asyncio.sleep(SCHEDULER_INITIAL_DELAY_SECONDS)
         logger.info("IdleScheduler: entering main loop")
+
+        try:
+            from curatorx.scheduler.bootstrap import run_idle_bootstrap
+
+            await run_idle_bootstrap(self)
+        except Exception:  # noqa: BLE001
+            logger.exception("IdleScheduler: first-start bootstrap failed (continuing)")
 
         while not self._shutdown:
             try:

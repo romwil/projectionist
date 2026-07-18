@@ -1,8 +1,10 @@
-"""Optional idle trickle: fill ``long_synopsis`` from Wikipedia or OMDb.
+"""Idle trickle: fill ``long_synopsis`` from Wikipedia or OMDb.
 
 Never overwrites Plex ``summary`` / TMDB ``tmdb_overview`` / ``tagline``.
-Operators must set ``long_synopsis_source`` (``wikipedia`` / ``omdb`` / ``auto``);
-without a usable source the task skips with a clear ``outcome_reason``.
+
+Default source is ``wikipedia`` (free, no API key, deeper plot text without an LLM).
+Owners disable the trickle with ``long_synopsis_source=off`` (preferred); empty /
+``none`` / ``disabled`` also skip. Values: ``wikipedia`` / ``omdb`` / ``auto`` / ``off``.
 
 Default interval: 12 hours. Small batches + pause between requests.
 """
@@ -30,6 +32,8 @@ REQUEST_PAUSE_SECONDS = 1.5
 _MAX_SYNOPSIS_CHARS = 4000
 TASK_NAME = "long_synopsis_enrichment"
 VALID_SOURCES = frozenset({"wikipedia", "omdb", "auto"})
+# Preferred disable value is ``off``; empty / none / disabled also disable.
+DISABLED_SOURCES = frozenset({"", "off", "none", "disabled"})
 
 
 def _normalize_source(raw: Any) -> str:
@@ -37,9 +41,13 @@ def _normalize_source(raw: Any) -> str:
 
 
 def resolve_synopsis_source(settings: Settings) -> Tuple[str, Optional[str]]:
-    """Return ``(source, skip_reason)``. Empty source → skip."""
-    source = _normalize_source(getattr(settings, "long_synopsis_source", ""))
-    if not source or source in {"off", "none", "disabled"}:
+    """Return ``(source, skip_reason)``.
+
+    Missing/unset settings default to ``wikipedia``. Explicit empty or ``off``
+    (also ``none`` / ``disabled``) disables the trickle.
+    """
+    source = _normalize_source(getattr(settings, "long_synopsis_source", "wikipedia"))
+    if source in DISABLED_SOURCES:
         return "", "no_synopsis_source_configured"
     if source not in VALID_SOURCES:
         return "", "invalid_synopsis_source"
@@ -113,8 +121,8 @@ async def run(
             "reason": skip_reason,
             "enriched": 0,
             "note": (
-                "Set long_synopsis_source to wikipedia, omdb, or auto "
-                "(and OMDB_API_KEY when using omdb). Never invents plot."
+                "Default is wikipedia. Set long_synopsis_source to off to disable, "
+                "or omdb/auto (OMDB_API_KEY required for omdb). Never invents plot."
             ),
         }
 
@@ -202,10 +210,9 @@ def register(scheduler: IdleScheduler) -> None:
             enabled=True,
             run_fn=run,
             description=(
-                "Optional longer plot text from Wikipedia extract or OMDb into "
-                f"long_synopsis (never overwrites Plex/TMDB). About "
-                f"{DEFAULT_BATCH_SIZE} titles per run when long_synopsis_source is set; "
-                "skips cleanly when the source is off or OMDb lacks a key."
+                "Longer plot text from Wikipedia (default) or OMDb into long_synopsis "
+                f"(never overwrites Plex/TMDB). About {DEFAULT_BATCH_SIZE} titles per run; "
+                "set long_synopsis_source=off to disable, or omdb/auto when preferred."
             ),
             items_per_cycle=DEFAULT_BATCH_SIZE,
             progress_scope="long_synopsis_backlog",

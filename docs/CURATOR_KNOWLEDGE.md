@@ -102,7 +102,7 @@ flowchart LR
 | Plex `summary`, play state, `added_at` | Library sync |
 | TMDB `tmdb_overview`, `tagline`, keywords, dates, credits | Sync enrichment + idle `metadata_enrichment` |
 | `llm_logline` | Optional idle `llm_logline_enrichment` when a provider is configured — **never invented** if the task skips |
-| `long_synopsis` / `synopsis_source` | Optional idle `long_synopsis_enrichment` (Wikipedia extract or OMDb) when `long_synopsis_source` is set — never overwrites Plex/TMDB |
+| `long_synopsis` / `synopsis_source` | Idle `long_synopsis_enrichment` — default source **Wikipedia** (free, no key, deeper plot without LLM); set `long_synopsis_source=off` to disable — never overwrites Plex/TMDB |
 | Motif facets | Idle `summary_motifs` (local NLP over layered plot text) |
 | Theme facets | Idle `keyword_theme_tagging` (local keyword→theme map; no LLM) |
 | Embeddings + neighbors | Idle `semantic_embeddings` then `plot_neighbors` |
@@ -139,6 +139,18 @@ Agent tools and Explore feeds **read caches**; they do not recompute embeddings 
 
 ## Idle tasks — purpose, trickle, auto-tune
 
+### First-start idle bootstrap
+
+Regular idle intervals (often 12–24h) are right for steady-state trickle, but a brand-new library would otherwise sit sparse for days. On IdleScheduler start, CuratorX checks whether foundational knowledge tasks have **never run**. If so, it runs a **one-shot sequenced bootstrap** (not a parallel stampede):
+
+1. `metadata_enrichment` — only when a TMDB metadata backlog exists  
+2. `summary_motifs` — full library motif pass (Plot Lab chips)  
+3. `keyword_theme_tagging` — free theme facets from keywords  
+4. `long_synopsis_enrichment` — when the synopsis source is enabled (Wikipedia by default)  
+5. `semantic_embeddings` — only when the embeddings table is empty and titles still need vectors  
+
+Each step waits for the previous to finish. Flags `idle_bootstrap_completed` / `idle_bootstrap_queue` persist in SQLite so a restart resumes once and never re-fires forever. Logs and run history use trigger `bootstrap` (e.g. `bootstrap: running summary_motifs because never run`). Installs that already ran those tasks mark completed immediately.
+
 ### Why idle?
 
 Chat turns must stay snappy. Building motifs across thousands of titles, embedding batches, and materializing neighbor graphs are **batch** jobs. Running them while the household chats would compete for SQLite writes and LLM/embed quota. Idle windows are the homelab-friendly place for that work.
@@ -153,7 +165,7 @@ Chat turns must stay snappy. Building motifs across thousands of titles, embeddi
 | `summary_motifs` | Lexical motif facets for Plot Lab | `library_facets` motif rows |
 | `title_relations_refresh` | Collection / neighbor / crew graph | `title_relations` edges |
 | `llm_logline_enrichment` | Optional one-liner when free text is thin | Sparse `llm_logline` fills |
-| `long_synopsis_enrichment` | Optional longer plot from Wikipedia/OMDb | `long_synopsis` + `synopsis_source` |
+| `long_synopsis_enrichment` | Longer plot from Wikipedia (default) or OMDb | `long_synopsis` + `synopsis_source` |
 | `keyword_theme_tagging` | Local keyword→controlled theme map | `facet_type='theme'` |
 | `llm_theme_tagging` | Reserved future LLM theme path (stub; skips) | Prefer `keyword_theme_tagging` |
 
@@ -203,7 +215,7 @@ Practical owner habits:
 | Overview / tagline enrichment | TMDB API key (free tier) | No |
 | Motif facets from existing text | Local NLP idle task | No |
 | Keyword→theme map | Local (`keyword_theme_tagging`) | No |
-| Long synopsis from Wikipedia/OMDb | Opt-in `long_synopsis_source`; OMDb needs key; rate-limited | No LLM |
+| Long synopsis from Wikipedia/OMDb | Default `wikipedia`; set `off` to disable; OMDb needs key; rate-limited | No LLM |
 | Embeddings | Hash fallback or local/OpenAI-compatible embed model | Depends on configured embed path |
 | Chat curator personality / tool-using answers | — | Yes (or local Ollama) |
 | `llm_logline` / future LLM theme tagging | — | Yes, optional trickle (themes already free via keywords) |
