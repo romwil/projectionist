@@ -1,6 +1,19 @@
 {
-  "generated_at": "2026-07-18T04:30:22Z",
+  "generated_at": "2026-07-18T04:33:57Z",
   "releases": [
+    {
+      "version": "1.8.18",
+      "date": "2026-07-18",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**In-progress** browse filters now include movies with an unfinished playhead and continue to use partial episode counts for TV shows. Unwatched filters exclude partial movies and shows."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.17",
       "date": "2026-07-18",

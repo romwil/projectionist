@@ -476,6 +476,58 @@ class LibraryQueryTests(unittest.TestCase):
             result = query_library(db, LibraryFilters(unwatched_only=True))
             self.assertEqual([item["title"] for item in result["items"]], ["Unwatched"])
 
+    def test_progress_filters_include_partial_movies_and_shows_exclusively(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "partial-movie",
+                    "media_type": "movie",
+                    "title": "Partial Movie",
+                    "view_count": 0,
+                    "view_offset_ms": 12_000,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "partial-show",
+                    "media_type": "show",
+                    "title": "Partial Show",
+                    "view_count": 0,
+                    "total_episode_count": 10,
+                    "unwatched_episode_count": 4,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "unwatched",
+                    "media_type": "movie",
+                    "title": "Unwatched",
+                    "view_count": 0,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "complete-show",
+                    "media_type": "show",
+                    "title": "Complete Show",
+                    "view_count": 0,
+                    "total_episode_count": 10,
+                    "unwatched_episode_count": 0,
+                }
+            )
+
+            in_progress = query_library(db, LibraryFilters(in_progress_only=True))
+            self.assertEqual(
+                {item["title"] for item in in_progress["items"]},
+                {"Partial Movie", "Partial Show"},
+            )
+            unwatched = query_library(db, LibraryFilters(unwatched_only=True))
+            self.assertEqual(
+                {item["title"] for item in unwatched["items"]},
+                {"Unwatched"},
+            )
+
     def test_query_missing_from_radarr(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

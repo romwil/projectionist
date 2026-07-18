@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.8.18] — 2026-07-18
+
+### Fixed
+- **In-progress** browse filters now include movies with an unfinished playhead and continue to use partial episode counts for TV shows. Unwatched filters exclude partial movies and shows.
+
 ## [1.8.17] — 2026-07-18
 
 ### Fixed

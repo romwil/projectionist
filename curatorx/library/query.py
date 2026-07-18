@@ -292,12 +292,29 @@ def build_facet_match_details(
                 else:
                     matches.append(f"Year: ≤{filters.year_to}")
 
-    if filters.unwatched_only and int(item.get("view_count") or 0) == 0:
-        matches.append("Unwatched")
+    if filters.unwatched_only:
+        total_eps = int(item.get("total_episode_count") or 0)
+        unwatched_eps = int(item.get("unwatched_episode_count") or 0)
+        if (
+            (total_eps > 0 and unwatched_eps >= total_eps)
+            or (
+                total_eps == 0
+                and int(item.get("view_count") or 0) == 0
+                and int(item.get("view_offset_ms") or 0) == 0
+            )
+        ):
+            matches.append("Unwatched")
     if filters.in_progress_only:
         total_eps = int(item.get("total_episode_count") or 0)
         unwatched_eps = int(item.get("unwatched_episode_count") or 0)
-        if total_eps > 0 and 0 < unwatched_eps < total_eps:
+        if (
+            (total_eps > 0 and 0 < unwatched_eps < total_eps)
+            or (
+                item.get("media_type") == "movie"
+                and int(item.get("view_count") or 0) == 0
+                and int(item.get("view_offset_ms") or 0) > 0
+            )
+        ):
             matches.append("In progress")
     if filters.semantic_query:
         matches.append(f"Mood: {filters.semantic_query}")
@@ -429,8 +446,14 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         params.append(filters.fts_query)
     if filters.unwatched_only:
         clauses.append(
-            "(view_count IS NULL OR view_count = 0) "
+            "("
+            "(total_episode_count > 0 AND unwatched_episode_count >= total_episode_count) "
+            "OR ("
+            "(total_episode_count IS NULL OR total_episode_count = 0) "
+            "AND (view_count IS NULL OR view_count = 0) "
             "AND (view_offset_ms IS NULL OR view_offset_ms = 0)"
+            ")"
+            ")"
         )
     if filters.min_view_count is not None:
         clauses.append("view_count >= ?")
@@ -545,8 +568,12 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         params.append(filters.max_unwatched_episodes)
     if filters.in_progress_only:
         clauses.append(
-            "total_episode_count > 0 AND unwatched_episode_count > 0 "
-            "AND unwatched_episode_count < total_episode_count"
+            "("
+            "(total_episode_count > 0 AND unwatched_episode_count > 0 "
+            "AND unwatched_episode_count < total_episode_count) "
+            "OR (media_type = 'movie' AND (view_count IS NULL OR view_count = 0) "
+            "AND view_offset_ms > 0)"
+            ")"
         )
 
     return " AND ".join(clauses), params
