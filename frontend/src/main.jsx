@@ -24,6 +24,8 @@ import PersonPage from "./pages/PersonPage";
 import TagPage from "./pages/TagPage";
 import TagsPage from "./pages/TagsPage";
 import PlotLabPage from "./pages/PlotLabPage";
+import ListsPage from "./pages/ListsPage";
+import MediaIssuesPage from "./pages/MediaIssuesPage";
 import WhatsNewGate from "./components/WhatsNewGate";
 import "./styles.css";
 
@@ -38,6 +40,8 @@ createRoot(document.getElementById("root")).render(
         <Route path="/explore/plot-lab" element={<PlotLabPage />} />
         <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
         <Route path="/watchlist" element={<WatchlistPage />} />
+        <Route path="/lists" element={<ListsPage />} />
+        <Route path="/lists/:listId" element={<ListsPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/about" element={<AboutPage />} />
@@ -47,6 +51,7 @@ createRoot(document.getElementById("root")).render(
           <Route index element={<Navigate to="overview" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="tasks" element={<ScheduledTasksPage />} />
+          <Route path="issues" element={<MediaIssuesPage />} />
           <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
           <Route path=":section" element={<ConfigPage />} />
         </Route>

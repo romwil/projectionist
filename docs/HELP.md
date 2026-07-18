@@ -15,6 +15,7 @@ Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [P
 | Motif walls & surprising neighbors | [Plot Lab](/explore/plot-lab) |
 | Tag / keyword search | [Tags](/explore/tags) |
 | Pins | [Watchlist](/watchlist) |
+| Curated shelves | [Lists & playlists](/lists) |
 | Personal prefs | [Settings](/settings) |
 | Version & release notes | [About](/about) |
 | Data use | [Privacy](/privacy) |
@@ -56,6 +57,14 @@ If chips are missing or a wall is empty, see [Why walls feel sparse](#why-motif-
 ### Why? on posters
 
 **Why?** explains a Plot Lab match and cites which layer hit each selected token (motif facet, keyword, or live plot text). It is provenance for the wall — not a spoiler essay.
+
+### Browse controls, lists, and issue reports
+
+Poster walls default to the visual browse view, while **List** view makes scanning metadata and watch state faster. Sort, filters, and CSV export deliberately use the same current query so a shared link, a visible wall, and an exported research slice mean the same thing.
+
+Use a **watchlist** for personal “remember this” pins. Use a **list** for a durable curated shelf; use a **playlist** for a deliberate viewing sequence. They share the same collection engine, but express different intent so a future watch does not get confused with a planned program.
+
+The ⋮ grip on posters and list rows keeps common actions in one location. **Report issue** records a typed report for an owner; it never directly changes Plex or *arr. Owners decide whether to resolve it or run a supported, logged repair. This separation protects files and downloads from accidental member actions.
 
 ### Title detail — Plot knowledge
 

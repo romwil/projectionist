@@ -476,6 +476,32 @@ export async function deleteCuratedListItem(listId, itemId) {
   });
 }
 
+export async function createMediaIssue(payload) {
+  return api("/media-issues", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listMediaIssues(params = {}) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== null && value !== "") search.set(key, String(value));
+  }
+  return api(`/media-issues${search.toString() ? `?${search}` : ""}`);
+}
+
+export async function updateMediaIssue(issueId, payload) {
+  return api(`/media-issues/${encodeURIComponent(issueId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function repairMediaIssue(issueId) {
+  return api(`/media-issues/${encodeURIComponent(issueId)}/repair`, { method: "POST" });
+}
+
 export async function getEngagementStreak() {
   return api("/engagement/streak");
 }

@@ -3,6 +3,8 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { queryLibrary } from "../api/client";
 import BackLink from "../components/BackLink";
 import LibraryMediaCard from "../components/LibraryMediaCard";
+import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
@@ -12,6 +14,7 @@ import {
   normalizeTagSort,
   parseAndTags,
 } from "../lib/tagSearch.js";
+import { buildMediaBrowseParams, parseMediaBrowse, queryFiltersFromBrowse } from "../lib/mediaBrowse.js";
 
 export default function TagPage() {
   const { tagName } = useParams();
@@ -23,6 +26,8 @@ export default function TagPage() {
     [decoded, andTags],
   );
   const sort = normalizeTagSort(searchParams.get("sort"));
+  const browse = useMemo(() => parseMediaBrowse(searchParams, { sort }), [searchParams, sort]);
+  const [columns, setColumns] = useState(null);
   const { multiUserEnabled } = useAuthGate();
   const [recommendItem, setRecommendItem] = useState(null);
   const [state, setState] = useState({ loading: true, items: [], error: "" });
@@ -30,7 +35,7 @@ export default function TagPage() {
   useEffect(() => {
     let cancelled = false;
     setState({ loading: true, items: [], error: "" });
-    queryLibrary({ keywords, limit: 48, sort })
+    queryLibrary({ ...queryFiltersFromBrowse(browse), keywords, limit: browse.limit, sort: browse.sort })
       .then((data) => {
         if (cancelled) return;
         setState({
@@ -50,13 +55,19 @@ export default function TagPage() {
     return () => {
       cancelled = true;
     };
-  }, [keywords, sort]);
+  }, [keywords, browse]);
 
   function handleSortChange(nextSort) {
     const params = new URLSearchParams(searchParams);
     const normalized = normalizeTagSort(nextSort);
     if (normalized === "title") params.delete("sort");
     else params.set("sort", normalized);
+    setSearchParams(params, { replace: true });
+  }
+
+  function handleBrowseChange(patch) {
+    const params = buildMediaBrowseParams(browse, patch);
+    params.set("keywords", keywords.join(","));
     setSearchParams(params, { replace: true });
   }
 
@@ -78,20 +89,7 @@ export default function TagPage() {
         <p className="explore-section-subtitle">
           Library titles tagged with {keywords.length > 1 ? "all of these keywords" : "this keyword"}
         </p>
-        <label className="tag-sort-control">
-          <span>Sort</span>
-          <select
-            value={sort}
-            data-testid="tag-sort"
-            onChange={(event) => handleSortChange(event.target.value)}
-          >
-            {TAG_SORT_OPTIONS.map((opt) => (
-              <option key={opt.id} value={opt.sort}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <MediaBrowseControls state={browse} onChange={handleBrowseChange} columns={columns} onColumnsChange={setColumns} columnScope="tag" />
       </section>
 
       <section className="tag-results" data-testid="tag-results">
@@ -102,19 +100,7 @@ export default function TagPage() {
             No library titles match {keywords.length > 1 ? "these tags" : "this tag"} yet.
           </p>
         ) : null}
-        {state.items.length ? (
-          <div className="explore-poster-wall">
-            {state.items.map((item) => (
-              <LibraryMediaCard
-                key={item.id || item.rating_key || `${item.media_type}-${item.tmdb_id || item.title}`}
-                item={item}
-                testId="tag-title-card"
-                showRecommend={multiUserEnabled}
-                onRecommend={multiUserEnabled ? setRecommendItem : undefined}
-              />
-            ))}
-          </div>
-        ) : null}
+        {state.items.length ? <MediaBrowseResults state={browse} items={state.items} columns={columns || undefined} cardProps={{ testId: "tag-title-card", showRecommend: multiUserEnabled, onRecommend: multiUserEnabled ? setRecommendItem : undefined }} /> : null}
       </section>
 
       <RecommendModal

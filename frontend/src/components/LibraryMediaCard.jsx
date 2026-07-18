@@ -4,6 +4,7 @@ import { api, getPlexMachineId } from "../api/client";
 import { formatMatchLayers } from "../lib/plotKnowledge.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 import { watchProgressState } from "../lib/watchProgress.js";
+import PosterActionMenu from "./PosterActionMenu";
 import WatchProgressBadge from "./WatchProgressBadge";
 
 let cachedPlexMachineId;
@@ -39,6 +40,8 @@ export default function LibraryMediaCard({
   showRecommend = false,
   onOpenDetail,
   motifWhy = null,
+  onTogglePin,
+  pinned = false,
   testId = "explore-title-card",
 }) {
   const [hovered, setHovered] = useState(false);
@@ -237,6 +240,14 @@ export default function LibraryMediaCard({
         {posterNode}
         <WatchProgressBadge item={item} />
         {playAction}
+        <PosterActionMenu
+          item={item}
+          onRecommend={onRecommend}
+          onSeed={onSeed}
+          onTogglePin={onTogglePin}
+          pinned={pinned}
+          motifWhy={motifWhy}
+        />
         {cornerActions}
       </div>
       {titleNode}
