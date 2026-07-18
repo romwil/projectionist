@@ -91,6 +91,15 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                         "type": "string",
                         "description": "Seed title to look up when item_id is unknown",
                     },
+                    "year": {
+                        "type": "integer",
+                        "description": "Release/air year to disambiguate same-name seed titles",
+                    },
+                    "media_type": {
+                        "type": "string",
+                        "enum": ["movie", "show"],
+                        "description": "Optional media type to disambiguate same-name seed titles",
+                    },
                     "mode": {
                         "type": "string",
                         "enum": ["similar", "surprising"],
@@ -1604,29 +1613,7 @@ class ToolRegistry:
         if mode not in {"similar", "surprising"}:
             mode = "similar"
 
-        seed_row = None
-        seed_id = args.get("item_id")
-        if seed_id is not None:
-            try:
-                seed_row = self.db.library_item_by_id(int(seed_id))
-            except (TypeError, ValueError):
-                seed_row = None
-
-        if seed_row is None:
-            title = str(args.get("title") or "").strip()
-            if not title:
-                return json.dumps({"error": "Provide item_id or title", "items": []})
-            pattern = f"%{title.lower()}%"
-            with self.db.connect() as conn:
-                seed_row = conn.execute(
-                    """
-                    SELECT * FROM library_items
-                    WHERE lower(title) LIKE ?
-                    ORDER BY CASE WHEN lower(title) = ? THEN 0 ELSE 1 END, title
-                    LIMIT 1
-                    """,
-                    (pattern, title.lower()),
-                ).fetchone()
+        seed_row = self._resolve_seed_library_row(args)
         if seed_row is None:
             return json.dumps({"error": "Seed title not found in library", "items": []})
 
@@ -1653,9 +1640,13 @@ class ToolRegistry:
                 "mode": mode,
                 "items": items,
                 "returned": len(items),
+                "cache_status": "ready" if items else "seed_pending",
                 "note": (
                     "Neighbors come from the plot_neighbors idle cache. "
-                    "Empty results mean embeddings/neighbors have not been computed yet."
+                    "This seed has no cached neighbors yet; let the plot_neighbors scheduled "
+                    "task catch up, then retry with the returned seed id."
+                    if not items
+                    else "Neighbors come from the plot_neighbors idle cache."
                 ),
             }
         )
@@ -1694,15 +1685,28 @@ class ToolRegistry:
             if not title:
                 return None
             pattern = f"%{title.lower()}%"
+            clauses = ["lower(title) LIKE ?"]
+            params: List[Any] = [pattern]
+            year = args.get("year")
+            if year is not None:
+                try:
+                    clauses.append("year = ?")
+                    params.append(int(year))
+                except (TypeError, ValueError):
+                    pass
+            media_type = str(args.get("media_type") or "").strip().lower()
+            if media_type in {"movie", "show"}:
+                clauses.append("media_type = ?")
+                params.append(media_type)
             with self.db.connect() as conn:
                 seed_row = conn.execute(
-                    """
+                    f"""
                     SELECT * FROM library_items
-                    WHERE lower(title) LIKE ?
+                    WHERE {' AND '.join(clauses)}
                     ORDER BY CASE WHEN lower(title) = ? THEN 0 ELSE 1 END, title
                     LIMIT 1
                     """,
-                    (pattern, title.lower()),
+                    [*params, title.lower()],
                 ).fetchone()
         return seed_row
 

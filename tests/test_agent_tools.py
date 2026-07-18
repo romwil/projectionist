@@ -325,6 +325,39 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["total_matched"], 2)
             self.assertEqual(len(payload["items"]), 2)
 
+    async def test_find_similar_titles_uses_year_to_disambiguate_seed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            old_id = db.upsert_library_item(
+                {
+                    "rating_key": "wild-old",
+                    "media_type": "movie",
+                    "title": "Wild",
+                    "year": 1980,
+                }
+            )
+            new_id = db.upsert_library_item(
+                {
+                    "rating_key": "wild-new",
+                    "media_type": "movie",
+                    "title": "Wild",
+                    "year": 2014,
+                }
+            )
+            db.set_neighbors(new_id, [(old_id, 0.8, 0.2)])
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+
+            result = json.loads(
+                await registry.execute(
+                    "find_similar_titles",
+                    {"title": "Wild", "year": 2014, "media_type": "movie"},
+                )
+            )
+
+            self.assertEqual(result["seed"]["id"], new_id)
+            self.assertEqual(result["seed"]["year"], 2014)
+            self.assertEqual(result["items"][0]["rating_key"], "wild-old")
+
     async def test_summarize_library_by_decade(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

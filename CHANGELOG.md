@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.8.22] — 2026-07-18
+
+### Fixed
+- Agent similarity lookup now accepts an optional title year and media type, preventing ambiguous same-name library titles from selecting the wrong seed.
+- Anthropic-only chat configurations no longer call the nonexistent Anthropic embeddings endpoint or present hash-vector results as semantic matches. Semantic search now reports the missing OpenAI-compatible embedding endpoint clearly, while title, keyword, motif, and full-text search continue to work.
+- Empty similar-title results now identify the per-seed neighbor-cache backlog and direct the owner to the `plot_neighbors` scheduled task.
+
 ## [1.8.21] — 2026-07-18
 
 ### Added

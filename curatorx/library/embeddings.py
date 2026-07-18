@@ -20,6 +20,29 @@ ProgressCallback = Optional[Callable[[str, int, int, str], None]]
 DEFAULT_EMBED_BATCH_SIZE = 64
 
 
+def remote_embedding_provider_available(settings: Settings) -> bool:
+    """Whether the configured LLM setup exposes an OpenAI-compatible embeddings API.
+
+    Anthropic's Messages API does not provide ``/embeddings``.  It therefore
+    needs an explicitly configured, OpenAI-compatible embedding endpoint rather
+    than silently reusing the Anthropic chat endpoint.
+    """
+    if not settings.llm_api_key:
+        return False
+    provider = str(settings.llm_provider or "").strip().lower()
+    return provider != "anthropic" or bool(str(settings.llm_embedding_base_url or "").strip())
+
+
+def semantic_embedding_search_available(settings: Settings) -> bool:
+    """Whether semantic lookup can safely use the configured embedding strategy.
+
+    The hash fallback remains supported for installations with no LLM key, but
+    an Anthropic chat configuration must opt into a separate embedding endpoint.
+    """
+    provider = str(settings.llm_provider or "").strip().lower()
+    return provider != "anthropic" or bool(str(settings.llm_embedding_base_url or "").strip())
+
+
 def _hash_embed(text: str, dims: int = 384) -> List[float]:
     """Deterministic fallback embedding when no LLM embedding API is configured."""
     vector = np.zeros(dims, dtype=np.float32)
@@ -47,7 +70,7 @@ async def embed_texts(texts: Sequence[str], settings: Settings) -> List[List[flo
     """Embed many texts; prefers provider batch API when available."""
     if not texts:
         return []
-    if not settings.llm_api_key:
+    if not remote_embedding_provider_available(settings):
         return [_hash_embed(text) for text in texts]
     try:
         from curatorx.agent.providers import get_embedding_provider
@@ -124,7 +147,7 @@ async def build_item_embedding_text(row) -> str:
 
 def embedding_model_label(settings: Settings) -> str:
     """Stable label stored on embeddings rows for hygiene / future rebuilds."""
-    if settings.llm_api_key:
+    if remote_embedding_provider_available(settings):
         return str(settings.llm_embedding_model or "text-embedding-3-small").strip()
     return "hash-fallback"
 

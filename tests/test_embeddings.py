@@ -9,7 +9,13 @@ from unittest.mock import AsyncMock, patch
 
 from curatorx.config_store import Settings
 from curatorx.library.db import Database
-from curatorx.library.embeddings import rebuild_embeddings
+from curatorx.library.embeddings import (
+    embed_texts,
+    embedding_model_label,
+    rebuild_embeddings,
+    remote_embedding_provider_available,
+)
+from curatorx.library.query import filters_from_mapping, query_library_async
 from curatorx.models.recommendation import sanitize_recommendation_reason
 
 
@@ -28,6 +34,49 @@ class RecommendationReasonTests(unittest.TestCase):
 
 
 class RebuildEmbeddingsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_anthropic_without_embedding_endpoint_uses_hash_without_request(self) -> None:
+        settings = Settings(
+            llm_provider="anthropic",
+            llm_api_key="not-a-real-secret",
+            llm_base_url="https://api.anthropic.com",
+        )
+
+        with patch("curatorx.agent.providers.get_embedding_provider") as get_provider:
+            vectors = await embed_texts(["A pilgrimage through grief."], settings)
+
+        self.assertFalse(remote_embedding_provider_available(settings))
+        self.assertEqual(embedding_model_label(settings), "hash-fallback")
+        self.assertEqual(len(vectors), 1)
+        self.assertEqual(len(vectors[0]), 384)
+        get_provider.assert_not_called()
+
+    async def test_semantic_query_reports_missing_embedding_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "harold",
+                    "media_type": "movie",
+                    "title": "The Unlikely Pilgrimage of Harold Fry",
+                    "summary": "A man walks across England to visit a dying friend.",
+                }
+            )
+            settings = Settings(
+                llm_provider="anthropic",
+                llm_api_key="not-a-real-secret",
+                llm_base_url="https://api.anthropic.com",
+            )
+
+            result = await query_library_async(
+                db,
+                filters_from_mapping({"semantic_query": "a walking pilgrimage", "limit": 5}),
+                settings,
+            )
+
+            self.assertEqual(result["search_mode"], "semantic_unavailable")
+            self.assertEqual(result["items"], [])
+            self.assertIn("llm_embedding_base_url", result["error"])
+
     async def test_rebuild_embeddings_reports_progress(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

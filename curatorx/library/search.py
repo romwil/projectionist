@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from curatorx.config_store import Settings
 from curatorx.library.db import Database
+from curatorx.library.embeddings import semantic_embedding_search_available
 from curatorx.library.query import filters_from_mapping, query_library, query_library_async
 from curatorx.models.schemas import TitleCard
 
@@ -141,7 +142,11 @@ async def search_library(
             limit=capped,
         )
 
-    # 3) Semantic fallback only when structured matches came up empty.
+    # 3) Semantic fallback only when structured matches came up empty. An
+    # Anthropic chat endpoint is not an embeddings endpoint, so it needs an
+    # explicitly configured OpenAI-compatible embedding URL.
+    if not semantic_embedding_search_available(settings):
+        return []
     filters = filters_from_mapping(
         {
             "semantic_query": cleaned,

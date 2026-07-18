@@ -10,7 +10,11 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from curatorx.config_store import Settings
 from curatorx.library.db import ACTIVE_CONTEXT_CONFIG_KEY, DEFAULT_CONTEXT_HASH, Database
-from curatorx.library.embeddings import embed_text, semantic_search
+from curatorx.library.embeddings import (
+    embed_text,
+    semantic_embedding_search_available,
+    semantic_search,
+)
 from curatorx.library.facets import library_facet_catalog
 
 MAX_QUERY_LIMIT = 100
@@ -652,6 +656,20 @@ async def query_library_async(
 
     semantic_ids: Optional[List[int]] = None
     if filters.semantic_query and settings is not None:
+        if not semantic_embedding_search_available(settings):
+            return {
+                "total_matched": 0,
+                "returned": 0,
+                "offset": offset,
+                "has_more": False,
+                "items": [],
+                "search_mode": "semantic_unavailable",
+                "error": (
+                    "Semantic search needs an OpenAI-compatible embeddings endpoint. "
+                    "Anthropic chat credentials alone do not provide one; configure "
+                    "llm_embedding_base_url or use keyword, motif, or full-text filters."
+                ),
+            }
         vector = await embed_text(filters.semantic_query, settings)
         with db.connect() as conn:
             candidate_rows = conn.execute(
