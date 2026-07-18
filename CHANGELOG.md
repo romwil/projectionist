@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.8.20] — 2026-07-18
+
+### Changed
+- **Media List view** now orders each row as actions, selection, title, and metadata; uses compact watch-state chips; gives the title flexible width while keeping metadata columns legible; and reveals a full poster preview on title hover or keyboard focus.
+
 ## [1.8.19] — 2026-07-18
 
 ### Fixed

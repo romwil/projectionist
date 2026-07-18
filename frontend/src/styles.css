@@ -2004,21 +2004,29 @@ button.watchlist-chip {
 .poster-action-popover a:hover, .poster-action-popover button:hover { background: var(--surface-2); }
 .poster-action-submenu, .poster-action-owner { display: grid; gap: 2px; padding: 5px 0; border-top: 1px solid var(--border); }
 .poster-action-submenu span, .poster-action-owner > span, .poster-action-status { font-size: 11px; color: var(--muted); padding: 2px 8px; margin: 0; }
-.media-list-view { display: grid; border-top: 1px solid var(--border); }
-.media-list-row { display: grid; grid-template-columns: minmax(190px,2fr) repeat(5,minmax(70px,1fr)) 36px; align-items: center; gap: 10px; min-height: 52px; border-bottom: 1px solid var(--border); }
+.media-list-scroll { position: relative; overflow-x: auto; }
+.media-list-view { display: grid; min-width: 720px; border-top: 1px solid var(--border); }
+.media-list-row { display: grid; grid-template-columns: var(--media-list-columns); align-items: center; gap: 8px; min-height: 48px; padding: 0 4px; border-bottom: 1px solid var(--border); }
 .media-list-row > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.media-list-header { min-height: 34px; color: var(--muted); font-size: 11px; text-transform: uppercase; }
+.media-list-header { min-height: 34px; color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: .03em; text-transform: uppercase; }
 .media-list-row .poster-action-menu { position: relative; left: auto; bottom: auto; }
-.media-list-row .poster-action-grip { color: var(--text); background: transparent; border-color: transparent; }
-.media-list-poster { width: 26px; height: 38px; object-fit: cover; vertical-align: middle; margin-right: 8px; border-radius: 3px; }
-.media-list-row .watch-progress-badge { position: static; display: inline-flex; margin-left: 6px; }
+.media-list-row .poster-action-grip { display: grid; place-items: center; min-width: 30px; min-height: 30px; color: var(--text); background: transparent; border-color: transparent; }
+.media-list-select { display: grid; place-items: center; min-width: 0; }
+.media-list-select input { margin: 0; }
+.media-list-title { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.media-list-title > a { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; font-weight: 600; }
+.media-list-watch-state { display: inline-flex; flex: 0 0 auto; align-items: center; max-width: 100%; padding: 3px 7px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 11px; font-weight: 600; line-height: 1.1; text-transform: capitalize; }
+.media-list-watch-state.is-watched { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); color: var(--accent); }
+.media-list-watch-state.is-partial { border-color: rgba(176, 122, 48, .65); color: #c99a57; }
+.media-list-poster-preview { position: fixed; z-index: 80; width: 160px; height: 240px; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised, var(--surface)); box-shadow: 0 14px 34px rgba(0,0,0,.45); pointer-events: auto; }
+.media-list-poster-preview img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .media-issue-backdrop { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(0,0,0,.62); }
 .media-issue-modal { width: min(460px,100%); display: grid; gap: 12px; padding: 20px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-raised, var(--surface)); }
 .media-issue-modal h2, .media-issue-modal p { margin: 0; }
 .media-issue-modal label { display: grid; gap: 5px; }
 .media-issue-modal textarea { min-height: 90px; resize: vertical; }
 .media-issue-actions { display: flex; justify-content: end; gap: 8px; }
-@media (max-width: 760px) { .media-list-row { grid-template-columns: minmax(160px,1fr) 44px; } .media-list-row > span:not([data-column="title"]):not([data-column="year"]) { display: none; } .media-list-header > span:not(:first-child) { display: none; } }
+@media (max-width: 760px) { .media-list-view { min-width: 610px; } .media-list-poster-preview { display: none; } }
 
 .inline-cards,
 .turnstyle-track {

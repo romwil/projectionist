@@ -1,6 +1,19 @@
 {
-  "generated_at": "2026-07-18T04:44:25Z",
+  "generated_at": "2026-07-18T04:46:12Z",
   "releases": [
+    {
+      "version": "1.8.20",
+      "date": "2026-07-18",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**Media List view** now orders each row as actions, selection, title, and metadata; uses compact watch-state chips; gives the title flexible width while keeping metadata columns legible; and reveals a full poster preview on title hover or keyboard focus."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.19",
       "date": "2026-07-18",
