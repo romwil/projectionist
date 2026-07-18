@@ -85,36 +85,42 @@ export function normalizeSectionSort(raw) {
   return EXPLORE_SECTION_SORTS.some((opt) => opt.id === value) ? value : "default";
 }
 
+function normalizeSectionList(raw) {
+  if (Array.isArray(raw)) return raw.map((value) => String(value).trim()).filter(Boolean);
+  return String(raw || "").split(",").map((value) => value.trim()).filter(Boolean);
+}
+
 /** Sort a page of feed items without mutating the input. */
-export function sortExploreSectionItems(items, sortId) {
+export function sortExploreSectionItems(items, sortId, sortDir = "desc") {
   const list = Array.isArray(items) ? items.slice() : [];
   const sort = normalizeSectionSort(sortId);
+  const direction = sortDir === "asc" ? 1 : -1;
   if (sort === "default") return list;
   list.sort((a, b) => {
     if (sort === "title") {
       return String(a?.title || "").localeCompare(String(b?.title || ""), undefined, {
         sensitivity: "base",
-      });
+      }) * direction;
     }
     if (sort === "year") {
       const ay = Number(a?.year);
       const by = Number(b?.year);
       const aMissing = !Number.isFinite(ay);
       const bMissing = !Number.isFinite(by);
-      if (aMissing && bMissing) return String(a?.title || "").localeCompare(String(b?.title || ""));
+      if (aMissing && bMissing) return String(a?.title || "").localeCompare(String(b?.title || "")) * direction;
       if (aMissing) return 1;
       if (bMissing) return -1;
-      return by - ay;
+      return (ay - by) * direction;
     }
     if (sort === "rating") {
       const ar = Number(a?.rating ?? a?.vote_average);
       const br = Number(b?.rating ?? b?.vote_average);
       const aMissing = !Number.isFinite(ar);
       const bMissing = !Number.isFinite(br);
-      if (aMissing && bMissing) return String(a?.title || "").localeCompare(String(b?.title || ""));
+      if (aMissing && bMissing) return String(a?.title || "").localeCompare(String(b?.title || "")) * direction;
       if (aMissing) return 1;
       if (bMissing) return -1;
-      return br - ar;
+      return (ar - br) * direction;
     }
     return 0;
   });
@@ -129,6 +135,13 @@ export function parseExploreSectionQuery(searchParams) {
     offset: normalizeFeedOffset(params.get("offset")),
     mediaType: normalizeMediaTypeFilter(params.get("media_type")),
     sort: normalizeSectionSort(params.get("sort")),
+    sort_dir: params.get("sort_dir") === "asc" ? "asc" : "desc",
+    view: params.get("view") === "list" ? "list" : "poster",
+    watch_state: ["unwatched", "in_progress", "watched"].includes(params.get("watch_state"))
+      ? params.get("watch_state")
+      : "",
+    year: String(params.get("year") || "").trim(),
+    genres: normalizeSectionList(params.get("genres")),
   };
 }
 
@@ -139,6 +152,11 @@ export function buildExploreSectionQuery(current, updates = {}) {
     offset: current?.offset ?? 0,
     mediaType: current?.mediaType ?? null,
     sort: current?.sort ?? "default",
+    sort_dir: current?.sort_dir ?? "desc",
+    view: current?.view ?? "poster",
+    watch_state: current?.watch_state ?? "",
+    year: current?.year ?? "",
+    genres: current?.genres ?? [],
     ...updates,
   };
   const params = new URLSearchParams();
@@ -146,6 +164,12 @@ export function buildExploreSectionQuery(current, updates = {}) {
   if (next.limit !== DEFAULT_EXPLORE_PAGE_SIZE) params.set("limit", String(next.limit));
   if (next.offset > 0) params.set("offset", String(next.offset));
   if (next.sort && next.sort !== "default") params.set("sort", next.sort);
+  if (next.sort_dir === "asc") params.set("sort_dir", "asc");
+  if (next.view === "list") params.set("view", "list");
+  if (next.watch_state) params.set("watch_state", next.watch_state);
+  if (next.year) params.set("year", String(next.year));
+  const genres = normalizeSectionList(next.genres);
+  if (genres.length) params.set("genres", genres.join(","));
   return params;
 }
 

@@ -201,13 +201,18 @@ test("normalizeMotifFacets filters blank values", () => {
   ]);
 });
 
-test("parseExploreSectionQuery normalizes pagination and media type", () => {
-  const params = new URLSearchParams("media_type=tv&limit=40&offset=20");
+test("parseExploreSectionQuery normalizes browse state", () => {
+  const params = new URLSearchParams("media_type=tv&limit=40&offset=20&view=list&sort=year&sort_dir=asc&watch_state=unwatched&year=1999&genres=Drama,Sci-Fi");
   assert.deepEqual(parseExploreSectionQuery(params), {
     limit: 40,
     offset: 20,
     mediaType: "show",
-    sort: "default",
+    sort: "year",
+    sort_dir: "asc",
+    view: "list",
+    watch_state: "unwatched",
+    year: "1999",
+    genres: ["Drama", "Sci-Fi"],
   });
   assert.equal(normalizePageSize("99"), 20);
   assert.equal(normalizeMediaTypeFilter("movies"), "movie");
@@ -221,6 +226,16 @@ test("buildExploreSectionQuery omits default limit and zero offset", () => {
   assert.equal(params.get("media_type"), "movie");
   assert.equal(params.get("limit"), "40");
   assert.equal(params.get("offset"), null);
+});
+
+test("buildExploreSectionQuery preserves list filters", () => {
+  const params = buildExploreSectionQuery(
+    { limit: 20, offset: 0, mediaType: null, sort: "default" },
+    { view: "list", watch_state: "unwatched", genres: ["Drama"] },
+  );
+  assert.equal(params.get("view"), "list");
+  assert.equal(params.get("watch_state"), "unwatched");
+  assert.equal(params.get("genres"), "Drama");
 });
 
 test("sortExploreSectionItems sorts by year desc", () => {

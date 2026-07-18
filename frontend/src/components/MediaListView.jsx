@@ -12,6 +12,7 @@ export default function MediaListView({
   onRecommend,
   onSeed,
   onTogglePin,
+  getItemKey,
 }) {
   return <div className="media-list-view" role="table" aria-label="Titles">
     <div className="media-list-row media-list-header" role="row">
@@ -20,7 +21,7 @@ export default function MediaListView({
       <span />
     </div>
     {items.map((item) => {
-      const key = String(item.id || item.rating_key || item.plex_rating_key || `${item.media_type}:${item.tmdb_id || item.title}`);
+      const key = getItemKey?.(item) || String(item.id || item.rating_key || item.plex_rating_key || `${item.media_type}:${item.tmdb_id || item.title}`);
       const path = titleDetailPath({ ...item, in_library: true });
       return <div className="media-list-row" role="row" key={key}>
         {selectable ? <label><input type="checkbox" checked={selected?.has(key)} onChange={() => onToggleSelect?.(item)} /><span className="sr-only">Select {item.title}</span></label> : null}

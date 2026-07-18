@@ -17,6 +17,9 @@ export default function MediaBrowseControls({
   bulkActions,
   leading,
   exportEnabled = true,
+  sortOptions = MEDIA_BROWSE_SORTS,
+  exportItems,
+  onExport,
 }) {
   const [columnOpen, setColumnOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -40,6 +43,15 @@ export default function MediaBrowseControls({
     onColumnsChange?.(next);
   }
 
+  function updateList(key, value) {
+    const values = Array.isArray(state[key]) ? state[key] : [];
+    update({
+      [key]: values.includes(value)
+        ? values.filter((entry) => entry !== value)
+        : [...values, value],
+    });
+  }
+
   return (
     <div className="media-browse-controls" data-testid="media-browse-controls">
       <div className="media-browse-controls-main">
@@ -47,7 +59,7 @@ export default function MediaBrowseControls({
         <label>
           <span>Sort</span>
           <select value={state.sort} onChange={(event) => update({ sort: event.target.value })}>
-            {MEDIA_BROWSE_SORTS.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            {sortOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </label>
         <button type="button" className="ghost" onClick={() => update({ sort_dir: state.sort_dir === "asc" ? "desc" : "asc" })}>
@@ -70,6 +82,22 @@ export default function MediaBrowseControls({
             <option value="">Any</option>{filterOptions.years.map((year) => <option key={year} value={year}>{year}</option>)}
           </select></label>
         ) : null}
+        {filterOptions.genres?.length ? (
+          <details className="media-browse-filter-menu">
+            <summary>Filters{state.genres?.length ? ` (${state.genres.length})` : ""}</summary>
+            <div className="media-browse-popover">
+              <span>Genres</span>
+              {filterOptions.genres.map((genre) => <label key={genre}>
+                <input
+                  type="checkbox"
+                  checked={state.genres?.includes(genre)}
+                  onChange={() => updateList("genres", genre)}
+                />
+                {genre}
+              </label>)}
+            </div>
+          </details>
+        ) : null}
       </div>
       <div className="media-browse-controls-actions">
         {bulkActions}
@@ -85,8 +113,13 @@ export default function MediaBrowseControls({
         <div className="media-browse-menu-wrap">
           <button type="button" className="ghost" aria-expanded={exportOpen} disabled={!exportEnabled} onClick={() => setExportOpen((open) => !open)}>Export CSV</button>
           {exportOpen ? <div className="media-browse-popover" role="menu">
-            <a href={libraryExportHref(state, visibleColumns)}>Visible columns</a>
-            <a href={libraryExportHref(state)}>All columns</a>
+            {exportItems ? <>
+              <button type="button" onClick={() => onExport?.(visibleColumns)}>Current page · visible columns</button>
+              <button type="button" onClick={() => onExport?.(MEDIA_BROWSE_COLUMNS.map((column) => column.id))}>Current page · all columns</button>
+            </> : <>
+              <a href={libraryExportHref(state, visibleColumns)}>Visible columns</a>
+              <a href={libraryExportHref(state)}>All columns</a>
+            </>}
           </div> : null}
         </div>
         <div className="media-browse-view-toggle" aria-label="View">

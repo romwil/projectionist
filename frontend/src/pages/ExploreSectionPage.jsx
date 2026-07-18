@@ -8,7 +8,8 @@ import {
 } from "../api/client";
 import BackLink from "../components/BackLink.jsx";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
-import LibraryMediaCard from "../components/LibraryMediaCard.jsx";
+import MediaBrowseControls from "../components/MediaBrowseControls.jsx";
+import MediaBrowseResults from "../components/MediaBrowseResults.jsx";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { exploreSectionPath } from "../lib/browseLinks.js";
@@ -39,6 +40,27 @@ const MEDIA_TABS = [
 
 function itemKey(item) {
   return `${item?.media_type || ""}:${item?.tmdb_id || item?.rating_key || item?.title || ""}`;
+}
+
+function matchesBrowseFilters(item, query) {
+  if (query.year && String(item?.year || "") !== String(query.year)) return false;
+  if (query.watch_state) {
+    const watched = Boolean(item?.watched || Number(item?.view_count) > 0);
+    const inProgress = Boolean(item?.view_offset || item?.view_offset_ms);
+    if (query.watch_state === "watched" && !watched) return false;
+    if (query.watch_state === "in_progress" && !inProgress) return false;
+    if (query.watch_state === "unwatched" && watched) return false;
+  }
+  if (query.genres?.length) {
+    const itemGenres = (item?.genres || []).map((genre) => String(genre).toLowerCase());
+    if (!query.genres.some((genre) => itemGenres.includes(String(genre).toLowerCase()))) return false;
+  }
+  return true;
+}
+
+function csvCell(value) {
+  const text = Array.isArray(value) ? value.join(" · ") : String(value ?? "");
+  return `"${text.replaceAll("\"", "\"\"")}"`;
 }
 
 function SectionPagination({ summary, onPageChange, onPageSizeChange, pageSize, compact = false }) {
@@ -162,9 +184,18 @@ export default function ExploreSectionPage() {
   }, [config, query.limit, query.offset, query.mediaType]);
 
   const sortedItems = useMemo(
-    () => sortExploreSectionItems(state.items, query.sort),
-    [state.items, query.sort],
+    () => sortExploreSectionItems(
+      state.items.filter((item) => matchesBrowseFilters(item, query)),
+      query.sort,
+      query.sort_dir,
+    ),
+    [state.items, query],
   );
+
+  const filterOptions = useMemo(() => ({
+    years: [...new Set(state.items.map((item) => item.year).filter(Boolean))].sort((a, b) => b - a),
+    genres: [...new Set(state.items.flatMap((item) => item.genres || []).filter(Boolean))].sort(),
+  }), [state.items]);
 
   const summary = useMemo(
     () => feedPaginationSummary(state.payload || { items: state.items, total: state.items.length }),
@@ -197,6 +228,27 @@ export default function ExploreSectionPage() {
 
   function handlePageSizeChange(limit) {
     updateQuery({ limit, offset: 0 });
+  }
+
+  function handleBrowseChange(patch) {
+    const updates = { ...patch };
+    if (Object.hasOwn(patch, "media_type")) {
+      updates.mediaType = patch.media_type || null;
+      delete updates.media_type;
+    }
+    updateQuery(updates);
+  }
+
+  function exportCurrentPage(columns) {
+    const header = columns.join(",");
+    const rows = sortedItems.map((item) => columns.map((column) => csvCell(item?.[column])).join(","));
+    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
+    const href = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = href;
+    link.download = `${config.id}-${query.offset + 1}-${query.offset + sortedItems.length}.csv`;
+    link.click();
+    URL.revokeObjectURL(href);
   }
 
   function toggleSelect(item) {
@@ -357,22 +409,17 @@ export default function ExploreSectionPage() {
       ) : null}
 
       <div className="explore-section-toolbar" data-testid="explore-section-toolbar">
+        <MediaBrowseControls
+          state={{ ...query, media_type: query.mediaType || "" }}
+          onChange={handleBrowseChange}
+          columnScope={`explore-${config.id}`}
+          filterOptions={filterOptions}
+          sortOptions={EXPLORE_SECTION_SORTS}
+          exportItems
+          onExport={exportCurrentPage}
+        />
         <div className="explore-section-toolbar-row">
           <div className="explore-section-toolbar-primary">
-            <label className="explore-section-sort">
-              <span>Sort</span>
-              <select
-                value={query.sort || "default"}
-                data-testid="explore-section-sort"
-                onChange={(event) => updateQuery({ sort: event.target.value, offset: query.offset })}
-              >
-                {EXPLORE_SECTION_SORTS.map((opt) => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
             {showToolbarPagination ? (
               <label className="explore-section-page-size">
                 <span>Per page</span>
@@ -483,32 +530,14 @@ export default function ExploreSectionPage() {
           </p>
         ) : null}
         {sortedItems.length ? (
-          <div className="explore-poster-wall">
-            {sortedItems.map((item) => {
-              const key = itemKey(item);
-              const canPin = pinnableKeys.has(key);
-              const isSelected = selected.has(key);
-              return (
-                <div
-                  key={key}
-                  className={`explore-section-card-wrap${isSelected ? " is-selected" : ""}`}
-                >
-                  {canPin ? (
-                    <label className="explore-section-select">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        data-testid="explore-section-select-item"
-                        onChange={() => toggleSelect(item)}
-                      />
-                      <span className="sr-only">Select {item.title || "title"}</span>
-                    </label>
-                  ) : null}
-                  <LibraryMediaCard item={item} />
-                </div>
-              );
-            })}
-          </div>
+          <MediaBrowseResults
+            state={{ ...query, media_type: query.mediaType || "" }}
+            items={sortedItems}
+            selectable
+            selected={selected}
+            onToggleSelect={toggleSelect}
+            getItemKey={itemKey}
+          />
         ) : null}
       </section>
 

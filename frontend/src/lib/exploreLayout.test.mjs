@@ -19,11 +19,11 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(styles, /\.explore-section\s*\{[^}]*min-width:\s*0/s);
   });
 
-  it("keeps explore section multi-select toolbar inside the reading column", () => {
+  it("keeps Explore controls visible inside the reading column", () => {
     assert.match(styles, /\.explore-section-toolbar\s*\{[^}]*width:\s*min\(var\(--reading-column-max/s);
-    assert.match(styles, /\.explore-section-toolbar\s*\{[^}]*overflow-x:\s*clip/s);
+    assert.match(styles, /\.explore-section-toolbar\s*\{[^}]*overflow:\s*visible/s);
     assert.match(styles, /\.explore-section-bulk\s*\{[^}]*flex-wrap:\s*wrap/s);
-    assert.match(styles, /\.explore-section-sort select\s*\{[^}]*border:\s*1px solid var\(--border/s);
+    assert.match(styles, /\.media-browse-filter-menu\s+>\s+summary\s*\{[^}]*white-space:\s*nowrap/s);
   });
 
   it("keeps poster hover actions as corner icons on the poster", () => {

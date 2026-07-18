@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.8.14] — 2026-07-18
+
+Explore feed browsing now uses the same visible controls as the rest of CuratorX.
+
+### Fixed
+- **Recently Added** and **Recent Releases** now include Poster/List, sort direction, type/watch/year/genre filters, columns, and a clearly available CSV export. Feed CSV exports only the current loaded page so it does not imply an unrestricted library export.
+- List mode preserves feed selection, pinning, and owner delete actions; control menus are no longer clipped by the Explore toolbar.
+
 ## [1.8.13] — 2026-07-18
 
 Shared media browsing, local collections, and safe owner-reviewed media repair.

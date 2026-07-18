@@ -90,8 +90,8 @@ export function formatBulkDeletePreviewTitles(titles, limit = 5) {
 export function exploreSectionToolbarLayoutMatchers() {
   return {
     container: /\.explore-section-toolbar\s*\{[^}]*width:\s*min\(var\(--reading-column-max/s,
-    overflow: /\.explore-section-toolbar\s*\{[^}]*overflow-x:\s*clip/s,
-    sortSelect: /\.explore-section-sort select\s*\{[^}]*border:\s*1px solid var\(--border/s,
+    overflow: /\.explore-section-toolbar\s*\{[^}]*overflow:\s*visible/s,
+    sortSelect: /\.media-browse-filter-menu\s+>\s+summary\s*\{[^}]*border:\s*1px solid var\(--border/s,
     bulkWrap: /\.explore-section-bulk\s*\{[^}]*flex-wrap:\s*wrap/s,
   };
 }

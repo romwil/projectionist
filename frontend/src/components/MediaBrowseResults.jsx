@@ -9,13 +9,14 @@ export default function MediaBrowseResults({
   onToggleSelect,
   selectable = false,
   cardProps = {},
+  getItemKey,
 }) {
   if (state.view === "list") {
-    return <MediaListView items={items} columns={columns} selected={selected} onToggleSelect={onToggleSelect} selectable={selectable} {...cardProps} />;
+    return <MediaListView items={items} columns={columns} selected={selected} onToggleSelect={onToggleSelect} selectable={selectable} getItemKey={getItemKey} {...cardProps} />;
   }
   return <div className="explore-poster-wall media-browse-poster-wall">
     {items.map((item) => {
-      const key = String(item.id || item.rating_key || item.plex_rating_key || `${item.media_type}:${item.tmdb_id || item.title}`);
+      const key = getItemKey?.(item) || String(item.id || item.rating_key || item.plex_rating_key || `${item.media_type}:${item.tmdb_id || item.title}`);
       const isSelected = selected?.has(key);
       const itemCardProps = typeof cardProps === "function" ? cardProps(item) : cardProps;
       return <div key={key} className={`explore-section-card-wrap${isSelected ? " is-selected" : ""}`}>
