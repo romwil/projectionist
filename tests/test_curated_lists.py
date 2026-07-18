@@ -56,6 +56,17 @@ class CuratedListsDbTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 db.create_curated_list(list_id="b", user_id=None, name="Favorites")
 
+    def test_playlist_kind_persists_and_updates(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            created = db.create_curated_list(
+                list_id="playlist-1", user_id=None, name="Road trip", list_kind="playlist"
+            )
+            self.assertEqual(created["list_kind"], "playlist")
+            updated = db.update_curated_list("playlist-1", user_id=None, list_kind="list")
+            assert updated is not None
+            self.assertEqual(updated["list_kind"], "list")
+
     def test_plex_lists_publish_is_deferred(self) -> None:
         self.assertFalse(PLEX_LISTS_PUBLISH_SUPPORTED)
 

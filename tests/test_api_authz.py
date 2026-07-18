@@ -125,6 +125,41 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertTrue(features.json()["features"]["multi_user_enabled"])
         self.assertFalse(features.json()["authenticated"])
 
+    def test_library_csv_export_requires_auth_and_uses_requested_columns(self) -> None:
+        self._enable_multi_user_via_api()
+        from curatorx.web.jobs import get_job_manager
+
+        get_job_manager().db.upsert_library_item(
+            {"rating_key": "csv-1", "media_type": "movie", "title": "CSV Title", "year": 2024}
+        )
+        self.client.cookies.clear()
+        self.assertEqual(self.client.get("/api/library/export.csv").status_code, 401)
+        self._login_as(1, "Owner")
+        response = self.client.get("/api/library/export.csv?columns=title,year")
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.text.splitlines()[0], "title,year")
+        self.assertIn("CSV Title,2024", response.text)
+        self.assertIn("curatorx-library-", response.headers["content-disposition"])
+
+    def test_member_can_report_but_cannot_repair_media_issue(self) -> None:
+        self._enable_multi_user_via_api()
+        self._login_as(1, "Owner")
+        self.client.post("/api/auth/logout")
+        self._login_as(2, "Member")
+        created = self.client.post(
+            "/api/media-issues",
+            json={"media_type": "movie", "title": "Broken Movie", "tmdb_id": 1, "code": "bad_video"},
+        )
+        self.assertEqual(created.status_code, 200, created.text)
+        issue_id = created.json()["id"]
+        self.assertEqual(self.client.get("/api/media-issues").status_code, 403)
+        self.assertEqual(self.client.post(f"/api/media-issues/{issue_id}/repair").status_code, 403)
+        self.client.post("/api/auth/logout")
+        self._login_as(1, "Owner")
+        repaired = self.client.post(f"/api/media-issues/{issue_id}/repair")
+        self.assertEqual(repaired.status_code, 200, repaired.text)
+        self.assertEqual(repaired.json()["repair_action"], "skipped")
+
     def test_refuse_multi_user_when_dev_session_secret(self) -> None:
         os.environ["CURATORX_SESSION_SECRET"] = DEV_SESSION_SECRET
         clear_session_secret_cache()

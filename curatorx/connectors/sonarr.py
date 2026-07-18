@@ -166,6 +166,17 @@ class SonarrClient:
             timeout=self.timeout,
         )
 
+    def search_series(self, series_id: int) -> Mapping[str, Any]:
+        """Ask Sonarr to search a managed series through its Commands API."""
+        payload = request_json(
+            f"{self.base_url}/api/v3/command",
+            method="POST",
+            headers=self._headers(),
+            body={"name": "SeriesSearch", "seriesId": series_id},
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, dict) else {}
+
     def quality_profiles(self) -> List[Mapping[str, Any]]:
         payload = request_json(
             f"{self.base_url}/api/v3/qualityprofile",

@@ -109,7 +109,17 @@ class LibraryQueryTests(unittest.TestCase):
         )
         self.assertEqual(filters.genres, ["Horror", "Sci-Fi"])
         self.assertEqual(filters.year_from, 1970)
-        self.assertEqual(filters.normalized_limit(), 50)
+        self.assertEqual(filters.normalized_limit(), 100)
+
+    def test_query_sort_direction_overrides_legacy_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item({"rating_key": "old", "media_type": "movie", "title": "Old", "year": 1970})
+            db.upsert_library_item({"rating_key": "new", "media_type": "movie", "title": "New", "year": 2020})
+            legacy = query_library(db, LibraryFilters(sort="year"))
+            ascending = query_library(db, LibraryFilters(sort="year", sort_dir="asc"))
+            self.assertEqual(legacy["items"][0]["title"], "New")
+            self.assertEqual(ascending["items"][0]["title"], "Old")
 
     def test_compute_overview_decades(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

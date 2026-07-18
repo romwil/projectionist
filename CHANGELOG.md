@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+- Library browse supports explicit `sort_dir`, up to 100 results, and a privacy-filtered CSV export of the active query.
+- Curated lists now carry a `list_kind` (`list` or `playlist`) for shared collection controls.
+- Media issue queue: household members can report media problems; owners can review, resolve, and run logged *arr repair playbooks. Auto-repair remains off until an owner allowlists issue codes.
+
 ## [1.8.12] — 2026-07-18
 
 AppNav hamburger on every core shell (chat, browse, Settings, Admin, Privacy); chat footer links move into the drawer.

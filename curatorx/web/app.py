@@ -8,15 +8,19 @@ import os
 import re
 import secrets
 import threading
+import time
 import uuid
+import csv
+import io
 from contextlib import asynccontextmanager
 from dataclasses import asdict
+from datetime import date
 from pathlib import Path
 import asyncio
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -98,6 +102,9 @@ from curatorx.models.schemas import (
     Lens,
     LensCreate,
     LensUpdate,
+    MediaIssue,
+    MediaIssueCreate,
+    MediaIssueUpdate,
     MessageFeedbackRequest,
     PersonaMetrics,
     PersonaMetricsUpdate,
@@ -537,6 +544,7 @@ class SettingsPayload(BaseModel):
     tv_page_size: int = Field(default=500, ge=50, le=2000)
     library_enrich_workers: int = Field(default=6, ge=1, le=16)
     sync_reviews_to_plex: bool = True
+    auto_repair_issue_codes: List[str] = Field(default_factory=list)
     mcp_api_key: str = ""
     mcp_full_api_key: str = ""
     mcp_tmdb_poster_size: str = "w500"
@@ -2051,6 +2059,7 @@ async def library_query_endpoint(
     missing_tmdb_id: bool = False,
     in_progress_only: bool = False,
     sort: str = "title",
+    sort_dir: Optional[Literal["asc", "desc"]] = None,
     offset: int = 0,
     limit: int = 25,
     user=Depends(get_current_user_dep),
@@ -2093,6 +2102,7 @@ async def library_query_endpoint(
             "missing_tmdb_id": missing_tmdb_id,
             "in_progress_only": in_progress_only,
             "sort": sort,
+            "sort_dir": sort_dir,
             "offset": offset,
             "limit": limit,
         }
@@ -2102,6 +2112,63 @@ async def library_query_endpoint(
     else:
         result = query_library(_db(), filters)
     return _sanitize_library_payload(result, user)
+
+
+_EXPORT_COLUMNS = (
+    "title", "year", "media_type", "genres", "runtime_minutes", "vote_average",
+    "watch_state", "view_count", "added_at", "last_viewed_at", "tmdb_id", "tvdb_id",
+)
+
+
+@app.get("/api/library/export.csv")
+async def library_export_csv(
+    request: Request,
+    columns: str = "all",
+    user=Depends(get_current_user_dep),
+) -> StreamingResponse:
+    """Export the current filtered library view after applying the normal privacy boundary."""
+    raw: Dict[str, Any] = dict(request.query_params)
+    for key in ("unwatched_only", "missing_tmdb_id", "in_progress_only"):
+        if key in raw:
+            raw[key] = str(raw[key]).lower() in {"1", "true", "yes", "on"}
+    raw["limit"] = 5000
+    raw["offset"] = 0
+    filters = filters_from_mapping(raw)
+    result = (
+        await query_library_async(_db(), filters, _settings())
+        if filters.semantic_query
+        else query_library(_db(), filters)
+    )
+    items = _sanitize_library_payload(result["items"], user)
+    requested = list(_EXPORT_COLUMNS) if columns.strip().lower() == "all" else [
+        value.strip() for value in columns.split(",") if value.strip()
+    ]
+    if not requested or any(value not in _EXPORT_COLUMNS for value in requested):
+        raise HTTPException(status_code=400, detail="columns must be all or a comma-separated safe column list")
+
+    def rows():
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=requested, extrasaction="ignore")
+        writer.writeheader()
+        yield output.getvalue()
+        output.seek(0)
+        output.truncate(0)
+        for item in items:
+            row = dict(item)
+            for field in ("genres",):
+                if isinstance(row.get(field), list):
+                    row[field] = ", ".join(str(value) for value in row[field])
+            writer.writerow({field: row.get(field, "") for field in requested})
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
+
+    filename = f"curatorx-library-{date.today().isoformat()}.csv"
+    return StreamingResponse(
+        rows(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/api/library/aggregate")
@@ -3430,6 +3497,7 @@ def create_curated_list(
             user_id=user_id,
             name=payload.name,
             description=payload.description or "",
+            list_kind=payload.list_kind,
         )
     except ValueError as error:
         raise HTTPException(
@@ -3458,7 +3526,7 @@ def update_curated_list(
     user=Depends(get_current_user_dep),
 ) -> CuratedList:
     user_id = user.id if _settings().features.multi_user_enabled else None
-    if payload.name is None and payload.description is None:
+    if payload.name is None and payload.description is None and payload.list_kind is None:
         raise HTTPException(status_code=400, detail="No list fields to update")
     try:
         updated = _db().update_curated_list(
@@ -3466,6 +3534,7 @@ def update_curated_list(
             user_id=user_id,
             name=payload.name,
             description=payload.description,
+            list_kind=payload.list_kind,
         )
     except ValueError as error:
         raise HTTPException(
@@ -3518,6 +3587,109 @@ def add_curated_list_item(
             detail=_safe_error_detail(error, context),
         ) from error
     return CuratedListItem(**item)
+
+
+_AUTO_REPAIR_CODES = {"wrong_language", "bad_video", "bad_audio"}
+
+
+def _run_media_issue_repair(issue: Dict[str, Any]) -> Dict[str, Any]:
+    """Execute only documented, identity-bound *arr actions and persist an honest outcome."""
+    db = _db()
+    now = time.time()
+    code = str(issue["code"])
+    if code not in _AUTO_REPAIR_CODES:
+        updated = db.update_media_issue(
+            issue["id"], status="approved", repair_action="skipped",
+            repair_log_entry={"at": now, "outcome": "skipped", "reason": "No safe repair playbook for this issue code."},
+        )
+        assert updated is not None
+        return updated
+    settings = _settings()
+    try:
+        if issue["media_type"] == "movie":
+            if not settings.radarr_url or not settings.radarr_api_key or not issue.get("tmdb_id"):
+                raise LookupError("Radarr is not configured or the issue has no TMDB id.")
+            client = RadarrClient(settings.radarr_url, settings.radarr_api_key)
+            movie = client.movie_by_tmdb_id(int(issue["tmdb_id"]))
+            if movie is None:
+                raise LookupError("Title is not managed by Radarr.")
+            if movie.movie_file_id is not None:
+                client.mark_movie_file_failed(movie.movie_file_id)
+            command = client.search_movie(movie.id)
+            action = "radarr delete-file-and-search" if movie.movie_file_id is not None else "radarr search"
+        else:
+            if not settings.sonarr_url or not settings.sonarr_api_key or not issue.get("tvdb_id"):
+                raise LookupError("Sonarr is not configured or the issue has no TVDB id.")
+            client = SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
+            series = client.series_by_tvdb_id(int(issue["tvdb_id"]))
+            if series is None:
+                raise LookupError("Title is not managed by Sonarr.")
+            command = client.search_series(series.id)
+            action = "sonarr search"
+        updated = db.update_media_issue(
+            issue["id"], status="resolved", repair_action=action,
+            repair_log_entry={"at": now, "outcome": "started", "action": action, "command": command},
+        )
+    except LookupError as error:
+        updated = db.update_media_issue(
+            issue["id"], status="approved", repair_action="skipped",
+            repair_log_entry={"at": now, "outcome": "skipped", "reason": str(error)},
+        )
+    except Exception as error:
+        logger.warning("Media issue repair failed for %s", issue["id"], exc_info=True)
+        updated = db.update_media_issue(
+            issue["id"], status="approved", repair_action="failed",
+            repair_log_entry={"at": now, "outcome": "failed", "reason": _safe_error_detail(error, "Repair request failed")},
+        )
+    assert updated is not None
+    return updated
+
+
+@app.post("/api/media-issues", response_model=MediaIssue)
+def create_media_issue(payload: MediaIssueCreate, user=Depends(get_current_user_dep)) -> MediaIssue:
+    reporter_user_id = user.id if _settings().features.multi_user_enabled else None
+    try:
+        issue = _db().create_media_issue(
+            issue_id=str(uuid.uuid4()), reporter_user_id=reporter_user_id,
+            rating_key=payload.rating_key, tmdb_id=payload.tmdb_id, tvdb_id=payload.tvdb_id,
+            media_type=payload.media_type, title=payload.title, code=payload.code, note=payload.note,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=_safe_error_detail(error, "Invalid media issue")) from error
+    configured = {str(code).strip() for code in _settings().auto_repair_issue_codes}
+    if payload.code in _AUTO_REPAIR_CODES and payload.code in configured:
+        issue = _run_media_issue_repair(issue)
+    return MediaIssue(**issue)
+
+
+@app.get("/api/media-issues")
+def list_media_issues(
+    status: Optional[str] = None, code: Optional[str] = None, limit: int = 100,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    del user
+    items = _db().list_media_issues(status=status, code=code, limit=limit)
+    return {"items": [MediaIssue(**item) for item in items], "count": len(items)}
+
+
+@app.patch("/api/media-issues/{issue_id}", response_model=MediaIssue)
+def update_media_issue(
+    issue_id: str, payload: MediaIssueUpdate, user=Depends(require_role("owner")),
+) -> MediaIssue:
+    del user
+    issue = _db().update_media_issue(issue_id, status=payload.status)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Media issue not found")
+    return MediaIssue(**issue)
+
+
+@app.post("/api/media-issues/{issue_id}/repair", response_model=MediaIssue)
+def repair_media_issue(issue_id: str, user=Depends(require_role("owner"))) -> MediaIssue:
+    del user
+    issue = _db().get_media_issue(issue_id)
+    if issue is None:
+        raise HTTPException(status_code=404, detail="Media issue not found")
+    return MediaIssue(**_run_media_issue_repair(issue))
 
 
 @app.delete("/api/lists/{list_id}/items/{item_id}")

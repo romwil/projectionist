@@ -21,6 +21,7 @@ class RadarrMovie:
     has_file: bool
     file_path: str = ""
     file_size: int = 0
+    movie_file_id: Optional[int] = None
 
 
 class RadarrClient:
@@ -50,6 +51,7 @@ class RadarrClient:
             has_file=bool(movie_file),
             file_path=str(movie_file.get("path") or item.get("path") or ""),
             file_size=int(movie_file.get("size") or 0),
+            movie_file_id=int(movie_file["id"]) if movie_file.get("id") is not None else None,
         )
 
     def movies(self) -> List[RadarrMovie]:
@@ -160,6 +162,26 @@ class RadarrClient:
     def delete_movie(self, movie_id: int, *, delete_files: bool = False) -> None:
         request_json(
             f"{self.base_url}/api/v3/movie/{movie_id}?deleteFiles={'true' if delete_files else 'false'}",
+            method="DELETE",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+
+    def search_movie(self, movie_id: int) -> Mapping[str, Any]:
+        """Ask Radarr to search for a managed movie (Commands API)."""
+        payload = request_json(
+            f"{self.base_url}/api/v3/command",
+            method="POST",
+            headers=self._headers(),
+            body={"name": "MoviesSearch", "movieIds": [movie_id]},
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, dict) else {}
+
+    def mark_movie_file_failed(self, movie_file_id: int) -> None:
+        """Remove a known bad Radarr file so the subsequent search can replace it."""
+        request_json(
+            f"{self.base_url}/api/v3/moviefile/{movie_file_id}",
             method="DELETE",
             headers=self._headers(),
             timeout=self.timeout,

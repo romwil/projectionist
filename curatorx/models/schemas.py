@@ -353,6 +353,7 @@ class CuratedList(BaseModel):
     user_id: Optional[str] = None
     name: str
     description: str = ""
+    list_kind: Literal["list", "playlist"] = "list"
     created_at: float
     updated_at: float
     item_count: int = 0
@@ -362,11 +363,13 @@ class CuratedList(BaseModel):
 class CuratedListCreate(BaseModel):
     name: str = Field(..., min_length=1)
     description: str = ""
+    list_kind: Literal["list", "playlist"] = "list"
 
 
 class CuratedListUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1)
     description: Optional[str] = None
+    list_kind: Optional[Literal["list", "playlist"]] = None
 
 
 class CuratedListItemCreate(BaseModel):
@@ -380,6 +383,41 @@ class CuratedListItemCreate(BaseModel):
 class CuratedListCollectionResponse(BaseModel):
     items: List[CuratedList] = Field(default_factory=list)
     count: int = 0
+
+
+class MediaIssueCreate(BaseModel):
+    rating_key: Optional[str] = None
+    tmdb_id: Optional[int] = None
+    tvdb_id: Optional[int] = None
+    media_type: MediaType
+    title: str = Field(..., min_length=1)
+    code: Literal[
+        "wrong_language", "bad_video", "bad_audio", "wrong_title",
+        "mismatch", "missing_subs", "duplicate", "other",
+    ]
+    note: str = Field(default="", max_length=2000)
+
+
+class MediaIssueUpdate(BaseModel):
+    status: Literal["open", "approved", "repairing", "resolved", "rejected"]
+
+
+class MediaIssue(BaseModel):
+    id: str
+    reporter_user_id: Optional[str] = None
+    rating_key: Optional[str] = None
+    tmdb_id: Optional[int] = None
+    tvdb_id: Optional[int] = None
+    media_type: MediaType
+    title: str
+    code: str
+    note: str = ""
+    status: str
+    repair_action: str = ""
+    repair_log: List[Dict[str, Any]] = Field(default_factory=list)
+    created_at: float
+    updated_at: float
+    resolved_at: Optional[float] = None
 
 
 class EngagementStreakResponse(BaseModel):

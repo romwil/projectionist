@@ -13,7 +13,7 @@ from curatorx.library.db import ACTIVE_CONTEXT_CONFIG_KEY, DEFAULT_CONTEXT_HASH,
 from curatorx.library.embeddings import embed_text, semantic_search
 from curatorx.library.facets import library_facet_catalog
 
-MAX_QUERY_LIMIT = 50
+MAX_QUERY_LIMIT = 100
 DEFAULT_QUERY_LIMIT = 25
 OVERVIEW_CACHE_KEY = "library_overview"
 
@@ -87,6 +87,7 @@ class LibraryFilters:
     max_unwatched_episodes: Optional[int] = None
     in_progress_only: bool = False
     sort: SortField = "title"
+    sort_dir: Literal["asc", "desc"] | None = None
     offset: int = 0
     limit: int = DEFAULT_QUERY_LIMIT
 
@@ -122,6 +123,10 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
     }
     if sort not in allowed_sort:
         sort = "title"
+    sort_dir_raw = str(data.get("sort_dir") or "").strip().lower()
+    sort_dir: Literal["asc", "desc"] | None = (
+        sort_dir_raw if sort_dir_raw in {"asc", "desc"} else None
+    )  # type: ignore[assignment]
 
     in_radarr = data.get("in_radarr")
     in_sonarr = data.get("in_sonarr")
@@ -178,6 +183,7 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         max_unwatched_episodes=_optional_int(data.get("max_unwatched_episodes")),
         in_progress_only=bool(data.get("in_progress_only")),
         sort=sort,  # type: ignore[arg-type]
+        sort_dir=sort_dir,
         offset=int(data.get("offset") or 0),
         limit=int(data.get("limit") or DEFAULT_QUERY_LIMIT),
     )
@@ -543,7 +549,18 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
     return " AND ".join(clauses), params
 
 
-def _sort_clause(sort: SortField) -> str:
+def _sort_clause(sort: SortField, sort_dir: Literal["asc", "desc"] | None = None) -> str:
+    if sort_dir:
+        direction = sort_dir.upper()
+        nullable = {
+            "year",
+            "vote_average",
+            "runtime_minutes",
+            "added_at",
+            "last_viewed_at",
+        }
+        prefix = f"{sort} IS NULL, " if sort in nullable else ""
+        return f"{prefix}{sort} {direction}, title ASC"
     mapping = {
         "year": "year IS NULL, year DESC, title ASC",
         "view_count": "view_count DESC, title ASC",
@@ -601,7 +618,7 @@ async def query_library_async(
     where_sql, params = _build_where(filters)
     limit = filters.normalized_limit()
     offset = filters.normalized_offset()
-    sort_sql = _sort_clause(filters.sort)
+    sort_sql = _sort_clause(filters.sort, filters.sort_dir)
 
     semantic_ids: Optional[List[int]] = None
     if filters.semantic_query and settings is not None:
@@ -828,7 +845,7 @@ def query_library(db: Database, filters: LibraryFilters) -> Dict[str, Any]:
     where_sql, params = _build_where(filters)
     limit = filters.normalized_limit()
     offset = filters.normalized_offset()
-    sort_sql = _sort_clause(filters.sort)
+    sort_sql = _sort_clause(filters.sort, filters.sort_dir)
     total_matched, rows = _fetch_rows(
         db,
         where_sql,

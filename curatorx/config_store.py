@@ -554,6 +554,8 @@ class Settings:
     tv_page_size: int = 500
     library_enrich_workers: int = 6
     sync_reviews_to_plex: bool = True
+    # Explicit allowlist: empty keeps all reported repairs owner-approved.
+    auto_repair_issue_codes: list[str] = field(default_factory=list)
     webhook_secret: str = ""
     # Dual-mode MCP HTTP keys (also CURATORX_MCP_* env / Unraid).
     mcp_api_key: str = ""

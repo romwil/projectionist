@@ -21,6 +21,13 @@ Product principles, single-workspace UX, lens isolation, agent behavior, and API
 7. **Bring your own provider** — LLM and embeddings are configurable; Ollama on the homelab is first-class.
 
 8. **Homelab pragmatism** — Single container (non-root), SQLite, no mandatory cloud beyond TMDB and your chosen LLM.
+9. **Safe browse and repair** — Library exports apply the same member privacy schema as browse results; media problems become durable reports for owner review rather than member-triggered *arr mutations.
+
+## Browse exports and media issue repair
+
+Library browse endpoints accept an explicit sort direction while retaining each field's established default when no direction is provided. CSV exports reuse those filters but are capped and privacy-sanitized before rows are serialized, so a household member cannot turn a convenient download into a path or Plex-token disclosure.
+
+Reporting a bad title creates an issue-queue record. Members can report, but only owners can resolve or execute a repair. Safe repair playbooks identify an already-managed *arr title, optionally remove a known bad Radarr movie file, and enqueue the documented search command. When the title is not managed or its identity is incomplete, CuratorX records a skip reason rather than guessing an endpoint or deleting files.
 
 ---
 
