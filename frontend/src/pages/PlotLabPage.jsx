@@ -8,6 +8,8 @@ import {
 } from "../api/client";
 import BackLink from "../components/BackLink";
 import LibraryMediaCard from "../components/LibraryMediaCard";
+import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowseResults from "../components/MediaBrowseResults";
 import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
@@ -28,6 +30,7 @@ import {
   resolveMotifWhy,
   toggleMotifSelection,
 } from "../lib/exploreFeeds.js";
+import { DEFAULT_MEDIA_BROWSE, queryFiltersFromBrowse } from "../lib/mediaBrowse.js";
 
 const MEDIA_TABS = [
   { id: "all", label: "All", mediaType: null },
@@ -127,6 +130,8 @@ export default function PlotLabPage() {
   const [seedHits, setSeedHits] = useState([]);
   const [neighbors, setNeighbors] = useState({ loading: false, items: [], note: null, error: "" });
   const [recommendItem, setRecommendItem] = useState(null);
+  const [browse, setBrowse] = useState({ ...DEFAULT_MEDIA_BROWSE, sort: "title", sort_dir: "asc" });
+  const [columns, setColumns] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,11 +175,16 @@ export default function PlotLabPage() {
     const params = buildMotifQueryParams(selectedMotifs, {
       limit: pageSize,
       offset,
-      mediaType,
+      mediaType: browse.media_type || mediaType,
       plotMatchMode,
       themes: selectedThemes,
     });
-    queryLibrary(Object.fromEntries(params.entries()))
+    queryLibrary({
+      ...Object.fromEntries(params.entries()),
+      ...queryFiltersFromBrowse(browse),
+      limit: pageSize,
+      offset,
+    })
       .then((data) => {
         if (cancelled) return;
         const items = Array.isArray(data?.items) ? data.items : [];
@@ -199,7 +209,7 @@ export default function PlotLabPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedMotifs, selectedThemes, mediaType, pageSize, offset, plotMatchMode]);
+  }, [browse, selectedMotifs, selectedThemes, mediaType, pageSize, offset, plotMatchMode]);
 
   useEffect(() => {
     if (!seed?.id) {
@@ -287,7 +297,9 @@ export default function PlotLabPage() {
   }
 
   function handleMediaTab(nextType) {
-    setMediaType(normalizeMediaTypeFilter(nextType));
+    const normalized = normalizeMediaTypeFilter(nextType);
+    setMediaType(normalized);
+    setBrowse((current) => ({ ...current, media_type: normalized || "", offset: 0 }));
     setOffset(0);
   }
 
@@ -452,6 +464,16 @@ export default function PlotLabPage() {
                 : ""}{" "}
               Tap Why? on a poster for which layer matched.
             </p>
+            <MediaBrowseControls
+              state={browse}
+              onChange={(patch) => {
+                setBrowse((current) => ({ ...current, ...patch }));
+                if (Object.hasOwn(patch, "media_type")) setMediaType(normalizeMediaTypeFilter(patch.media_type));
+              }}
+              columns={columns}
+              onColumnsChange={setColumns}
+              columnScope="plot-lab"
+            />
             {motifWall.error || motifWall.note ? (
               <p className="explore-empty status status-secondary">
                 {motifWall.error || motifWall.note}
@@ -467,18 +489,17 @@ export default function PlotLabPage() {
                   onPageChange={handlePageChange}
                   onPageSizeChange={handlePageSizeChange}
                 />
-                <div className="explore-poster-wall">
-                  {motifWall.items.map((item) => (
-                    <LibraryMediaCard
-                      key={item.id || item.rating_key || item.title}
-                      item={item}
-                      onSeed={handleSeed}
-                      showRecommend={multiUserEnabled}
-                      onRecommend={multiUserEnabled ? setRecommendItem : undefined}
-                      motifWhy={resolveMotifWhy(item, selectedMotifs)}
-                    />
-                  ))}
-                </div>
+                <MediaBrowseResults
+                  state={browse}
+                  items={motifWall.items}
+                  columns={columns || undefined}
+                  cardProps={(item) => ({
+                    onSeed: handleSeed,
+                    showRecommend: multiUserEnabled,
+                    onRecommend: multiUserEnabled ? setRecommendItem : undefined,
+                    motifWhy: resolveMotifWhy(item, selectedMotifs),
+                  })}
+                />
                 <MotifWallPagination
                   summary={wallSummary}
                   pageSize={pageSize}

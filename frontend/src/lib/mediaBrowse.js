@@ -2,7 +2,7 @@ export const MEDIA_BROWSE_COLUMNS = [
   { id: "title", label: "Title" },
   { id: "year", label: "Year" },
   { id: "media_type", label: "Type" },
-  { id: "rating", label: "Rating" },
+  { id: "vote_average", label: "Rating" },
   { id: "genres", label: "Genres" },
   { id: "runtime_minutes", label: "Runtime" },
   { id: "watch_state", label: "Watch state" },
@@ -11,9 +11,9 @@ export const MEDIA_BROWSE_COLUMNS = [
 export const MEDIA_BROWSE_SORTS = [
   { id: "title", label: "Title" },
   { id: "year", label: "Year" },
-  { id: "rating", label: "Rating" },
+  { id: "vote_average", label: "Rating" },
   { id: "added_at", label: "Recently added" },
-  { id: "last_watched_at", label: "Last watched" },
+  { id: "last_viewed_at", label: "Last watched" },
   { id: "runtime_minutes", label: "Runtime" },
 ];
 

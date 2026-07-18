@@ -29,6 +29,16 @@ Library browse endpoints accept an explicit sort direction while retaining each 
 
 Reporting a bad title creates an issue-queue record. Members can report, but only owners can resolve or execute a repair. Safe repair playbooks identify an already-managed *arr title, optionally remove a known bad Radarr movie file, and enqueue the documented search command. When the title is not managed or its identity is incomplete, CuratorX records a skip reason rather than guessing an endpoint or deleting files.
 
+### Shared browse interaction standard
+
+`MediaBrowseControls` is the standard for a collection-sized result set: a visible sort plus `sort_dir`, filters that reflect the source's actual data, a poster/list pivot, durable column choices, and CSV only when the wall maps faithfully to the library query. `MediaBrowseResults` keeps poster and dense-row variants aligned. A list row must carry the same `PosterActionMenu` as its poster counterpart so accessibility, muscle memory, and role checks do not vary by layout.
+
+`PosterActionMenu` is a bottom-corner grip rather than another set of always-visible poster buttons. Its sections follow user intent: view/play, collect (watchlist/list/playlist), discover, report, then owner tools. It is present on library posters and compact title cards where sensible. The control is not a privilege escalation: report is broadly available; repair and index changes remain owner-gated.
+
+### Repair safety model
+
+The issue lifecycle is `open → approved/repairing → resolved` or `rejected`, with a durable append-only repair log from the user's point of view. The frontend may optimistically describe a submitted report as queued, but must never imply that it repaired media. Owner repair code must prefer “skipped because target is not safe/known” over a speculative *arr call. Auto-repair remains opt-in by issue code and is intentionally narrower than owner manual repair; no playbook performs a blind file delete, metadata rewrite, or bulk action.
+
 ---
 
 ## Visual language

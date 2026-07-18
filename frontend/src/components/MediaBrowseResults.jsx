@@ -17,12 +17,13 @@ export default function MediaBrowseResults({
     {items.map((item) => {
       const key = String(item.id || item.rating_key || item.plex_rating_key || `${item.media_type}:${item.tmdb_id || item.title}`);
       const isSelected = selected?.has(key);
+      const itemCardProps = typeof cardProps === "function" ? cardProps(item) : cardProps;
       return <div key={key} className={`explore-section-card-wrap${isSelected ? " is-selected" : ""}`}>
         {selectable ? <label className="explore-section-select">
           <input type="checkbox" checked={isSelected} onChange={() => onToggleSelect?.(item)} />
           <span className="sr-only">Select {item.title || "title"}</span>
         </label> : null}
-        <LibraryMediaCard item={item} {...cardProps} />
+        <LibraryMediaCard item={item} {...itemCardProps} />
       </div>;
     })}
   </div>;

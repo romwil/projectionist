@@ -54,10 +54,11 @@ export default function PosterActionMenu({
   async function addToList(list) {
     try {
       await addCuratedListItem(list.id, {
-        rating_key: item?.rating_key || item?.plex_rating_key || undefined,
         tmdb_id: item?.tmdb_id || undefined,
+        tvdb_id: item?.tvdb_id || undefined,
         media_type: item?.media_type,
         title: item?.title,
+        library_item_id: item?.id && Number.isInteger(Number(item.id)) ? Number(item.id) : undefined,
       });
       setStatus(`Added to ${list.name || "list"}.`);
       setListOpen(false);

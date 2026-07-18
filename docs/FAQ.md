@@ -12,7 +12,7 @@ A chat-first + Explore curator for self-hosted **Plex** libraries — and a real
 |-----|------|
 | `romwil/curatorx:latest` | Everyday Unraid / Compose (CA template default) |
 | `romwil/curatorx:1.8` | Track the 1.8 line |
-| `romwil/curatorx:1.8.11` | Pin an exact release |
+| `romwil/curatorx:1.8.13` | Pin an exact release |
 
 Images are multi-arch (**amd64 + arm64**), run as non-root `curatorx` (UID/GID 1000). See [wiki/Installation.md](wiki/Installation.md).
 
@@ -122,6 +122,18 @@ Local watchlist pins can sync with Plex Discover when you enable sync in Setting
 ## Can CuratorX publish named lists to Plex Lists?
 
 **Not yet.** CuratorX supports **local** named curated lists (Settings → Lists, plus chat tools `list_lists` / `create_list` / `add_to_list` / `remove_from_list`). A 2026 spike found **no clear public/stable API** for Plex Discover personal Lists (`watch.plex.tv/watchlist/my-lists`): official PMS docs cover Playlists/Collections, and Discover documents Watchlist add/remove only. Publish-to-Plex-Lists is deferred so we never fake a broken sync. Watchlist ↔ Discover sync remains separate and available.
+
+## What is the difference between a list, playlist, and watchlist?
+
+A **watchlist** is a personal reminder and can sync with Plex Discover. A CuratorX **list** is a durable named shelf, while a **playlist** uses the same local collection storage to communicate a planned viewing sequence. Adding or removing a collection membership never deletes a library title, and CuratorX does not currently publish local playlists to Plex.
+
+## Can I export a filtered library view?
+
+Yes, from browse controls on library-query walls. Export uses the same filters and sort direction as the view, caps the result, and accepts only a safe column allowlist. It is intentionally not an unrestricted database export: paths, Plex credentials, and internal operational fields are excluded. Feed and collection walls do not claim to export when their source cannot faithfully reproduce a library query.
+
+## What happens when I report bad video, audio, or metadata?
+
+The report is saved in an owner queue with the title identity, problem type, and optional note. Members can report but never directly command Radarr/Sonarr or delete a file. An owner can reject, resolve, or run a supported repair that is logged on the issue. Repairs may safely skip if the title is not managed, ambiguous, or unsupported; CuratorX does not blindly delete files, “fix” metadata matches, or promise a subtitle/download result.
 
 ## Where should I look next?
 

@@ -69,6 +69,8 @@ With `features.multi_user_enabled` left at `false` (the default), CuratorX runs 
 | `/help` | Help guide — Chat, Explore, Plot Lab, owner idle curation (no login; role-aware sections) |
 | `/explore` | Explore hub — feed rails + compact knowledge-coverage honesty strip |
 | `/explore/plot-lab` | Plot Lab — multi-signal / motifs-only walls, theme chips when present, Why? layers, surprising neighbors |
+| `/lists` and `/lists/{id}` | Local curated lists and playlists; a list is a reusable shelf, while a playlist signals a planned viewing sequence |
+| `/admin/issues` | Owner-only media-issue queue with review status and logged supported repairs |
 | `/admin/tasks` | Owner Scheduled Tasks (coverage strip, cadence, batch, measured rate, run history, ETA) |
 | `/login` | Multi-user login (configured auth methods) |
 
@@ -264,6 +266,24 @@ When multi-user is **off** (default), there is no login screen and the bootstrap
 ## Security
 
 Single-owner installs have no built-in authentication — run on a trusted LAN or behind an authenticated reverse proxy. When multi-user is enabled, Plex PIN login and signed session cookies gate the SPA **and** most `/api/*` routes (see [SECURITY.md](SECURITY.md)). Always set `CURATORX_SESSION_SECRET` to a long random string (never leave the public dev default). Destructive *arr operations use confirmation tokens (10-minute TTL) scoped to the acting user.
+
+---
+
+## Browse controls, collections, and media issue queue
+
+Library-oriented walls share **MediaBrowseControls**: sort and direction, type/watch/year filtering where data supports it, a poster/list pivot, column preference, and a CSV action. The controls are intentionally a *query interface*: their state is sent as normal library query parameters including `sort_dir`, and the browser may export only the server allowlist (title, year, type, genres, runtime, rating, watch state, counts/dates, and public IDs). This makes an exported slice match the visible filtered library rather than leaking filesystem paths or operational secrets.
+
+The **⋮ poster action grip** appears on LibraryMediaCard posters, list rows, and compact TitleCard overlays. It centralizes detail, Plex playback, watchlist pinning, list/playlist membership, discovery, reporting, and owner-only tools. A repeated control location matters for keyboard and touch users, and prevents each wall from inventing a subtly different action model.
+
+`/lists` uses one local collection model with `list_kind`:
+
+| Kind | Use it for | Not the same as |
+|------|------------|-----------------|
+| **List** | A lasting shelf, research set, or shareable theme | Plex Discover watchlist |
+| **Playlist** | A deliberate watch sequence | Plex Playlist synchronization (not implemented) |
+| **Watchlist** | Personal “remember this” pins, optionally Plex Discover synced | A curated shelf or program |
+
+Anyone may send a typed **Report issue** from the grip. Reports go to `/api/media-issues`; members cannot call *arr repair routes. Owners review `/admin/issues`, update the status, and may use `/repair` only for supported, logged playbooks. A repair can safely skip when the item is not managed, has ambiguous identity, or the connector lacks the required operation. It never blindly deletes a file or treats a report as authority to control *arr.
 
 ---
 

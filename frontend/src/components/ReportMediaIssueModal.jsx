@@ -29,6 +29,7 @@ export default function ReportMediaIssueModal({ item, open, onClose, onReported 
         note: note.trim() || undefined,
         rating_key: item?.rating_key || item?.plex_rating_key || undefined,
         tmdb_id: item?.tmdb_id || undefined,
+        tvdb_id: item?.tvdb_id || undefined,
         media_type: item?.media_type || undefined,
         title: item?.title || undefined,
       });

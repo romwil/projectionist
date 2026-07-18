@@ -8,9 +8,9 @@ import {
 } from "./mediaBrowse.js";
 
 test("parseMediaBrowse keeps supported URL state and bounds limit", () => {
-  const state = parseMediaBrowse(new URLSearchParams("view=list&sort=rating&sort_dir=desc&limit=1000&genres=Drama,Sci-Fi"));
+  const state = parseMediaBrowse(new URLSearchParams("view=list&sort=vote_average&sort_dir=desc&limit=1000&genres=Drama,Sci-Fi"));
   assert.equal(state.view, "list");
-  assert.equal(state.sort, "rating");
+  assert.equal(state.sort, "vote_average");
   assert.equal(state.sort_dir, "desc");
   assert.equal(state.limit, 100);
   assert.deepEqual(state.genres, ["Drama", "Sci-Fi"]);

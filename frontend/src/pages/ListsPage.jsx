@@ -1,14 +1,19 @@
-import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { getCuratedList, listCuratedLists } from "../api/client";
 import BackLink from "../components/BackLink";
-import LibraryMediaCard from "../components/LibraryMediaCard";
+import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowseResults from "../components/MediaBrowseResults";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
+import { buildMediaBrowseParams, parseMediaBrowse } from "../lib/mediaBrowse.js";
 
 export default function ListsPage() {
   const { listId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ loading: true, lists: [], list: null, error: "" });
+  const [columns, setColumns] = useState(null);
+  const browse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
   useEffect(() => {
     let cancelled = false;
     const request = listId ? getCuratedList(listId) : listCuratedLists();
@@ -18,12 +23,52 @@ export default function ListsPage() {
     }).catch((error) => !cancelled && setState({ loading: false, lists: [], list: null, error: error.message || "Could not load lists." }));
     return () => { cancelled = true; };
   }, [listId]);
-  const items = state.list?.items || [];
+  const items = useMemo(() => {
+    const source = (state.list?.items || [])
+      .map((entry) => entry.media || entry)
+      .filter((item) => !browse.media_type || item?.media_type === browse.media_type)
+      .filter((item) => !browse.year || String(item?.year || "") === String(browse.year))
+      .filter((item) => !browse.watch_state || (
+        browse.watch_state === "watched" ? Boolean(item?.watched) :
+          browse.watch_state === "in_progress" ? Boolean(item?.view_offset) :
+            !item?.watched
+      ));
+    const direction = browse.sort_dir === "desc" ? -1 : 1;
+    return [...source].sort((left, right) => {
+      const a = left?.[browse.sort] ?? (browse.sort === "vote_average" ? left?.rating : "") ?? "";
+      const b = right?.[browse.sort] ?? (browse.sort === "vote_average" ? right?.rating : "") ?? "";
+      return String(a).localeCompare(String(b), undefined, { numeric: true }) * direction;
+    });
+  }, [browse.media_type, browse.sort, browse.sort_dir, browse.watch_state, browse.year, state.list?.items]);
+
+  function handleBrowseChange(patch) {
+    setSearchParams(buildMediaBrowseParams(browse, patch), { replace: true });
+  }
+
   return <AppShell className="app-root lists-page" testId="lists-page" variant="browse" leading={<BackLink fallbackTo={ROUTES.explore} />}>
     <section className="explore-section-hero"><p className="person-eyebrow">{listId ? state.list?.list_kind || "List" : "Collections"}</p><h1>{listId ? state.list?.name || "List" : "Lists & playlists"}</h1><p className="explore-section-subtitle">Lists are intentional CuratorX shelves. Watchlist pins answer “keep this in mind”; playlists answer “play these together.”</p></section>
     {state.loading ? <p className="status status-secondary">Loading…</p> : null}
     {state.error ? <p className="error">{state.error}</p> : null}
     {!listId && !state.loading ? <div className="curated-list-grid">{state.lists.map((list) => <Link key={list.id} to={`/lists/${list.id}`} className="review-prompt-card"><strong>{list.name}</strong><span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span></Link>)}</div> : null}
-    {listId && items.length ? <div className="explore-poster-wall">{items.map((entry) => <LibraryMediaCard key={entry.id || entry.rating_key || entry.title} item={entry.media || entry} />)}</div> : null}
+    {listId && !state.loading ? (
+      <section className="tag-results">
+        <MediaBrowseControls
+          state={browse}
+          onChange={handleBrowseChange}
+          columns={columns}
+          onColumnsChange={setColumns}
+          columnScope={`list-${listId}`}
+          exportEnabled={false}
+        />
+        {items.length ? (
+          <MediaBrowseResults
+            state={browse}
+            items={items}
+            columns={columns || undefined}
+            cardProps={{ testId: "list-title-card" }}
+          />
+        ) : <p className="explore-empty status status-secondary">This {state.list?.list_kind === "playlist" ? "playlist" : "list"} has no titles yet.</p>}
+      </section>
+    ) : null}
   </AppShell>;
 }

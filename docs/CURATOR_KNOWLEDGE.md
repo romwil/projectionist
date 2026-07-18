@@ -244,6 +244,24 @@ Everything above, plus:
 
 ---
 
+## Browse, collection, and repair knowledge boundaries
+
+Library knowledge is valuable only when people can inspect and act on it without confusing a browse convenience for an administrative command. CuratorX therefore treats browsing, collecting, and repair as separate layers:
+
+1. **Browse controls** shape a read query: sort direction, filters, poster/list presentation, visible columns, and privacy-safe CSV output. The server owns the query contract (`sort_dir`, a bounded result count, and an export allowlist) so a client cannot turn an export into raw paths, tokens, or private operational data.
+2. **Curated lists and playlists** preserve human intent. A list means a reusable shelf; a playlist means a viewing program. Both are local CuratorX collections, while the Plex Discover watchlist is a distinct “remember this” signal and may be synchronized separately.
+3. **Media issues** preserve operational evidence. A member’s issue report records a problem code, note, and media identity in a durable owner queue. It is not a remote-control route to Radarr, Sonarr, Plex, or the filesystem.
+
+This separation matters on a household server. A person reporting corrupted audio should be able to do that from the same poster grip used to pin or collect a title, but should not need credentials—or receive authority—to mark files bad and launch downloads. The owner has the broader context: storage policy, quality profiles, *arr connectivity, and whether the apparent issue is actually a metadata mismatch.
+
+### Repair playbooks: deliberately narrow
+
+For supported `wrong_language`, `bad_video`, and `bad_audio` reports, a repair playbook can look up an already-managed *arr record, use the connector's documented failed-file/search capability where it is safe, and append each decision and response to the issue log. It does not manufacture an identifier, delete an unknown library file, or treat a search as proof that a replacement exists. `wrong_title`, `mismatch`, `duplicate`, `missing_subs`, and free-form reports remain owner-review-first unless a future, explicit policy adds a safe action.
+
+Owner-configured auto-repair begins disabled and is limited to allowlisted codes. It is a convenience for known, repeatable conditions—not an escalation of member authority. A skipped repair is a successful safety outcome when CuratorX cannot establish a safe target.
+
+---
+
 ## Related docs
 
 | Doc | Role |

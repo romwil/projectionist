@@ -2,10 +2,21 @@
 
 ## [Unreleased]
 
+## [1.8.13] — 2026-07-18
+
+Shared media browsing, local collections, and safe owner-reviewed media repair.
+
 ### Added
-- Library browse supports explicit `sort_dir`, up to 100 results, and a privacy-filtered CSV export of the active query.
-- Curated lists now carry a `list_kind` (`list` or `playlist`) for shared collection controls.
-- Media issue queue: household members can report media problems; owners can review, resolve, and run logged *arr repair playbooks. Auto-repair remains off until an owner allowlists issue codes.
+- **Browse controls** support explicit `sort_dir`, up to 100 results, poster/list pivots, and a privacy-filtered CSV export of the active library query.
+- **Curated lists** carry a `list_kind` (`list` or `playlist`) and share the poster/list-row action grip with watchlist collection actions.
+- **Media issue queue**: household members can report media problems; owners can review, resolve, and run logged *arr repair playbooks. Auto-repair remains off until an owner allowlists issue codes.
+
+### Fixed
+- Frontend browse contract now uses backend `vote_average` / `last_viewed_at` fields and exports only backend-allowlisted columns; collection membership sends `tvdb_id` and optional library item identity.
+- Compact chat TitleCards now expose the same role-aware action grip as browse posters.
+
+### Documentation
+- Expanded in-app Help and operator guides for browse/export intent, lists vs. playlists vs. watchlist, the shared grip, issue reporting, owner queue workflow, and conservative repair limits.
 
 ## [1.8.12] — 2026-07-18
 

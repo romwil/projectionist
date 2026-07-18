@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import {
   deleteLibraryItems,
   formatApiError,
@@ -9,12 +9,14 @@ import {
 } from "../api/client";
 import BackLink from "../components/BackLink";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
-import LibraryMediaCard from "../components/LibraryMediaCard";
+import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowseResults from "../components/MediaBrowseResults";
 import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import { partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
+import { buildMediaBrowseParams, parseMediaBrowse } from "../lib/mediaBrowse.js";
 import { titleDetailTargetFromItem } from "../lib/titleDetailDrawer.js";
 
 function pinKey(pin) {
@@ -31,7 +33,9 @@ function pinToCardItem(pin) {
 
 export default function WatchlistPage() {
   const { isOwner } = useAuthGate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ loading: true, items: [], error: "" });
+  const [columns, setColumns] = useState(null);
   const [selected, setSelected] = useState(() => new Set());
   const [actionStatus, setActionStatus] = useState("");
   const [removing, setRemoving] = useState(false);
@@ -67,15 +71,22 @@ export default function WatchlistPage() {
     refresh({ pull: false });
   }, [refresh]);
 
-  const sortedItems = useMemo(
-    () =>
-      [...state.items].sort((a, b) => {
-        const aTime = Number(a?.created_at) || 0;
-        const bTime = Number(b?.created_at) || 0;
-        return bTime - aTime;
-      }),
-    [state.items],
-  );
+  const browse = useMemo(() => parseMediaBrowse(searchParams, { sort: "added_at", sort_dir: "desc" }), [searchParams]);
+  const sortedItems = useMemo(() => {
+    const direction = browse.sort_dir === "desc" ? -1 : 1;
+    return [...state.items]
+      .filter((item) => !browse.media_type || item?.media_type === browse.media_type)
+      .filter((item) => !browse.year || String(item?.year || "") === String(browse.year))
+      .filter((item) => !browse.watch_state || (
+        browse.watch_state === "watched" ? Boolean(item?.watched) :
+          browse.watch_state === "in_progress" ? Boolean(item?.view_offset) : !item?.watched
+      ))
+      .sort((a, b) => {
+        const aValue = a?.[browse.sort] ?? (browse.sort === "added_at" ? a?.created_at : "") ?? "";
+        const bValue = b?.[browse.sort] ?? (browse.sort === "added_at" ? b?.created_at : "") ?? "";
+        return String(aValue).localeCompare(String(bValue), undefined, { numeric: true }) * direction;
+      });
+  }, [browse, state.items]);
 
   const cardItems = useMemo(() => sortedItems.map(pinToCardItem), [sortedItems]);
 
@@ -101,6 +112,10 @@ export default function WatchlistPage() {
 
   function clearSelection() {
     setSelected(new Set());
+  }
+
+  function handleBrowseChange(patch) {
+    setSearchParams(buildMediaBrowseParams(browse, patch), { replace: true });
   }
 
   async function handleBulkRemove() {
@@ -190,6 +205,14 @@ export default function WatchlistPage() {
       </section>
 
       <div className="explore-section-toolbar watchlist-toolbar" data-testid="watchlist-toolbar">
+        <MediaBrowseControls
+          state={browse}
+          onChange={handleBrowseChange}
+          columns={columns}
+          onColumnsChange={setColumns}
+          columnScope="watchlist"
+          exportEnabled={false}
+        />
         <div className="explore-section-toolbar-row">
           <div className="explore-section-toolbar-primary">
             {!state.loading && sortedItems.length ? (
@@ -276,39 +299,24 @@ export default function WatchlistPage() {
           </div>
         ) : null}
         {sortedItems.length ? (
-          <div className="explore-poster-wall">
-            {sortedItems.map((pin) => {
-              const key = pinKey(pin);
-              const card = pinToCardItem(pin);
-              const isSelected = selected.has(key);
-              const detailTarget = titleDetailTargetFromItem(card);
-              return (
-                <div
-                  key={key}
-                  className={`explore-section-card-wrap watchlist-card-wrap${isSelected ? " is-selected" : ""}`}
-                >
-                  <label className="explore-section-select">
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      data-testid="watchlist-select-item"
-                      onChange={() => toggleSelect(pin)}
-                    />
-                    <span className="sr-only">Select {pin.title || "title"}</span>
-                  </label>
-                  <LibraryMediaCard
-                    item={card}
-                    testId="watchlist-title-card"
-                    onOpenDetail={
-                      detailTarget
-                        ? (_item, event) => handleOpenDrawer(pin, event.currentTarget)
-                        : undefined
-                    }
-                  />
-                </div>
-              );
-            })}
-          </div>
+          <MediaBrowseResults
+            state={browse}
+            items={cardItems}
+            columns={columns || undefined}
+            selectable
+            selected={selected}
+            onToggleSelect={(card) => {
+              const pin = sortedItems.find((item) => pinKey(item) === pinKey(card));
+              if (pin) toggleSelect(pin);
+            }}
+            cardProps={{
+              testId: "watchlist-title-card",
+              onOpenDetail: (card, event) => {
+                const pin = sortedItems.find((item) => pinKey(item) === pinKey(card));
+                if (pin && titleDetailTargetFromItem(card)) handleOpenDrawer(pin, event.currentTarget);
+              },
+            }}
+          />
         ) : null}
       </section>
 

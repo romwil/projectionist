@@ -8,6 +8,7 @@ import { displayRecommendationReason } from "../lib/recommendationReason.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 import { watchProgressState } from "../lib/watchProgress.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
+import PosterActionMenu from "./PosterActionMenu";
 import WatchProgressBadge from "./WatchProgressBadge";
 
 let cachedPlexMachineId;
@@ -290,6 +291,12 @@ export default function TitleCard({
           posterMedia
         )}
         <WatchProgressBadge item={item} />
+        <PosterActionMenu
+          item={item}
+          onRecommend={onRecommend}
+          onTogglePin={onTogglePin ? (target) => onTogglePin(target, pinRecord) : undefined}
+          pinned={isPinned}
+        />
         <span className="badge">{badge}</span>
         {matchLabel ? (
           <span className="title-card-match-badge" data-testid="title-card-match-badge">
