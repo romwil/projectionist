@@ -62,6 +62,9 @@ class LibraryFilters:
     query: Optional[str] = None
     fts_query: Optional[str] = None
     semantic_query: Optional[str] = None
+    # Plot Lab: hybrid = motif ∪ keyword ∪ live plot-text per token (AND across tokens).
+    # motifs = pure library_facets motif AND (legacy motif walls).
+    plot_match_mode: Literal["hybrid", "motifs"] = "hybrid"
     unwatched_only: bool = False
     min_view_count: Optional[int] = None
     max_view_count: Optional[int] = None
@@ -130,6 +133,11 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         cutoff = int(time.time()) - recently_added_days * 86400
         added_from = max(added_from, cutoff) if added_from is not None else cutoff
 
+    plot_match_mode_raw = str(data.get("plot_match_mode") or "hybrid").strip().lower()
+    plot_match_mode: Literal["hybrid", "motifs"] = (
+        "motifs" if plot_match_mode_raw in {"motifs", "motif", "pure"} else "hybrid"
+    )
+
     return LibraryFilters(
         media_type=str(data["media_type"]).strip() if data.get("media_type") else None,
         year_from=_optional_int(data.get("year_from")),
@@ -147,6 +155,7 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         query=str(data["query"]).strip() if data.get("query") else None,
         fts_query=str(data["fts_query"]).strip() if data.get("fts_query") else None,
         semantic_query=str(data["semantic_query"]).strip() if data.get("semantic_query") else None,
+        plot_match_mode=plot_match_mode,
         unwatched_only=bool(data.get("unwatched_only")),
         min_view_count=_optional_int(data.get("min_view_count")),
         max_view_count=_optional_int(data.get("max_view_count")),
@@ -350,6 +359,27 @@ def _facet_subquery(facet_type: str, values: List[str]) -> Tuple[str, List[Any]]
     return sql, params
 
 
+def _plot_signal_subquery(token: str) -> Tuple[str, List[Any]]:
+    """Match one Plot Lab token via motif facet OR keyword facet OR live plot text."""
+    needle = f"%{token.lower()}%"
+    sql = (
+        "id IN ("
+        "SELECT item_id FROM library_facets "
+        "WHERE (facet_type = 'motif' OR facet_type = 'keyword') "
+        "AND lower(facet_value) LIKE ? "
+        "UNION "
+        "SELECT id FROM library_items WHERE "
+        "lower(COALESCE(summary, '')) LIKE ? "
+        "OR lower(COALESCE(tmdb_overview, '')) LIKE ? "
+        "OR lower(COALESCE(tagline, '')) LIKE ? "
+        "OR lower(COALESCE(llm_logline, '')) LIKE ? "
+        "OR lower(COALESCE(keywords, '')) LIKE ?"
+        ")"
+    )
+    # Note: keep keyword JSON LIKE as a cheap fallback when facets lag sync.
+    return sql, [needle, needle, needle, needle, needle, needle]
+
+
 def _effective_added_from(filters: LibraryFilters) -> Optional[int]:
     added_from = filters.added_from
     if filters.recently_added_days is not None:
@@ -429,11 +459,18 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         clauses.append("lower(collection_name) = ?")
         params.append(filters.collection_name.lower())
     if filters.motifs:
-        # Multiple motifs are AND so Plot Lab walls show true intersections.
-        for motif in filters.motifs:
-            facet_sql, facet_params = _facet_subquery("motif", [motif])
-            clauses.append(facet_sql)
-            params.extend(facet_params)
+        # Multiple tokens are AND. Hybrid (default) unions motif ∪ keyword ∪ plot text
+        # per token so sparse motif facets do not brick Plot Lab intersections.
+        if filters.plot_match_mode == "motifs":
+            for motif in filters.motifs:
+                facet_sql, facet_params = _facet_subquery("motif", [motif])
+                clauses.append(facet_sql)
+                params.extend(facet_params)
+        else:
+            for motif in filters.motifs:
+                signal_sql, signal_params = _plot_signal_subquery(motif)
+                clauses.append(signal_sql)
+                params.extend(signal_params)
     if filters.themes:
         for theme in filters.themes:
             facet_sql, facet_params = _facet_subquery("theme", [theme])
@@ -650,22 +687,55 @@ def _excerpt_around(text: str, needle: str, *, radius: int = 72) -> str:
     return excerpt
 
 
+def _token_in_values(needle: str, values: Sequence[str]) -> bool:
+    target = needle.lower()
+    return any(target == value or target in value for value in values)
+
+
+def _layer_label(layer: str) -> str:
+    return {
+        "motif": "plot motif",
+        "keyword": "keyword",
+        "plot_text": "plot text",
+    }.get(layer, layer)
+
+
 def build_motif_why(
     selected_motifs: List[str],
     item_motif_values: List[str],
     *,
     plot_text: str = "",
+    item_keyword_values: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
-    """Explain why a title appears for the selected Plot Lab motifs."""
+    """Explain why a title appears for the selected Plot Lab tokens.
+
+    Layers (any may match in hybrid mode):
+    - ``motif`` — ``library_facets`` motif value
+    - ``keyword`` — ``library_facets`` / item keyword value
+    - ``plot_text`` — live summary/overview/tagline/logline excerpt
+    """
     selected = [str(m).strip() for m in (selected_motifs or []) if str(m).strip()]
-    owned = [str(v).strip() for v in (item_motif_values or []) if str(v).strip()]
-    owned_lower = [v.lower() for v in owned]
+    owned = [str(v).strip().lower() for v in (item_motif_values or []) if str(v).strip()]
+    keywords = [
+        str(v).strip().lower() for v in (item_keyword_values or []) if str(v).strip()
+    ]
+    plot_lower = str(plot_text or "").lower()
     matched: List[str] = []
     missed: List[str] = []
+    match_layers: List[Dict[str, Any]] = []
+
     for motif in selected:
         needle = motif.lower()
-        if any(needle == value or needle in value for value in owned_lower):
+        layers: List[str] = []
+        if _token_in_values(needle, owned):
+            layers.append("motif")
+        if _token_in_values(needle, keywords):
+            layers.append("keyword")
+        if needle and needle in plot_lower:
+            layers.append("plot_text")
+        if layers:
             matched.append(motif)
+            match_layers.append({"motif": motif, "layers": layers})
         else:
             missed.append(motif)
 
@@ -678,20 +748,25 @@ def build_motif_why(
     if not selected:
         summary = "No motifs selected."
     elif not matched:
-        summary = "Selected motifs are not attached to this title’s plot facets."
-    elif len(matched) == len(selected):
-        if len(matched) == 1:
-            summary = f"Selected because its plot motifs include “{matched[0]}”."
-        else:
-            joined = ", ".join(f"“{m}”" for m in matched)
-            summary = f"Selected because its plot motifs include all of {joined}."
+        summary = "Selected motifs are not attached to this title’s plot signals."
     else:
-        joined = ", ".join(f"“{m}”" for m in matched)
-        summary = f"Matches {joined} among the selected motifs."
+        parts: List[str] = []
+        for entry in match_layers:
+            labels = [_layer_label(layer) for layer in entry["layers"]]
+            joined_layers = " + ".join(labels)
+            parts.append(f"“{entry['motif']}” ({joined_layers})")
+        if len(matched) == len(selected):
+            if len(matched) == 1:
+                summary = f"Selected because {parts[0]}."
+            else:
+                summary = "Selected because " + "; ".join(parts) + "."
+        else:
+            summary = "Matches " + "; ".join(parts) + " among the selected motifs."
 
     return {
         "matched_motifs": matched,
         "missed_motifs": missed,
+        "match_layers": match_layers,
         "excerpts": excerpts,
         "summary": summary,
     }
@@ -708,6 +783,7 @@ def attach_motif_why(
         return
     ids = [int(item["id"]) for item in items if item.get("id") is not None]
     motifs_by_id = db.facet_values_for_items(ids, "motif")
+    keywords_by_id = db.facet_values_for_items(ids, "keyword")
     plots_by_id = db.plot_text_for_items(ids)
     for item in items:
         item_id = item.get("id")
@@ -718,9 +794,11 @@ def attach_motif_why(
             selected,
             motifs_by_id.get(key) or [],
             plot_text=plots_by_id.get(key) or "",
+            item_keyword_values=keywords_by_id.get(key) or [],
         )
         item["matched_motifs"] = why["matched_motifs"]
         item["missed_motifs"] = why["missed_motifs"]
+        item["match_layers"] = why["match_layers"]
         item["motif_excerpts"] = why["excerpts"]
         item["motif_why"] = why["summary"]
 
@@ -1305,6 +1383,104 @@ def format_overview_for_prompt(overview: Mapping[str, Any]) -> str:
         "gaps/hidden gems to add → find_collection_gaps/recommend_hidden_gems (never query_library)."
     )
     return " ".join(lines)
+
+
+def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
+    """Library knowledge-depth coverage for Admin / Explore (Phase D UI consumes this).
+
+    Returns percentages and averages for overview text, motifs, keywords, neighbors,
+    and optional LLM loglines so sparsity is visible without LLM spend.
+    """
+    with db.connect() as conn:
+        total = int(
+            conn.execute("SELECT COUNT(*) AS cnt FROM library_items").fetchone()["cnt"]
+        )
+        if total <= 0:
+            return {
+                "total_titles": 0,
+                "with_overview_pct": 0.0,
+                "with_motifs_pct": 0.0,
+                "with_keywords_pct": 0.0,
+                "with_neighbors_pct": 0.0,
+                "with_loglines_pct": 0.0,
+                "avg_motifs_per_title": 0.0,
+                "avg_keywords_per_title": 0.0,
+                "neighbor_edges": 0,
+                "motif_rows": 0,
+                "keyword_rows": 0,
+                "logline_count": 0,
+            }
+
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(library_items)")}
+        overview_expr = "TRIM(COALESCE(summary, '')) != ''"
+        if "tmdb_overview" in cols:
+            overview_expr = (
+                f"({overview_expr} OR TRIM(COALESCE(tmdb_overview, '')) != '')"
+            )
+        with_overview = int(
+            conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM library_items WHERE {overview_expr}"
+            ).fetchone()["cnt"]
+        )
+
+        logline_count = 0
+        if "llm_logline" in cols:
+            logline_count = int(
+                conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM library_items "
+                    "WHERE TRIM(COALESCE(llm_logline, '')) != ''"
+                ).fetchone()["cnt"]
+            )
+
+        motif_row = conn.execute(
+            """
+            SELECT COUNT(*) AS rows,
+                   COUNT(DISTINCT item_id) AS titles
+            FROM library_facets
+            WHERE facet_type = 'motif'
+            """
+        ).fetchone()
+        motif_rows = int(motif_row["rows"] or 0)
+        motif_titles = int(motif_row["titles"] or 0)
+
+        keyword_row = conn.execute(
+            """
+            SELECT COUNT(*) AS rows,
+                   COUNT(DISTINCT item_id) AS titles
+            FROM library_facets
+            WHERE facet_type = 'keyword'
+            """
+        ).fetchone()
+        keyword_rows = int(keyword_row["rows"] or 0)
+        keyword_titles = int(keyword_row["titles"] or 0)
+
+        neighbor_row = conn.execute(
+            """
+            SELECT COUNT(*) AS edges,
+                   COUNT(DISTINCT item_id) AS seeds
+            FROM item_neighbors
+            """
+        ).fetchone()
+        neighbor_edges = int(neighbor_row["edges"] or 0)
+        neighbor_seeds = int(neighbor_row["seeds"] or 0)
+
+    def _pct(count: int) -> float:
+        return round((count / total) * 100.0, 1)
+
+    return {
+        "total_titles": total,
+        "with_overview_pct": _pct(with_overview),
+        "with_motifs_pct": _pct(motif_titles),
+        "with_keywords_pct": _pct(keyword_titles),
+        "with_neighbors_pct": _pct(neighbor_seeds),
+        "with_loglines_pct": _pct(logline_count),
+        "avg_motifs_per_title": round(motif_rows / total, 2),
+        "avg_keywords_per_title": round(keyword_rows / total, 2),
+        "neighbor_edges": neighbor_edges,
+        "motif_rows": motif_rows,
+        "keyword_rows": keyword_rows,
+        "logline_count": logline_count,
+    }
 
 
 def maybe_set_audit_context_label(db: Database, filters: LibraryFilters) -> None:

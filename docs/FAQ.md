@@ -12,7 +12,7 @@ A chat-first + Explore curator for self-hosted **Plex** libraries — and a real
 |-----|------|
 | `romwil/curatorx:latest` | Everyday Unraid / Compose (CA template default) |
 | `romwil/curatorx:1.8` | Track the 1.8 line |
-| `romwil/curatorx:1.8.7` | Pin an exact release |
+| `romwil/curatorx:1.8.8` | Pin an exact release |
 
 Images are multi-arch (**amd64 + arm64**), run as non-root `curatorx` (UID/GID 1000). See [wiki/Installation.md](wiki/Installation.md).
 
@@ -58,9 +58,9 @@ Job **state** is persisted; an in-flight job is marked failed with *Interrupted 
 
 Status dock (**bottom of the conversation sidebar**) and Settings → Library sync show phase, counts, and percent. Persona phrases are secondary and do not replace live progress.
 
-## Where is About / Privacy?
+## Where is About / Privacy / Help?
 
-Subtle footer links on every layout, plus Settings. About is **not** in the top navigation bar.
+Footer links on every layout (**Help · Privacy · About**), plus the hamburger AppNav and user menu. About is **not** a top-bar icon — use the menu or footer.
 
 ## What is Explore?
 
@@ -69,6 +69,18 @@ Top-bar cinema icon → `/explore`. Browse rails (Recently Added, Recent Release
 ## Why is “More Like This” / Plot Lab empty?
 
 Neighbors and motifs are **materialized by idle scheduler tasks** after sync (`plot_neighbors`, `summary_motifs`, `title_relations_refresh`). Empty means the cache has not been built yet — not that your library has no similar titles. Leave the container idle after a sync, or check Admin → scheduled tasks.
+
+## Why doesn’t Plot Lab find a title I know matches those motifs?
+
+Motif chips are a **small lexical extract** from short Plex/TMDB blurbs (as of this release: up to eight uncommon unigrams per title). An AND wall needs every selected chip present as a facet — so intersections can miss titles even when the free text or TMDB keywords already contain the ideas. See [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) (Kill Bill bride∩coma case study) and in-app Help at `/help` ([HELP.md](HELP.md)).
+
+## Where is Help?
+
+In-app at **`/help`** (hamburger AppNav, footer, user menu, login footer). Same markdown source: [HELP.md](HELP.md). Deeper education: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md).
+
+## How do idle tasks deepen library knowledge?
+
+After sync, the idle scheduler trickles metadata, embeddings, motifs, and neighbor edges so Chat/Explore stay fast. Owners tune cadence in **Admin → Scheduled Tasks**. Coverage climbs over hours/days on large libraries; neighbor edges often lag embeddings. Full why/what/how: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md#idle-tasks--purpose-trickle-auto-tune).
 
 ## Lights Up vs Lights Down?
 
@@ -101,6 +113,8 @@ Local watchlist pins can sync with Plex Discover when you enable sync in Setting
 
 ## Where should I look next?
 
+- [HELP.md](HELP.md) / in-app `/help` — role-aware product help
+- [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) — library knowledge depth
 - [wiki/Home.md](wiki/Home.md) — wiki index
 - [PRIVACY.md](PRIVACY.md) / in-app `/privacy` — data use
 - [MCP.md](MCP.md) — dual-mode MCP keys and tools

@@ -6,7 +6,7 @@ import privacyMarkdown from "@docs/PRIVACY.md?raw";
 const GITHUB_DOCS_BASE = "https://github.com/romwil/curatorx/tree/main/docs";
 
 /** In-app routes that should use React Router navigation. */
-const IN_APP_ROUTES = new Set(["/privacy", "/about", "/settings", "/login", "/admin"]);
+const IN_APP_ROUTES = new Set(["/privacy", "/about", "/help", "/settings", "/login", "/admin"]);
 
 /** Stable ids for in-page jump links / e2e (must match docs/PRIVACY.md anchors). */
 const HEADING_ANCHORS = {
@@ -119,6 +119,7 @@ export default function PrivacyPage() {
           <a href="#household-members">Household</a>
           <a href="#server-owners">Owners</a>
           <a href="#mcp">MCP</a>
+          <Link to="/help">Help</Link>
           <Link to="/about">About</Link>
           <Link to="/login">Login</Link>
         </nav>
@@ -135,6 +136,8 @@ export default function PrivacyPage() {
       </article>
 
       <footer className="privacy-footer">
+        <Link to="/help">Help</Link>
+        {" · "}
         <Link to="/about">About</Link>
         {" · "}
         <Link to="/settings">Settings</Link>

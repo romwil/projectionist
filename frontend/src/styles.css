@@ -406,7 +406,7 @@ button.app-topbar-icon:focus-visible,
 }
 
 .workspace-sidebar-library {
-  margin: 0 0 var(--space-2);
+  margin: 0;
   padding: 0 var(--space-1);
   text-align: center;
   color: var(--muted);
@@ -416,7 +416,15 @@ button.app-topbar-icon:focus-visible,
   flex-shrink: 0;
 }
 
-.workspace-sidebar.sidebar-collapsed .workspace-sidebar-library {
+.sidebar-footer {
+  margin-top: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.workspace-sidebar.sidebar-collapsed .sidebar-footer {
   display: none;
 }
 
@@ -1143,17 +1151,13 @@ button.watchlist-chip {
 }
 
 .sidebar-bottom-actions {
-  margin-top: auto;
+  margin-top: 0;
   padding-top: 8px;
   border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
-}
-
-.workspace-sidebar.sidebar-collapsed .sidebar-bottom-actions {
-  display: none;
 }
 
 .sidebar-bottom-link {
@@ -3614,8 +3618,8 @@ button.ghost.inline-link {
     display: block;
   }
 
-  .workspace-sidebar.sidebar-collapsed .workspace-sidebar-library {
-    display: block;
+  .workspace-sidebar.sidebar-collapsed.mobile-nav-open .sidebar-footer {
+    display: flex;
   }
 
   .workspace-sidebar.sidebar-collapsed .thread-list-toolbar {
@@ -3628,10 +3632,6 @@ button.ghost.inline-link {
 
   .workspace-sidebar.sidebar-collapsed .thread-empty {
     display: block;
-  }
-
-  .workspace-sidebar.sidebar-collapsed .sidebar-bottom-actions {
-    display: flex;
   }
 
   .workspace-sidebar-toggle {
@@ -4711,13 +4711,114 @@ button.ghost.inline-link {
   font-size: var(--text-sm);
 }
 
+/* About — AppShell + explore reading column (theme tokens, Fraunces section heads) */
+.help-page .help-main {
+  width: min(65ch, 100%);
+  margin: 0 auto;
+}
+
+.help-page .help-role-bar {
+  margin-bottom: var(--space-4);
+}
+
+.help-page .help-role-meta {
+  margin: 0 0 var(--space-3);
+}
+
+.help-page .help-jump-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-4);
+  font-size: var(--text-sm);
+}
+
+.help-page .help-jump-nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.help-page .help-jump-nav a:hover {
+  color: var(--accent);
+}
+
+.help-page .help-article.privacy-prose {
+  width: 100%;
+  margin: 0;
+  padding: 0 0 var(--space-8);
+}
+
+.help-page .help-article.privacy-prose h1 {
+  display: none;
+}
+
+.about-page .about-main {
+  width: min(720px, 100%);
+}
+
+.about-page .about-intro p,
+.about-page .about-section-meta {
+  max-width: 62ch;
+}
+
+.about-lede {
+  margin: 0 0 var(--space-4);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-lg);
+  line-height: var(--leading-body);
+  max-width: 42ch;
+}
+
+.about-page .explore-section p {
+  margin: 0 0 var(--space-4);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
+}
+
+.about-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.about-links a {
+  color: var(--accent);
+  text-decoration: none;
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+}
+
+.about-links a:hover,
+.about-links a:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.about-whats-new-link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.about-whats-new-link:hover,
+.about-whats-new-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.about-release-notes .about-section-meta {
+  margin: 0 0 var(--space-3);
+}
+
+/* Legacy editorial helpers (kept for any residual markup) */
 .editorial-page {
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(ellipse 90% 45% at 50% -15%, #1a1612 0%, transparent 55%),
-    linear-gradient(180deg, #0a0b0f 0%, var(--bg) 40%);
+  background: var(--bg);
   color: var(--text);
   padding: var(--space-8) var(--space-6);
 }
@@ -4728,7 +4829,7 @@ button.ghost.inline-link {
 }
 
 .editorial-lede {
-  color: rgba(243, 239, 230, 0.9);
+  color: var(--text);
   font-size: var(--text-lg);
   max-width: 42ch;
 }
@@ -4744,7 +4845,7 @@ button.ghost.inline-link {
 }
 
 .editorial-section p {
-  color: rgba(243, 239, 230, 0.92);
+  color: var(--text);
 }
 
 .editorial-links {
@@ -4771,19 +4872,6 @@ button.ghost.inline-link {
   padding-top: var(--space-6);
   color: var(--muted);
   font-size: var(--text-sm);
-}
-
-.about-whats-new-link {
-  color: var(--accent);
-  text-decoration: none;
-}
-
-.about-whats-new-link:hover {
-  text-decoration: underline;
-}
-
-.about-release-notes .editorial-meta {
-  margin-bottom: var(--space-3);
 }
 
 .release-notes-panel.is-scrollable {
@@ -4839,6 +4927,7 @@ button.ghost.inline-link {
 
 .release-notes-version-header h3 {
   margin: 0;
+  font-family: var(--font-display);
   font-size: var(--text-md);
 }
 
@@ -4849,12 +4938,14 @@ button.ghost.inline-link {
 
 .release-notes-summary {
   margin: 0 0 var(--space-3);
-  color: rgba(243, 239, 230, 0.9);
+  color: var(--text);
+  font-family: var(--font-body);
   font-size: var(--text-sm);
 }
 
 .release-notes-section h4 {
   margin: var(--space-3) 0 var(--space-2);
+  font-family: var(--font-body);
   font-size: var(--text-sm);
   color: var(--muted);
   text-transform: uppercase;
@@ -4869,7 +4960,8 @@ button.ghost.inline-link {
 }
 
 .release-notes-section li {
-  color: rgba(243, 239, 230, 0.92);
+  color: var(--text);
+  font-family: var(--font-body);
   font-size: var(--text-sm);
 }
 
@@ -6978,6 +7070,11 @@ a.title-credit-link:hover {
   min-width: 0;
 }
 
+/* Browse shells keep AppNav reachable on desktop (chat uses workspace chrome). */
+.explore-page .app-topbar-menu {
+  display: inline-flex;
+}
+
 .explore-main {
   width: min(var(--reading-column-max), 100%);
   max-width: 100%;
@@ -8178,6 +8275,51 @@ a.explore-cinema-card-link:focus-visible h3 {
   font-size: 0.84rem;
   line-height: 1.4;
   color: var(--muted, #9aa3ad);
+}
+
+.scheduled-task-measured-rate {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--muted, #9aa3ad);
+}
+
+.scheduled-task-batch {
+  margin-top: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.scheduled-task-batch label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.scheduled-task-batch input {
+  max-width: 8rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.scheduled-task-history {
+  margin-top: 0.9rem;
+}
+
+.scheduled-task-history-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.scheduled-task-history-item {
+  font-size: 0.8rem;
+  color: var(--muted, #9aa3ad);
+  font-variant-numeric: tabular-nums;
 }
 
 .scheduled-tasks-log {

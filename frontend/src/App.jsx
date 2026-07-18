@@ -198,6 +198,7 @@ export default function App() {
   const jobsRunningRef = useRef(false);
   const tokenNoteLoggedRef = useRef(false);
   const composerRef = useRef(null);
+  const quickPickAnchorRef = useRef(null);
   const konamiTrackerRef = useRef(null);
   const inputRef = useRef("");
   const pendingDeleteRef = useRef(null);
@@ -794,6 +795,17 @@ export default function App() {
       setQuickPickLoading(false);
     }
   }
+
+  // Surprise Me renders near the composer (below the transcript). Scroll it into
+  // view so a long chat history never makes the pick look like a silent no-op.
+  useEffect(() => {
+    if (!quickPickLoading && !quickPick) return;
+    const el = quickPickAnchorRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  }, [quickPickLoading, quickPick]);
 
   async function sendMessage(text) {
     if (!text.trim() || loading) return;
@@ -1435,13 +1447,6 @@ export default function App() {
           className={`workspace-sidebar ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${mobileNavOpen ? "mobile-nav-open" : ""}`}
           data-testid="workspace-sidebar"
         >
-          {stats ? (
-            <p className="workspace-sidebar-library" data-testid="library-stats-chip">
-              {stats.plex_server_name
-                ? `${stats.plex_server_name} · ${stats.movies} movies · ${stats.shows} shows`
-                : `${stats.movies} movies · ${stats.shows} shows`}
-            </p>
-          ) : null}
           <div className="workspace-sidebar-top">
             <p className="eyebrow workspace-sidebar-eyebrow">Conversations</p>
             <div className="workspace-sidebar-top-actions">
@@ -1485,16 +1490,25 @@ export default function App() {
               }}
             />
           ) : null}
-          <div className="sidebar-bottom-actions" data-testid="sidebar-bottom-actions">
-            <Link
-              to="/explore"
-              className="sidebar-nav-btn"
-              data-testid="sidebar-explore"
-              onClick={() => setMobileNavOpen(false)}
-            >
-              Explore
-            </Link>
-            <WatchlistPanel count={watchlistPins.length} />
+          <div className="sidebar-footer" data-testid="sidebar-footer">
+            {stats ? (
+              <p className="workspace-sidebar-library" data-testid="library-stats-chip">
+                {stats.plex_server_name
+                  ? `${stats.plex_server_name} · ${stats.movies} movies · ${stats.shows} shows`
+                  : `${stats.movies} movies · ${stats.shows} shows`}
+              </p>
+            ) : null}
+            <div className="sidebar-bottom-actions" data-testid="sidebar-bottom-actions">
+              <Link
+                to="/explore"
+                className="sidebar-nav-btn"
+                data-testid="sidebar-explore"
+                onClick={() => setMobileNavOpen(false)}
+              >
+                Explore
+              </Link>
+              <WatchlistPanel count={watchlistPins.length} />
+            </div>
           </div>
           <StatusDock
             jobs={jobs}
@@ -1550,26 +1564,6 @@ export default function App() {
             {!showWelcomePanel && libraryGlance && !glanceShown ? (
               <LibraryGlanceCard snapshot={libraryGlance} onDismiss={handleDismissGlance} />
             ) : null}
-            {quickPickLoading || quickPick ? (
-              <QuickPickCard
-                item={quickPick?.item}
-                why={quickPick?.why}
-                status={quickPick?.status}
-                message={quickPick?.message}
-                loading={quickPickLoading}
-                onRetry={handleQuickPick}
-                onTellMore={
-                  quickPick?.item?.title
-                    ? () => sendMessage(`Tell me more about ${quickPick.item.title}`)
-                    : undefined
-                }
-                onAdd={handleAdd}
-                onDismiss={() => setQuickPick(null)}
-                requestPath={requestPath}
-                userRole={userRole}
-                multiUserEnabled={multiUserEnabled}
-              />
-            ) : null}
             <ChatThread
               messages={displayMessages}
               sessionId={activeSessionId}
@@ -1598,6 +1592,28 @@ export default function App() {
               draggableToDock={dockDropEnabled}
               onReviewConflictResolved={handleReviewConflictResolved}
             />
+            {quickPickLoading || quickPick ? (
+              <div ref={quickPickAnchorRef} data-testid="quick-pick-anchor">
+                <QuickPickCard
+                  item={quickPick?.item}
+                  why={quickPick?.why}
+                  status={quickPick?.status}
+                  message={quickPick?.message}
+                  loading={quickPickLoading}
+                  onRetry={handleQuickPick}
+                  onTellMore={
+                    quickPick?.item?.title
+                      ? () => sendMessage(`Tell me more about ${quickPick.item.title}`)
+                      : undefined
+                  }
+                  onAdd={handleAdd}
+                  onDismiss={() => setQuickPick(null)}
+                  requestPath={requestPath}
+                  userRole={userRole}
+                  multiUserEnabled={multiUserEnabled}
+                />
+              </div>
+            ) : null}
             {loading || agentActivityLog.length > 0 ? (
               <TypingIndicator
                 label={
@@ -1823,6 +1839,8 @@ export default function App() {
       />
 
       <footer className="app-footer" data-testid="app-footer">
+        <Link to="/help" className="app-footer-link">Help</Link>
+        <span className="app-footer-sep">·</span>
         <Link to="/privacy" className="app-footer-link">Privacy</Link>
         <span className="app-footer-sep">·</span>
         <Link to="/about" className="app-footer-link">About</Link>

@@ -87,8 +87,21 @@ Use the **single chat workspace** for everyday curation. Expand large title-card
 
 ---
 
+## Warm library knowledge (after first sync)
+
+Sync indexes identity and whatever Plex/TMDB return immediately. **Plot Lab motifs**, **embeddings**, and **neighbor graphs** fill in via the **idle scheduler** while the household is not chatting.
+
+1. Leave CuratorX running overnight after the first full sync.
+2. Owners: open **Admin → Scheduled Tasks** (`/admin/tasks`) and confirm `metadata_enrichment`, `semantic_embeddings`, `summary_motifs`, and `plot_neighbors` are enabled.
+3. Open in-app Help at `/help` (or [HELP.md](HELP.md)) for role-aware guidance; read [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) for why motif walls can feel sparse and what coverage to expect over time.
+4. Try **Plot Lab** (`/explore/plot-lab`) once motifs appear — empty chips mean the motif task has not finished a pass yet.
+
+---
+
 ## Related documentation
 
+- [HELP.md](HELP.md) — in-app Help (`/help`)
+- [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) — knowledge depth & idle curation
 - [CONFIGURATION.md](CONFIGURATION.md) — settings reference
 - [WEB_UI.md](WEB_UI.md) — routes and chat features
 - [wiki/Home.md](wiki/Home.md) — operator wiki

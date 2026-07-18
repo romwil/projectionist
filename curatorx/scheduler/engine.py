@@ -50,7 +50,19 @@ from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from curatorx.config_store import Settings, load_merged_settings
 from curatorx.library.db import Database
+from curatorx.scheduler.autotune import (
+    AUTOTUNE_TASKS,
+    evaluate_autotune,
+    resolve_batch_size,
+)
 from curatorx.scheduler.progress import progress_for_definition
+from curatorx.scheduler.run_history import (
+    aggregate_task_rate,
+    append_task_run,
+    ensure_run_history_table,
+    extract_items_processed,
+    list_task_runs,
+)
 from curatorx.scheduler.run_log import TaskRunLogStore
 from curatorx.scheduler.run_outcome import build_run_summary
 
@@ -97,6 +109,7 @@ class TaskState:
     last_status: Optional[str] = None
     last_outcome_reason: Optional[str] = None
     last_run_summary: Optional[Dict[str, Any]] = None
+    items_per_cycle: Optional[int] = None
 
 
 @dataclass
@@ -311,7 +324,30 @@ class IdleScheduler:
                 last_started_at = self._running_started_at
             if last_run_summary is None and state.last_run_summary:
                 last_run_summary = state.last_run_summary
-            progress = progress_for_definition(self._db, defn, interval_seconds=interval)
+            effective_batch = state.items_per_cycle
+            if effective_batch is None and defn is not None:
+                effective_batch = defn.items_per_cycle
+            rate = None
+            measured_iph: Optional[float] = None
+            if defn is not None and defn.items_per_cycle is not None:
+                rate = aggregate_task_rate(
+                    self._db,
+                    state.name,
+                    interval_seconds=interval,
+                )
+                raw_iph = rate.get("items_per_hour")
+                if raw_iph is not None:
+                    try:
+                        measured_iph = float(raw_iph)
+                    except (TypeError, ValueError):
+                        measured_iph = None
+            progress = progress_for_definition(
+                self._db,
+                defn,
+                interval_seconds=interval,
+                items_per_cycle=effective_batch,
+                items_per_hour=measured_iph,
+            )
             result.append(
                 {
                     "name": state.name,
@@ -322,9 +358,16 @@ class IdleScheduler:
                         defn.run_interval_seconds if defn is not None else interval
                     ),
                     "description": (defn.description if defn is not None else "") or "",
-                    "items_per_cycle": defn.items_per_cycle if defn is not None else None,
+                    "items_per_cycle": effective_batch,
+                    "default_items_per_cycle": (
+                        defn.items_per_cycle if defn is not None else None
+                    ),
+                    "autotune_enabled": (
+                        defn is not None and defn.name in AUTOTUNE_TASKS
+                    ),
                     "progress_scope": defn.progress_scope if defn is not None else None,
                     "progress": progress,
+                    "rate": rate,
                     "last_run_at": last_run_at,
                     "last_started_at": last_started_at,
                     "last_finished_at": last_run_at,
@@ -357,8 +400,9 @@ class IdleScheduler:
         *,
         enabled: Optional[bool] = None,
         run_interval_seconds: Optional[int] = None,
+        items_per_cycle: Optional[int] = None,
     ) -> Optional[Dict[str, Any]]:
-        """Enable/disable a task or adjust its interval. Returns updated state."""
+        """Enable/disable a task or adjust its interval/batch. Returns updated state."""
         with self._db.connect() as conn:
             row = conn.execute(
                 "SELECT * FROM scheduled_tasks WHERE name = ?", (name,)
@@ -373,6 +417,9 @@ class IdleScheduler:
             if run_interval_seconds is not None:
                 updates.append("run_interval_seconds = ?")
                 params.append(max(60, run_interval_seconds))
+            if items_per_cycle is not None:
+                updates.append("items_per_cycle = ?")
+                params.append(max(1, int(items_per_cycle)))
             if updates:
                 params.append(name)
                 conn.execute(
@@ -383,6 +430,43 @@ class IdleScheduler:
             if item["name"] == name:
                 return item
         return None
+
+    def get_task_history(
+        self,
+        name: str,
+        *,
+        limit: int = 50,
+    ) -> Dict[str, Any]:
+        """Return durable run history for a task (DB source of truth)."""
+        if name not in self._definitions and name not in {
+            s.name for s in self._load_all_states()
+        }:
+            return {"error": f"Task '{name}' not found"}
+        runs = list_task_runs(self._db, name, limit=limit)
+        return {"name": name, "runs": runs, "count": len(runs)}
+
+    def get_task_rate(
+        self,
+        name: str,
+        *,
+        lookback_hours: int = 72,
+    ) -> Dict[str, Any]:
+        """Return aggregate measured rate for a task."""
+        if name not in self._definitions and name not in {
+            s.name for s in self._load_all_states()
+        }:
+            return {"error": f"Task '{name}' not found"}
+        interval = None
+        for state in self._load_all_states():
+            if state.name == name:
+                interval = state.run_interval_seconds
+                break
+        return aggregate_task_rate(
+            self._db,
+            name,
+            lookback_hours=lookback_hours,
+            interval_seconds=interval,
+        )
 
     async def trigger_task(self, name: str) -> Dict[str, Any]:
         """Manually trigger a task regardless of idle state or schedule."""
@@ -490,7 +574,8 @@ class IdleScheduler:
                     last_duration_ms INTEGER,
                     last_status TEXT,
                     last_outcome_reason TEXT,
-                    last_run_summary TEXT
+                    last_run_summary TEXT,
+                    items_per_cycle INTEGER
                 )
                 """
             )
@@ -506,22 +591,38 @@ class IdleScheduler:
                 conn.execute(
                     "ALTER TABLE scheduled_tasks ADD COLUMN last_run_summary TEXT"
                 )
+            if "items_per_cycle" not in columns:
+                conn.execute(
+                    "ALTER TABLE scheduled_tasks ADD COLUMN items_per_cycle INTEGER"
+                )
+            ensure_run_history_table(conn)
 
     def _upsert_task_state(self, defn: TaskDefinition) -> None:
         with self._db.connect() as conn:
             conn.execute(
                 """
-                INSERT INTO scheduled_tasks (name, enabled, run_interval_seconds)
-                VALUES (?, ?, ?)
+                INSERT INTO scheduled_tasks (name, enabled, run_interval_seconds, items_per_cycle)
+                VALUES (?, ?, ?, ?)
                 ON CONFLICT(name) DO UPDATE SET
                     run_interval_seconds = CASE
                         WHEN scheduled_tasks.run_interval_seconds != excluded.run_interval_seconds
                              AND scheduled_tasks.last_run_at IS NULL
                         THEN excluded.run_interval_seconds
                         ELSE scheduled_tasks.run_interval_seconds
+                    END,
+                    items_per_cycle = CASE
+                        WHEN scheduled_tasks.items_per_cycle IS NULL
+                             AND excluded.items_per_cycle IS NOT NULL
+                        THEN excluded.items_per_cycle
+                        ELSE scheduled_tasks.items_per_cycle
                     END
                 """,
-                (defn.name, 1 if defn.enabled else 0, defn.run_interval_seconds),
+                (
+                    defn.name,
+                    1 if defn.enabled else 0,
+                    defn.run_interval_seconds,
+                    defn.items_per_cycle,
+                ),
             )
 
     def _load_all_states(self) -> List[TaskState]:
@@ -548,6 +649,13 @@ class IdleScheduler:
                     last_run_summary = parsed
             except (json.JSONDecodeError, TypeError, ValueError):
                 pass
+        items_per_cycle: Optional[int] = None
+        raw_batch = row["items_per_cycle"] if "items_per_cycle" in row.keys() else None
+        if raw_batch is not None:
+            try:
+                items_per_cycle = int(raw_batch)
+            except (TypeError, ValueError):
+                items_per_cycle = None
         return TaskState(
             name=str(row["name"]),
             last_run_at=last_run_at,
@@ -559,6 +667,7 @@ class IdleScheduler:
                 str(row["last_outcome_reason"]) if row["last_outcome_reason"] is not None else None
             ),
             last_run_summary=last_run_summary,
+            items_per_cycle=items_per_cycle,
         )
 
     def _row_to_dict(self, row: Any) -> Dict[str, Any]:
@@ -708,24 +817,25 @@ class IdleScheduler:
             elapsed_ms = int((time.time() - start) * 1000)
 
             status = result.get("status", "completed") if isinstance(result, dict) else "completed"
-            run_summary = build_run_summary(
-                status,
-                result=result if isinstance(result, dict) else None,
-            )
+            result_dict = result if isinstance(result, dict) else None
+            run_summary = build_run_summary(status, result=result_dict)
             outcome_reason = run_summary.get("outcome_reason")
             qinfo.record_success()
-            self._record_run(
-                defn.name,
-                elapsed_ms,
-                status,
+            self._finalize_run(
+                defn,
+                started_at=start,
+                duration_ms=elapsed_ms,
+                status=status,
+                trigger=trigger,
                 outcome_reason=outcome_reason,
                 run_summary=run_summary,
+                result=result_dict,
             )
             self._run_log.end_run(
                 defn.name,
                 status=status,
                 duration_ms=elapsed_ms,
-                result=result if isinstance(result, dict) else None,
+                result=result_dict,
             )
             self._emit_progress(defn.name, status)
             logger.info(
@@ -759,12 +869,17 @@ class IdleScheduler:
                     qinfo.consecutive_failures,
                     error_msg,
                 )
-            self._record_run(
-                defn.name,
-                elapsed_ms,
-                f"error: {error_msg}",
+            error_summary = build_run_summary("error", error=error_msg)
+            self._finalize_run(
+                defn,
+                started_at=start,
+                duration_ms=elapsed_ms,
+                status=f"error: {error_msg}",
+                trigger=trigger,
                 outcome_reason=error_msg,
-                run_summary=build_run_summary("error", error=error_msg),
+                run_summary=error_summary,
+                error=error_msg,
+                apply_autotune=False,
             )
             self._run_log.end_run(
                 defn.name,
@@ -793,12 +908,17 @@ class IdleScheduler:
                     qinfo.consecutive_failures,
                     error_msg,
                 )
-            self._record_run(
-                defn.name,
-                elapsed_ms,
-                f"error: {exc}",
+            error_summary = build_run_summary("error", error=error_msg)
+            self._finalize_run(
+                defn,
+                started_at=start,
+                duration_ms=elapsed_ms,
+                status=f"error: {exc}",
+                trigger=trigger,
                 outcome_reason=error_msg,
-                run_summary=build_run_summary("error", error=error_msg),
+                run_summary=error_summary,
+                error=error_msg,
+                apply_autotune=False,
             )
             self._run_log.end_run(
                 defn.name,
@@ -818,6 +938,105 @@ class IdleScheduler:
             self._run_log.reset_emitter(emitter_token)
             self._running_task = None
             self._running_started_at = None
+
+    def _finalize_run(
+        self,
+        defn: TaskDefinition,
+        *,
+        started_at: float,
+        duration_ms: int,
+        status: str,
+        trigger: str,
+        outcome_reason: Optional[str] = None,
+        run_summary: Optional[Dict[str, Any]] = None,
+        result: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None,
+        apply_autotune: bool = True,
+    ) -> None:
+        """Persist last-run fields, append durable history, optionally auto-tune."""
+        finished_at = time.time()
+        metrics = dict((run_summary or {}).get("metrics") or {})
+        items_processed = extract_items_processed(result)
+        if items_processed is None and "items_processed" in metrics:
+            try:
+                items_processed = int(metrics["items_processed"])
+            except (TypeError, ValueError):
+                pass
+
+        # Auto-tune before writing history so the decision is included in metrics.
+        if apply_autotune and defn.name in AUTOTUNE_TASKS:
+            states = {s.name: s for s in self._load_all_states()}
+            state = states.get(defn.name)
+            current_batch = resolve_batch_size(
+                self._db,
+                defn.name,
+                defn.items_per_cycle or 1,
+            )
+            current_interval = (
+                state.run_interval_seconds if state is not None else defn.run_interval_seconds
+            )
+            remaining = None
+            has_more = bool(result.get("has_more")) if isinstance(result, dict) else False
+            if defn.progress_scope:
+                from curatorx.scheduler.progress import count_remaining
+
+                remaining = count_remaining(self._db, defn.progress_scope)
+            decision = evaluate_autotune(
+                name=defn.name,
+                status=str(result.get("status") if isinstance(result, dict) else status),
+                duration_ms=duration_ms,
+                timeout_seconds=defn.timeout_seconds,
+                items_per_cycle=current_batch,
+                interval_seconds=current_interval,
+                items_processed=items_processed,
+                remaining_items=remaining,
+                has_more=has_more,
+            )
+            metrics.update(decision.as_metrics())
+            if decision.changed:
+                updates: Dict[str, Any] = {}
+                if decision.items_per_cycle is not None:
+                    updates["items_per_cycle"] = decision.items_per_cycle
+                if decision.run_interval_seconds is not None:
+                    updates["run_interval_seconds"] = decision.run_interval_seconds
+                if updates:
+                    self.update_task(defn.name, **updates)
+                    logger.info(
+                        "Scheduler auto-tune '%s': batch %s→%s interval %s→%s (%s)",
+                        defn.name,
+                        current_batch,
+                        decision.items_per_cycle,
+                        current_interval,
+                        decision.run_interval_seconds,
+                        ", ".join(decision.reasons or []),
+                    )
+
+        if run_summary is not None:
+            run_summary = {**run_summary, "metrics": metrics}
+
+        self._record_run(
+            defn.name,
+            duration_ms,
+            status,
+            outcome_reason=outcome_reason,
+            run_summary=run_summary,
+        )
+        try:
+            append_task_run(
+                self._db,
+                name=defn.name,
+                started_at=started_at,
+                finished_at=finished_at,
+                duration_ms=duration_ms,
+                status=status,
+                trigger=trigger,
+                outcome_reason=outcome_reason,
+                metrics=metrics,
+                items_processed=items_processed,
+                error=error,
+            )
+        except Exception:
+            logger.exception("Failed to persist scheduled_task_runs for '%s'", defn.name)
 
     def _record_run(
         self,

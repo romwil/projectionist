@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   LAST_SEEN_VERSION_KEY,
   compareSemver,
+  fetchReleaseNotes,
   findReleaseByVersion,
   getLastSeenVersion,
   normalizeReleaseNotes,
@@ -70,4 +71,37 @@ test("pickLatestRelease and findReleaseByVersion", () => {
 test("plainChangelogText strips light markdown", () => {
   assert.equal(plainChangelogText("**Scheduled Tasks** admin"), "Scheduled Tasks admin");
   assert.equal(plainChangelogText("use `enrich` flag"), "use enrich flag");
+});
+
+test("fetchReleaseNotes rejects non-OK and HTML responses", async () => {
+  await assert.rejects(
+    () =>
+      fetchReleaseNotes(async () => ({
+        ok: false,
+        status: 404,
+        headers: { get: () => "application/json" },
+        json: async () => ({}),
+      })),
+    /404/,
+  );
+
+  await assert.rejects(
+    () =>
+      fetchReleaseNotes(async () => ({
+        ok: true,
+        status: 200,
+        headers: { get: () => "text/html; charset=utf-8" },
+        json: async () => ({ releases: [] }),
+      })),
+    /HTML response/,
+  );
+
+  const payload = { releases: [{ version: "1.8.7" }] };
+  const got = await fetchReleaseNotes(async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => "application/json" },
+    json: async () => payload,
+  }));
+  assert.equal(got.releases[0].version, "1.8.7");
 });

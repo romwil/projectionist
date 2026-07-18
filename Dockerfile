@@ -5,6 +5,10 @@ RUN npm install
 COPY frontend/ ./
 # PrivacyPage imports @docs/PRIVACY.md (alias → /docs in this stage)
 COPY docs/PRIVACY.md /docs/PRIVACY.md
+# release-notes.json is generated on the host by docker-release.sh / generate-release-notes.sh
+# before build; Vite copies public/ into dist. Fail fast if missing so About / What's New work.
+RUN test -f public/release-notes.json \
+  || (echo "frontend/public/release-notes.json missing — run scripts/generate-release-notes.sh" >&2 && exit 1)
 RUN npm run build
 
 FROM python:3.12-slim

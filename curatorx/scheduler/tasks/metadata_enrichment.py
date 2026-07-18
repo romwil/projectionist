@@ -24,6 +24,7 @@ from curatorx.config_store import Settings
 from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import Database
 from curatorx.library.sync import apply_tmdb_details_to_library_row
+from curatorx.scheduler.autotune import resolve_batch_size
 from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
 from curatorx.scheduler.run_log import emit_task_event
 
@@ -33,6 +34,7 @@ INTERVAL_SECONDS = 21600  # 6 hours
 DEFAULT_BATCH_SIZE = 25
 # Pause between TMDB detail calls (~40 req/min with headroom for other traffic).
 REQUEST_PAUSE_SECONDS = 1.5
+TASK_NAME = "metadata_enrichment"
 
 
 async def run(
@@ -45,7 +47,7 @@ async def run(
     if not api_key:
         return {"status": "skipped", "reason": "no_tmdb_api_key", "enriched": 0}
 
-    batch_size = DEFAULT_BATCH_SIZE
+    batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
     backlog = db.items_needing_metadata_enrichment(limit=batch_size)
     if not backlog:
         return {"status": "completed", "enriched": 0, "remaining": 0}
@@ -151,14 +153,15 @@ async def run(
 def register(scheduler: IdleScheduler) -> None:
     scheduler.register(
         TaskDefinition(
-            name="metadata_enrichment",
+            name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
             description=(
                 "Trickles through titles that have a TMDB id but still lack release/air "
                 f"dates or plot text. Processes about {DEFAULT_BATCH_SIZE} titles per run "
-                "with paced TMDB requests so free-tier limits stay safe."
+                "with paced TMDB requests so free-tier limits stay safe "
+                "(batch auto-tunes from measured history)."
             ),
             items_per_cycle=DEFAULT_BATCH_SIZE,
             progress_scope="metadata_backlog",

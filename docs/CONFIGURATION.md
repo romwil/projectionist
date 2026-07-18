@@ -315,6 +315,25 @@ CURATORX_LOG_LEVEL=ERROR docker compose up -d
 
 API keys and tokens are never written to logs (URLs and error bodies are redacted).
 
+### Data retention (idle task)
+
+`data_retention` prunes accumulating tables once per day. Defaults (override via matching attributes on settings if present):
+
+| Setting key | Default | Table |
+|-------------|---------|-------|
+| `telemetry_retention_days` | 90 | `system_telemetry_stream` |
+| `interaction_retention_days` | 90 | `interaction_telemetry` |
+| `anniversary_retention_days` | 30 | `daily_anniversaries` |
+| `task_run_retention_days` | 60 | `scheduled_task_runs` (durable scheduler history) |
+
+### Scheduled tasks (owner Admin)
+
+| Control | Notes |
+|---------|-------|
+| Cadence (`run_interval_seconds`) | Owner presets / custom hours; auto-tune may nudge within caps for trickle tasks |
+| Batch (`items_per_cycle`) | Persisted for metadata / embeddings / neighbors / LLM logline; auto-tune adjusts after successful runs |
+| History / rate | `GET …/history`, `GET …/rate`; list payload includes measured items/hour when history exists |
+
 ---
 
 ## LLM providers

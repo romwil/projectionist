@@ -18,6 +18,7 @@ from typing import Any, Callable, Dict
 
 from curatorx.config_store import Settings
 from curatorx.library.db import Database
+from curatorx.scheduler.autotune import resolve_batch_size
 from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ INTERVAL_SECONDS = 86400  # 24 hours
 DEFAULT_BATCH_SIZE = 5
 REQUEST_PAUSE_SECONDS = 1.0
 _MAX_LOGLINE_CHARS = 180
+TASK_NAME = "llm_logline_enrichment"
 
 
 def _clean_logline(text: str) -> str:
@@ -88,7 +90,8 @@ async def run(
             "note": "llm_logline stays empty until an LLM is configured",
         }
 
-    backlog = db.items_needing_llm_logline(limit=DEFAULT_BATCH_SIZE)
+    batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
+    backlog = db.items_needing_llm_logline(limit=batch_size)
     if not backlog:
         return {"status": "completed", "enriched": 0, "remaining": 0}
 
@@ -145,7 +148,7 @@ async def run(
         "status": "completed",
         "enriched": enriched,
         "errors": errors,
-        "batch_size": DEFAULT_BATCH_SIZE,
+        "batch_size": batch_size,
         "has_more": remaining > 0,
     }
 
@@ -153,14 +156,14 @@ async def run(
 def register(scheduler: IdleScheduler) -> None:
     scheduler.register(
         TaskDefinition(
-            name="llm_logline_enrichment",
+            name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
             description=(
                 "When an LLM API key is configured, writes short narrative loglines used "
-                f"in embedding text. Processes about {DEFAULT_BATCH_SIZE} titles per run; "
-                "skips cleanly when no LLM is configured."
+                f"in embedding text. Processes about {DEFAULT_BATCH_SIZE} titles per run "
+                "(batch auto-tunes gently); skips cleanly when no LLM is configured."
             ),
             items_per_cycle=DEFAULT_BATCH_SIZE,
             progress_scope="llm_logline_backlog",

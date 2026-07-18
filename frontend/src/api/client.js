@@ -774,6 +774,11 @@ export async function getLibraryStats() {
   return api("/library/stats");
 }
 
+/** Knowledge-depth coverage (% overview, motifs, keywords, neighbors, loglines). */
+export async function getLibraryKnowledgeCoverage() {
+  return api("/library/knowledge-coverage");
+}
+
 export async function getLibraryOverview() {
   return api("/library/overview");
 }
@@ -1016,4 +1021,16 @@ export async function getScheduledTaskLog(name, { after_seq = 0, limit = 200 } =
     limit: String(limit || 200),
   });
   return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/log?${search}`);
+}
+
+export async function getScheduledTaskHistory(name, { limit = 50 } = {}) {
+  const search = new URLSearchParams({ limit: String(limit || 50) });
+  return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/history?${search}`);
+}
+
+export async function getScheduledTaskRate(name, { lookback_hours = 72 } = {}) {
+  const search = new URLSearchParams({
+    lookback_hours: String(lookback_hours || 72),
+  });
+  return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/rate?${search}`);
 }

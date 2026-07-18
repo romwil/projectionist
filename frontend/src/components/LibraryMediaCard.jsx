@@ -261,7 +261,16 @@ export default function LibraryMediaCard({
           {whyOpen ? (
             <div className="explore-motif-why-detail" data-testid="explore-motif-why-detail">
               <p>{motifWhy.summary}</p>
-              {motifWhy.matched?.length ? (
+              {motifWhy.matchLayers?.length ? (
+                <ul className="explore-motif-why-layers" data-testid="explore-motif-why-layers">
+                  {motifWhy.matchLayers.map((entry) => (
+                    <li key={`${entry.motif}-${entry.layers.join("-")}`}>
+                      <strong>{entry.motif}</strong>
+                      <span>{entry.layers.join(" + ")}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : motifWhy.matched?.length ? (
                 <p className="explore-motif-why-matched">
                   Motifs: {motifWhy.matched.join(" · ")}
                 </p>

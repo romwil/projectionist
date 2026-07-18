@@ -33,6 +33,7 @@ from curatorx.library.embeddings import (
     embed_texts,
     embedding_model_label,
 )
+from curatorx.scheduler.autotune import resolve_batch_size
 from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 BATCH_SIZE = 10
 MAX_ITEMS_PER_CYCLE = 50
 INTERVAL_SECONDS = 86400  # 24 hours
+TASK_NAME = "semantic_embeddings"
 
 
 async def run(
@@ -50,6 +52,7 @@ async def run(
     if total == 0:
         return {"status": "completed", "embedded": 0, "skipped": 0}
 
+    cycle_cap = resolve_batch_size(db, TASK_NAME, MAX_ITEMS_PER_CYCLE)
     existing_hashes = db.embedding_content_hashes()
     embedded = 0
     skipped = 0
@@ -73,7 +76,7 @@ async def run(
         pending_hashes.clear()
 
     for row in rows:
-        if embedded >= MAX_ITEMS_PER_CYCLE:
+        if embedded >= cycle_cap:
             remaining = total - skipped - embedded
             logger.info(
                 "Semantic embeddings: cycle cap reached (%d embedded, ~%d remaining); "
@@ -87,6 +90,8 @@ async def run(
                 "skipped": skipped,
                 "total": total,
                 "remaining": remaining,
+                "batch_size": cycle_cap,
+                "has_more": True,
             }
 
         summary = str(row["summary"] or "").strip()
@@ -135,20 +140,22 @@ async def run(
         "embedded": embedded,
         "skipped": skipped,
         "total": total,
+        "batch_size": cycle_cap,
+        "has_more": db.count_items_needing_embeddings() > 0,
     }
 
 
 def register(scheduler: IdleScheduler) -> None:
     scheduler.register(
         TaskDefinition(
-            name="semantic_embeddings",
+            name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
             run_fn=run,
             description=(
                 "Builds semantic embeddings from plot summaries for similarity search and "
                 f"Plot Lab. Caps each run at {MAX_ITEMS_PER_CYCLE} titles so large libraries "
-                "catch up gradually without pegging the host."
+                "catch up gradually without pegging the host (batch auto-tunes from history)."
             ),
             items_per_cycle=MAX_ITEMS_PER_CYCLE,
             progress_scope="embeddings_pending",

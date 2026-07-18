@@ -119,6 +119,23 @@ Lightweight title graph (idle `title_relations_refresh`).
 
 Idle motif/theme replaces only its own `facet_type` so sync-managed facets are preserved.
 
+##### Why motifs were sparse (and what changed)
+
+`summary_motifs` builds searchable plot tokens from layered text (`summary` + `tmdb_overview` + `tagline` + optional `llm_logline`). Early versions kept only **8 rare unigrams per title** after a document-frequency band. That hard cap routinely crowded out high-signal words that still appear in the blurb — e.g. Kill Bill Vol. 1 literally contains “The Bride” + “coma”, but attached motifs kept `coma` and dropped `bride`; Vol. 2 stored the possessive `bride's` instead of `bride`. Plot Lab AND on motifs alone was therefore structurally blind even when the library “knew” the film.
+
+Current extraction:
+
+1. **Possessive normalize** — `bride's` → `bride`
+2. **Unigrams + high-signal bigrams** — e.g. `the bride`, `death list`
+3. **Split per-title budget** — top rare tokens **plus** guaranteed retention for tokens that also appear as keyword stems
+4. **Plot Lab hybrid query** (default) — each selected token may match via motif facet **or** keyword facet **or** live plot-text `LIKE`, AND across tokens; pure motif-AND remains available via `plot_match_mode=motifs`
+
+Knowledge coverage stats (`GET /api/library/stats` → `knowledge_coverage`, or `/api/library/knowledge-coverage`) expose % with overview / motifs / keywords / neighbors / loglines so sparsity stays visible to Admin/Explore.
+
+**Motif extraction (as of this release):** `summary_motifs` tokenizes `summary` + `tmdb_overview` into uncommon unigrams (document-frequency band), keeping at most **8** motifs per title. Tagline/keywords are not yet in the motif pipeline; possessives are not normalized (`bride's` ≠ `bride`). Plot Lab AND walls read these rows — sparse intersections are often a facet budget / token-normalization issue, not missing Plex text. Product explanation: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md).
+
+**Roadmap:** optional `long_synopsis` / `synopsis_source` columns and local keyword→theme maps — without inventing plot. Durable `scheduled_task_runs` history + auto-tune are implemented (see [ARCHITECTURE.md](ARCHITECTURE.md#why-last-run-only-failed-and-what-replaced-it)).
+
 #### `preference_facts`
 
 Taste signals for agent context and purge scoring.
@@ -483,6 +500,7 @@ erDiagram
 
 ## Related documentation
 
+- [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) — knowledge dimensions, motifs, idle curation
 - [ARCHITECTURE.md](ARCHITECTURE.md) — sync and chat data flows
 - [DESIGN.md](DESIGN.md) — block schema and API usage
 - [curatorx_prd.md](curatorx_prd.md) — product source spec

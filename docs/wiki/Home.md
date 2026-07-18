@@ -27,6 +27,8 @@ Features: library-grounded recommendations, Explore feeds, title detail with nei
 
 ## Related guides
 
+- [../HELP.md](../HELP.md) — in-app Help (`/help`)
+- [../CURATOR_KNOWLEDGE.md](../CURATOR_KNOWLEDGE.md) — library knowledge, idle curation, Plot Lab
 - [../ONBOARDING.md](../ONBOARDING.md) — first-run wizard
 - [../WEB_UI.md](../WEB_UI.md) — single workspace UI
 - [../DOCKER.md](../DOCKER.md) — Mac / Compose / Unraid notes

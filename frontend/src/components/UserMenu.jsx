@@ -64,6 +64,9 @@ export default function UserMenu() {
           <Link to="/settings" className="user-menu-link" onClick={() => setOpen(false)}>
             Settings
           </Link>
+          <Link to="/help" className="user-menu-link" data-testid="user-menu-help" onClick={() => setOpen(false)}>
+            Help
+          </Link>
           <Link to="/about" className="user-menu-link" onClick={() => setOpen(false)}>
             About
           </Link>
@@ -76,7 +79,12 @@ export default function UserMenu() {
   );
 }
 
-export function useAuthGate() {
+/**
+ * Auth gate for browse shells.
+ * @param {{ redirect?: boolean }} [options] When redirect is false (public pages
+ *   like About), never send the user to /login — still resolve isOwner when possible.
+ */
+export function useAuthGate({ redirect = true } = {}) {
   const navigate = useNavigate();
   const [authReady, setAuthReady] = useState(false);
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
@@ -112,7 +120,13 @@ export function useAuthGate() {
         const me = await getAuthMe();
         if (cancelled) return;
         if (!me) {
-          navigate("/login", { replace: true });
+          if (redirect) {
+            navigate("/login", { replace: true });
+            return;
+          }
+          setIsOwner(false);
+          setRole("guest");
+          setAuthReady(true);
           return;
         }
         if (me.user?.ui_font_size || me.user?.ui_theme) {
@@ -128,7 +142,13 @@ export function useAuthGate() {
         if (cancelled) return;
         // Multi-user must not failure-open into the app on auth/network errors.
         if (enabled) {
-          navigate("/login", { replace: true });
+          if (redirect) {
+            navigate("/login", { replace: true });
+            return;
+          }
+          setIsOwner(false);
+          setRole("guest");
+          setAuthReady(true);
           return;
         }
         setIsOwner(true);
@@ -141,7 +161,7 @@ export function useAuthGate() {
     return () => {
       cancelled = true;
     };
-  }, [navigate]);
+  }, [navigate, redirect]);
 
   return { authReady, multiUserEnabled, isOwner, role };
 }

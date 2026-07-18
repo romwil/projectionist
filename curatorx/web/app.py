@@ -74,6 +74,7 @@ from curatorx.library.feeds import (
 )
 from curatorx.library.query import (
     aggregate_library,
+    compute_knowledge_coverage,
     filters_from_mapping,
     library_overview,
     query_library,
@@ -811,6 +812,48 @@ def about_page() -> HTMLResponse:
     return _serve_index()
 
 
+@app.get("/help", response_class=HTMLResponse)
+def help_page() -> HTMLResponse:
+    return _serve_index()
+
+
+def _frontend_public_file(*parts: str) -> Path | None:
+    """Resolve a Vite public asset from dist (prod) or public/ (local pre-build).
+
+    When both exist (common after generate-release-notes without a rebuild),
+    prefer the newer file so About stays current during local development.
+    """
+    candidates = [
+        FRONTEND_DIST.joinpath(*parts),
+        FRONTEND_DIST.parent.joinpath("public", *parts),
+    ]
+    existing = [candidate for candidate in candidates if candidate.is_file()]
+    if not existing:
+        return None
+    return max(existing, key=lambda item: item.stat().st_mtime)
+
+
+@app.get("/release-notes.json")
+def release_notes_json() -> FileResponse:
+    """Serve release notes copied into dist (Docker) or public/ (local generate)."""
+    path = _frontend_public_file("release-notes.json")
+    if path is None:
+        raise HTTPException(status_code=404, detail="Release notes not found")
+    return FileResponse(
+        path,
+        media_type="application/json",
+        headers={"Cache-Control": "public, max-age=60"},
+    )
+
+
+@app.get("/favicon.svg")
+def favicon_svg() -> FileResponse:
+    path = _frontend_public_file("favicon.svg")
+    if path is None:
+        raise HTTPException(status_code=404, detail="Favicon not found")
+    return FileResponse(path, media_type="image/svg+xml")
+
+
 @app.get("/admin", response_class=HTMLResponse)
 @app.get("/admin/{section}", response_class=HTMLResponse)
 def admin_page(section: str = "") -> HTMLResponse:
@@ -1413,8 +1456,16 @@ def library_stats(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
         "shows": shows,
         "last_sync": db.get_sync_state("last_sync"),
         "plex_server_name": plex_server_name or None,
+        # Phase A data surface for Admin/Explore knowledge-depth UI (Phase D).
+        "knowledge_coverage": compute_knowledge_coverage(db),
     }
     return _sanitize_library_payload(payload, user)
+
+
+@app.get("/api/library/knowledge-coverage")
+def library_knowledge_coverage(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    """Dedicated coverage stats for Admin / Explore knowledge-depth panels."""
+    return _sanitize_library_payload(compute_knowledge_coverage(_db()), user)
 
 
 @app.get("/api/library/health")
@@ -1569,6 +1620,7 @@ def export_training_corpus(user=Depends(require_role("owner"))) -> JSONResponse:
 class ScheduledTaskUpdatePayload(BaseModel):
     enabled: Optional[bool] = None
     run_interval_seconds: Optional[int] = Field(default=None, ge=60, le=2_592_000)
+    items_per_cycle: Optional[int] = Field(default=None, ge=1, le=500)
 
 
 @app.get("/api/admin/scheduled-tasks")
@@ -1598,6 +1650,7 @@ def update_scheduled_task(
         name,
         enabled=payload.enabled,
         run_interval_seconds=payload.run_interval_seconds,
+        items_per_cycle=payload.items_per_cycle,
     )
     if updated is None:
         raise HTTPException(status_code=404, detail=f"Task '{name}' not found")
@@ -1642,6 +1695,40 @@ def get_scheduled_task_log(
     if scheduler is None:
         raise HTTPException(status_code=503, detail="Scheduler not available")
     payload = scheduler.get_task_run_log(name, after_seq=after_seq, limit=limit)
+    if payload.get("error"):
+        raise HTTPException(status_code=404, detail=payload["error"])
+    return payload
+
+
+@app.get("/api/admin/scheduled-tasks/{name}/history")
+def get_scheduled_task_history(
+    name: str,
+    limit: int = 50,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Return durable run history for a task (survives restarts)."""
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    payload = scheduler.get_task_history(name, limit=limit)
+    if payload.get("error"):
+        raise HTTPException(status_code=404, detail=payload["error"])
+    return payload
+
+
+@app.get("/api/admin/scheduled-tasks/{name}/rate")
+def get_scheduled_task_rate(
+    name: str,
+    lookback_hours: int = 72,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Return measured items/hour and duration percentiles from run history."""
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    payload = scheduler.get_task_rate(name, lookback_hours=lookback_hours)
     if payload.get("error"):
         raise HTTPException(status_code=404, detail=payload["error"])
     return payload
@@ -1899,6 +1986,9 @@ def library_quick_pick_endpoint(
     item = {key: row[key] for key in row.keys()}
     item["genres"] = genres_list
     item["view_count"] = int(item.get("view_count") or 0)
+    # TitleCard expects overview + in_library (DB column is summary).
+    item["overview"] = str(item.get("summary") or "")
+    item["in_library"] = True
 
     return {"item": item, "why": reason}
 

@@ -59,12 +59,14 @@ test("buildMotifQueryParams encodes motifs csv", () => {
   assert.equal(params.get("motifs"), "time loop,found family");
   assert.equal(params.get("offset"), null);
   assert.equal(params.get("media_type"), null);
+  assert.equal(params.get("plot_match_mode"), "hybrid");
 });
 
 test("buildMotifQueryParams omits motifs when empty", () => {
   const params = buildMotifQueryParams([], { limit: 20 });
   assert.equal(params.get("limit"), "20");
   assert.equal(params.get("motifs"), null);
+  assert.equal(params.get("plot_match_mode"), "hybrid");
 });
 
 test("buildMotifQueryParams includes media type and offset", () => {
@@ -85,11 +87,20 @@ test("buildMotifQueryParams normalizes tv media type and page size", () => {
   assert.equal(params.get("media_type"), "show");
 });
 
+test("buildMotifQueryParams accepts pure motifs mode", () => {
+  const params = buildMotifQueryParams(["coma"], { plotMatchMode: "motifs" });
+  assert.equal(params.get("plot_match_mode"), "motifs");
+});
+
 test("resolveMotifWhy prefers server motif payload", () => {
   const why = resolveMotifWhy(
     {
       matched_motifs: ["extinction", "pennsylvania"],
-      motif_why: 'Selected because its plot motifs include all of “extinction”, “pennsylvania”.',
+      motif_why: 'Selected because “extinction” (plot motif + plot text); “pennsylvania” (plot motif).',
+      match_layers: [
+        { motif: "extinction", layers: ["motif", "plot_text"] },
+        { motif: "pennsylvania", layers: ["motif"] },
+      ],
       motif_excerpts: [
         { motif: "extinction", excerpt: "…risk of extinction…" },
         { motif: "pennsylvania", excerpt: "…rural Pennsylvania…" },
@@ -100,6 +111,7 @@ test("resolveMotifWhy prefers server motif payload", () => {
   assert.equal(why.matched.length, 2);
   assert.match(why.summary, /extinction/);
   assert.equal(why.excerpts[0].motif, "extinction");
+  assert.equal(why.matchLayers[0].layers[0], "motif");
 });
 
 test("resolveMotifWhy returns null without motif payload", () => {

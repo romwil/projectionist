@@ -7,6 +7,7 @@ import ConfigPage from "./pages/ConfigPage";
 import LoginPage from "./pages/LoginPage";
 import PrivacyPage from "./pages/PrivacyPage";
 import AboutPage from "./pages/AboutPage";
+import HelpPage from "./pages/HelpPage";
 import NotFoundPage from "./pages/NotFoundPage";
 import DashboardPage from "./pages/DashboardPage";
 import ScheduledTasksPage from "./pages/ScheduledTasksPage";
@@ -40,6 +41,7 @@ createRoot(document.getElementById("root")).render(
         <Route path="/login" element={<LoginPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/about" element={<AboutPage />} />
+        <Route path="/help" element={<HelpPage />} />
         <Route path="/config" element={<Navigate to="/admin" replace />} />
         <Route path="/admin" element={<AdminLayout />}>
           <Route index element={<Navigate to="overview" replace />} />

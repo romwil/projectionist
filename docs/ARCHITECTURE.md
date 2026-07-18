@@ -184,7 +184,8 @@ flowchart LR
 ### Frontend (Vite / React)
 
 - **Single workspace** — chat thread, welcome panel, watchlist sidebar, keyboard shortcuts.
-- **Explore hub** — `/explore` cinema browse (Recently Added + feed rails); Plot Lab section reserved for motif/neighbor discovery.
+- **Explore hub** — `/explore` cinema browse (Recently Added + feed rails); Plot Lab for multi-signal plot intersections + neighbor discovery.
+- **Help** — `/help` in-app guide (role-aware); deep education in [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md).
 - **Title detail** — `/title/{movie|show}/{id}` with backdrop hero, neighbors carousel, trailer modal.
 - **Dual theme** — Lights Up (gallery paper) / Lights Down (cinema chamber) via `html[data-theme]`.
 - **ChatThread** — blocks (`text`, `title_cards`, `action_prompt`, review prompts) plus circular **AgentAvatar**.
@@ -198,7 +199,7 @@ See [WEB_UI.md](WEB_UI.md) and [DESIGN.md](DESIGN.md).
 - **Lens API** — `/api/lenses`, `/api/lenses/active`.
 - **Persona API** — `/api/persona`, `/api/system-config`.
 - **Reviews API** — `/api/reviews` with optional Plex rating sync and conflict handling.
-- **Explore feeds** — `/api/library/feeds/*`, `/api/library/neighbors/{item_id}`, `/api/library/motifs`.
+- **Explore feeds** — `/api/library/feeds/*`, `/api/library/neighbors/{item_id}`, `/api/library/motifs`, `/api/library/knowledge-coverage`.
 - **Webhooks** — `POST /api/webhooks/plex` for near-completion rating prompts (optional shared secret).
 - **JobManager** — background library sync with progress polling.
 - **CuratorAgent** — accepts `lens_id`; builds persona-aware system prompt; tool list respects feature flags.
@@ -371,7 +372,7 @@ Some features span both sides. The scheduler pre-computes; the agent tool (or Ex
 | `semantic_embeddings` | `search_library`, semantic `query_library` |
 | `metadata_enrichment` | release dates, TMDB overview/tagline, collection ids, structured credits |
 | `plot_neighbors` → `item_neighbors` | `find_similar_titles`, Title Detail “More Like This”, `/api/library/neighbors/{id}` |
-| `summary_motifs` / `llm_theme_tagging` → `library_facets` | `get_facet_catalog` (`motif` / `theme`), Explore Plot Lab |
+| `summary_motifs` / `llm_theme_tagging` → `library_facets` | `get_facet_catalog` (`motif` / `theme`), Explore Plot Lab (hybrid query also reads keywords + live plot text) |
 | `title_relations_refresh` → `title_relations` | `list_relations`, `walk_relations` |
 | `llm_logline_enrichment` | layered embedding text (optional; never invents plot) |
 | `anniversary_scanner` | `get_todays_anniversaries`, On This Day feed fallback |
@@ -387,11 +388,11 @@ Some features span both sides. The scheduler pre-computes; the agent tool (or Ex
 
 1. `metadata_enrichment` — missing dates, overviews, taglines, collection ids, credits
 2. `semantic_embeddings` — capped batches (see [Trickle ingestion](#trickle-ingestion-for-embeddings))
-3. `plot_neighbors` — materialize top-K cosine (+ surprise) into `item_neighbors`
+3. `plot_neighbors` — materialize top-K cosine (+ surprise) into `item_neighbors`, preferring titles still missing neighbor rows (`neighbors_backlog`)
 4. `summary_motifs` / optional `llm_theme_tagging` / `llm_logline_enrichment`
 5. `title_relations_refresh` — collection + neighbor + shared-crew edges
 
-Agent tools and Explore feeds **read caches**; they do not recompute embeddings or graphs per chat turn.
+Batch sizes for (1)–(3) and loglines are **auto-tuned** from durable run history (see [Active auto-tune](#active-auto-tune-batch--interval)); agent tools and Explore feeds **read caches**; they do not recompute embeddings or graphs per chat turn.
 
 ### Materialized similarity & relations
 
@@ -413,10 +414,82 @@ Empty neighbor/relation responses are **honest** — they mean the idle cache ha
 | `GET /api/library/feeds/on-this-day` | calendar month-day match, else milestone-year fallback | `mode` field discloses which path ran |
 | `GET /api/library/neighbors/{item_id}` | `item_neighbors` | Empty until `plot_neighbors` ran |
 | `GET /api/library/motifs` | `library_facets` where `facet_type='motif'` | Empty until motif task ran |
+| `GET /api/library/knowledge-coverage` | facet/neighbor/plot column counts | Honest % coverage for Admin/Explore |
+| `GET /api/library/query?motifs=…` | hybrid by default (`plot_match_mode`) | Motif ∪ keyword ∪ plot-text AND; `motifs` mode = facet-only |
+
+### Plot Lab multi-signal search
+
+Plot Lab chip walls used to AND only on stored motif facets. Because motif extraction is intentionally sparse (DF band + per-title budget), intersections like `bride` ∩ `coma` failed even when Plex/TMDB text contained both words and keywords already tagged revenge/martial-arts.
+
+**Default (`plot_match_mode=hybrid`):** for each selected token, a title matches if **any** of these layers hit:
+
+1. `library_facets` motif value
+2. `library_facets` keyword value (or keywords JSON fallback)
+3. Live plot text (`summary` / `tmdb_overview` / `tagline` / `llm_logline`)
+
+Tokens are still AND’d across the selection. Why? responses cite which layer matched (`match_layers`). Operators can switch to `plot_match_mode=motifs` for pure facet walls.
+
+This unlocks intersections without LLM tokens; richer synopsis sources and theme maps remain later phases.
 
 ### Watchdog and circuit breaker
 
 Each scheduler task runs with a configurable timeout (default 5 minutes). A per-task failure counter tracks consecutive failures; after 3 consecutive failures the task is **quarantined** — skipped on subsequent cycles until the cooldown period (default 1 hour) elapses or an admin clears it via `POST /api/admin/scheduled-tasks/{name}/reset`. Quarantine state is in-memory and resets on restart.
+
+### Why last-run-only failed (and what replaced it)
+
+For a long time Admin → Scheduled Tasks only persisted **last run** fields on `scheduled_tasks` (`last_run_at`, `last_duration_ms`, `last_status`, …). Live progress lines lived in an in-memory ring buffer (`TaskRunLogStore`) that **dies on restart**.
+
+That answered “did the last cycle succeed?” but not:
+
+- How fast are we actually clearing the backlog (items/hour)?
+- Is ETA honest, or just `remaining ÷ batch × interval` with idle time ignored?
+- Should batch/interval adapt when neighbors are thin but embeddings are full?
+
+**Fix:** every finished execution also appends a row to durable `scheduled_task_runs` (name, timestamps, duration, status, trigger, outcome, metrics JSON, items_processed, error). The in-memory log remains for live monitoring; **SQLite is the source of truth for history**. `data_retention` prunes runs older than `task_run_retention_days` (default **60**).
+
+Owner APIs:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/admin/scheduled-tasks/{name}/history` | Recent durable runs |
+| `GET /api/admin/scheduled-tasks/{name}/rate` | Aggregate items/hour, success rate, p50/p95 duration |
+| `GET /api/admin/scheduled-tasks` | Includes `rate`, `progress.eta_source` (`measured` \| `theoretical`), `items_per_cycle` |
+
+### Measured throughput and ETA
+
+`progress.py` still computes a **theoretical** ETA from `items_per_cycle × interval`. When enough productive history exists, the list payload prefers **measured** `items_per_hour` from `scheduled_task_runs` and sets `eta_source=measured`. Admin UI shows both the ETA line and a measured-rate summary (success %, p50/p95). Drafting a new cadence falls back to theoretical until history reflects the new interval.
+
+### Active auto-tune (batch + interval)
+
+Trickle tasks with a backlog expose a persisted `scheduled_tasks.items_per_cycle` column (seeded from the task definition, owner-overridable). After each successful productive run of:
+
+- `metadata_enrichment`
+- `semantic_embeddings`
+- `plot_neighbors`
+- `llm_logline_enrichment`
+
+the scheduler evaluates duration vs timeout and backlog ETA vs a target horizon (neighbors ≈ **7 days**), then nudges batch and/or interval within **safety caps** (e.g. neighbors batch 5–60, interval 15m–12h; LLM logline batch 1–10). Every decision is copied into that run’s `metrics` (`autotune_*` keys) for audit. Owners can still override interval and batch in Admin; the next tune only moves within caps.
+
+### Neighbor catch-up
+
+Embeddings can be complete while `item_neighbors` is still thin. `plot_neighbors` progress scope is **`neighbors_backlog`** (embedded titles missing neighbor rows), not a full embeddings pass. Each cycle **prefers seeds that lack neighbor rows**, then fills the remainder by rotating the embedding cursor — so auto-tune + catch-up densify the similarity graph without waiting on unrelated work.
+
+### Curator knowledge depth (product model)
+
+Library “understanding” is a **stack of dimensions** (identity → credits → keywords → plot text → motifs → themes → similarity graph), not a single motif wall. Short Plex/TMDB blurbs plus an 8-slot DF-capped unigram motif extract explain why Plot Lab AND intersections can miss titles that free text already describes (see the Kill Bill bride/coma case study).
+
+Educational guide for owners and household users: **[CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md)**. In-app: **`/help`**.
+
+**Roadmap hooks** (landing in parallel with this docs work):
+
+| Phase | Intent |
+|-------|--------|
+| A | Motif extraction quality + Plot Lab multi-signal AND (motifs ∪ keywords ∪ plot text) |
+| B | Durable `scheduled_task_runs`, measured throughput UI, auto-tune batch/interval |
+| C | Optional long synopsis + local keyword→theme (LLM last) |
+| D | Coverage UI + title Plot knowledge panel |
+
+Phase B is implemented: Admin Scheduled Tasks show durable recent runs, measured items/hour when history exists, and auto-tuned batch/interval for trickle tasks. Prefer free sources before LLM — provenance rules unchanged.
 
 ---
 
@@ -472,6 +545,8 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 
 ## Related documentation
 
+- [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) — why/what/how of library knowledge, idle curation, Plot Lab
+- [HELP.md](HELP.md) — in-app Help source (`/help`)
 - [DESIGN.md](DESIGN.md) — UX principles, agent tools
 - [DATA_MODEL.md](DATA_MODEL.md) — SQLite and PRD tables
 - [wiki/Home.md](wiki/Home.md) — operator wiki

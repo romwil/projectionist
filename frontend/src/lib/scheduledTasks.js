@@ -104,9 +104,11 @@ export function formatEtaDuration(seconds) {
 
 /**
  * Recompute trickle ETA when the owner adjusts cadence locally.
- * Uses remaining_items + items_per_cycle from the API progress payload.
+ * Prefers measured items/hour from run history when available and the draft
+ * cadence still matches the saved interval; otherwise falls back to theoretical
+ * remaining ÷ (items_per_cycle × cycles at draft interval).
  */
-export function estimateThroughputEta(progress, intervalSeconds) {
+export function estimateThroughputEta(progress, intervalSeconds, options = {}) {
   if (!progress) return null;
   const remaining = Number(progress.remaining_items);
   const perCycle = Number(progress.items_per_cycle);
@@ -115,10 +117,29 @@ export function estimateThroughputEta(progress, intervalSeconds) {
   if (!Number.isFinite(perCycle) || perCycle <= 0) return null;
   if (!Number.isFinite(interval) || interval < 60) return null;
   const cycles = remaining === 0 ? 0 : Math.ceil(remaining / perCycle);
+  const savedInterval = Number(options.savedIntervalSeconds ?? interval);
+  const measuredIph = Number(progress.items_per_hour);
+  const cadenceUnchanged =
+    Number.isFinite(savedInterval) && Math.abs(interval - savedInterval) < 1;
+  if (
+    progress.eta_source === "measured" &&
+    cadenceUnchanged &&
+    Number.isFinite(measuredIph) &&
+    measuredIph > 0
+  ) {
+    return {
+      ...progress,
+      estimated_cycles: cycles,
+      estimated_seconds: remaining === 0 ? 0 : Math.ceil((remaining / measuredIph) * 3600),
+      eta_source: "measured",
+      items_per_hour: measuredIph,
+    };
+  }
   return {
     ...progress,
     estimated_cycles: cycles,
     estimated_seconds: cycles * interval,
+    eta_source: "theoretical",
   };
 }
 
@@ -137,10 +158,48 @@ export function formatThroughputEstimate(progress) {
   const cycleBit = Number.isFinite(cycles)
     ? `${cycles} cycle${cycles === 1 ? "" : "s"}`
     : "several cycles";
+  const sourceBit = progress.eta_source === "measured" ? " (measured)" : "";
   return (
     `About ${remaining.toLocaleString()} ${scope} · ${perCycle}/run · ` +
-    `${cycleBit} ≈ ${eta} at this cadence`
+    `${cycleBit} ≈ ${eta} at this cadence${sourceBit}`
   );
+}
+
+/** Format measured rate payload from the API (items/hour, success rate). */
+export function formatMeasuredRate(rate) {
+  if (!rate) return "";
+  const iph = Number(rate.items_per_hour);
+  const success = Number(rate.success_rate);
+  const runs = Number(rate.run_count);
+  const parts = [];
+  if (Number.isFinite(iph) && iph > 0) {
+    const rounded = iph >= 10 ? Math.round(iph) : Math.round(iph * 10) / 10;
+    parts.push(`${rounded.toLocaleString()}/hr measured`);
+  }
+  if (Number.isFinite(success) && Number.isFinite(runs) && runs > 0) {
+    parts.push(`${Math.round(success * 100)}% success · ${runs} run${runs === 1 ? "" : "s"}`);
+  } else if (Number.isFinite(runs) && runs > 0) {
+    parts.push(`${runs} run${runs === 1 ? "" : "s"} in window`);
+  }
+  const p50 = Number(rate.duration_p50_ms);
+  const p95 = Number(rate.duration_p95_ms);
+  if (Number.isFinite(p50) && Number.isFinite(p95)) {
+    parts.push(`p50 ${formatDurationMs(p50)} · p95 ${formatDurationMs(p95)}`);
+  }
+  return parts.join(" · ");
+}
+
+/** Compact recent-run row for the history table. */
+export function formatHistoryRunLine(run) {
+  if (!run) return "";
+  const when = formatEpoch(run.finished_at ?? run.started_at);
+  const status = summarizeLastStatus(run.status);
+  const duration = formatDurationMs(run.duration_ms);
+  const items =
+    run.items_processed != null && Number.isFinite(Number(run.items_processed))
+      ? `${Number(run.items_processed).toLocaleString()} items`
+      : null;
+  return [when, status, duration, items].filter(Boolean).join(" · ");
 }
 
 export function formatDurationMs(ms) {

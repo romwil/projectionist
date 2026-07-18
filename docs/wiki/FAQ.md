@@ -8,13 +8,13 @@ A chat-first + Explore curator for self-hosted **Plex** libraries — and a real
 
 ## Is there still a dual UI (Turnstyle / Immersive)?
 
-No. CuratorX is a **single workspace**: sidebar conversations + full-width chat + status dock, with turnstyle / poster cards inside the chat stream, plus an **Explore** hub (`/explore`) for cinema browse. An optional overlay can expand large title-card result sets. Privacy / About live in the page footer (not the top bar).
+No. CuratorX is a **single workspace**: sidebar conversations + full-width chat + status dock, with turnstyle / poster cards inside the chat stream, plus an **Explore** hub (`/explore`) for cinema browse. An optional overlay can expand large title-card result sets. Help / Privacy / About live in the AppNav menu and page footer (not as top-bar icons).
 
 ## Which Docker image should I use?
 
 - Unraid / everyday: `romwil/curatorx:latest` (CA template default)
 - Track the line: `romwil/curatorx:1.8`
-- Pin exact: `romwil/curatorx:1.8.7`
+- Pin exact: `romwil/curatorx:1.8.8`
 
 Images are multi-arch (amd64 + arm64) and run as non-root.
 
@@ -54,9 +54,13 @@ CuratorX is a **taste-aware curator** over your library (RAG, persona, ratings, 
 
 Top-bar cinema icon → `/explore`. Browse rails read the same SQLite feeds as the agent. Chat stays the primary curation loop.
 
-## Why is “More Like This” empty?
+## Why is “More Like This” / Plot Lab empty?
 
-Idle tasks materialize `item_neighbors` after sync. Empty = cache not built yet. See [Library Sync](Library-Sync.md).
+Idle tasks materialize neighbors and motifs after sync (`plot_neighbors`, `summary_motifs`). Empty = cache not built yet — not a missing library. See [Library Sync](Library-Sync.md) and [CURATOR_KNOWLEDGE.md](../CURATOR_KNOWLEDGE.md).
+
+## Where is Help?
+
+In-app at **`/help`** ([HELP.md](../HELP.md)). Deeper guide: [CURATOR_KNOWLEDGE.md](../CURATOR_KNOWLEDGE.md).
 
 ## Lights Up vs Lights Down?
 

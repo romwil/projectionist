@@ -25,7 +25,8 @@ class MotifWhyTests(unittest.TestCase):
         self.assertEqual(why["matched_motifs"], ["extinction", "pennsylvania"])
         self.assertEqual(why["missed_motifs"], [])
         self.assertEqual(len(why["excerpts"]), 2)
-        self.assertIn("all of", why["summary"])
+        self.assertIn("plot motif", why["summary"])
+        self.assertEqual(len(why["match_layers"]), 2)
 
     def test_query_library_attaches_motif_why_and_requires_all_motifs(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

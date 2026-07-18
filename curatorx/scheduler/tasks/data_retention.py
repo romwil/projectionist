@@ -8,6 +8,7 @@ Tables pruned:
     - ``system_telemetry_stream`` — default 90-day retention
     - ``interaction_telemetry``   — default 90-day retention
     - ``daily_anniversaries``     — default 30-day retention (rebuilt daily)
+    - ``scheduled_task_runs``     — default 60-day retention (scheduler history)
 
 Runs at most once per day regardless of scheduler cycle frequency.
 Default interval: 24 hours.
@@ -16,12 +17,15 @@ Default interval: 24 hours.
 from __future__ import annotations
 
 import logging
-import time
 from typing import Any, Callable, Dict
 
 from curatorx.config_store import Settings
 from curatorx.library.db import Database
 from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
+from curatorx.scheduler.run_history import (
+    DEFAULT_RETENTION_DAYS as DEFAULT_TASK_RUN_RETENTION_DAYS,
+    prune_scheduled_task_runs,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +60,9 @@ async def run(
     anniversary_days = _get_retention_setting(
         settings, "anniversary_retention_days", DEFAULT_ANNIVERSARY_RETENTION_DAYS
     )
+    task_run_days = _get_retention_setting(
+        settings, "task_run_retention_days", DEFAULT_TASK_RUN_RETENTION_DAYS
+    )
 
     total_pruned = 0
     pruned_details: Dict[str, int] = {}
@@ -79,6 +86,13 @@ async def run(
 
     count = db.prune_daily_anniversaries(anniversary_days)
     pruned_details["daily_anniversaries"] = count
+    total_pruned += count
+
+    if should_stop():
+        return {"status": "interrupted", "pruned": pruned_details, "total_pruned": total_pruned}
+
+    count = prune_scheduled_task_runs(db, task_run_days)
+    pruned_details["scheduled_task_runs"] = count
     total_pruned += count
 
     vacuumed = False
@@ -113,8 +127,9 @@ def register(scheduler: IdleScheduler) -> None:
             enabled=True,
             run_fn=run,
             description=(
-                "Prunes old telemetry and anniversary rows past their retention windows "
-                "to keep the SQLite database from growing without bound."
+                "Prunes old telemetry, anniversary, and scheduled-task run-history rows "
+                "past their retention windows to keep the SQLite database from growing "
+                "without bound."
             ),
         )
     )

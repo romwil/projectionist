@@ -50,6 +50,34 @@ class ProgressEstimateTests(unittest.TestCase):
             self.assertEqual(progress["estimated_seconds"], 0)
             self.assertEqual(progress["items_per_cycle"], 25)
 
+    def test_neighbors_backlog_scope(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            self.assertEqual(db.count_items_missing_neighbors(), 0)
+            defn = TaskDefinition(
+                name="plot_neighbors",
+                run_interval_seconds=43200,
+                items_per_cycle=15,
+                progress_scope="neighbors_backlog",
+            )
+            progress = progress_for_definition(db, defn, interval_seconds=43200)
+            assert progress is not None
+            self.assertEqual(progress["scope"], "neighbors_backlog")
+            self.assertEqual(progress["remaining_items"], 0)
+
+    def test_measured_eta_overrides_theoretical(self) -> None:
+        progress = estimate_progress(
+            remaining=100,
+            items_per_cycle=25,
+            interval_seconds=21600,
+            library_size=500,
+            scope="neighbors_backlog",
+            items_per_hour=50,
+        )
+        assert progress is not None
+        self.assertEqual(progress["eta_source"], "measured")
+        self.assertEqual(progress["estimated_seconds"], 7200)
+
 
 if __name__ == "__main__":
     unittest.main()

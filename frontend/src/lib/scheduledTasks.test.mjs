@@ -5,9 +5,11 @@ import {
   estimateThroughputEta,
   formatDurationMs,
   formatEtaDuration,
+  formatHistoryRunLine,
   formatInterval,
   formatLastOutcomeLine,
   formatLogLine,
+  formatMeasuredRate,
   formatOutcomeReason,
   formatRunSummaryLine,
   formatTaskLastRun,
@@ -144,5 +146,57 @@ describe("scheduledTasks helpers", () => {
     );
     assert.equal(formatEtaDuration(0), "caught up");
     assert.equal(formatEtaDuration(90 * 86400), "~3mo");
+  });
+
+  it("prefers measured ETA when history rate is present", () => {
+    const progress = {
+      remaining_items: 100,
+      items_per_cycle: 25,
+      scope_label: "embedded titles still missing neighbor rows",
+      eta_source: "measured",
+      items_per_hour: 50,
+    };
+    const measured = estimateThroughputEta(progress, 43200, {
+      savedIntervalSeconds: 43200,
+    });
+    assert.equal(measured.eta_source, "measured");
+    assert.equal(measured.estimated_seconds, 7200);
+    assert.match(formatThroughputEstimate(measured), /measured/);
+
+    const drafted = estimateThroughputEta(progress, 3600, {
+      savedIntervalSeconds: 43200,
+    });
+    assert.equal(drafted.eta_source, "theoretical");
+    assert.equal(drafted.estimated_seconds, 14400);
+  });
+
+  it("formats measured rate and history lines", () => {
+    assert.match(
+      formatMeasuredRate({
+        items_per_hour: 12.4,
+        success_rate: 0.9,
+        run_count: 10,
+        duration_p50_ms: 1500,
+        duration_p95_ms: 4000,
+      }),
+      /12\/hr measured/,
+    );
+    assert.match(
+      formatMeasuredRate({
+        items_per_hour: 2.4,
+        success_rate: 1,
+        run_count: 2,
+      }),
+      /2\.4\/hr measured/,
+    );
+    assert.match(
+      formatHistoryRunLine({
+        finished_at: 1_700_000_000,
+        status: "completed",
+        duration_ms: 1500,
+        items_processed: 15,
+      }),
+      /Succeeded/,
+    );
   });
 });

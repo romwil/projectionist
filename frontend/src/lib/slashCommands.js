@@ -54,7 +54,12 @@ export function formatHelpMessage(curatorName = "Curator", { plexCollectionsEnab
   if (plexCollectionsEnabled) {
     lines.push("- `/collections` — list Plex movie and TV collections");
   }
-  lines.push("", "Type anything else to chat normally.");
+  lines.push(
+    "",
+    "Open **Help** in the nav menu (or `/help`) for Plot Lab, Explore, and idle-curation guidance.",
+    "",
+    "Type anything else to chat normally.",
+  );
   return lines.join("\n");
 }
 

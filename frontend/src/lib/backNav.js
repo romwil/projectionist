@@ -10,7 +10,9 @@ export const ROUTES = {
   watchlistSettings: "/settings/watchlist",
   settings: "/settings",
   admin: "/admin",
+  adminTasks: "/admin/tasks",
   about: "/about",
+  help: "/help",
 };
 
 /** @deprecated Use ROUTES.watchlist — kept for legacy deep links. */
@@ -89,6 +91,8 @@ export function backLabelForPath(path, { defaultLabel = "Back" } = {}) {
   if (normalized.startsWith("/title/")) return "Back to title";
   if (normalized.startsWith("/settings")) return "Back to settings";
   if (normalized.startsWith("/admin")) return "Back to admin";
+  if (normalized === ROUTES.help) return "Back to Help";
+  if (normalized === ROUTES.about) return "Back to About";
   return defaultLabel;
 }
 

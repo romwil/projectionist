@@ -202,10 +202,25 @@ export const PLOT_LAB_PAGE_SIZES = [20, 40, 50];
 export const DEFAULT_PLOT_LAB_PAGE_SIZE = 20;
 export const PLOT_LAB_MOTIF_CATALOG_LIMIT = 160;
 
+/** Plot Lab match modes: hybrid (default) unions motif ∪ keyword ∪ plot text. */
+export const PLOT_MATCH_MODES = ["hybrid", "motifs"];
+export const DEFAULT_PLOT_MATCH_MODE = "hybrid";
+
+export function normalizePlotMatchMode(raw) {
+  const value = String(raw || "").trim().toLowerCase();
+  if (value === "motifs" || value === "motif" || value === "pure") return "motifs";
+  return DEFAULT_PLOT_MATCH_MODE;
+}
+
 /** Build library query params for motif-filtered poster walls. */
 export function buildMotifQueryParams(
   motifs,
-  { limit = DEFAULT_PLOT_LAB_PAGE_SIZE, offset = 0, mediaType = null } = {},
+  {
+    limit = DEFAULT_PLOT_LAB_PAGE_SIZE,
+    offset = 0,
+    mediaType = null,
+    plotMatchMode = DEFAULT_PLOT_MATCH_MODE,
+  } = {},
 ) {
   const params = new URLSearchParams();
   const pageSize = normalizePageSize(limit, PLOT_LAB_PAGE_SIZES);
@@ -218,12 +233,15 @@ export function buildMotifQueryParams(
   if (cleaned.length) params.set("motifs", cleaned.join(","));
   const media = normalizeMediaTypeFilter(mediaType);
   if (media) params.set("media_type", media);
+  const mode = normalizePlotMatchMode(plotMatchMode);
+  // Always send mode so Plot Lab defaults stay explicit on the API.
+  params.set("plot_match_mode", mode);
   return params;
 }
 
 /**
  * Normalize Plot Lab “Why?” payload from a library query item.
- * Prefers server-attached motif_why / excerpts when present.
+ * Prefers server-attached motif_why / excerpts / match_layers when present.
  */
 export function resolveMotifWhy(item, selectedMotifs = []) {
   if (!item || typeof item !== "object") return null;
@@ -241,6 +259,16 @@ export function resolveMotifWhy(item, selectedMotifs = []) {
         }))
         .filter((entry) => entry.motif && entry.excerpt)
     : [];
+  const matchLayers = Array.isArray(item.match_layers)
+    ? item.match_layers
+        .map((entry) => ({
+          motif: String(entry?.motif || "").trim(),
+          layers: Array.isArray(entry?.layers)
+            ? entry.layers.map((layer) => String(layer || "").trim()).filter(Boolean)
+            : [],
+        }))
+        .filter((entry) => entry.motif && entry.layers.length)
+    : [];
   const summary = String(item.motif_why || "").trim();
   if (!matched.length && !summary && selected.length < 1) return null;
   if (!matched.length && !summary) return null;
@@ -248,11 +276,12 @@ export function resolveMotifWhy(item, selectedMotifs = []) {
     matched,
     selected,
     excerpts,
+    matchLayers,
     summary:
       summary ||
       (matched.length
-        ? `Selected because its plot motifs include ${matched.map((m) => `“${m}”`).join(", ")}.`
-        : "Selected motifs are linked via plot facets."),
+        ? `Selected because its plot signals include ${matched.map((m) => `“${m}”`).join(", ")}.`
+        : "Selected motifs are linked via plot signals."),
   };
 }
 

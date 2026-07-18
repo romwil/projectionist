@@ -44,6 +44,7 @@ test("formatHelpMessage lists core slash commands", () => {
   for (const command of ["help", "stats", "sync", "rate", "purge"]) {
     assert.match(text, new RegExp(`/${command}`));
   }
+  assert.match(text, /Open \*\*Help\*\*/);
   assert.doesNotMatch(text, /\/collections/);
 });
 

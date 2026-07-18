@@ -2353,6 +2353,42 @@ class Database:
             row = conn.execute("SELECT COUNT(*) AS cnt FROM embeddings").fetchone()
             return int(row["cnt"] if row else 0)
 
+    def count_items_missing_neighbors(self) -> int:
+        """Count embedded titles that still have no ``item_neighbors`` rows.
+
+        Used by ``plot_neighbors`` catch-up ETA — embeddings can be complete while
+        the neighbor cache is still thin.
+        """
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT COUNT(*) AS cnt
+                FROM embeddings e
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM item_neighbors n WHERE n.item_id = e.item_id
+                )
+                """
+            ).fetchone()
+            return int(row["cnt"] if row else 0)
+
+    def item_ids_missing_neighbors(self, *, limit: int = 50) -> List[int]:
+        """Return embedding item ids that still lack neighbor cache rows."""
+        capped = max(1, int(limit))
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT e.item_id AS item_id
+                FROM embeddings e
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM item_neighbors n WHERE n.item_id = e.item_id
+                )
+                ORDER BY e.item_id ASC
+                LIMIT ?
+                """,
+                (capped,),
+            ).fetchall()
+            return [int(row["item_id"]) for row in rows]
+
     def set_llm_logline(self, item_id: int, logline: str) -> None:
         cleaned = str(logline or "").strip()
         if not cleaned:
@@ -2435,7 +2471,7 @@ class Database:
         return out
 
     def plot_text_for_items(self, item_ids: Sequence[int]) -> Dict[int, str]:
-        """Return ``item_id → summary + overview`` text used for motif extraction."""
+        """Return ``item_id → layered plot text`` for motif Why? / hybrid match excerpts."""
         ids = [int(i) for i in item_ids if i is not None]
         if not ids:
             return {}
@@ -2445,9 +2481,13 @@ class Database:
             overview_select = (
                 "tmdb_overview" if "tmdb_overview" in cols else "'' AS tmdb_overview"
             )
+            tagline_select = "tagline" if "tagline" in cols else "'' AS tagline"
+            logline_select = (
+                "llm_logline" if "llm_logline" in cols else "'' AS llm_logline"
+            )
             rows = conn.execute(
                 f"""
-                SELECT id, summary, {overview_select}
+                SELECT id, summary, {overview_select}, {tagline_select}, {logline_select}
                 FROM library_items
                 WHERE id IN ({placeholders})
                 """,
@@ -2458,6 +2498,8 @@ class Database:
             parts = [
                 str(row["summary"] or "").strip(),
                 str(row["tmdb_overview"] or "").strip(),
+                str(row["tagline"] or "").strip(),
+                str(row["llm_logline"] or "").strip(),
             ]
             out[int(row["id"])] = "\n".join(part for part in parts if part)
         return out

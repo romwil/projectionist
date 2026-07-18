@@ -70,6 +70,8 @@ class QuickPickApiTests(unittest.TestCase):
         body = resp.json()
         self.assertIsNotNone(body["item"])
         self.assertEqual(body["item"]["title"], "Fresh Pick")
+        self.assertTrue(body["item"]["in_library"])
+        self.assertIn("overview", body["item"])
         self.assertEqual(body["item"]["genres"], ["Science Fiction"])
         self.assertIn("why", body)
         self.assertTrue(body["why"])

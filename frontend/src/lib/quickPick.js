@@ -4,6 +4,26 @@ export const QUICK_PICK_EMPTY_MESSAGE = "No unwatched titles match the criteria.
 export const QUICK_PICK_ERROR_FALLBACK = "Couldn't pick a title right now.";
 
 /**
+ * Coerce API genres (array or JSON string) so TitleCard never crashes on `.join`.
+ * @param {unknown} genres
+ * @returns {string[]}
+ */
+export function normalizeQuickPickGenres(genres) {
+  if (Array.isArray(genres)) {
+    return genres.map((g) => String(g));
+  }
+  if (typeof genres === "string" && genres.trim()) {
+    try {
+      const parsed = JSON.parse(genres);
+      return Array.isArray(parsed) ? parsed.map((g) => String(g)) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/**
  * @param {unknown} result
  * @returns {{ item: object | null, why: string | null, status: "ready" | "empty", message: string | null }}
  */
@@ -13,8 +33,17 @@ export function normalizeQuickPickResult(result) {
     result && typeof result === "object" && typeof result.why === "string" ? result.why : null;
 
   if (item && typeof item === "object") {
+    const overview =
+      (typeof item.overview === "string" && item.overview.trim()) ||
+      (typeof item.summary === "string" ? item.summary : "") ||
+      "";
     return {
-      item,
+      item: {
+        ...item,
+        genres: normalizeQuickPickGenres(item.genres),
+        overview,
+        in_library: true,
+      },
       why,
       status: "ready",
       message: null,

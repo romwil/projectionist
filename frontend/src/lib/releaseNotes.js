@@ -95,5 +95,10 @@ export async function fetchReleaseNotes(fetchImpl = globalThis.fetch) {
   if (!response.ok) {
     throw new Error(`Failed to load release notes (${response.status})`);
   }
+  const contentType = String(response.headers?.get?.("content-type") || "").toLowerCase();
+  // FastAPI SPA shells must not be mistaken for JSON when the static file is missing.
+  if (contentType.includes("text/html")) {
+    throw new Error("Failed to load release notes (HTML response)");
+  }
   return response.json();
 }

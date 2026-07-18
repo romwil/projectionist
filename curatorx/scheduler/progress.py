@@ -25,6 +25,8 @@ def count_remaining(db: Database, scope: Optional[str]) -> Optional[int]:
         return db.count_items_needing_embeddings()
     if scope == "embeddings_pass":
         return db.count_embeddings()
+    if scope == "neighbors_backlog":
+        return db.count_items_missing_neighbors()
     return None
 
 
@@ -35,11 +37,13 @@ def estimate_progress(
     interval_seconds: int,
     library_size: int,
     scope: Optional[str],
+    items_per_hour: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     """Build a progress/ETA payload for trickle tasks.
 
     ``estimated_seconds`` assumes one cycle every ``interval_seconds`` and that
-    each cycle processes ``items_per_cycle`` items (idle time ignored).
+    each cycle processes ``items_per_cycle`` items (idle time ignored), unless
+    ``items_per_hour`` is provided from measured run history.
     """
     if items_per_cycle is None or items_per_cycle <= 0 or remaining is None:
         return None
@@ -52,16 +56,27 @@ def estimate_progress(
         "llm_logline_backlog": "titles still needing an LLM logline",
         "embeddings_pending": "titles with plot text still needing embeddings",
         "embeddings_pass": "embedded titles in one full neighbor pass",
+        "neighbors_backlog": "embedded titles still missing neighbor rows",
     }
-    return {
+    if items_per_hour is not None and float(items_per_hour) > 0 and remaining > 0:
+        estimated_seconds = int(math.ceil((remaining / float(items_per_hour)) * 3600))
+        eta_source = "measured"
+    else:
+        estimated_seconds = cycles * interval
+        eta_source = "theoretical"
+    payload: Dict[str, Any] = {
         "scope": scope,
         "scope_label": scope_labels.get(scope or "", "remaining work"),
         "remaining_items": remaining,
         "items_per_cycle": per_cycle,
         "library_size": int(library_size),
         "estimated_cycles": cycles,
-        "estimated_seconds": cycles * interval,
+        "estimated_seconds": estimated_seconds,
+        "eta_source": eta_source,
     }
+    if items_per_hour is not None:
+        payload["items_per_hour"] = float(items_per_hour)
+    return payload
 
 
 def progress_for_definition(
@@ -69,16 +84,22 @@ def progress_for_definition(
     defn: Optional[_HasProgress],
     *,
     interval_seconds: int,
+    items_per_cycle: Optional[int] = None,
+    items_per_hour: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     """Resolve progress for a registered task definition."""
-    if defn is None or defn.items_per_cycle is None:
+    if defn is None:
+        return None
+    batch = items_per_cycle if items_per_cycle is not None else defn.items_per_cycle
+    if batch is None:
         return None
     library_size = int(db.library_counts().get("items") or 0)
     remaining = count_remaining(db, defn.progress_scope)
     return estimate_progress(
         remaining=remaining,
-        items_per_cycle=defn.items_per_cycle,
+        items_per_cycle=batch,
         interval_seconds=interval_seconds,
         library_size=library_size,
         scope=defn.progress_scope,
+        items_per_hour=items_per_hour,
     )

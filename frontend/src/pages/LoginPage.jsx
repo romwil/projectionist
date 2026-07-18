@@ -340,6 +340,10 @@ export default function LoginPage() {
         ) : null}
 
         <p className="login-footer">
+          <Link to="/help" data-testid="help-link">
+            Help
+          </Link>
+          {" · "}
           <Link to="/privacy" data-testid="privacy-link">
             Privacy &amp; data use
           </Link>

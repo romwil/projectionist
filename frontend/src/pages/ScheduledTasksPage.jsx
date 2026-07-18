@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  getScheduledTaskHistory,
   getScheduledTaskLog,
   listScheduledTasks,
   resetScheduledTaskQuarantine,
@@ -11,9 +12,11 @@ import {
   estimateThroughputEta,
   formatDurationMs,
   formatEpoch,
+  formatHistoryRunLine,
   formatInterval,
   formatLastOutcomeLine,
   formatLogLine,
+  formatMeasuredRate,
   formatThroughputEstimate,
   formatTaskLastRun,
   formatTaskLastRunDetail,
@@ -48,6 +51,8 @@ export default function ScheduledTasksPage() {
   const [optimisticStart, setOptimisticStart] = useState(null);
   const [draftInterval, setDraftInterval] = useState(null);
   const [customHours, setCustomHours] = useState("");
+  const [draftBatch, setDraftBatch] = useState(null);
+  const [historyRuns, setHistoryRuns] = useState([]);
   const logEndRef = useRef(null);
   const latestSeqRef = useRef(0);
   const warmExploreNames = useMemo(() => resolveWarmExploreTasks(items), [items]);
@@ -61,16 +66,25 @@ export default function ScheduledTasksPage() {
     if (!selected) {
       setDraftInterval(null);
       setCustomHours("");
+      setDraftBatch(null);
       return;
     }
     const seconds = Number(selected.run_interval_seconds) || MIN_INTERVAL_SECONDS;
     setDraftInterval(seconds);
     const preset = CADENCE_PRESETS.some((item) => item.seconds === seconds);
     setCustomHours(preset ? "" : String(Math.round((seconds / 3600) * 100) / 100));
-  }, [selectedName, selected?.run_interval_seconds]);
+    setDraftBatch(
+      selected.items_per_cycle != null ? Number(selected.items_per_cycle) : null,
+    );
+  }, [selectedName, selected?.run_interval_seconds, selected?.items_per_cycle]);
 
   const liveProgress = useMemo(
-    () => estimateThroughputEta(selected?.progress, draftInterval ?? selected?.run_interval_seconds),
+    () =>
+      estimateThroughputEta(
+        selected?.progress,
+        draftInterval ?? selected?.run_interval_seconds,
+        { savedIntervalSeconds: selected?.run_interval_seconds },
+      ),
     [selected?.progress, draftInterval, selected?.run_interval_seconds],
   );
 
@@ -78,6 +92,12 @@ export default function ScheduledTasksPage() {
     selected != null &&
     draftInterval != null &&
     Number(draftInterval) !== Number(selected.run_interval_seconds);
+
+  const batchDirty =
+    selected != null &&
+    selected.items_per_cycle != null &&
+    draftBatch != null &&
+    Number(draftBatch) !== Number(selected.items_per_cycle);
 
   const selectedOutcome = useMemo(() => {
     if (!selected && !lastRun) {
@@ -173,8 +193,12 @@ export default function ScheduledTasksPage() {
     setCurrentRun(null);
     setLastRun(null);
     setOptimisticStart(null);
+    setHistoryRuns([]);
     if (selectedName) {
       refreshLog({ reset: true });
+      getScheduledTaskHistory(selectedName, { limit: 12 })
+        .then((data) => setHistoryRuns(data.runs || []))
+        .catch(() => setHistoryRuns([]));
     }
   }, [selectedName, refreshLog]);
 
@@ -250,6 +274,14 @@ export default function ScheduledTasksPage() {
       await fn();
       await refreshList();
       await refreshLog({ reset: false });
+      if (name === selectedName) {
+        try {
+          const data = await getScheduledTaskHistory(name, { limit: 12 });
+          setHistoryRuns(data.runs || []);
+        } catch {
+          /* keep prior history */
+        }
+      }
     } catch (err) {
       setActionError(err.message || "Action failed");
     } finally {
@@ -314,6 +346,23 @@ export default function ScheduledTasksPage() {
       MIN_INTERVAL_SECONDS;
     setDraftInterval(clampInterval(fallback));
     setCustomHours("");
+  }
+
+  function handleSaveBatch() {
+    if (!selected || draftBatch == null) return;
+    const next = Math.max(1, Math.min(500, Math.round(Number(draftBatch))));
+    return withBusy(selected.name, async () => {
+      await updateScheduledTask(selected.name, { items_per_cycle: next });
+    });
+  }
+
+  function handleResetBatch() {
+    if (!selected) return;
+    const fallback =
+      selected.default_items_per_cycle != null
+        ? Number(selected.default_items_per_cycle)
+        : Number(selected.items_per_cycle);
+    if (Number.isFinite(fallback)) setDraftBatch(fallback);
   }
 
   function handleResetQuarantine(name) {
@@ -618,6 +667,82 @@ export default function ScheduledTasksPage() {
                   >
                     {formatThroughputEstimate(liveProgress)}
                   </p>
+                ) : null}
+                {selected.rate && formatMeasuredRate(selected.rate) ? (
+                  <p
+                    className="scheduled-task-measured-rate"
+                    data-testid="task-measured-rate"
+                  >
+                    {formatMeasuredRate(selected.rate)}
+                  </p>
+                ) : null}
+                {selected.items_per_cycle != null ? (
+                  <div className="scheduled-task-batch" data-testid="task-batch-panel">
+                    <label htmlFor="task-batch-size">
+                      Items per run
+                      <input
+                        id="task-batch-size"
+                        type="number"
+                        min="1"
+                        max="500"
+                        step="1"
+                        value={draftBatch ?? ""}
+                        data-testid="batch-size-input"
+                        disabled={busyNames.has(selected.name)}
+                        onChange={(event) => {
+                          const value = Number(event.target.value);
+                          if (Number.isFinite(value)) setDraftBatch(value);
+                          else setDraftBatch(null);
+                        }}
+                      />
+                    </label>
+                    <div className="scheduled-task-cadence-actions">
+                      <button
+                        type="button"
+                        className="ghost"
+                        data-testid="batch-reset"
+                        disabled={busyNames.has(selected.name)}
+                        onClick={handleResetBatch}
+                      >
+                        Reset default
+                      </button>
+                      <button
+                        type="button"
+                        data-testid="batch-save"
+                        disabled={
+                          busyNames.has(selected.name) || !batchDirty || draftBatch == null
+                        }
+                        onClick={handleSaveBatch}
+                      >
+                        Save batch
+                      </button>
+                    </div>
+                    {selected.autotune_enabled ? (
+                      <p className="scheduled-task-meta">
+                        Auto-tune adjusts batch/interval after successful runs within safety
+                        caps. Your saved values stick until the next tune or manual edit.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+                {historyRuns.length ? (
+                  <div
+                    className="scheduled-task-history"
+                    data-testid="task-run-history"
+                  >
+                    <h4 className="scheduled-task-cadence-title">Recent runs</h4>
+                    <ul className="scheduled-task-history-list">
+                      {historyRuns.slice(0, 8).map((run) => (
+                        <li
+                          key={run.id}
+                          className="scheduled-task-history-item"
+                          data-testid={`task-history-row-${run.id}`}
+                        >
+                          {formatHistoryRunLine(run)}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ) : null}
               </div>
             ) : null}

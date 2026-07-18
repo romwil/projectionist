@@ -48,6 +48,7 @@ export default function AppNav({
   if (isOwner) {
     items.push({ id: "admin", to: ROUTES.admin, label: "Admin", testId: "app-nav-admin" });
   }
+  items.push({ id: "help", to: ROUTES.help, label: "Help", testId: "app-nav-help" });
   items.push({ id: "about", to: ROUTES.about, label: "About", testId: "app-nav-about" });
 
   function handleWatchlistClick() {

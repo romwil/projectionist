@@ -1,6 +1,6 @@
 # CuratorX — Docker / Unraid
 
-Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Everyday tag: **`romwil/curatorx:latest`** (CA default). Pin **`:1.8`** or **`:1.8.7`** when you need a fixed line or exact build.
+Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Everyday tag: **`romwil/curatorx:latest`** (CA default). Pin **`:1.8`** or **`:1.8.8`** when you need a fixed line or exact build.
 
 ---
 
@@ -103,7 +103,7 @@ Install from the Community Applications template (`templates/curatorx.xml` or `u
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/curatorx/config` → `/config` |
-| **Image** | `romwil/curatorx:latest` (or `:1.8` / `:1.8.7`) — multi-arch amd64+arm64 |
+| **Image** | `romwil/curatorx:latest` (or `:1.8` / `:1.8.8`) — multi-arch amd64+arm64 |
 
 Optional advanced env (or generate in **Admin → Advanced**): `CURATORX_MCP_API_KEY` (privacy) and `CURATORX_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
@@ -134,7 +134,7 @@ CA XML remains the human install source of truth. For pull/recreate rollouts (po
 ssh automat
 cd /mnt/user/appdata/curatorx
 ./rollout.sh           # :latest
-./rollout.sh 1.8.7     # pin a release tag
+./rollout.sh 1.8.8     # pin a release tag
 ```
 
 `rollout.sh` uses plain Docker CLI on Unraid (Compose is usually absent). If `docker compose` / `docker-compose` is available it prefers that instead. Same-named containers are stop/rm only — `./config` is never wiped. Optional seed env: copy `.env.example` → `.env` (secrets usually already live in `config/`).

@@ -135,6 +135,8 @@ export default function AdminLayout() {
         <Outlet context={{ setWizardMode }} />
       </main>
       <footer className="app-footer app-footer-full" data-testid="app-footer">
+        <Link to="/help" className="app-footer-link">Help</Link>
+        <span className="app-footer-sep">·</span>
         <Link to="/privacy" className="app-footer-link">Privacy</Link>
         <span className="app-footer-sep">·</span>
         <Link to="/about" className="app-footer-link">About</Link>

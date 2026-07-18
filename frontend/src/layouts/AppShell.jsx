@@ -5,13 +5,16 @@ import { useAuthGate } from "../components/UserMenu";
 import { libraryDeleteNoticeFromState } from "../lib/bulkLibraryDelete.js";
 
 /**
- * Shared chrome for authenticated browse / detail routes.
+ * Shared chrome for browse / detail routes.
  * Always provides hamburger AppNav; leaf pages pass BackLink via `leading` or `actions`.
  *
  * Variants:
  * - topbar  — Explore / Tags / Plot Lab (brand titles + actions)
  * - browse  — person / tag / section (toggle + BackLink, no page title in chrome)
  * - sticky  — title detail sticky header
+ *
+ * Set requireAuth={false} for public pages (e.g. About) so multi-user mode
+ * does not redirect anonymous visitors to /login.
  */
 export default function AppShell({
   children,
@@ -24,8 +27,9 @@ export default function AppShell({
   actions = null,
   headerClassName,
   showTitles = true,
+  requireAuth = true,
 }) {
-  const { isOwner } = useAuthGate();
+  const { isOwner } = useAuthGate({ redirect: requireAuth });
   const location = useLocation();
   const [navOpen, setNavOpen] = useState(false);
   const [libraryDeleteNotice, setLibraryDeleteNotice] = useState("");

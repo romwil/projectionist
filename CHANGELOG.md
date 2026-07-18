@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [1.8.8] — 2026-07-17
+
+Library knowledge Wave 1: richer motif extraction, multi-signal Plot Lab AND, durable scheduled-task run history with measured rate and auto-tune, in-app Help + curator knowledge guide, plus About/Surprise Me/sidebar polish.
+
+### Added
+- **Help** (`/help`): in-app guide from `docs/HELP.md` with role-aware jump links (browse/chat for everyone; owners see curation, Scheduled Tasks, coverage, LLM-vs-free). Entry points in AppNav, footer, user menu, login, keyboard `?` modal, and `/help` slash-command note.
+- **Curator knowledge guide** (`docs/CURATOR_KNOWLEDGE.md`): educational why/what/how for library knowledge dimensions, Kill Bill bride∩coma sparsity case study, idle-task trickle, coverage expectations, and Phase A–D roadmap hooks (multi-signal Plot Lab, durable run history / auto-tune, long synopsis, coverage UI).
+- Motif extraction upgrades: possessive normalize, bigrams, keyword-stem retention, higher per-title budget; sources include tagline + optional `llm_logline`.
+- Plot Lab **Multi-signal** / **Motifs only** modes (`plot_match_mode`); Why? cites match layers (`match_layers`).
+- Knowledge coverage stats on `/api/library/stats` (`knowledge_coverage`) and `GET /api/library/knowledge-coverage`.
+- **Durable scheduled-task run history** (`scheduled_task_runs`): every idle/manual run is persisted with metrics, items processed, and outcome; Admin shows recent runs + measured items/hour (p50/p95 duration, success rate). Retention via `data_retention` (`task_run_retention_days`, default 60).
+- **Scheduler auto-tune** for trickle tasks (`metadata_enrichment`, `semantic_embeddings`, `plot_neighbors`, `llm_logline_enrichment`): persists tunable `items_per_cycle`, safely raises/lowers batch and interval from measured duration vs timeout and backlog ETA vs target horizon; decisions logged in run metrics. Owner can still override cadence and batch in Admin.
+- **Neighbor catch-up**: `plot_neighbors` progress scope is titles missing neighbor rows (`neighbors_backlog`); cycles prefer those seeds so a full library can densify with auto-tune.
+- Owner APIs: `GET /api/admin/scheduled-tasks/{name}/history`, `GET /api/admin/scheduled-tasks/{name}/rate`; `PUT` accepts `items_per_cycle`.
+
+### Fixed
+- **About / What’s New release notes**: FastAPI now serves `/release-notes.json` from `frontend/dist` (Vite root public file). Previously only `/assets/*` was mounted, so Docker builds returned 404 and the About page showed “Could not load release notes.”
+- **Surprise Me no-op**: quick-pick card now mounts below the transcript (near the composer) and scrolls into view on click; normalize API `summary`→`overview`, `in_library`, and genres so loading/empty/error feedback is always visible.
+- **Plot Lab intersections**: sparse motif facets no longer brick AND walls — hybrid mode matches each token via motifs ∪ keywords ∪ live plot text (e.g. `bride` + `coma` → Kill Bill).
+
+### Changed
+- **About page** (`/about`): AppShell chrome (hamburger AppNav + BackLink), explore reading-column layout, and Fraunces/DM Sans section typography aligned with Explore/Settings; remains public when multi-user auth is on.
+- **Sidebar library totals**: server name / movie·show counts moved from under Conversations to the sidebar footer above Explore + Watchlist.
+- **Docs**: `ARCHITECTURE.md`, `DATA_MODEL.md`, `FAQ.md`, `ONBOARDING.md`, and `WEB_UI.md` link the knowledge guide and Help; onboarding adds a post-sync “warm library knowledge” checklist. Motif sparsity + multi-signal Plot Lab documented in `DATA_MODEL` / `ARCHITECTURE`. Idle-scheduler history, measured ETA, and auto-tune safety caps documented in `ARCHITECTURE` / `CONFIGURATION`.
+- Admin Scheduled Tasks ETA prefers measured throughput when history exists (falls back to theoretical `progress.py`).
+
 ## [1.8.7] — 2026-07-17
 
 Sidebar conversation layout polish, turnstile Why? collapsed by default, faster watchlist loads, and consistent centered Play on in-library posters.

@@ -10,7 +10,7 @@ This guide describes what you see after opening CuratorX in a browser — whethe
 
 1. **Open the app** — In your browser, go to the host and port where CuratorX is running (for example `http://your-unraid-ip:8788` or the URL in your compose file).
 2. **Setup banner** — If Plex, TMDB, or your LLM provider are not configured yet, a banner appears under the top bar: *Finish setup in Settings…* Click **Config** in the top bar to open the wizard.
-3. **Top bar** — **CuratorX** (display brand), your curator name, a small **agent pulse** (chat idle / thinking / error), quiet **Plex server name · movie/show counts**, optional streak / watchlist pins chips, **Admin** (owners) / **Settings**, and an optional avatar menu when multi-user is on. **About** is not in the top bar — use the page footer or Settings.
+3. **Top bar** — **CuratorX** (display brand), your curator name, a small **agent pulse** (chat idle / thinking / error), quiet **Plex server name · movie/show counts**, optional streak / watchlist pins chips, **Admin** (owners) / **Settings**, and an optional avatar menu when multi-user is on. **Help** and **About** live in the hamburger AppNav, footer, and user menu (not as top-bar icons).
 4. **Conversation sidebar** — On the left, past chats and **New**. Collapse with `«` / `»` on smaller screens. The **watchlist panel** and **status dock** (sync jobs, confirmations) live at the bottom of this sidebar.
 5. **Main chat** — Wide reading column (~80%): recommendations inbox (multi-user), messages, title cards, ambient context tag, composer with persona selector.
 6. **Status dock** — In the sidebar bottom: background jobs (library sync, idle scheduler), and single-title Radarr/Sonarr confirms. Drop a title card onto the dock while dragging to queue an add — the drop hint appears only during drag.
@@ -66,6 +66,10 @@ With `features.multi_user_enabled` left at `false` (the default), CuratorX runs 
 | `/title/{movie\|show}/{id}` | Title detail — backdrop hero, trailer modal, Watch on Plex, purge notes |
 | `/privacy` | Privacy disclosure (no login) |
 | `/about` | About / version |
+| `/help` | Help guide — Chat, Explore, Plot Lab, owner idle curation (no login; role-aware sections) |
+| `/explore` | Explore hub (feed rails) |
+| `/explore/plot-lab` | Plot Lab — motif walls, Why?, surprising neighbors |
+| `/admin/tasks` | Owner Scheduled Tasks (cadence, batch, measured rate, run history, ETA) |
 | `/login` | Multi-user login (configured auth methods) |
 
 Session ID persists in `localStorage` for chat continuity across reloads.
@@ -248,7 +252,7 @@ When `features.multi_user_enabled` is `true` in settings:
 1. The app loads `GET /api/features` and `GET /api/auth/me`.
 2. If features show multi-user mode and `/api/auth/me` returns **401**, the browser redirects to **`/login`**. API middleware also requires a session for almost all `/api/*` (see [SECURITY.md](SECURITY.md)).
 3. Sign in with a configured method (**Plex PIN**, **local password**, and/or **OIDC**). For Plex, CuratorX starts an Overseerr-style plex.tv PIN flow. Approve in the Plex window; CuratorX polls until authorized and stores a signed **HttpOnly** session cookie. Token paste is an advanced fallback only.
-4. After login, the main chat UI loads. The top bar shows an avatar menu with display name, role, and **Sign out**. Privacy / About remain in the footer.
+4. After login, the main chat UI loads. The top bar shows an avatar menu with display name, role, **Help**, and **Sign out**. Help / Privacy / About remain in the footer.
 5. **Owners** manage household users and the dashboard under **Admin**. **Members** use **Settings** for personal prefs (including font size); Seerr request buttons appear instead of Radarr/Sonarr adds when Seerr is enabled.
 
 When multi-user is **off** (default), there is no login screen and the bootstrap owner is used implicitly.
@@ -261,8 +265,22 @@ Single-owner installs have no built-in authentication — run on a trusted LAN o
 
 ---
 
+## Help & knowledge
+
+| Surface | Audience | Content |
+|---------|----------|---------|
+| `/help` ([HELP.md](HELP.md)) | Everyone; owner sections when `isOwner` | Chat, Explore, Plot Lab, sparse-wall explanation; owners get scheduler / coverage / LLM-vs-free guidance |
+| [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) | Operators + curious users | Full why/what/how of knowledge dimensions, idle trickle, roadmap hooks for Phases A–D |
+| Admin → Scheduled Tasks | Owners | Cadence, last-run, ETA; deep-linked from Help and cold Explore empty states |
+
+Jump links on Help highlight **Owners** + Scheduled Tasks for owners; members/guests see browse/chat guidance and are pointed at the server owner for sync.
+
+---
+
 ## Related documentation
 
+- [HELP.md](HELP.md) — in-app Help source
+- [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) — library knowledge depth
 - [SECURITY.md](SECURITY.md) — threat model and living findings (S1–S13)
 - [DESIGN.md](DESIGN.md) — block schema, interaction patterns
 - [ARCHITECTURE.md](ARCHITECTURE.md) — chat and sync data flows

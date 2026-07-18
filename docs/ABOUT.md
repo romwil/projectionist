@@ -14,10 +14,12 @@ For the full MCP protocol surface and integration guide, see [MCP.md](MCP.md).
 
 ## Links
 
+- **Help** — [HELP.md](HELP.md) (also in-app at `/help`)
+- **Curator knowledge** — [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md)
 - **Privacy & data use** — [PRIVACY.md](PRIVACY.md) (also in-app at `/privacy`)
 - **Security assessment** — [SECURITY.md](SECURITY.md)
 - **Architecture** — [ARCHITECTURE.md](ARCHITECTURE.md)
 - **MCP integration** — [MCP.md](MCP.md)
 - **Changelog** — [../CHANGELOG.md](../CHANGELOG.md)
 
-Primary About UI lives at `/about` in the app (footer + Settings links; not top-nav). This file is the short docs companion.
+Primary About UI lives at `/about` in the app (AppNav + footer; not a top-bar icon). Help is at `/help`. This file is the short docs companion.

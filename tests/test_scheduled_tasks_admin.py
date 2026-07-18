@@ -438,6 +438,37 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         cycles = 0 if remaining == 0 else (remaining + 24) // 25
         self.assertEqual(body["progress"]["estimated_seconds"], cycles * 3600)
 
+    def test_history_and_rate_endpoints_after_run(self) -> None:
+        self._write_settings(multi_user=False)
+        name = "health_metrics"
+        with patch.object(
+            self.app_mod.app.state.idle_scheduler._definitions[name],
+            "run_fn",
+            _metrics_task,
+        ):
+            run = self.client.post(f"/api/admin/scheduled-tasks/{name}/run?wait=true")
+            self.assertEqual(run.status_code, 200, run.text)
+            self.assertEqual(run.json()["status"], "completed")
+
+        history = self.client.get(f"/api/admin/scheduled-tasks/{name}/history")
+        self.assertEqual(history.status_code, 200, history.text)
+        body = history.json()
+        self.assertGreaterEqual(body["count"], 1)
+        self.assertEqual(body["runs"][0]["items_processed"], 5)
+
+        rate = self.client.get(f"/api/admin/scheduled-tasks/{name}/rate")
+        self.assertEqual(rate.status_code, 200, rate.text)
+        self.assertEqual(rate.json()["items_processed_total"], 5)
+
+        batch = self.client.put(
+            "/api/admin/scheduled-tasks/plot_neighbors",
+            json={"items_per_cycle": 30},
+        )
+        self.assertEqual(batch.status_code, 200, batch.text)
+        self.assertEqual(batch.json()["items_per_cycle"], 30)
+        self.assertEqual(batch.json()["progress_scope"], "neighbors_backlog")
+        self.assertTrue(batch.json().get("autotune_enabled"))
+
 
 if __name__ == "__main__":
     unittest.main()

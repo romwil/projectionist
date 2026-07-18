@@ -14,6 +14,7 @@ import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
 import {
   DEFAULT_PLOT_LAB_PAGE_SIZE,
+  DEFAULT_PLOT_MATCH_MODE,
   PLOT_LAB_MOTIF_CATALOG_LIMIT,
   PLOT_LAB_PAGE_SIZES,
   buildMotifQueryParams,
@@ -22,6 +23,7 @@ import {
   normalizeMediaTypeFilter,
   normalizeMotifFacets,
   normalizePageSize,
+  normalizePlotMatchMode,
   resolveMotifWhy,
   toggleMotifSelection,
 } from "../lib/exploreFeeds.js";
@@ -107,6 +109,7 @@ export default function PlotLabPage() {
   const [motifsLoading, setMotifsLoading] = useState(true);
   const [selectedMotifs, setSelectedMotifs] = useState([]);
   const [mediaType, setMediaType] = useState(null);
+  const [plotMatchMode, setPlotMatchMode] = useState(DEFAULT_PLOT_MATCH_MODE);
   const [pageSize, setPageSize] = useState(DEFAULT_PLOT_LAB_PAGE_SIZE);
   const [offset, setOffset] = useState(0);
   const [motifWall, setMotifWall] = useState({
@@ -159,6 +162,7 @@ export default function PlotLabPage() {
       limit: pageSize,
       offset,
       mediaType,
+      plotMatchMode,
     });
     queryLibrary(Object.fromEntries(params.entries()))
       .then((data) => {
@@ -167,7 +171,7 @@ export default function PlotLabPage() {
         setMotifWall({
           loading: false,
           items,
-          note: items.length ? null : "No titles match the selected motifs.",
+          note: items.length ? null : "No titles match the selected plot signals.",
           error: "",
           payload: data,
         });
@@ -185,7 +189,7 @@ export default function PlotLabPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedMotifs, mediaType, pageSize, offset]);
+  }, [selectedMotifs, mediaType, pageSize, offset, plotMatchMode]);
 
   useEffect(() => {
     if (!seed?.id) {
@@ -272,6 +276,11 @@ export default function PlotLabPage() {
     setOffset(0);
   }
 
+  function handlePlotMatchMode(nextMode) {
+    setPlotMatchMode(normalizePlotMatchMode(nextMode));
+    setOffset(0);
+  }
+
   function handlePageSizeChange(nextSize) {
     setPageSize(normalizePageSize(nextSize, PLOT_LAB_PAGE_SIZES));
     setOffset(0);
@@ -355,10 +364,39 @@ export default function PlotLabPage() {
         {selectedMotifs.length ? (
           <div className="explore-plot-lab-wall" data-testid="explore-motif-wall">
             <h3 className="explore-plot-lab-heading">Motif wall</h3>
+            <div
+              className="explore-media-tabs plot-lab-match-mode"
+              role="tablist"
+              aria-label="Plot match mode"
+              data-testid="plot-lab-match-mode"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={plotMatchMode === "hybrid"}
+                className={`explore-media-tab${plotMatchMode === "hybrid" ? " is-active" : ""}`}
+                data-testid="plot-lab-mode-hybrid"
+                onClick={() => handlePlotMatchMode("hybrid")}
+              >
+                Multi-signal
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={plotMatchMode === "motifs"}
+                className={`explore-media-tab${plotMatchMode === "motifs" ? " is-active" : ""}`}
+                data-testid="plot-lab-mode-motifs"
+                onClick={() => handlePlotMatchMode("motifs")}
+              >
+                Motifs only
+              </button>
+            </div>
             {selectedMotifs.length > 1 ? (
               <p className="explore-section-subtitle" data-testid="plot-lab-intersection-hint">
-                Titles matching all selected motifs ({selectedMotifs.join(" · ")}).
-                Tap Why? on a poster for plot excerpts.
+                {plotMatchMode === "motifs"
+                  ? `Titles matching all selected motifs (${selectedMotifs.join(" · ")}).`
+                  : `Titles matching all selected signals across motifs, keywords, and plot text (${selectedMotifs.join(" · ")}).`}{" "}
+                Tap Why? on a poster for which layer matched.
               </p>
             ) : null}
             {motifWall.error || motifWall.note ? (

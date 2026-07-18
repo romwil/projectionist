@@ -5,6 +5,7 @@ import {
   QUICK_PICK_EMPTY_MESSAGE,
   QUICK_PICK_ERROR_FALLBACK,
   normalizeQuickPickError,
+  normalizeQuickPickGenres,
   normalizeQuickPickResult,
 } from "./quickPick.js";
 
@@ -12,7 +13,10 @@ test("normalizeQuickPickResult keeps a successful pick", () => {
   const item = { title: "Arrival", media_type: "movie", rating_key: "1" };
   const next = normalizeQuickPickResult({ item, why: "Unwatched pick for you" });
   assert.equal(next.status, "ready");
-  assert.equal(next.item, item);
+  assert.equal(next.item.title, "Arrival");
+  assert.equal(next.item.rating_key, "1");
+  assert.equal(next.item.in_library, true);
+  assert.deepEqual(next.item.genres, []);
   assert.equal(next.why, "Unwatched pick for you");
   assert.equal(next.message, null);
 });
@@ -51,4 +55,27 @@ test("normalizeQuickPickError falls back when formatter returns blank", () => {
   const next = normalizeQuickPickError({}, () => "  ");
   assert.equal(next.status, "error");
   assert.equal(next.message, QUICK_PICK_ERROR_FALLBACK);
+});
+
+test("normalizeQuickPickResult maps summary to overview and marks in_library", () => {
+  const next = normalizeQuickPickResult({
+    item: { title: "Arrival", media_type: "movie", summary: "Linguists meet aliens.", genres: ["Sci-Fi"] },
+    why: "Unwatched pick for you",
+  });
+  assert.equal(next.status, "ready");
+  assert.equal(next.item.overview, "Linguists meet aliens.");
+  assert.equal(next.item.in_library, true);
+  assert.deepEqual(next.item.genres, ["Sci-Fi"]);
+});
+
+test("normalizeQuickPickResult coerces genres JSON string for TitleCard safety", () => {
+  const next = normalizeQuickPickResult({
+    item: { title: "Broken", genres: '["Horror","Thriller"]' },
+  });
+  assert.deepEqual(next.item.genres, ["Horror", "Thriller"]);
+});
+
+test("normalizeQuickPickGenres returns empty array for malformed JSON", () => {
+  assert.deepEqual(normalizeQuickPickGenres("not-json"), []);
+  assert.deepEqual(normalizeQuickPickGenres(null), []);
 });
