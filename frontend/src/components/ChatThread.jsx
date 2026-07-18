@@ -246,6 +246,7 @@ export default function ChatThread({
   multiUserEnabled = true,
   showErrors = true,
   draggableToDock = false,
+  onSaveToLibrary,
 }) {
   const lastAssistantId = [...messages].reverse().find((message) => message.role === "assistant")?.id;
 
@@ -306,12 +307,24 @@ export default function ChatThread({
                 </div>
               ))}
               {isAssistant ? (
-                <MessageReactions
-                  messageId={message.id}
-                  sessionId={sessionId}
-                  initialFeedback={messageFeedback[message.id]}
-                  onFeedbackChange={onFeedbackChange}
-                />
+                <div className="message-response-actions">
+                  <MessageReactions
+                    messageId={message.id}
+                    sessionId={sessionId}
+                    initialFeedback={messageFeedback[message.id]}
+                    onFeedbackChange={onFeedbackChange}
+                  />
+                  {onSaveToLibrary ? (
+                    <button
+                      type="button"
+                      className="ghost"
+                      data-testid="save-to-library"
+                      onClick={() => onSaveToLibrary(message)}
+                    >
+                      Save to library
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           </div>

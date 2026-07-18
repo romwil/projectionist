@@ -1489,6 +1489,17 @@ def _attach_query_cards(
 def _append_recommendation_cards(registry: "ToolRegistry", cards: List[TitleCard]) -> None:
     """Attach title cards for titles the user may want to add (never owned or already queued)."""
     registry._recommendation_context = True
+    existing = {
+        (
+            card.media_type,
+            card.tmdb_id or None,
+            card.tvdb_id or None,
+            card.rating_key or None,
+            card.title.strip().casefold(),
+            card.year,
+        )
+        for card in registry._cards
+    }
     for card in cards:
         if card.in_library or card.in_radarr or card.in_sonarr:
             continue
@@ -1499,6 +1510,17 @@ def _append_recommendation_cards(registry: "ToolRegistry", cards: List[TitleCard
         if card.tvdb_id and registry.db.is_arr_queued(media_type="show", tvdb_id=card.tvdb_id):
             card.in_sonarr = True
             continue
+        identity = (
+            card.media_type,
+            card.tmdb_id or None,
+            card.tvdb_id or None,
+            card.rating_key or None,
+            card.title.strip().casefold(),
+            card.year,
+        )
+        if identity in existing:
+            continue
+        existing.add(identity)
         registry._cards.append(card)
 
 

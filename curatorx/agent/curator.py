@@ -17,11 +17,27 @@ logger = logging.getLogger(__name__)
 
 
 def _displayable_cards(cards: List[TitleCard]) -> List[TitleCard]:
-    """Skip empty placeholder cards that have no title or external ids."""
+    """Skip placeholders and collapse duplicate cards by stable media identity."""
     displayable: List[TitleCard] = []
+    positions: Dict[str, int] = {}
     for card in cards:
-        if card.title or card.tmdb_id or card.tvdb_id or card.rating_key:
+        if not (card.title or card.tmdb_id or card.tvdb_id or card.rating_key):
+            continue
+        identity = (
+            f"{card.media_type}:tmdb:{card.tmdb_id}"
+            if card.tmdb_id
+            else f"{card.media_type}:tvdb:{card.tvdb_id}"
+            if card.tvdb_id
+            else f"{card.media_type}:rating:{card.rating_key}"
+            if card.rating_key
+            else f"{card.media_type}:title:{card.title.strip().casefold()}:{card.year or ''}"
+        )
+        existing_index = positions.get(identity)
+        if existing_index is None:
+            positions[identity] = len(displayable)
             displayable.append(card)
+        elif card.recommendation_reason and not displayable[existing_index].recommendation_reason:
+            displayable[existing_index] = card
     return displayable
 
 

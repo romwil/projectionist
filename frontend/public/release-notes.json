@@ -1,6 +1,40 @@
 {
-  "generated_at": "2026-07-18T04:53:45Z",
+  "generated_at": "2026-07-18T05:27:31Z",
   "releases": [
+    {
+      "version": "1.8.23",
+      "date": "2026-07-18",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**Saved curator library**: save structured curator responses, search and revisit them by date, export Markdown/JSON/TXT, and start a new contextual chat from a saved page."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Recommendation responses now deduplicate cards by stable media identity and retain the richer available rationale for a repeated title."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.8.22",
+      "date": "2026-07-18",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Agent similarity lookup now accepts an optional title year and media type, preventing ambiguous same-name library titles from selecting the wrong seed.",
+            "Anthropic-only chat configurations no longer call the nonexistent Anthropic embeddings endpoint or present hash-vector results as semantic matches. Semantic search now reports the missing OpenAI-compatible embedding endpoint clearly, while title, keyword, motif, and full-text search continue to work.",
+            "Empty similar-title results now identify the per-seed neighbor-cache backlog and direct the owner to the `plot_neighbors` scheduled task."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.21",
       "date": "2026-07-18",

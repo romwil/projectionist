@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [1.8.23] — 2026-07-18
+
+### Added
+- **Saved curator library**: save structured curator responses, search and revisit them by date, export Markdown/JSON/TXT, and start a new contextual chat from a saved page.
+
+### Fixed
+- Recommendation responses now deduplicate cards by stable media identity and retain the richer available rationale for a repeated title.
+
 ## [1.8.22] — 2026-07-18
 
 ### Fixed

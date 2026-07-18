@@ -25,6 +25,7 @@ import TagPage from "./pages/TagPage";
 import TagsPage from "./pages/TagsPage";
 import PlotLabPage from "./pages/PlotLabPage";
 import ListsPage from "./pages/ListsPage";
+import LibraryPage from "./pages/LibraryPage";
 import MediaIssuesPage from "./pages/MediaIssuesPage";
 import { BulkActionProgressProvider } from "./components/BulkActionProgress";
 import WhatsNewGate from "./components/WhatsNewGate";
@@ -42,6 +43,8 @@ createRoot(document.getElementById("root")).render(
           <Route path="/explore/plot-lab" element={<PlotLabPage />} />
           <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
+          <Route path="/library" element={<LibraryPage />} />
+          <Route path="/library/:pageId" element={<LibraryPage />} />
           <Route path="/lists" element={<ListsPage />} />
           <Route path="/lists/:listId" element={<ListsPage />} />
           <Route path="/login" element={<LoginPage />} />

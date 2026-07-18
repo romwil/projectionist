@@ -499,6 +499,13 @@ class RecommendationsSeenPayload(BaseModel):
     all_unread: bool = False
 
 
+class SavedLibraryPagePayload(BaseModel):
+    name: str = Field(min_length=1, max_length=160)
+    source_session_id: Optional[str] = Field(default=None, max_length=128)
+    source_message_id: Optional[str] = Field(default=None, max_length=128)
+    content: Dict[str, Any]
+
+
 class SeerrSyncPayload(BaseModel):
     auth_token: str = Field(min_length=1)
 
@@ -2719,6 +2726,89 @@ def get_chat_thread_messages(
         raise HTTPException(status_code=404, detail="Thread not found")
     messages = db.chat_history(session_id, limit=limit)
     return {"session_id": session_id, "messages": messages, "thread": thread}
+
+
+def _saved_library_text(content: Dict[str, Any]) -> str:
+    """Flatten safe, human-visible saved blocks for search and text exports."""
+    parts: List[str] = []
+    for block in content.get("blocks") or []:
+        if not isinstance(block, dict):
+            continue
+        if block.get("content"):
+            parts.append(str(block["content"]))
+        for item in block.get("items") or []:
+            if isinstance(item, dict):
+                parts.append(" ".join(str(item.get(key) or "") for key in ("title", "year", "recommendation_reason")))
+    return "\n".join(part for part in parts if part.strip())
+
+
+@app.post("/api/saved-library")
+def create_saved_library_page(
+    payload: SavedLibraryPagePayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    db = _db()
+    user_id = _scoped_user_id(user)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Sign in to save curator responses")
+    if payload.source_session_id and db.get_chat_thread(payload.source_session_id, user_id=user_id) is None:
+        raise HTTPException(status_code=404, detail="Source conversation not found")
+    searchable_text = f"{payload.name}\n{_saved_library_text(payload.content)}"
+    return db.create_saved_library_page(
+        page_id=uuid.uuid4().hex,
+        user_id=user_id,
+        name=payload.name,
+        source_session_id=payload.source_session_id,
+        source_message_id=payload.source_message_id,
+        content=payload.content,
+        searchable_text=searchable_text,
+    )
+
+
+@app.get("/api/saved-library")
+def list_saved_library_pages(
+    q: str = "",
+    user=Depends(get_current_user_dep),
+) -> List[Dict[str, Any]]:
+    user_id = _scoped_user_id(user)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Sign in to view your library")
+    return _db().list_saved_library_pages(user_id=user_id, query=q)
+
+
+@app.get("/api/saved-library/{page_id}")
+def get_saved_library_page(page_id: str, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    user_id = _scoped_user_id(user)
+    page = _db().get_saved_library_page(page_id, user_id=user_id or "")
+    if page is None:
+        raise HTTPException(status_code=404, detail="Saved page not found")
+    return page
+
+
+@app.delete("/api/saved-library/{page_id}")
+def delete_saved_library_page(page_id: str, user=Depends(get_current_user_dep)) -> Dict[str, bool]:
+    user_id = _scoped_user_id(user)
+    if not user_id or not _db().delete_saved_library_page(page_id, user_id=user_id):
+        raise HTTPException(status_code=404, detail="Saved page not found")
+    return {"deleted": True}
+
+
+@app.get("/api/saved-library/{page_id}/export")
+def export_saved_library_page(
+    page_id: str,
+    format: Literal["json", "markdown", "txt"] = "markdown",
+    user=Depends(get_current_user_dep),
+) -> Response:
+    user_id = _scoped_user_id(user)
+    page = _db().get_saved_library_page(page_id, user_id=user_id or "")
+    if page is None:
+        raise HTTPException(status_code=404, detail="Saved page not found")
+    text = _saved_library_text(page["content"])
+    if format == "json":
+        return Response(json.dumps(page, indent=2), media_type="application/json")
+    if format == "txt":
+        return Response(f"{page['name']}\n\n{text}\n", media_type="text/plain")
+    return Response(f"# {page['name']}\n\n{text}\n", media_type="text/markdown")
 
 
 @app.patch("/api/chat/threads/{session_id}")

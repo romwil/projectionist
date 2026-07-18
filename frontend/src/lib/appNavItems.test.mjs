@@ -4,7 +4,7 @@ import { ROUTES } from "./backNav.js";
 import { APP_NAV_CORE_ITEMS, buildAppNavItems } from "./appNavItems.js";
 
 describe("buildAppNavItems", () => {
-  it("includes chat, explore family, watchlist, and footer destinations", () => {
+  it("includes chat, explore family, library, and footer destinations", () => {
     const ids = buildAppNavItems().map((item) => item.id);
     assert.deepEqual(ids, [
       "chat",
@@ -12,6 +12,7 @@ describe("buildAppNavItems", () => {
       "plot-lab",
       "tags",
       "watchlist",
+      "library",
       "settings",
       "help",
       "privacy",

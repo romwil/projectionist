@@ -11,6 +11,7 @@ import {
   getActiveContext,
   getAuthMe,
   getFeatures,
+  getLibraryPage,
   patchAuthMe,
   getThreadFeedback,
   getThreadMessages,
@@ -25,6 +26,7 @@ import {
   proposeAction,
   removeWatchlistPin,
   runWatchlistSync,
+  saveLibraryPage,
   saveReview,
   createPersona,
   deletePersona,
@@ -209,6 +211,7 @@ export default function App() {
   const pendingDeleteRef = useRef(null);
   const rateFlowStartedRef = useRef(false);
   const recommendLikeStartedRef = useRef(false);
+  const savedLibraryStartedRef = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return sessionStorage.getItem(SIDEBAR_RAIL_KEY) === "true";
@@ -553,6 +556,24 @@ export default function App() {
       }
     },
     [activeSessionId, messageFeedback]
+  );
+
+  const handleSaveToLibrary = useCallback(
+    async (message) => {
+      const name = window.prompt("Name this saved curator response", threads.find((thread) => thread.id === activeSessionId)?.thread_title || "Curator response");
+      if (!name?.trim()) return;
+      try {
+        await saveLibraryPage({
+          name: name.trim(),
+          source_session_id: activeSessionId,
+          source_message_id: message.id,
+          content: { blocks: message.blocks },
+        });
+      } catch (error) {
+        setChatError(formatApiError(error));
+      }
+    },
+    [activeSessionId, threads],
   );
 
   function toggleSidebarRail() {
@@ -962,6 +983,20 @@ export default function App() {
     rateFlowStartedRef.current = true;
     setSearchParams(stripRateFlowParam(searchParams), { replace: true });
     sendMessage("/rate");
+  }, [authReady, threadsReady, loading, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const pageId = searchParams.get("saved_library");
+    if (!authReady || !threadsReady || loading || !pageId || savedLibraryStartedRef.current) return;
+    savedLibraryStartedRef.current = true;
+    searchParams.delete("saved_library");
+    setSearchParams(searchParams, { replace: true });
+    getLibraryPage(pageId)
+      .then((page) => {
+        const source = JSON.stringify(page.content?.blocks || []).slice(0, 8000);
+        return sendMessage(`Continue this saved curator response, keeping its recommendations and analysis as context:\n\n${source}`);
+      })
+      .catch((error) => appendChatError(formatApiError(error)));
   }, [authReady, threadsReady, loading, searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -1633,6 +1668,7 @@ export default function App() {
               showErrors={false}
               draggableToDock={dockDropEnabled}
               onReviewConflictResolved={handleReviewConflictResolved}
+              onSaveToLibrary={handleSaveToLibrary}
             />
             {loading || agentActivityLog.length > 0 ? (
               <TypingIndicator

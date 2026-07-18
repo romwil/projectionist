@@ -15,6 +15,7 @@ Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [P
 | Motif walls & surprising neighbors | [Plot Lab](/explore/plot-lab) |
 | Tag / keyword search | [Tags](/explore/tags) |
 | Pins | [Watchlist](/watchlist) |
+| Save a curator reply | **Save to library** below any curator response, then open [Library](/library) |
 | Curated shelves | [Lists & playlists](/lists) |
 | Personal prefs | [Settings](/settings) |
 | Version & release notes | [About](/about) |
@@ -38,6 +39,12 @@ Useful slash commands (no LLM call):
 - `/purge` — large / unwatched / low-taste candidates
 
 Thumbs up / down on curator replies train future recommendations. Personal **reviews** (stars on titles) are separate from those reactions.
+
+### Saved curator library
+
+Use **Save to library** on a curator response when a recommendation set or explanation is worth returning to. Give it a useful name; saved pages are private to your account, searchable by title and response text, and grouped by the day you saved them.
+
+Saved pages preserve the curator's structured text and title cards. Download a page as **Markdown**, **JSON** (the structured source), or **TXT**. **Chat from here** opens a new conversation with the saved analysis and recommendations as context, so it continues the idea without changing the original conversation.
 
 ### Explore
 

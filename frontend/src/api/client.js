@@ -80,6 +80,22 @@ export async function getThreadMessages(sessionId) {
   return api(`/chat/threads/${encodeURIComponent(sessionId)}/messages`);
 }
 
+export async function saveLibraryPage(payload) {
+  return api("/saved-library", { method: "POST", body: JSON.stringify(payload) });
+}
+
+export async function listLibraryPages(query = "") {
+  return api(`/saved-library?q=${encodeURIComponent(query)}`);
+}
+
+export async function getLibraryPage(pageId) {
+  return api(`/saved-library/${encodeURIComponent(pageId)}`);
+}
+
+export async function deleteLibraryPage(pageId) {
+  return api(`/saved-library/${encodeURIComponent(pageId)}`, { method: "DELETE" });
+}
+
 export async function getFeatures() {
   return api("/features");
 }

@@ -342,6 +342,7 @@ class Database:
             self._migrate_media_issues(conn)
             self._migrate_persona_templates(conn)
             self._migrate_recommendations(conn)
+            self._migrate_saved_library(conn)
             self._migrate_library_metadata_enrichment(conn)
             self._migrate_people_credits(conn)
             self._migrate_plot_text_columns(conn)
@@ -1021,6 +1022,28 @@ class Database:
                 ON user_recommendations(to_user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_user_recommendations_unread
                 ON user_recommendations(to_user_id, seen_at);
+            """
+        )
+
+    def _migrate_saved_library(self, conn: sqlite3.Connection) -> None:
+        """Saved curator responses, private to the user who saved them."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS saved_library_pages (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                source_session_id TEXT,
+                source_message_id TEXT,
+                searchable_text TEXT NOT NULL DEFAULT '',
+                content_json TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_saved_library_pages_user_created
+                ON saved_library_pages(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_saved_library_pages_user_name
+                ON saved_library_pages(user_id, name);
             """
         )
 
@@ -4342,6 +4365,83 @@ class Database:
                     }
                 )
             return messages
+
+    @staticmethod
+    def _row_to_saved_library_page(row: sqlite3.Row) -> Dict[str, Any]:
+        return {
+            "id": str(row["id"]),
+            "user_id": str(row["user_id"]),
+            "name": str(row["name"]),
+            "source_session_id": row["source_session_id"],
+            "source_message_id": row["source_message_id"],
+            "searchable_text": str(row["searchable_text"] or ""),
+            "content": json.loads(row["content_json"]),
+            "created_at": float(row["created_at"]),
+        }
+
+    def create_saved_library_page(
+        self,
+        *,
+        page_id: str,
+        user_id: str,
+        name: str,
+        content: Mapping[str, Any],
+        searchable_text: str,
+        source_session_id: Optional[str] = None,
+        source_message_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        now = time.time()
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO saved_library_pages (
+                    id, user_id, name, source_session_id, source_message_id,
+                    searchable_text, content_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    page_id,
+                    user_id,
+                    name.strip(),
+                    source_session_id,
+                    source_message_id,
+                    searchable_text,
+                    json.dumps(dict(content)),
+                    now,
+                ),
+            )
+            row = conn.execute("SELECT * FROM saved_library_pages WHERE id = ?", (page_id,)).fetchone()
+        assert row is not None
+        return self._row_to_saved_library_page(row)
+
+    def list_saved_library_pages(self, *, user_id: str, query: str = "") -> List[Dict[str, Any]]:
+        pattern = f"%{query.strip().lower()}%"
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM saved_library_pages
+                WHERE user_id = ? AND (lower(name) LIKE ? OR lower(searchable_text) LIKE ?)
+                ORDER BY created_at DESC
+                """,
+                (user_id, pattern, pattern),
+            ).fetchall()
+        return [self._row_to_saved_library_page(row) for row in rows]
+
+    def get_saved_library_page(self, page_id: str, *, user_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM saved_library_pages WHERE id = ? AND user_id = ?",
+                (page_id, user_id),
+            ).fetchone()
+        return self._row_to_saved_library_page(row) if row else None
+
+    def delete_saved_library_page(self, page_id: str, *, user_id: str) -> bool:
+        with self.connect() as conn:
+            result = conn.execute(
+                "DELETE FROM saved_library_pages WHERE id = ? AND user_id = ?",
+                (page_id, user_id),
+            )
+        return result.rowcount > 0
 
     def list_watchlist_pins(self, *, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
         with self.connect() as conn:

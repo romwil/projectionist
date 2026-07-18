@@ -8,6 +8,7 @@ export const APP_NAV_CORE_ITEMS = [
   { id: "plot-lab", to: ROUTES.plotLab, label: "Plot Lab", testId: "app-nav-plot-lab" },
   { id: "tags", to: ROUTES.tags, label: "Tags", testId: "app-nav-tags" },
   { id: "watchlist", kind: "watchlist", label: "Watchlist", testId: "app-nav-watchlist" },
+  { id: "library", to: ROUTES.library, label: "Library", testId: "app-nav-library" },
 ];
 
 /**

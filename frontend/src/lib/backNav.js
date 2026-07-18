@@ -6,6 +6,7 @@ export const ROUTES = {
   tags: "/explore/tags",
   plotLab: "/explore/plot-lab",
   watchlist: "/watchlist",
+  library: "/library",
   /** Sync/token settings only — browse pins on /watchlist. */
   watchlistSettings: "/settings/watchlist",
   settings: "/settings",
