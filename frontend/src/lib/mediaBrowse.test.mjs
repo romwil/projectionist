@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildMediaBrowseParams,
   libraryExportHref,
+  matchesMediaBrowseWatchState,
   mediaBrowseRowsToCsv,
   parseMediaBrowse,
   queryFiltersFromBrowse,
@@ -24,11 +25,18 @@ test("browse query and export preserve current filters", () => {
     sort_dir: "asc",
     limit: 48,
     offset: 48,
-    watch_state: "unwatched",
+    unwatched_only: true,
     year: "1999",
   });
   assert.equal(buildMediaBrowseParams(state).get("year"), "1999");
   assert.match(libraryExportHref(state, ["title", "year"]), /columns=title%2Cyear/);
+});
+
+test("unwatched excludes watched and in-progress titles", () => {
+  assert.equal(matchesMediaBrowseWatchState({ watched: false }, "unwatched"), true);
+  assert.equal(matchesMediaBrowseWatchState({ watched: true }, "unwatched"), false);
+  assert.equal(matchesMediaBrowseWatchState({ view_offset: 1200 }, "unwatched"), false);
+  assert.equal(matchesMediaBrowseWatchState({ view_offset_ms: 1200 }, "unwatched"), false);
 });
 
 test("mediaBrowseRowsToCsv serializes visible columns safely", () => {

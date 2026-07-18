@@ -24,6 +24,7 @@ import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 import {
   buildMediaBrowseParams,
   mediaBrowseRowsToCsv,
+  matchesMediaBrowseWatchState,
   parseMediaBrowse,
   queryFiltersFromBrowse,
 } from "../lib/mediaBrowse.js";
@@ -125,12 +126,7 @@ function FeedRail({ testId, items, loading, cardMeta, onSeed, onRecommend, showR
 
 function matchesFacetBrowse(item, browse) {
   if (browse.year && String(item?.year || "") !== String(browse.year)) return false;
-  if (!browse.watch_state) return true;
-  const watched = Boolean(item?.watched || Number(item?.view_count) > 0);
-  const inProgress = Boolean(item?.view_offset || item?.view_offset_ms);
-  if (browse.watch_state === "watched") return watched;
-  if (browse.watch_state === "in_progress") return inProgress;
-  return !watched;
+  return matchesMediaBrowseWatchState(item, browse.watch_state);
 }
 
 function useFeed(loader, deps = []) {

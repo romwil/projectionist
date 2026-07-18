@@ -17,7 +17,12 @@ import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import { partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
-import { buildMediaBrowseParams, mediaBrowseRowsToCsv, parseMediaBrowse } from "../lib/mediaBrowse.js";
+import {
+  buildMediaBrowseParams,
+  matchesMediaBrowseWatchState,
+  mediaBrowseRowsToCsv,
+  parseMediaBrowse,
+} from "../lib/mediaBrowse.js";
 import { titleDetailTargetFromItem } from "../lib/titleDetailDrawer.js";
 
 function pinKey(pin) {
@@ -79,10 +84,7 @@ export default function WatchlistPage() {
     return [...state.items]
       .filter((item) => !browse.media_type || item?.media_type === browse.media_type)
       .filter((item) => !browse.year || String(item?.year || "") === String(browse.year))
-      .filter((item) => !browse.watch_state || (
-        browse.watch_state === "watched" ? Boolean(item?.watched) :
-          browse.watch_state === "in_progress" ? Boolean(item?.view_offset) : !item?.watched
-      ))
+      .filter((item) => matchesMediaBrowseWatchState(item, browse.watch_state))
       .sort((a, b) => {
         const aValue = a?.[browse.sort] ?? (browse.sort === "added_at" ? a?.created_at : "") ?? "";
         const bValue = b?.[browse.sort] ?? (browse.sort === "added_at" ? b?.created_at : "") ?? "";

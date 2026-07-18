@@ -428,7 +428,10 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
         )
         params.append(filters.fts_query)
     if filters.unwatched_only:
-        clauses.append("(view_count IS NULL OR view_count = 0)")
+        clauses.append(
+            "(view_count IS NULL OR view_count = 0) "
+            "AND (view_offset_ms IS NULL OR view_offset_ms = 0)"
+        )
     if filters.min_view_count is not None:
         clauses.append("view_count >= ?")
         params.append(filters.min_view_count)

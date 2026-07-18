@@ -1,6 +1,38 @@
 {
-  "generated_at": "2026-07-18T04:18:25Z",
+  "generated_at": "2026-07-18T04:30:22Z",
   "releases": [
+    {
+      "version": "1.8.17",
+      "date": "2026-07-18",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Unwatched** browse filters consistently exclude in-progress titles, and Explore feed List view now honors the Columns menu and saved column choices."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.8.16",
+      "date": "2026-07-18",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Deep-linked Explore facet walls now use the shared browse controls, Poster/List results, current-page CSV export, and the same card action grip as full Tag, Explore section, Watchlist, and collection views."
+          ]
+        },
+        {
+          "title": "Documentation",
+          "bullets": [
+            "Help now calls out deep-linked Explore facets as full browse walls; only short contextual rails and credit-annotated person filmography remain intentional toolbar exceptions."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.15",
       "date": "2026-07-18",

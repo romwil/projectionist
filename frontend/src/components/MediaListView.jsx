@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import PosterActionMenu from "./PosterActionMenu";
 import WatchProgressBadge from "./WatchProgressBadge";
+import { mediaBrowseWatchState } from "../lib/mediaBrowse.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 
 export default function MediaListView({
@@ -30,7 +31,7 @@ export default function MediaListView({
         {columns.map((column) => <span key={column} role="cell" data-column={column}>
           {column === "title" ? <>{item.poster_url ? <img className="media-list-poster" src={item.poster_url} alt="" /> : null}{path ? <Link to={path}>{item.title || "Untitled"}</Link> : item.title || "Untitled"}<WatchProgressBadge item={item} /></> :
             column === "genres" ? (item.genres || []).slice(0, 3).join(" · ") :
-              column === "watch_state" ? (item.watched ? "Watched" : item.view_offset ? "In progress" : "Unwatched") :
+              column === "watch_state" ? mediaBrowseWatchState(item).replace("_", " ").replace(/^./, (char) => char.toUpperCase()) :
                 item[column] ?? "—"}
         </span>)}
         <PosterActionMenu

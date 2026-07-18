@@ -453,6 +453,29 @@ class LibraryQueryTests(unittest.TestCase):
             self.assertEqual(result["total_matched"], 1)
             self.assertEqual(result["items"][0]["title"], "Fresh Unwatched")
 
+    def test_query_unwatched_excludes_in_progress_movies(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "unwatched",
+                    "media_type": "movie",
+                    "title": "Unwatched",
+                    "view_count": 0,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "in-progress",
+                    "media_type": "movie",
+                    "title": "In Progress",
+                    "view_count": 0,
+                    "view_offset_ms": 12_000,
+                }
+            )
+            result = query_library(db, LibraryFilters(unwatched_only=True))
+            self.assertEqual([item["title"] for item in result["items"]], ["Unwatched"])
+
     def test_query_missing_from_radarr(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

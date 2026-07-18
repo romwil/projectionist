@@ -8,7 +8,12 @@ import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
-import { buildMediaBrowseParams, mediaBrowseRowsToCsv, parseMediaBrowse } from "../lib/mediaBrowse.js";
+import {
+  buildMediaBrowseParams,
+  matchesMediaBrowseWatchState,
+  mediaBrowseRowsToCsv,
+  parseMediaBrowse,
+} from "../lib/mediaBrowse.js";
 
 export default function ListsPage() {
   const { listId } = useParams();
@@ -32,11 +37,7 @@ export default function ListsPage() {
       .map((entry) => ({ ...(entry.media || entry), _listItemId: entry.id }))
       .filter((item) => !browse.media_type || item?.media_type === browse.media_type)
       .filter((item) => !browse.year || String(item?.year || "") === String(browse.year))
-      .filter((item) => !browse.watch_state || (
-        browse.watch_state === "watched" ? Boolean(item?.watched) :
-          browse.watch_state === "in_progress" ? Boolean(item?.view_offset) :
-            !item?.watched
-      ));
+      .filter((item) => matchesMediaBrowseWatchState(item, browse.watch_state));
     const direction = browse.sort_dir === "desc" ? -1 : 1;
     return [...source].sort((left, right) => {
       const a = left?.[browse.sort] ?? (browse.sort === "vote_average" ? left?.rating : "") ?? "";

@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.8.17] — 2026-07-18
+
+### Fixed
+- **Unwatched** browse filters consistently exclude in-progress titles, and Explore feed List view now honors the Columns menu and saved column choices.
+
 ## [1.8.16] — 2026-07-18
 
 ### Fixed

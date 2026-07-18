@@ -80,11 +80,31 @@ export function buildMediaBrowseParams(state, updates = {}) {
 
 export function queryFiltersFromBrowse(state, extra = {}) {
   const filters = { ...extra };
-  for (const key of ["sort", "sort_dir", "limit", "offset", "media_type", "watch_state", "year", "genres", "keywords"]) {
+  for (const key of ["sort", "sort_dir", "limit", "offset", "media_type", "year", "genres", "keywords"]) {
     const value = state?.[key];
     if (Array.isArray(value) ? value.length : value !== "" && value != null) filters[key] = value;
   }
+  if (state?.watch_state === "unwatched") filters.unwatched_only = true;
+  if (state?.watch_state === "watched") filters.min_view_count = 1;
+  if (state?.watch_state === "in_progress") filters.in_progress_only = true;
   return filters;
+}
+
+export function mediaBrowseWatchState(item) {
+  const explicit = String(item?.watch_state || "").toLowerCase();
+  const watched = Boolean(item?.watched || Number(item?.view_count) > 0 || explicit === "watched");
+  if (watched) return "watched";
+  const inProgress = Boolean(
+    item?.view_offset ||
+    item?.view_offset_ms ||
+    explicit === "partial" ||
+    explicit === "in_progress",
+  );
+  return inProgress ? "in_progress" : "unwatched";
+}
+
+export function matchesMediaBrowseWatchState(item, watchState) {
+  return !watchState || mediaBrowseWatchState(item) === watchState;
 }
 
 export function loadMediaBrowseColumns(scope = "default") {
@@ -120,7 +140,7 @@ export function mediaBrowseRowsToCsv(items, columns) {
   };
   const valueFor = (item, column) => {
     if (column === "watch_state") {
-      return item?.watched ? "Watched" : item?.view_offset ? "In progress" : "Unwatched";
+      return mediaBrowseWatchState(item).replace("_", " ").replace(/^./, (char) => char.toUpperCase());
     }
     if (column === "vote_average") return item?.vote_average ?? item?.rating ?? "";
     return item?.[column] ?? "";

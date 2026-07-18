@@ -25,6 +25,7 @@ import {
   parseExploreSectionQuery,
   sortExploreSectionItems,
 } from "../lib/exploreFeeds.js";
+import { matchesMediaBrowseWatchState } from "../lib/mediaBrowse.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
 
 const FEED_LOADERS = {
@@ -44,13 +45,7 @@ function itemKey(item) {
 
 function matchesBrowseFilters(item, query) {
   if (query.year && String(item?.year || "") !== String(query.year)) return false;
-  if (query.watch_state) {
-    const watched = Boolean(item?.watched || Number(item?.view_count) > 0);
-    const inProgress = Boolean(item?.view_offset || item?.view_offset_ms);
-    if (query.watch_state === "watched" && !watched) return false;
-    if (query.watch_state === "in_progress" && !inProgress) return false;
-    if (query.watch_state === "unwatched" && watched) return false;
-  }
+  if (!matchesMediaBrowseWatchState(item, query.watch_state)) return false;
   if (query.genres?.length) {
     const itemGenres = (item?.genres || []).map((genre) => String(genre).toLowerCase());
     if (!query.genres.some((genre) => itemGenres.includes(String(genre).toLowerCase()))) return false;
@@ -140,6 +135,7 @@ export default function ExploreSectionPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [columns, setColumns] = useState(null);
 
   useEffect(() => {
     if (!config) return undefined;
@@ -412,6 +408,8 @@ export default function ExploreSectionPage() {
         <MediaBrowseControls
           state={{ ...query, media_type: query.mediaType || "" }}
           onChange={handleBrowseChange}
+          columns={columns}
+          onColumnsChange={setColumns}
           columnScope={`explore-${config.id}`}
           filterOptions={filterOptions}
           sortOptions={EXPLORE_SECTION_SORTS}
@@ -533,6 +531,7 @@ export default function ExploreSectionPage() {
           <MediaBrowseResults
             state={{ ...query, media_type: query.mediaType || "" }}
             items={sortedItems}
+            columns={columns || undefined}
             selectable
             selected={selected}
             onToggleSelect={toggleSelect}
