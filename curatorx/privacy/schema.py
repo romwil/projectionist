@@ -33,6 +33,8 @@ _PUBLIC_DROP_KEYS = frozenset(
         "file_size",
         "file_size_bytes",
         "view_count",
+        "view_offset_ms",
+        "duration_ms",
         "added_at",
         "last_viewed_at",
         "in_radarr",
@@ -129,22 +131,23 @@ def strip_plex_token_urls(payload: Any) -> Any:
 
 
 def derive_watch_state(item: Mapping[str, Any]) -> str:
-    """Qualitative watch state for public schema (no raw view/added timestamps)."""
+    """Qualitative watch state for public schema (no raw view/added timestamps).
+
+    Uses shared ``watch_progress_state``; maps ``partial`` → ``in_progress`` for
+    existing public/MCP consumers. Returns ``unknown`` when no watch signals exist.
+    """
+    from curatorx.library.watch_progress import watch_progress_state
+
     total_eps = int(item.get("total_episode_count") or 0)
-    unwatched_eps = int(item.get("unwatched_episode_count") or 0)
-    if total_eps > 0:
-        if unwatched_eps <= 0:
-            return "watched"
-        if unwatched_eps >= total_eps:
-            return "unwatched"
+    has_view_count = "view_count" in item and item.get("view_count") is not None
+    has_offset = "view_offset_ms" in item and item.get("view_offset_ms") is not None
+    if total_eps <= 0 and not has_view_count and not has_offset:
+        return "unknown"
+
+    state = watch_progress_state(item)
+    if state == "partial":
         return "in_progress"
-    view_count = item.get("view_count")
-    if view_count is None:
-        return "unknown"
-    try:
-        return "watched" if int(view_count) > 0 else "unwatched"
-    except (TypeError, ValueError):
-        return "unknown"
+    return state
 
 
 def public_image_urls(
@@ -182,7 +185,15 @@ def _sanitize_mapping(
 
     # Derive watch_state before dropping telemetry fields.
     watch_state: Optional[str] = None
-    if public and any(k in payload for k in ("view_count", "total_episode_count", "unwatched_episode_count")):
+    if public and any(
+        k in payload
+        for k in (
+            "view_count",
+            "view_offset_ms",
+            "total_episode_count",
+            "unwatched_episode_count",
+        )
+    ):
         watch_state = derive_watch_state(payload)
 
     for key, value in payload.items():

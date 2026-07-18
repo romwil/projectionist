@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { api, getPlexMachineId } from "../api/client";
 import { formatMatchLayers } from "../lib/plotKnowledge.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
+import { watchProgressState } from "../lib/watchProgress.js";
+import WatchProgressBadge from "./WatchProgressBadge";
 
 let cachedPlexMachineId;
 let plexMachineIdPromise;
@@ -48,6 +50,7 @@ export default function LibraryMediaCard({
 
   const path = titleDetailPath({ ...item, in_library: true });
   const showWatch = canWatchOnPlex(item);
+  const hasWatchBadge = watchProgressState(item) !== "unwatched";
 
   useEffect(() => {
     setWhyOpen(false);
@@ -230,8 +233,9 @@ export default function LibraryMediaCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="explore-poster">
+      <div className={`explore-poster${hasWatchBadge ? " has-watch-badge" : ""}`}>
         {posterNode}
+        <WatchProgressBadge item={item} />
         {playAction}
         {cornerActions}
       </div>

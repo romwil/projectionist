@@ -31,6 +31,9 @@ class TitleCard(BaseModel):
     facet_matches: List[str] = Field(default_factory=list)
     runtime_minutes: Optional[int] = None
     user_stars: Optional[int] = None
+    view_count: int = 0
+    view_offset_ms: Optional[int] = None
+    duration_ms: Optional[int] = None
     total_episode_count: Optional[int] = None
     unwatched_episode_count: Optional[int] = None
     card_kind: Optional[str] = None
@@ -66,7 +69,6 @@ class TitleDetail(TitleCard):
     keywords: List[str] = Field(default_factory=list)
     credits: List[CreditPerson] = Field(default_factory=list)
     file_size_bytes: int = 0
-    view_count: int = 0
     last_viewed_at: Optional[int] = None
     arr_id: Optional[int] = None
     purge_score: Optional[float] = None

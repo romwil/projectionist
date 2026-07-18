@@ -4,6 +4,7 @@ import {
   getExploreFeedOnThisDay,
   getExploreFeedRecentReleases,
   getExploreFeedRecentlyAdded,
+  getExploreFeedRevisitThese,
   getLibraryHealth,
   getLibraryOverview,
   queryLibrary,
@@ -155,6 +156,7 @@ export default function ExplorePage() {
   const [recommendItem, setRecommendItem] = useState(null);
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
+  const revisitThese = useFeed(() => getExploreFeedRevisitThese({ limit: 20, idleDays: 60 }), []);
   const onThisDay = useFeed(() => getExploreFeedOnThisDay({ limit: 12 }), []);
 
   const [pulse, setPulse] = useState({ loading: true, stats: [], error: "" });
@@ -336,6 +338,24 @@ export default function ExplorePage() {
             testId="explore-recent-releases-rail"
             items={recentReleases.items}
             loading={recentReleases.loading}
+            {...recommendProps}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="revisit-these"
+          title="Revisit These"
+          subtitle="Partially watched shows you haven’t touched in over two months"
+          isOwner={isOwner}
+          empty={
+            revisitThese.error ||
+            (!revisitThese.loading && !revisitThese.items.length ? revisitThese.note : null)
+          }
+        >
+          <FeedRail
+            testId="explore-revisit-these-rail"
+            items={revisitThese.items}
+            loading={revisitThese.loading}
             {...recommendProps}
           />
         </ExploreSection>

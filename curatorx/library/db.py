@@ -2211,6 +2211,10 @@ class Database:
                         li.summary,
                         li.genres,
                         li.view_count,
+                        li.view_offset_ms,
+                        li.duration_ms,
+                        li.unwatched_episode_count,
+                        li.total_episode_count,
                         li.in_radarr,
                         li.in_sonarr,
                         li.runtime_minutes

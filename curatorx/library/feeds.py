@@ -1,9 +1,10 @@
-"""Explore hub feed helpers — recently added, recent releases, on-this-day.
+"""Explore hub feed helpers — recently added, recent releases, on-this-day, revisit.
 
 Honest empties: recent-releases returns ``[]`` when no ``release_date`` /
 ``first_air_date`` rows exist. On-this-day prefers calendar month-day matches
 from those dates; when none exist it falls back to the legacy milestone-year
 anniversaries behavior used by ``GET /api/library/anniversaries``.
+Revisit These samples partially watched TV idle for 60+ days.
 """
 
 from __future__ import annotations
@@ -18,6 +19,8 @@ from curatorx.library.query import row_to_query_item
 DEFAULT_FEED_LIMIT = 12
 MAX_FEED_LIMIT = 48
 MAX_PAGE_LIMIT = 100
+REVISIT_DEFAULT_LIMIT = 20
+REVISIT_IDLE_DAYS = 60
 MILESTONE_AGES = (5, 10, 15, 20, 25, 30, 40, 50, 75)
 
 
@@ -193,6 +196,67 @@ def feed_recently_added(
         "limit": capped,
         "has_more": off + len(items) < total,
         "media_type": media_filter,
+        "note": note,
+    }
+
+
+def feed_revisit_these(
+    db: Database,
+    *,
+    limit: int = REVISIT_DEFAULT_LIMIT,
+    idle_days: int = REVISIT_IDLE_DAYS,
+) -> Dict[str, Any]:
+    """Random sample of partially watched TV idle for ``idle_days``+.
+
+    Selection:
+    - ``media_type = 'show'``
+    - some but not all episodes watched
+    - last activity (``last_viewed_at`` or ``last_episode_watched_at``) older
+      than ``idle_days`` (default 60 / ~2 months)
+    - ``ORDER BY RANDOM()`` capped at ``limit`` (default 20)
+    """
+    capped = _cap_limit(limit, default=REVISIT_DEFAULT_LIMIT, max_limit=REVISIT_DEFAULT_LIMIT)
+    window = _cap_days(idle_days, default=REVISIT_IDLE_DAYS)
+    cutoff = int(time.time()) - window * 86400
+    where_sql = """
+        media_type = 'show'
+        AND total_episode_count > 0
+        AND unwatched_episode_count > 0
+        AND unwatched_episode_count < total_episode_count
+        AND COALESCE(last_viewed_at, last_episode_watched_at) IS NOT NULL
+        AND COALESCE(last_viewed_at, last_episode_watched_at) > 0
+        AND COALESCE(last_viewed_at, last_episode_watched_at) < ?
+    """
+    with db.connect() as conn:
+        count_row = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM library_items WHERE {where_sql}",
+            (cutoff,),
+        ).fetchone()
+        total = int(count_row["cnt"] or 0)
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM library_items
+            WHERE {where_sql}
+            ORDER BY RANDOM()
+            LIMIT ?
+            """,
+            (cutoff, capped),
+        ).fetchall()
+
+    items = [_feed_item(row) for row in rows]
+    note = None
+    if not items:
+        note = (
+            "No partially watched shows idle for over two months — "
+            "or episode progress has not been synced yet."
+        )
+    return {
+        "feed": "revisit-these",
+        "idle_days": window,
+        "items": items,
+        "total": total,
+        "limit": capped,
         "note": note,
     }
 

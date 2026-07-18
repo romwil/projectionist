@@ -70,6 +70,7 @@ from curatorx.library.feeds import (
     feed_on_this_day,
     feed_recent_releases,
     feed_recently_added,
+    feed_revisit_these,
     neighbors_payload,
 )
 from curatorx.library.query import (
@@ -1880,6 +1881,23 @@ def library_feed_recent_releases(
             days=days,
             offset=offset,
             media_type=media_type,
+        ),
+        user,
+    )
+
+
+@app.get("/api/library/feeds/revisit-these")
+def library_feed_revisit_these(
+    limit: int = 20,
+    idle_days: int = 60,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore rail: partially watched TV idle for ``idle_days``+ (random ≤20)."""
+    return _sanitize_library_payload(
+        feed_revisit_these(
+            _db(),
+            limit=limit,
+            idle_days=idle_days,
         ),
         user,
     )

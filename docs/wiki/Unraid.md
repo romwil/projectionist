@@ -1,6 +1,6 @@
 # Unraid
 
-CuratorX is packaged for Unraid Community Applications as a single container with one config volume. The CA template uses **`romwil/curatorx:latest`**. Pin `:1.7` or `:1.7.13` if you prefer a fixed tag.
+CuratorX is packaged for Unraid Community Applications as a single container with one config volume. The CA template uses **`romwil/curatorx:latest`**. Pin `:1.8` or `:1.8.11` if you prefer a fixed tag.
 
 CA packaging in this repo:
 
@@ -32,7 +32,7 @@ Resize from a larger master if needed: `sips -z 256 256 source.png --out unraid/
 
 | Field | Value |
 |-------|-------|
-| Repository | `romwil/curatorx:latest` (or `:1.7` / `:1.7.13`) |
+| Repository | `romwil/curatorx:latest` (or `:1.8` / `:1.8.11`) |
 | Host port | `8788` (or map freely) |
 | Config | `/mnt/user/appdata/curatorx/config` → `/config` |
 | TZ (advanced) | e.g. `America/New_York` — needed so preferred `library_sync_hour` matches wall clock |
@@ -75,13 +75,21 @@ That includes `settings.json`, `curatorx.db`, and `jobs_state.json`.
 
 ## Updating
 
-Pull a newer tag and recreate the container with the **same** `/config` mount. An interrupted sync job is marked failed; start sync again — phase checkpoints resume unfinished work when still valid (≤72h).
+**Do not rely on Docker → Force Update alone.** Dockerman *does* call Engine pull, but when the UI reports **TOTAL DATA PULLED: 0 B** it recreates from a stale local `romwil/curatorx:latest` digest even though Hub `:latest` has moved. There is no template XML switch that forces a stronger pull. Supported paths (same `/config` mount — never wipe appdata):
 
 ```bash
+# Preferred one-shot (pull + recreate; config preserved):
+cd /mnt/user/appdata/curatorx && ./rollout.sh latest
+
+# Or refresh the image, then Force Update / Apply in the Docker UI:
 docker pull romwil/curatorx:latest
-# or pin: docker pull romwil/curatorx:1.7.13
+# optional helper from the repo (or copied into appdata):
+# ./scripts/unraid-force-pull.sh latest
+# ./scripts/unraid-force-pull.sh latest --rmi-retry   # if pull still no-ops
 ```
 
-If Unraid does not detect a new image after Force Update, see the cache-busting notes in [../DOCKER.md](../DOCKER.md) (v1.7.10+ embeds a build timestamp so every release is a distinct image).
+Keep `rollout.sh` in sync with the repo: `scripts/unraid-rollout.sh`. Confirm: `docker exec curatorx cat /app/.build-info` and the `CuratorX startup (version …)` log line. Full root-cause: [../DOCKER.md](../DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
+
+An interrupted sync job is marked failed; start sync again — phase checkpoints resume unfinished work when still valid (≤72h).
 
 See also: [Installation](Installation.md) · [Troubleshooting](Troubleshooting.md) · [../DOCKER.md](../DOCKER.md)

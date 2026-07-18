@@ -7163,6 +7163,7 @@ a.title-credit-link:hover {
 }
 
 .title-neighbor-poster {
+  position: relative;
   aspect-ratio: 2 / 3;
   border-radius: var(--radius);
   overflow: hidden;
@@ -8221,9 +8222,51 @@ a.explore-cinema-card-link:focus-visible h3 {
   top: 0.35rem;
   right: 0.35rem;
 }
+.explore-poster.has-watch-badge .explore-hover-icon-trailer {
+  /* Keep trailer clear of the always-on watch corner ribbon. */
+  top: 2.35rem;
+  right: 0.35rem;
+}
 .explore-hover-icon-recommend {
   bottom: 0.35rem;
   right: 0.35rem;
+}
+
+/* Plex-like watch progress corner ribbon (always visible). */
+.watch-progress-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
+  width: 2.15rem;
+  height: 2.15rem;
+  pointer-events: none;
+  overflow: hidden;
+}
+.watch-progress-badge::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  border-style: solid;
+  border-width: 0 2.15rem 2.15rem 0;
+  border-color: transparent rgba(10, 12, 16, 0.82) transparent transparent;
+}
+.watch-progress-badge.is-partial::before {
+  border-color: transparent rgba(176, 122, 48, 0.92) transparent transparent;
+}
+.watch-progress-badge .material-symbols-outlined {
+  position: absolute;
+  top: 0.1rem;
+  right: 0.06rem;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: #f5f1ea;
+  font-variation-settings: "FILL" 1, "wght" 600, "GRAD" 0, "opsz" 20;
+}
+.poster-wrap.has-watch-badge .title-card-pin,
+.poster-wrap.has-watch-badge .title-card-match-badge {
+  right: 2.35rem;
 }
 .person-title-card-wrap {
   display: flex;

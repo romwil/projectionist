@@ -14,9 +14,13 @@ No. CuratorX is a **single workspace**: sidebar conversations + full-width chat 
 
 - Unraid / everyday: `romwil/curatorx:latest` (CA template default)
 - Track the line: `romwil/curatorx:1.8`
-- Pin exact: `romwil/curatorx:1.8.9`
+- Pin exact: `romwil/curatorx:1.8.11`
 
 Images are multi-arch (amd64 + arm64) and run as non-root.
+
+## Unraid Force Update pulled 0 B and I’m still on an old version
+
+Force Update can recreate from a stale local `latest` mapping (**0 B** pulled) even when Hub has moved. Prefer `cd /mnt/user/appdata/curatorx && ./rollout.sh latest`, or `docker pull` / `scripts/unraid-force-pull.sh` then Force Update. Details: [DOCKER.md](../DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
 
 ## Where is my data stored?
 

@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.8.11] — 2026-07-18
+
+Watched poster badges, Revisit These rail, and durable Unraid update hygiene after Force Update 0 B no-ops.
+
+### Added
+- **Watched posters**: Plex-like upper-right watch overlays on every poster surface (`WatchProgressBadge`) — checkmark when fully watched, distinct in-progress glyph for movie playhead progress or partially watched shows.
+- **Revisit These** Explore rail: random sample of up to 20 partially watched TV series with no activity for 60+ days (`GET /api/library/feeds/revisit-these`).
+- **`scripts/unraid-force-pull.sh`**: CLI pull + RepoDigest verify; optional `--rmi-retry` / `--recreate` when Force Update reports 0 B.
+- **`scripts/unraid-rollout.sh`**: canonical vendored copy of appdata `rollout.sh` for sync onto Unraid hosts.
+
+### Changed
+- Library/query and title-card payloads include `view_count` / `view_offset_ms` / episode progress fields needed for badges without extra fetches.
+- Dockerfile OCI labels: `org.opencontainers.image.version` / `.revision` / `.created`; `/app/.build-info` includes git short SHA.
+- `docker-release.sh`: passes `VCS_REF`, prints Hub digests after push, optional `--date-tag` (`:latest-YYYYMMDD`).
+- CA templates / `ca_profile.xml`: honest update notes when Force Update pulls 0 B; keep Repository `:latest`.
+
+### Fixed
+- **Docs**: Unraid Force Update systemic root cause — Dockerman *does* pull, but Engine can keep a stale local `latest` mapping (TOTAL DATA PULLED: 0 B). Prior BUILD_DATE / label cache-busting remains for Hub uniqueness only; it does not bypass the no-op. Supported path: `docker pull` / `unraid-force-pull.sh` / appdata `rollout.sh` ([DOCKER.md](docs/DOCKER.md), FAQ, wiki Unraid).
+
 ## [1.8.10] — 2026-07-17
 
 Wikipedia-default long synopsis and first-start idle bootstrap so fresh installs gain plot depth without waiting days or spending LLM tokens.

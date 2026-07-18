@@ -6,7 +6,9 @@ import { setTitleCardDragData } from "../lib/easterEggs.js";
 import { formatMatchPercent } from "../lib/matchScore.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
+import { watchProgressState } from "../lib/watchProgress.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
+import WatchProgressBadge from "./WatchProgressBadge";
 
 let cachedPlexMachineId;
 let plexMachineIdPromise;
@@ -99,6 +101,7 @@ export default function TitleCard({
   const showRing =
     item.media_type === "show" &&
     (item.total_episode_count > 0 || item.unwatched_episode_count != null);
+  const hasWatchBadge = watchProgressState(item) !== "unwatched";
   const isPinned = Boolean(pinRecord);
   const showPin = Boolean(onTogglePin) && allowWatchlistPin(item);
   const facetMatches = item.facet_matches || [];
@@ -273,7 +276,7 @@ export default function TitleCard({
           aria-hidden="true"
         />
       ) : null}
-      <div className="poster-wrap">
+      <div className={`poster-wrap${hasWatchBadge ? " has-watch-badge" : ""}`}>
         {detailPath ? (
           <Link
             to={detailPath}
@@ -286,6 +289,7 @@ export default function TitleCard({
         ) : (
           posterMedia
         )}
+        <WatchProgressBadge item={item} />
         <span className="badge">{badge}</span>
         {matchLabel ? (
           <span className="title-card-match-badge" data-testid="title-card-match-badge">

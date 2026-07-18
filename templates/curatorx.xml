@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.8.5 -->
+<!-- Unraid Community Applications template — CuratorX 1.8.11 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -11,7 +11,7 @@
   <Support>https://github.com/romwil/curatorx/issues</Support>
   <Project>https://github.com/romwil/curatorx</Project>
   <Readme>https://raw.githubusercontent.com/romwil/curatorx/main/docs/wiki/Unraid.md</Readme>
-  <Overview>Chat-first Plex collection curator with BYOP LLM support, RAG over your library, TMDB discovery, and confirmation-gated Radarr/Sonarr add/remove. Keep port 8788 on a trusted LAN — do not WAN-expose without an authenticated reverse proxy.</Overview>
+  <Overview>Chat-first Plex collection curator with BYOP LLM support, RAG over your library, TMDB discovery, and confirmation-gated Radarr/Sonarr add/remove. Keep port 8788 on a trusted LAN — do not WAN-expose without an authenticated reverse proxy. Updates: if Force Update shows 0 B pulled, SSH `docker pull romwil/curatorx:latest` or appdata `./rollout.sh` (see Unraid wiki).</Overview>
   <Category>MediaServer:Other Tools:Utilities</Category>
   <WebUI>http://[IP]:[PORT:8788]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/romwil/curatorx/main/templates/curatorx.xml</TemplateURL>
@@ -21,6 +21,11 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.8.11
+- Watched poster badges + Revisit These Explore rail; Unraid Force Update docs/scripts (`unraid-force-pull.sh`, vendored `unraid-rollout.sh`)
+- OCI labels: version / revision / created; release script prints Hub digests (+ optional `--date-tag`)
+- Honest CA update path when Force Update reports TOTAL DATA PULLED: 0 B
+
 ### 1.8.5
 - Watchlist explore page (/watchlist) with bulk Remove/Delete and TitleDetailDrawer; Settings → Watchlist sync prefs only
 - Plex Discover watchlist sync paginates full list; title detail watched-state, reviews, trailer CSP, bulk delete
@@ -74,7 +79,7 @@
 - Decade Distribution, Top Genres, Countries, Languages, Runtime Distribution, Purge Candidates, TV Completion, and Reviews panels now populate correctly
 
 ### 1.7.10
-- Fix Unraid Force Update: build timestamp now embedded in image file content, not just labels
+- Embed build timestamp in image file content (unique Hub layers); Force Update still needs Engine re-resolve — see Unraid wiki
 - Startup log shows build info for version verification
 
 ### 1.7.9
@@ -84,7 +89,7 @@
 - Fix scroll chip, turnstyle buttons, agent tool data consistency; 33 new validation tests
 
 ### 1.7.7
-- Fix Docker layer caching — Force Update now pulls fresh images reliably
+- OCI version label via build arg so each release has a distinct Hub manifest
 
 ### 1.7.6
 - Fix wrong titles in Turnstyle viewport; fix streaming monologue leak
@@ -146,6 +151,11 @@
   </Changes>
   <Description>
 CuratorX helps you curate your movie and TV collection through conversation. Connect Plex, Radarr, Sonarr, TMDB, and your preferred LLM provider (cloud API or Ollama).
+
+**Updating (important)**
+- Repository default: `romwil/curatorx:latest` (pin `:1.8` / `:1.8.11` if preferred).
+- If **Force Update** reports **TOTAL DATA PULLED: 0 B** and the app stays on an old version, Docker kept a stale local tag. SSH: `docker pull romwil/curatorx:latest` then Force Update / Apply, or `cd /mnt/user/appdata/curatorx && ./rollout.sh latest`. Do not wipe `/config`.
+- Full notes: https://github.com/romwil/curatorx/blob/main/docs/wiki/Unraid.md
 
 **Security**
 - Bind to a trusted LAN or put CuratorX behind an authenticated reverse proxy.

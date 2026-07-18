@@ -105,6 +105,8 @@ On `/config` load, the UI fetches certification status and sequentially tests an
 - **Card hover backdrop** — Hover a title card to see a blurred backdrop image when art is available.
 - **Cinema mode** — In the results overlay, toggle **Cinema mode** to enlarge cards and dim surrounding chrome.
 - **TV progress rings** — Show cards display a small ring for watched vs total episodes when that data is available.
+- **Watch overlays** — Every poster (Explore rails, Plot Lab, Watchlist, Person, section pages, chat TitleCard, QuickPick, title-detail related rails) shows a Plex-like upper-right checkmark when fully watched, or a distinct in-progress badge for movie playhead progress / partially watched shows.
+- **Revisit These** — Explore hub rail of up to 20 partially watched shows idle for 60+ days (random sample; honest empty when none qualify).
 - **Curator streaks** — After three or more conversations in the last 30 days, a subtle streak chip appears in the top bar.
 - **Sync completion chime** — When a library sync job finishes, a short chime plays (toggle mute with the bell in the status dock).
 - **Late-night mode** — After 11 p.m. local time, the top bar shifts to a softer night-owl palette.

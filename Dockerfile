@@ -14,12 +14,16 @@ RUN npm run build
 
 FROM python:3.12-slim
 
+# Build-time identity (passed by scripts/docker-release.sh). These must land in
+# LABEL + a file layer so every release has a unique image config digest.
 ARG CURATORX_VERSION=dev
 ARG BUILD_DATE=unknown
+ARG VCS_REF=unknown
 
 LABEL org.opencontainers.image.title="CuratorX" \
       org.opencontainers.image.description="Chat-first Plex collection curator for self-hosted homelabs" \
       org.opencontainers.image.version="${CURATORX_VERSION}" \
+      org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.source="https://github.com/romwil/curatorx" \
       org.opencontainers.image.licenses="MIT"
@@ -34,7 +38,10 @@ COPY pyproject.toml README.md LICENSE ./
 COPY curatorx ./curatorx
 COPY --from=frontend /frontend/dist ./frontend/dist
 
-RUN echo "${CURATORX_VERSION} built ${BUILD_DATE}" > /app/.build-info
+# File-level cache bust: guarantees layer content differs every release even when
+# only labels would change. Does NOT make Unraid Force Update pull by itself —
+# Dockerman still depends on Docker Engine re-resolving the tag (see docs/DOCKER.md).
+RUN echo "${CURATORX_VERSION} built ${BUILD_DATE} rev ${VCS_REF}" > /app/.build-info
 
 RUN pip install --no-cache-dir ".[web,mcp]"
 

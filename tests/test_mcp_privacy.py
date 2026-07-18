@@ -86,6 +86,14 @@ class PrivacySchemaTests(unittest.TestCase):
             "in_progress",
         )
 
+    def test_derive_watch_state_movie_partial_offset(self) -> None:
+        self.assertEqual(
+            derive_watch_state(
+                {"media_type": "movie", "view_count": 0, "view_offset_ms": 15_000}
+            ),
+            "in_progress",
+        )
+
 
 class McpHttpKeyModeTests(unittest.TestCase):
     def setUp(self) -> None:

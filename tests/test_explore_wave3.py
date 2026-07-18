@@ -21,6 +21,7 @@ from curatorx.library.feeds import (
     feed_on_this_day,
     feed_recent_releases,
     feed_recently_added,
+    feed_revisit_these,
     neighbors_payload,
 )
 from curatorx.library.query import LibraryFilters, query_library
@@ -200,6 +201,74 @@ class FeedHelperTests(unittest.TestCase):
             shows = feed_recent_releases(db, limit=10, days=30, media_type="show")
             self.assertEqual(shows["total"], 1)
             self.assertEqual(shows["items"][0]["title"], "Show A")
+
+    def test_revisit_these_selects_idle_partial_shows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            now = int(time.time())
+            stale = now - 90 * 86400
+            recent = now - 5 * 86400
+            db.upsert_library_item(
+                {
+                    "rating_key": "stale-partial",
+                    "media_type": "show",
+                    "title": "Stale Partial",
+                    "year": 2018,
+                    "total_episode_count": 10,
+                    "unwatched_episode_count": 4,
+                    "last_viewed_at": stale,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "fresh-partial",
+                    "media_type": "show",
+                    "title": "Fresh Partial",
+                    "year": 2022,
+                    "total_episode_count": 8,
+                    "unwatched_episode_count": 2,
+                    "last_viewed_at": recent,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "fully-watched",
+                    "media_type": "show",
+                    "title": "Fully Watched",
+                    "year": 2015,
+                    "total_episode_count": 6,
+                    "unwatched_episode_count": 0,
+                    "last_viewed_at": stale,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "movie-partial",
+                    "media_type": "movie",
+                    "title": "Movie Progress",
+                    "year": 2020,
+                    "view_count": 0,
+                    "view_offset_ms": 12_000,
+                    "last_viewed_at": stale,
+                }
+            )
+            payload = feed_revisit_these(db, limit=20, idle_days=60)
+            self.assertEqual(payload["feed"], "revisit-these")
+            self.assertEqual(payload["idle_days"], 60)
+            self.assertEqual(payload["total"], 1)
+            self.assertEqual(len(payload["items"]), 1)
+            self.assertEqual(payload["items"][0]["title"], "Stale Partial")
+            self.assertEqual(payload["items"][0]["media_type"], "show")
+            self.assertIn("view_count", payload["items"][0])
+            self.assertIn("unwatched_episode_count", payload["items"][0])
+
+    def test_revisit_these_honest_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            payload = feed_revisit_these(db, limit=20, idle_days=60)
+            self.assertEqual(payload["items"], [])
+            self.assertEqual(payload["total"], 0)
+            self.assertIn("partially watched", (payload["note"] or "").lower())
 
     def test_on_this_day_calendar_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

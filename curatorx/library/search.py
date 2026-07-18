@@ -30,6 +30,17 @@ def row_to_title_card(row, *, reason: str = "", facet_matches: Optional[List[str
         recommendation_reason=reason,
         facet_matches=list(facet_matches or []),
         runtime_minutes=int(row["runtime_minutes"]) if "runtime_minutes" in row.keys() and row["runtime_minutes"] else None,
+        view_count=int(row["view_count"] or 0) if "view_count" in row.keys() else 0,
+        view_offset_ms=(
+            int(row["view_offset_ms"])
+            if "view_offset_ms" in row.keys() and row["view_offset_ms"] is not None
+            else None
+        ),
+        duration_ms=(
+            int(row["duration_ms"])
+            if "duration_ms" in row.keys() and row["duration_ms"] is not None
+            else None
+        ),
         total_episode_count=int(row["total_episode_count"])
         if "total_episode_count" in row.keys() and row["total_episode_count"]
         else None,

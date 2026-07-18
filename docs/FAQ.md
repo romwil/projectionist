@@ -12,9 +12,21 @@ A chat-first + Explore curator for self-hosted **Plex** libraries — and a real
 |-----|------|
 | `romwil/curatorx:latest` | Everyday Unraid / Compose (CA template default) |
 | `romwil/curatorx:1.8` | Track the 1.8 line |
-| `romwil/curatorx:1.8.9` | Pin an exact release |
+| `romwil/curatorx:1.8.11` | Pin an exact release |
 
 Images are multi-arch (**amd64 + arm64**), run as non-root `curatorx` (UID/GID 1000). See [wiki/Installation.md](wiki/Installation.md).
+
+## Unraid Force Update pulled 0 B and I’m still on an old version
+
+Force Update calls Docker Engine pull, then recreates the container. **0 B** means Engine kept the existing local `romwil/curatorx:latest` mapping while Hub may already have a newer digest. Dockerfile labels / `.build-info` do not bypass that. Fix (config stays under `/mnt/user/appdata/curatorx/config`):
+
+```bash
+cd /mnt/user/appdata/curatorx && ./rollout.sh latest
+# or: docker pull romwil/curatorx:latest   # then Force Update / Apply
+# or: ./scripts/unraid-force-pull.sh latest --rmi-retry
+```
+
+Verify: `docker exec curatorx cat /app/.build-info`. Details: [DOCKER.md](DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
 
 ## Where is my data stored?
 

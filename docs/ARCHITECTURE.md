@@ -411,6 +411,7 @@ Empty neighbor/relation responses are **honest** — they mean the idle cache ha
 |----------|--------|--------------|
 | `GET /api/library/feeds/recently-added` | `library_items.added_at` | Empty + note if sync never recorded `added_at` |
 | `GET /api/library/feeds/recent-releases` | `release_date` / `first_air_date` | Empty + note if no enriched dates (no year faking) |
+| `GET /api/library/feeds/revisit-these` | partially watched TV + idle `last_viewed_at` / `last_episode_watched_at` ≥ 60d | Random ≤20; empty + note when none qualify |
 | `GET /api/library/feeds/on-this-day` | calendar month-day match, else milestone-year fallback | `mode` field discloses which path ran |
 | `GET /api/library/neighbors/{item_id}` | `item_neighbors` | Empty until `plot_neighbors` ran |
 | `GET /api/library/motifs` | `library_facets` where `facet_type='motif'` | Empty until motif task ran |

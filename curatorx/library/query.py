@@ -328,6 +328,16 @@ def row_to_query_item(row: Mapping[str, Any]) -> Dict[str, Any]:
         "cast": _parse_json_list(row["cast"]) if "cast" in keys else [],
         "keywords": _parse_json_list(row["keywords"]) if "keywords" in keys else [],
         "view_count": int(row["view_count"] or 0),
+        "view_offset_ms": (
+            int(row["view_offset_ms"])
+            if "view_offset_ms" in keys and row["view_offset_ms"] is not None
+            else None
+        ),
+        "duration_ms": (
+            int(row["duration_ms"])
+            if "duration_ms" in keys and row["duration_ms"] is not None
+            else None
+        ),
         "added_at": int(row["added_at"]) if "added_at" in keys and row["added_at"] is not None else None,
         "last_viewed_at": int(row["last_viewed_at"]) if "last_viewed_at" in keys and row["last_viewed_at"] is not None else None,
         "tmdb_id": int(row["tmdb_id"]) if row["tmdb_id"] is not None else None,

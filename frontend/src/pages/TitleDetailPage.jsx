@@ -6,6 +6,7 @@ import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
 import RecommendModal from "../components/RecommendModal";
 import TitleDetailContent from "../components/TitleDetailContent";
 import TitleReviewModal from "../components/TitleReviewModal";
+import WatchProgressBadge from "../components/WatchProgressBadge";
 import AppShell from "../layouts/AppShell";
 import { useTitleDetail } from "../hooks/useTitleDetail.js";
 import { useTitleDetailInteractions } from "../hooks/useTitleDetailInteractions.js";
@@ -182,6 +183,7 @@ export default function TitleDetailPage() {
                     ) : (
                       <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
                     )}
+                    <WatchProgressBadge item={item} />
                   </div>
                   <h3>{item.title}</h3>
                   {item.year ? <p className="title-neighbor-year">{item.year}</p> : null}
@@ -268,6 +270,7 @@ export default function TitleDetailPage() {
                     ) : (
                       <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
                     )}
+                    <WatchProgressBadge item={item} />
                   </div>
                   <h3>{item.title}</h3>
                   {item.year ? <p className="title-neighbor-year">{item.year}</p> : null}

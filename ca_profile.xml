@@ -9,6 +9,8 @@ CuratorX is a chat-first Plex collection curator for self-hosted homelabs. Conne
 **Install notes:** https://github.com/romwil/curatorx/blob/main/docs/wiki/Unraid.md
 
 Keep port 8788 on a trusted LAN; do not WAN-expose without an authenticated reverse proxy.
+
+**Updating:** if Docker Force Update reports TOTAL DATA PULLED: 0 B, run `docker pull romwil/curatorx:latest` (or appdata `./rollout.sh`) then recreate — see wiki Unraid / DOCKER.md.
   </Profile>
   <Icon>https://raw.githubusercontent.com/romwil/curatorx/main/unraid/curatorx-icon.png</Icon>
   <WebPage>https://github.com/romwil/curatorx</WebPage>

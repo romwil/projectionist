@@ -40,7 +40,7 @@ Thumbs up / down on curator replies train future recommendations. Personal **rev
 
 ### Explore
 
-Cinema browse over the same SQLite feeds the agent uses: Recently Added, Recent Releases, On This Day, and links into Plot Lab / Tags. Empty rails usually mean enrichment caches are still cold — not that your library is empty.
+Cinema browse over the same SQLite feeds the agent uses: Recently Added, Recent Releases, Revisit These (partially watched TV idle 60+ days), On This Day, and links into Plot Lab / Tags. Posters show watched / in-progress overlays from Plex sync. Empty rails usually mean enrichment caches are still cold — not that your library is empty.
 
 ### Plot Lab
 

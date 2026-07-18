@@ -826,6 +826,14 @@ export async function getExploreFeedOnThisDay({ limit = 12 } = {}) {
   return api(`/library/feeds/on-this-day?${params}`);
 }
 
+export async function getExploreFeedRevisitThese({ limit = 20, idleDays = 60 } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    idle_days: String(idleDays),
+  });
+  return api(`/library/feeds/revisit-these?${params}`);
+}
+
 export async function getLibraryMotifs({ limit = 160 } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   return api(`/library/motifs?${params}`);
