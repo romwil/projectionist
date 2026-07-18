@@ -14,6 +14,7 @@ import {
 import BarChart from "../components/charts/BarChart";
 import DonutChart from "../components/charts/DonutChart";
 import Gauge from "../components/charts/Gauge";
+import { useBulkActionProgress } from "../components/BulkActionProgress";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import { buildRuntimeBuckets, sortPurgeCandidates } from "../lib/dashboardCharts.js";
@@ -84,6 +85,7 @@ function formatPurgeGeneratedAt(generatedAt) {
 }
 
 function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, onRefreshNow }) {
+  const { start, update, finish } = useBulkActionProgress();
   const [sortKey, setSortKey] = useState("purge_score");
   const [sortDir, setSortDir] = useState("desc");
   const [selected, setSelected] = useState(new Set());
@@ -135,6 +137,8 @@ function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, 
   async function handleConfirmedAction() {
     const keys = [...selected];
     if (!keys.length) return;
+    const actionLabel = confirmAction === "delete" ? "Deleting purge candidates" : "Dismissing purge candidates";
+    const progressId = start({ label: actionLabel, total: keys.length, asynchronous: true });
     setActionLoading(true);
     try {
       if (confirmAction === "delete") {
@@ -142,10 +146,14 @@ function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, 
       } else if (confirmAction === "dismiss") {
         await dismissPurgeCandidates(keys);
       }
+      update(progressId, keys.length);
+      finish(progressId, {
+        label: `${confirmAction === "delete" ? "Deleted" : "Dismissed"} ${keys.length} purge candidate${keys.length === 1 ? "" : "s"}.`,
+      });
       setSelected(new Set());
       onRefresh?.();
     } catch {
-      // silently fail (endpoint may return error in toast)
+      finish(progressId, { label: "Could not complete the bulk action.", state: "error" });
     } finally {
       setActionLoading(false);
       setConfirmAction(null);

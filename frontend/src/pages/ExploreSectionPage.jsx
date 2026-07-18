@@ -7,6 +7,7 @@ import {
   getExploreFeedRecentlyAdded,
 } from "../api/client";
 import BackLink from "../components/BackLink.jsx";
+import { useBulkActionProgress } from "../components/BulkActionProgress.jsx";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
 import MediaBrowseControls from "../components/MediaBrowseControls.jsx";
 import MediaBrowseResults from "../components/MediaBrowseResults.jsx";
@@ -120,6 +121,7 @@ export default function ExploreSectionPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { isOwner } = useAuthGate();
+  const { start, update, finish } = useBulkActionProgress();
   const config = getExploreSectionConfig(sectionId);
   const query = useMemo(() => parseExploreSectionQuery(searchParams), [searchParams]);
   const [state, setState] = useState({
@@ -270,6 +272,11 @@ export default function ExploreSectionPage() {
     if (!selected.size || pinning) return;
     const targets = sortedItems.filter((item) => selected.has(itemKey(item)) && allowWatchlistPin(item));
     if (!targets.length) return;
+    const progressId = start({
+      label: "Pinning to watchlist",
+      total: targets.length,
+      asynchronous: true,
+    });
     setPinning(true);
     setActionStatus("");
     let ok = 0;
@@ -285,14 +292,18 @@ export default function ExploreSectionPage() {
         ok += 1;
       } catch {
         failed += 1;
+      } finally {
+        update(progressId, ok + failed);
       }
     }
     setPinning(false);
-    setActionStatus(
+    const summary = (
       failed
         ? `Pinned ${ok}; ${failed} failed.`
         : `Pinned ${ok} title${ok === 1 ? "" : "s"} to watchlist.`,
     );
+    setActionStatus(summary);
+    finish(progressId, { label: summary, state: failed ? "error" : "success" });
     setSelected(new Set());
   }
 
@@ -306,6 +317,11 @@ export default function ExploreSectionPage() {
     if (!isOwner || deleting) return;
     const { ratingKeys, titles } = deletePartition;
     if (!ratingKeys.length) return;
+    const progressId = start({
+      label: "Deleting from library index",
+      total: ratingKeys.length,
+      asynchronous: true,
+    });
     setDeleting(true);
     setDeleteError("");
     try {
@@ -329,13 +345,18 @@ export default function ExploreSectionPage() {
       });
       setSelected(new Set());
       setDeleteOpen(false);
-      setActionStatus(
+      const summary = (
         deletedCount
           ? `Removed ${deletedCount} title${deletedCount === 1 ? "" : "s"} from the CuratorX library index.`
           : `No matching library records for ${titles.length} selected title${titles.length === 1 ? "" : "s"}.`,
       );
+      setActionStatus(summary);
+      update(progressId, ratingKeys.length);
+      finish(progressId, { label: summary });
     } catch (err) {
-      setDeleteError(err.message || "Could not delete selected titles.");
+      const message = err.message || "Could not delete selected titles.";
+      setDeleteError(message);
+      finish(progressId, { label: message, state: "error" });
     } finally {
       setDeleting(false);
     }

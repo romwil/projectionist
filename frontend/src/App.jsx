@@ -99,6 +99,7 @@ import {
 } from "./lib/backNav.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import ChatThread from "./components/ChatThread";
+import { useBulkActionProgress } from "./components/BulkActionProgress";
 import InlineAlert from "./components/InlineAlert";
 import PersonaSelector from "./components/PersonaSelector";
 import KeyboardHelpModal from "./components/KeyboardHelpModal";
@@ -150,6 +151,7 @@ function appendPerfectPickAck(message) {
 
 export default function App() {
   const { authReady, multiUserEnabled, isOwner, role: userRole } = useAuthGate();
+  const { start: startBulkProgress, update: updateBulkProgress, finish: finishBulkProgress } = useBulkActionProgress();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
@@ -1077,6 +1079,11 @@ export default function App() {
 
     setAddInProgress(true);
     setAddProgress({ current: 0, total: items.length });
+    const progressId = startBulkProgress({
+      label: target === "seerr" ? "Requesting titles in Seerr" : `Adding titles to ${service}`,
+      total: items.length,
+      asynchronous: true,
+    });
 
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
@@ -1096,6 +1103,8 @@ export default function App() {
         successCount += 1;
       } catch (error) {
         failures.push({ title: item.title || "Unknown title", message: formatApiError(error) });
+      } finally {
+        updateBulkProgress(progressId, index + 1);
       }
     }
 
@@ -1104,27 +1113,32 @@ export default function App() {
     setPendingBulk(null);
 
     if (successCount === items.length) {
+      const summary = target === "seerr"
+        ? `Requested ${successCount} title${successCount === 1 ? "" : "s"} in Seerr.`
+        : `Added ${successCount} title${successCount === 1 ? "" : "s"} to ${service}.`;
+      finishBulkProgress(progressId, { label: summary });
       setAddFeedback({
         type: "success",
-        message:
-          target === "seerr"
-            ? `Requested ${successCount} title${successCount === 1 ? "" : "s"} in Seerr.`
-            : `Added ${successCount} title${successCount === 1 ? "" : "s"} to ${service}.`,
+        message: summary,
       });
       return;
     }
 
     if (successCount > 0) {
+      const summary = `Added ${successCount} of ${items.length} to ${service}. ${failures.length} failed.`;
+      finishBulkProgress(progressId, { label: summary, state: "error" });
       setAddFeedback({
         type: "error",
-        message: `Added ${successCount} of ${items.length} to ${service}. ${failures.length} failed.`,
+        message: summary,
       });
       return;
     }
 
+    const summary = failures[0]?.message || `Could not add titles to ${service}.`;
+    finishBulkProgress(progressId, { label: summary, state: "error" });
     setAddFeedback({
       type: "error",
-      message: failures[0]?.message || `Could not add titles to ${service}.`,
+      message: summary,
     });
   }
 
@@ -1135,6 +1149,11 @@ export default function App() {
 
     setAddInProgress(true);
     setAddProgress({ current: 0, total: tokens.length });
+    const progressId = startBulkProgress({
+      label: "Confirming bulk actions",
+      total: tokens.length,
+      asynchronous: true,
+    });
 
     for (let index = 0; index < tokens.length; index += 1) {
       const entry = tokens[index];
@@ -1148,6 +1167,8 @@ export default function App() {
         successCount += 1;
       } catch (error) {
         failures.push(formatApiError(error));
+      } finally {
+        updateBulkProgress(progressId, index + 1);
       }
     }
 
@@ -1156,24 +1177,30 @@ export default function App() {
     setPendingTokens([]);
 
     if (successCount === tokens.length) {
+      const summary = tokenConfirmSuccessMessage(successCount, tokens);
+      finishBulkProgress(progressId, { label: summary });
       setAddFeedback({
         type: "success",
-        message: tokenConfirmSuccessMessage(successCount, tokens),
+        message: summary,
       });
       return;
     }
 
     if (successCount > 0) {
+      const summary = `Confirmed ${successCount} of ${tokens.length}. ${failures.length} failed.`;
+      finishBulkProgress(progressId, { label: summary, state: "error" });
       setAddFeedback({
         type: "error",
-        message: `Confirmed ${successCount} of ${tokens.length}. ${failures.length} failed.`,
+        message: summary,
       });
       return;
     }
 
+    const summary = failures[0] || tokenConfirmFailureMessage(tokens);
+    finishBulkProgress(progressId, { label: summary, state: "error" });
     setAddFeedback({
       type: "error",
-      message: failures[0] || tokenConfirmFailureMessage(tokens),
+      message: summary,
     });
   }
 

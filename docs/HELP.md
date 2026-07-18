@@ -64,6 +64,8 @@ Poster walls default to the visual browse view, while **List** view makes scanni
 
 Use a **watchlist** for personal “remember this” pins. Use a **list** for a durable curated shelf; use a **playlist** for a deliberate viewing sequence. They share the same collection engine, but express different intent so a future watch does not get confused with a planned program.
 
+When an action works through multiple titles or recipients, its progress appears in the lower-left corner with the completed count. A short result stays there when the action finishes.
+
 The ⋮ grip on posters and list rows keeps common actions in one location. **Report issue** records a typed report for an owner; it never directly changes Plex or *arr. Owners decide whether to resolve it or run a supported, logged repair. This separation protects files and downloads from accidental member actions.
 
 #### A practical browse workflow

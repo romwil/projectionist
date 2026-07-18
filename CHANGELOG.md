@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.8.21] — 2026-07-18
+
+### Added
+- Multi-item actions now use one consistent lower-left progress indicator with action copy, completed count, and a short success or error summary. It covers chat bulk adds/confirmations, Explore pin and delete, Watchlist removal and delete, purge-candidate actions, Warm Explore task queueing, and multi-recipient household recommendations.
+
 ## [1.8.20] — 2026-07-18
 
 ### Changed

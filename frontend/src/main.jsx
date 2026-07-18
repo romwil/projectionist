@@ -26,47 +26,50 @@ import TagsPage from "./pages/TagsPage";
 import PlotLabPage from "./pages/PlotLabPage";
 import ListsPage from "./pages/ListsPage";
 import MediaIssuesPage from "./pages/MediaIssuesPage";
+import { BulkActionProgressProvider } from "./components/BulkActionProgress";
 import WhatsNewGate from "./components/WhatsNewGate";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
-      <WhatsNewGate />
-      <Routes>
-        <Route path="/" element={<App />} />
-        <Route path="/explore" element={<ExplorePage />} />
-        <Route path="/explore/tags" element={<TagsPage />} />
-        <Route path="/explore/plot-lab" element={<PlotLabPage />} />
-        <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
-        <Route path="/watchlist" element={<WatchlistPage />} />
-        <Route path="/lists" element={<ListsPage />} />
-        <Route path="/lists/:listId" element={<ListsPage />} />
-        <Route path="/login" element={<LoginPage />} />
-        <Route path="/privacy" element={<PrivacyPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="/help" element={<HelpPage />} />
-        <Route path="/config" element={<Navigate to="/admin" replace />} />
-        <Route path="/admin" element={<AdminLayout />}>
-          <Route index element={<Navigate to="overview" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="tasks" element={<ScheduledTasksPage />} />
-          <Route path="issues" element={<MediaIssuesPage />} />
-          <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
-          <Route path=":section" element={<ConfigPage />} />
-        </Route>
-        <Route path="/settings" element={<SettingsLayout />}>
-          <Route index element={<Navigate to="profile" replace />} />
-          <Route path="profile" element={<ProfilePage />} />
-          <Route path="voice" element={<VoicePage />} />
-          <Route path="watchlist" element={<WatchlistSettingsPage />} />
-          <Route path="lists" element={<ListsSettingsPage />} />
-        </Route>
-        <Route path="/title/:mediaType/:itemId" element={<TitleDetailPage />} />
-        <Route path="/person/:tmdbPersonId" element={<PersonPage />} />
-        <Route path="/tag/:tagName" element={<TagPage />} />
-        <Route path="*" element={<NotFoundPage />} />
-      </Routes>
+      <BulkActionProgressProvider>
+        <WhatsNewGate />
+        <Routes>
+          <Route path="/" element={<App />} />
+          <Route path="/explore" element={<ExplorePage />} />
+          <Route path="/explore/tags" element={<TagsPage />} />
+          <Route path="/explore/plot-lab" element={<PlotLabPage />} />
+          <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
+          <Route path="/watchlist" element={<WatchlistPage />} />
+          <Route path="/lists" element={<ListsPage />} />
+          <Route path="/lists/:listId" element={<ListsPage />} />
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/about" element={<AboutPage />} />
+          <Route path="/help" element={<HelpPage />} />
+          <Route path="/config" element={<Navigate to="/admin" replace />} />
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="tasks" element={<ScheduledTasksPage />} />
+            <Route path="issues" element={<MediaIssuesPage />} />
+            <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
+            <Route path=":section" element={<ConfigPage />} />
+          </Route>
+          <Route path="/settings" element={<SettingsLayout />}>
+            <Route index element={<Navigate to="profile" replace />} />
+            <Route path="profile" element={<ProfilePage />} />
+            <Route path="voice" element={<VoicePage />} />
+            <Route path="watchlist" element={<WatchlistSettingsPage />} />
+            <Route path="lists" element={<ListsSettingsPage />} />
+          </Route>
+          <Route path="/title/:mediaType/:itemId" element={<TitleDetailPage />} />
+          <Route path="/person/:tmdbPersonId" element={<PersonPage />} />
+          <Route path="/tag/:tagName" element={<TagPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </BulkActionProgressProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

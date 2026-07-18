@@ -7,6 +7,7 @@ import {
   runScheduledTask,
   updateScheduledTask,
 } from "../api/client";
+import { useBulkActionProgress } from "../components/BulkActionProgress";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import {
   CADENCE_PRESETS,
@@ -35,6 +36,7 @@ const MIN_INTERVAL_SECONDS = 60;
 const MAX_INTERVAL_SECONDS = 30 * 86400;
 
 export default function ScheduledTasksPage() {
+  const { start, update, finish } = useBulkActionProgress();
   const [items, setItems] = useState([]);
   const [idle, setIdle] = useState(false);
   const [running, setRunning] = useState(null);
@@ -378,19 +380,30 @@ export default function ScheduledTasksPage() {
     setActionError("");
     setWarmStatus("Starting Warm Explore…");
     const started = [];
+    const progressId = start({
+      label: "Queueing Warm Explore tasks",
+      total: warmExploreNames.length,
+      asynchronous: true,
+    });
     try {
-      for (const name of warmExploreNames) {
+      for (let index = 0; index < warmExploreNames.length; index += 1) {
+        const name = warmExploreNames[index];
         await runScheduledTask(name);
         started.push(taskDisplayName(name));
+        update(progressId, index + 1);
         setWarmStatus(`Triggered ${started.join(", ")}`);
         // Brief gap so the scheduler can accept the next fire-and-forget run.
         await new Promise((resolve) => setTimeout(resolve, 250));
       }
-      setWarmStatus(`Warm Explore queued: ${started.join(", ")}`);
+      const summary = `Warm Explore queued: ${started.join(", ")}`;
+      setWarmStatus(summary);
+      finish(progressId, { label: summary });
       await refreshList();
     } catch (err) {
-      setActionError(err.message || "Warm Explore failed");
+      const message = err.message || "Warm Explore failed";
+      setActionError(message);
       setWarmStatus("");
+      finish(progressId, { label: message, state: "error" });
     } finally {
       setWarming(false);
     }

@@ -8,6 +8,7 @@ import {
   runWatchlistSync,
 } from "../api/client";
 import BackLink from "../components/BackLink";
+import { useBulkActionProgress } from "../components/BulkActionProgress";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
@@ -39,6 +40,7 @@ function pinToCardItem(pin) {
 
 export default function WatchlistPage() {
   const { isOwner, multiUserEnabled } = useAuthGate();
+  const { start, update, finish } = useBulkActionProgress();
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ loading: true, items: [], error: "" });
   const [columns, setColumns] = useState(null);
@@ -136,6 +138,11 @@ export default function WatchlistPage() {
     if (!selected.size || removing) return;
     const targets = sortedItems.filter((pin) => selected.has(pinKey(pin)));
     if (!targets.length) return;
+    const progressId = start({
+      label: "Removing from watchlist",
+      total: targets.length,
+      asynchronous: true,
+    });
     setRemoving(true);
     setActionStatus("");
     let ok = 0;
@@ -146,15 +153,19 @@ export default function WatchlistPage() {
         ok += 1;
       } catch {
         failed += 1;
+      } finally {
+        update(progressId, ok + failed);
       }
     }
     setRemoving(false);
     setSelected(new Set());
-    setActionStatus(
+    const summary = (
       failed
         ? `Removed ${ok}; ${failed} failed.`
         : `Removed ${ok} title${ok === 1 ? "" : "s"} from your watchlist.`,
     );
+    setActionStatus(summary);
+    finish(progressId, { label: summary, state: failed ? "error" : "success" });
     await refresh();
   }
 
@@ -176,6 +187,11 @@ export default function WatchlistPage() {
     if (!isOwner || deleting) return;
     const { ratingKeys, titles } = deletePartition;
     if (!ratingKeys.length) return;
+    const progressId = start({
+      label: "Deleting from library index",
+      total: ratingKeys.length,
+      asynchronous: true,
+    });
     setDeleting(true);
     setDeleteError("");
     try {
@@ -183,14 +199,19 @@ export default function WatchlistPage() {
       const deletedCount = Number(result?.deleted) || 0;
       setDeleteOpen(false);
       setSelected(new Set());
-      setActionStatus(
+      const summary = (
         deletedCount
           ? `Removed ${deletedCount} title${deletedCount === 1 ? "" : "s"} from the CuratorX library index.`
           : `No matching library records for ${titles.length} selected title${titles.length === 1 ? "" : "s"}.`,
       );
+      setActionStatus(summary);
+      update(progressId, ratingKeys.length);
+      finish(progressId, { label: summary });
       await refresh();
     } catch (err) {
-      setDeleteError(err.message || "Could not delete selected titles.");
+      const message = err.message || "Could not delete selected titles.";
+      setDeleteError(message);
+      finish(progressId, { label: message, state: "error" });
     } finally {
       setDeleting(false);
     }

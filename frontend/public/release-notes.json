@@ -1,6 +1,19 @@
 {
-  "generated_at": "2026-07-18T04:46:12Z",
+  "generated_at": "2026-07-18T04:53:45Z",
   "releases": [
+    {
+      "version": "1.8.21",
+      "date": "2026-07-18",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Multi-item actions now use one consistent lower-left progress indicator with action copy, completed count, and a short success or error summary. It covers chat bulk adds/confirmations, Explore pin and delete, Watchlist removal and delete, purge-candidate actions, Warm Explore task queueing, and multi-recipient household recommendations."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.20",
       "date": "2026-07-18",

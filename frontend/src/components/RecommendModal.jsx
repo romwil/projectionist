@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { createRecommendations, listHouseholdPeers } from "../api/client";
+import { useBulkActionProgress } from "./BulkActionProgress";
 
 export default function RecommendModal({ item, open, onClose, onSent }) {
+  const { start, update, finish } = useBulkActionProgress();
   const [peers, setPeers] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
   const [message, setMessage] = useState("");
@@ -50,6 +52,11 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
       setError("Pick at least one person.");
       return;
     }
+    const progressId = start({
+      label: "Sending recommendations",
+      total: selected.size,
+      asynchronous: true,
+    });
     setSending(true);
     setError("");
     try {
@@ -64,10 +71,16 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
         poster_url: item.poster_url || null,
         message: message.trim() || null,
       });
+      update(progressId, selected.size);
+      finish(progressId, {
+        label: `Sent recommendation${selected.size === 1 ? "" : "s"} to ${selected.size}.`,
+      });
       onSent?.(result);
       onClose?.();
     } catch (err) {
-      setError(err.message || "Could not send recommendation.");
+      const message = err.message || "Could not send recommendation.";
+      setError(message);
+      finish(progressId, { label: message, state: "error" });
     } finally {
       setSending(false);
     }
