@@ -3,8 +3,9 @@ WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 COPY frontend/ ./
-# PrivacyPage imports @docs/PRIVACY.md (alias → /docs in this stage)
+# PrivacyPage / HelpPage import @docs/*.md (alias → /docs in this stage)
 COPY docs/PRIVACY.md /docs/PRIVACY.md
+COPY docs/HELP.md /docs/HELP.md
 # release-notes.json is generated on the host by docker-release.sh / generate-release-notes.sh
 # before build; Vite copies public/ into dist. Fail fast if missing so About / What's New work.
 RUN test -f public/release-notes.json \
