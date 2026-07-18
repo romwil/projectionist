@@ -360,24 +360,25 @@ def _facet_subquery(facet_type: str, values: List[str]) -> Tuple[str, List[Any]]
 
 
 def _plot_signal_subquery(token: str) -> Tuple[str, List[Any]]:
-    """Match one Plot Lab token via motif facet OR keyword facet OR live plot text."""
+    """Match one Plot Lab token via motif/keyword/theme facet OR live plot text."""
     needle = f"%{token.lower()}%"
     sql = (
         "id IN ("
         "SELECT item_id FROM library_facets "
-        "WHERE (facet_type = 'motif' OR facet_type = 'keyword') "
+        "WHERE (facet_type = 'motif' OR facet_type = 'keyword' OR facet_type = 'theme') "
         "AND lower(facet_value) LIKE ? "
         "UNION "
         "SELECT id FROM library_items WHERE "
         "lower(COALESCE(summary, '')) LIKE ? "
         "OR lower(COALESCE(tmdb_overview, '')) LIKE ? "
         "OR lower(COALESCE(tagline, '')) LIKE ? "
+        "OR lower(COALESCE(long_synopsis, '')) LIKE ? "
         "OR lower(COALESCE(llm_logline, '')) LIKE ? "
         "OR lower(COALESCE(keywords, '')) LIKE ?"
         ")"
     )
     # Note: keep keyword JSON LIKE as a cheap fallback when facets lag sync.
-    return sql, [needle, needle, needle, needle, needle, needle]
+    return sql, [needle, needle, needle, needle, needle, needle, needle]
 
 
 def _effective_added_from(filters: LibraryFilters) -> Optional[int]:
@@ -696,6 +697,7 @@ def _layer_label(layer: str) -> str:
     return {
         "motif": "plot motif",
         "keyword": "keyword",
+        "theme": "theme",
         "plot_text": "plot text",
     }.get(layer, layer)
 
@@ -706,18 +708,23 @@ def build_motif_why(
     *,
     plot_text: str = "",
     item_keyword_values: Optional[Sequence[str]] = None,
+    item_theme_values: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     """Explain why a title appears for the selected Plot Lab tokens.
 
     Layers (any may match in hybrid mode):
     - ``motif`` — ``library_facets`` motif value
     - ``keyword`` — ``library_facets`` / item keyword value
-    - ``plot_text`` — live summary/overview/tagline/logline excerpt
+    - ``theme`` — controlled theme facet (keyword→theme map)
+    - ``plot_text`` — live summary/overview/tagline/long_synopsis/logline excerpt
     """
     selected = [str(m).strip() for m in (selected_motifs or []) if str(m).strip()]
     owned = [str(v).strip().lower() for v in (item_motif_values or []) if str(v).strip()]
     keywords = [
         str(v).strip().lower() for v in (item_keyword_values or []) if str(v).strip()
+    ]
+    themes = [
+        str(v).strip().lower() for v in (item_theme_values or []) if str(v).strip()
     ]
     plot_lower = str(plot_text or "").lower()
     matched: List[str] = []
@@ -731,6 +738,8 @@ def build_motif_why(
             layers.append("motif")
         if _token_in_values(needle, keywords):
             layers.append("keyword")
+        if _token_in_values(needle, themes):
+            layers.append("theme")
         if needle and needle in plot_lower:
             layers.append("plot_text")
         if layers:
@@ -784,6 +793,7 @@ def attach_motif_why(
     ids = [int(item["id"]) for item in items if item.get("id") is not None]
     motifs_by_id = db.facet_values_for_items(ids, "motif")
     keywords_by_id = db.facet_values_for_items(ids, "keyword")
+    themes_by_id = db.facet_values_for_items(ids, "theme")
     plots_by_id = db.plot_text_for_items(ids)
     for item in items:
         item_id = item.get("id")
@@ -795,6 +805,7 @@ def attach_motif_why(
             motifs_by_id.get(key) or [],
             plot_text=plots_by_id.get(key) or "",
             item_keyword_values=keywords_by_id.get(key) or [],
+            item_theme_values=themes_by_id.get(key) or [],
         )
         item["matched_motifs"] = why["matched_motifs"]
         item["missed_motifs"] = why["missed_motifs"]
@@ -1401,13 +1412,16 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
                 "with_overview_pct": 0.0,
                 "with_motifs_pct": 0.0,
                 "with_keywords_pct": 0.0,
+                "with_themes_pct": 0.0,
                 "with_neighbors_pct": 0.0,
                 "with_loglines_pct": 0.0,
                 "avg_motifs_per_title": 0.0,
                 "avg_keywords_per_title": 0.0,
+                "avg_themes_per_title": 0.0,
                 "neighbor_edges": 0,
                 "motif_rows": 0,
                 "keyword_rows": 0,
+                "theme_rows": 0,
                 "logline_count": 0,
             }
 
@@ -1429,6 +1443,16 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
                 conn.execute(
                     "SELECT COUNT(*) AS cnt FROM library_items "
                     "WHERE TRIM(COALESCE(llm_logline, '')) != ''"
+                ).fetchone()["cnt"]
+            )
+
+        synopsis_count = 0
+        has_synopsis_col = "long_synopsis" in cols
+        if has_synopsis_col:
+            synopsis_count = int(
+                conn.execute(
+                    "SELECT COUNT(*) AS cnt FROM library_items "
+                    "WHERE TRIM(COALESCE(long_synopsis, '')) != ''"
                 ).fetchone()["cnt"]
             )
 
@@ -1454,6 +1478,17 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
         keyword_rows = int(keyword_row["rows"] or 0)
         keyword_titles = int(keyword_row["titles"] or 0)
 
+        theme_row = conn.execute(
+            """
+            SELECT COUNT(*) AS rows,
+                   COUNT(DISTINCT item_id) AS titles
+            FROM library_facets
+            WHERE facet_type = 'theme'
+            """
+        ).fetchone()
+        theme_rows = int(theme_row["rows"] or 0)
+        theme_titles = int(theme_row["titles"] or 0)
+
         neighbor_row = conn.execute(
             """
             SELECT COUNT(*) AS edges,
@@ -1467,20 +1502,28 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
     def _pct(count: int) -> float:
         return round((count / total) * 100.0, 1)
 
-    return {
+    result = {
         "total_titles": total,
         "with_overview_pct": _pct(with_overview),
         "with_motifs_pct": _pct(motif_titles),
         "with_keywords_pct": _pct(keyword_titles),
+        "with_themes_pct": _pct(theme_titles),
         "with_neighbors_pct": _pct(neighbor_seeds),
         "with_loglines_pct": _pct(logline_count),
         "avg_motifs_per_title": round(motif_rows / total, 2),
         "avg_keywords_per_title": round(keyword_rows / total, 2),
+        "avg_themes_per_title": round(theme_rows / total, 2),
         "neighbor_edges": neighbor_edges,
         "motif_rows": motif_rows,
         "keyword_rows": keyword_rows,
+        "theme_rows": theme_rows,
         "logline_count": logline_count,
     }
+    # Phase C may add long_synopsis — only expose when the column exists.
+    if has_synopsis_col:
+        result["with_synopsis_pct"] = _pct(synopsis_count)
+        result["synopsis_count"] = synopsis_count
+    return result
 
 
 def maybe_set_audit_context_label(db: Database, filters: LibraryFilters) -> None:

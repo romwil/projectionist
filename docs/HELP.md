@@ -45,23 +45,29 @@ Cinema browse over the same SQLite feeds the agent uses: Recently Added, Recent 
 ### Plot Lab
 
 1. Open **Plot Lab** from the nav menu or Explore.
-2. Tap one or more **motif chips**. Multiple chips mean **intersection (AND)** — titles that carry *all* selected motifs.
-3. Open **Why?** on a poster for which motifs matched and plot-summary excerpts.
-4. Seed a title under **Surprising neighbors** for narrative oddballs from the plot-similarity cache.
+2. Tap one or more **motif chips**. Multiple chips mean **intersection (AND)** — titles that carry *all* selected signals.
+3. Choose **Multi-signal** (default) so each token can match via motif, keyword, or plot text — or **Motifs only** for pure facet walls.
+4. When theme enrichment has run, optional **theme chips** appear and AND with your motif selection.
+5. Open **Why?** on a poster for which layer matched (motif / keyword / plot text) and summary excerpts.
+6. Seed a title under **Surprising neighbors** for narrative oddballs from the plot-similarity cache.
 
 If chips are missing or a wall is empty, see [Why walls feel sparse](#why-motif-walls-feel-sparse) and the full [knowledge guide](CURATOR_KNOWLEDGE.md).
 
 ### Why? on posters
 
-**Why?** explains a Plot Lab match using selected motifs and summary excerpts. It is provenance for the wall — not a spoiler essay. (Roadmap: cite keyword vs motif vs live text layer when multi-signal search lands.)
+**Why?** explains a Plot Lab match and cites which layer hit each selected token (motif facet, keyword, or live plot text). It is provenance for the wall — not a spoiler essay.
+
+### Title detail — Plot knowledge
+
+On a library title, the **Plot knowledge** panel shows which plot layers are present (overview, tagline, logline, and long synopsis when that source exists), motif/keyword/theme chips, and neighbor-cache count. Sparse panels mean idle enrichment is still catching up.
 
 ---
 
 ## Why motif walls feel sparse
 
-Plex/TMDB blurbs are short. Motifs are a **small lexical extract** (today: up to eight uncommon unigrams per title from summary + overview). An AND wall needs every chip present as a facet — so `bride` + `coma` can miss *Kill Bill* even when the free text contains both words, or when TMDB keywords already say `revenge` / `martial arts`.
+Plex/TMDB blurbs are short. Motifs are a **small lexical extract** from summary + overview (+ tagline / logline when present). A pure motif AND wall needs every chip present as a facet — so `bride` + `coma` can miss *Kill Bill* even when free text contains both words, or when TMDB keywords already say `revenge` / `martial arts`.
 
-That is a representation limit, not a broken library. Full case study and roadmap: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md#case-study-kill-bill--bride--coma).
+**Multi-signal** mode fixes that class of miss without inventing plot. Full case study: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md#case-study-kill-bill--bride--coma).
 
 ---
 
@@ -86,18 +92,32 @@ Knowledge-related tasks: `metadata_enrichment`, `semantic_embeddings`, `summary_
 | Motifs | Appear after `summary_motifs` runs |
 | Neighbor edges | Often lag embeddings — patience or tighter `plot_neighbors` cadence |
 | LLM loglines | Sparse by design |
+| Themes / long synopsis | Appear only after those optional enrichers run |
+
+**Where to read coverage in the app**
+
+- **Admin → Dashboard** — full **Knowledge coverage** panel (% with overview, motifs, keywords, neighbors, loglines; themes/synopsis when present).
+- **Admin → Scheduled Tasks** and **Explore** — compact honesty strip so sparsity stays visible while you tune cadence.
+- API: `GET /api/library/knowledge-coverage` (also nested under `/api/library/stats`).
 
 Honest empty “More Like This” / Plot Lab notes mean caches are cold. Owners get a deep link to Scheduled Tasks; members see the note only.
 
-### Telemetry & tuning (as of this release + roadmap)
+### Telemetry & tuning
 
-**As of this release:** Admin shows last-run outcome, owner-set intervals, and theoretical backlog ETAs. Live run logs are in-memory and reset on restart.
-
-**Roadmap:** durable run history, measured items/hour, and auto-tune of batch size / interval from real durations — especially to catch up neighbor graphs. See [CURATOR_KNOWLEDGE.md — Idle tasks](CURATOR_KNOWLEDGE.md#idle-tasks--purpose-trickle-auto-tune).
+Admin shows last-run outcome, durable run history, measured items/hour, owner-set intervals/batch, and ETA (measured when history exists). Auto-tune may adjust batch/interval for trickle tasks within safe caps — you can still override. See [CURATOR_KNOWLEDGE.md — Idle tasks](CURATOR_KNOWLEDGE.md#idle-tasks--purpose-trickle-auto-tune).
 
 ### LLM vs free sources
 
-Chat needs an LLM (or Ollama). Library sync, TMDB enrichment, motifs from existing text, and neighbor materialization do **not** require inventing plot with GPT. Prefer free layers first — details in the [knowledge guide](CURATOR_KNOWLEDGE.md#what-requires-llm-vs-free-sources).
+Chat needs an LLM (or Ollama). Library sync, TMDB enrichment, motifs from existing text, keyword→theme mapping, and neighbor materialization do **not** require inventing plot with GPT. Prefer free layers first — details in the [knowledge guide](CURATOR_KNOWLEDGE.md#what-requires-llm-vs-free-sources).
+
+### Owner: optional long synopsis
+
+To deepen plot text without LLM spend:
+
+1. Set `long_synopsis_source` in `{DATA_DIR}/settings.json` (or `CURATORX_LONG_SYNOPSIS_SOURCE`) to `wikipedia`, `omdb`, or `auto`.
+2. For OMDb (or `auto` fallback), set `omdb_api_key` / `OMDB_API_KEY`.
+3. Leave the task enabled under **Admin → Scheduled Tasks** (`long_synopsis_enrichment`) — it skips cleanly when the source is off.
+4. Themes: trigger `keyword_theme_tagging` (no key). Plot Lab shows theme chips once facets exist.
 
 ---
 

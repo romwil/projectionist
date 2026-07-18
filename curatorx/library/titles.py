@@ -11,7 +11,7 @@ from curatorx.connectors.fanart import FanartClient
 from curatorx.connectors.plex import cached_machine_identifier, plex_watch_url
 from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import Database
-from curatorx.models.schemas import CreditPerson, TitleDetail
+from curatorx.models.schemas import CreditPerson, PlotKnowledge, TitleDetail
 
 logger = logging.getLogger(__name__)
 
@@ -249,6 +249,42 @@ def _apply_tmdb_tv_meta(detail: TitleDetail, meta: Mapping[str, Any], tmdb: TMDB
         detail.trailer_youtube_key = trailer_key if isinstance(trailer_key, str) else ""
 
 
+def _plot_knowledge_for_item(db: Database, row, item_id: int) -> PlotKnowledge:
+    """Cheap per-title plot-depth snapshot for title detail (feature-detects columns)."""
+    keys = set(row.keys()) if hasattr(row, "keys") else set()
+    summary = str(row["summary"] or "").strip() if "summary" in keys else ""
+    overview = (
+        str(row["tmdb_overview"] or "").strip() if "tmdb_overview" in keys else ""
+    )
+    tagline = str(row["tagline"] or "").strip() if "tagline" in keys else ""
+    logline = str(row["llm_logline"] or "").strip() if "llm_logline" in keys else ""
+    synopsis_supported = "long_synopsis" in keys
+    synopsis = (
+        str(row["long_synopsis"] or "").strip() if synopsis_supported else ""
+    )
+    motifs = db.facet_values_for_items([item_id], "motif").get(item_id, [])
+    themes = db.facet_values_for_items([item_id], "theme").get(item_id, [])
+    neighbor_count = 0
+    with db.connect() as conn:
+        neighbor_count = int(
+            conn.execute(
+                "SELECT COUNT(*) AS cnt FROM item_neighbors WHERE item_id = ?",
+                (int(item_id),),
+            ).fetchone()["cnt"]
+            or 0
+        )
+    return PlotKnowledge(
+        has_overview=bool(summary or overview),
+        has_tagline=bool(tagline),
+        has_logline=bool(logline),
+        has_synopsis=bool(synopsis),
+        synopsis_supported=synopsis_supported,
+        motifs=motifs[:24],
+        themes=themes[:24],
+        neighbor_count=neighbor_count,
+    )
+
+
 def get_title_detail(
     db: Database,
     settings: Settings,
@@ -342,6 +378,7 @@ def get_title_detail(
                 for credit_row in db.list_credits_for_item(item_id)
                 if str(credit_row["name"] or "").strip()
             ]
+            detail.plot_knowledge = _plot_knowledge_for_item(db, row, item_id)
 
     resolved_tmdb_id = detail.tmdb_id
     if (

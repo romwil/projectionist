@@ -6,6 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from unittest.mock import MagicMock, patch
+
 from curatorx.library.db import Database
 from curatorx.library.query import (
     build_motif_why,
@@ -13,6 +15,7 @@ from curatorx.library.query import (
     filters_from_mapping,
     query_library,
 )
+from curatorx.library.titles import get_title_detail
 
 
 class PlotMultiSignalTests(unittest.TestCase):
@@ -197,10 +200,68 @@ class PlotMultiSignalTests(unittest.TestCase):
             self.assertEqual(coverage["with_overview_pct"], 50.0)
             self.assertEqual(coverage["with_motifs_pct"], 50.0)
             self.assertEqual(coverage["with_keywords_pct"], 50.0)
+            self.assertEqual(coverage["with_themes_pct"], 0.0)
             self.assertEqual(coverage["with_neighbors_pct"], 50.0)
             self.assertEqual(coverage["with_loglines_pct"], 50.0)
             self.assertEqual(coverage["motif_rows"], 2)
+            self.assertEqual(coverage["theme_rows"], 0)
             self.assertEqual(coverage["logline_count"], 1)
+            # Phase C synopsis column may be absent — key must not crash consumers.
+            self.assertTrue(
+                "with_synopsis_pct" not in coverage or isinstance(coverage["with_synopsis_pct"], float)
+            )
+
+    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
+    def test_title_detail_includes_plot_knowledge(self, _machine) -> None:
+        settings = MagicMock()
+        settings.tmdb_api_key = ""
+        settings.fanart_api_key = ""
+        settings.plex_url = ""
+        settings.plex_token = ""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "lib.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "pk-1",
+                    "media_type": "movie",
+                    "title": "Kill Bill: Vol. 1",
+                    "year": 2003,
+                    "tmdb_id": 24,
+                    "summary": "The Bride awakens from a coma.",
+                    "tagline": "Revenge is a dish best served cold.",
+                    "keywords": ["revenge"],
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "pk-2",
+                    "media_type": "movie",
+                    "title": "Neighbor",
+                    "year": 2004,
+                    "summary": "Other title.",
+                }
+            )
+            ids = {str(row["title"]): int(row["id"]) for row in db.all_library_items()}
+            item_id = ids["Kill Bill: Vol. 1"]
+            other_id = ids["Neighbor"]
+            db.replace_facets_of_type(
+                "motif",
+                [(item_id, "motif", "bride"), (item_id, "motif", "coma")],
+            )
+            db.replace_facets_of_type("theme", [(item_id, "theme", "revenge")])
+            db.set_neighbors(item_id, [(other_id, 0.9, 0.1)])
+
+            detail = get_title_detail(
+                db, settings, media_type="movie", tmdb_id=24, enrich=False
+            )
+            self.assertIsNotNone(detail.plot_knowledge)
+            pk = detail.plot_knowledge
+            self.assertTrue(pk.has_overview)
+            self.assertTrue(pk.has_tagline)
+            self.assertFalse(pk.has_logline)
+            self.assertIn("bride", pk.motifs)
+            self.assertIn("revenge", pk.themes)
+            self.assertEqual(pk.neighbor_count, 1)
 
 
 if __name__ == "__main__":

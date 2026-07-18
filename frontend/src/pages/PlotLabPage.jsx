@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  getLibraryFacets,
   getLibraryMotifs,
   getLibraryNeighbors,
   queryLibrary,
@@ -105,9 +106,11 @@ function MotifWallPagination({ summary, pageSize, onPageChange, onPageSizeChange
 export default function PlotLabPage() {
   const { isOwner, multiUserEnabled } = useAuthGate();
   const [motifs, setMotifs] = useState([]);
+  const [themes, setThemes] = useState([]);
   const [motifsNote, setMotifsNote] = useState("");
   const [motifsLoading, setMotifsLoading] = useState(true);
   const [selectedMotifs, setSelectedMotifs] = useState([]);
+  const [selectedThemes, setSelectedThemes] = useState([]);
   const [mediaType, setMediaType] = useState(null);
   const [plotMatchMode, setPlotMatchMode] = useState(DEFAULT_PLOT_MATCH_MODE);
   const [pageSize, setPageSize] = useState(DEFAULT_PLOT_LAB_PAGE_SIZE);
@@ -128,11 +131,16 @@ export default function PlotLabPage() {
   useEffect(() => {
     let cancelled = false;
     setMotifsLoading(true);
-    getLibraryMotifs({ limit: PLOT_LAB_MOTIF_CATALOG_LIMIT })
-      .then((data) => {
+    Promise.all([
+      getLibraryMotifs({ limit: PLOT_LAB_MOTIF_CATALOG_LIMIT }),
+      getLibraryFacets("theme", PLOT_LAB_MOTIF_CATALOG_LIMIT).catch(() => ({ facets: [] })),
+    ])
+      .then(([motifData, themeData]) => {
         if (cancelled) return;
-        const facets = normalizeMotifFacets(data);
+        const facets = normalizeMotifFacets(motifData);
+        const themeFacets = normalizeMotifFacets(themeData);
         setMotifs(facets);
+        setThemes(themeFacets);
         setMotifsNote(
           facets.length
             ? ""
@@ -143,6 +151,7 @@ export default function PlotLabPage() {
       .catch((err) => {
         if (cancelled) return;
         setMotifs([]);
+        setThemes([]);
         setMotifsNote(err.message || "Could not load motifs.");
         setMotifsLoading(false);
       });
@@ -152,7 +161,7 @@ export default function PlotLabPage() {
   }, []);
 
   useEffect(() => {
-    if (!selectedMotifs.length) {
+    if (!selectedMotifs.length && !selectedThemes.length) {
       setMotifWall({ loading: false, items: [], note: null, error: "", payload: null });
       return undefined;
     }
@@ -163,6 +172,7 @@ export default function PlotLabPage() {
       offset,
       mediaType,
       plotMatchMode,
+      themes: selectedThemes,
     });
     queryLibrary(Object.fromEntries(params.entries()))
       .then((data) => {
@@ -189,7 +199,7 @@ export default function PlotLabPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedMotifs, mediaType, pageSize, offset, plotMatchMode]);
+  }, [selectedMotifs, selectedThemes, mediaType, pageSize, offset, plotMatchMode]);
 
   useEffect(() => {
     if (!seed?.id) {
@@ -271,6 +281,11 @@ export default function PlotLabPage() {
     setOffset(0);
   }
 
+  function handleToggleTheme(value) {
+    setSelectedThemes((prev) => toggleMotifSelection(prev, value));
+    setOffset(0);
+  }
+
   function handleMediaTab(nextType) {
     setMediaType(normalizeMediaTypeFilter(nextType));
     setOffset(0);
@@ -337,6 +352,9 @@ export default function PlotLabPage() {
                 </button>
               ))}
             </div>
+            <p className="explore-section-subtitle" data-testid="plot-lab-motif-hint">
+              Motifs — tap to filter. Multiple selections AND together.
+            </p>
             <div
               className="explore-motif-chips explore-motif-chips-scroll"
               data-testid="explore-motif-chips"
@@ -358,47 +376,82 @@ export default function PlotLabPage() {
                 );
               })}
             </div>
+            {themes.length ? (
+              <>
+                <p className="explore-section-subtitle" data-testid="plot-lab-theme-hint">
+                  Themes — from TMDB keywords via keyword_theme_tagging (no LLM).
+                </p>
+                <div
+                  className="explore-motif-chips explore-motif-chips-scroll"
+                  data-testid="explore-theme-chips"
+                >
+                  {themes.map((facet) => {
+                    const active = selectedThemes.includes(facet.value);
+                    return (
+                      <button
+                        key={facet.value}
+                        type="button"
+                        className={`explore-motif-chip explore-theme-chip${active ? " is-active" : ""}`}
+                        data-testid="explore-theme-chip"
+                        aria-pressed={active}
+                        onClick={() => handleToggleTheme(facet.value)}
+                      >
+                        {facet.value}
+                        {facet.count ? (
+                          <span className="explore-motif-count">{facet.count}</span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            ) : null}
           </>
         ) : null}
 
-        {selectedMotifs.length ? (
+        {selectedMotifs.length || selectedThemes.length ? (
           <div className="explore-plot-lab-wall" data-testid="explore-motif-wall">
-            <h3 className="explore-plot-lab-heading">Motif wall</h3>
-            <div
-              className="explore-media-tabs plot-lab-match-mode"
-              role="tablist"
-              aria-label="Plot match mode"
-              data-testid="plot-lab-match-mode"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={plotMatchMode === "hybrid"}
-                className={`explore-media-tab${plotMatchMode === "hybrid" ? " is-active" : ""}`}
-                data-testid="plot-lab-mode-hybrid"
-                onClick={() => handlePlotMatchMode("hybrid")}
+            <h3 className="explore-plot-lab-heading">Plot wall</h3>
+            {selectedMotifs.length ? (
+              <div
+                className="explore-media-tabs plot-lab-match-mode"
+                role="tablist"
+                aria-label="Plot match mode"
+                data-testid="plot-lab-match-mode"
               >
-                Multi-signal
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={plotMatchMode === "motifs"}
-                className={`explore-media-tab${plotMatchMode === "motifs" ? " is-active" : ""}`}
-                data-testid="plot-lab-mode-motifs"
-                onClick={() => handlePlotMatchMode("motifs")}
-              >
-                Motifs only
-              </button>
-            </div>
-            {selectedMotifs.length > 1 ? (
-              <p className="explore-section-subtitle" data-testid="plot-lab-intersection-hint">
-                {plotMatchMode === "motifs"
-                  ? `Titles matching all selected motifs (${selectedMotifs.join(" · ")}).`
-                  : `Titles matching all selected signals across motifs, keywords, and plot text (${selectedMotifs.join(" · ")}).`}{" "}
-                Tap Why? on a poster for which layer matched.
-              </p>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={plotMatchMode === "hybrid"}
+                  className={`explore-media-tab${plotMatchMode === "hybrid" ? " is-active" : ""}`}
+                  data-testid="plot-lab-mode-hybrid"
+                  onClick={() => handlePlotMatchMode("hybrid")}
+                >
+                  Multi-signal
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={plotMatchMode === "motifs"}
+                  className={`explore-media-tab${plotMatchMode === "motifs" ? " is-active" : ""}`}
+                  data-testid="plot-lab-mode-motifs"
+                  onClick={() => handlePlotMatchMode("motifs")}
+                >
+                  Motifs only
+                </button>
+              </div>
             ) : null}
+            <p className="explore-section-subtitle" data-testid="plot-lab-intersection-hint">
+              {selectedMotifs.length
+                ? plotMatchMode === "motifs"
+                  ? `Titles matching all selected motifs (${selectedMotifs.join(" · ")}).`
+                  : `Multi-signal: each selected token may match via motif, keyword, or plot text (${selectedMotifs.join(" · ")}).`
+                : "Filtering by selected themes."}
+              {selectedThemes.length
+                ? ` Themes also required: ${selectedThemes.join(" · ")}.`
+                : ""}{" "}
+              Tap Why? on a poster for which layer matched.
+            </p>
             {motifWall.error || motifWall.note ? (
               <p className="explore-empty status status-secondary">
                 {motifWall.error || motifWall.note}

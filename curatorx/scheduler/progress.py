@@ -21,6 +21,8 @@ def count_remaining(db: Database, scope: Optional[str]) -> Optional[int]:
         return db.count_items_needing_metadata_enrichment()
     if scope == "llm_logline_backlog":
         return db.count_items_needing_llm_logline()
+    if scope == "long_synopsis_backlog":
+        return db.count_items_needing_long_synopsis()
     if scope == "embeddings_pending":
         return db.count_items_needing_embeddings()
     if scope == "embeddings_pass":
@@ -54,6 +56,7 @@ def estimate_progress(
     scope_labels = {
         "metadata_backlog": "titles still missing TMDB dates/plot",
         "llm_logline_backlog": "titles still needing an LLM logline",
+        "long_synopsis_backlog": "titles still needing an optional long synopsis",
         "embeddings_pending": "titles with plot text still needing embeddings",
         "embeddings_pass": "embedded titles in one full neighbor pass",
         "neighbors_backlog": "embedded titles still missing neighbor rows",

@@ -35,6 +35,7 @@ SECRET_FIELDS = (
     "tmdb_api_key",
     "tvdb_api_key",
     "fanart_api_key",
+    "omdb_api_key",
     "tautulli_api_key",
     "llm_api_key",
     "webhook_secret",

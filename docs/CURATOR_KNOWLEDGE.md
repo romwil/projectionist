@@ -48,9 +48,9 @@ Treat curator knowledge as a stack, not one chip wall:
 | 1 | **Identity** | Title, year, media type, Plex/TMDB/IMDB ids | Plex sync | Done |
 | 2 | **Credits / place** | People, jobs, country, language | TMDB credits + sync | Done |
 | 3 | **Catalog tags** | Genres, TMDB keywords | Sync + `metadata_enrichment` | Mostly done; underused in Plot Lab today |
-| 4 | **Plot text layers** | summary → overview → tagline → optional long synopsis → rare LLM logline | Plex / TMDB / optional idle | Layered fields exist; long synopsis is roadmap |
-| 5 | **Lexical motifs** | Searchable plot tokens in `library_facets` (`facet_type='motif'`) | Idle `summary_motifs` | Weak for multi-chip AND (see case study) |
-| 6 | **Tropes / themes** | Controlled vocab (`facet_type='theme'`) | Stub `llm_theme_tagging`; keyword→theme planned | Sparse |
+| 4 | **Plot text layers** | summary → overview → tagline → optional long synopsis → rare LLM logline | Plex / TMDB / optional idle | Layered fields exist; long synopsis optional (Wikipedia/OMDb) |
+| 5 | **Lexical motifs** | Searchable plot tokens in `library_facets` (`facet_type='motif'`) | Idle `summary_motifs` | Improved (Phase A); hybrid Plot Lab AND mitigates sparsity |
+| 6 | **Tropes / themes** | Controlled vocab (`facet_type='theme'`) | Idle `keyword_theme_tagging` (local map); `llm_theme_tagging` stub reserved | Offline from keywords |
 | 7 | **Similarity graph** | Embeddings + `item_neighbors` + `title_relations` | Idle embed / neighbors / relations | Embeddings often full; neighbor edges can lag |
 | 8 | **Taste / ops** | Lenses, reviews, purge, watchlist, gaps | User + other idle tasks | Separate from plot depth |
 
@@ -61,10 +61,12 @@ flowchart LR
   subgraph sources [Sources]
     Plex[Plex summary]
     TMDB[TMDB overview tagline keywords]
+    Long[Optional long_synopsis]
     LLM[Optional llm_logline]
   end
   subgraph preprocess [Preprocess idle]
     Motifs[summary_motifs]
+    Themes[keyword_theme_tagging]
     Embed[semantic_embeddings]
     Neigh[plot_neighbors]
   end
@@ -75,10 +77,14 @@ flowchart LR
   end
   Plex --> Motifs
   TMDB --> Motifs
+  Long --> Motifs
+  TMDB --> Themes
   Plex --> Embed
   TMDB --> Embed
+  Long --> Embed
   LLM --> Embed
   Motifs --> PlotLab
+  Themes --> PlotLab
   Embed --> Neigh
   Neigh --> Explore
   Motifs --> Chat
@@ -96,7 +102,9 @@ flowchart LR
 | Plex `summary`, play state, `added_at` | Library sync |
 | TMDB `tmdb_overview`, `tagline`, keywords, dates, credits | Sync enrichment + idle `metadata_enrichment` |
 | `llm_logline` | Optional idle `llm_logline_enrichment` when a provider is configured — **never invented** if the task skips |
-| Motif / theme facets | Idle NLP / optional LLM theme task |
+| `long_synopsis` / `synopsis_source` | Optional idle `long_synopsis_enrichment` (Wikipedia extract or OMDb) when `long_synopsis_source` is set — never overwrites Plex/TMDB |
+| Motif facets | Idle `summary_motifs` (local NLP over layered plot text) |
+| Theme facets | Idle `keyword_theme_tagging` (local keyword→theme map; no LLM) |
 | Embeddings + neighbors | Idle `semantic_embeddings` then `plot_neighbors` |
 
 ### Stored
@@ -145,7 +153,9 @@ Chat turns must stay snappy. Building motifs across thousands of titles, embeddi
 | `summary_motifs` | Lexical motif facets for Plot Lab | `library_facets` motif rows |
 | `title_relations_refresh` | Collection / neighbor / crew graph | `title_relations` edges |
 | `llm_logline_enrichment` | Optional one-liner when free text is thin | Sparse `llm_logline` fills |
-| `llm_theme_tagging` | Optional theme facets (stub / scarce) | `facet_type='theme'` |
+| `long_synopsis_enrichment` | Optional longer plot from Wikipedia/OMDb | `long_synopsis` + `synopsis_source` |
+| `keyword_theme_tagging` | Local keyword→controlled theme map | `facet_type='theme'` |
+| `llm_theme_tagging` | Reserved future LLM theme path (stub; skips) | Prefer `keyword_theme_tagging` |
 
 Other tasks (taste, health, anniversary, retention, …) support ops and taste — not plot depth. Full boundary table: [ARCHITECTURE.md — Agent tools vs. background scheduler](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
 
@@ -192,11 +202,11 @@ Practical owner habits:
 | Identity, credits, genres, TMDB keywords | Yes | No |
 | Overview / tagline enrichment | TMDB API key (free tier) | No |
 | Motif facets from existing text | Local NLP idle task | No |
-| Keyword→theme map (roadmap) | Local | No |
-| Long synopsis from OMDb/Wikipedia (roadmap) | Operator-keyed, rate-limited | No LLM |
+| Keyword→theme map | Local (`keyword_theme_tagging`) | No |
+| Long synopsis from Wikipedia/OMDb | Opt-in `long_synopsis_source`; OMDb needs key; rate-limited | No LLM |
 | Embeddings | Hash fallback or local/OpenAI-compatible embed model | Depends on configured embed path |
 | Chat curator personality / tool-using answers | — | Yes (or local Ollama) |
-| `llm_logline` / LLM theme tagging | — | Yes, optional trickle |
+| `llm_logline` / future LLM theme tagging | — | Yes, optional trickle (themes already free via keywords) |
 
 **Policy:** never invent plot. If a free field is empty, it stays empty until a real source fills it.
 
@@ -207,17 +217,17 @@ Practical owner habits:
 ### End users (members / guests)
 
 - **Chat** — ask for plot-ish intersections (“revenge martial arts under 2 hours”); the agent uses tools over library + facets when available.
-- **Explore** — browse rails; empty rails usually mean cold caches.
-- **Plot Lab** (`/explore/plot-lab`) — tap motif chips (AND when multiple); open **Why?** on a poster for motif + summary excerpts; seed a title for surprising neighbors.
-- **Title detail** — “More Like This” reads `item_neighbors`.
+- **Explore** — browse rails; a compact **Knowledge** strip shows coverage honesty (overview / motifs / keywords / neighbors %); empty rails usually mean cold caches.
+- **Plot Lab** (`/explore/plot-lab`) — tap motif chips (AND when multiple); optional theme chips when `facet_type='theme'` is populated; **Multi-signal** (default) matches each token via motif ∪ keyword ∪ plot text; **Motifs only** for pure facet walls; open **Why?** for which layer matched; seed a title for surprising neighbors.
+- **Title detail** — **Plot knowledge** panel lists which plot layers are present, motif/keyword/theme chips, and neighbor count; “More Like This” reads `item_neighbors`.
 - **Help** (`/help`, [HELP.md](HELP.md)) — role-aware guidance; links here for depth.
 
 ### Owners / admins
 
 Everything above, plus:
 
-- **Admin → Scheduled Tasks** — enable/disable, cadence, last outcome, ETA, quarantine reset.
-- **Admin → Dashboard** — library composition / health (not yet a full “knowledge coverage” strip — roadmap Phase D).
+- **Admin → Scheduled Tasks** — enable/disable, cadence, last outcome, measured rate, ETA, quarantine reset; knowledge-coverage strip at the top.
+- **Admin → Dashboard** — **Knowledge coverage** panel (% with overview, motifs/title, keywords/title, neighbors, loglines; themes/synopsis when present) with a link into Help.
 - Expect motif quality and neighbor density to improve as idle work catches up; do not expect Chat to recompute the whole graph per turn.
 
 ---

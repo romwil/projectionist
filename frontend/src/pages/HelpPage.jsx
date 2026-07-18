@@ -19,6 +19,7 @@ const IN_APP_ROUTES = new Set([
   "/login",
   "/admin",
   "/admin/tasks",
+  "/admin/dashboard",
   "/explore",
   "/explore/tags",
   "/explore/plot-lab",
@@ -33,11 +34,12 @@ const HEADING_ANCHORS = {
   "explore": "explore",
   "plot lab": "plot-lab",
   "why?": "why-on-posters",
+  "title detail": "title-detail--plot-knowledge",
   "why motif walls feel sparse": "why-motif-walls-feel-sparse",
   "for owners": "for-owners--curation--scheduler",
   "after sync": "after-sync",
   "coverage over time": "coverage-over-time",
-  "telemetry": "telemetry--tuning-as-of-this-release--roadmap",
+  "telemetry": "telemetry--tuning",
   "llm vs free": "llm-vs-free-sources",
   "related documentation": "related-documentation",
 };
@@ -183,14 +185,21 @@ export default function HelpPage() {
             <a href="#start-here">Start</a>
             <a href="#chat">Chat</a>
             <a href="#plot-lab">Plot Lab</a>
+            <a href="#title-detail--plot-knowledge">Plot knowledge</a>
             <a href="#why-motif-walls-feel-sparse">Sparse walls</a>
             {showOwnerNav ? (
               <>
                 <a href="#for-owners--curation--scheduler" data-testid="help-jump-owners">
                   Owners
                 </a>
+                <a href="#coverage-over-time" data-testid="help-jump-coverage">
+                  Coverage
+                </a>
                 <Link to={ROUTES.adminTasks} data-testid="help-link-admin-tasks">
                   Scheduled Tasks
+                </Link>
+                <Link to={ROUTES.adminDashboard} data-testid="help-link-admin-dashboard">
+                  Dashboard
                 </Link>
               </>
             ) : null}

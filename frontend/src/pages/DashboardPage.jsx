@@ -14,6 +14,7 @@ import {
 import BarChart from "../components/charts/BarChart";
 import DonutChart from "../components/charts/DonutChart";
 import Gauge from "../components/charts/Gauge";
+import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import { buildRuntimeBuckets, sortPurgeCandidates } from "../lib/dashboardCharts.js";
 import { titleDetailTargetFromPurgeCandidate } from "../lib/titleDetailDrawer.js";
@@ -450,6 +451,10 @@ export default function DashboardPage() {
           <BarChart data={runtimeBuckets} />
         </Panel>
       </div>
+
+      {/* ─── Knowledge depth (Phase D) ─── */}
+      <h2 className="dash-section-title">Curator knowledge</h2>
+      <KnowledgeCoverageCard variant="panel" />
 
       {/* ─── Panel 2: Health & Engagement ─── */}
       <h2 className="dash-section-title">Health &amp; Engagement</h2>

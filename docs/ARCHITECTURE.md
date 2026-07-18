@@ -372,7 +372,7 @@ Some features span both sides. The scheduler pre-computes; the agent tool (or Ex
 | `semantic_embeddings` | `search_library`, semantic `query_library` |
 | `metadata_enrichment` | release dates, TMDB overview/tagline, collection ids, structured credits |
 | `plot_neighbors` → `item_neighbors` | `find_similar_titles`, Title Detail “More Like This”, `/api/library/neighbors/{id}` |
-| `summary_motifs` / `llm_theme_tagging` → `library_facets` | `get_facet_catalog` (`motif` / `theme`), Explore Plot Lab (hybrid query also reads keywords + live plot text) |
+| `summary_motifs` / `keyword_theme_tagging` → `library_facets` | `get_facet_catalog` (`motif` / `theme`), Explore Plot Lab (hybrid also reads keywords/themes + live plot text incl. optional `long_synopsis`) |
 | `title_relations_refresh` → `title_relations` | `list_relations`, `walk_relations` |
 | `llm_logline_enrichment` | layered embedding text (optional; never invents plot) |
 | `anniversary_scanner` | `get_todays_anniversaries`, On This Day feed fallback |
@@ -389,7 +389,7 @@ Some features span both sides. The scheduler pre-computes; the agent tool (or Ex
 1. `metadata_enrichment` — missing dates, overviews, taglines, collection ids, credits
 2. `semantic_embeddings` — capped batches (see [Trickle ingestion](#trickle-ingestion-for-embeddings))
 3. `plot_neighbors` — materialize top-K cosine (+ surprise) into `item_neighbors`, preferring titles still missing neighbor rows (`neighbors_backlog`)
-4. `summary_motifs` / optional `llm_theme_tagging` / `llm_logline_enrichment`
+4. `summary_motifs` / `keyword_theme_tagging` / optional `long_synopsis_enrichment` / optional `llm_logline_enrichment` (stub `llm_theme_tagging` reserved)
 5. `title_relations_refresh` — collection + neighbor + shared-crew edges
 
 Batch sizes for (1)–(3) and loglines are **auto-tuned** from durable run history (see [Active auto-tune](#active-auto-tune-batch--interval)); agent tools and Explore feeds **read caches**; they do not recompute embeddings or graphs per chat turn.
@@ -415,7 +415,7 @@ Empty neighbor/relation responses are **honest** — they mean the idle cache ha
 | `GET /api/library/neighbors/{item_id}` | `item_neighbors` | Empty until `plot_neighbors` ran |
 | `GET /api/library/motifs` | `library_facets` where `facet_type='motif'` | Empty until motif task ran |
 | `GET /api/library/knowledge-coverage` | facet/neighbor/plot column counts | Honest % coverage for Admin/Explore |
-| `GET /api/library/query?motifs=…` | hybrid by default (`plot_match_mode`) | Motif ∪ keyword ∪ plot-text AND; `motifs` mode = facet-only |
+| `GET /api/library/query?motifs=…` | hybrid by default (`plot_match_mode`) | Motif ∪ keyword ∪ theme ∪ plot-text AND; `motifs` mode = facet-only |
 
 ### Plot Lab multi-signal search
 
@@ -425,11 +425,12 @@ Plot Lab chip walls used to AND only on stored motif facets. Because motif extra
 
 1. `library_facets` motif value
 2. `library_facets` keyword value (or keywords JSON fallback)
-3. Live plot text (`summary` / `tmdb_overview` / `tagline` / `llm_logline`)
+3. Live plot text (`summary` / `tmdb_overview` / `tagline` / optional `long_synopsis` / `llm_logline`)
+4. Theme facets from local keyword→theme map (`keyword_theme_tagging`)
 
 Tokens are still AND’d across the selection. Why? responses cite which layer matched (`match_layers`). Operators can switch to `plot_match_mode=motifs` for pure facet walls.
 
-This unlocks intersections without LLM tokens; richer synopsis sources and theme maps remain later phases.
+This unlocks intersections without LLM tokens. Optional Wikipedia/OMDb `long_synopsis` and offline keyword→theme maps deepen text without burning LLM quota.
 
 ### Watchdog and circuit breaker
 
@@ -486,7 +487,7 @@ Educational guide for owners and household users: **[CURATOR_KNOWLEDGE.md](CURAT
 |-------|--------|
 | A | Motif extraction quality + Plot Lab multi-signal AND (motifs ∪ keywords ∪ plot text) |
 | B | Durable `scheduled_task_runs`, measured throughput UI, auto-tune batch/interval |
-| C | Optional long synopsis + local keyword→theme (LLM last) |
+| C | Optional long synopsis + local keyword→theme (LLM last) — **implemented** |
 | D | Coverage UI + title Plot knowledge panel |
 
 Phase B is implemented: Admin Scheduled Tasks show durable recent runs, measured items/hour when history exists, and auto-tuned batch/interval for trickle tasks. Prefer free sources before LLM — provenance rules unchanged.
@@ -523,10 +524,10 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 | Explore hub | **Implemented** — `/explore` feed rails, Pulse strip, Plot Lab motifs/neighbors |
 | Title detail + neighbors | **Implemented** — hero detail, trailer, “More Like This” from `item_neighbors` |
 | Metadata enrichment + credits | **Implemented** — sync + idle trickle; `people` / `credits` tables |
-| Layered plot text | **Implemented** — Plex summary + TMDB overview/tagline + optional LLM logline |
+| Layered plot text | **Implemented** — Plex summary + TMDB overview/tagline + optional `long_synopsis` + optional LLM logline |
 | Materialized neighbors | **Implemented** — `item_neighbors` via `plot_neighbors` idle task |
 | Title relations graph | **Implemented** — collection / neighbor / shared_crew (+ optional llm_theme) |
-| Motif / theme facets | **Implemented** — `summary_motifs`, optional `llm_theme_tagging` |
+| Motif / theme facets | **Implemented** — `summary_motifs`, `keyword_theme_tagging`; stub `llm_theme_tagging` reserved |
 | Owner dashboard | **Implemented** — `/admin/dashboard` composition, health, purge, taste |
 | Idle task scheduler | **Implemented** — embeddings, enrichment, neighbors, relations, motifs, taste, health, …; circuit breaker |
 | Durable sync jobs | **Implemented** — `jobs_state.json` + restart recovery |

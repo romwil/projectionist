@@ -220,6 +220,7 @@ export function buildMotifQueryParams(
     offset = 0,
     mediaType = null,
     plotMatchMode = DEFAULT_PLOT_MATCH_MODE,
+    themes = [],
   } = {},
 ) {
   const params = new URLSearchParams();
@@ -231,6 +232,10 @@ export function buildMotifQueryParams(
     .map((m) => String(m || "").trim())
     .filter(Boolean);
   if (cleaned.length) params.set("motifs", cleaned.join(","));
+  const cleanedThemes = (Array.isArray(themes) ? themes : [])
+    .map((t) => String(t || "").trim())
+    .filter(Boolean);
+  if (cleanedThemes.length) params.set("themes", cleanedThemes.join(","));
   const media = normalizeMediaTypeFilter(mediaType);
   if (media) params.set("media_type", media);
   const mode = normalizePlotMatchMode(plotMatchMode);

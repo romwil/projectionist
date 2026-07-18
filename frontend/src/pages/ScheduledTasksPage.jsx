@@ -7,6 +7,7 @@ import {
   runScheduledTask,
   updateScheduledTask,
 } from "../api/client";
+import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import {
   CADENCE_PRESETS,
   estimateThroughputEta,
@@ -438,6 +439,8 @@ export default function ScheduledTasksPage() {
           {actionError}
         </p>
       ) : null}
+
+      <KnowledgeCoverageCard variant="strip" className="scheduled-tasks-coverage" />
 
       {loading ? (
         <p className="status status-secondary">Loading tasks…</p>

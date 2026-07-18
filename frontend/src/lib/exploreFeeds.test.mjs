@@ -92,6 +92,14 @@ test("buildMotifQueryParams accepts pure motifs mode", () => {
   assert.equal(params.get("plot_match_mode"), "motifs");
 });
 
+test("buildMotifQueryParams encodes themes csv when present", () => {
+  const params = buildMotifQueryParams(["coma"], {
+    themes: ["revenge", "found family"],
+  });
+  assert.equal(params.get("motifs"), "coma");
+  assert.equal(params.get("themes"), "revenge,found family");
+});
+
 test("resolveMotifWhy prefers server motif payload", () => {
   const why = resolveMotifWhy(
     {

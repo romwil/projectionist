@@ -9,6 +9,7 @@ import {
   queryLibrary,
 } from "../api/client";
 import BackLink from "../components/BackLink";
+import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import RecommendModal from "../components/RecommendModal";
@@ -274,6 +275,8 @@ export default function ExplorePage() {
             <p>Find keyword tags across your full library index</p>
           </Link>
         </section>
+
+        <KnowledgeCoverageCard variant="strip" />
 
         <ExploreSection
           id="recently-added"

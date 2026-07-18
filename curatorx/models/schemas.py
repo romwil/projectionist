@@ -47,6 +47,19 @@ class CreditPerson(BaseModel):
     billing_order: int = 0
 
 
+class PlotKnowledge(BaseModel):
+    """Per-title curator knowledge depth for title-detail UI (Phase D)."""
+
+    has_overview: bool = False
+    has_tagline: bool = False
+    has_logline: bool = False
+    has_synopsis: bool = False
+    synopsis_supported: bool = False
+    motifs: List[str] = Field(default_factory=list)
+    themes: List[str] = Field(default_factory=list)
+    neighbor_count: int = 0
+
+
 class TitleDetail(TitleCard):
     cast: List[str] = Field(default_factory=list)
     directors: List[str] = Field(default_factory=list)
@@ -68,6 +81,7 @@ class TitleDetail(TitleCard):
     original_language: str = ""
     countries: List[str] = Field(default_factory=list)
     status: str = ""
+    plot_knowledge: Optional[PlotKnowledge] = None
 
 
 class ChatMessageBlock(BaseModel):

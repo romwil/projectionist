@@ -12,7 +12,7 @@ A chat-first + Explore curator for self-hosted **Plex** libraries — and a real
 |-----|------|
 | `romwil/curatorx:latest` | Everyday Unraid / Compose (CA template default) |
 | `romwil/curatorx:1.8` | Track the 1.8 line |
-| `romwil/curatorx:1.8.8` | Pin an exact release |
+| `romwil/curatorx:1.8.9` | Pin an exact release |
 
 Images are multi-arch (**amd64 + arm64**), run as non-root `curatorx` (UID/GID 1000). See [wiki/Installation.md](wiki/Installation.md).
 

@@ -76,9 +76,10 @@ def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
 async def build_item_embedding_text(row) -> str:
     """Build weighted/sectioned text for item embeddings.
 
-    Plot section (summary + TMDB overview + tagline + optional LLM logline) is
-    listed first and denser so semantic similarity leans on narrative.  Metadata
-    (title/year/genres/keywords) is a lighter second section for grounding.
+    Plot section (summary + TMDB overview + tagline + optional long synopsis +
+    optional LLM logline) is listed first and denser so semantic similarity leans
+    on narrative.  Metadata (title/year/genres/keywords) is a lighter second
+    section for grounding.
     """
     def _field(name: str) -> str:
         try:
@@ -94,6 +95,7 @@ async def build_item_embedding_text(row) -> str:
         _field("summary"),
         _field("tmdb_overview"),
         _field("tagline"),
+        _field("long_synopsis"),
         _field("llm_logline"),
     ]
     # Repeat non-empty plot lines once for mild plot weighting vs metadata.

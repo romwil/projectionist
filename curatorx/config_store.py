@@ -30,6 +30,8 @@ ENV_TO_FIELD = {
     "TMDB_API_KEY": "tmdb_api_key",
     "TVDB_API_KEY": "tvdb_api_key",
     "FANART_API_KEY": "fanart_api_key",
+    "OMDB_API_KEY": "omdb_api_key",
+    "CURATORX_LONG_SYNOPSIS_SOURCE": "long_synopsis_source",
     "TAUTULLI_URL": "tautulli_url",
     "TAUTULLI_API_KEY": "tautulli_api_key",
     "LLM_PROVIDER": "llm_provider",
@@ -532,6 +534,9 @@ class Settings:
     tmdb_api_key: str = ""
     tvdb_api_key: str = ""
     fanart_api_key: str = ""
+    omdb_api_key: str = ""
+    # Optional long-synopsis idle source: "", "wikipedia", "omdb", or "auto".
+    long_synopsis_source: str = ""
     tautulli_url: str = ""
     tautulli_api_key: str = ""
     llm_provider: str = "openai"
@@ -691,6 +696,7 @@ def secret_field_sources(data_dir: Path) -> Dict[str, str]:
         "tmdb_api_key",
         "tvdb_api_key",
         "fanart_api_key",
+        "omdb_api_key",
         "tautulli_api_key",
         "llm_api_key",
         "webhook_secret",

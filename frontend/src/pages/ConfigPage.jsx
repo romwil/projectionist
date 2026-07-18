@@ -65,6 +65,7 @@ const SECRET_FIELDS = [
   "tmdb_api_key",
   "tvdb_api_key",
   "fanart_api_key",
+  "omdb_api_key",
   "tautulli_api_key",
   "llm_api_key",
   "seerr_api_key",
@@ -80,6 +81,8 @@ const FIELD_LABELS = {
   sonarr_api_key: "API key",
   tmdb_api_key: "API key",
   fanart_api_key: "API key",
+  omdb_api_key: "OMDb API key",
+  long_synopsis_source: "Long synopsis source",
   tautulli_url: "Tautulli URL",
   tautulli_api_key: "API key",
   movies_root: "Movies folder path",
@@ -105,6 +108,10 @@ const FIELD_HELP = {
     "Lets CuratorX read your Plex libraries (sync, collections, ratings). This is a server token for the Media Server — not the same as household Sign in with Plex on the login page.",
   tmdb_api_key: "Powers posters, details, and discovery for titles not yet in your library.",
   fanart_api_key: "Optional richer backdrop art. Leave blank if you only need TMDB.",
+  omdb_api_key:
+    "Optional. Used only when long synopsis source is omdb or auto. Never overwrites Plex/TMDB blurbs.",
+  long_synopsis_source:
+    "Optional idle long synopses: leave blank (off), or wikipedia / omdb / auto. Wikipedia needs no key.",
   tautulli_url: "Optional: watch history for purge suggestions and “what we’ve been watching”.",
   movies_root: "Host path Radarr uses for movies (advanced; usually matches Radarr).",
   tv_root: "Host path Sonarr uses for TV (advanced; usually matches Sonarr).",

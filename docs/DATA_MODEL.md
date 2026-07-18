@@ -33,6 +33,8 @@ Canonical Plex index enriched during sync and idle `metadata_enrichment`.
 | `year` | INTEGER | Release / first air **year** (coarse; not a substitute for ISO dates) |
 | `summary` | TEXT | Plex/local blurb |
 | `tmdb_overview` / `tagline` | TEXT | TMDB plot layers (empty until enriched) |
+| `long_synopsis` | TEXT | Optional longer plot from Wikipedia/OMDb idle task; empty unless configured — **never invented** |
+| `synopsis_source` | TEXT | Provenance for `long_synopsis` (`wikipedia` / `omdb`); empty when unset |
 | `llm_logline` | TEXT | Optional idle LLM one-liner; empty unless task ran — **never invented** |
 | `genres` | TEXT | JSON array |
 | `cast` / `directors` / `keywords` | TEXT | JSON arrays (dual-written with `people`/`credits`) |
@@ -63,6 +65,7 @@ CuratorX treats missing metadata as a first-class state. Feeds and agent tools m
 | `release_date` / `first_air_date` | TMDB ISO date | Fabricate from `year` (year is coarse only) |
 | `summary` | Plex | Overwrite with hallucinated synopsis |
 | `tmdb_overview` / `tagline` | TMDB | Fill from LLM guesswork |
+| `long_synopsis` / `synopsis_source` | Optional Wikipedia/OMDb idle task | Overwrite Plex/TMDB; invent when source off or fetch misses |
 | `llm_logline` | Optional idle LLM task | Run without a configured provider; invent when task skipped |
 
 Sync and `metadata_enrichment` use `COALESCE` / non-empty guards so empty TMDB fields do not wipe good prior data — and empty stays empty when the source has nothing.
@@ -84,7 +87,7 @@ Normalized cast & crew (Stage 1). JSON `cast` / `directors` on `library_items` r
 | `vector` | TEXT | JSON float array (384-dim hash or provider length) |
 | `embedding_model` | TEXT | Model id that produced the vector (rebuild hygiene) |
 
-Layered embedding input prefers TMDB overview/tagline (+ optional `llm_logline`) over Plex `summary` when present.
+Layered embedding input uses summary + TMDB overview/tagline + optional `long_synopsis` + optional `llm_logline` (plot section repeated for mild narrative weighting).
 
 #### `item_neighbors`
 
@@ -121,20 +124,20 @@ Idle motif/theme replaces only its own `facet_type` so sync-managed facets are p
 
 ##### Why motifs were sparse (and what changed)
 
-`summary_motifs` builds searchable plot tokens from layered text (`summary` + `tmdb_overview` + `tagline` + optional `llm_logline`). Early versions kept only **8 rare unigrams per title** after a document-frequency band. That hard cap routinely crowded out high-signal words that still appear in the blurb — e.g. Kill Bill Vol. 1 literally contains “The Bride” + “coma”, but attached motifs kept `coma` and dropped `bride`; Vol. 2 stored the possessive `bride's` instead of `bride`. Plot Lab AND on motifs alone was therefore structurally blind even when the library “knew” the film.
+`summary_motifs` builds searchable plot tokens from layered text (`summary` + `tmdb_overview` + `tagline` + optional `long_synopsis` + optional `llm_logline`). Early versions kept only **8 rare unigrams per title** after a document-frequency band. That hard cap routinely crowded out high-signal words that still appear in the blurb — e.g. Kill Bill Vol. 1 literally contains “The Bride” + “coma”, but attached motifs kept `coma` and dropped `bride`; Vol. 2 stored the possessive `bride's` instead of `bride`. Plot Lab AND on motifs alone was therefore structurally blind even when the library “knew” the film.
 
 Current extraction:
 
 1. **Possessive normalize** — `bride's` → `bride`
 2. **Unigrams + high-signal bigrams** — e.g. `the bride`, `death list`
 3. **Split per-title budget** — top rare tokens **plus** guaranteed retention for tokens that also appear as keyword stems
-4. **Plot Lab hybrid query** (default) — each selected token may match via motif facet **or** keyword facet **or** live plot-text `LIKE`, AND across tokens; pure motif-AND remains available via `plot_match_mode=motifs`
+4. **Plot Lab hybrid query** (default) — each selected token may match via motif / keyword / theme facet **or** live plot-text `LIKE` (including `long_synopsis`), AND across tokens; pure motif-AND remains available via `plot_match_mode=motifs`
+
+**Themes (no LLM):** idle `keyword_theme_tagging` maps frequent TMDB keywords onto a small controlled vocabulary and writes `facet_type='theme'`. The stub `llm_theme_tagging` task remains registered for a future optional LLM path but skips in production.
 
 Knowledge coverage stats (`GET /api/library/stats` → `knowledge_coverage`, or `/api/library/knowledge-coverage`) expose % with overview / motifs / keywords / neighbors / loglines so sparsity stays visible to Admin/Explore.
 
-**Motif extraction (as of this release):** `summary_motifs` tokenizes `summary` + `tmdb_overview` into uncommon unigrams (document-frequency band), keeping at most **8** motifs per title. Tagline/keywords are not yet in the motif pipeline; possessives are not normalized (`bride's` ≠ `bride`). Plot Lab AND walls read these rows — sparse intersections are often a facet budget / token-normalization issue, not missing Plex text. Product explanation: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md).
-
-**Roadmap:** optional `long_synopsis` / `synopsis_source` columns and local keyword→theme maps — without inventing plot. Durable `scheduled_task_runs` history + auto-tune are implemented (see [ARCHITECTURE.md](ARCHITECTURE.md#why-last-run-only-failed-and-what-replaced-it)).
+Product explanation: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md). Durable `scheduled_task_runs` history + auto-tune: [ARCHITECTURE.md](ARCHITECTURE.md#why-last-run-only-failed-and-what-replaced-it).
 
 #### `preference_facts`
 

@@ -520,6 +520,8 @@ class SettingsPayload(BaseModel):
     tmdb_api_key: str = ""
     tvdb_api_key: str = ""
     fanart_api_key: str = ""
+    omdb_api_key: str = ""
+    long_synopsis_source: str = ""
     tautulli_url: str = ""
     tautulli_api_key: str = ""
     llm_provider: str = "openai"

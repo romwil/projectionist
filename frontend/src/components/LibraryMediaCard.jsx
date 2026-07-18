@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api, getPlexMachineId } from "../api/client";
+import { formatMatchLayers } from "../lib/plotKnowledge.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 
 let cachedPlexMachineId;
@@ -266,7 +267,9 @@ export default function LibraryMediaCard({
                   {motifWhy.matchLayers.map((entry) => (
                     <li key={`${entry.motif}-${entry.layers.join("-")}`}>
                       <strong>{entry.motif}</strong>
-                      <span>{entry.layers.join(" + ")}</span>
+                      <span className="explore-motif-why-layer-labels">
+                        {formatMatchLayers(entry.layers)}
+                      </span>
                     </li>
                   ))}
                 </ul>

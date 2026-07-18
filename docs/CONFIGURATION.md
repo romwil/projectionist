@@ -35,6 +35,8 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 |---------|---------|-------------|
 | Fanart.tv key | `FANART_API_KEY` | Rich poster/backdrop art |
 | TVDB key | `TVDB_API_KEY` | TV metadata parity (client present; sync wiring partial) |
+| Long synopsis source | `CURATORX_LONG_SYNOPSIS_SOURCE` | Opt-in idle long plots: blank/off (default), `wikipedia`, `omdb`, or `auto`. Never overwrites Plex/TMDB. |
+| OMDb API key | `OMDB_API_KEY` | Required only when synopsis source is `omdb` (or `auto` fallback). Free OMDb key. |
 | Tautulli URL / key | `TAUTULLI_URL`, `TAUTULLI_API_KEY` | Watch stats for purge scoring |
 | Radarr root folder | `RADARR_ROOT_FOLDER` | Default path for movie adds |
 | Sonarr root folder | `SONARR_ROOT_FOLDER` | Default path for series adds |
@@ -331,8 +333,21 @@ API keys and tokens are never written to logs (URLs and error bodies are redacte
 | Control | Notes |
 |---------|-------|
 | Cadence (`run_interval_seconds`) | Owner presets / custom hours; auto-tune may nudge within caps for trickle tasks |
-| Batch (`items_per_cycle`) | Persisted for metadata / embeddings / neighbors / LLM logline; auto-tune adjusts after successful runs |
+| Batch (`items_per_cycle`) | Persisted for metadata / embeddings / neighbors / LLM logline / long synopsis; auto-tune adjusts after successful runs |
 | History / rate | `GET …/history`, `GET …/rate`; list payload includes measured items/hour when history exists |
+
+### Optional long synopsis (owner)
+
+Idle task `long_synopsis_enrichment` fills nullable `library_items.long_synopsis` + `synopsis_source` from Wikipedia (no key) or OMDb (key). It skips with `no_synopsis_source_configured` until you opt in.
+
+```json
+{
+  "long_synopsis_source": "wikipedia",
+  "omdb_api_key": ""
+}
+```
+
+Or env: `CURATORX_LONG_SYNOPSIS_SOURCE=wikipedia` / `auto` / `omdb` and optional `OMDB_API_KEY=…`. Then enable/trigger the task under **Admin → Scheduled Tasks**. Themes do not need keys — run `keyword_theme_tagging` (offline from TMDB keywords already in the DB).
 
 ---
 

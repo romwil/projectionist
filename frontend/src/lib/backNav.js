@@ -11,6 +11,7 @@ export const ROUTES = {
   settings: "/settings",
   admin: "/admin",
   adminTasks: "/admin/tasks",
+  adminDashboard: "/admin/dashboard",
   about: "/about",
   help: "/help",
 };

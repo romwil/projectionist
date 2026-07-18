@@ -62,14 +62,14 @@ With `features.multi_user_enabled` left at `false` (the default), CuratorX runs 
 | `/config` | First-run setup wizard or Settings |
 | `/settings/*` | Profile (font size), lists, preferences |
 | `/admin/*` | Owner Admin shell (users, dashboard, advanced) |
-| `/admin/dashboard` | Owner library intelligence dashboard |
-| `/title/{movie\|show}/{id}` | Title detail — backdrop hero, trailer modal, Watch on Plex, purge notes |
+| `/admin/dashboard` | Owner library intelligence dashboard (includes Knowledge coverage panel) |
+| `/title/{movie\|show}/{id}` | Title detail — backdrop hero, Plot knowledge panel, trailer modal, Watch on Plex, purge notes |
 | `/privacy` | Privacy disclosure (no login) |
 | `/about` | About / version |
 | `/help` | Help guide — Chat, Explore, Plot Lab, owner idle curation (no login; role-aware sections) |
-| `/explore` | Explore hub (feed rails) |
-| `/explore/plot-lab` | Plot Lab — motif walls, Why?, surprising neighbors |
-| `/admin/tasks` | Owner Scheduled Tasks (cadence, batch, measured rate, run history, ETA) |
+| `/explore` | Explore hub — feed rails + compact knowledge-coverage honesty strip |
+| `/explore/plot-lab` | Plot Lab — multi-signal / motifs-only walls, theme chips when present, Why? layers, surprising neighbors |
+| `/admin/tasks` | Owner Scheduled Tasks (coverage strip, cadence, batch, measured rate, run history, ETA) |
 | `/login` | Multi-user login (configured auth methods) |
 
 Session ID persists in `localStorage` for chat continuity across reloads.
@@ -269,11 +269,13 @@ Single-owner installs have no built-in authentication — run on a trusted LAN o
 
 | Surface | Audience | Content |
 |---------|----------|---------|
-| `/help` ([HELP.md](HELP.md)) | Everyone; owner sections when `isOwner` | Chat, Explore, Plot Lab, sparse-wall explanation; owners get scheduler / coverage / LLM-vs-free guidance |
-| [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) | Operators + curious users | Full why/what/how of knowledge dimensions, idle trickle, roadmap hooks for Phases A–D |
-| Admin → Scheduled Tasks | Owners | Cadence, last-run, ETA; deep-linked from Help and cold Explore empty states |
+| `/help` ([HELP.md](HELP.md)) | Everyone; owner sections when `isOwner` | Chat, Explore, Plot Lab, Plot knowledge, sparse-wall explanation; owners get scheduler / coverage / LLM-vs-free guidance |
+| [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) | Operators + curious users | Full why/what/how of knowledge dimensions, idle trickle, product surfaces for coverage / Plot Lab / title detail |
+| Admin → Dashboard | Owners | Knowledge coverage panel (% overview / motifs / keywords / neighbors / loglines) |
+| Admin → Scheduled Tasks | Owners | Coverage strip + cadence, measured rate, ETA; deep-linked from Help and cold Explore empty states |
+| Explore hub | Everyone | Compact knowledge-coverage honesty strip |
 
-Jump links on Help highlight **Owners** + Scheduled Tasks for owners; members/guests see browse/chat guidance and are pointed at the server owner for sync.
+Jump links on Help highlight **Owners**, Coverage, Dashboard, and Scheduled Tasks for owners; members/guests see browse/chat guidance and are pointed at the server owner for sync.
 
 ---
 

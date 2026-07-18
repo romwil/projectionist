@@ -29,7 +29,9 @@ import {
   decadeLabel,
   languageBrowseMeta,
 } from "../lib/titleDetailMeta.js";
+import { buildPlotKnowledgePanel } from "../lib/plotKnowledge.js";
 import { canWatchOnPlex, plexWatchUrl } from "../lib/titleLinks.js";
+import { ROUTES } from "../lib/backNav.js";
 
 const META_LINK_CLASS = "title-meta-link";
 const META_STATIC_CLASS = "title-meta-static";
@@ -182,6 +184,8 @@ export default function TitleDetailContent({
   const contentRating = String(detail.content_rating || "").trim();
   const castLimit = compact ? 4 : 6;
   const tagLimit = compact ? 5 : 8;
+  const chipLimit = compact ? 4 : 8;
+  const plotKnowledge = buildPlotKnowledgePanel(detail);
 
   const headlineId = titleId || "title-detail-headline";
 
@@ -377,6 +381,102 @@ export default function TitleDetailContent({
             <div className="title-detail-section">
               <h2 className="title-detail-section-label">Synopsis</h2>
               <p className="title-detail-synopsis">{detail.overview}</p>
+            </div>
+          ) : null}
+
+          {plotKnowledge ? (
+            <div
+              className="title-detail-section title-plot-knowledge"
+              data-testid="title-plot-knowledge"
+            >
+              <h2 className="title-detail-section-label">Plot knowledge</h2>
+              {plotKnowledge.empty ? (
+                <p className="status status-secondary">
+                  No plot signals yet — idle enrichment may still be catching up.
+                </p>
+              ) : (
+                <>
+                  <ul
+                    className="title-plot-layers"
+                    data-testid="title-plot-layers"
+                    aria-label="Plot layers present"
+                  >
+                    {plotKnowledge.layers.map((layer) => (
+                      <li
+                        key={layer.id}
+                        className={`title-plot-layer${layer.present ? " is-present" : ""}`}
+                        data-testid={`title-plot-layer-${layer.id}`}
+                      >
+                        {layer.label}
+                      </li>
+                    ))}
+                    {plotKnowledge.neighborCount > 0 ? (
+                      <li
+                        className="title-plot-layer is-present"
+                        data-testid="title-plot-neighbor-count"
+                      >
+                        {plotKnowledge.neighborCount} neighbors
+                      </li>
+                    ) : (
+                      <li className="title-plot-layer" data-testid="title-plot-neighbor-count">
+                        No neighbors yet
+                      </li>
+                    )}
+                  </ul>
+                  {plotKnowledge.motifs.length ? (
+                    <div className="title-plot-chip-group">
+                      <h3 className="title-plot-chip-heading">Motifs</h3>
+                      <div className="title-tag-list" data-testid="title-plot-motifs">
+                        {plotKnowledge.motifs.slice(0, chipLimit).map((motif) => (
+                          <Link
+                            key={motif}
+                            to={`${ROUTES.plotLab}`}
+                            className="title-tag title-meta-link title-tag-link"
+                            state={{ seedMotif: motif }}
+                          >
+                            {motif}
+                          </Link>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {plotKnowledge.themes.length ? (
+                    <div className="title-plot-chip-group">
+                      <h3 className="title-plot-chip-heading">Themes</h3>
+                      <div className="title-tag-list" data-testid="title-plot-themes">
+                        {plotKnowledge.themes.slice(0, chipLimit).map((theme) => (
+                          <span key={theme} className="title-tag">
+                            {theme}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  {plotKnowledge.keywords.length ? (
+                    <div className="title-plot-chip-group">
+                      <h3 className="title-plot-chip-heading">Keywords</h3>
+                      <div className="title-tag-list" data-testid="title-plot-keywords">
+                        {plotKnowledge.keywords.slice(0, chipLimit).map((tag) => {
+                          const to = tagPath(tag);
+                          return to ? (
+                            <Link
+                              key={tag}
+                              to={to}
+                              className="title-tag title-meta-link title-tag-link"
+                            >
+                              {tag}
+                            </Link>
+                          ) : (
+                            <span key={tag} className="title-tag">
+                              {tag}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ) : null}
+                </>
+              )}
             </div>
           ) : null}
 

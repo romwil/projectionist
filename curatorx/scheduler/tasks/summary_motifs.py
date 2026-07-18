@@ -235,13 +235,14 @@ def tokenize_plot_text(*parts: str) -> Set[str]:
     return tokens
 
 
-def _row_plot_parts(row: Mapping[str, Any]) -> Tuple[str, str, str, str]:
+def _row_plot_parts(row: Mapping[str, Any]) -> Tuple[str, str, str, str, str]:
     keys = row.keys() if hasattr(row, "keys") else row
     summary = str(row["summary"] or "") if "summary" in keys else ""
     overview = str(row["tmdb_overview"] or "") if "tmdb_overview" in keys else ""
     tagline = str(row["tagline"] or "") if "tagline" in keys else ""
+    long_synopsis = str(row["long_synopsis"] or "") if "long_synopsis" in keys else ""
     logline = str(row["llm_logline"] or "") if "llm_logline" in keys else ""
-    return summary, overview, tagline, logline
+    return summary, overview, tagline, long_synopsis, logline
 
 
 def _select_motifs_for_item(
@@ -299,8 +300,8 @@ def extract_motif_rows(db: Database) -> List[Tuple[int, str, str]]:
     """Return ``(item_id, 'motif', token)`` rows after DF filtering."""
     docs: List[Tuple[int, Set[str], Set[str]]] = []
     for row in db.all_library_items():
-        summary, overview, tagline, logline = _row_plot_parts(row)
-        tokens = tokenize_plot_text(summary, overview, tagline, logline)
+        summary, overview, tagline, long_synopsis, logline = _row_plot_parts(row)
+        tokens = tokenize_plot_text(summary, overview, tagline, long_synopsis, logline)
         if not tokens:
             continue
         keys = row.keys() if hasattr(row, "keys") else row

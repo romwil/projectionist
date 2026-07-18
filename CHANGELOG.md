@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.8.9] — 2026-07-17
+
+Library knowledge Wave 2: optional long synopsis enrichment, free keyword→theme facets, knowledge coverage UI across Admin/Explore/Tasks, Plot knowledge on title detail, and Plot Lab theme chips.
+
+### Added
+- **Knowledge coverage UI**: Admin Dashboard panel + compact strips on Explore and Scheduled Tasks (`GET /api/library/knowledge-coverage`); themes/synopsis metrics feature-detected when present.
+- **Title detail Plot knowledge** panel: plot layers present, motif/keyword/theme chips, neighbor count (`plot_knowledge` on title detail).
+- Plot Lab **theme chips** when `facet_type=theme` catalog returns data; Why? layer labels humanized (Motif / Keyword / Plot text).
+- Optional **long synopsis** (`long_synopsis` / `synopsis_source`) via idle `long_synopsis_enrichment` (Wikipedia or OMDb when `long_synopsis_source` is set). Never overwrites Plex/TMDB; skips cleanly when unconfigured.
+- Offline **keyword→theme** mapping (`keyword_theme_tagging`) writes controlled `facet_type='theme'` from TMDB keywords — no API key or LLM.
+- Long synopsis feeds motif extraction, embedding text, and hybrid Plot Lab plot-text match; hybrid also considers theme facets.
+
+### Changed
+- Help / `CURATOR_KNOWLEDGE.md` / `WEB_UI.md`: document coverage surfaces, multi-signal Plot Lab, and how to read knowledge depth.
+- `llm_theme_tagging` remains a reserved stub (skips); production themes come from `keyword_theme_tagging`.
+- Docs: `DATA_MODEL`, `ARCHITECTURE`, `CONFIGURATION`, `HELP` cover synopsis opt-in and free theme mapping.
+
 ## [1.8.8] — 2026-07-17
 
 Library knowledge Wave 1: richer motif extraction, multi-signal Plot Lab AND, durable scheduled-task run history with measured rate and auto-tune, in-app Help + curator knowledge guide, plus About/Surprise Me/sidebar polish.

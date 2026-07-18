@@ -25,6 +25,7 @@ AUTOTUNE_TASKS = frozenset(
         "semantic_embeddings",
         "plot_neighbors",
         "llm_logline_enrichment",
+        "long_synopsis_enrichment",
     }
 )
 
@@ -34,6 +35,7 @@ TARGET_HORIZON_SECONDS = {
     "semantic_embeddings": 7 * 86400,
     "plot_neighbors": 7 * 86400,
     "llm_logline_enrichment": 30 * 86400,  # keep LLM spend gentle
+    "long_synopsis_enrichment": 14 * 86400,  # paced external fetches
 }
 
 # Soft interval bounds for auto-tune nudges (owner may still set outside these
@@ -43,6 +45,7 @@ INTERVAL_BOUNDS: Dict[str, Tuple[int, int]] = {
     "semantic_embeddings": (3600, 172800),  # 1h – 2d
     "plot_neighbors": (900, 43200),  # 15m – 12h (catch-up friendly)
     "llm_logline_enrichment": (3600, 172800),  # 1h – 2d
+    "long_synopsis_enrichment": (3600, 172800),  # 1h – 2d
 }
 
 BATCH_BOUNDS: Dict[str, Tuple[int, int]] = {
@@ -50,6 +53,7 @@ BATCH_BOUNDS: Dict[str, Tuple[int, int]] = {
     "semantic_embeddings": (10, 100),
     "plot_neighbors": (5, 60),
     "llm_logline_enrichment": (1, 10),
+    "long_synopsis_enrichment": (3, 20),
 }
 
 # Raise batch when duration is under this fraction of the timeout.

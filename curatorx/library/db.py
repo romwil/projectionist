@@ -344,6 +344,7 @@ class Database:
             self._migrate_library_metadata_enrichment(conn)
             self._migrate_people_credits(conn)
             self._migrate_plot_text_columns(conn)
+            self._migrate_long_synopsis_columns(conn)
             self._migrate_embeddings_model(conn)
             self._migrate_item_neighbors(conn)
             self._migrate_title_relations(conn)
@@ -534,6 +535,20 @@ class Database:
             "tmdb_overview": "TEXT DEFAULT ''",
             "tagline": "TEXT DEFAULT ''",
             "llm_logline": "TEXT DEFAULT ''",
+        }.items():
+            if name not in cols:
+                conn.execute(f"ALTER TABLE library_items ADD COLUMN {name} {typedef}")
+
+    def _migrate_long_synopsis_columns(self, conn: sqlite3.Connection) -> None:
+        """Optional longer plot text from Wikipedia/OMDb (never overwrites Plex/TMDB).
+
+        Written only by ``long_synopsis_enrichment`` via ``set_long_synopsis``.
+        Not part of library upsert — sync cannot clobber or invent these fields.
+        """
+        cols = self._table_columns(conn, "library_items")
+        for name, typedef in {
+            "long_synopsis": "TEXT DEFAULT ''",
+            "synopsis_source": "TEXT DEFAULT ''",
         }.items():
             if name not in cols:
                 conn.execute(f"ALTER TABLE library_items ADD COLUMN {name} {typedef}")
@@ -2407,6 +2422,76 @@ class Database:
 
         run_with_db_lock_retry(_write, label="set_llm_logline")
 
+    _LONG_SYNOPSIS_WHERE = """
+        (long_synopsis IS NULL OR long_synopsis = '')
+        AND (
+          (summary IS NOT NULL AND summary != '')
+          OR (tmdb_overview IS NOT NULL AND tmdb_overview != '')
+          OR title IS NOT NULL
+        )
+    """
+
+    def items_needing_long_synopsis(self, *, limit: int = 10) -> List[sqlite3.Row]:
+        """Rows still missing optional ``long_synopsis`` (Wikipedia/OMDb backlog)."""
+        with self.connect() as conn:
+            cols = self._table_columns(conn, "library_items")
+            if "long_synopsis" not in cols:
+                return []
+            return list(
+                conn.execute(
+                    f"""
+                    SELECT id, rating_key, media_type, title, year, imdb_id,
+                           summary, tmdb_overview, tagline, long_synopsis, synopsis_source
+                    FROM library_items
+                    WHERE {self._LONG_SYNOPSIS_WHERE}
+                    ORDER BY updated_at ASC
+                    LIMIT ?
+                    """,
+                    (max(1, int(limit)),),
+                ).fetchall()
+            )
+
+    def count_items_needing_long_synopsis(self) -> int:
+        """Count titles still waiting on the optional long-synopsis trickle."""
+        with self.connect() as conn:
+            cols = self._table_columns(conn, "library_items")
+            if "long_synopsis" not in cols:
+                return 0
+            row = conn.execute(
+                f"SELECT COUNT(*) AS cnt FROM library_items WHERE {self._LONG_SYNOPSIS_WHERE}"
+            ).fetchone()
+            return int(row["cnt"] if row else 0)
+
+    def set_long_synopsis(self, item_id: int, synopsis: str, source: str) -> None:
+        """Write optional long synopsis + provenance. Never clears existing non-empty text."""
+        cleaned = str(synopsis or "").strip()
+        provenance = str(source or "").strip().lower()
+        if not cleaned or not provenance:
+            return
+
+        def _write() -> None:
+            with self.connect() as conn:
+                conn.execute(
+                    """
+                    UPDATE library_items
+                    SET long_synopsis = CASE
+                            WHEN long_synopsis IS NULL OR long_synopsis = ''
+                            THEN ?
+                            ELSE long_synopsis
+                        END,
+                        synopsis_source = CASE
+                            WHEN synopsis_source IS NULL OR synopsis_source = ''
+                            THEN ?
+                            ELSE synopsis_source
+                        END,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (cleaned, provenance, time.time(), int(item_id)),
+                )
+
+        run_with_db_lock_retry(_write, label="set_long_synopsis")
+
     def replace_facets_of_type(
         self,
         facet_type: str,
@@ -2485,9 +2570,13 @@ class Database:
             logline_select = (
                 "llm_logline" if "llm_logline" in cols else "'' AS llm_logline"
             )
+            synopsis_select = (
+                "long_synopsis" if "long_synopsis" in cols else "'' AS long_synopsis"
+            )
             rows = conn.execute(
                 f"""
-                SELECT id, summary, {overview_select}, {tagline_select}, {logline_select}
+                SELECT id, summary, {overview_select}, {tagline_select},
+                       {logline_select}, {synopsis_select}
                 FROM library_items
                 WHERE id IN ({placeholders})
                 """,
@@ -2499,6 +2588,7 @@ class Database:
                 str(row["summary"] or "").strip(),
                 str(row["tmdb_overview"] or "").strip(),
                 str(row["tagline"] or "").strip(),
+                str(row["long_synopsis"] or "").strip(),
                 str(row["llm_logline"] or "").strip(),
             ]
             out[int(row["id"])] = "\n".join(part for part in parts if part)

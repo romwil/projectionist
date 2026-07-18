@@ -1,12 +1,12 @@
-"""Optional idle stub: LLM theme/trope tagging → ``facet_type='theme'``.
+"""Optional future idle stub: LLM theme/trope tagging → ``facet_type='theme'``.
+
+**Production themes come from** ``keyword_theme_tagging`` (local keyword→theme
+map, no LLM). This task stays registered so Admin history and Explore wiring
+keep a stable name for a future LLM enrichment path.
 
 v1 does **not** call an LLM. Without ``llm_api_key`` the task skips cleanly.
-With a key it still returns ``skipped`` / ``stub_pending`` so Explore and agent
-tools can wire to ``theme`` facets without blocking on generation.
-
-When implemented, write controlled-vocab theme strings via
-``db.replace_facets_of_type('theme', ...)`` and/or ``title_relations`` rows with
-``relation='llm_theme'``. Never invent themes from heuristics in the request path.
+With a key it still returns ``skipped`` / ``stub_pending`` — do not rely on it
+for theme facets; enable/run ``keyword_theme_tagging`` instead.
 
 Default interval: 24 hours.
 """
@@ -38,21 +38,21 @@ async def run(
             "reason": "no_llm_api_key",
             "tagged": 0,
             "note": (
-                "LLM theme tagging stays empty until an LLM is configured. "
-                "Use motif facets + title_relations (collection/neighbor/shared_crew) for now."
+                "LLM theme tagging is an unused future path. Themes are written by "
+                "keyword_theme_tagging from TMDB keywords (no LLM)."
             ),
         }
 
-    # Stub: keep non-blocking even when a key exists. Full controlled-vocab
-    # tagging lands in a later pass.
+    # Stub: keep non-blocking even when a key exists. Controlled-vocab LLM
+    # enrichment may land later; keyword_theme_tagging remains the source of truth.
     logger.info("LLM theme tagging stub: pending implementation (key present)")
     return {
         "status": "skipped",
         "reason": "stub_pending",
         "tagged": 0,
         "note": (
-            "Theme tagging stub — will write facet_type='theme' and/or "
-            "relation='llm_theme' when implemented. Motifs remain available via summary_motifs."
+            "Theme tagging via LLM is stubbed. Run keyword_theme_tagging for "
+            "facet_type='theme' from local keyword maps."
         ),
     }
 
@@ -65,9 +65,8 @@ def register(scheduler: IdleScheduler) -> None:
             enabled=True,
             run_fn=run,
             description=(
-                "Reserved for controlled-vocab LLM theme/trope tagging. Currently skips "
-                "(no key, or stub pending) so Explore can wire to theme facets later "
-                "without blocking motif and relation data."
+                "Reserved optional LLM theme enrichment (currently skips). "
+                "Production themes come from keyword_theme_tagging (offline keyword map)."
             ),
         )
     )
