@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.8.27] — 2026-07-20
+
+### Fixed
+- Align the server-reported application version with the published release tag.
+
 ## [1.8.26] — 2026-07-20
 
 ### Fixed

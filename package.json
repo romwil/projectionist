@@ -1,7 +1,7 @@
 {
   "name": "curatorx",
   "private": true,
-  "version": "1.8.26",
+  "version": "1.8.27",
   "scripts": {
     "test": "python -m unittest discover -s tests -q && npm run test:frontend && npm run test:e2e",
     "test:frontend": "cd frontend && npm install && npm run test:unit && npm run build",

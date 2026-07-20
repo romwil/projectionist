@@ -1,6 +1,19 @@
 {
-  "generated_at": "2026-07-20T21:18:14Z",
+  "generated_at": "2026-07-20T21:22:13Z",
   "releases": [
+    {
+      "version": "1.8.27",
+      "date": "2026-07-20",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Align the server-reported application version with the published release tag."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.26",
       "date": "2026-07-20",
