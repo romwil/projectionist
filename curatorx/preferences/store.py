@@ -63,9 +63,18 @@ def preference_context(
             lines.append(f"- {row['cluster_tag']} (weight={row['weight']}){lock}")
         return "\n".join(lines)
 
-    facts = db.preference_facts(limit=limit, user_id=user_id)
+    # v1.8.29 unified memory is the source of truth for account-scoped
+    # preferences.  Legacy facts remain only for pre-migration installations.
+    notes = db.list_user_memory_notes(user_id, limit=limit) if user_id else []
+    facts = [note for note in notes if note.get("kind") == "preference"]
+    if not facts:
+        facts = db.preference_facts(limit=limit, user_id=user_id)
     if not facts:
         return "No explicit preferences recorded yet."
     for fact in facts:
-        lines.append(f"- [{fact['signal_type']}] {fact['text']}")
+        if isinstance(fact, dict):
+            signal_type = fact.get("metadata", {}).get("signal_type", "explicit")
+            lines.append(f"- [{signal_type}] {fact['text']}")
+        else:
+            lines.append(f"- [{fact['signal_type']}] {fact['text']}")
     return "User preferences:\n" + "\n".join(lines)

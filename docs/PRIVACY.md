@@ -42,10 +42,17 @@ When multi-user is enabled, these stay scoped to your user:
 - Watchlist pins
 - Ratings and review prompts tied to you
 - Preference / taste facts the curator keeps for you
+- Private memory notes (for example stated goals, watch intentions, and external watches)
 - **Preferred conversation name** — how the curator addresses you in chat (may differ from your Plex display name)
 - Voice toggles (listen / speak replies), when voice mode is available
 
 Other household members cannot open your chats or confirm your pending actions through the normal multi-user API boundary.
+
+### Memory, Youth mode, export, and purge
+
+Your private memory stays tied to your account. An owner cannot read an adult member's memory. If the owner explicitly flags an account **Youth mode**, the account profile shows a Youth badge and the owner may review or export that account's memory for moderation. This is not a consent toggle and does not apply to adult accounts.
+
+Use `GET /api/me/memory` to download your memory as JSON or Markdown. `DELETE /api/me/memory` permanently deletes your private memory **and all of your chat transcripts** together. It does not delete shared, sanitized repository research about media.
 
 ### What is shared household
 
@@ -183,6 +190,7 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 | `in_radarr` / `in_sonarr` | SQLite | — | Y | — | Y | Y (agent) |
 | Watch telemetry (detailed) | SQLite | Own signals in UI | Y | — | Y | Y (agent tools) |
 | Chat messages | SQLite | Own | Own + admin host access | — | — | Y\* (provider) |
+| Private user memory | SQLite | Own | Youth accounts only | — | — | Current user's agent context |
 | Watchlist pins | SQLite | Own | Own | Snapshot tool may list pins (no account token) | Same | Y (agent tools) |
 | Ratings / reviews | SQLite | Own | Own | — | — | Y (agent tools) |
 | Preferred name | User row | Own | Household user admin | — | — | Y (addressing) |

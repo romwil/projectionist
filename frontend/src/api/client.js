@@ -232,6 +232,13 @@ export async function patchUserDisabled(userId, disabled) {
   });
 }
 
+export async function patchUserYouthMode(userId, isYouth) {
+  return api(`/users/${encodeURIComponent(userId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ is_youth: Boolean(isYouth) }),
+  });
+}
+
 export async function deleteUser(userId) {
   return api(`/users/${encodeURIComponent(userId)}`, {
     method: "DELETE",

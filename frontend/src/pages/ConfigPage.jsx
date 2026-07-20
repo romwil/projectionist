@@ -20,6 +20,7 @@ import {
   deleteUser,
   listUsers,
   patchUserDisabled,
+  patchUserYouthMode,
   putPersona,
   putSystemConfig,
   resolveModelForProvider,
@@ -651,6 +652,16 @@ export default function ConfigPage() {
         "success",
         nextDisabled ? "User disabled." : "User re-enabled.",
       );
+    } catch (error) {
+      setActionFeedback("users", "error", error.message);
+    }
+  }
+
+  async function handleYouthModeToggle(entry) {
+    try {
+      await patchUserYouthMode(entry.id, !entry.is_youth);
+      await refreshManagedUsers();
+      setActionFeedback("users", "success", entry.is_youth ? "Youth mode removed." : "Youth mode enabled.");
     } catch (error) {
       setActionFeedback("users", "error", error.message);
     }
@@ -1835,6 +1846,7 @@ export default function ConfigPage() {
                               <th scope="col">Name</th>
                               <th scope="col">Email</th>
                               <th scope="col">Role</th>
+                              <th scope="col">Youth mode</th>
                               <th scope="col">Seerr</th>
                               <th scope="col">Status</th>
                               <th scope="col">Actions</th>
@@ -1867,6 +1879,17 @@ export default function ConfigPage() {
                                       <option value="member">Member</option>
                                       <option value="guest">Guest</option>
                                     </select>
+                                  </td>
+                                  <td>
+                                    <button
+                                      type="button"
+                                      className="ghost"
+                                      data-testid={`user-youth-mode-${entry.id}`}
+                                      disabled={isSelf}
+                                      onClick={() => handleYouthModeToggle(entry)}
+                                    >
+                                      {entry.is_youth ? "Youth mode on" : "Set Youth mode"}
+                                    </button>
                                   </td>
                                   <td>
                                     {seerrLinked ? (

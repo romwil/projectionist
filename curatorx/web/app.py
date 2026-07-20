@@ -66,6 +66,7 @@ from curatorx.connectors.seerr import SeerrClient
 from curatorx.connectors.sonarr import SonarrClient
 from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import DEFAULT_LENS_ID
+from curatorx.memory import MemoryAccessError, UserMemoryService
 from curatorx.library.health import compute_library_health
 from curatorx.library.facets import ensure_library_facet_index
 from curatorx.library.episodes import query_episodes, summarize_tv_progress
@@ -472,6 +473,7 @@ class PlexLoginPayload(BaseModel):
 class UserUpdatePayload(BaseModel):
     role: Optional[str] = Field(default=None, pattern="^(owner|member|guest)$")
     disabled: Optional[bool] = None
+    is_youth: Optional[bool] = None
 
 
 class AuthMeUpdatePayload(BaseModel):
@@ -919,6 +921,48 @@ def auth_me(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     return {"user": user.to_dict(), "authenticated": True}
 
 
+def _memory_service() -> UserMemoryService:
+    return UserMemoryService(_db())
+
+
+@app.get("/api/me/memory")
+def export_my_memory(
+    format: Literal["json", "markdown"] = "json",
+    user=Depends(get_current_user_dep),
+):
+    payload = _db().export_user_memory(user.id)
+    if format == "json":
+        return JSONResponse(
+            content=payload,
+            headers={"Content-Disposition": 'attachment; filename="curatorx-memory.json"'},
+        )
+    lines = ["# CuratorX memory export", ""]
+    for note in payload["notes"]:
+        lines.extend([f"## {note['kind']}", note["text"], ""])
+    return Response(
+        content="\n".join(lines),
+        media_type="text/markdown",
+        headers={"Content-Disposition": 'attachment; filename="curatorx-memory.md"'},
+    )
+
+
+@app.delete("/api/me/memory")
+def purge_my_memory(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    """Hard-delete private notes and every private chat transcript together."""
+    return {"purged": _db().purge_user_memory_and_chats(user.id)}
+
+
+@app.get("/api/users/{user_id}/memory")
+def review_youth_memory(user_id: str, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    try:
+        notes = _memory_service().recall(
+            caller_id=user.id, caller_role=user.role, target_id=user_id, limit=500
+        )
+    except MemoryAccessError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+    return {"user_id": user_id, "notes": notes}
+
+
 @app.patch("/api/auth/me")
 def patch_auth_me(
     payload: AuthMeUpdatePayload,
@@ -1094,8 +1138,8 @@ def patch_user(
     payload: UserUpdatePayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    if payload.role is None and payload.disabled is None:
-        raise HTTPException(status_code=400, detail="Provide role and/or disabled")
+    if payload.role is None and payload.disabled is None and payload.is_youth is None:
+        raise HTTPException(status_code=400, detail="Provide role, disabled, and/or is_youth")
     db = _db()
     target = db.get_user(user_id)
     if target is None:
@@ -1127,6 +1171,11 @@ def patch_user(
                 status_code=404,
                 detail=_safe_error_detail(error, "User not found"),
             ) from error
+    if payload.is_youth is not None:
+        try:
+            updated = db.set_user_youth(user_id, payload.is_youth)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail=_safe_error_detail(error, "User not found")) from error
     assert updated is not None
     return {"user": updated}
 

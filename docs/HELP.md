@@ -184,6 +184,15 @@ optional OMDb or TVDB when the owner configures their keys. It reports which
 sources answered and what remains unavailable. This is media research, not
 general-purpose open-web browsing or HTML scraping.
 
+### Your memory
+
+The curator can remember preferences, stated goals, watch intentions, and
+external watches for your account. Export it from `GET /api/me/memory` (JSON
+or Markdown). Deleting it permanently deletes both private memory and your
+chat transcripts, so export first if you need a copy. Youth-mode accounts show
+a badge in Profile; only those accounts can be reviewed by the owner for
+moderation.
+
 ---
 
 ## Related documentation

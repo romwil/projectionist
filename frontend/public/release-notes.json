@@ -1,6 +1,26 @@
 {
-  "generated_at": "2026-07-20T21:54:38Z",
+  "generated_at": "2026-07-20T23:17:38Z",
   "releases": [
+    {
+      "version": "1.8.29",
+      "date": "2026-07-20",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Privacy-first dual-scope curator memory: append-only sanitized repository research and unified private user notes.",
+            "Youth-mode owner moderation, account memory export, and an atomic purge of private memory plus chat transcripts."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Account-scoped preference writes now use the private memory store and title research persists safe repository snapshots."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.28",
       "date": "2026-07-20",

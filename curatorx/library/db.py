@@ -350,6 +350,7 @@ class Database:
             self._migrate_embeddings_model(conn)
             self._migrate_item_neighbors(conn)
             self._migrate_title_relations(conn)
+            self._migrate_curator_memory(conn)
             self._seed_defaults(conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
@@ -452,6 +453,91 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_message_feedback_session ON message_feedback(session_id);
             """
         )
+
+    def _migrate_curator_memory(self, conn: sqlite3.Connection) -> None:
+        """Install the v1.8.29 dual-scope memory model and migrate preferences."""
+        user_cols = self._table_columns(conn, "users")
+        if "is_youth" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN is_youth INTEGER NOT NULL DEFAULT 0")
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS memory_entities (
+                id TEXT PRIMARY KEY,
+                entity_type TEXT NOT NULL CHECK (entity_type IN ('person','company','title','location','other')),
+                name TEXT NOT NULL,
+                external_ids_json TEXT NOT NULL DEFAULT '{}',
+                library_item_id INTEGER,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                archived_at REAL,
+                UNIQUE(entity_type, name)
+            );
+            CREATE TABLE IF NOT EXISTS memory_snapshots (
+                id TEXT PRIMARY KEY,
+                entity_id TEXT NOT NULL REFERENCES memory_entities(id),
+                payload_json TEXT NOT NULL,
+                sources_json TEXT NOT NULL DEFAULT '[]',
+                fetched_at REAL NOT NULL,
+                created_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS memory_relations (
+                id TEXT PRIMARY KEY,
+                source_entity_id TEXT NOT NULL REFERENCES memory_entities(id),
+                target_entity_id TEXT NOT NULL REFERENCES memory_entities(id),
+                relation_type TEXT NOT NULL,
+                snapshot_id TEXT REFERENCES memory_snapshots(id),
+                created_at REAL NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS memory_insights (
+                id TEXT PRIMARY KEY,
+                entity_id TEXT NOT NULL REFERENCES memory_entities(id),
+                insight TEXT NOT NULL,
+                citations_json TEXT NOT NULL,
+                created_at REAL NOT NULL,
+                archived_at REAL
+            );
+            CREATE TABLE IF NOT EXISTS memory_entity_activity (
+                entity_id TEXT PRIMARY KEY REFERENCES memory_entities(id),
+                discussion_count INTEGER NOT NULL DEFAULT 0,
+                last_discussed_at REAL
+            );
+            CREATE TABLE IF NOT EXISTS user_memory_notes (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                kind TEXT NOT NULL,
+                text TEXT NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}',
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                archived_at REAL
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_memory_notes_user ON user_memory_notes(user_id, created_at DESC);
+            CREATE TABLE IF NOT EXISTS user_memory_events (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                event_type TEXT NOT NULL,
+                target_id TEXT,
+                created_at REAL NOT NULL,
+                metadata_json TEXT NOT NULL DEFAULT '{}'
+            );
+            """
+        )
+        # Preference facts are retained only as a rollback compatibility source.
+        # The id prefix makes this migration idempotent on every startup.
+        pref_cols = self._table_columns(conn, "preference_facts")
+        if "user_id" in pref_cols:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO user_memory_notes
+                    (id, user_id, kind, text, metadata_json, created_at, updated_at)
+                SELECT 'pref-' || id, user_id, 'preference', text,
+                       json_object('signal_type', signal_type, 'weight', weight,
+                                   'tmdb_id', tmdb_id, 'tvdb_id', tvdb_id, 'media_type', media_type),
+                       created_at, created_at
+                FROM preference_facts
+                WHERE user_id IS NOT NULL
+                """
+            )
 
     def _migrate_library_indexes(self, conn: sqlite3.Connection) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_library_year ON library_items(year)")
@@ -1587,6 +1673,7 @@ class Database:
         disabled = False
         if "disabled" in keys and row["disabled"] is not None:
             disabled = bool(int(row["disabled"]))
+        is_youth = bool(int(row["is_youth"])) if "is_youth" in keys and row["is_youth"] is not None else False
         seerr_user_id = int(row["seerr_user_id"]) if row["seerr_user_id"] is not None else None
         return {
             "id": str(row["id"]),
@@ -1597,6 +1684,7 @@ class Database:
             "email": str(row["email"]) if row["email"] is not None else None,
             "role": str(row["role"]),
             "disabled": disabled,
+            "is_youth": is_youth,
             "plex_user_id": str(row["plex_user_id"]) if row["plex_user_id"] is not None else None,
             "seerr_user_id": seerr_user_id,
             "seerr_linked": seerr_user_id is not None,
@@ -3282,6 +3370,23 @@ class Database:
             return [(int(r["item_id"]), json.loads(r["vector"])) for r in rows]
 
     def add_preference(self, signal_type: str, text: str, **kwargs: Any) -> None:
+        user_id = kwargs.get("user_id")
+        if user_id:
+            self.add_user_memory_note(
+                str(user_id),
+                kind="preference",
+                text=text,
+                metadata={
+                    "signal_type": signal_type,
+                    "weight": kwargs.get("weight", 1.0),
+                    "tmdb_id": kwargs.get("tmdb_id"),
+                    "tvdb_id": kwargs.get("tvdb_id"),
+                    "media_type": kwargs.get("media_type"),
+                },
+            )
+            # Keep the legacy row during the compatibility window.  New agent
+            # reads use user_memory_notes; this preserves existing integrations
+            # and rollback-safe historical queries until preference_facts retires.
         with self.connect() as conn:
             conn.execute(
                 """
@@ -3320,6 +3425,152 @@ class Database:
                     (user_id, limit),
                 ).fetchall()
             )
+
+    # --- Curator memory (v1.8.29) ---
+
+    def set_user_youth(self, user_id: str, is_youth: bool) -> Dict[str, Any]:
+        with self.connect() as conn:
+            if conn.execute("SELECT 1 FROM users WHERE id = ?", (user_id,)).fetchone() is None:
+                raise ValueError("User not found")
+            conn.execute("UPDATE users SET is_youth = ? WHERE id = ?", (int(is_youth), user_id))
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        assert row is not None
+        return self._row_to_user(row)
+
+    def add_user_memory_note(
+        self, user_id: str, *, kind: str, text: str, metadata: Optional[Mapping[str, Any]] = None
+    ) -> Dict[str, Any]:
+        cleaned = str(text or "").strip()
+        if not cleaned:
+            raise ValueError("Memory text is required")
+        now = time.time()
+        note_id = uuid.uuid4().hex
+        with self.connect() as conn:
+            conn.execute(
+                """INSERT INTO user_memory_notes
+                   (id, user_id, kind, text, metadata_json, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (note_id, user_id, str(kind or "note")[:64], cleaned[:4000],
+                 json.dumps(dict(metadata or {})), now, now),
+            )
+            conn.execute(
+                """INSERT INTO user_memory_events (id, user_id, event_type, target_id, created_at)
+                   VALUES (?, ?, 'remember', ?, ?)""",
+                (uuid.uuid4().hex, user_id, note_id, now),
+            )
+        return self.get_user_memory_note(note_id, user_id=user_id) or {}
+
+    def get_user_memory_note(self, note_id: str, *, user_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                """SELECT * FROM user_memory_notes
+                   WHERE id = ? AND user_id = ? AND archived_at IS NULL""", (note_id, user_id)
+            ).fetchone()
+        return self._memory_note_dict(row) if row else None
+
+    def list_user_memory_notes(self, user_id: str, *, limit: int = 100) -> List[Dict[str, Any]]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """SELECT * FROM user_memory_notes WHERE user_id = ? AND archived_at IS NULL
+                   ORDER BY updated_at DESC LIMIT ?""", (user_id, min(max(limit, 1), 500))
+            ).fetchall()
+        return [self._memory_note_dict(row) for row in rows]
+
+    def update_user_memory_note(
+        self, user_id: str, note_id: str, *, text: str, kind: Optional[str] = None
+    ) -> Optional[Dict[str, Any]]:
+        cleaned = str(text or "").strip()
+        if not cleaned:
+            raise ValueError("Memory text is required")
+        now = time.time()
+        with self.connect() as conn:
+            if kind:
+                conn.execute(
+                    """UPDATE user_memory_notes SET text = ?, kind = ?, updated_at = ?
+                       WHERE id = ? AND user_id = ? AND archived_at IS NULL""",
+                    (cleaned[:4000], kind[:64], now, note_id, user_id),
+                )
+            else:
+                conn.execute(
+                    """UPDATE user_memory_notes SET text = ?, updated_at = ?
+                       WHERE id = ? AND user_id = ? AND archived_at IS NULL""",
+                    (cleaned[:4000], now, note_id, user_id),
+                )
+            if not conn.execute("SELECT 1 FROM user_memory_notes WHERE id = ? AND user_id = ?", (note_id, user_id)).fetchone():
+                return None
+            conn.execute(
+                "INSERT INTO user_memory_events (id, user_id, event_type, target_id, created_at) VALUES (?, ?, 'update', ?, ?)",
+                (uuid.uuid4().hex, user_id, note_id, now),
+            )
+        return self.get_user_memory_note(note_id, user_id=user_id)
+
+    def export_user_memory(self, user_id: str) -> Dict[str, Any]:
+        notes = self.list_user_memory_notes(user_id, limit=500)
+        now = time.time()
+        with self.connect() as conn:
+            conn.execute(
+                "INSERT INTO user_memory_events (id, user_id, event_type, created_at) VALUES (?, ?, 'export', ?)",
+                (uuid.uuid4().hex, user_id, now),
+            )
+        return {"user_id": user_id, "exported_at": now, "notes": notes}
+
+    def purge_user_memory_and_chats(self, user_id: str) -> Dict[str, int]:
+        now = time.time()
+        with self.connect() as conn:
+            notes = conn.execute("SELECT COUNT(*) AS count FROM user_memory_notes WHERE user_id = ?", (user_id,)).fetchone()
+            chats = conn.execute("SELECT COUNT(*) AS count FROM chat_sessions WHERE user_id = ?", (user_id,)).fetchone()
+            conn.execute("DELETE FROM user_memory_notes WHERE user_id = ?", (user_id,))
+            conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
+            conn.execute(
+                "INSERT INTO user_memory_events (id, user_id, event_type, created_at) VALUES (?, ?, 'purge', ?)",
+                (uuid.uuid4().hex, user_id, now),
+            )
+        return {"notes_deleted": int(notes["count"]), "chat_sessions_deleted": int(chats["count"])}
+
+    def save_repository_research(
+        self, *, entity_type: str, name: str, payload: Mapping[str, Any],
+        external_ids: Optional[Mapping[str, Any]] = None, library_item_id: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Append a sanitized research snapshot; repository history is never overwritten."""
+        now = time.time()
+        entity_id = uuid.uuid4().hex
+        entity_type = entity_type if entity_type in {"person", "company", "title", "location", "other"} else "other"
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT id FROM memory_entities WHERE entity_type = ? AND name = ?",
+                (entity_type, str(name).strip()),
+            ).fetchone()
+            if row is None:
+                conn.execute(
+                    """INSERT INTO memory_entities
+                       (id, entity_type, name, external_ids_json, library_item_id, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (entity_id, entity_type, str(name).strip(), json.dumps(dict(external_ids or {})),
+                     library_item_id, now, now),
+                )
+            else:
+                entity_id = str(row["id"])
+                conn.execute("UPDATE memory_entities SET updated_at = ? WHERE id = ?", (now, entity_id))
+            snapshot_id = uuid.uuid4().hex
+            conn.execute(
+                """INSERT INTO memory_snapshots (id, entity_id, payload_json, sources_json, fetched_at, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?)""",
+                (snapshot_id, entity_id, json.dumps(dict(payload)),
+                 json.dumps(dict(payload).get("sources_checked", {})), now, now),
+            )
+        return {"entity_id": entity_id, "snapshot_id": snapshot_id, "freshness": now}
+
+    @staticmethod
+    def _memory_note_dict(row: sqlite3.Row) -> Dict[str, Any]:
+        try:
+            metadata = json.loads(row["metadata_json"] or "{}")
+        except (TypeError, json.JSONDecodeError):
+            metadata = {}
+        return {
+            "id": str(row["id"]), "user_id": str(row["user_id"]), "kind": str(row["kind"]),
+            "text": str(row["text"]), "metadata": metadata,
+            "created_at": float(row["created_at"]), "updated_at": float(row["updated_at"]),
+        }
 
     # --- Telemetry ---
 

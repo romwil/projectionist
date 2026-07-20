@@ -139,6 +139,11 @@ export default function ProfilePage() {
             <p className="settings-identity-name">{user.display_name}</p>
             {user.email ? <p className="settings-identity-meta">{user.email}</p> : null}
             <p className="settings-identity-meta">Role · {user.role}</p>
+            {user.is_youth ? (
+              <p className="settings-identity-meta" data-testid="youth-mode-badge">
+                Youth mode · memory may be reviewed by the owner for moderation.
+              </p>
+            ) : null}
             <div className="settings-avatar-actions">
               <input
                 ref={avatarInputRef}

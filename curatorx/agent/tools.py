@@ -191,6 +191,29 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "remember_about_user",
+            "description": "Remember a user-provided private fact, goal, intention, or external watch for that same user only.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string"},
+                    "kind": {"type": "string", "enum": ["self_disclosure", "learning_goal", "watch_intention", "watched_external", "follow_up", "preference"]},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall_user_memory",
+            "description": "Recall only the current user's private memory. Never use it for another account.",
+            "parameters": {"type": "object", "properties": {"limit": {"type": "integer"}}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "add_to_radarr",
             "description": "Propose adding a movie to Radarr. Returns a confirmation token.",
             "parameters": {
@@ -1686,6 +1709,8 @@ class ToolRegistry:
                 tmdb_id=tmdb_int,
                 tvdb_id=tvdb_int,
                 imdb_id=imdb_id,
+                db=self.db,
+                library_item_id=int(row["id"]) if row is not None else None,
             )
         )
 
@@ -2109,6 +2134,33 @@ class ToolRegistry:
             user_id=self.user_id,
         )
         return json.dumps({"saved": True})
+
+    async def _tool_remember_about_user(self, args: Mapping[str, Any]) -> str:
+        if not self.user_id:
+            return json.dumps({"error": "Private memory requires an authenticated household account"})
+        from curatorx.memory import UserMemoryService
+
+        try:
+            note = UserMemoryService(self.db).remember(
+                caller_id=self.user_id,
+                kind=str(args.get("kind") or "self_disclosure"),
+                text=str(args.get("text") or ""),
+            )
+        except ValueError as error:
+            return json.dumps({"error": str(error)})
+        return json.dumps({"saved": True, "id": note["id"], "kind": note["kind"]})
+
+    async def _tool_recall_user_memory(self, args: Mapping[str, Any]) -> str:
+        if not self.user_id:
+            return json.dumps({"error": "Private memory requires an authenticated household account"})
+        from curatorx.memory import UserMemoryService
+
+        notes = UserMemoryService(self.db).recall(
+            caller_id=self.user_id,
+            caller_role=self.user_role,
+            limit=min(max(1, int(args.get("limit") or 20)), 100),
+        )
+        return json.dumps({"notes": notes})
 
     async def _tool_add_to_radarr(self, args: Mapping[str, Any]) -> str:
         config_error = radarr_add_configuration_error(self.settings)

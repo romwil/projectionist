@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.8.29] — 2026-07-20
+
+### Added
+- Privacy-first dual-scope curator memory: append-only sanitized repository research and unified private user notes.
+- Youth-mode owner moderation, account memory export, and an atomic purge of private memory plus chat transcripts.
+
+### Changed
+- Account-scoped preference writes now use the private memory store and title research persists safe repository snapshots.
+
 ## [1.8.28] — 2026-07-20
 
 ### Added

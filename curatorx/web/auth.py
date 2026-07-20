@@ -78,6 +78,7 @@ class CurrentUser:
     preferred_name: Optional[str] = None
     ui_font_size: str = "medium"
     ui_theme: str = "system"
+    is_youth: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -91,6 +92,7 @@ class CurrentUser:
             "avatar_url": self.avatar_url,
             "ui_font_size": self.ui_font_size or "medium",
             "ui_theme": self.ui_theme or "system",
+            "is_youth": self.is_youth,
         }
 
 
@@ -117,6 +119,7 @@ def row_to_current_user(row) -> CurrentUser:
         cleaned_theme = str(row["ui_theme"]).strip().lower()
         if cleaned_theme in {"lights_up", "lights_down", "system"}:
             ui_theme = cleaned_theme
+    is_youth = bool(int(row["is_youth"])) if "is_youth" in keys and row["is_youth"] is not None else False
     user_id = str(row["id"])
     return CurrentUser(
         id=user_id,
@@ -129,6 +132,7 @@ def row_to_current_user(row) -> CurrentUser:
         preferred_name=preferred_name,
         ui_font_size=ui_font_size,
         ui_theme=ui_theme,
+        is_youth=is_youth,
     )
 
 
@@ -652,6 +656,7 @@ def row_to_current_user_from_dict(d: dict) -> CurrentUser:
         preferred_name=d.get("preferred_name"),
         ui_font_size=font,
         ui_theme=theme,
+        is_youth=bool(d.get("is_youth", False)),
     )
 
 

@@ -12,6 +12,7 @@ from curatorx.connectors.omdb import OMDbClient
 from curatorx.connectors.tmdb import TMDBClient
 from curatorx.connectors.tvdb import TVDBClient
 from curatorx.connectors.wikipedia import fetch_extract
+from curatorx.library.db import Database
 
 
 def _source(status: str, **values: Any) -> Dict[str, Any]:
@@ -42,8 +43,10 @@ def research_title(
     tmdb_id: Optional[int] = None,
     tvdb_id: Optional[int] = None,
     imdb_id: str = "",
+    db: Optional[Database] = None,
+    library_item_id: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Research one title through configured official providers with provenance."""
+    """Research one title through official providers and persist a safe repository snapshot."""
     kind = "show" if str(media_type).lower() == "show" else "movie"
     resolved_title = str(title or "").strip()
     result: Dict[str, Any] = {
@@ -153,4 +156,17 @@ def research_title(
 
     if not result["plot"]:
         result["warnings"].append("Configured research sources returned no plot text.")
+    if db is not None:
+        # Only provider-normalized metadata is stored.  Caller-provided Plex paths,
+        # tokens, and provider URLs are intentionally absent from this payload.
+        result["memory"] = db.save_repository_research(
+            entity_type="title",
+            name=str(result["identity"]["title"] or resolved_title),
+            payload=result,
+            external_ids={
+                key: value for key, value in result["identity"].items()
+                if key in {"tmdb_id", "tvdb_id", "imdb_id"} and value
+            },
+            library_item_id=library_item_id,
+        )
     return result

@@ -2,6 +2,10 @@
 
 CuratorX exposes a Model Context Protocol server over your indexed Plex library, with **two trust planes** selected by which API key you present.
 
+Repository memory is shared, sanitized media knowledge and may be added to the
+read-only MCP surface. Private user memory, account exports, and user-memory
+events are never exposed through either MCP trust plane.
+
 ## Why MCP for media curation?
 
 A personal Plex library is a uniquely well-structured local dataset: thousands of titles with rich metadata (genres, ratings, cast, watch state, file sizes) already indexed in SQLite. MCP lets an LLM reach into that index with surgical precision — one tool call per conversational turn — without ever bulk-exporting your collection or exposing your Plex token to a remote service.
