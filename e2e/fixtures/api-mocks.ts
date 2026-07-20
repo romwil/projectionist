@@ -428,6 +428,7 @@ export async function mockCuratorApis(page: Page) {
             year: 1979,
             media_type: "movie",
             tmdb_id: 348,
+            rating_key: "plex-348",
             poster_url: "",
             added_at: Math.floor(Date.now() / 1000) - 86400,
           },

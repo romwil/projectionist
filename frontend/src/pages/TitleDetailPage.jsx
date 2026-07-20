@@ -3,10 +3,10 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import BackLink from "../components/BackLink";
 import { api, queryLibrary } from "../api/client";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
+import PosterOverlayControls from "../components/PosterOverlayControls";
 import RecommendModal from "../components/RecommendModal";
 import TitleDetailContent from "../components/TitleDetailContent";
 import TitleReviewModal from "../components/TitleReviewModal";
-import WatchProgressBadge from "../components/WatchProgressBadge";
 import AppShell from "../layouts/AppShell";
 import { useTitleDetail } from "../hooks/useTitleDetail.js";
 import { useTitleDetailInteractions } from "../hooks/useTitleDetailInteractions.js";
@@ -18,6 +18,29 @@ import {
 } from "../lib/bulkLibraryDelete.js";
 import { filterCollectionPeers } from "../lib/titleDetailExtras.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
+
+function TitleNeighborCard({ item, testId }) {
+  // Both endpoint sources are library relations; make that explicit because
+  // the compact relation payloads do not consistently include in_library.
+  const libraryItem = { ...item, in_library: true };
+  const path = titleDetailPath(libraryItem);
+  const poster = libraryItem.poster_url ? (
+    <img src={libraryItem.poster_url} alt="" loading="lazy" />
+  ) : (
+    <div className="poster-fallback">{libraryItem.title?.slice(0, 1) || "?"}</div>
+  );
+
+  return (
+    <article className="title-neighbor-card" data-testid={testId}>
+      <div className="title-neighbor-poster">
+        {path ? <Link to={path} className="title-neighbor-poster-link">{poster}</Link> : poster}
+        <PosterOverlayControls item={libraryItem} testPrefix="title-neighbor" />
+      </div>
+      <h3>{path ? <Link to={path}>{libraryItem.title}</Link> : libraryItem.title}</h3>
+      {libraryItem.year ? <p className="title-neighbor-year">{libraryItem.year}</p> : null}
+    </article>
+  );
+}
 
 export default function TitleDetailPage() {
   const { mediaType, itemId } = useParams();
@@ -173,41 +196,13 @@ export default function TitleDetailPage() {
             <h2>More in {detail.collection_name}</h2>
           </div>
           <div className="title-neighbors-track">
-            {collectionPeers.map((item) => {
-              const path = titleDetailPath(item);
-              const card = (
-                <>
-                  <div className="title-neighbor-poster">
-                    {item.poster_url ? (
-                      <img src={item.poster_url} alt="" loading="lazy" />
-                    ) : (
-                      <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
-                    )}
-                    <WatchProgressBadge item={item} />
-                  </div>
-                  <h3>{item.title}</h3>
-                  {item.year ? <p className="title-neighbor-year">{item.year}</p> : null}
-                </>
-              );
-              return path ? (
-                <Link
-                  key={`${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`}
-                  to={path}
-                  className="title-neighbor-card"
-                  data-testid="title-collection-peer"
-                >
-                  {card}
-                </Link>
-              ) : (
-                <div
-                  key={`${item.media_type}-${item.title}`}
-                  className="title-neighbor-card"
-                  data-testid="title-collection-peer"
-                >
-                  {card}
-                </div>
-              );
-            })}
+            {collectionPeers.map((item) => (
+              <TitleNeighborCard
+                key={`${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`}
+                item={item}
+                testId="title-collection-peer"
+              />
+            ))}
           </div>
         </section>
       ) : null}
@@ -260,32 +255,13 @@ export default function TitleDetailPage() {
             </div>
           </div>
           <div className="title-neighbors-track" ref={carouselRef}>
-            {neighbors.map((item) => {
-              const path = titleDetailPath(item);
-              const card = (
-                <>
-                  <div className="title-neighbor-poster">
-                    {item.poster_url ? (
-                      <img src={item.poster_url} alt="" loading="lazy" />
-                    ) : (
-                      <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
-                    )}
-                    <WatchProgressBadge item={item} />
-                  </div>
-                  <h3>{item.title}</h3>
-                  {item.year ? <p className="title-neighbor-year">{item.year}</p> : null}
-                </>
-              );
-              return path ? (
-                <Link key={`${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`} to={path} className="title-neighbor-card">
-                  {card}
-                </Link>
-              ) : (
-                <div key={`${item.media_type}-${item.title}`} className="title-neighbor-card">
-                  {card}
-                </div>
-              );
-            })}
+            {neighbors.map((item) => (
+              <TitleNeighborCard
+                key={`${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`}
+                item={item}
+                testId="title-neighbor-card"
+              />
+            ))}
           </div>
         </section>
       ) : null}

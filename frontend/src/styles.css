@@ -2076,7 +2076,8 @@ button.watchlist-chip {
 .media-browse-view-toggle .is-active { background: var(--accent); color: #1b160d; }
 .poster-action-menu { position: absolute; left: 8px; bottom: 8px; z-index: 5; }
 .poster-action-grip { min-width: 30px; min-height: 30px; padding: 0; border-radius: 50%; background: rgba(0,0,0,.78); color: #fff; border: 1px solid rgba(255,255,255,.25); font-size: 20px; line-height: 1; }
-.poster-action-popover { bottom: 36px; left: 0; right: auto; display: grid; gap: 2px; }
+/* Portaled to document.body so poster and rail overflow cannot clip it. */
+.poster-action-popover { position: fixed; bottom: auto; left: auto; right: auto; z-index: 1000; display: grid; gap: 2px; max-width: min(280px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow-y: auto; }
 .poster-action-popover a, .poster-action-popover button { width: 100%; text-align: left; border: 0; background: transparent; color: inherit; padding: 7px 8px; border-radius: 6px; font: inherit; }
 .poster-action-popover a:hover, .poster-action-popover button:hover { background: var(--surface-2); }
 .poster-action-submenu, .poster-action-owner { display: grid; gap: 2px; padding: 5px 0; border-top: 1px solid var(--border); }
@@ -6483,6 +6484,7 @@ a.on-this-day-item:focus-visible {
 }
 
 .recommendation-card-poster {
+  position: relative;
   width: 64px;
   aspect-ratio: 2 / 3;
   overflow: hidden;
@@ -7242,6 +7244,12 @@ a.title-credit-link:hover {
   background: var(--surface-2);
 }
 
+.title-neighbor-poster-link {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
 .title-neighbor-poster img,
 .title-neighbor-poster .poster-fallback {
   width: 100%;
@@ -7252,6 +7260,11 @@ a.title-credit-link:hover {
 .title-neighbor-card h3 {
   margin: 0;
   font-size: var(--text-sm);
+}
+
+.title-neighbor-card h3 a {
+  color: inherit;
+  text-decoration: none;
 }
 
 .title-neighbor-year {

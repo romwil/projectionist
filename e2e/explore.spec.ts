@@ -65,4 +65,24 @@ test.describe("Explore hub", () => {
     await page.getByRole("button", { name: "Export CSV" }).click();
     await expect(page.getByRole("button", { name: "Current page · visible columns" })).toBeVisible();
   });
+
+  test("library rail controls expose Play and a viewport-safe action menu", async ({ page }) => {
+    await page.setViewportSize({ width: 900, height: 700 });
+    await page.goto("/explore");
+
+    const card = page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card").first();
+    await expect(card.getByTestId("explore-watch-plex")).toBeVisible();
+    await card.getByRole("button", { name: /Actions for/ }).click();
+
+    const menu = page.getByRole("menu");
+    await expect(menu).toBeVisible();
+    await expect(menu.getByText("Open details")).toBeVisible();
+    await expect.poll(() => menu.evaluate((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        fixed: getComputedStyle(node).position === "fixed",
+        visible: rect.top >= 0 && rect.left >= 0 && rect.bottom <= window.innerHeight && rect.right <= window.innerWidth,
+      };
+    })).toEqual({ fixed: true, visible: true });
+  });
 });

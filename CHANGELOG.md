@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.8.24] — 2026-07-20
+
+### Fixed
+- Poster action menus now render above clipped poster walls, list rows, and horizontal rails, flip into the visible viewport, and remain usable near screen edges.
+- Library poster controls are consistent across Explore feeds and walls, title-detail Similar/Surprising/collection rails, and recommendation cards. Plex Play appears only for titles with both a library identity and rating key.
+- Incoming recommendation cards now deduplicate repeated titles by stable media identity and preserve the richer available sender note.
+
+### Documentation
+- Help now describes the shared poster controls and the limited decorative-thumbnail exception.
+
 ## [1.8.23] — 2026-07-18
 
 ### Added

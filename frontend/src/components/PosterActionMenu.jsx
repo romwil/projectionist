@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import {
   addCuratedListItem,
@@ -31,16 +32,54 @@ export default function PosterActionMenu({
   const [reportOpen, setReportOpen] = useState(false);
   const [status, setStatus] = useState("");
   const rootRef = useRef(null);
+  const popoverRef = useRef(null);
+  const [popoverStyle, setPopoverStyle] = useState(null);
   const detailPath = titleDetailPath({ ...item, in_library: true });
   const plexHref = item?.plex_watch_url || (canWatchOnPlex(item) ? plexWatchUrl(item.rating_key) : "");
 
   useEffect(() => {
     function close(event) {
-      if (!rootRef.current?.contains(event.target)) setOpen(false);
+      if (!rootRef.current?.contains(event.target) && !popoverRef.current?.contains(event.target)) {
+        setOpen(false);
+      }
     }
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+
+  useEffect(() => {
+    function close(event) {
+      if (event.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    function position() {
+      const grip = rootRef.current?.querySelector(".poster-action-grip");
+      const popover = popoverRef.current;
+      if (!grip || !popover) return;
+      const anchor = grip.getBoundingClientRect();
+      const menu = popover.getBoundingClientRect();
+      const margin = 8;
+      const above = anchor.top - margin - menu.height;
+      const below = anchor.bottom + margin;
+      const top = above >= margin || below + menu.height > window.innerHeight
+        ? Math.max(margin, Math.min(above, window.innerHeight - menu.height - margin))
+        : Math.min(below, window.innerHeight - menu.height - margin);
+      const left = Math.max(margin, Math.min(anchor.left, window.innerWidth - menu.width - margin));
+      setPopoverStyle({ top: `${top}px`, left: `${left}px` });
+    }
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => {
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+    };
+  }, [open, listOpen, status]);
 
   async function openLists() {
     setListOpen(true);
@@ -97,11 +136,8 @@ export default function PosterActionMenu({
     }
   }
 
-  return <div className="poster-action-menu" ref={rootRef}>
-    <button type="button" className="poster-action-grip" aria-label={`Actions for ${item?.title || "title"}`} aria-expanded={open} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setOpen((value) => !value); }}>
-      <span aria-hidden="true">⋮</span>
-    </button>
-    {open ? <div className="poster-action-popover" role="menu">
+  const popover = open && typeof document !== "undefined" ? createPortal(
+    <div className="poster-action-popover" ref={popoverRef} role="menu" style={popoverStyle || { visibility: "hidden" }}>
       {detailPath ? <Link to={detailPath} onClick={() => setOpen(false)}>Open details</Link> : null}
       {plexHref ? <a href={plexHref} target="_blank" rel="noopener noreferrer">Watch on Plex</a> : null}
       <button type="button" onClick={togglePin}>{pinned ? "Remove from watchlist" : "Add to watchlist"}</button>
@@ -121,7 +157,15 @@ export default function PosterActionMenu({
         {item?.rating_key || item?.plex_rating_key ? <button type="button" onClick={deleteIndex}>Delete from index</button> : null}
       </div> : null}
       {status ? <p className="poster-action-status">{status}</p> : null}
-    </div> : null}
+    </div>,
+    document.body,
+  ) : null;
+
+  return <div className="poster-action-menu" ref={rootRef}>
+    <button type="button" className="poster-action-grip" aria-label={`Actions for ${item?.title || "title"}`} aria-expanded={open} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setOpen((value) => !value); }}>
+      <span aria-hidden="true">⋮</span>
+    </button>
+    {popover}
     <ReportMediaIssueModal item={item} open={reportOpen} onClose={() => setReportOpen(false)} onReported={() => setStatus("Issue reported to the owner queue.")} />
   </div>;
 }

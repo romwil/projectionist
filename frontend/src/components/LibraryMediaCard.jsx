@@ -1,32 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, getPlexMachineId } from "../api/client";
 import { formatMatchLayers } from "../lib/plotKnowledge.js";
-import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
-import { watchProgressState } from "../lib/watchProgress.js";
-import PosterActionMenu from "./PosterActionMenu";
-import WatchProgressBadge from "./WatchProgressBadge";
-
-let cachedPlexMachineId;
-let plexMachineIdPromise;
-
-function loadPlexMachineId() {
-  if (cachedPlexMachineId !== undefined) {
-    return Promise.resolve(cachedPlexMachineId);
-  }
-  if (!plexMachineIdPromise) {
-    plexMachineIdPromise = getPlexMachineId()
-      .then((machineId) => {
-        cachedPlexMachineId = machineId;
-        return cachedPlexMachineId;
-      })
-      .catch(() => {
-        cachedPlexMachineId = "";
-        return "";
-      });
-  }
-  return plexMachineIdPromise;
-}
+import { titleDetailPath } from "../lib/titleLinks.js";
+import PosterOverlayControls from "./PosterOverlayControls";
 
 /**
  * Explore / tag / plot-lab poster card with hover Watch / Trailer / Recommend.
@@ -46,142 +22,24 @@ export default function LibraryMediaCard({
 }) {
   const [hovered, setHovered] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
-  const [plexHref, setPlexHref] = useState(() => String(item?.plex_watch_url || "").trim());
-  const [trailerKey, setTrailerKey] = useState(() => String(item?.trailer_youtube_key || "").trim());
-  const [trailerOpen, setTrailerOpen] = useState(false);
-  const [trailerLoading, setTrailerLoading] = useState(false);
+  // Browse/feed endpoints are library-only but some compact payloads omit
+  // in_library. A Plex rating key is the required proof for playable posters.
+  const libraryItem = {
+    ...item,
+    in_library: item?.in_library ?? Boolean(item?.rating_key || item?.plex_rating_key),
+  };
 
-  const path = titleDetailPath({ ...item, in_library: true });
-  const showWatch = canWatchOnPlex(item);
-  const hasWatchBadge = watchProgressState(item) !== "unwatched";
+  const path = titleDetailPath(libraryItem);
 
   useEffect(() => {
     setWhyOpen(false);
   }, [item?.id, item?.rating_key, motifWhy?.summary]);
 
-  useEffect(() => {
-    const provided = String(item?.plex_watch_url || "").trim();
-    if (provided) {
-      setPlexHref(provided);
-      return undefined;
-    }
-    if (!showWatch) {
-      setPlexHref("");
-      return undefined;
-    }
-    let cancelled = false;
-    loadPlexMachineId().then((machineId) => {
-      if (cancelled) return;
-      setPlexHref(plexWatchUrl(item.rating_key, machineId));
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [item?.plex_watch_url, item?.rating_key, showWatch]);
-
-  useEffect(() => {
-    if (!trailerOpen) return undefined;
-    function onKey(event) {
-      if (event.key === "Escape") setTrailerOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [trailerOpen]);
-
-  async function handleTrailer(event) {
-    event.preventDefault();
-    event.stopPropagation();
-    if (trailerKey) {
-      setTrailerOpen(true);
-      return;
-    }
-    if (!item?.media_type || !(item.tmdb_id || item.rating_key)) return;
-    setTrailerLoading(true);
-    try {
-      const id = item.tmdb_id || item.rating_key;
-      const idType = item.tmdb_id ? "tmdb" : "rating_key";
-      const detail = await api(
-        `/title/${item.media_type}/${id}?id_type=${encodeURIComponent(idType)}&enrich=1`,
-      );
-      const key = String(detail?.trailer_youtube_key || "").trim();
-      if (key) {
-        setTrailerKey(key);
-        setTrailerOpen(true);
-      }
-    } catch {
-      // Trailer unavailable — user can open title detail.
-    } finally {
-      setTrailerLoading(false);
-    }
-  }
-
   const media = item.poster_url ? (
     <img src={item.poster_url} alt="" loading="lazy" />
   ) : (
-    <div className="poster-fallback">{item.title?.slice(0, 1) || "?"}</div>
+    <div className="poster-fallback">{libraryItem.title?.slice(0, 1) || "?"}</div>
   );
-
-  const showCornerActions = Boolean(
-    item?.tmdb_id || item?.rating_key || (showRecommend && onRecommend),
-  );
-
-  // Play stays centered and always visible for in-library titles (does not share the
-  // top-left corner with multi-select checkboxes).
-  const playAction =
-    showWatch && plexHref ? (
-      <a
-        href={plexHref}
-        className="explore-hover-icon explore-hover-icon-watch is-always-on"
-        data-testid="explore-watch-plex"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Watch on Plex"
-        title="Watch on Plex"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <span className="material-symbols-outlined" aria-hidden="true">
-          play_arrow
-        </span>
-      </a>
-    ) : null;
-
-  const cornerActions = showCornerActions ? (
-    <div className="explore-card-hover-actions" data-testid="explore-card-hover-actions">
-      {item?.tmdb_id || item?.rating_key ? (
-        <button
-          type="button"
-          className="explore-hover-icon explore-hover-icon-trailer"
-          data-testid="explore-view-trailer"
-          disabled={trailerLoading}
-          aria-label={trailerLoading ? "Loading trailer" : "Watch trailer"}
-          title="Trailer"
-          onClick={handleTrailer}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">
-            {trailerLoading ? "progress_activity" : "movie"}
-          </span>
-        </button>
-      ) : null}
-      {showRecommend && onRecommend ? (
-        <button
-          type="button"
-          className="explore-hover-icon explore-hover-icon-recommend"
-          data-testid="explore-recommend"
-          aria-label="Recommend"
-          title="Recommend"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onRecommend(item);
-          }}
-        >
-          <span className="material-symbols-outlined" aria-hidden="true">
-            recommend
-          </span>
-        </button>
-      ) : null}
-    </div>
-  ) : null;
 
   const titleBlock = (
     <>
@@ -236,19 +94,18 @@ export default function LibraryMediaCard({
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className={`explore-poster${hasWatchBadge ? " has-watch-badge" : ""}`}>
+      <div className="explore-poster">
         {posterNode}
-        <WatchProgressBadge item={item} />
-        {playAction}
-        <PosterActionMenu
-          item={item}
+        <PosterOverlayControls
+          item={libraryItem}
           onRecommend={onRecommend}
+          showRecommend={showRecommend}
           onSeed={onSeed}
           onTogglePin={onTogglePin}
           pinned={pinned}
           motifWhy={motifWhy}
+          testPrefix="explore"
         />
-        {cornerActions}
       </div>
       {titleNode}
 
@@ -308,53 +165,6 @@ export default function LibraryMediaCard({
         </div>
       ) : null}
 
-      {trailerOpen && trailerKey ? (
-        <div
-          className="trailer-modal-backdrop"
-          data-testid="explore-trailer-modal"
-          onClick={() => setTrailerOpen(false)}
-          role="presentation"
-        >
-          <div
-            className="trailer-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${item.title || "Title"} trailer`}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="trailer-modal-header">
-              <h2>{item.title || "Trailer"}</h2>
-              <div className="trailer-modal-actions">
-                <a
-                  className="btn-link ghost"
-                  href={`https://www.youtube.com/watch?v=${encodeURIComponent(trailerKey)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  Open on YouTube
-                </a>
-                <button
-                  type="button"
-                  className="ghost"
-                  data-testid="close-explore-trailer"
-                  onClick={() => setTrailerOpen(false)}
-                >
-                  Close
-                </button>
-              </div>
-            </div>
-            <div className="trailer-modal-frame">
-              <iframe
-                title={`${item.title || "Title"} trailer`}
-                src={`https://www.youtube-nocookie.com/embed/${encodeURIComponent(trailerKey)}?autoplay=1&rel=0`}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-                referrerPolicy="strict-origin-when-cross-origin"
-                allowFullScreen
-              />
-            </div>
-          </div>
-        </div>
-      ) : null}
     </article>
   );
 }
