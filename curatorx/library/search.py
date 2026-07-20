@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import List, Optional
 
 from curatorx.config_store import Settings
@@ -81,6 +82,20 @@ def looks_like_facet_tag_query(query: str) -> bool:
     return True
 
 
+def _title_candidates(query: str) -> List[str]:
+    """Extract conservative title-like candidates from conversational lookup text."""
+    tokens = re.findall(r"[\w']+", str(query or "").casefold())
+    ignored = {
+        "a", "about", "any", "can", "could", "do", "for", "get", "how", "i",
+        "is", "it", "know", "me", "more", "of", "on", "please", "search",
+        "tell", "the", "this", "what", "with", "you",
+    }
+    meaningful = [token for token in tokens if token not in ignored and not re.fullmatch(r"\d{4}", token)]
+    if not meaningful or meaningful == tokens:
+        return []
+    return [" ".join(meaningful), *meaningful]
+
+
 async def search_library(
     db: Database,
     settings: Settings,
@@ -141,6 +156,29 @@ async def search_library(
             reason="Library match (text)",
             limit=capped,
         )
+
+    # 2b) Conversational title lookup. The chat preflight passes the user's
+    # whole sentence; retry only cleaned, deterministic candidates so a title
+    # such as “Simpsley” is not lost behind “how about … 2026?”.
+    for candidate in _title_candidates(cleaned):
+        candidate_result = query_library(
+            db,
+            filters_from_mapping(
+                {
+                    "query": candidate,
+                    "media_type": media_type,
+                    "limit": capped,
+                    "sort": "title",
+                }
+            ),
+        )
+        if candidate_result.get("total_matched", 0) > 0:
+            return _cards_from_query_result(
+                db,
+                candidate_result,
+                reason="Library match (title extracted from conversation)",
+                limit=capped,
+            )
 
     # 3) Semantic fallback only when structured matches came up empty. An
     # Anthropic chat endpoint is not an embeddings endpoint, so it needs an

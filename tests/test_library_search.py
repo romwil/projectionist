@@ -95,6 +95,28 @@ class LibrarySearchTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(cards), 1)
             self.assertEqual(cards[0].title, "Quiet Picnic")
 
+    async def test_search_library_extracts_title_from_conversational_query(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "simpsley-1",
+                    "media_type": "movie",
+                    "title": "Simpsley",
+                    "year": 2026,
+                    "summary": "A Simpsons noir special.",
+                }
+            )
+
+            cards = await search_library(
+                db,
+                Settings(),
+                "how about simpsley? 2026?",
+                media_type="movie",
+            )
+
+            self.assertEqual([(card.title, card.year) for card in cards], [("Simpsley", 2026)])
+
 
 if __name__ == "__main__":
     unittest.main()

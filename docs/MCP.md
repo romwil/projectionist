@@ -128,6 +128,13 @@ Without either key, `/mcp` returns **503**. Wrong key → **401**. Logs record `
 | `upcoming_premieres` | Recently added titles |
 | `search_tmdb_proxy` | TMDB search when key configured (CDN posters; trimmed fields) |
 
+The in-app agent’s `research_title` service combines configured TMDB details
+with the keyless Wikipedia MediaWiki API and optional OMDb/TVDB sources. It
+returns provenance and does not expose Plex paths or credentials. A future
+read-only MCP `research_title` tool should wrap this same sanitized service;
+the in-process agent surface ships first so external-provider behavior and
+privacy boundaries remain centrally tested.
+
 Chat agent tools (same library index; available in the in-app curator and mirrored concepts for MCP library browses) also include graph/person helpers. Prefer these when the user asks “more like X”, “same director”, or “franchise siblings”:
 
 | Agent tool | Purpose | Cache / source |

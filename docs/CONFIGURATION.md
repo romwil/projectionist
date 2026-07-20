@@ -37,6 +37,7 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 | TVDB key | `TVDB_API_KEY` | TV metadata parity (client present; sync wiring partial) |
 | Long synopsis source | `CURATORX_LONG_SYNOPSIS_SOURCE` | Idle long plots. Default **`wikipedia`** (free, no key, deeper plot without LLM). Prefer **`off`** to disable (also empty/`none`/`disabled`). Or `omdb` / `auto`. Never overwrites Plex/TMDB. |
 | OMDb API key | `OMDB_API_KEY` | Required only when synopsis source is `omdb` (or `auto` fallback). Free OMDb key. |
+
 | Tautulli URL / key | `TAUTULLI_URL`, `TAUTULLI_API_KEY` | Watch stats for purge scoring |
 | Radarr root folder | `RADARR_ROOT_FOLDER` | Default path for movie adds |
 | Sonarr root folder | `SONARR_ROOT_FOLDER` | Default path for series adds |
@@ -54,6 +55,15 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 | Webhook secret | `CURATORX_WEBHOOK_SECRET` | Required for Plex webhook auth (`X-CuratorX-Webhook-Secret`) |
 
 MCP details: [MCP.md](MCP.md). Privacy disclosure: [PRIVACY.md](PRIVACY.md) and in-app `/privacy`.
+
+### Title research sources
+
+`research_title` is the chat tool for a specific thin or uncertain record. It
+uses only configured official APIs: TMDB (key required), Wikipedia MediaWiki
+(no key), OMDb (optional key), and TVDB (optional v4 key/subscription for TV).
+The response names every source checked and preserves source gaps instead of
+inventing details. Source readiness appears in **Admin → Connections**; keys
+remain masked and are never emitted to chat or MCP clients.
 
 ---
 

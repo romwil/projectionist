@@ -80,6 +80,7 @@ const FIELD_LABELS = {
   sonarr_url: "Sonarr URL",
   sonarr_api_key: "API key",
   tmdb_api_key: "API key",
+  tvdb_api_key: "TVDB API key",
   fanart_api_key: "API key",
   omdb_api_key: "OMDb API key",
   long_synopsis_source: "Long synopsis source",
@@ -107,9 +108,10 @@ const FIELD_HELP = {
   plex_token:
     "Lets CuratorX read your Plex libraries (sync, collections, ratings). This is a server token for the Media Server — not the same as household Sign in with Plex on the login page.",
   tmdb_api_key: "Powers posters, details, and discovery for titles not yet in your library.",
+  tvdb_api_key: "Optional TV metadata research. A TVDB v4 API key/subscription is required.",
   fanart_api_key: "Optional richer backdrop art. Leave blank if you only need TMDB.",
   omdb_api_key:
-    "Optional. Used only when long synopsis source is omdb or auto. Never overwrites Plex/TMDB blurbs.",
+    "Optional. Adds IMDb-aligned plot research when configured; also supports long synopsis enrichment.",
   long_synopsis_source:
     "Defaults to wikipedia (free, no key, deeper plot without LLM). Set to off to disable, or omdb / auto.",
   tautulli_url: "Optional: watch history for purge suggestions and “what we’ve been watching”.",
@@ -1658,7 +1660,8 @@ export default function ConfigPage() {
         <section className="config-section">
           <h2>Optional enrichments</h2>
           <p className="wizard-note">
-            TMDB improves discovery and artwork. Fanart.tv and Tautulli are optional extras — add them whenever you like.
+            TMDB improves discovery and artwork. Wikipedia research is available without a key; OMDb and TVDB are optional
+            research sources. Fanart.tv and Tautulli are optional extras.
           </p>
           <div className="service-cards">
             {OPTIONAL_SERVICES.map(({ id, label, fields }) => {
@@ -1707,6 +1710,25 @@ export default function ConfigPage() {
                 </div>
               );
             })}
+          </div>
+          <p className="wizard-note" data-testid="research-source-readiness">
+            Chat research sources: TMDB {settings.tmdb_api_key_set ? "configured" : "needs an API key"} · Wikipedia available
+            without a key · OMDb {settings.omdb_api_key_set ? "configured" : "optional (API key)"} · TVDB{" "}
+            {settings.tvdb_api_key_set ? "configured" : "optional (v4 API key/subscription)"}.
+          </p>
+          <div className="service-fields">
+            <label>
+              <span>OMDb API key (optional)</span>
+              {renderSecretInput("omdb_api_key", {
+                placeholder: secretPlaceholder(settings, "omdb_api_key", "Optional IMDb-aligned research"),
+              })}
+            </label>
+            <label>
+              <span>TVDB API key (optional)</span>
+              {renderSecretInput("tvdb_api_key", {
+                placeholder: secretPlaceholder(settings, "tvdb_api_key", "Optional TVDB v4 key"),
+              })}
+            </label>
           </div>
         </section>
         </>

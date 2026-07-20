@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [1.8.28] — 2026-07-20
+
+### Added
+- `research_title` gives the curator safe, source-attributed TMDB, Wikipedia, and optional OMDb/TVDB enrichment for thin records without claiming arbitrary web access.
+- Admin Connections now explains configured title-research sources; Help, configuration, MCP guidance, and a Simpsley incident report document the privacy and provenance boundary.
+
+### Fixed
+- Conversational title queries such as “how about simpsley? 2026?” now extract a conservative title candidate before falling back to semantic search.
+- The curator is instructed to research incomplete local metadata and surface source gaps instead of inventing confidence or declaring a configured API unavailable.
+
 ## [1.8.27] — 2026-07-20
 
 ### Fixed

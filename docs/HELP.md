@@ -175,6 +175,15 @@ Wikipedia is the default long-synopsis source because it is free, needs no API k
 
 **First-start bootstrap:** after the idle scheduler starts, never-run foundational tasks (`metadata_enrichment` if backlog, `summary_motifs`, `keyword_theme_tagging`, synopsis when enabled, embeddings only if the store is empty) run once in sequence so coverage does not wait days. See [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md#first-start-idle-bootstrap).
 
+### Researching a specific title
+
+When you ask for more plot, cast, crew, or context, the curator can use
+configured official media APIs rather than guessing from a thin local card:
+TMDB for details/credits/images, Wikipedia’s MediaWiki API without a key, and
+optional OMDb or TVDB when the owner configures their keys. It reports which
+sources answered and what remains unavailable. This is media research, not
+general-purpose open-web browsing or HTML scraping.
+
 ---
 
 ## Related documentation

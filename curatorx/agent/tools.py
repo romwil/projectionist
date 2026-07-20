@@ -46,6 +46,7 @@ from curatorx.models.recommendation import sanitize_recommendation_reason
 from curatorx.models.schemas import TitleCard
 from curatorx.preferences.purge import suggest_purge_candidates
 from curatorx.preferences.store import preference_context, remember_preference
+from curatorx.research.title_research import research_title
 from curatorx.reviews.store import get_reviews, list_pending_prompts, list_titles_to_rate, mark_prompts_surfaced, save_review
 from curatorx.reviews.plex_sync import sync_review_rating_to_plex
 
@@ -68,6 +69,30 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     "media_type": {"type": "string", "enum": ["movie", "show"]},
                 },
                 "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "research_title",
+            "description": (
+                "Research a specific movie or show using configured official media APIs: TMDB details "
+                "(credits, keywords, images), Wikipedia, optional OMDb, and optional TVDB. Use this "
+                "when a local record or search result has thin plot/credit data. Returns provenance and "
+                "honest source gaps; it is not arbitrary web browsing."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "item_id": {"type": "integer", "description": "Optional local library item id"},
+                    "title": {"type": "string"},
+                    "year": {"type": "integer"},
+                    "media_type": {"type": "string", "enum": ["movie", "show"]},
+                    "tmdb_id": {"type": "integer"},
+                    "tvdb_id": {"type": "integer"},
+                    "imdb_id": {"type": "string"},
+                },
             },
         },
     },
@@ -1626,6 +1651,42 @@ class ToolRegistry:
                 "has_more": False,
                 "items": items,
             }
+        )
+
+    async def _tool_research_title(self, args: Mapping[str, Any]) -> str:
+        """Return source-attributed enrichment without exposing local file metadata."""
+        row = self._resolve_seed_library_row(args)
+        title = str(args.get("title") or "").strip()
+        year = args.get("year")
+        media_type = str(args.get("media_type") or "movie").strip().lower()
+        tmdb_id = args.get("tmdb_id")
+        tvdb_id = args.get("tvdb_id")
+        imdb_id = str(args.get("imdb_id") or "").strip()
+        if row is not None:
+            title = str(row["title"] or title)
+            year = row["year"] if row["year"] is not None else year
+            media_type = str(row["media_type"] or media_type)
+            tmdb_id = row["tmdb_id"] if row["tmdb_id"] is not None else tmdb_id
+            tvdb_id = row["tvdb_id"] if row["tvdb_id"] is not None else tvdb_id
+            imdb_id = str(row["imdb_id"] or imdb_id)
+        if not title:
+            return json.dumps({"error": "Provide a library item_id or title"})
+        try:
+            year_int = int(year) if year is not None else None
+            tmdb_int = int(tmdb_id) if tmdb_id is not None else None
+            tvdb_int = int(tvdb_id) if tvdb_id is not None else None
+        except (TypeError, ValueError):
+            return json.dumps({"error": "year, tmdb_id, and tvdb_id must be integers"})
+        return json.dumps(
+            research_title(
+                self.settings,
+                title=title,
+                year=year_int,
+                media_type=media_type,
+                tmdb_id=tmdb_int,
+                tvdb_id=tvdb_int,
+                imdb_id=imdb_id,
+            )
         )
 
     async def _tool_find_similar_titles(self, args: Mapping[str, Any]) -> str:
@@ -3691,6 +3752,10 @@ def build_system_prompt(
         "For exact external title lookup before add_to_radarr or add_to_sonarr, use search_tmdb — not search_library. "
         "When you already know a specific work, call search_tmdb with tmdb_id (and media_type), or title+year — "
         "never title-only when recommending one film/show, or turnstyle cards may list every same-name TMDB hit. "
+        "When a user asks for more plot, cast, crew, or context and the local/TMDB card is thin, call research_title "
+        "with the exact library item or title+year before declaring a dead end. You can research through configured "
+        "official media APIs (TMDB, Wikipedia, and optional OMDb/TVDB), but you cannot arbitrarily browse or scrape "
+        "the open web. Report source provenance and gaps; never invent confidence from an incomplete record. "
         "When recommending external titles, set a specific taste-based reason via search_tmdb(reason=…) "
         "or set_recommendation_reasons — never leave Why this? as a pipeline label. "
         "For movies use tmdb_id with add_to_radarr; for shows use tvdb_id with add_to_sonarr.\n"
