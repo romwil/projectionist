@@ -1,22 +1,42 @@
 {
-  "generated_at": "2026-07-20T21:00:37Z",
+  "generated_at": "2026-07-20T21:18:14Z",
   "releases": [
+    {
+      "version": "1.8.26",
+      "date": "2026-07-20",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Dismissing all incoming recommendations now dismisses exactly the deduplicated cards shown in the inbox.",
+            "Recommendations that carry a Plex rating key now expose Play when their compact payload omits `in_library`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.25",
       "date": "2026-07-20",
-      "summary": "Explore now leads with rotating, in-library discoveries before Library Pulse.",
+      "summary": "",
       "sections": [
         {
           "title": "Added",
           "bullets": [
-            "Daily director and genre discovery rails when your library has enough matching titles, with links to the matching facet walls.",
-            "A seasonal rail using an editable holiday calendar (including Arbor Day) near observances and a gentle seasonal fallback otherwise."
+            "Explore now rotates daily director and genre rails when the library has enough matching titles, with shared in-library poster controls and deep links into the matching facet walls.",
+            "A seasonal rail uses a small, editable server calendar (including movable Arbor Day) within a seven-day window, then falls back to restrained season-of-the-year matching across title, genre, keyword, and plot text."
           ]
         },
         {
           "title": "Changed",
           "bullets": [
-            "Library Pulse now appears after discovery rails while keeping the same collection-health stats."
+            "Library Pulse now follows the discovery rails, preserving its collection-health stats without making the Explore hub feel like a dashboard."
+          ]
+        },
+        {
+          "title": "Documentation",
+          "bullets": [
+            "Help and WEB_UI describe discovery rotation, the maintainable holiday calendar, and Library Pulse placement."
           ]
         }
       ]

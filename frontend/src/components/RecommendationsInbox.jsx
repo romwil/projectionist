@@ -1,26 +1,8 @@
 import { useMemo } from "react";
 import { Link } from "react-router-dom";
+import { dedupeRecommendations, normalizeRecommendation } from "../lib/recommendationInbox.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
-
-function recommendationIdentity(item) {
-  const type = item?.media_type === "show" ? "show" : "movie";
-  const externalId = item?.tmdb_id || item?.tvdb_id || item?.rating_key || item?.plex_rating_key;
-  return externalId ? `${type}:${externalId}` : `${type}:${String(item?.title || "").trim().toLowerCase()}:${item?.year || ""}`;
-}
-
-function dedupeRecommendations(items) {
-  const byIdentity = new Map();
-  for (const item of items) {
-    const key = recommendationIdentity(item);
-    const current = byIdentity.get(key);
-    // Retain the record with the richer sender note while preserving inbox order.
-    if (!current || String(item?.message || "").length > String(current?.message || "").length) {
-      byIdentity.set(key, item);
-    }
-  }
-  return [...byIdentity.values()];
-}
 
 export default function RecommendationsInbox({ items = [], onDismiss, onDismissAll }) {
   const recommendations = useMemo(() => dedupeRecommendations(items), [items]);
@@ -38,7 +20,7 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
             type="button"
             className="ghost"
             data-testid="recommendations-dismiss-all"
-            onClick={() => onDismissAll?.(items)}
+            onClick={() => onDismissAll?.(recommendations)}
           >
             Dismiss all
           </button>
@@ -46,12 +28,8 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
       </header>
       <div className="recommendations-inbox-stack">
         {recommendations.map((rec, index) => {
-          const path = titleDetailPath({
-            media_type: rec.media_type,
-            tmdb_id: rec.tmdb_id,
-            tvdb_id: rec.tvdb_id,
-            rating_key: rec.rating_key,
-          });
+          const recommendation = normalizeRecommendation(rec);
+          const path = titleDetailPath(recommendation);
           const fromName = rec.from_display_name || "Someone";
           const yearBit = rec.year ? ` (${rec.year})` : "";
           return (
@@ -67,7 +45,7 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
                 ) : (
                   <div className="poster-fallback">{(rec.title || "?").slice(0, 1)}</div>
                 )}
-                <PosterOverlayControls item={rec} testPrefix="recommendation" />
+                <PosterOverlayControls item={recommendation} testPrefix="recommendation" />
               </div>
               <div className="recommendation-card-body">
                 <p className="recommendation-card-from">

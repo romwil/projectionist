@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.8.26] — 2026-07-20
+
+### Fixed
+- Dismissing all incoming recommendations now dismisses exactly the deduplicated cards shown in the inbox.
+- Recommendations that carry a Plex rating key now expose Play when their compact payload omits `in_library`.
+
 ## [1.8.25] — 2026-07-20
 
 ### Added
