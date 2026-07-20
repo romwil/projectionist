@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-20T23:17:38Z",
+  "generated_at": "2026-07-20T23:24:38Z",
   "releases": [
     {
       "version": "1.8.30",
@@ -9,8 +9,8 @@
         {
           "title": "Added",
           "bullets": [
-            "Public, provenance-aware person and company research with transparent filmography comparison.",
-            "Daily idle entity-memory grooming refreshes a small stale research batch without reading private account memory."
+            "Public, provenance-aware `research_person` and `research_company` tools plus transparent filmography comparison.",
+            "Daily idle `entity_memory_enrichment` refreshes a tiny stale repository-research batch without accessing private user memory."
           ]
         }
       ]
