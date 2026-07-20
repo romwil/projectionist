@@ -9,6 +9,7 @@ Revisit These samples partially watched TV idle for 60+ days.
 
 from __future__ import annotations
 
+import json
 import time
 from datetime import date
 from typing import Any, Dict, List, Mapping, Optional, Sequence
@@ -22,6 +23,32 @@ MAX_PAGE_LIMIT = 100
 REVISIT_DEFAULT_LIMIT = 20
 REVISIT_IDLE_DAYS = 60
 MILESTONE_AGES = (5, 10, 15, 20, 25, 30, 40, 50, 75)
+DIRECTOR_MIN_TITLES = 3
+GENRE_MIN_TITLES = 4
+HOLIDAY_WINDOW_DAYS = 7
+
+# Keep this small, explicit calendar editable in one place. Movable observances
+# are calculated in ``_holiday_candidates`` rather than guessed from prose.
+FIXED_HOLIDAYS = (
+    ("New Year's Day", 1, 1, ("new year", "party", "celebration", "fresh start")),
+    ("Groundhog Day", 2, 2, ("groundhog", "winter", "repetition", "small town")),
+    ("Valentine's Day", 2, 14, ("romance", "love", "dating", "valentine")),
+    ("St. Patrick's Day", 3, 17, ("ireland", "irish", "green", "pub")),
+    ("Pi Day", 3, 14, ("math", "science", "pie", "genius")),
+    ("Earth Day", 4, 22, ("nature", "environment", "earth", "wildlife")),
+    ("May Day", 5, 1, ("spring", "garden", "flower", "festival")),
+    ("Independence Day", 7, 4, ("america", "independence", "summer", "fireworks")),
+    ("Día de los Muertos", 11, 2, ("afterlife", "spirit", "family", "mexico")),
+    ("Halloween", 10, 31, ("horror", "haunted", "ghost", "witch", "monster")),
+    ("Winter Solstice", 12, 21, ("winter", "snow", "holiday", "christmas")),
+    ("Christmas", 12, 25, ("christmas", "holiday", "winter", "family")),
+)
+SEASONAL_FALLBACKS = (
+    ("Winter nights", (12, 1, 2), ("winter", "snow", "holiday", "christmas")),
+    ("Spring awakenings", (3, 4, 5), ("spring", "nature", "garden", "coming of age")),
+    ("Summer comfort", (6, 7, 8), ("summer", "road trip", "beach", "vacation")),
+    ("Autumn gothic", (9, 10, 11), ("autumn", "fall", "gothic", "mystery", "horror")),
+)
 
 
 def _cap_limit(
@@ -143,6 +170,137 @@ def _feed_item(row: Mapping[str, Any], **extra: Any) -> Dict[str, Any]:
         item["tmdb_collection_id"] = int(row["tmdb_collection_id"])
     item.update(extra)
     return item
+
+
+def _json_list(raw: Any) -> List[str]:
+    if isinstance(raw, list):
+        return [str(value).strip() for value in raw if str(value).strip()]
+    try:
+        decoded = json.loads(str(raw or "[]"))
+    except (TypeError, ValueError):
+        return []
+    return [str(value).strip() for value in decoded if str(value).strip()] if isinstance(decoded, list) else []
+
+
+def _daily_choice(values: Sequence[str], today: date) -> Optional[str]:
+    """Stable daily rotation without database state or request-time randomness."""
+    ordered = sorted(set(values), key=str.casefold)
+    return ordered[today.toordinal() % len(ordered)] if ordered else None
+
+
+def _sort_rail_items(rows: Sequence[Mapping[str, Any]], limit: int) -> List[Dict[str, Any]]:
+    ordered = sorted(
+        rows,
+        key=lambda row: (
+            -(int(row["year"]) if row["year"] is not None else 0),
+            str(row["title"] or "").casefold(),
+        ),
+    )
+    return [_feed_item(row) for row in ordered[:limit]]
+
+
+def feed_director_spotlight(
+    db: Database, *, limit: int = DEFAULT_FEED_LIMIT, today: Optional[date] = None
+) -> Dict[str, Any]:
+    """Daily rotating filmography rail, only when a director has real depth."""
+    selected_day = today or date.today()
+    rows = db.all_library_items()
+    by_director: Dict[str, List[Mapping[str, Any]]] = {}
+    for row in rows:
+        for director in _json_list(row["directors"]):
+            by_director.setdefault(director, []).append(row)
+    candidates = [
+        name for name, titles in by_director.items() if len(titles) >= DIRECTOR_MIN_TITLES
+    ]
+    director = _daily_choice(candidates, selected_day)
+    if not director:
+        return {
+            "feed": "director-spotlight", "date": selected_day.isoformat(), "items": [],
+            "total": 0, "note": f"Add director credits to show this rail (needs {DIRECTOR_MIN_TITLES} titles per director).",
+        }
+    items = _sort_rail_items(by_director[director], _cap_limit(limit))
+    return {
+        "feed": "director-spotlight", "date": selected_day.isoformat(), "director": director,
+        "items": items, "total": len(by_director[director]), "note": None,
+    }
+
+
+def feed_genre_spotlight(
+    db: Database, *, limit: int = DEFAULT_FEED_LIMIT, today: Optional[date] = None
+) -> Dict[str, Any]:
+    """Daily rotating genre rail with enough owned titles to feel intentional."""
+    selected_day = today or date.today()
+    rows = db.all_library_items()
+    by_genre: Dict[str, List[Mapping[str, Any]]] = {}
+    for row in rows:
+        for genre in _json_list(row["genres"]):
+            by_genre.setdefault(genre, []).append(row)
+    candidates = [name for name, titles in by_genre.items() if len(titles) >= GENRE_MIN_TITLES]
+    genre = _daily_choice(candidates, selected_day)
+    if not genre:
+        return {
+            "feed": "genre-spotlight", "date": selected_day.isoformat(), "items": [],
+            "total": 0, "note": f"Add genre metadata to show this rail (needs {GENRE_MIN_TITLES} titles per genre).",
+        }
+    items = _sort_rail_items(by_genre[genre], _cap_limit(limit))
+    return {
+        "feed": "genre-spotlight", "date": selected_day.isoformat(), "genre": genre,
+        "items": items, "total": len(by_genre[genre]), "note": None,
+    }
+
+
+def _holiday_candidates(today: date) -> List[tuple[str, date, tuple[str, ...]]]:
+    """Return the maintained fixed and movable holiday calendar for this year."""
+    candidates = [
+        (name, date(today.year, month, day), terms)
+        for name, month, day, terms in FIXED_HOLIDAYS
+    ]
+    april_first = date(today.year, 4, 1)
+    arbor_day = date(today.year, 4, 1 + ((4 - april_first.weekday()) % 7) + 21)
+    candidates.append(("Arbor Day", arbor_day, ("tree", "forest", "nature", "environment", "garden")))
+    september_first = date(today.year, 9, 1)
+    labor_day = date(today.year, 9, 1 + ((0 - september_first.weekday()) % 7))
+    candidates.append(("Labor Day", labor_day, ("work", "road trip", "summer", "family")))
+    november_first = date(today.year, 11, 1)
+    thanksgiving = date(today.year, 11, 1 + ((3 - november_first.weekday()) % 7) + 21)
+    candidates.append(("Thanksgiving", thanksgiving, ("family", "food", "home", "thanksgiving")))
+    return candidates
+
+
+def _seasonal_context(today: date) -> tuple[str, tuple[str, ...], str]:
+    nearest = min(_holiday_candidates(today), key=lambda entry: abs((entry[1] - today).days))
+    if abs((nearest[1] - today).days) <= HOLIDAY_WINDOW_DAYS:
+        return nearest[0], nearest[2], "holiday"
+    for label, months, terms in SEASONAL_FALLBACKS:
+        if today.month in months:
+            return label, terms, "season"
+    return "Seasonal picks", (), "season"
+
+
+def feed_seasonal_spotlight(
+    db: Database, *, limit: int = DEFAULT_FEED_LIMIT, today: Optional[date] = None
+) -> Dict[str, Any]:
+    """Holiday-near matching with a modest, explicit season fallback."""
+    selected_day = today or date.today()
+    label, terms, mode = _seasonal_context(selected_day)
+    matches: List[Mapping[str, Any]] = []
+    for row in db.all_library_items():
+        haystack = " ".join(
+            [
+                str(row["title"] or ""),
+                str(row["summary"] or ""),
+                " ".join(_json_list(row["genres"])),
+                " ".join(_json_list(row["keywords"])),
+            ]
+        ).casefold()
+        if any(term.casefold() in haystack for term in terms):
+            matches.append(row)
+    items = _sort_rail_items(matches, _cap_limit(limit))
+    return {
+        "feed": "seasonal-spotlight", "date": selected_day.isoformat(), "label": label,
+        "mode": mode, "items": items, "total": len(matches),
+        "note": None if items else f"No {label.lower()} matches in your library yet.",
+    }
 
 
 def feed_recently_added(

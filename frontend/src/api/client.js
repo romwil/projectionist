@@ -868,6 +868,21 @@ export async function getExploreFeedOnThisDay({ limit = 12 } = {}) {
   return api(`/library/feeds/on-this-day?${params}`);
 }
 
+export async function getExploreFeedDirectorSpotlight({ limit = 12 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/feeds/director-spotlight?${params}`);
+}
+
+export async function getExploreFeedGenreSpotlight({ limit = 12 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/feeds/genre-spotlight?${params}`);
+}
+
+export async function getExploreFeedSeasonalSpotlight({ limit = 12 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/feeds/seasonal-spotlight?${params}`);
+}
+
 export async function getExploreFeedRevisitThese({ limit = 20, idleDays = 60 } = {}) {
   const params = new URLSearchParams({
     limit: String(limit),

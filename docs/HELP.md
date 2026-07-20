@@ -48,7 +48,9 @@ Saved pages preserve the curator's structured text and title cards. Download a p
 
 ### Explore
 
-Cinema browse over the same SQLite feeds the agent uses: Recently Added, Recent Releases, Revisit These (partially watched TV idle 60+ days), On This Day, and links into Plot Lab / Tags. Posters show watched / in-progress overlays from Plex sync. Empty rails usually mean enrichment caches are still cold — not that your library is empty.
+Cinema browse over the same SQLite feeds the agent uses: Recently Added, Recent Releases, Revisit These (partially watched TV idle 60+ days), On This Day, and links into Plot Lab / Tags. The hub also rotates a well-stocked director filmography and genre each day, then looks for titles matching a nearby maintained calendar occasion (including Arbor Day) or a gentle season-of-the-year fallback. Those rails only appear when the library has enough matching metadata, and their headings open the matching director or genre wall.
+
+**Library Pulse** intentionally sits at the bottom of Explore. It remains the same useful collection-health snapshot, but discovery comes first so the hub opens with titles rather than dashboard metrics. Posters show watched / in-progress overlays from Plex sync. Empty rails usually mean enrichment caches are still cold — not that your library is empty.
 
 ### Plot Lab
 

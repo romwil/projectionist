@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
+  getExploreFeedDirectorSpotlight,
+  getExploreFeedGenreSpotlight,
   getExploreFeedOnThisDay,
   getExploreFeedRecentReleases,
   getExploreFeedRecentlyAdded,
   getExploreFeedRevisitThese,
+  getExploreFeedSeasonalSpotlight,
   getLibraryHealth,
   getLibraryOverview,
   queryLibrary,
@@ -129,6 +132,11 @@ function matchesFacetBrowse(item, browse) {
   return matchesMediaBrowseWatchState(item, browse.watch_state);
 }
 
+function exploreFacetPath(key, value) {
+  const params = new URLSearchParams([[key, value]]);
+  return `${ROUTES.explore}?${params}`;
+}
+
 function useFeed(loader, deps = []) {
   const [state, setState] = useState({ loading: true, items: [], note: null, error: "" });
   useEffect(() => {
@@ -173,6 +181,9 @@ export default function ExplorePage() {
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
   const revisitThese = useFeed(() => getExploreFeedRevisitThese({ limit: 20, idleDays: 60 }), []);
   const onThisDay = useFeed(() => getExploreFeedOnThisDay({ limit: 12 }), []);
+  const directorSpotlight = useFeed(() => getExploreFeedDirectorSpotlight({ limit: 12 }), []);
+  const genreSpotlight = useFeed(() => getExploreFeedGenreSpotlight({ limit: 12 }), []);
+  const seasonalSpotlight = useFeed(() => getExploreFeedSeasonalSpotlight({ limit: 12 }), []);
   const facetBrowse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
 
   const [pulse, setPulse] = useState({ loading: true, stats: [], error: "" });
@@ -407,6 +418,75 @@ export default function ExplorePage() {
         </ExploreSection>
 
         <ExploreSection
+          id="on-this-day"
+          title="On This Day"
+          subtitle={otdSubtitle}
+          isOwner={isOwner}
+          empty={onThisDay.error || (!onThisDay.loading && !onThisDay.items.length ? onThisDay.note : null)}
+          note={onThisDay.items.length && onThisDay.note && !onThisDay.error ? onThisDay.note : null}
+        >
+          <FeedRail
+            testId="explore-on-this-day-rail"
+            items={onThisDay.items}
+            loading={onThisDay.loading}
+            {...recommendProps}
+          />
+        </ExploreSection>
+
+        {directorSpotlight.items.length || directorSpotlight.loading ? (
+          <ExploreSection
+            id="director-spotlight"
+            title={`Films by ${directorSpotlight.meta?.director || "a director"}`}
+            subtitle="A daily rotating filmography from your shelves"
+            titleHref={directorSpotlight.meta?.director ? exploreFacetPath("directors", directorSpotlight.meta.director) : null}
+            isOwner={isOwner}
+            empty={directorSpotlight.error || (!directorSpotlight.loading && !directorSpotlight.items.length ? directorSpotlight.note : null)}
+          >
+            <FeedRail
+              testId="explore-director-spotlight-rail"
+              items={directorSpotlight.items}
+              loading={directorSpotlight.loading}
+              {...recommendProps}
+            />
+          </ExploreSection>
+        ) : null}
+
+        {genreSpotlight.items.length || genreSpotlight.loading ? (
+          <ExploreSection
+            id="genre-spotlight"
+            title={`${genreSpotlight.meta?.genre || "Genre"} in your library`}
+            subtitle="A daily rotating corner of your collection"
+            titleHref={genreSpotlight.meta?.genre ? exploreFacetPath("genre", genreSpotlight.meta.genre) : null}
+            isOwner={isOwner}
+            empty={genreSpotlight.error || (!genreSpotlight.loading && !genreSpotlight.items.length ? genreSpotlight.note : null)}
+          >
+            <FeedRail
+              testId="explore-genre-spotlight-rail"
+              items={genreSpotlight.items}
+              loading={genreSpotlight.loading}
+              {...recommendProps}
+            />
+          </ExploreSection>
+        ) : null}
+
+        {seasonalSpotlight.items.length || seasonalSpotlight.loading ? (
+          <ExploreSection
+            id="seasonal-spotlight"
+            title={seasonalSpotlight.meta?.label || "Seasonal picks"}
+            subtitle={seasonalSpotlight.meta?.mode === "holiday" ? "A nearby calendar occasion, found in your library" : "A light seasonal turn through your library"}
+            isOwner={isOwner}
+            empty={seasonalSpotlight.error || (!seasonalSpotlight.loading && !seasonalSpotlight.items.length ? seasonalSpotlight.note : null)}
+          >
+            <FeedRail
+              testId="explore-seasonal-spotlight-rail"
+              items={seasonalSpotlight.items}
+              loading={seasonalSpotlight.loading}
+              {...recommendProps}
+            />
+          </ExploreSection>
+        ) : null}
+
+        <ExploreSection
           id="library-pulse"
           title="Library Pulse"
           subtitle="A quick read on collection health"
@@ -458,22 +538,6 @@ export default function ExplorePage() {
               </div>
             </div>
           ) : null}
-        </ExploreSection>
-
-        <ExploreSection
-          id="on-this-day"
-          title="On This Day"
-          subtitle={otdSubtitle}
-          isOwner={isOwner}
-          empty={onThisDay.error || (!onThisDay.loading && !onThisDay.items.length ? onThisDay.note : null)}
-          note={onThisDay.items.length && onThisDay.note && !onThisDay.error ? onThisDay.note : null}
-        >
-          <FeedRail
-            testId="explore-on-this-day-rail"
-            items={onThisDay.items}
-            loading={onThisDay.loading}
-            {...recommendProps}
-          />
         </ExploreSection>
 
         {facetWall.label ? (

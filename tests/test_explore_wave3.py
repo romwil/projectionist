@@ -18,10 +18,13 @@ from curatorx.agent.tools import ToolRegistry
 from curatorx.config_store import Settings
 from curatorx.library.db import DEFAULT_LENS_ID, Database
 from curatorx.library.feeds import (
+    feed_director_spotlight,
+    feed_genre_spotlight,
     feed_on_this_day,
     feed_recent_releases,
     feed_recently_added,
     feed_revisit_these,
+    feed_seasonal_spotlight,
     neighbors_payload,
 )
 from curatorx.library.query import LibraryFilters, query_library
@@ -309,6 +312,47 @@ class FeedHelperTests(unittest.TestCase):
             self.assertGreaterEqual(payload["total"], 1)
             self.assertEqual(payload["items"][0]["anniversary_type"], "milestone_year")
 
+    def test_rotating_director_and_genre_spotlights(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            for index in range(4):
+                db.upsert_library_item(
+                    {
+                        "rating_key": f"spotlight-{index}",
+                        "media_type": "movie",
+                        "title": f"Spotlight {index}",
+                        "year": 2000 + index,
+                        "directors": ["Jane Director"],
+                        "genres": ["Drama"],
+                    }
+                )
+            selected_day = date(2026, 7, 20)
+            directors = feed_director_spotlight(db, limit=3, today=selected_day)
+            genres = feed_genre_spotlight(db, limit=3, today=selected_day)
+            self.assertEqual(directors["director"], "Jane Director")
+            self.assertEqual(directors["total"], 4)
+            self.assertEqual(len(directors["items"]), 3)
+            self.assertEqual(genres["genre"], "Drama")
+            self.assertEqual(genres["total"], 4)
+            self.assertEqual(len(genres["items"]), 3)
+
+    def test_seasonal_spotlight_uses_editable_holiday_calendar(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "arbor",
+                    "media_type": "movie",
+                    "title": "The Forest",
+                    "year": 2016,
+                    "keywords": ["forest"],
+                }
+            )
+            payload = feed_seasonal_spotlight(db, today=date(2026, 4, 24))
+            self.assertEqual(payload["label"], "Arbor Day")
+            self.assertEqual(payload["mode"], "holiday")
+            self.assertEqual(payload["items"][0]["title"], "The Forest")
+
 
 class RelationsTests(unittest.IsolatedAsyncioTestCase):
     async def test_collection_edges_and_task(self) -> None:
@@ -489,6 +533,11 @@ class ExploreFeedApiTests(unittest.TestCase):
         self.assertEqual(otd.status_code, 200)
         self.assertEqual(otd.json()["feed"], "on-this-day")
         self.assertIn(otd.json()["mode"], {"calendar", "milestone_fallback"})
+
+        for feed in ("director-spotlight", "genre-spotlight", "seasonal-spotlight"):
+            spotlight = self.client.get(f"/api/library/feeds/{feed}")
+            self.assertEqual(spotlight.status_code, 200)
+            self.assertEqual(spotlight.json()["feed"], feed)
 
         motifs = self.client.get("/api/library/motifs", params={"limit": 10})
         self.assertEqual(motifs.status_code, 200)

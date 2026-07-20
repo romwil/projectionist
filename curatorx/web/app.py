@@ -71,10 +71,13 @@ from curatorx.library.facets import ensure_library_facet_index
 from curatorx.library.episodes import query_episodes, summarize_tv_progress
 from curatorx.library.facets import library_facet_catalog
 from curatorx.library.feeds import (
+    feed_director_spotlight,
+    feed_genre_spotlight,
     feed_on_this_day,
     feed_recent_releases,
     feed_recently_added,
     feed_revisit_these,
+    feed_seasonal_spotlight,
     neighbors_payload,
 )
 from curatorx.library.query import (
@@ -1930,6 +1933,33 @@ def library_feed_on_this_day(
         feed_on_this_day(_db(), limit=limit, month=month, day=day),
         user,
     )
+
+
+@app.get("/api/library/feeds/director-spotlight")
+def library_feed_director_spotlight(
+    limit: int = 12,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore rail: stable daily rotation through owned director filmographies."""
+    return _sanitize_library_payload(feed_director_spotlight(_db(), limit=limit), user)
+
+
+@app.get("/api/library/feeds/genre-spotlight")
+def library_feed_genre_spotlight(
+    limit: int = 12,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore rail: stable daily rotation through well-stocked genres."""
+    return _sanitize_library_payload(feed_genre_spotlight(_db(), limit=limit), user)
+
+
+@app.get("/api/library/feeds/seasonal-spotlight")
+def library_feed_seasonal_spotlight(
+    limit: int = 12,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore rail: holiday-window or season-aware owned title matches."""
+    return _sanitize_library_payload(feed_seasonal_spotlight(_db(), limit=limit), user)
 
 
 @app.get("/api/library/neighbors/{item_id}")

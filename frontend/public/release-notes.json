@@ -2,6 +2,26 @@
   "generated_at": "2026-07-20T21:00:37Z",
   "releases": [
     {
+      "version": "1.8.25",
+      "date": "2026-07-20",
+      "summary": "Explore now leads with rotating, in-library discoveries before Library Pulse.",
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Daily director and genre discovery rails when your library has enough matching titles, with links to the matching facet walls.",
+            "A seasonal rail using an editable holiday calendar (including Arbor Day) near observances and a gentle seasonal fallback otherwise."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Library Pulse now appears after discovery rails while keeping the same collection-health stats."
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.8.24",
       "date": "2026-07-20",
       "summary": "",

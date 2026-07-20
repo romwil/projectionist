@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.8.25] — 2026-07-20
+
+### Added
+- Explore now rotates daily director and genre rails when the library has enough matching titles, with shared in-library poster controls and deep links into the matching facet walls.
+- A seasonal rail uses a small, editable server calendar (including movable Arbor Day) within a seven-day window, then falls back to restrained season-of-the-year matching across title, genre, keyword, and plot text.
+
+### Changed
+- Library Pulse now follows the discovery rails, preserving its collection-health stats without making the Explore hub feel like a dashboard.
+
+### Documentation
+- Help and WEB_UI describe discovery rotation, the maintainable holiday calendar, and Library Pulse placement.
+
 ## [1.8.24] — 2026-07-20
 
 ### Fixed
