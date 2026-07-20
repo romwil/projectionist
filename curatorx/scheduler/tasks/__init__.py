@@ -17,6 +17,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     from curatorx.scheduler.tasks import (
         anniversary_scanner,
         data_retention,
+        entity_memory_enrichment,
         gap_analysis,
         health_metrics,
         keyword_theme_tagging,
@@ -40,6 +41,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     recommendation_warmup.register(scheduler)
     gap_analysis.register(scheduler)
     data_retention.register(scheduler)
+    entity_memory_enrichment.register(scheduler)
     metadata_enrichment.register(scheduler)
     plot_neighbors.register(scheduler)
     summary_motifs.register(scheduler)

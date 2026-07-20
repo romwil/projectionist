@@ -2,6 +2,20 @@
   "generated_at": "2026-07-20T23:17:38Z",
   "releases": [
     {
+      "version": "1.8.30",
+      "date": "2026-07-20",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Public, provenance-aware person and company research with transparent filmography comparison.",
+            "Daily idle entity-memory grooming refreshes a small stale research batch without reading private account memory."
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.8.29",
       "date": "2026-07-20",
       "summary": "",

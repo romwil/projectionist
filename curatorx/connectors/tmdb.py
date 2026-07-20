@@ -50,6 +50,9 @@ class TMDBClient:
     def search_tv_page(self, query: str, *, page: int = 1) -> Mapping[str, Any]:
         return self._search("/search/tv", query, page=page)
 
+    def search_person(self, query: str, *, page: int = 1) -> List[Mapping[str, Any]]:
+        return self._search("/search/person", query, page=page).get("results", [])
+
     def movie_details(self, tmdb_id: int) -> Mapping[str, Any]:
         payload = request_json(
             self._url(f"/movie/{tmdb_id}", append_to_response="credits,keywords,external_ids,videos"),
@@ -77,6 +80,10 @@ class TMDBClient:
             self._url(f"/person/{int(person_id)}", **params),
             timeout=self.timeout,
         )
+        return payload if isinstance(payload, dict) else {}
+
+    def company_details(self, company_id: int) -> Mapping[str, Any]:
+        payload = request_json(self._url(f"/company/{int(company_id)}"), timeout=self.timeout)
         return payload if isinstance(payload, dict) else {}
 
     @staticmethod

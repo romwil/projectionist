@@ -54,6 +54,8 @@ Your private memory stays tied to your account. An owner cannot read an adult me
 
 Use `GET /api/me/memory` to download your memory as JSON or Markdown. `DELETE /api/me/memory` permanently deletes your private memory **and all of your chat transcripts** together. It does not delete shared, sanitized repository research about media.
 
+Curator research about titles, people, and production companies is shared repository knowledge drawn from configured official media APIs. It is kept separate from account memory; the idle refresh task never reads private notes or chats.
+
 ### What is shared household
 
 Everyone on the same CuratorX instance shares:

@@ -170,3 +170,125 @@ def research_title(
             library_item_id=library_item_id,
         )
     return result
+
+
+def _filmography(credits: Mapping[str, Any]) -> list[Dict[str, Any]]:
+    seen: set[tuple[str, int]] = set()
+    entries: list[Dict[str, Any]] = []
+    for credit_type in ("cast", "crew"):
+        for entry in credits.get(credit_type, []) if isinstance(credits.get(credit_type), list) else []:
+            if not isinstance(entry, Mapping) or entry.get("id") is None:
+                continue
+            media_type = str(entry.get("media_type") or "").lower()
+            if media_type not in {"movie", "tv"}:
+                continue
+            key = (media_type, int(entry["id"]))
+            if key in seen:
+                continue
+            seen.add(key)
+            entries.append(
+                {
+                    "tmdb_id": int(entry["id"]),
+                    "media_type": "show" if media_type == "tv" else "movie",
+                    "title": str(entry.get("title") or entry.get("name") or ""),
+                    "year": str(entry.get("release_date") or entry.get("first_air_date") or "")[:4],
+                    "credit_type": credit_type,
+                    "role": str(entry.get("character") or entry.get("job") or ""),
+                }
+            )
+    return sorted(entries, key=lambda item: (item["year"], item["title"]), reverse=True)
+
+
+def research_person(
+    settings: Settings, *, name: str, tmdb_id: Optional[int] = None, db: Optional[Database] = None
+) -> Dict[str, Any]:
+    """Research a person through TMDB and retain only public, source-attributed facts."""
+    result: Dict[str, Any] = {
+        "identity": {"name": str(name).strip(), "tmdb_id": tmdb_id},
+        "sources_checked": {"tmdb": _source("not_configured")},
+        "profile": {},
+        "filmography": [],
+        "warnings": [],
+    }
+    if not settings.tmdb_api_key:
+        return result
+    try:
+        client = TMDBClient(settings.tmdb_api_key)
+        if not tmdb_id:
+            matches = client.search_person(str(name))
+            tmdb_id = int(matches[0]["id"]) if matches and matches[0].get("id") is not None else None
+        details = client.person_details(int(tmdb_id), append_to_response="combined_credits") if tmdb_id else {}
+        if not details:
+            result["sources_checked"]["tmdb"] = _source("empty")
+            return result
+        result["identity"] = {"name": str(details.get("name") or name).strip(), "tmdb_id": int(details["id"])}
+        result["profile"] = {
+            "known_for_department": str(details.get("known_for_department") or ""),
+            "biography": str(details.get("biography") or ""),
+            "birthday": str(details.get("birthday") or ""),
+            "place_of_birth": str(details.get("place_of_birth") or ""),
+        }
+        result["filmography"] = _filmography(details.get("combined_credits") or {})
+        result["sources_checked"]["tmdb"] = _source("ok")
+    except (RuntimeError, ValueError, KeyError):
+        result["sources_checked"]["tmdb"] = _source("unavailable")
+    if db is not None and result["identity"]["name"]:
+        result["memory"] = db.save_repository_research(
+            entity_type="person", name=result["identity"]["name"], payload=result,
+            external_ids={"tmdb_id": result["identity"]["tmdb_id"]} if result["identity"]["tmdb_id"] else {},
+        )
+    return result
+
+
+def research_company(
+    settings: Settings, *, name: str, tmdb_id: Optional[int] = None, db: Optional[Database] = None
+) -> Dict[str, Any]:
+    """Research a production company by its TMDB id without web scraping."""
+    result: Dict[str, Any] = {
+        "identity": {"name": str(name).strip(), "tmdb_id": tmdb_id},
+        "sources_checked": {"tmdb": _source("not_configured")},
+        "profile": {},
+        "warnings": [],
+    }
+    if not settings.tmdb_api_key:
+        return result
+    if not tmdb_id:
+        result["sources_checked"]["tmdb"] = _source("id_required")
+        result["warnings"].append("TMDB company id is required; name-only company lookup is intentionally unsupported.")
+        return result
+    try:
+        details = TMDBClient(settings.tmdb_api_key).company_details(int(tmdb_id))
+        if not details:
+            result["sources_checked"]["tmdb"] = _source("empty")
+            return result
+        result["identity"] = {"name": str(details.get("name") or name).strip(), "tmdb_id": int(details["id"])}
+        result["profile"] = {
+            "description": str(details.get("description") or ""),
+            "headquarters": str(details.get("headquarters") or ""),
+            "homepage": str(details.get("homepage") or ""),
+            "origin_country": str(details.get("origin_country") or ""),
+        }
+        result["sources_checked"]["tmdb"] = _source("ok")
+    except (RuntimeError, ValueError, KeyError):
+        result["sources_checked"]["tmdb"] = _source("unavailable")
+    if db is not None and result["identity"]["name"]:
+        result["memory"] = db.save_repository_research(
+            entity_type="company", name=result["identity"]["name"], payload=result,
+            external_ids={"tmdb_id": result["identity"]["tmdb_id"]} if result["identity"]["tmdb_id"] else {},
+        )
+    return result
+
+
+def compare_filmographies(left: Mapping[str, Any], right: Mapping[str, Any]) -> Dict[str, Any]:
+    """Compare two normalized research results without claiming subjective similarity."""
+    left_titles = {(item["media_type"], item["tmdb_id"]) for item in left.get("filmography", [])}
+    right_titles = {(item["media_type"], item["tmdb_id"]) for item in right.get("filmography", [])}
+    return {
+        "left": left.get("identity", {}),
+        "right": right.get("identity", {}),
+        "left_total": len(left_titles),
+        "right_total": len(right_titles),
+        "shared_credits": len(left_titles & right_titles),
+        "left_only": len(left_titles - right_titles),
+        "right_only": len(right_titles - left_titles),
+    }

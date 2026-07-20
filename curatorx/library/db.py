@@ -3560,6 +3560,42 @@ class Database:
             )
         return {"entity_id": entity_id, "snapshot_id": snapshot_id, "freshness": now}
 
+    def repository_entities_due_for_enrichment(
+        self, *, older_than_seconds: float, limit: int = 5
+    ) -> List[Dict[str, Any]]:
+        """Return public entities whose newest research snapshot has gone stale."""
+        cutoff = time.time() - older_than_seconds
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT e.id, e.entity_type, e.name, e.external_ids_json, MAX(s.fetched_at) AS last_fetched_at
+                FROM memory_entities e
+                JOIN memory_snapshots s ON s.entity_id = e.id
+                WHERE e.archived_at IS NULL
+                GROUP BY e.id
+                HAVING MAX(s.fetched_at) < ?
+                ORDER BY MAX(s.fetched_at) ASC
+                LIMIT ?
+                """,
+                (cutoff, max(1, min(int(limit), 50))),
+            ).fetchall()
+        entities: List[Dict[str, Any]] = []
+        for row in rows:
+            try:
+                external_ids = json.loads(row["external_ids_json"] or "{}")
+            except (TypeError, json.JSONDecodeError):
+                external_ids = {}
+            entities.append(
+                {
+                    "id": str(row["id"]),
+                    "entity_type": str(row["entity_type"]),
+                    "name": str(row["name"]),
+                    "external_ids": external_ids if isinstance(external_ids, dict) else {},
+                    "last_fetched_at": float(row["last_fetched_at"]),
+                }
+            )
+        return entities
+
     @staticmethod
     def _memory_note_dict(row: sqlite3.Row) -> Dict[str, Any]:
         try:

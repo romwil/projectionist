@@ -46,7 +46,7 @@ from curatorx.models.recommendation import sanitize_recommendation_reason
 from curatorx.models.schemas import TitleCard
 from curatorx.preferences.purge import suggest_purge_candidates
 from curatorx.preferences.store import preference_context, remember_preference
-from curatorx.research.title_research import research_title
+from curatorx.research.title_research import compare_filmographies, research_company, research_person, research_title
 from curatorx.reviews.store import get_reviews, list_pending_prompts, list_titles_to_rate, mark_prompts_surfaced, save_review
 from curatorx.reviews.plex_sync import sync_review_rating_to_plex
 
@@ -93,6 +93,47 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     "tvdb_id": {"type": "integer"},
                     "imdb_id": {"type": "string"},
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "research_person",
+            "description": "Research a filmmaker or performer from TMDB and return public biography plus filmography with provenance.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "tmdb_id": {"type": "integer"}},
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "research_company",
+            "description": "Research a production company from TMDB. Requires its TMDB company id to avoid ambiguous name matching.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "tmdb_id": {"type": "integer"}},
+                "required": ["name", "tmdb_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_filmographies",
+            "description": "Compare two people’s TMDB filmographies by counts and shared credits; do not infer subjective similarity.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "left_name": {"type": "string"},
+                    "left_tmdb_id": {"type": "integer"},
+                    "right_name": {"type": "string"},
+                    "right_tmdb_id": {"type": "integer"},
+                },
+                "required": ["left_name", "right_name"],
             },
         },
     },
@@ -1713,6 +1754,39 @@ class ToolRegistry:
                 library_item_id=int(row["id"]) if row is not None else None,
             )
         )
+
+    async def _tool_research_person(self, args: Mapping[str, Any]) -> str:
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return json.dumps({"error": "Provide a person name"})
+        try:
+            tmdb_id = int(args["tmdb_id"]) if args.get("tmdb_id") is not None else None
+        except (TypeError, ValueError):
+            return json.dumps({"error": "tmdb_id must be an integer"})
+        return json.dumps(research_person(self.settings, name=name, tmdb_id=tmdb_id, db=self.db))
+
+    async def _tool_research_company(self, args: Mapping[str, Any]) -> str:
+        name = str(args.get("name") or "").strip()
+        try:
+            tmdb_id = int(args["tmdb_id"])
+        except (KeyError, TypeError, ValueError):
+            return json.dumps({"error": "Provide a company name and integer tmdb_id"})
+        return json.dumps(research_company(self.settings, name=name, tmdb_id=tmdb_id, db=self.db))
+
+    async def _tool_compare_filmographies(self, args: Mapping[str, Any]) -> str:
+        def resolve(prefix: str) -> tuple[str, Optional[int]]:
+            raw = args.get(f"{prefix}_tmdb_id")
+            return str(args.get(f"{prefix}_name") or "").strip(), int(raw) if raw is not None else None
+        try:
+            left_name, left_id = resolve("left")
+            right_name, right_id = resolve("right")
+        except (TypeError, ValueError):
+            return json.dumps({"error": "person TMDB ids must be integers"})
+        if not left_name or not right_name:
+            return json.dumps({"error": "Provide both person names"})
+        left = research_person(self.settings, name=left_name, tmdb_id=left_id, db=self.db)
+        right = research_person(self.settings, name=right_name, tmdb_id=right_id, db=self.db)
+        return json.dumps(compare_filmographies(left, right))
 
     async def _tool_find_similar_titles(self, args: Mapping[str, Any]) -> str:
         """Read cached plot neighbors (similar or surprising) for a seed title."""

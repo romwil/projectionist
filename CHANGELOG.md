@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.8.30] — 2026-07-20
+
+### Added
+- Public, provenance-aware `research_person` and `research_company` tools plus transparent filmography comparison.
+- Daily idle `entity_memory_enrichment` refreshes a tiny stale repository-research batch without accessing private user memory.
+
 ## [1.8.29] — 2026-07-20
 
 ### Added
