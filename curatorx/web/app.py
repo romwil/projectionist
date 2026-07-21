@@ -3135,7 +3135,9 @@ def list_saved_library_pages(
 @app.get("/api/saved-library/{page_id}")
 def get_saved_library_page(page_id: str, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     user_id = _scoped_user_id(user)
-    page = _db().get_saved_library_page(page_id, user_id=user_id or "")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Sign in to view your library")
+    page = _db().get_saved_library_page(page_id, user_id=user_id)
     if page is None:
         raise HTTPException(status_code=404, detail="Saved page not found")
     return _saved_library_response(page, user)
@@ -3156,7 +3158,9 @@ def export_saved_library_page(
     user=Depends(get_current_user_dep),
 ) -> Response:
     user_id = _scoped_user_id(user)
-    page = _db().get_saved_library_page(page_id, user_id=user_id or "")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Sign in to view your library")
+    page = _db().get_saved_library_page(page_id, user_id=user_id)
     if page is None:
         raise HTTPException(status_code=404, detail="Saved page not found")
     text = _saved_library_text(page["content"])

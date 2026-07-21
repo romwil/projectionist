@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.19.1] — 2026-07-21
+
+A small security fix for your saved pages. The pages you save from a curator conversation are private to you — and now the app enforces that on every read path. Signed-out requests are turned away instead of being quietly answered, and one household member can never open another member's saved page.
+
+### Highlights
+- **Saved pages are only viewable by their owner.** Opening or exporting a saved page now always checks that it's yours. A page another member saved can't be read or exported from your account.
+- **Signed-out requests are rejected, not guessed.** If there's no signed-in user to attribute the request to, viewing or exporting a saved page is refused up front rather than falling back to an unowned match.
+
+### Security
+- **Closed a cross-account read gap on two saved-library endpoints.** `GET /api/saved-library/{page_id}` and `GET /api/saved-library/{page_id}/export` previously passed `user_id=""` to the database when there was no scoped user (`_scoped_user_id(user) or ""`). Against legacy NULL-owner rows an empty owner could match, so a saved page could be read or exported across accounts / while signed out. Both endpoints now resolve the scoped user first and `raise HTTPException(401, "Sign in to view your library")` when there is none, then query strictly by that owner — bringing them in line with the sibling `GET /api/saved-library` (`list_saved_library_pages`) guard that already shipped, and with the ownership scoping already enforced on create (`POST /api/saved-library`) and delete. No leaky `user_id or ""` remains in the saved-library routes. (`curatorx/web/app.py`)
+
+### Verification
+- New regression test `tests/test_saved_library_authz.py` (FastAPI `TestClient`) asserts that `GET /api/saved-library/{id}` and its `/export` return **401** when there is no scoped user (single-workspace mode) and when signed out under multi-user, that a member gets **404** for another member's saved page, and that the rightful owner reads (**200**) and exports (**200**) their own page. Full backend `pytest` suite **1202 passed, 4 skipped** (13 subtests passed) at **78.59%** total coverage, satisfying `--cov-fail-under=74`; `test_version` parity holds across `curatorx/_version.py`, root `package.json`, `frontend/package.json`, and both lockfiles at **1.19.1**. Frontend `node --test` unit suite **374 passed**, ESLint **0 errors** (pre-existing warning count unchanged), and the production build succeeds. `frontend/public/release-notes.json` regenerated from this entry via `scripts/generate-release-notes.sh`.
+
 ## [1.19.0] — 2026-07-21
 
 Search beyond your collection. When you search Explore and the title you want isn't in the library, CuratorX can now look it up in the wider film database and — depending on who you are — help you bring it in. Owners add it to Radarr/Sonarr, members request it through Seerr, and guests get a friendly "ask owner" note. Titles you already own or have queued are shown for context but never offered as a duplicate add.
