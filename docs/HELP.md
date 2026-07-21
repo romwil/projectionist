@@ -186,14 +186,27 @@ optional OMDb or TVDB when the owner configures their keys. It reports which
 sources answered and what remains unavailable. This is media research, not
 general-purpose open-web browsing or HTML scraping.
 
-### Your memory
+Research it has done before is kept in a **persistent, source-cited knowledge
+store**. Before saying it has nothing, the curator checks what it already knows
+about a title, person, or company — so a second question about the same subject
+recalls the earlier cited answer instead of starting over, and it will refresh
+that knowledge when it has gone stale. It cites its sources in the reply.
 
-The curator can remember preferences, stated goals, watch intentions, and
-external watches for your account. Export it from `GET /api/me/memory` (JSON
-or Markdown). Deleting it permanently deletes both private memory and your
-chat transcripts, so export first if you need a copy. Youth-mode accounts show
-a badge in Profile; only those accounts can be reviewed by the owner for
-moderation.
+### What the curator remembers
+
+The curator keeps two kinds of memory:
+
+- **Shared knowledge** about titles, people, and companies it has researched,
+  with the sources cited. This is not tied to any one account.
+- **Your private memory** — preferences, stated goals, watch intentions, and
+  follow-ups for your account only. It is surfaced back to you at the start of a
+  conversation (including a "resume where we left off" nudge) and is never shared
+  with, or applied to, another household member. Youth-mode accounts show a badge
+  in Profile; only those accounts can be reviewed by the owner for moderation.
+
+Export your private memory from `GET /api/me/memory` (JSON or Markdown).
+Deleting it permanently deletes both your private memory and your chat
+transcripts, so export first if you need a copy.
 
 ---
 

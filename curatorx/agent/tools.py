@@ -141,6 +141,82 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "recall_repo_memory",
+            "description": (
+                "Recall what CuratorX already knows about a title, person, or company from its "
+                "persistent, source-cited repository memory: the latest research snapshot, when it "
+                "was first known and last refreshed, saved insights, and how often it has come up. "
+                "Call this BEFORE declaring you have no information — the store may already hold a "
+                "cited answer. Returns provenance for prose citations; never local file paths."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Entity name (title, person, or company)"},
+                    "entity_type": {"type": "string", "enum": ["title", "person", "company", "location", "other"]},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_memory",
+            "description": (
+                "Fuzzy-search the persistent repository knowledge store — \"what do I already know "
+                "about X\". Returns matching entities with type and freshness so you can then "
+                "recall_repo_memory the best match. Use before research when the user references "
+                "something you may have already looked up."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string"},
+                    "limit": {"type": "integer"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "save_repo_insight",
+            "description": (
+                "Persist a durable, source-cited insight about a known repository entity (a lasting "
+                "fact or synthesis worth remembering across sessions — Scholar cited knowledge). "
+                "Cite sources so the claim can be repeated with provenance. The entity must already "
+                "exist in memory (research it first if needed). Use for shared/library knowledge — "
+                "NOT for private user facts (use remember_about_user for those)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "Entity name; resolved against known entities"},
+                    "entity_id": {"type": "string", "description": "Exact entity id from recall_repo_memory/search_memory"},
+                    "entity_type": {"type": "string", "enum": ["title", "person", "company", "location", "other"]},
+                    "insight": {"type": "string"},
+                    "citations": {
+                        "type": "array",
+                        "description": "Sources backing the insight",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "source": {"type": "string", "description": "e.g. TMDB, Wikipedia"},
+                                "ref": {"type": "string", "description": "Optional reference/URL"},
+                                "note": {"type": "string"},
+                            },
+                        },
+                    },
+                },
+                "required": ["insight"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "find_similar_titles",
             "description": (
                 "Find titles similar or surprisingly adjacent to a seed library title using "
@@ -1263,6 +1339,31 @@ SEERR_TOOL_NAMES = frozenset(
 )
 
 
+def _memory_freshness(known_since: Any, fetched_at: Any) -> Dict[str, Any]:
+    """Summarize entity freshness for prose ("known since"/last refreshed/staleness)."""
+    def _fmt(ts: Any) -> Optional[str]:
+        try:
+            return _dt.fromtimestamp(float(ts)).strftime("%Y-%m-%d")
+        except (TypeError, ValueError, OSError):
+            return None
+
+    freshness: Dict[str, Any] = {}
+    known = _fmt(known_since)
+    fetched = _fmt(fetched_at)
+    if known:
+        freshness["known_since"] = known
+    if fetched:
+        freshness["last_refreshed"] = fetched
+    if fetched_at is not None:
+        try:
+            age_days = int((time.time() - float(fetched_at)) / 86400)
+            freshness["age_days"] = max(age_days, 0)
+            freshness["stale"] = age_days >= 30
+        except (TypeError, ValueError):
+            pass
+    return freshness
+
+
 def build_tool_definitions(settings: Settings) -> List[Mapping[str, Any]]:
     """Return LLM tool schemas with feature-gated tools omitted when disabled."""
     omitted: set[str] = set()
@@ -1803,19 +1904,19 @@ class ToolRegistry:
             tvdb_int = int(tvdb_id) if tvdb_id is not None else None
         except (TypeError, ValueError):
             return json.dumps({"error": "year, tmdb_id, and tvdb_id must be integers"})
-        return json.dumps(
-            research_title(
-                self.settings,
-                title=title,
-                year=year_int,
-                media_type=media_type,
-                tmdb_id=tmdb_int,
-                tvdb_id=tvdb_int,
-                imdb_id=imdb_id,
-                db=self.db,
-                library_item_id=int(row["id"]) if row is not None else None,
-            )
+        result = research_title(
+            self.settings,
+            title=title,
+            year=year_int,
+            media_type=media_type,
+            tmdb_id=tmdb_int,
+            tvdb_id=tvdb_int,
+            imdb_id=imdb_id,
+            db=self.db,
+            library_item_id=int(row["id"]) if row is not None else None,
         )
+        self._note_research_activity(result)
+        return json.dumps(result)
 
     async def _tool_research_person(self, args: Mapping[str, Any]) -> str:
         name = str(args.get("name") or "").strip()
@@ -1825,7 +1926,9 @@ class ToolRegistry:
             tmdb_id = int(args["tmdb_id"]) if args.get("tmdb_id") is not None else None
         except (TypeError, ValueError):
             return json.dumps({"error": "tmdb_id must be an integer"})
-        return json.dumps(research_person(self.settings, name=name, tmdb_id=tmdb_id, db=self.db))
+        result = research_person(self.settings, name=name, tmdb_id=tmdb_id, db=self.db)
+        self._note_research_activity(result)
+        return json.dumps(result)
 
     async def _tool_research_company(self, args: Mapping[str, Any]) -> str:
         name = str(args.get("name") or "").strip()
@@ -1833,7 +1936,9 @@ class ToolRegistry:
             tmdb_id = int(args["tmdb_id"])
         except (KeyError, TypeError, ValueError):
             return json.dumps({"error": "Provide a company name and integer tmdb_id"})
-        return json.dumps(research_company(self.settings, name=name, tmdb_id=tmdb_id, db=self.db))
+        result = research_company(self.settings, name=name, tmdb_id=tmdb_id, db=self.db)
+        self._note_research_activity(result)
+        return json.dumps(result)
 
     async def _tool_compare_filmographies(self, args: Mapping[str, Any]) -> str:
         def resolve(prefix: str) -> tuple[str, Optional[int]]:
@@ -1848,7 +1953,85 @@ class ToolRegistry:
             return json.dumps({"error": "Provide both person names"})
         left = research_person(self.settings, name=left_name, tmdb_id=left_id, db=self.db)
         right = research_person(self.settings, name=right_name, tmdb_id=right_id, db=self.db)
+        self._note_research_activity(left)
+        self._note_research_activity(right)
         return json.dumps(compare_filmographies(left, right))
+
+    def _note_research_activity(self, result: Optional[Mapping[str, Any]]) -> None:
+        """Best-effort: mark a just-researched entity as discussed. Never raises."""
+        if not isinstance(result, Mapping):
+            return
+        memory = result.get("memory") if isinstance(result.get("memory"), Mapping) else None
+        entity_id = str((memory or {}).get("entity_id") or "").strip()
+        try:
+            if entity_id:
+                self.db.record_entity_discussion(entity_id)
+        except Exception:
+            logger.debug("Could not record research activity", exc_info=True)
+
+    async def _tool_recall_repo_memory(self, args: Mapping[str, Any]) -> str:
+        """Return the latest cited snapshot, insights, and freshness for a known entity."""
+        name = str(args.get("name") or "").strip()
+        if not name:
+            return json.dumps({"error": "Provide an entity name", "known": False})
+        entity_type = str(args.get("entity_type") or "").strip() or None
+        try:
+            record = self.db.get_repository_entity(name, entity_type)
+        except Exception:
+            logger.exception("recall_repo_memory failed for %r", name)
+            return json.dumps({"error": "Repository memory could not be read", "known": False})
+        if not record:
+            return json.dumps({"known": False, "name": name, "entity_type": entity_type})
+        try:
+            self.db.record_entity_discussion(record["entity_id"])
+            record["discussion_count"] = int(record.get("discussion_count") or 0) + 1
+        except Exception:
+            logger.debug("Could not record recall activity", exc_info=True)
+        record["frequently_discussed"] = int(record.get("discussion_count") or 0) >= 3
+        record["freshness"] = _memory_freshness(record.get("known_since"), record.get("fetched_at"))
+        record["known"] = True
+        return json.dumps(record)
+
+    async def _tool_search_memory(self, args: Mapping[str, Any]) -> str:
+        """Fuzzy-list known repository entities for 'what do I already know about X'."""
+        query = str(args.get("query") or "").strip()
+        if not query:
+            return json.dumps({"error": "Provide a search query", "matches": []})
+        try:
+            limit = min(max(1, int(args.get("limit") or 10)), 50)
+        except (TypeError, ValueError):
+            limit = 10
+        try:
+            matches = self.db.search_repository_memory(query, limit=limit)
+        except Exception:
+            logger.exception("search_memory failed for %r", query)
+            return json.dumps({"error": "Repository memory could not be searched", "matches": []})
+        for match in matches:
+            match["freshness"] = _memory_freshness(match.get("known_since"), match.get("fetched_at"))
+        return json.dumps({"query": query, "count": len(matches), "matches": matches})
+
+    async def _tool_save_repo_insight(self, args: Mapping[str, Any]) -> str:
+        """Persist a durable, source-cited insight against a known repository entity."""
+        insight = str(args.get("insight") or "").strip()
+        if not insight:
+            return json.dumps({"error": "Provide insight text"})
+        entity_id = str(args.get("entity_id") or "").strip()
+        name = str(args.get("name") or "").strip()
+        entity_type = str(args.get("entity_type") or "").strip() or None
+        try:
+            if not entity_id and name:
+                entity_id = self.db.resolve_memory_entity_id(name, entity_type) or ""
+            if not entity_id:
+                return json.dumps(
+                    {"error": "Unknown entity; research it first so it exists in repository memory", "saved": False}
+                )
+            saved = self.db.save_repository_insight(entity_id, insight, args.get("citations"))
+        except ValueError as error:
+            return json.dumps({"error": str(error), "saved": False})
+        except Exception:
+            logger.exception("save_repo_insight failed for entity %r", entity_id or name)
+            return json.dumps({"error": "Insight could not be saved", "saved": False})
+        return json.dumps({"saved": True, "id": saved["id"], "entity_id": saved["entity_id"]})
 
     async def _tool_find_similar_titles(self, args: Mapping[str, Any]) -> str:
         """Read cached plot neighbors (similar or surprising) for a seed title."""
@@ -3867,16 +4050,61 @@ def _persona_prompt_block(db: Database, *, persona_id: Optional[str] = None) -> 
     return build_persona_prompt(persona_row_to_dict(persona))
 
 
+def _user_memory_context_block(
+    db: Database, user_id: Optional[str], user_role: Optional[str]
+) -> str:
+    """Compact, privacy-safe "what you already know" block for the signed-in user.
+
+    Reads only the caller's own private notes via the fail-closed ``UserMemoryService``.
+    Returns an empty string when there is no signed-in user, no notes, or on any error —
+    memory injection must never crash a chat turn.
+    """
+    if not user_id:
+        return ""
+    try:
+        from curatorx.memory import UserMemoryService
+
+        notes = UserMemoryService(db).recall(
+            caller_id=user_id, caller_role=user_role or "member", limit=12
+        )
+    except Exception:
+        logger.debug("Skipping user-memory injection", exc_info=True)
+        return ""
+    lines: List[str] = []
+    resume: List[str] = []
+    for note in notes[:8]:
+        text = " ".join(str(note.get("text") or "").split()).strip()
+        if not text:
+            continue
+        kind = str(note.get("kind") or "note")
+        lines.append(f"- [{kind}] {text[:240]}")
+        if kind in {"follow_up", "watch_intention"}:
+            resume.append(text[:160])
+    if not lines:
+        return ""
+    block = (
+        "What you already know about this signed-in user (private to them — never reveal or apply "
+        "another account's memory):\n" + "\n".join(lines)
+    )
+    if resume:
+        block += "\nResume where you left off: " + "; ".join(resume[:3]) + "."
+    return block + "\n\n"
+
+
 def build_system_prompt(
     db: Database,
     lens_id: Optional[str] = None,
     *,
     persona_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    user_role: Optional[str] = None,
 ) -> str:
     """Assemble the full system prompt for the Curator agent.
 
     ``persona_id`` specifies the per-conversation persona template. When
     omitted, the global singleton persona is used (backward-compatible).
+    ``user_id``/``user_role`` thread the signed-in account so a compact,
+    privacy-safe slice of that user's own memory can be injected per turn.
     """
     from curatorx.library.db import DEFAULT_LENS_ID
 
@@ -3943,10 +4171,16 @@ def build_system_prompt(
         "For exact external title lookup before add_to_radarr or add_to_sonarr, use search_tmdb — not search_library. "
         "When you already know a specific work, call search_tmdb with tmdb_id (and media_type), or title+year — "
         "never title-only when recommending one film/show, or turnstyle cards may list every same-name TMDB hit. "
-        "When a user asks for more plot, cast, crew, or context and the local/TMDB card is thin, call research_title "
-        "with the exact library item or title+year before declaring a dead end. You can research through configured "
+        "You have a PERSISTENT, SOURCE-CITED knowledge store (past research on titles, people, and companies) "
+        "plus private per-user memory — you are not starting from scratch each turn. Before declaring a gap or "
+        "dead-end about a title, person, or company, consult it: call recall_repo_memory (or search_memory to "
+        "find what you already know) and recall_user_memory for the signed-in user's own saved notes. "
+        "When the local/TMDB card is thin or a stored snapshot is stale, call research_title/research_person/"
+        "research_company to retrieve durable cited knowledge and refresh it. You can research through configured "
         "official media APIs (TMDB, Wikipedia, and optional OMDb/TVDB), but you cannot arbitrarily browse or scrape "
-        "the open web. Report source provenance and gaps; never invent confidence from an incomplete record. "
+        "the open web. Persist lasting facts with save_repo_insight (include citations) and user intentions or "
+        "preferences with remember_about_user. Cite your sources in prose using the provenance in tool output; "
+        "report source gaps and never invent confidence from an incomplete record. "
         "When recommending external titles, set a specific taste-based reason via search_tmdb(reason=…) "
         "or set_recommendation_reasons — never leave Why this? as a pipeline label. "
         "After a useful recommendation or gap response, call suggest_follow_ups with 2-4 concise, safe next user turns. "
@@ -3958,5 +4192,6 @@ def build_system_prompt(
         f"{_persona_prompt_block(db, persona_id=persona_id)}"
         f"{night_owl_block}"
         f"{lens_block}\n\n"
-        + preference_context(db, lens_id=resolved)
+        + _user_memory_context_block(db, user_id, user_role)
+        + preference_context(db, lens_id=resolved, user_id=user_id)
     )

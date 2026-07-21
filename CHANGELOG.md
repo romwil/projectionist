@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-07-20
+
+### Added
+- The curator can now **read** its persistent, source-cited knowledge store: `recall_repo_memory` returns the latest cited research snapshot, freshness, saved insights, and how often an entity has come up; `search_memory` fuzzy-finds "what do I already know about X".
+- `save_repo_insight` persists durable, source-cited insights about known titles, people, and companies for reuse across sessions.
+- Per-turn memory injection: a compact, privacy-safe slice of the signed-in user's own notes — plus a "resume where we left off" line from saved follow-ups and watch intentions — is added to the system prompt. It never exposes another account's memory and injects nothing when no user is signed in.
+- Entity discussion activity (`memory_entity_activity`) is now recorded when titles/people/companies are researched or recalled, letting recall flag "frequently discussed" and grooming prioritize hot entities.
+
+### Changed
+- The system and persona prompts now state plainly that the curator has persistent, source-cited memory plus per-user memory, and instruct it to consult that memory before declaring a gap and to cite sources in prose. Research is reframed from a thin-card fallback to durable cited retrieval with staleness-aware refresh; the "no arbitrary open-web browsing/scraping" guardrail is retained.
+
 ## [1.9.1] — 2026-07-20
 
 ### Fixed

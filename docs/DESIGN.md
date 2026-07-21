@@ -332,6 +332,18 @@ Agent tools are **synchronous and user-triggered**; long batch work (metadata en
 
 ---
 
+## Curator memory model (1.10)
+
+The curator has **two memory scopes**, both readable and writable, so it behaves as if it remembers rather than starting cold each turn.
+
+**Repository memory (shared, source-cited).** Research on titles, people, and companies is persisted as append-only `memory_snapshots` under `memory_entities`, refreshed by idle `entity_memory_enrichment`. The curator reads it back with `recall_repo_memory` (latest snapshot + freshness + insights + how often it's come up) and `search_memory` (fuzzy "what do I already know about X", backed by `search_repository_memory`). Durable synthesis is saved as `memory_insights` through `save_repo_insight`, which stores citations (`{source, ref, note}`) so the claim can be repeated with provenance — there is no separate citation UI; the agent cites in prose from tool output. `memory_entity_activity` counts discussions per entity (best-effort, never fatal) so recall can flag "frequently discussed" and grooming can prioritize hot entities. Only provider-normalized, path-free payloads are ever stored; local file paths and rating keys never enter this scope.
+
+**Per-user memory (private, fail-closed).** `user_memory_notes` hold a signed-in account's disclosures, goals, watch intentions, and follow-ups behind `UserMemoryService`, whose `_authorize` is fail-closed: a caller reads only their own notes, and the owner may review **only** Youth-flagged accounts. Adults are isolated from each other and from the owner.
+
+**Per-turn injection.** `build_system_prompt(user_id, user_role)` injects a compact, privacy-safe "what you already know about this signed-in user" block next to the lens/preference context, plus a "resume where we left off" line drawn from `follow_up`/`watch_intention` notes. It reads only the caller's own notes, injects nothing when there is no signed-in user or no notes, and degrades silently on any error. The system and persona prompts state plainly that persistent, cited memory exists and instruct the curator to consult it **before** declaring a gap. The "no arbitrary web browsing/scraping" guardrail is retained; research is framed as durable cited retrieval with staleness-aware refresh.
+
+---
+
 ## API surface (highlights)
 
 | Area | Endpoints |

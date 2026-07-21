@@ -73,6 +73,15 @@ LIBRARY_CURATION_BLOCK = (
     "those are done; pick different gaps instead."
 )
 
+MEMORY_AWARENESS_BLOCK = (
+    "Memory: you have a persistent, source-cited knowledge store (titles, people, companies you've "
+    "researched) plus private per-user memory. You are NOT starting from scratch each turn. Before "
+    "saying you don't know or have nothing, call recall_repo_memory / search_memory for shared knowledge "
+    "and recall_user_memory for the signed-in user's own notes. Persist lasting, cited facts with "
+    "save_repo_insight and user intentions or preferences with remember_about_user. Cite your sources in "
+    "prose using the provenance in tool output. Never mix or reveal one user's private memory to another."
+)
+
 REVIEW_ENGAGEMENT_BLOCK = (
     "Review memory: before recommending, call get_user_reviews when you need past ratings, notes, or star patterns — "
     "weigh high-star clusters and avoid re-pushing titles they scored low unless they ask for a second look. "
@@ -299,6 +308,7 @@ def build_persona_prompt(persona: Mapping[str, Any]) -> str:
 
     parts.append(build_rendered_behavioral_prompt(persona))
     parts.append(REVIEW_ENGAGEMENT_BLOCK)
+    parts.append(MEMORY_AWARENESS_BLOCK)
 
     if not parts:
         return ""

@@ -256,7 +256,16 @@ class CuratorAgent:
         history = self.db.chat_history(session_id, limit=20, lens_id=self.lens_id)
         thread_persona_id = self.db.get_thread_persona_id(session_id)
         messages: List[Dict[str, Any]] = [
-            {"role": "system", "content": build_system_prompt(self.db, self.lens_id, persona_id=thread_persona_id)}
+            {
+                "role": "system",
+                "content": build_system_prompt(
+                    self.db,
+                    self.lens_id,
+                    persona_id=thread_persona_id,
+                    user_id=self.user_id,
+                    user_role=self.user_role,
+                ),
+            }
         ]
         for entry in history:
             text = " ".join(
@@ -433,7 +442,16 @@ async def stream_agent(
     history = db.chat_history(session_id, limit=20, lens_id=resolved_lens)
     thread_persona_id = db.get_thread_persona_id(session_id)
     messages: List[Dict[str, Any]] = [
-        {"role": "system", "content": build_system_prompt(db, resolved_lens, persona_id=thread_persona_id)},
+        {
+            "role": "system",
+            "content": build_system_prompt(
+                db,
+                resolved_lens,
+                persona_id=thread_persona_id,
+                user_id=user_id,
+                user_role=user_role,
+            ),
+        },
     ]
     for entry in history:
         text = " ".join(
