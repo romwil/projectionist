@@ -2,9 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   addWatchlistPin,
+  confirmAction,
   deleteLibraryItems,
+  getFeatures,
   getLibraryAggregate,
+  proposeAction,
   queryLibrary,
+  searchExternal,
 } from "../api/client";
 import BackLink from "../components/BackLink";
 import { useBulkActionProgress } from "../components/BulkActionProgress.jsx";
@@ -12,8 +16,29 @@ import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
+import TitleCard from "../components/TitleCard";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
+import {
+  alreadyInArrMessage,
+  buildProposeActionBody,
+  isAlreadyInArr,
+  normalizeUserRole,
+  requestPathFromFeatures,
+  serviceLabelForTarget,
+} from "../lib/addActions.js";
+import {
+  BEYOND_STATUS,
+  beyondCtaLabel,
+  beyondEmptyMessage,
+  beyondErrorNote,
+  beyondSectionSubtitle,
+  beyondStatusForError,
+  beyondStatusForResult,
+  beyondUnavailableNote,
+  normalizeExternalResults,
+  shouldShowBeyondAffordance,
+} from "../lib/beyondSearch.js";
 import { ROUTES } from "../lib/browseLinks.js";
 import { partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
 import {
@@ -71,6 +96,37 @@ export default function LibraryBrowsePage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [access, setAccess] = useState({
+    userRole: "owner",
+    requestPath: "arr",
+    multiUserEnabled: false,
+  });
+  const [beyond, setBeyond] = useState({
+    status: BEYOND_STATUS.idle,
+    items: [],
+    total: 0,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    getFeatures()
+      .then((data) => {
+        if (cancelled) return;
+        const enabled = Boolean(data?.features?.multi_user_enabled);
+        setAccess({
+          userRole: normalizeUserRole(data?.user?.role, { multiUserEnabled: enabled }),
+          requestPath: requestPathFromFeatures(data),
+          multiUserEnabled: enabled,
+        });
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setAccess({ userRole: "owner", requestPath: "arr", multiUserEnabled: false });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +156,7 @@ export default function LibraryBrowsePage() {
     setActionStatus("");
     setDeleteOpen(false);
     setDeleteError("");
+    setBeyond({ status: BEYOND_STATUS.idle, items: [], total: 0 });
 
     const filters = queryFiltersFromBrowse(browse);
     // The reader takes year_from/year_to, not a bare year.
@@ -269,6 +326,54 @@ export default function LibraryBrowsePage() {
     }
   }
 
+  async function handleBeyondSearch() {
+    if (!q || beyond.status === BEYOND_STATUS.loading) return;
+    setBeyond((prev) => ({ ...prev, status: BEYOND_STATUS.loading }));
+    try {
+      const payload = await searchExternal({ q, mediaType: browse.media_type || "movie" });
+      const { items, total } = normalizeExternalResults(payload);
+      setBeyond({ status: beyondStatusForResult(payload), items, total });
+    } catch (err) {
+      setBeyond({ status: beyondStatusForError(err), items: [], total: 0 });
+    }
+  }
+
+  // TitleCard owns its own add button state; this resolves on success and
+  // throws on failure so the card can show Added / Retry.
+  async function handleBeyondAdd(item, target) {
+    const label = item.title || "this title";
+    const service = serviceLabelForTarget(target);
+    const proposal = await proposeAction(buildProposeActionBody(item, target));
+    if (isAlreadyInArr(proposal)) {
+      setActionStatus(alreadyInArrMessage(proposal, { label, service }));
+      return proposal;
+    }
+    const confirm = await confirmAction(proposal.confirmation_token);
+    if (isAlreadyInArr(confirm)) {
+      setActionStatus(alreadyInArrMessage(confirm, { label, service }));
+      return confirm;
+    }
+    setActionStatus(
+      target === "seerr" ? `Requested “${label}” in Seerr.` : `Added “${label}” to ${service}.`,
+    );
+    return confirm;
+  }
+
+  function handleBeyondDismiss(item) {
+    setBeyond((prev) => ({
+      ...prev,
+      items: prev.items.filter((entry) => entry !== item),
+    }));
+  }
+
+  const hasLibraryResults = state.items.length > 0;
+  const showBeyondAffordance = shouldShowBeyondAffordance({
+    q,
+    unavailable: beyond.status === BEYOND_STATUS.unavailable,
+  });
+  const beyondBusy = beyond.status === BEYOND_STATUS.loading;
+  const beyondActivated = beyond.status !== BEYOND_STATUS.idle;
+
   const recommendProps = multiUserEnabled
     ? { showRecommend: true, onRecommend: setRecommendItem }
     : { showRecommend: false };
@@ -415,6 +520,80 @@ export default function LibraryBrowsePage() {
           />
         ) : null}
       </section>
+
+      {showBeyondAffordance ? (
+        <section
+          className={`explore-beyond ${hasLibraryResults ? "is-secondary" : "is-prominent"}`}
+          data-testid="explore-beyond"
+        >
+          {!beyondActivated ? (
+            <div className="explore-beyond-cta" data-testid="explore-beyond-cta">
+              <p className="explore-beyond-lead">
+                {hasLibraryResults
+                  ? "Looking for something you don’t own yet?"
+                  : "Not in your library — want to look further afield?"}
+              </p>
+              <button
+                type="button"
+                className={hasLibraryResults ? "ghost" : ""}
+                data-testid="explore-beyond-button"
+                onClick={handleBeyondSearch}
+              >
+                {beyondCtaLabel({ q })}
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="explore-beyond-heading">
+                <h2 data-testid="explore-beyond-title">Beyond your collection</h2>
+                <p className="explore-section-subtitle">{beyondSectionSubtitle({ q })}</p>
+              </div>
+              {beyondBusy ? (
+                <p className="status status-secondary" data-testid="explore-beyond-loading">
+                  Searching beyond your collection…
+                </p>
+              ) : null}
+              {beyond.status === BEYOND_STATUS.error ? (
+                <p className="error" data-testid="explore-beyond-error">
+                  {beyondErrorNote()}
+                </p>
+              ) : null}
+              {beyond.status === BEYOND_STATUS.empty ? (
+                <p
+                  className="explore-empty status status-secondary"
+                  data-testid="explore-beyond-empty"
+                >
+                  {beyondEmptyMessage({ q })}
+                </p>
+              ) : null}
+              {beyond.status === BEYOND_STATUS.loaded ? (
+                <div className="inline-cards explore-beyond-grid" data-testid="explore-beyond-results">
+                  {beyond.items.map((item) => (
+                    <TitleCard
+                      key={`beyond-${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`}
+                      item={item}
+                      onAdd={handleBeyondAdd}
+                      onDismiss={handleBeyondDismiss}
+                      requestPath={access.requestPath}
+                      userRole={access.userRole}
+                      multiUserEnabled={access.multiUserEnabled}
+                    />
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
+        </section>
+      ) : null}
+
+      {beyond.status === BEYOND_STATUS.unavailable ? (
+        <p
+          className="status status-secondary explore-beyond-note"
+          data-testid="explore-beyond-unavailable"
+        >
+          {beyondUnavailableNote()}
+        </p>
+      ) : null}
 
       <BulkLibraryDeleteDialog
         open={deleteOpen}

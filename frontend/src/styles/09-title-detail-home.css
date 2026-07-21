@@ -1212,6 +1212,56 @@ a.explore-cinema-card-link:focus-visible h3 {
   padding-top: var(--space-2);
 }
 
+/* Search beyond the collection (Explore external/TMDB results) */
+.explore-beyond {
+  width: min(var(--reading-column-max, 72rem), 100%);
+  margin: 0 auto;
+  padding: 0 var(--gutter) var(--space-6);
+}
+
+.explore-beyond.is-prominent .explore-beyond-cta {
+  border: 1px solid var(--accent);
+  background: var(--accent-soft);
+}
+
+.explore-beyond-cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-3) var(--space-4);
+}
+
+.explore-beyond-lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.explore-beyond-heading {
+  margin-bottom: var(--space-3);
+}
+
+.explore-beyond-heading h2 {
+  margin: 0 0 var(--space-1);
+}
+
+.explore-beyond-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-4);
+}
+
+.explore-beyond-note {
+  width: min(var(--reading-column-max, 72rem), 100%);
+  margin: 0 auto;
+  padding: 0 var(--gutter) var(--space-6);
+}
+
 .explore-media-tabs {
   display: flex;
   flex-wrap: wrap;

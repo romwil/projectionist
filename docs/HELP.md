@@ -90,6 +90,22 @@ The **search bar** at the top of Explore looks across your library by title and 
 
 The browse page uses the same controls as every other wall (sort, direction, type, watch state, year, genres, columns, poster/list, CSV). A **Show** selector picks how many titles load at once: **48**, **100**, **500**, or **All**. With a fixed size you page through results with **Previous** / **Next**; **All** loads everything in one go up to a safety ceiling of 5,000 titles and tells you *"Showing first N of M"* when your library is larger than that. Select titles to pin them to your watchlist in bulk (owners can also remove them from the index).
 
+### Search beyond the collection
+
+Sometimes the thing you want isn't in the library yet. Whenever you've searched, look for **Search beyond your collection** — it's front and center when nothing in your library matched, and a quieter button below your results otherwise. Tap it and CuratorX looks up matching movies or shows from the wider film database, then shows them in a clearly separated **Beyond your collection** section.
+
+> **You search:** "arrival"
+>
+> **Your library has nothing** — so **Search beyond your collection for "arrival"** sits right in the empty state. Tap it and *Arrival (2016)* and its neighbors appear under **Beyond your collection**, each with a poster, a link to full details, and — depending on who you are — a way to bring it in.
+
+What the button on each beyond result does depends on your role, and CuratorX never double-adds something you already have:
+
+- **Owners** get **Add to Radarr** (movies) or **Add to Sonarr** (shows), which queues the title for download.
+- **Members** get **Request in Seerr**, sending it to the household request queue for approval.
+- **Guests** see a gentle *"Ask owner"* note instead of a button — browsing and discovery stay open to everyone, but only owners and members can bring titles in.
+
+Anything already in your library (or already queued to download) is shown with an **In library** or **In queue** badge and no add button, so you can see it exists without accidentally requesting a duplicate. If external search isn't available, the button steps aside with a short note rather than failing loudly.
+
 ### What knowledge coverage means
 
 "Knowledge coverage" is an **honesty gauge, not a grade of your library.** It reports how much of each **plot-knowledge layer** the curator has filled in so far: overviews and keywords, semantic embeddings, plot motifs, plot-similarity neighbors, and optional LLM loglines (plus themes and long synopsis when those enrichers run). A high percentage means the curator has rich signals to reason over when it recommends, compares, or explains; a low percentage means idle enrichment still has work to do — recommendations may lean on thinner data until it catches up.
@@ -176,6 +192,25 @@ curl -s -X POST http://localhost:8788/api/library/sync
 # Watch counts climb
 curl -s http://localhost:8788/api/library/stats | python3 -m json.tool
 ```
+
+### Search beyond the collection — how acquisition works
+
+The member-facing **Search beyond your collection** action (see the member half above) is backed by an authenticated endpoint that queries TMDB, de-dupes the hits against your library and Radarr/Sonarr queue, and returns cards flagged with `in_library` / `in_radarr` / `in_sonarr` / `already_queued`. TMDB must be configured for it to work; when it isn't, the endpoint returns `503` and the UI hides the affordance behind a short note (no provider detail leaks to members).
+
+```bash
+# Search beyond the library for a movie (owner host); shows dedupe flags
+curl -s "http://localhost:8788/api/search/external?q=arrival&media_type=movie&limit=5" \
+  | python3 -m json.tool
+# → {"query": "arrival", "returned": 5, "items": [{"title": "Arrival", "in_library": false, "already_queued": false, ...}]}
+```
+
+The add/request buttons on beyond results reuse the same **propose → confirm** acquisition flow as the rest of the app, so it's role-aware without new plumbing:
+
+- **Owners** propose `add_radarr` (by `tmdb_id`) or `add_sonarr` (by `tvdb_id`, which shows results carry via TMDB enrichment). Requires Radarr/Sonarr configured with a valid root folder.
+- **Members** propose `request_seerr` — routed to Seerr for approval. With `seerr.require_linked_user_for_requests` on, the member must have a linked Seerr account.
+- **Guests** get no write path at all; the API rejects acquisition just as it does elsewhere.
+
+Owned or already-queued titles are returned for context (so members see they exist) but never carry an add/request button. This is a read-only discovery surface: nothing is downloaded until someone with the right role confirms the proposal.
 
 ### Watched state & Plex sync
 

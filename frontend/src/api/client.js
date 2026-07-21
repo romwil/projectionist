@@ -979,6 +979,20 @@ export async function queryLibrary(filters = {}) {
   return api(`/library/query?${params}`);
 }
 
+/**
+ * Search beyond the collection: TMDB titles de-duped against the library,
+ * returned as acquisition-capable TitleCard-shaped items. Throws with
+ * `error.status === 503` when external search is unavailable (e.g. TMDB not
+ * configured) so callers can grey the affordance with a helpful note.
+ */
+export async function searchExternal({ q, mediaType = "movie", limit = 20 } = {}) {
+  const params = new URLSearchParams();
+  params.set("q", String(q || "").trim());
+  if (mediaType) params.set("media_type", String(mediaType));
+  params.set("limit", String(limit));
+  return api(`/search/external?${params}`);
+}
+
 export async function getLibraryFacets(facetType, limit = 50, q = "") {
   const params = new URLSearchParams({
     facet_type: String(facetType || ""),

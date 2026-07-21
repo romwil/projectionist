@@ -1,6 +1,40 @@
 {
-  "generated_at": "2026-07-21T19:33:50Z",
+  "generated_at": "2026-07-21T20:01:23Z",
   "releases": [
+    {
+      "version": "1.19.0",
+      "date": "2026-07-21",
+      "summary": "Search beyond your collection. When you search Explore and the title you want isn't in the library, CuratorX can now look it up in the wider film database and — depending on who you are — help you bring it in. Owners add it to Radarr/Sonarr, members request it through Seerr, and guests get a friendly \"ask owner\" note. Titles you already own or have queued are shown for context but never offered as a duplicate add.",
+      "highlights": [
+        "**Find titles you don't own yet, right from search.** Search Explore and you'll see **Search beyond your collection** — prominent when nothing in your library matched, and a quieter button below your results otherwise. It pulls up matching movies and shows from the wider film database in a clearly separated **Beyond your collection** section, each with a poster and a link to full details.",
+        "**One tap to bring it in — matched to your role.** Owners get **Add to Radarr / Sonarr**, members get **Request in Seerr**, and guests see a gentle *\"Ask owner\"* note instead of a dead button. It reuses the same trusted add/confirm flow as the rest of the app.",
+        "**No accidental duplicates.** Anything already in your library or already queued to download is badged **In library** / **In queue** with no add button, so you can see it exists without re-requesting it.",
+        "**Graceful when it's off.** If external lookup isn't available, the affordance quietly steps aside with a short note instead of failing."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**`GET /api/search/external` (authenticated).** New endpoint that searches TMDB and returns TitleCard-shaped items de-duped against the library, flagged with `in_library` / `in_radarr` / `in_sonarr` / `already_queued` (with `tvdb_id` enrichment for shows so Sonarr adds resolve). The result is role-sanitized through the existing library audience boundary — members lose internal fields but keep `in_library` + `already_queued`. TMDB-not-configured returns a non-leaky `503`; the query is required and the limit is capped at 20. (`curatorx/web/app.py`)",
+            "**Shared external-search service (`curatorx/library/external_search.py`).** The TMDB search + card/item mapping + de-dupe + ownership/queue flagging that lived inside the agent's `search_tmdb` tool was extracted into a reusable `external_tmdb_search(...)` service (moving `_tmdb_card`, `_tmdb_search_item_to_tool_item`, `_enrich_show_external_ids`, `_rank_tmdb_search_results`, `_apply_queue_flags`, and the title-match helpers). Both the agent tool and the new HTTP endpoint call it, so behavior stays identical and DRY; the helpers are re-exported from `curatorx.agent.tools` to preserve the import surface.",
+            "**\"Search beyond the collection\" on the Explore browse page.** `LibraryBrowsePage.jsx` now shows the affordance whenever a query is present (prominent in the zero-results empty state, secondary below results otherwise), calls the endpoint via a new `searchExternal` client method, and renders hits in a **Beyond your collection** section using the acquisition-capable `TitleCard` (not the library-only card). Add/request wires to the existing `proposeAction` → `confirmAction` flow via `buildProposeActionBody`, so owners see Add-to-arr, members see Request-in-Seerr, and guests get info-only guidance. Owned/queued titles are badged and suppressed. Presentation logic (visibility gating, status, copy, de-dupe, badges) lives in a new pure helper `frontend/src/lib/beyondSearch.js`; theme-safe styles use shared tokens for Lights Up / Lights Down parity.",
+            "**Tests.** Backend `tests/test_external_search_api.py` covers success, TMDB-not-configured (503, non-leaky), owned-title de-dupe flags, empty-query rejection, and member/guest audiences. Frontend `frontend/src/lib/beyondSearch.test.mjs` covers affordance gating on `q`, unavailable-hides-affordance, placement, 503→unavailable mapping, result normalization/rendering states, already-in-library de-dupe, badges, and guest info-only vs owner/member acquire."
+          ]
+        },
+        {
+          "title": "Follow-ups (not in this release)",
+          "bullets": [
+            "**Part B — native-Plex capabilities to expose next (prioritized menu, not built here):** two-way Plex Discover watchlist sync, a Plex \"Continue Watching / On Deck\" resume rail, CuratorX list/playlist → Plex Playlist sync, collections published to Plex, and richer play-history/ratings import. Captured as the prioritized follow-up menu; this release ships Part A (Explore external search) only."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Full backend `pytest` suite **1199 passed, 4 skipped** (13 subtests passed) at **78.35%** total coverage, satisfying `--cov-fail-under=74`; the refactor keeps the agent `search_tmdb` behavior identical (existing tool tests re-pointed to the new service module and pass). `test_version` parity holds across `curatorx/_version.py`, root `package.json`, `frontend/package.json`, and both lockfiles at **1.19.0**. Frontend `node --test` unit suite **374 passed**, ESLint **0 errors** (pre-existing warning count unchanged), and the production build succeeds. `frontend/public/release-notes.json` regenerated from this entry via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.18.1",
       "date": "2026-07-21",

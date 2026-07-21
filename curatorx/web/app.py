@@ -66,6 +66,10 @@ from curatorx.connectors.seerr import SeerrClient
 from curatorx.connectors.sonarr import SonarrClient
 from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import DEFAULT_LENS_ID
+from curatorx.library.external_search import (
+    ERROR_NOT_CONFIGURED,
+    external_tmdb_search,
+)
 from curatorx.memory import MemoryAccessError, UserMemoryService
 from curatorx.library.health import compute_library_health
 from curatorx.library.facets import ensure_library_facet_index
@@ -2327,6 +2331,55 @@ async def library_query_endpoint(
     else:
         result = query_library(_db(), filters)
     return _sanitize_library_payload(result, user)
+
+
+@app.get("/api/search/external")
+def external_search_endpoint(
+    q: str = "",
+    media_type: str = "movie",
+    limit: int = 20,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Search beyond the collection: TMDB titles de-duped against the library.
+
+    Returns TitleCard-shaped items flagged with in_library / in_radarr /
+    in_sonarr / already_queued (plus tvdb_id enrichment for shows so Sonarr adds
+    resolve), sanitized to the caller's audience. The acquisition-capable
+    frontend card drives the role-aware add/request flow from these flags.
+    """
+    query = (q or "").strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Enter something to search for.")
+    normalized_type = "show" if str(media_type or "").strip().lower() in {"show", "tv", "series"} else "movie"
+    capped_limit = max(1, min(int(limit or 20), 20))
+    result = external_tmdb_search(
+        _db(),
+        _settings(),
+        media_type=normalized_type,
+        title=query,
+        limit=capped_limit,
+    )
+    if not result.ok:
+        if result.error_kind == ERROR_NOT_CONFIGURED:
+            # Non-leaky: never surface the raw provider/config detail to members.
+            raise HTTPException(
+                status_code=503,
+                detail="Search beyond the collection isn't available right now.",
+            )
+        raise HTTPException(status_code=400, detail="Could not search beyond the collection.")
+    items: List[Dict[str, Any]] = []
+    for card in result.cards:
+        payload = card.model_dump()
+        payload["already_queued"] = bool(card.in_radarr or card.in_sonarr)
+        items.append(payload)
+    sanitized = _sanitize_library_payload(items, user)
+    return {
+        "query": query,
+        "media_type": normalized_type,
+        "total_matched": result.total_matched,
+        "returned": len(sanitized) if isinstance(sanitized, list) else 0,
+        "items": sanitized,
+    }
 
 
 _EXPORT_COLUMNS = (

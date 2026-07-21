@@ -657,7 +657,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(registry.cards), 1)
             self.assertEqual(registry.cards[0].tmdb_id, 27205)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("curatorx.library.external_search.TMDBClient")
     async def test_search_tmdb_omits_owned_from_cards_but_reports_in_library(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_movie_page.return_value = {
@@ -780,7 +780,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
         ranked = _rank_tmdb_search_results(results, year=None)
         self.assertEqual(len(ranked), 2)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("curatorx.library.external_search.TMDBClient")
     async def test_search_tmdb_movie_returns_structured_matches(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_movie_page.return_value = {
@@ -827,7 +827,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(registry.cards[0].recommendation_reason, "")
             self.assertNotIn("recommendation_reason", payload["items"][0])
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("curatorx.library.external_search.TMDBClient")
     async def test_search_tmdb_year_does_not_expand_ambiguous_title(self, mock_tmdb_cls) -> None:
         """Mandy + year=2018 must pin Cosmatos 2018, not every same-name hit."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -881,7 +881,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(registry.cards[0].year, 2018)
             self.assertIn("Cosmic neon", registry.cards[0].recommendation_reason)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("curatorx.library.external_search.TMDBClient")
     async def test_search_tmdb_by_tmdb_id_pins_exact_work(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {
@@ -914,7 +914,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(registry.cards[0].title, "Mandy")
             self.assertEqual(registry.cards[0].year, 2018)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("curatorx.library.external_search.TMDBClient")
     async def test_search_tmdb_title_only_may_return_multiple_same_name(self, mock_tmdb_cls) -> None:
         """Without year/tmdb_id, disambiguation candidates are still allowed."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -941,7 +941,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(registry.cards), 3)
             self.assertEqual({c.tmdb_id for c in registry.cards}, {460885, 111, 222})
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("curatorx.library.external_search.TMDBClient")
     async def test_search_tmdb_accepts_curator_reason(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_movie_page.return_value = {
@@ -980,7 +980,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 "Mind-bending sci-fi that fits your unwatched cyberpunk streak",
             )
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("curatorx.library.external_search.TMDBClient")
     async def test_set_recommendation_reasons_updates_cards(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_movie_page.return_value = {
@@ -1016,7 +1016,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["updated"], 1)
             self.assertEqual(registry.cards[0].recommendation_reason, "British Quatermass energy")
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("curatorx.library.external_search.TMDBClient")
     async def test_search_tmdb_show_enriches_tvdb_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_tv_page.return_value = {
@@ -1231,7 +1231,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(payload.get("keywords_unresolved"))
             mock_tmdb.discover_movies.assert_not_called()
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("curatorx.library.external_search.TMDBClient")
     async def test_search_tmdb_rejects_mismatched_pinned_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {

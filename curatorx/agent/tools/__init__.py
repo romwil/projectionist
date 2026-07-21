@@ -27,6 +27,16 @@ from curatorx.connectors.sonarr import SonarrClient
 from curatorx.connectors.tmdb import TMDBClient
 from curatorx.library.db import Database
 from curatorx.library.episodes import query_episodes, summarize_tv_progress
+from curatorx.library.external_search import (  # re-exported: preserves import surface
+    _apply_queue_flags,
+    _enrich_show_external_ids,
+    _rank_tmdb_search_results,
+    _titles_roughly_match,
+    _tmdb_card,
+    _tmdb_result_year,
+    _tmdb_search_item_to_tool_item,
+    external_tmdb_search,
+)
 from curatorx.library.facets import library_facet_catalog
 from curatorx.library.query import (
     LibraryFilters,
@@ -138,29 +148,6 @@ def _memory_freshness(known_since: Any, fetched_at: Any) -> Dict[str, Any]:
     return freshness
 
 
-def _normalize_title_key(value: Any) -> str:
-    return " ".join(str(value or "").strip().casefold().split())
-
-
-def _titles_roughly_match(expected: str, actual: str) -> bool:
-    """True when expected title aligns with actual (exact or containment)."""
-    left = _normalize_title_key(expected)
-    right = _normalize_title_key(actual)
-    if not left or not right:
-        return True
-    if left == right:
-        return True
-    if left in right or right in left:
-        return True
-    # Token overlap for minor punctuation differences.
-    left_tokens = {t for t in left.replace(":", " ").replace("-", " ").split() if t}
-    right_tokens = {t for t in right.replace(":", " ").replace("-", " ").split() if t}
-    if not left_tokens or not right_tokens:
-        return False
-    overlap = len(left_tokens & right_tokens) / max(len(left_tokens), len(right_tokens))
-    return overlap >= 0.6
-
-
 def _resolve_tmdb_keyword_ids(tmdb: TMDBClient, keywords_text: str) -> Dict[str, Any]:
     """Resolve keyword phrases to TMDB ids, preferring exact name matches.
 
@@ -215,84 +202,6 @@ def _resolve_tmdb_keyword_ids(tmdb: TMDBClient, keywords_text: str) -> Dict[str,
     }
 
 
-def _tmdb_result_year(item: Mapping[str, Any]) -> Optional[int]:
-    date = item.get("release_date") or item.get("first_air_date") or ""
-    if not date:
-        return None
-    try:
-        return int(str(date)[:4])
-    except ValueError:
-        return None
-
-
-def _rank_tmdb_search_results(
-    results: List[Mapping[str, Any]],
-    *,
-    year: Optional[int],
-    title: Optional[str] = None,
-) -> List[Mapping[str, Any]]:
-    """Order/filter TMDB search hits.
-
-    When ``year`` is set, keep only that release year so one recommendation
-    (e.g. Mandy 2018) does not expand into every same-name hit.
-
-    When both ``title`` and ``year`` are set, exact title matches are preferred
-    so that "Munich (2005)" pins Spielberg's film and not every same-year title
-    containing "Munich" (e.g. "Munich Mambo").
-
-    When only ``title`` is set, exact title matches are ranked ahead of partial
-    hits so agents do not recommend unrelated IDs from a noisy search page.
-    """
-    ordered = [item for item in results if isinstance(item, Mapping)]
-    normalised = title.strip().casefold() if title else ""
-    if year is None:
-        if not normalised:
-            return ordered
-        exact = [
-            item
-            for item in ordered
-            if str(item.get("title") or item.get("name") or "").strip().casefold() == normalised
-        ]
-        if exact:
-            return exact + [item for item in ordered if item not in exact]
-        close = [
-            item
-            for item in ordered
-            if _titles_roughly_match(normalised, str(item.get("title") or item.get("name") or ""))
-        ]
-        if close:
-            return close
-        return ordered
-    year_matched = [item for item in ordered if _tmdb_result_year(item) == year]
-    if normalised and year_matched:
-        exact = [
-            item
-            for item in year_matched
-            if str(item.get("title") or item.get("name") or "").strip().casefold() == normalised
-        ]
-        if exact:
-            return exact
-    return year_matched
-
-
-def _tmdb_search_item_to_tool_item(item: Mapping[str, Any], media_type: str) -> Dict[str, Any]:
-    title = str(item.get("title") or item.get("name") or "")
-    overview = str(item.get("overview") or "")
-    payload: Dict[str, Any] = {
-        "title": title,
-        "year": _tmdb_result_year(item),
-        "media_type": media_type,
-        "tmdb_id": int(item.get("id") or 0),
-        "overview": overview[:200] if overview else "",
-        "in_library": False,
-    }
-    if media_type == "show":
-        external = item.get("external_ids") or {}
-        if external.get("tvdb_id"):
-            payload["tvdb_id"] = int(external["tvdb_id"])
-    return payload
-
-
 def _seerr_result_year(item: Mapping[str, Any]) -> Optional[int]:
     date = item.get("releaseDate") or item.get("firstAirDate") or item.get("release_date") or ""
     if not date:
@@ -320,34 +229,6 @@ def _seerr_search_item_to_tool_item(item: Mapping[str, Any], media_type: str) ->
     if tvdb_id is not None:
         payload["tvdb_id"] = int(tvdb_id)
     return payload
-
-
-def _tmdb_card(item: Mapping[str, Any], media_type: str, tmdb: TMDBClient, *, reason: str = "") -> TitleCard:
-    poster = tmdb.poster_url(item.get("poster_path"))
-    backdrop = tmdb.backdrop_url(item.get("backdrop_path"))
-    title = item.get("title") or item.get("name") or ""
-    year = None
-    date = item.get("release_date") or item.get("first_air_date") or ""
-    if date:
-        year = int(str(date)[:4])
-    tvdb_id = None
-    if media_type == "show":
-        external = item.get("external_ids") or {}
-        if external.get("tvdb_id"):
-            tvdb_id = int(external["tvdb_id"])
-    return TitleCard(
-        media_type=media_type,  # type: ignore[arg-type]
-        title=str(title),
-        year=year,
-        tmdb_id=int(item.get("id") or 0),
-        tvdb_id=tvdb_id,
-        poster_url=poster,
-        backdrop_url=backdrop,
-        overview=str(item.get("overview") or ""),
-        rating=float(item.get("vote_average") or 0) or None,
-        recommendation_reason=sanitize_recommendation_reason(reason),
-        in_library=False,
-    )
 
 
 def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
@@ -401,19 +282,6 @@ def _query_item_to_tool_item(item: Mapping[str, Any]) -> Dict[str, Any]:
     if item.get("rating_key"):
         payload["rating_key"] = item["rating_key"]
     return payload
-
-
-def _enrich_show_external_ids(item: Mapping[str, Any], tmdb: TMDBClient) -> Mapping[str, Any]:
-    if item.get("external_ids"):
-        return item
-    tmdb_id = int(item.get("id") or 0)
-    if not tmdb_id:
-        return item
-    try:
-        details = tmdb.tv_details(tmdb_id)
-    except RuntimeError:
-        return item
-    return {**item, "external_ids": details.get("external_ids") or {}}
 
 
 def _detail_to_tool_payload(detail: Any, settings: Settings) -> Dict[str, Any]:
@@ -500,18 +368,6 @@ def _append_recommendation_cards(registry: "ToolRegistry", cards: List[TitleCard
 
 def _excluded_add_tmdb_ids(db: Database, media_type: str) -> set[int]:
     return db.owned_tmdb_ids(media_type) | db.queued_tmdb_ids(media_type)
-
-
-def _apply_queue_flags(db: Database, card: TitleCard) -> TitleCard:
-    if card.media_type == "movie" and card.tmdb_id:
-        if db.is_arr_queued(media_type="movie", tmdb_id=card.tmdb_id):
-            card.in_radarr = True
-    if card.media_type == "show":
-        if card.tvdb_id and db.is_arr_queued(media_type="show", tvdb_id=card.tvdb_id):
-            card.in_sonarr = True
-        elif card.tmdb_id and db.is_arr_queued(media_type="show", tmdb_id=card.tmdb_id):
-            card.in_sonarr = True
-    return card
 
 
 class ToolRegistry:
@@ -1432,94 +1288,27 @@ class ToolRegistry:
         )
 
     async def _tool_search_tmdb(self, args: Mapping[str, Any]) -> str:
-        if not self.settings.tmdb_api_key:
-            return json.dumps({"error": "TMDB API key not configured"})
-        media_type = str(args.get("media_type") or "movie")
-        title = str(args.get("title") or "").strip()
         raw_tmdb_id = args.get("tmdb_id")
-        pinned_tmdb_id = int(raw_tmdb_id) if raw_tmdb_id is not None else None
-        if pinned_tmdb_id is not None and pinned_tmdb_id <= 0:
-            return json.dumps({"error": "tmdb_id must be a positive integer"})
-        if not title and pinned_tmdb_id is None:
-            return json.dumps({"error": "title or tmdb_id is required"})
-        year = args.get("year")
-        year_int = int(year) if year is not None else None
-        limit = min(int(args.get("limit") or 10), 20)
-        reason = sanitize_recommendation_reason(
-            str(args.get("reason") or args.get("recommendation_reason") or "")
+        raw_year = args.get("year")
+        result = external_tmdb_search(
+            self.db,
+            self.settings,
+            media_type=str(args.get("media_type") or "movie"),
+            title=str(args.get("title") or ""),
+            tmdb_id=int(raw_tmdb_id) if raw_tmdb_id is not None else None,
+            year=int(raw_year) if raw_year is not None else None,
+            limit=int(args.get("limit") or 10),
+            reason=str(args.get("reason") or args.get("recommendation_reason") or ""),
         )
+        if not result.ok:
+            error_payload: Dict[str, Any] = {"error": result.error}
+            if result.error_kind == "mismatch":
+                error_payload["items"] = []
+            return json.dumps(error_payload)
 
-        tmdb = TMDBClient(self.settings.tmdb_api_key)
-        results: List[Mapping[str, Any]] = []
-        total_matched = 0
-        if pinned_tmdb_id is not None:
-            try:
-                details = (
-                    tmdb.movie_details(pinned_tmdb_id)
-                    if media_type == "movie"
-                    else tmdb.tv_details(pinned_tmdb_id)
-                )
-            except RuntimeError as error:
-                return json.dumps({"error": str(error)})
-            if not isinstance(details, Mapping) or not int(details.get("id") or 0):
-                return json.dumps({"error": f"TMDB {media_type} {pinned_tmdb_id} not found"})
-            actual_title = str(details.get("title") or details.get("name") or "")
-            if title and not _titles_roughly_match(title, actual_title):
-                return json.dumps(
-                    {
-                        "error": (
-                            f"tmdb_id {pinned_tmdb_id} resolves to '{actual_title}', "
-                            f"which does not match requested title '{title}'. "
-                            "Re-search by title+year instead of inventing ids."
-                        ),
-                        "items": [],
-                    }
-                )
-            results = [details]
-            total_matched = 1
-        else:
-            if media_type == "movie":
-                page = tmdb.search_movie_page(title, year=year_int)
-            else:
-                page = tmdb.search_tv_page(title)
-            raw_results = page.get("results", [])
-            if not isinstance(raw_results, list):
-                raw_results = []
-            total_matched = int(page.get("total_results") or len(raw_results))
-            results = _rank_tmdb_search_results(raw_results, year=year_int, title=title)
-            if year_int is not None:
-                # Year pin: honest count is filtered matches, not unscoped TMDB total.
-                total_matched = len(results)
-
-        owned = self.db.owned_tmdb_ids(media_type)
-        queued = self.db.queued_tmdb_ids(media_type)
-        cards: List[TitleCard] = []
-        items: List[Dict[str, Any]] = []
-        for item in results:
-            if not isinstance(item, Mapping):
-                continue
-            tmdb_id = int(item.get("id") or 0)
-            if tmdb_id <= 0:
-                continue
-            if media_type == "show":
-                item = _enrich_show_external_ids(item, tmdb)
-            card = _apply_queue_flags(self.db, _tmdb_card(item, media_type, tmdb, reason=reason))
-            card.in_library = tmdb_id in owned
-            if tmdb_id in queued and media_type == "movie":
-                card.in_radarr = True
-            cards.append(card)
-            tool_item = _tmdb_search_item_to_tool_item(item, media_type)
-            tool_item["in_library"] = card.in_library
-            tool_item["in_radarr"] = bool(card.in_radarr)
-            tool_item["in_sonarr"] = bool(card.in_sonarr)
-            tool_item["already_queued"] = bool(card.in_radarr or card.in_sonarr or tmdb_id in queued)
-            if reason:
-                tool_item["recommendation_reason"] = reason
-            items.append(tool_item)
-            if len(items) >= limit:
-                break
-
-        _append_recommendation_cards(self, cards)
+        items = result.items
+        total_matched = result.total_matched
+        _append_recommendation_cards(self, result.cards)
         return json.dumps(
             {
                 "total_matched": total_matched,
