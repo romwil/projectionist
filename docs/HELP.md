@@ -129,6 +129,8 @@ Use the grip's **Add to list or playlist** chooser to place a title in more than
 
 **The ⋮ action grip** is repeated on posters, title-card overlays, and list rows on purpose — so "open details," Plex playback when available, watchlist pinning, list/playlist membership, household recommendations, **Recommend like this in chat**, discovery, and **Report issue** all live in one place whether you browse with mouse, keyboard, or touch. The centered **Play** control appears only when a card is a library title with a playable Plex rating key; external discovery cards never show a dead Play action.
 
+**Mark as watched — a guided one-tap.** For any title that lives in your Plex library, the grip offers **Mark as watched**. Say you just finished *Heat* on the TV downstairs but forgot to press play in Plex — open the ⋮ menu on its poster and choose **Mark as watched**. CuratorX records the view and tells Plex, so the poster's watched overlay turns on and the title stops showing up as "unwatched" everywhere it appears. Changed your mind, or marked the wrong one? The same spot now reads **Mark as unwatched** and reverses it. The action only appears on real library titles (the same rule as **Play**) — discovery cards for things you don't own never show it — and, like everything else, it's tied to *your* signed-in Plex context.
+
 **Reporting a title problem — safely.** Anyone who can browse can submit a typed **Report issue** (wrong language, bad video/audio, wrong title, missing subtitles, duplicate, or other) with an optional note. The report captures the title identity and a snapshot of what you saw, then lands in the owner queue at **Admin → Issues**. Members and guests never invoke Radarr or Sonarr commands from a report — this separation protects your files and downloads from accidental changes. An owner decides whether to resolve it or run a supported, logged repair.
 
 ### Title detail — Plot knowledge
@@ -173,6 +175,19 @@ Kick off a sync from the terminal if you prefer (single-owner install shown):
 curl -s -X POST http://localhost:8788/api/library/sync
 # Watch counts climb
 curl -s http://localhost:8788/api/library/stats | python3 -m json.tool
+```
+
+### Watched state & Plex sync
+
+When anyone in the household uses **Mark as watched / unwatched** from a poster's ⋮ grip (or the button on a title's detail page), CuratorX does two things: it updates the title's `view_count` / `last_viewed_at` in its own index, and it pushes the change to your Plex server. The Plex write uses the Plex "scrobble" endpoint (`/:/scrobble` to mark watched, `/:/unscrobble` to clear it) against the same server URL and token the connector already uses for sync and deep links — no new Plex credential is introduced.
+
+Which Plex identity gets the write depends on how the member signed in: if they authenticated with **Sign in with Plex**, their own account token is used so the watched flag lands on *their* Plex profile. If no per-account token is available, CuratorX falls back to the server `plex_token`, which applies watched state to the admin/account that owns that token — effectively household-wide. Guests cannot change watched state while multi-user is on.
+
+If Plex is unreachable or not configured, the local index is still updated and the member sees an honest note (for example *"saved locally; Plex sync failed"*) rather than a silent failure.
+
+```bash
+# The scrobble call CuratorX makes on your behalf (movie ratingKey 12345)
+curl -s "http://localhost:32400/:/scrobble?identifier=com.plexapp.plugins.library&key=12345&X-Plex-Token=$PLEX_TOKEN"
 ```
 
 ### Coverage over time

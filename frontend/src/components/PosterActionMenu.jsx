@@ -13,6 +13,7 @@ import { useAuthGate } from "./UserMenu";
 import ReportMediaIssueModal from "./ReportMediaIssueModal";
 import { recommendLikeHref } from "../lib/backNav.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
+import { posterWatchAction, watchedStatePatch } from "../lib/posterWatchAction.js";
 
 function placePosterMenu(anchor, menu) {
   const margin = 8;
@@ -35,13 +36,17 @@ export default function PosterActionMenu({
   listId,
   listItemId,
   onRemoveFromList,
+  onWatchedChange,
   motifWhy,
 }) {
-  const { isOwner, multiUserEnabled } = useAuthGate();
+  const { isOwner, multiUserEnabled, role } = useAuthGate();
   const [lists, setLists] = useState([]);
   const [listOpen, setListOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [status, setStatus] = useState("");
+  // Optimistic overlay so the menu label + card reflect a completed scrobble
+  // without waiting on a parent refresh.
+  const [watchPatch, setWatchPatch] = useState(null);
   const { open, setOpen, rootRef, popoverRef, popoverStyle } = useAnchoredPopover({
     closeOnEscape: true,
     anchorSelector: ".poster-action-grip",
@@ -50,6 +55,8 @@ export default function PosterActionMenu({
   });
   const detailPath = titleDetailPath({ ...item, in_library: true });
   const plexHref = item?.plex_watch_url || (canWatchOnPlex(item) ? plexWatchUrl(item.rating_key) : "");
+  const effectiveItem = watchPatch ? { ...item, ...watchPatch } : item;
+  const watchAction = posterWatchAction(effectiveItem, { role, multiUserEnabled });
 
   async function openLists() {
     setListOpen(true);
@@ -87,12 +94,26 @@ export default function PosterActionMenu({
     }
   }
 
-  async function markWatched() {
+  async function toggleWatched() {
+    if (!watchAction) return;
+    const nextWatched = watchAction.nextWatched;
     try {
-      await setLibraryItemWatched(item.rating_key || item.plex_rating_key, true);
-      setStatus("Marked watched.");
+      const result = await setLibraryItemWatched(item.rating_key || item.plex_rating_key, nextWatched);
+      const patch = watchedStatePatch(nextWatched);
+      if (result && typeof result.view_count === "number") patch.view_count = result.view_count;
+      setWatchPatch(patch);
+      onWatchedChange?.(item, patch, result);
+      const plexNote =
+        result?.plex_synced === false
+          ? result.plex_reason === "plex_not_configured"
+            ? " (local only — Plex not configured)"
+            : result.plex_reason === "plex_error"
+              ? " (saved locally; Plex sync failed)"
+              : " (local only)"
+          : "";
+      setStatus(nextWatched ? `Marked as watched${plexNote}.` : `Marked as unwatched${plexNote}.`);
     } catch (error) {
-      setStatus(error.message || "Could not mark watched.");
+      setStatus(error.message || "Could not update watched state.");
     }
   }
 
@@ -110,6 +131,7 @@ export default function PosterActionMenu({
     <div className="poster-action-popover" ref={popoverRef} role="menu" style={popoverStyle || { visibility: "hidden" }}>
       {detailPath ? <Link to={detailPath} onClick={() => setOpen(false)}>Open details</Link> : null}
       {plexHref ? <a href={plexHref} target="_blank" rel="noopener noreferrer">Watch on Plex</a> : null}
+      {watchAction ? <button type="button" className="poster-action-watched" onClick={toggleWatched}>{watchAction.label}</button> : null}
       <button type="button" onClick={togglePin}>{pinned ? "Remove from watchlist" : "Add to watchlist"}</button>
       {listId && onRemoveFromList ? <button type="button" onClick={async () => { await onRemoveFromList(listId, listItemId); onRemovedFromList?.(); }}>Remove from this collection</button> : null}
       <button type="button" onClick={openLists}>Add to list or playlist…</button>
@@ -123,7 +145,6 @@ export default function PosterActionMenu({
       <button type="button" onClick={() => setReportOpen(true)}>Report issue…</button>
       {isOwner ? <div className="poster-action-owner">
         <span>Owner tools</span>
-        {item?.rating_key || item?.plex_rating_key ? <button type="button" onClick={markWatched}>Mark watched</button> : null}
         {item?.rating_key || item?.plex_rating_key ? <button type="button" onClick={deleteIndex}>Delete from index</button> : null}
       </div> : null}
       {status ? <p className="poster-action-status">{status}</p> : null}

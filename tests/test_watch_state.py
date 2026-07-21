@@ -187,6 +187,55 @@ class WatchStateApiTests(unittest.TestCase):
         self.assertEqual(resp.json()["view_count"], 0)
         mock_unscrobble.assert_called_once_with("rk-heat")
 
+    def test_api_member_can_mark_watched(self) -> None:
+        self._enable_multi_user()
+        with patch(
+            "curatorx.web.auth.fetch_plex_account",
+            return_value={"id": 10, "title": "Owner"},
+        ):
+            self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
+
+        member_id = "plex-member-1"
+        self.db.upsert_plex_user(
+            user_id=member_id,
+            display_name="Member",
+            email="member@example.com",
+            plex_user_id="88",
+            role="member",
+        )
+        member_client = TestClient(self.app_mod.app)
+        member_client.cookies.set(SESSION_COOKIE_NAME, create_session_token(member_id))
+        with patch.object(PlexClient, "scrobble") as mock_scrobble:
+            resp = member_client.post(
+                "/api/library/items/watched",
+                json={"rating_key": "rk-heat", "watched": True},
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertTrue(resp.json()["watched"])
+        mock_scrobble.assert_called_once_with("rk-heat")
+
+    def test_api_unauthenticated_forbidden_when_multi_user(self) -> None:
+        self._enable_multi_user()
+        anon_client = TestClient(self.app_mod.app)
+        with patch.object(PlexClient, "scrobble") as mock_scrobble:
+            resp = anon_client.post(
+                "/api/library/items/watched",
+                json={"rating_key": "rk-heat", "watched": True},
+            )
+        self.assertEqual(resp.status_code, 401)
+        mock_scrobble.assert_not_called()
+        row = self.db.library_item_by_rating_key("rk-heat")
+        self.assertEqual(int(row["view_count"] or 0), 0)
+
+    def test_api_mark_watched_unknown_rating_key_returns_404(self) -> None:
+        with patch.object(PlexClient, "scrobble") as mock_scrobble:
+            resp = self.client.post(
+                "/api/library/items/watched",
+                json={"rating_key": "does-not-exist", "watched": True},
+            )
+        self.assertEqual(resp.status_code, 404, resp.text)
+        mock_scrobble.assert_not_called()
+
     def test_api_guest_forbidden_when_multi_user(self) -> None:
         self._enable_multi_user()
         with patch(
@@ -231,6 +280,24 @@ class WatchStateApiTests(unittest.TestCase):
             )
         self.assertFalse(result["plex_synced"])
         self.assertEqual(result["plex_reason"], "plex_error")
+
+    def test_sync_watched_to_plex_not_configured(self) -> None:
+        settings = Settings(
+            plex_url="",
+            plex_token="",
+            features=FeatureFlags(multi_user_enabled=False),
+        )
+        with patch.object(PlexClient, "scrobble") as mock_scrobble:
+            result = sync_watched_to_plex(
+                self.db,
+                settings,
+                "rk-heat",
+                watched=True,
+                user_id=None,
+            )
+        self.assertFalse(result["plex_synced"])
+        self.assertEqual(result["plex_reason"], "plex_not_configured")
+        mock_scrobble.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.18.0] — 2026-07-21
+
+Mark something watched right from the poster ⋮ menu and it syncs to Plex. The kebab (poster action grip) that already carries "open details," Plex playback, watchlist, and lists now offers a one-tap **Mark as watched** on any title you own — and it flips to **Mark as unwatched** when you change your mind. Because the grip is one shared control, the action shows up everywhere posters do (library, recommendations, neighbors, recently added, list rows), on the same in-library rule as the **Play** control, and in your own signed-in Plex context.
+
+### Highlights
+- **Mark something watched right from the kebab menu — and it syncs to Plex.** Finished a movie on the couch but forgot to hit play in Plex? Open the ⋮ menu on its poster and choose **Mark as watched**. CuratorX records the view and tells Plex, the watched overlay turns on, and the title stops nagging you as "unwatched" across every rail it appears in.
+- **A true toggle, not a one-way switch.** Once a title is watched, the same menu spot reads **Mark as unwatched** and reverses it (Plex `/:/unscrobble`), so mistakes are one tap to fix.
+- **Everyone in the household, not just the owner.** The action is now member-capable (guests are still blocked while multi-user is on) and uses each member's own Plex sign-in when present, so watched state lands on the right profile. It appears only on real library titles — discovery cards for things you don't own never show it — exactly like the centered **Play** control.
+
+### Added
+- **Member "Mark as watched / unwatched" on the poster ⋮ grip.** `PosterActionMenu.jsx` gained a member-capable, state-aware watched toggle that calls the existing `POST /api/library/items/watched` endpoint, optimistically reflects the new state in the card (label flips, watched overlay updates), and surfaces an honest note when Plex is unconfigured or unreachable. Visibility uses a new pure helper `frontend/src/lib/posterWatchAction.js` (`posterWatchAction`, `watchedStatePatch`) gating on library identity + `rating_key` and household role — the same identity rule as **Play**. The previous owner-only "Mark watched" one-shot button was replaced by this shared action; owner-only **Delete from index** is unchanged.
+- **Tests.** New `frontend/src/lib/posterWatchAction.test.mjs` covers visibility gating (present with `rating_key` + in-library; absent for external, missing-key, and guest-in-multi-user) and the watched↔unwatched label toggle. `tests/test_watch_state.py` gained explicit API cases: a member can scrobble, an unauthenticated caller cannot (401), an unknown `rating_key` returns 404, and `sync_watched_to_plex` reports `plex_not_configured` — alongside the existing success, guest-forbidden, and Plex-error coverage.
+
+### Verification
+- Backend Plex scrobble reuses the existing `PlexClient.scrobble` / `unscrobble` (`GET /:/scrobble|/:/unscrobble?identifier=com.plexapp.plugins.library&key=<ratingKey>` with the caller's `X-Plex-Token`) and token resolution (`resolve_plex_watch_token`) with no new Plex auth path. Full backend pytest suite green with coverage satisfying `--cov-fail-under=74`; frontend `node --test` unit suite green (360 tests incl. the new watched-action suite); ESLint 0 errors and the production build succeeds. `frontend/public/release-notes.json` regenerated from this entry via `scripts/generate-release-notes.sh`.
+
 ## [1.17.1] — 2026-07-21
 
 A docs-only release that publishes the roadmap for what's coming next. No code, API, prompt, or UI changes — CuratorX behaves exactly as it did in 1.17.0. The Delight wishlist now lays out, as ready-to-plan milestones, what we intend to build for members, younger viewers and guests, and the AI curators themselves.
