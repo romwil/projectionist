@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [1.9.1] — 2026-07-20
+
+### Fixed
+- Restored structured `search_library` tool responses and library cards after follow-up suggestion handling was added.
+
 ## [1.9.0] — 2026-07-20
 
 ### Added
@@ -10,9 +15,6 @@
 - Library rows now lead with user titles, persona badges, summaries, search, and archive/open/chat actions; chat responses have the same share footer.
 - Persona selector ovals now expose a token-backed hover affordance and Material chevron.
 - Added the human and AI-curator capability backlog in `docs/DELIGHT-WISHLIST.md`.
-
-### Fixed
-- Restored structured `search_library` tool responses and library cards after follow-up suggestion handling was added.
 
 ### Verification
 - Checked new library/share/selector surfaces against shared light and dark theme tokens; print view hides interactive chrome.

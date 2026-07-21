@@ -1,16 +1,38 @@
 {
-  "generated_at": "2026-07-21T00:53:01Z",
+  "generated_at": "2026-07-21T01:46:46Z",
   "releases": [
+    {
+      "version": "1.9.1",
+      "date": "2026-07-20",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Restored structured `search_library` tool responses and library cards after follow-up suggestion handling was added."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.9.0",
       "date": "2026-07-20",
-      "summary": "A persona-forward saved library and one quiet share menu for chat and saved pages.",
+      "summary": "",
       "sections": [
         {
           "title": "Added",
           "bullets": [
-            "Library rows now show persona badges and persona-voiced summaries.",
-            "Use the ⋮ menu to save, copy a private link, export, print to PDF, or share a curator response."
+            "Saved library pages now retain their originating persona, a best-effort persona-voiced summary, and member-sanitized content.",
+            "Unified ⋮ share actions save a private default library item before copying its authenticated link, exporting Markdown/JSON/text, printing to PDF, or using the system share sheet.",
+            "Library rows now lead with user titles, persona badges, summaries, search, and archive/open/chat actions; chat responses have the same share footer.",
+            "Persona selector ovals now expose a token-backed hover affordance and Material chevron.",
+            "Added the human and AI-curator capability backlog in `docs/DELIGHT-WISHLIST.md`."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Checked new library/share/selector surfaces against shared light and dark theme tokens; print view hides interactive chrome."
           ]
         }
       ]
