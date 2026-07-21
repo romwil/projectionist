@@ -9,6 +9,7 @@ import MessageReactions from "./MessageReactions";
 import TitleCard from "./TitleCard";
 import InlineAlert from "./InlineAlert";
 import MessageText from "./MessageText";
+import ShareActionMenu from "./ShareActionMenu";
 
 function renderBulkConfirmActions(message, handlers, showTokenConfirm, viewportBlock) {
   const { radarr, sonarr, seerr } = collectAddableFromMessage(message, {
@@ -335,16 +336,13 @@ export default function ChatThread({
                     initialFeedback={messageFeedback[message.id]}
                     onFeedbackChange={onFeedbackChange}
                   />
-                  {onSaveToLibrary ? (
-                    <button
-                      type="button"
-                      className="ghost"
-                      data-testid="save-to-library"
-                      onClick={() => onSaveToLibrary(message)}
-                    >
-                      Save to library
-                    </button>
-                  ) : null}
+                  <ShareActionMenu
+                    content={{ blocks: message.blocks }}
+                    name={`${curatorName} response`}
+                    sourceSessionId={sessionId}
+                    sourceMessageId={message.id}
+                    label="Save, share, print, or export"
+                  />
                 </div>
               ) : null}
             </div>

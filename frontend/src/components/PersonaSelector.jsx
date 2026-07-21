@@ -218,7 +218,7 @@ export default function PersonaSelector({
     <div className="persona-selector" ref={ref}>
       <button
         type="button"
-        className="persona-trigger ghost"
+        className="persona-trigger selectable-oval"
         onClick={() => setOpen(!open)}
         title={active ? `Persona: ${active.name}` : "Select persona"}
       >
@@ -226,7 +226,7 @@ export default function PersonaSelector({
           <span className="persona-dot" style={{ background: active.accent_color }} />
         )}
         <span className="persona-trigger-label">{active?.name || "Persona"}</span>
-        <span className="persona-trigger-chevron" aria-hidden="true">▾</span>
+        <span className="persona-trigger-chevron material-symbols-outlined" aria-hidden="true">expand_more</span>
       </button>
 
       {open && (

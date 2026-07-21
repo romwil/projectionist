@@ -35,6 +35,8 @@ Reporting a bad title creates an issue-queue record. Members can report, but onl
 
 `PosterActionMenu` is a bottom-corner grip rather than another set of always-visible poster buttons. Its sections follow user intent: view/play, collect (watchlist/list/playlist), discover, report, then owner tools. It is present on library posters and compact title cards where sensible. The control is not a privilege escalation: report is broadly available; repair and index changes remain owner-gated.
 
+`ShareActionMenu` applies that same portaled-grip pattern to curator responses and saved library pages. An action first ensures a sanitized, account-scoped saved item exists, then acts on its authenticated `/library/:id` route. Copy, export, print/PDF, and system share are conveniences around that private route, never public-link issuance. Library list rows make the originating persona visible with an avatar/name badge and keep the one-to-two sentence persona-voiced summary subordinate to the owner's title.
+
 ### Repair safety model
 
 The issue lifecycle is `open → approved/repairing → resolved` or `rejected`, with a durable append-only repair log from the user's point of view. The frontend may optimistically describe a submitted report as queued, but must never imply that it repaired media. Owner repair code must prefer “skipped because target is not safe/known” over a speculative *arr call. Auto-repair remains opt-in by issue code and is intentionally narrower than owner manual repair; no playbook performs a blind file delete, metadata rewrite, or bulk action.
@@ -52,6 +54,8 @@ Two complementary themes share layout and type; only color tokens swap via `html
 | **Match system** | `system` | Follows `prefers-color-scheme` |
 
 Accent stays a single **amber/gold** (no blue→violet gradients). Display type (**Fraunces**) for brand and empty-state headlines; body UI (**DM Sans**). Atmosphere comes from subtle ambient washes (persona/context), not glow stacks or pill chrome. Toggle lives in the top bar (icon cycle) and **Settings → Profile**.
+
+Quiet oval controls must remain discoverable: selectors use a `selectable-oval` token, a Material `expand_more` icon, and a token-backed hover/focus fill. New controls favor icon buttons with accessible labels/tooltips; their colors must use shared theme tokens so Lights Down and Lights Up stay equivalent.
 
 | Token role | Intent |
 |------------|--------|

@@ -30,7 +30,7 @@ There is **one workspace layout**. Visual language is **cinema dark** (near-blac
 │  [ New ]     │                                              │
 │  • Thread 1  │                                              │
 │  • Thread 2  │                                              │
-│──────────────│  [ persona ▾ ] [ composer ]        [ Send ]  │
+│──────────────│  [ persona ⌄ ] [ composer ]        [ Send ]  │
 │ watchlist    │                                              │
 │ status dock  │                                              │
 └──────────────┴──────────────────────────────────────────────┘
@@ -75,6 +75,12 @@ With `features.multi_user_enabled` left at `false` (the default), CuratorX runs 
 | `/login` | Multi-user login (configured auth methods) |
 
 Session ID persists in `localStorage` for chat continuity across reloads.
+
+### Library and share controls
+
+Library rows lead with the title, then a compact curator-persona badge and italic persona-voiced summary. Their ⋮ action menu, the library-detail menu, and the action footer under each curator reply share one model: save a default private library item first, then copy the authenticated `/library/:id` URL, export Markdown/JSON/text, print to PDF, or invoke the system share sheet. There are no public or tokenized share links.
+
+Persona and other compact selector ovals use a Material `expand_more` chevron plus a light hover surface. This keeps controls quiet at rest while making their dropdown behavior obvious and consistent with the app's icon-first chrome.
 
 ### Configuration page auto-certification
 

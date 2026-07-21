@@ -44,9 +44,9 @@ Thumbs up / down on curator replies train future recommendations. Personal **rev
 
 ### Saved curator library
 
-Use **Save to library** on a curator response when a recommendation set or explanation is worth returning to. Give it a useful name; saved pages are private to your account, searchable by title and response text, and grouped by the day you saved them.
+Use the ⋮ menu below a curator response when a recommendation set or explanation is worth returning to. It creates a named library item when needed, adds a short summary in the active curator persona's voice, and keeps the item private to authenticated household members. Library rows are searchable, grouped by day, and show which persona shaped the response.
 
-Saved pages preserve the curator's structured text, title cards, and reply chips. Download a page as **Markdown**, **JSON** (the structured source), or **TXT**. **Chat from here** opens a new conversation with the saved analysis and recommendations as context, so it continues the idea without changing the original conversation. Selecting a saved reply chip starts that same continuation with the selected next step.
+Saved pages preserve the curator's structured text, title cards, and reply chips. The same ⋮ menu can copy its authenticated `/library/:id` link, export **Markdown**, **JSON** (the structured source), or **TXT**, open a clean client-side print/PDF view, or invoke your device share sheet (falling back to Copy link). **Chat from here** opens a new conversation with the saved analysis and recommendations as context, so it continues the idea without changing the original conversation. Selecting a saved reply chip starts that same continuation with the selected next step.
 
 ### Explore
 

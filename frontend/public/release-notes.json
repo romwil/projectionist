@@ -2,6 +2,20 @@
   "generated_at": "2026-07-21T00:53:01Z",
   "releases": [
     {
+      "version": "1.9.0",
+      "date": "2026-07-20",
+      "summary": "A persona-forward saved library and one quiet share menu for chat and saved pages.",
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Library rows now show persona badges and persona-voiced summaries.",
+            "Use the ⋮ menu to save, copy a private link, export, print to PDF, or share a curator response."
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.8.32",
       "date": "2026-07-20",
       "summary": "",

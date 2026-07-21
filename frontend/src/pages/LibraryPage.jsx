@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
-import { getLibraryPage, listLibraryPages } from "../api/client";
+import { useNavigate, useParams } from "react-router-dom";
+import { deleteLibraryPage, getLibraryPage, listLibraryPages } from "../api/client";
 import AppShell from "../layouts/AppShell";
 import BackLink from "../components/BackLink";
 import MessageText from "../components/MessageText";
 import TitleCard from "../components/TitleCard";
+import AgentAvatar from "../components/AgentAvatar";
+import ShareActionMenu from "../components/ShareActionMenu";
 import { ROUTES } from "../lib/backNav";
 
 function groupedByDate(pages) {
@@ -26,6 +28,15 @@ export default function LibraryPage() {
     if (pageId) getLibraryPage(pageId).then(setPage);
     else listLibraryPages(query).then(setPages);
   }, [pageId, query]);
+  useEffect(() => {
+    if (pageId && new URLSearchParams(window.location.search).get("print") === "1" && page) window.print();
+  }, [pageId, page]);
+
+  async function archive(entry) {
+    if (!window.confirm(`Archive "${entry.name}"?`)) return;
+    await deleteLibraryPage(entry.id);
+    setPages((current) => current.filter((item) => item.id !== entry.id));
+  }
 
   if (pageId) {
     const blocks = page?.content?.blocks || [];
@@ -57,11 +68,15 @@ export default function LibraryPage() {
               }
               return <MessageText key={index} content={block.content || ""} markdown />;
             })}
-            {page ? <div className="bulk-confirm-actions">
-              <a className="ghost" href={`/api/saved-library/${page.id}/export?format=markdown`}>Download Markdown</a>
-              <a className="ghost" href={`/api/saved-library/${page.id}/export?format=json`}>Download JSON</a>
-              <a className="ghost" href={`/api/saved-library/${page.id}/export?format=txt`}>Download TXT</a>
-              <button onClick={() => navigate(`/?saved_library=${encodeURIComponent(page.id)}`)}>Chat from here</button>
+            {page ? <div className="library-detail-actions">
+              <ShareActionMenu
+                page={page}
+                content={page.content}
+                name={page.name}
+                sourceSessionId={page.source_session_id}
+                sourceMessageId={page.source_message_id}
+                extraActions={[{ label: "Chat from here", icon: "forum", onClick: () => navigate(`/?saved_library=${encodeURIComponent(page.id)}`) }]}
+              />
             </div> : null}
           </section>
         </main>
@@ -72,8 +87,30 @@ export default function LibraryPage() {
     <AppShell className="app-root explore-page" title="Library" actions={<BackLink fallbackTo={ROUTES.chat} />}>
       <main className="explore-main"><section className="explore-section">
         <div className="section-heading"><p className="eyebrow">Your saved curator responses</p><h1>Library</h1></div>
-        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search saved responses" aria-label="Search saved responses" />
-        {Object.entries(groupedByDate(pages)).map(([date, entries]) => <div key={date}><h2>{date}</h2>{entries.map((entry) => <Link className="thread-row" key={entry.id} to={`/library/${entry.id}`}><strong>{entry.name}</strong><span>{entry.searchable_text.slice(0, 160)}</span></Link>)}</div>)}
+        <label className="library-search">
+          <span className="material-symbols-outlined" aria-hidden="true">search</span>
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search saved responses" aria-label="Search saved responses" />
+        </label>
+        {Object.entries(groupedByDate(pages)).map(([date, entries]) => <div key={date}><h2>{date}</h2>{entries.map((entry) => (
+          <article className="thread-row library-row" key={entry.id}>
+            <button type="button" className="library-row-main" onClick={() => navigate(`/library/${entry.id}`)}>
+              <span className="library-row-title"><strong>{entry.name}</strong>{entry.persona?.name ? <span className="message-agent-meta library-persona-badge"><AgentAvatar name={entry.persona.name} /><span>{entry.persona.name}</span></span> : null}</span>
+              <em>{entry.summary || entry.searchable_text.slice(0, 160)}</em>
+            </button>
+            <ShareActionMenu
+              page={entry}
+              content={entry.content}
+              name={entry.name}
+              sourceSessionId={entry.source_session_id}
+              sourceMessageId={entry.source_message_id}
+              extraActions={[
+                { label: "Open", icon: "open_in_new", onClick: () => navigate(`/library/${entry.id}`) },
+                { label: "Chat from here", icon: "forum", onClick: () => navigate(`/?saved_library=${encodeURIComponent(entry.id)}`) },
+                { label: "Archive", icon: "archive", onClick: () => archive(entry) },
+              ]}
+            />
+          </article>
+        ))}</div>)}
       </section></main>
     </AppShell>
   );

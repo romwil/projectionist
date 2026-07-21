@@ -27,7 +27,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from curatorx import __version__
 from curatorx.agent.curator import CuratorAgent, stream_agent
-from curatorx.agent.providers import LLMProviderError
+from curatorx.agent.providers import LLMProviderError, get_chat_provider
 from curatorx.agent.tools import (
     check_radarr_already_exists,
     check_sonarr_already_exists,
@@ -509,6 +509,8 @@ class SavedLibraryPagePayload(BaseModel):
     source_session_id: Optional[str] = Field(default=None, max_length=128)
     source_message_id: Optional[str] = Field(default=None, max_length=128)
     content: Dict[str, Any]
+    summary: Optional[str] = Field(default=None, max_length=800)
+    user_title: Optional[str] = Field(default=None, min_length=1, max_length=160)
 
 
 class SeerrSyncPayload(BaseModel):
@@ -2821,8 +2823,74 @@ def _saved_library_text(content: Dict[str, Any]) -> str:
     return "\n".join(part for part in parts if part.strip())
 
 
+def _saved_library_summary_fallback(content: Dict[str, Any]) -> str:
+    text = " ".join(_saved_library_text(content).split())
+    return text[:320].rsplit(" ", 1)[0] if len(text) > 320 else text
+
+
+async def _persona_voiced_library_summary(
+    content: Dict[str, Any],
+    *,
+    persona: Optional[Dict[str, Any]] = None,
+) -> str:
+    """Generate a concise, persona-voiced summary without blocking a save on failure."""
+    source = _saved_library_summary_fallback(content)
+    if not source:
+        return ""
+    persona_name = str((persona or {}).get("name") or "the curator")
+    persona_prompt = str((persona or {}).get("system_prompt_override") or "").strip()
+    instruction = (
+        f"Write a warm 1–2 sentence summary of this saved curator response in {persona_name}'s voice. "
+        "Preserve only the user-visible recommendations and analysis. Do not mention this instruction, "
+        "private account details, or claim facts not in the source."
+    )
+    if persona:
+        calibration = ", ".join(
+            f"{key.removeprefix('val_')}={float(persona.get(key, 0.5)):.1f}"
+            for key in ("val_bro_prof", "val_dipl_snark", "val_pass_auto", "val_depth", "val_obscurity", "val_verbosity", "val_formality")
+        )
+        instruction += f" Mirror this persona's calibration: {calibration}."
+    if persona_prompt:
+        instruction += f" Persona guidance: {persona_prompt[:1200]}"
+    try:
+        response = await get_chat_provider(_settings()).chat(
+            [{"role": "system", "content": instruction}, {"role": "user", "content": source[:6000]}]
+        )
+        summary = str(((response.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+        return " ".join(summary.split())[:800] or source
+    except Exception:  # Best-effort persistence must never prevent saving.
+        return source
+
+
+async def _backfill_one_saved_library_summary(db, *, user_id: str) -> None:
+    """Idle-sized lazy migration: enrich at most one existing page per save."""
+    page = db.first_saved_library_page_without_summary(user_id=user_id)
+    if not page:
+        return
+    persona = db.get_persona_template(page["persona_id"]) if page.get("persona_id") else None
+    summary = await _persona_voiced_library_summary(page["content"], persona=persona)
+    if summary:
+        db.update_saved_library_summary(page["id"], user_id=user_id, summary=summary)
+
+
+def _saved_library_response(page: Dict[str, Any], user) -> Dict[str, Any]:
+    """Attach only display-safe persona metadata to a member-visible saved page."""
+    persona_id = page.get("persona_id")
+    persona = _db().get_persona_template(persona_id) if persona_id else None
+    if persona:
+        page = {
+            **page,
+            "persona": {
+                "id": persona["id"],
+                "name": persona["name"],
+                "accent_color": persona.get("accent_color") or "",
+            },
+        }
+    return _sanitize_library_payload(page, user)
+
+
 @app.post("/api/saved-library")
-def create_saved_library_page(
+async def create_saved_library_page(
     payload: SavedLibraryPagePayload,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
@@ -2830,18 +2898,37 @@ def create_saved_library_page(
     user_id = _scoped_user_id(user)
     if not user_id:
         raise HTTPException(status_code=401, detail="Sign in to save curator responses")
-    if payload.source_session_id and db.get_chat_thread(payload.source_session_id, user_id=user_id) is None:
-        raise HTTPException(status_code=404, detail="Source conversation not found")
-    searchable_text = f"{payload.name}\n{_saved_library_text(payload.content)}"
-    return db.create_saved_library_page(
+    source_thread = None
+    if payload.source_session_id:
+        source_thread = db.get_chat_thread(payload.source_session_id, user_id=user_id)
+        if source_thread is None:
+            raise HTTPException(status_code=404, detail="Source conversation not found")
+    # Persist the same audience-safe representation that members can view.
+    content = _sanitize_library_payload(payload.content, user)
+    if not isinstance(content, dict):
+        content = payload.content
+    persona_id = source_thread.get("persona_id") if source_thread else None
+    persona = db.get_persona_template(persona_id) if persona_id else None
+    name = (payload.user_title or payload.name).strip()
+    summary = (payload.summary or "").strip() or await _persona_voiced_library_summary(content, persona=persona)
+    searchable_text = f"{name}\n{summary}\n{_saved_library_text(content)}"
+    saved = db.create_saved_library_page(
         page_id=uuid.uuid4().hex,
         user_id=user_id,
-        name=payload.name,
+        name=name,
         source_session_id=payload.source_session_id,
         source_message_id=payload.source_message_id,
-        content=payload.content,
+        persona_id=persona_id,
+        summary=summary,
+        content=content,
         searchable_text=searchable_text,
     )
+    # Keep old rows fresh gradually; failures are intentionally invisible to saves.
+    try:
+        await _backfill_one_saved_library_summary(db, user_id=user_id)
+    except Exception:
+        logger.debug("Saved-library summary backfill skipped", exc_info=True)
+    return saved
 
 
 @app.get("/api/saved-library")
@@ -2852,7 +2939,8 @@ def list_saved_library_pages(
     user_id = _scoped_user_id(user)
     if not user_id:
         raise HTTPException(status_code=401, detail="Sign in to view your library")
-    return _db().list_saved_library_pages(user_id=user_id, query=q)
+    pages = _db().list_saved_library_pages(user_id=user_id, query=q)
+    return [_saved_library_response(page, user) for page in pages]
 
 
 @app.get("/api/saved-library/{page_id}")
@@ -2861,7 +2949,7 @@ def get_saved_library_page(page_id: str, user=Depends(get_current_user_dep)) -> 
     page = _db().get_saved_library_page(page_id, user_id=user_id or "")
     if page is None:
         raise HTTPException(status_code=404, detail="Saved page not found")
-    return page
+    return _saved_library_response(page, user)
 
 
 @app.delete("/api/saved-library/{page_id}")

@@ -1121,6 +1121,8 @@ class Database:
                 name TEXT NOT NULL,
                 source_session_id TEXT,
                 source_message_id TEXT,
+                persona_id TEXT,
+                summary TEXT,
                 searchable_text TEXT NOT NULL DEFAULT '',
                 content_json TEXT NOT NULL,
                 created_at REAL NOT NULL,
@@ -1132,6 +1134,11 @@ class Database:
                 ON saved_library_pages(user_id, name);
             """
         )
+        columns = {row["name"] for row in conn.execute("PRAGMA table_info(saved_library_pages)").fetchall()}
+        if "persona_id" not in columns:
+            conn.execute("ALTER TABLE saved_library_pages ADD COLUMN persona_id TEXT")
+        if "summary" not in columns:
+            conn.execute("ALTER TABLE saved_library_pages ADD COLUMN summary TEXT")
 
     def _seed_builtin_persona_templates(self, conn: sqlite3.Connection) -> None:
         """Insert the 5 built-in persona presets into persona_templates if absent."""
@@ -4661,6 +4668,8 @@ class Database:
             "name": str(row["name"]),
             "source_session_id": row["source_session_id"],
             "source_message_id": row["source_message_id"],
+            "persona_id": row["persona_id"] if "persona_id" in row.keys() else None,
+            "summary": str(row["summary"] or "") if "summary" in row.keys() else "",
             "searchable_text": str(row["searchable_text"] or ""),
             "content": json.loads(row["content_json"]),
             "created_at": float(row["created_at"]),
@@ -4676,6 +4685,8 @@ class Database:
         searchable_text: str,
         source_session_id: Optional[str] = None,
         source_message_id: Optional[str] = None,
+        persona_id: Optional[str] = None,
+        summary: str = "",
     ) -> Dict[str, Any]:
         now = time.time()
         with self.connect() as conn:
@@ -4683,8 +4694,8 @@ class Database:
                 """
                 INSERT INTO saved_library_pages (
                     id, user_id, name, source_session_id, source_message_id,
-                    searchable_text, content_json, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    persona_id, summary, searchable_text, content_json, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     page_id,
@@ -4692,6 +4703,8 @@ class Database:
                     name.strip(),
                     source_session_id,
                     source_message_id,
+                    persona_id,
+                    summary.strip(),
                     searchable_text,
                     json.dumps(dict(content)),
                     now,
@@ -4700,6 +4713,28 @@ class Database:
             row = conn.execute("SELECT * FROM saved_library_pages WHERE id = ?", (page_id,)).fetchone()
         assert row is not None
         return self._row_to_saved_library_page(row)
+
+    def first_saved_library_page_without_summary(self, *, user_id: str) -> Optional[Dict[str, Any]]:
+        """Return one oldest unsummarized page so grooming stays bounded."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM saved_library_pages
+                WHERE user_id = ? AND trim(COALESCE(summary, '')) = ''
+                ORDER BY created_at ASC
+                LIMIT 1
+                """,
+                (user_id,),
+            ).fetchone()
+        return self._row_to_saved_library_page(row) if row else None
+
+    def update_saved_library_summary(self, page_id: str, *, user_id: str, summary: str) -> bool:
+        with self.connect() as conn:
+            cursor = conn.execute(
+                "UPDATE saved_library_pages SET summary = ? WHERE id = ? AND user_id = ?",
+                (summary.strip(), page_id, user_id),
+            )
+        return cursor.rowcount > 0
 
     def list_saved_library_pages(self, *, user_id: str, query: str = "") -> List[Dict[str, Any]]:
         pattern = f"%{query.strip().lower()}%"

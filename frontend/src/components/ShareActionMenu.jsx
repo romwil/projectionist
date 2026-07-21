@@ -1,0 +1,134 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { saveLibraryPage } from "../api/client";
+
+function libraryUrl(id) {
+  return new URL(`/library/${encodeURIComponent(id)}`, window.location.origin).toString();
+}
+
+export default function ShareActionMenu({
+  page,
+  content,
+  name = "Curator response",
+  sourceSessionId,
+  sourceMessageId,
+  extraActions = [],
+  onSaved,
+  label = "Share and export",
+}) {
+  const [open, setOpen] = useState(false);
+  const [savedPage, setSavedPage] = useState(page || null);
+  const [status, setStatus] = useState("");
+  const rootRef = useRef(null);
+  const popoverRef = useRef(null);
+  const savePromiseRef = useRef(null);
+  const [popoverStyle, setPopoverStyle] = useState(null);
+
+  useEffect(() => setSavedPage(page || null), [page]);
+  useEffect(() => {
+    const close = (event) => {
+      if (!rootRef.current?.contains(event.target) && !popoverRef.current?.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+  useEffect(() => {
+    const close = (event) => event.key === "Escape" && setOpen(false);
+    document.addEventListener("keydown", close);
+    return () => document.removeEventListener("keydown", close);
+  }, []);
+  useLayoutEffect(() => {
+    if (!open) return undefined;
+    const position = () => {
+      const anchor = rootRef.current?.querySelector(".share-action-grip")?.getBoundingClientRect();
+      const menu = popoverRef.current?.getBoundingClientRect();
+      if (!anchor || !menu) return;
+      const margin = 8;
+      setPopoverStyle({
+        top: `${Math.max(margin, Math.min(anchor.bottom + margin, window.innerHeight - menu.height - margin))}px`,
+        left: `${Math.max(margin, Math.min(anchor.right - menu.width, window.innerWidth - menu.width - margin))}px`,
+      });
+    };
+    position();
+    window.addEventListener("resize", position);
+    window.addEventListener("scroll", position, true);
+    return () => {
+      window.removeEventListener("resize", position);
+      window.removeEventListener("scroll", position, true);
+    };
+  }, [open, status]);
+
+  async function ensureSaved() {
+    if (savedPage?.id) return savedPage;
+    if (!savePromiseRef.current) {
+      savePromiseRef.current = saveLibraryPage({
+        name,
+        source_session_id: sourceSessionId,
+        source_message_id: sourceMessageId,
+        content,
+      }).then((created) => {
+        setSavedPage(created);
+        onSaved?.(created);
+        return created;
+      }).finally(() => {
+        savePromiseRef.current = null;
+      });
+    }
+    return savePromiseRef.current;
+  }
+
+  async function run(action) {
+    try {
+      const item = await ensureSaved();
+      const url = libraryUrl(item.id);
+      if (action === "save") setStatus("Saved to your library.");
+      if (action === "copy") {
+        await navigator.clipboard?.writeText(url);
+        setStatus("Library link copied.");
+      }
+      if (action.startsWith("export:")) {
+        window.open(`/api/saved-library/${encodeURIComponent(item.id)}/export?format=${action.slice(7)}`, "_blank", "noopener");
+        setStatus("Export opened.");
+      }
+      if (action === "pdf") {
+        window.open(`${url}?print=1`, "_blank", "noopener");
+        setStatus("Print view opened.");
+      }
+      if (action === "more") {
+        if (navigator.share) await navigator.share({ title: item.name, url });
+        else {
+          await navigator.clipboard?.writeText(url);
+          setStatus("System share is unavailable; link copied.");
+        }
+      }
+    } catch (error) {
+      setStatus(error.message || "Could not prepare this library item.");
+    }
+  }
+
+  const popover = open && typeof document !== "undefined" ? createPortal(
+    <div className="share-action-popover" ref={popoverRef} role="menu" style={popoverStyle || { visibility: "hidden" }}>
+      <button type="button" onClick={() => run("save")}><span className="material-symbols-outlined">bookmark_add</span>Save to library</button>
+      <button type="button" onClick={() => run("copy")}><span className="material-symbols-outlined">content_copy</span>Copy link</button>
+      <button type="button" onClick={() => run("export:markdown")}><span className="material-symbols-outlined">download</span>Export Markdown</button>
+      <button type="button" onClick={() => run("export:json")}><span className="material-symbols-outlined">data_object</span>Export JSON</button>
+      <button type="button" onClick={() => run("export:txt")}><span className="material-symbols-outlined">description</span>Export text</button>
+      <button type="button" onClick={() => run("pdf")}><span className="material-symbols-outlined">print</span>Print / PDF</button>
+      <button type="button" onClick={() => run("more")}><span className="material-symbols-outlined">ios_share</span>More…</button>
+      {extraActions.length ? <div className="share-action-extra">{extraActions.map((action) => (
+        <button key={action.label} type="button" onClick={() => { action.onClick(); setOpen(false); }}>
+          {action.icon ? <span className="material-symbols-outlined">{action.icon}</span> : null}{action.label}
+        </button>
+      ))}</div> : null}
+      {status ? <p className="share-action-status" role="status">{status}</p> : null}
+    </div>,
+    document.body,
+  ) : null;
+
+  return <div className="share-action-menu" ref={rootRef}>
+    <button type="button" className="share-action-grip app-topbar-icon" data-tooltip={label} aria-label={label} aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+      <span className="material-symbols-outlined" aria-hidden="true">more_vert</span>
+    </button>
+    {popover}
+  </div>;
+}
