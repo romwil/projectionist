@@ -1,6 +1,30 @@
 {
-  "generated_at": "2026-07-21T05:53:47Z",
+  "generated_at": "2026-07-21T06:02:36Z",
   "releases": [
+    {
+      "version": "1.17.1",
+      "date": "2026-07-21",
+      "summary": "A docs-only release that publishes the roadmap for what's coming next. No code, API, prompt, or UI changes — CuratorX behaves exactly as it did in 1.17.0. The Delight wishlist now lays out, as ready-to-plan milestones, what we intend to build for members, younger viewers and guests, and the AI curators themselves.",
+      "highlights": [
+        "**A published roadmap for what's next.** The Delight wishlist now reads as a sequenced plan: Phase 1 (the curator's memory) shipped in 1.10.0 and Phase 2 (owner tools) in 1.16.0, and Phases 3–5 are spelled out — everyday wins for members, a safe and friendly door for younger viewers and guests, and more range for the AI curators.",
+        "**Honest about what's ready vs. greenfield.** Each upcoming phase says plainly what it can build on today (your watchlist, curated courses, taste profile, weekly digest) and what's genuinely new, so there are no surprises when the work is picked up."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "**`docs/DELIGHT-WISHLIST.md` gained a phased delivery roadmap.** Added a \"Roadmap at a glance\" status table and Mermaid flow (Phase 1 ✅ 1.10.0 → Phase 2 ✅ 1.16.0 → Phases 3–5 planned), plus detailed, pick-up-later milestone write-ups for **Phase 3 (adult member)** — where-to-watch, synced lists, surfaced resume, personalized weekly rail, tunable taste profile, arrival notifications; **Phase 4 (youth/guest)** — a moderated youth experience and a guest safe-browse tour + request-access; and **Phase 5 (AI-persona love/like)** — now-watching, syllabus/citations, cross-service acquisition path, and mood tuning. Each milestone carries a \"why / who it delights\" intro, Must/Love/Like-framed capabilities, the shipped substrate it builds on versus what is greenfield, and open questions to resolve at planning time. The persona/archetype backlog is retained as the source of the phases, with shipped/pending status reconciled across all five phases.",
+            "**`README.md`** documentation table entry for the Delight wishlist now notes the phased roadmap (Phases 1–2 shipped; 3–5 planned)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Docs-only change; no source, schema, prompt, or UI modifications. `test_version` (version parity across `curatorx/_version.py`, `package.json`, and the lockfiles) and `test_release_notes_static` remain green, and `frontend/public/release-notes.json` was regenerated from this entry via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.17.0",
       "date": "2026-07-21",

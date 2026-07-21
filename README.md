@@ -173,7 +173,7 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | [MCP](docs/MCP.md) | Dual-mode MCP keys, schemas, and tools |
 | [Configuration](docs/CONFIGURATION.md) | Env vars and settings |
 | [Docker / Unraid](docs/DOCKER.md) | Container deployment |
-| [Delight wishlist](docs/DELIGHT-WISHLIST.md) | Living backlog of experience ideas by persona |
+| [Delight wishlist](docs/DELIGHT-WISHLIST.md) | Persona backlog + the phased delight roadmap (Phases 1–2 shipped; 3–5 planned) |
 | [Documentation style](docs/DOCS_STYLE.md) | The durable docs standard (warm + E-E-A-T, worked examples, runnable snippets) |
 | [Testing (e2e / CA)](docs/TESTING.md) | Playwright and CA release checklist |
 | [Value-based testing](TESTING.md) | How to write logic-level backend tests |
