@@ -12,6 +12,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from curatorx.web.rate_limit import clear_rate_limits
 from curatorx.web.session_tokens import (
     DEV_SESSION_SECRET,
     clear_session_secret_cache,
@@ -27,6 +28,7 @@ class ApiAuthzTests(unittest.TestCase):
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-api-authz-session-secret-value"
         clear_session_secret_cache()
+        clear_rate_limits()
         import curatorx.web.jobs as jobs
 
         jobs._manager = None
@@ -41,6 +43,7 @@ class ApiAuthzTests(unittest.TestCase):
 
         jobs._manager = None
         clear_session_secret_cache()
+        clear_rate_limits()
         for key in (
             "CURATORX_SKIP_DOTENV",
             "LLM_PROVIDER",

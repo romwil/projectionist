@@ -628,6 +628,16 @@ class Settings:
     def save(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(asdict(self), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        # settings.json holds secrets (llm_api_key, plex_token, *_api_key,
+        # webhook_secret). Restrict it to owner read/write so other local
+        # accounts / volume readers can't lift credentials. Mirrors the
+        # session-secret file (session_tokens.py). chmod is a no-op or raises on
+        # filesystems that don't support POSIX perms (e.g. some Windows/network
+        # mounts) — degrade gracefully rather than failing the save.
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            logger.debug("Could not chmod %s to 0600 (unsupported filesystem?)", path)
 
 
 def _load_settings_file_data(data_dir: Path) -> Dict[str, Any]:

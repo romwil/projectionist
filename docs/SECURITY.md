@@ -67,7 +67,7 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 | **S8** | High | Empty webhook secret accepted any Plex webhook POST. | Spoof webhook events to queue sync/side effects. | **Mitigated** | Empty webhook secret → 503; header required when configured. |
 | **S9** | Medium | Session cookie lacked `Secure` behind HTTPS proxies. | Weaker cookie story on HTTPS / CSRF edge cases. | **Mitigated** | `Secure` cookie when `X-Forwarded-Proto=https`. |
 | **S10** | Medium | Seerr path could skip confirmation. | Tool args submit Seerr requests immediately. | **Mitigated** | Seerr tool path always returns a confirmation token. |
-| **S11** | Medium | Settings JSON stores API keys in plaintext under `/config`. | Read volume / backup / host filesystem → fleet credentials. | **Open** | Protect `/config` permissions and backups; treat volume as secret material. |
+| **S11** | Medium | Settings JSON stores API keys in plaintext under `/config`. | Read volume / backup / host filesystem → fleet credentials. | **Mitigated** | `settings.json` is now written `0600` (owner-only) on every save, matching the session-secret file; the values are still plaintext at rest, so protect volume mounts and backups and rotate on exposure (see [Rotating secrets & keys](#rotating-secrets--keys)). |
 | **S12** | Low | Docs understated multi-user API enforcement. | Operators misread network-peer risk. | **Mitigated** | Docs + middleware aligned for multi-user. |
 | **S13** | Low | Final Docker image runs as root (no `USER`). | Container breakout has root inside the image. | **Mitigated** | Entrypoint script auto-chowns `/config` to `curatorx` (UID/GID 1000) and drops privileges via `gosu`. Compatible with existing root-owned volumes and Kubernetes `runAsUser`. |
 | **S14** | High | Rate limiter trusted `X-Forwarded-For` on direct LAN binds. | Rotate spoofed IPs to bypass auth throttles / PIN brute force. | **Mitigated** | Ignore forwarded headers unless `CURATORX_TRUST_PROXY_HEADERS=1`; set that only behind a trusted reverse proxy. |
@@ -91,6 +91,50 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 6. Prefer a **privacy MCP key** for shared/third-party clients; only mint `CURATORX_MCP_FULL_API_KEY` for trusted in-stack automation (keys must differ).
 7. Leave **`CURATORX_TRUST_PROXY_HEADERS` unset** on direct LAN binds; enable only when a trusted reverse proxy sets client IP headers.
 8. Keep **`CURATORX_EXPOSE_OPENAPI` unset** in production; use it only for local API exploration.
+
+## Rotating secrets & keys
+
+Every credential CuratorX holds lives in one of two places: your **`settings.json`** under the config volume (`{DATA_DIR}`, `/config` in the default Docker image) or an **environment variable**. As of the current release, `settings.json` is written **`0600`** (owner read/write only) on every save, so a second local account can't read it — but the values are still **plaintext at rest**, so treat the volume and its backups as secret material and rotate promptly whenever a key may have been exposed (a leaked backup, a shared screenshot, an offboarded operator, or just a periodic hygiene pass).
+
+**How it works:** CuratorX never rotates a live credential for you — that's an owner action, because the real secret lives at the *provider* (TMDB, your LLM vendor, Radarr/Sonarr, Plex). Rotation is always two steps: **issue a new secret at the source, then update CuratorX to match.** Updating only one side breaks the integration.
+
+### The golden rule
+
+1. **Revoke/reissue at the provider first** (regenerate the API key in TMDB, roll the token in Plex, etc.).
+2. **Update the value in CuratorX** — via the UI or the file.
+3. **Verify** the integration still works, then confirm the old secret is dead.
+
+### Update in the UI (recommended)
+
+Sign in as the **owner**, open **Settings**, paste the new value into the matching field (LLM API key, Plex token, Radarr/Sonarr/TMDB keys, webhook secret…), and **Save**. Saving rewrites `settings.json` and re-applies `0600` automatically.
+
+### Update by editing the file (headless / scripted)
+
+```bash
+# Owner-only edit of the secrets file, then restart to load it.
+# {DATA_DIR} is /config in the default image.
+sudo nano /config/settings.json          # set "tmdb_api_key": "YOUR_NEW_TMDB_KEY"
+docker compose restart curatorx          # reload settings on boot
+
+# Confirm the file is owner-only (expect: 600)
+stat -c '%a %U' /config/settings.json    # → 600 curatorx
+```
+
+If your platform doesn't support POSIX permissions (some network mounts), the `0600` step is skipped gracefully — in that case, lean harder on volume-level access controls.
+
+### Secret-by-secret notes
+
+| Secret | Field / var | Rotate at the source by… | Then update in CuratorX |
+|--------|-------------|--------------------------|-------------------------|
+| **LLM API key** | `llm_api_key` | Revoking the key in your LLM vendor's console and minting a new one | Settings → save (or edit file + restart) |
+| **Plex token** | `plex_token` | Signing out other sessions / re-linking Plex to force a fresh token | Settings → save |
+| ***arr keys** | `radarr_api_key`, `sonarr_api_key` | Regenerating the API key in Radarr/Sonarr **Settings → General** | Settings → save |
+| **Metadata keys** | `tmdb_api_key`, `tvdb_api_key`, `omdb_api_key`, `fanart_api_key` | Regenerating the key in each provider's developer dashboard | Settings → save |
+| **Webhook secret** | `webhook_secret` | Choosing a new random value (`openssl rand -hex 24`) | Settings → save, then update the Plex webhook URL to match |
+| **MCP keys** | `CURATORX_MCP_API_KEY`, `CURATORX_MCP_FULL_API_KEY` (env) | Choosing new random values (privacy and full keys **must differ**) | Update the env vars / Compose and restart |
+| **Session secret** | `CURATORX_SESSION_SECRET` (env) or `session_secret` file | Generating a long random value (`openssl rand -base64 48`) | Set the env var (or delete the file to auto-regenerate) and restart — **note:** rotating this invalidates every signed-in session |
+
+**Honest limits.** Rotating a key here does **not** retroactively scrub it from old container logs, shell history, or prior backups — clean those separately. And because secrets are plaintext at rest, rotation is your containment tool, not a substitute for protecting the `/config` volume in the first place.
 
 ## Penetration-test protocol
 

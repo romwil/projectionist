@@ -8,7 +8,13 @@ import uuid
 from typing import Any, AsyncIterator, Dict, List, Mapping, Optional
 
 from curatorx.agent.providers import get_chat_provider
-from curatorx.agent.tools import build_tool_definitions, ToolRegistry, build_system_prompt
+from curatorx.agent.tools import (
+    UNTRUSTED_MEMORY_TOOLS,
+    ToolRegistry,
+    build_system_prompt,
+    build_tool_definitions,
+    wrap_untrusted_data,
+)
 from curatorx.config_store import Settings, uses_seerr_request_path
 from curatorx.library.db import DEFAULT_LENS_ID, Database
 from curatorx.models.schemas import TitleCard
@@ -315,11 +321,16 @@ class CuratorAgent:
                     )
                 except Exception:
                     pass
+                tool_content = (
+                    wrap_untrusted_data(result)
+                    if str(name) in UNTRUSTED_MEMORY_TOOLS
+                    else result
+                )
                 messages.append(
                     {
                         "role": "tool",
                         "tool_call_id": call.get("id"),
-                        "content": result,
+                        "content": tool_content,
                     }
                 )
             response = await self.provider.chat(messages, tools=tool_defs)
@@ -541,7 +552,10 @@ async def stream_agent(
                 brief_args = args if isinstance(args, dict) else {"value": args}
                 yield json.dumps({"type": "tool_start", "name": name, "args": brief_args}) + "\n"
                 result = await registry.execute(str(name), args)
-                messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": result})
+                tool_content = (
+                    wrap_untrusted_data(result) if str(name) in UNTRUSTED_MEMORY_TOOLS else result
+                )
+                messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": tool_content})
                 summary = result if isinstance(result, str) else str(result)
                 if len(summary) > 240:
                     summary = summary[:237] + "..."
