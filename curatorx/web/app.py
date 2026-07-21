@@ -101,6 +101,7 @@ from curatorx.models.schemas import (
     CuratedListCreate,
     CuratedListItem,
     CuratedListItemCreate,
+    CuratedListItemUpdate,
     CuratedListUpdate,
     EngagementStreakResponse,
     Lens,
@@ -1705,10 +1706,88 @@ def delete_purge_candidates(
 ):
     keys = _normalize_rating_keys(payload)
     db = _db()
+    # Snapshot the index rows BEFORE deleting so the owner can undo this run.
+    snapshot = db.snapshot_library_items_by_rating_keys(keys)
     deleted = db.delete_library_items_by_rating_keys(keys)
     drop_cached_purge_keys(db, keys)
+    action_id: Optional[str] = None
+    if deleted > 0 and snapshot.get("items"):
+        titles = [str(item.get("title") or "") for item in snapshot["items"] if item.get("title")]
+        preview = ", ".join(titles[:3])
+        if len(titles) > 3:
+            preview += f" +{len(titles) - 3} more"
+        summary = f"Deleted {deleted} purge candidate{'s' if deleted != 1 else ''}"
+        if preview:
+            summary += f": {preview}"
+        action = db.record_grooming_action(
+            action_id=str(uuid.uuid4()),
+            action_type="purge_delete",
+            actor_user_id=getattr(user, "id", None),
+            summary=summary,
+            item_count=deleted,
+            snapshot=snapshot,
+        )
+        action_id = action["id"]
+    return {"deleted": deleted, "action_id": action_id, "undoable": action_id is not None}
+
+
+@app.get("/api/admin/grooming/actions")
+def list_grooming_actions(
+    limit: int = 20,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """List recent reversible grooming actions (newest first) for the undo UI."""
     del user
-    return {"deleted": deleted}
+    actions = _db().list_grooming_actions(limit=limit)
+    return {"actions": actions, "count": len(actions)}
+
+
+@app.post("/api/admin/grooming/actions/{action_id}/undo")
+def undo_grooming_action(
+    action_id: str,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Restore the index rows a destructive grooming action deleted.
+
+    Only CuratorX index rows are restored; embeddings backfill on the next
+    enrichment cycle. Plex media files were never touched by the delete.
+    """
+    del user
+    db = _db()
+    try:
+        result = db.undo_grooming_action(action_id)
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    if result is None:
+        raise HTTPException(status_code=404, detail="Grooming action not found")
+    return {
+        "undone": True,
+        "restored": result.get("restored", 0),
+        "action": {k: v for k, v in result.items() if k != "snapshot"},
+    }
+
+
+@app.get("/api/admin/weekly-digest")
+def get_weekly_digest(
+    limit: int = 8,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Return the latest weekly digest snapshot plus recent history."""
+    del user
+    db = _db()
+    latest = db.get_latest_weekly_digest()
+    history = db.list_weekly_digests(limit=limit)
+    return {"latest": latest, "history": history}
+
+
+@app.post("/api/admin/weekly-digest/generate")
+def generate_weekly_digest(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Assemble and store the digest for the current week on demand."""
+    del user
+    from curatorx.digest import snapshot_weekly_digest
+
+    digest = snapshot_weekly_digest(_db(), _settings())
+    return {"latest": digest}
 
 
 @app.post("/api/library/purge-candidates/dismiss")
@@ -3855,25 +3934,104 @@ def update_curated_list(
     payload: CuratedListUpdate,
     user=Depends(get_current_user_dep),
 ) -> CuratedList:
-    user_id = user.id if _settings().features.multi_user_enabled else None
-    if payload.name is None and payload.description is None and payload.list_kind is None:
+    settings = _settings()
+    user_id = user.id if settings.features.multi_user_enabled else None
+    if (
+        payload.name is None
+        and payload.description is None
+        and payload.list_kind is None
+        and payload.visibility is None
+    ):
         raise HTTPException(status_code=400, detail="No list fields to update")
+    db = _db()
+    updated: Optional[Dict[str, Any]] = None
+    # Publishing a list exposes it to household members — owner-only.
+    if payload.visibility is not None:
+        if settings.features.multi_user_enabled and user.role != "owner":
+            raise HTTPException(
+                status_code=403, detail="Only the owner can publish or unpublish a collection"
+            )
+        try:
+            updated = db.set_curated_list_visibility(
+                list_id, user_id=user_id, visibility=payload.visibility
+            )
+        except ValueError as error:
+            raise HTTPException(
+                status_code=400, detail=_safe_error_detail(error, "Invalid visibility")
+            ) from error
+        if updated is None:
+            raise HTTPException(status_code=404, detail="List not found")
+    if payload.name is not None or payload.description is not None or payload.list_kind is not None:
+        try:
+            updated = db.update_curated_list(
+                list_id,
+                user_id=user_id,
+                name=payload.name,
+                description=payload.description,
+                list_kind=payload.list_kind,
+            )
+        except ValueError as error:
+            raise HTTPException(
+                status_code=400,
+                detail=_safe_error_detail(error, "Invalid list update"),
+            ) from error
+        if updated is None:
+            raise HTTPException(status_code=404, detail="List not found")
+    assert updated is not None
+    return CuratedList(**updated)
+
+
+@app.patch("/api/lists/{list_id}/items/{item_id}", response_model=CuratedListItem)
+def update_curated_list_item(
+    list_id: str,
+    item_id: str,
+    payload: CuratedListItemUpdate,
+    user=Depends(get_current_user_dep),
+) -> CuratedListItem:
+    """Set a course step's note and/or ordering position (list owner only)."""
+    user_id = user.id if _settings().features.multi_user_enabled else None
+    if payload.note is None and payload.position is None:
+        raise HTTPException(status_code=400, detail="No item fields to update")
     try:
-        updated = _db().update_curated_list(
+        item = _db().update_curated_list_item(
             list_id,
+            item_id,
             user_id=user_id,
-            name=payload.name,
-            description=payload.description,
-            list_kind=payload.list_kind,
+            note=payload.note,
+            position=payload.position,
         )
     except ValueError as error:
         raise HTTPException(
-            status_code=400,
-            detail=_safe_error_detail(error, "Invalid list update"),
+            status_code=400, detail=_safe_error_detail(error, "Invalid list item update")
         ) from error
-    if updated is None:
-        raise HTTPException(status_code=404, detail="List not found")
-    return CuratedList(**updated)
+    if item is None:
+        raise HTTPException(status_code=404, detail="List item not found")
+    return CuratedListItem(**item)
+
+
+@app.get("/api/collections", response_model=CuratedListCollectionResponse)
+def list_published_collections(
+    user=Depends(get_current_user_dep),
+) -> CuratedListCollectionResponse:
+    """Household-visible published collections/courses (any signed-in member)."""
+    del user
+    items = _db().list_published_lists()
+    return CuratedListCollectionResponse(
+        items=[CuratedList(**item) for item in items],
+        count=len(items),
+    )
+
+
+@app.get("/api/collections/{list_id}", response_model=CuratedList)
+def get_published_collection(
+    list_id: str,
+    user=Depends(get_current_user_dep),
+) -> CuratedList:
+    del user
+    found = _db().get_published_list(list_id, include_items=True)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Collection not found")
+    return CuratedList(**found)
 
 
 @app.delete("/api/lists/{list_id}")

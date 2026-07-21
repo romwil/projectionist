@@ -32,6 +32,7 @@ def register_all(scheduler: IdleScheduler) -> None:
         summary_motifs,
         taste_refresh,
         title_relations_refresh,
+        weekly_digest,
     )
 
     semantic_embeddings.register(scheduler)
@@ -51,3 +52,4 @@ def register_all(scheduler: IdleScheduler) -> None:
     keyword_theme_tagging.register(scheduler)
     llm_theme_tagging.register(scheduler)
     purge_candidates.register(scheduler)
+    weekly_digest.register(scheduler)

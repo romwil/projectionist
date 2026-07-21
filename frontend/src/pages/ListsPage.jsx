@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { deleteCuratedListItem, getCuratedList, listCuratedLists } from "../api/client";
 import BackLink from "../components/BackLink";
+import CourseAuthoringPanel from "../components/CourseAuthoringPanel";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
@@ -17,12 +18,21 @@ import {
 
 export default function ListsPage() {
   const { listId } = useParams();
-  const { multiUserEnabled } = useAuthGate();
+  const { multiUserEnabled, isOwner } = useAuthGate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ loading: true, lists: [], list: null, error: "" });
   const [columns, setColumns] = useState(null);
   const [recommendItem, setRecommendItem] = useState(null);
   const browse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
+  const reload = useCallback(async () => {
+    const data = listId ? await getCuratedList(listId) : await listCuratedLists();
+    setState({
+      loading: false,
+      lists: listId ? [] : data?.items || data || [],
+      list: listId ? data : null,
+      error: "",
+    });
+  }, [listId]);
   useEffect(() => {
     let cancelled = false;
     const request = listId ? getCuratedList(listId) : listCuratedLists();
@@ -78,6 +88,9 @@ export default function ListsPage() {
     {state.loading ? <p className="status status-secondary">Loading…</p> : null}
     {state.error ? <p className="error">{state.error}</p> : null}
     {!listId && !state.loading ? <div className="curated-list-grid">{state.lists.map((list) => <Link key={list.id} to={`/lists/${list.id}`} className="review-prompt-card"><strong>{list.name}</strong><span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span></Link>)}</div> : null}
+    {listId && !state.loading && isOwner ? (
+      <CourseAuthoringPanel list={state.list} onRefresh={reload} />
+    ) : null}
     {listId && !state.loading ? (
       <section className="tag-results">
         <MediaBrowseControls

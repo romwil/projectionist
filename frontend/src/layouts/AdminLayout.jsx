@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { getAuthMe, getFeatures } from "../api/client";
+import { getAuthMe, getFeatures, listMediaIssues } from "../api/client";
 import AppNav, { AppNavToggle } from "../components/AppNav";
 
 export const ADMIN_NAV = [
@@ -14,6 +14,8 @@ export const ADMIN_NAV = [
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },
   { to: "/admin/advanced", id: "advanced", label: "Advanced" },
   { to: "/admin/dashboard", id: "dashboard", label: "Dashboard" },
+  { to: "/admin/issues", id: "issues", label: "Issues", badge: "openIssues" },
+  { to: "/admin/youth", id: "youth", label: "Youth review" },
 ];
 
 export default function AdminLayout() {
@@ -23,6 +25,7 @@ export default function AdminLayout() {
   const [wizardMode, setWizardMode] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [appNavOpen, setAppNavOpen] = useState(false);
+  const [openIssues, setOpenIssues] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +67,25 @@ export default function AdminLayout() {
       cancelled = true;
     };
   }, [navigate]);
+
+  useEffect(() => {
+    if (!allowed) return undefined;
+    let cancelled = false;
+    listMediaIssues({ status: "open" })
+      .then((data) => {
+        if (cancelled) return;
+        const count = typeof data?.count === "number" ? data.count : (data?.items || []).length;
+        setOpenIssues(count);
+      })
+      .catch(() => {
+        if (!cancelled) setOpenIssues(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [allowed]);
+
+  const badgeValue = { openIssues };
 
   if (!ready) {
     return (
@@ -116,19 +138,32 @@ export default function AdminLayout() {
               <h1 className="admin-rail-title">Admin</h1>
             </div>
             <nav className="admin-rail-nav" aria-label="Admin sections">
-              {ADMIN_NAV.map((item) => (
-                <NavLink
-                  key={item.id}
-                  to={item.to}
-                  className={({ isActive }) =>
-                    `admin-rail-link ${isActive ? "admin-rail-link-active" : ""}`
-                  }
-                  data-testid={`admin-nav-${item.id}`}
-                  onClick={() => setDrawerOpen(false)}
-                >
-                  {item.label}
-                </NavLink>
-              ))}
+              {ADMIN_NAV.map((item) => {
+                const count = item.badge ? badgeValue[item.badge] : null;
+                const showBadge = typeof count === "number" && count > 0;
+                return (
+                  <NavLink
+                    key={item.id}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      `admin-rail-link ${isActive ? "admin-rail-link-active" : ""}`
+                    }
+                    data-testid={`admin-nav-${item.id}`}
+                    onClick={() => setDrawerOpen(false)}
+                  >
+                    <span>{item.label}</span>
+                    {showBadge ? (
+                      <span
+                        className="admin-rail-badge"
+                        data-testid={`admin-nav-badge-${item.id}`}
+                        aria-label={`${count} open`}
+                      >
+                        {count > 99 ? "99+" : count}
+                      </span>
+                    ) : null}
+                  </NavLink>
+                );
+              })}
             </nav>
             <div className="admin-rail-footer">
               <Link to="/settings" className="admin-rail-meta-link">

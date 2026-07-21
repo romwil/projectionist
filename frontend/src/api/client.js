@@ -499,6 +499,31 @@ export async function deleteCuratedListItem(listId, itemId) {
   });
 }
 
+/** Owner authoring: set a course step's note and/or ordering position. */
+export async function updateCuratedListItem(listId, itemId, payload) {
+  return api(`/lists/${encodeURIComponent(listId)}/items/${encodeURIComponent(itemId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Owner-only: publish a list to household members or make it private again. */
+export async function setCuratedListVisibility(listId, visibility) {
+  return api(`/lists/${encodeURIComponent(listId)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ visibility }),
+  });
+}
+
+/** Household-visible published collections/courses (any signed-in member). */
+export async function listPublishedCollections() {
+  return api("/collections");
+}
+
+export async function getPublishedCollection(listId) {
+  return api(`/collections/${encodeURIComponent(listId)}`);
+}
+
 export async function createMediaIssue(payload) {
   return api("/media-issues", {
     method: "POST",
@@ -527,6 +552,35 @@ export async function repairMediaIssue(issueId) {
 
 export async function getEngagementStreak() {
   return api("/engagement/streak");
+}
+
+/** Owner-only: review a Youth-flagged account's memory notes (fail-closed on the server). */
+export async function getUserMemory(userId) {
+  return api(`/users/${encodeURIComponent(userId)}/memory`);
+}
+
+/** Owner-only: list recent reversible grooming actions for the undo UI. */
+export async function listGroomingActions({ limit = 20 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/admin/grooming/actions?${params}`);
+}
+
+/** Owner-only: undo (restore) a destructive grooming action by id. */
+export async function undoGroomingAction(actionId) {
+  return api(`/admin/grooming/actions/${encodeURIComponent(actionId)}/undo`, {
+    method: "POST",
+  });
+}
+
+/** Owner-only: latest weekly in-app digest snapshot plus recent history. */
+export async function getWeeklyDigest({ limit = 8 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/admin/weekly-digest?${params}`);
+}
+
+/** Owner-only: assemble and store the digest for the current week on demand. */
+export async function generateWeeklyDigest() {
+  return api("/admin/weekly-digest/generate", { method: "POST" });
 }
 
 export async function getPersonas() {

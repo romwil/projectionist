@@ -339,6 +339,8 @@ class Database:
             self._migrate_multi_user_columns(conn)  # reviews/prefs tables exist after phase4
             self._migrate_embeddings_content_hash(conn)
             self._migrate_curated_lists(conn)
+            self._migrate_grooming_action_log(conn)
+            self._migrate_weekly_digests(conn)
             self._migrate_media_issues(conn)
             self._migrate_persona_templates(conn)
             self._migrate_recommendations(conn)
@@ -865,7 +867,58 @@ class Database:
             )
         conn.execute(
             "UPDATE curated_lists SET list_kind = 'list' "
-            "WHERE list_kind IS NULL OR list_kind NOT IN ('list', 'playlist')"
+            "WHERE list_kind IS NULL OR list_kind NOT IN ('list', 'playlist', 'course')"
+        )
+        # Collections/courses (M4): owner can publish a list to household members and
+        # sequence it as an ordered "course" with a note per step.
+        if "visibility" not in cols:
+            conn.execute(
+                "ALTER TABLE curated_lists ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'"
+            )
+        if "published_at" not in cols:
+            conn.execute("ALTER TABLE curated_lists ADD COLUMN published_at REAL")
+        conn.execute(
+            "UPDATE curated_lists SET visibility = 'private' "
+            "WHERE visibility IS NULL OR visibility NOT IN ('private', 'published')"
+        )
+        item_cols = self._table_columns(conn, "curated_list_items")
+        if "note" not in item_cols:
+            conn.execute("ALTER TABLE curated_list_items ADD COLUMN note TEXT NOT NULL DEFAULT ''")
+
+    def _migrate_grooming_action_log(self, conn: sqlite3.Connection) -> None:
+        """Reversible action log for destructive bulk grooming (M4 safe undo)."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS grooming_action_log (
+                id TEXT PRIMARY KEY,
+                action_type TEXT NOT NULL,
+                actor_user_id TEXT,
+                summary TEXT NOT NULL DEFAULT '',
+                item_count INTEGER NOT NULL DEFAULT 0,
+                snapshot_json TEXT NOT NULL DEFAULT '{}',
+                created_at REAL NOT NULL,
+                undone_at REAL
+            );
+            CREATE INDEX IF NOT EXISTS idx_grooming_action_log_created
+            ON grooming_action_log(created_at DESC);
+            """
+        )
+
+    def _migrate_weekly_digests(self, conn: sqlite3.Connection) -> None:
+        """Weekly library digest snapshots (M4 in-app digest)."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS weekly_digests (
+                id TEXT PRIMARY KEY,
+                week_start REAL NOT NULL,
+                generated_at REAL NOT NULL,
+                payload_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_weekly_digests_week_start
+            ON weekly_digests(week_start);
+            CREATE INDEX IF NOT EXISTS idx_weekly_digests_generated
+            ON weekly_digests(generated_at DESC);
+            """
         )
 
     def _migrate_media_issues(self, conn: sqlite3.Connection) -> None:
@@ -2838,6 +2891,240 @@ class Database:
                 return int(cursor.rowcount)
 
         return run_with_db_lock_retry(_write, label="delete_library_items")
+
+    def snapshot_library_items_by_rating_keys(
+        self, rating_keys: List[str]
+    ) -> Dict[str, Any]:
+        """Capture full ``library_items`` (+ episodes) rows so a delete is reversible.
+
+        Embeddings are intentionally NOT captured — they are large, derived
+        vectors that idle enrichment regenerates. The snapshot restores the index
+        rows the owner sees; embeddings backfill on the next enrichment cycle.
+        """
+        keys = [str(k) for k in rating_keys if str(k).strip()]
+        if not keys:
+            return {"items": [], "episodes": []}
+        with self.connect() as conn:
+            placeholders = ", ".join("?" for _ in keys)
+            item_rows = conn.execute(
+                f"SELECT * FROM library_items WHERE rating_key IN ({placeholders})",
+                keys,
+            ).fetchall()
+            items = [dict(row) for row in item_rows]
+            item_ids = [int(row["id"]) for row in item_rows]
+            episodes: List[Dict[str, Any]] = []
+            if item_ids:
+                id_ph = ", ".join("?" for _ in item_ids)
+                episode_rows = conn.execute(
+                    f"SELECT * FROM library_episodes WHERE show_item_id IN ({id_ph})",
+                    item_ids,
+                ).fetchall()
+                episodes = [dict(row) for row in episode_rows]
+        return {"items": items, "episodes": episodes}
+
+    def restore_library_items_snapshot(self, snapshot: Dict[str, Any]) -> int:
+        """Re-insert previously-deleted ``library_items`` (+ episodes) rows.
+
+        Idempotent per row: rows whose id already exists are skipped. Returns the
+        number of library items restored.
+        """
+        items = list((snapshot or {}).get("items") or [])
+        episodes = list((snapshot or {}).get("episodes") or [])
+        if not items:
+            return 0
+
+        def _write() -> int:
+            restored = 0
+            with self.connect() as conn:
+                item_cols = self._table_columns(conn, "library_items")
+                episode_cols = self._table_columns(conn, "library_episodes")
+                existing_ids = {
+                    int(row["id"])
+                    for row in conn.execute("SELECT id FROM library_items").fetchall()
+                }
+                restored_ids: set[int] = set()
+                for row in items:
+                    row_id = row.get("id")
+                    if row_id is not None and int(row_id) in existing_ids:
+                        continue
+                    cols = [c for c in row.keys() if c in item_cols]
+                    if not cols:
+                        continue
+                    placeholders = ", ".join("?" for _ in cols)
+                    col_sql = ", ".join(cols)
+                    conn.execute(
+                        f"INSERT OR IGNORE INTO library_items ({col_sql}) VALUES ({placeholders})",
+                        [row.get(c) for c in cols],
+                    )
+                    if row_id is not None:
+                        restored_ids.add(int(row_id))
+                    restored += 1
+                for row in episodes:
+                    show_id = row.get("show_item_id")
+                    if show_id is None or int(show_id) not in restored_ids:
+                        continue
+                    cols = [c for c in row.keys() if c in episode_cols]
+                    if not cols:
+                        continue
+                    placeholders = ", ".join("?" for _ in cols)
+                    col_sql = ", ".join(cols)
+                    conn.execute(
+                        f"INSERT OR IGNORE INTO library_episodes ({col_sql}) VALUES ({placeholders})",
+                        [row.get(c) for c in cols],
+                    )
+            return restored
+
+        return run_with_db_lock_retry(_write, label="restore_library_items")
+
+    def record_grooming_action(
+        self,
+        *,
+        action_id: str,
+        action_type: str,
+        actor_user_id: Optional[str],
+        summary: str,
+        item_count: int,
+        snapshot: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Persist a reversible grooming action with its restore snapshot."""
+        now = time.time()
+        payload = json.dumps(snapshot or {}, separators=(",", ":"))
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO grooming_action_log (
+                    id, action_type, actor_user_id, summary, item_count,
+                    snapshot_json, created_at, undone_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+                """,
+                (
+                    action_id,
+                    str(action_type),
+                    actor_user_id,
+                    str(summary or "")[:500],
+                    int(item_count),
+                    payload,
+                    now,
+                ),
+            )
+        got = self.get_grooming_action(action_id)
+        assert got is not None
+        return got
+
+    @staticmethod
+    def _row_to_grooming_action(
+        row: sqlite3.Row, *, include_snapshot: bool = False
+    ) -> Dict[str, Any]:
+        payload: Dict[str, Any] = {
+            "id": str(row["id"]),
+            "action_type": str(row["action_type"]),
+            "actor_user_id": str(row["actor_user_id"]) if row["actor_user_id"] is not None else None,
+            "summary": str(row["summary"] or ""),
+            "item_count": int(row["item_count"] or 0),
+            "created_at": float(row["created_at"]),
+            "undone_at": float(row["undone_at"]) if row["undone_at"] is not None else None,
+            "reversible": row["undone_at"] is None and int(row["item_count"] or 0) > 0,
+        }
+        if include_snapshot:
+            try:
+                payload["snapshot"] = json.loads(str(row["snapshot_json"] or "{}"))
+            except (TypeError, json.JSONDecodeError):
+                payload["snapshot"] = {}
+        return payload
+
+    def get_grooming_action(
+        self, action_id: str, *, include_snapshot: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM grooming_action_log WHERE id = ?",
+                (action_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_grooming_action(row, include_snapshot=include_snapshot)
+
+    def list_grooming_actions(self, *, limit: int = 20) -> List[Dict[str, Any]]:
+        capped = max(1, min(int(limit or 20), 100))
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM grooming_action_log ORDER BY created_at DESC LIMIT ?",
+                (capped,),
+            ).fetchall()
+        return [self._row_to_grooming_action(row) for row in rows]
+
+    def undo_grooming_action(self, action_id: str) -> Optional[Dict[str, Any]]:
+        """Restore a recorded grooming action's snapshot and mark it undone.
+
+        Returns the updated action dict with a ``restored`` count, or ``None`` if
+        the action does not exist. Raises ``ValueError`` if already undone.
+        """
+        action = self.get_grooming_action(action_id, include_snapshot=True)
+        if action is None:
+            return None
+        if action.get("undone_at") is not None:
+            raise ValueError("This grooming action has already been undone")
+        restored = self.restore_library_items_snapshot(action.get("snapshot") or {})
+        now = time.time()
+        with self.connect() as conn:
+            conn.execute(
+                "UPDATE grooming_action_log SET undone_at = ? WHERE id = ?",
+                (now, action_id),
+            )
+        updated = self.get_grooming_action(action_id)
+        assert updated is not None
+        updated["restored"] = restored
+        return updated
+
+    def save_weekly_digest(
+        self, *, digest_id: str, week_start: float, payload: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Upsert a weekly digest snapshot keyed by week_start."""
+        now = time.time()
+        body = json.dumps(payload or {}, separators=(",", ":"))
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO weekly_digests (id, week_start, generated_at, payload_json)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(week_start) DO UPDATE SET
+                    generated_at = excluded.generated_at,
+                    payload_json = excluded.payload_json
+                """,
+                (digest_id, float(week_start), now, body),
+            )
+        got = self.get_latest_weekly_digest()
+        assert got is not None
+        return got
+
+    @staticmethod
+    def _row_to_weekly_digest(row: sqlite3.Row) -> Dict[str, Any]:
+        try:
+            payload = json.loads(str(row["payload_json"] or "{}"))
+        except (TypeError, json.JSONDecodeError):
+            payload = {}
+        return {
+            "id": str(row["id"]),
+            "week_start": float(row["week_start"]),
+            "generated_at": float(row["generated_at"]),
+            "payload": payload if isinstance(payload, dict) else {},
+        }
+
+    def get_latest_weekly_digest(self) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM weekly_digests ORDER BY week_start DESC LIMIT 1"
+            ).fetchone()
+        return self._row_to_weekly_digest(row) if row else None
+
+    def list_weekly_digests(self, *, limit: int = 8) -> List[Dict[str, Any]]:
+        capped = max(1, min(int(limit or 8), 52))
+        with self.connect() as conn:
+            rows = conn.execute(
+                "SELECT * FROM weekly_digests ORDER BY week_start DESC LIMIT ?",
+                (capped,),
+            ).fetchall()
+        return [self._row_to_weekly_digest(row) for row in rows]
 
     def dismiss_purge_candidates(self, rating_keys: List[str]) -> int:
         """Mark rating_keys as dismissed so they won't appear as purge candidates."""
@@ -5490,8 +5777,8 @@ class Database:
         cleaned = (name or "").strip()
         if not cleaned:
             raise ValueError("name is required")
-        if list_kind not in {"list", "playlist"}:
-            raise ValueError("list_kind must be list or playlist")
+        if list_kind not in {"list", "playlist", "course"}:
+            raise ValueError("list_kind must be list, playlist, or course")
         now = time.time()
         with self.connect() as conn:
             existing = conn.execute(
@@ -5538,8 +5825,8 @@ class Database:
         cleaned_name = name.strip() if name is not None else None
         if cleaned_name is not None and not cleaned_name:
             raise ValueError("name cannot be empty")
-        if list_kind is not None and list_kind not in {"list", "playlist"}:
-            raise ValueError("list_kind must be list or playlist")
+        if list_kind is not None and list_kind not in {"list", "playlist", "course"}:
+            raise ValueError("list_kind must be list, playlist, or course")
         now = time.time()
         with self.connect() as conn:
             if user_id is None:
@@ -5782,6 +6069,137 @@ class Database:
                 return item
         return None
 
+    def set_curated_list_visibility(
+        self,
+        list_id: str,
+        *,
+        user_id: Optional[str] = None,
+        visibility: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Publish a list to household members (``published``) or make it private again."""
+        if visibility not in {"private", "published"}:
+            raise ValueError("visibility must be private or published")
+        now = time.time()
+        with self.connect() as conn:
+            if user_id is None:
+                existing = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id IS NULL",
+                    (list_id,),
+                ).fetchone()
+            else:
+                existing = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id = ?",
+                    (list_id, user_id),
+                ).fetchone()
+            if existing is None:
+                return None
+            published_at = now if visibility == "published" else None
+            conn.execute(
+                "UPDATE curated_lists SET visibility = ?, published_at = ?, updated_at = ? WHERE id = ?",
+                (visibility, published_at, now, list_id),
+            )
+        return self.get_curated_list(list_id, user_id=user_id, include_items=False)
+
+    def list_published_lists(self) -> List[Dict[str, Any]]:
+        """Return every list published to household members, newest first."""
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT l.*, (
+                    SELECT COUNT(*) FROM curated_list_items i WHERE i.list_id = l.id
+                ) AS item_count
+                FROM curated_lists l
+                WHERE l.visibility = 'published'
+                ORDER BY l.published_at DESC, l.updated_at DESC
+                """
+            ).fetchall()
+        return [self._row_to_curated_list(row) for row in rows]
+
+    def get_published_list(
+        self, list_id: str, *, include_items: bool = False
+    ) -> Optional[Dict[str, Any]]:
+        """Return a published list by id regardless of owner (members read path)."""
+        with self.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT l.*, (
+                    SELECT COUNT(*) FROM curated_list_items i WHERE i.list_id = l.id
+                ) AS item_count
+                FROM curated_lists l
+                WHERE l.id = ? AND l.visibility = 'published'
+                """,
+                (list_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            payload = self._row_to_curated_list(row)
+            if include_items:
+                items = conn.execute(
+                    """
+                    SELECT * FROM curated_list_items
+                    WHERE list_id = ?
+                    ORDER BY position ASC, created_at ASC
+                    """,
+                    (list_id,),
+                ).fetchall()
+                payload["items"] = [self._row_to_curated_list_item(item) for item in items]
+            return payload
+
+    def update_curated_list_item(
+        self,
+        list_id: str,
+        item_id: str,
+        *,
+        user_id: Optional[str] = None,
+        note: Optional[str] = None,
+        position: Optional[int] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Update a course step's note and/or ordering position (owner authoring)."""
+        if note is None and position is None:
+            raise ValueError("No item fields to update")
+        now = time.time()
+        with self.connect() as conn:
+            if user_id is None:
+                owned = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id IS NULL",
+                    (list_id,),
+                ).fetchone()
+            else:
+                owned = conn.execute(
+                    "SELECT id FROM curated_lists WHERE id = ? AND user_id = ?",
+                    (list_id, user_id),
+                ).fetchone()
+            if owned is None:
+                return None
+            existing = conn.execute(
+                "SELECT * FROM curated_list_items WHERE id = ? AND list_id = ?",
+                (item_id, list_id),
+            ).fetchone()
+            if existing is None:
+                return None
+            if note is not None:
+                next_note = note.strip()
+            elif "note" in existing.keys():
+                next_note = str(existing["note"] or "")
+            else:
+                next_note = ""
+            next_position = (
+                int(position) if position is not None else int(existing["position"] or 0)
+            )
+            conn.execute(
+                "UPDATE curated_list_items SET note = ?, position = ? WHERE id = ? AND list_id = ?",
+                (next_note, next_position, item_id, list_id),
+            )
+            conn.execute(
+                "UPDATE curated_lists SET updated_at = ? WHERE id = ?",
+                (now, list_id),
+            )
+            row = conn.execute(
+                "SELECT * FROM curated_list_items WHERE id = ? AND list_id = ?",
+                (item_id, list_id),
+            ).fetchone()
+        return self._row_to_curated_list_item(row) if row else None
+
     def create_media_issue(
         self,
         *,
@@ -5903,12 +6321,22 @@ class Database:
     def _row_to_curated_list(row: sqlite3.Row) -> Dict[str, Any]:
         keys = set(row.keys()) if hasattr(row, "keys") else set()
         item_count = int(row["item_count"]) if "item_count" in keys and row["item_count"] is not None else 0
+        visibility = (
+            str(row["visibility"] or "private") if "visibility" in keys else "private"
+        )
+        published_at = (
+            float(row["published_at"])
+            if "published_at" in keys and row["published_at"] is not None
+            else None
+        )
         return {
             "id": str(row["id"]),
             "user_id": str(row["user_id"]) if row["user_id"] is not None else None,
             "name": str(row["name"]),
             "description": str(row["description"] or ""),
             "list_kind": str(row["list_kind"] or "list") if "list_kind" in keys else "list",
+            "visibility": visibility,
+            "published_at": published_at,
             "created_at": float(row["created_at"]),
             "updated_at": float(row["updated_at"]),
             "item_count": item_count,
@@ -5929,5 +6357,6 @@ class Database:
             "title": str(row["title"]),
             "library_item_id": library_item_id,
             "position": int(row["position"] or 0),
+            "note": str(row["note"] or "") if "note" in keys else "",
             "created_at": float(row["created_at"]),
         }

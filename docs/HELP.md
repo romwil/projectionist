@@ -215,6 +215,74 @@ Open **Admin → Issues** to triage reports by status. Read the member's note an
 
 The safety model is deliberately conservative: auto-repair is an owner policy over narrow, logged playbooks — not a rule that every report should redownload or remove something. Supported high-confidence cases may identify a title already managed by the corresponding *arr service, mark a known bad file where the connector supports it, and request a search. CuratorX does **not** guess a title, delete arbitrary files, correct a bad metadata match blindly, or guarantee subtitles merely because a search was requested. If identity is incomplete, the title isn't managed, or the connector can't act safely, the issue records a clear skip/failure reason. Review the repair log after each run.
 
+### Library-health hero & issue badge
+
+The **Admin → Dashboard** now opens with a **library-health hero**: at-a-glance tiles for overall health, knowledge coverage, engagement streak, and the count of **open issues**, each linking into the page that fixes it. The Admin rail carries the same open-issue count as a badge next to **Issues**, so you can see the queue is backing up without opening it.
+
+The hero reuses the same aggregations the rest of the Dashboard already loads — nothing new is fetched per tile. The open-issue count comes from the existing queue:
+
+```bash
+# Owner host — the same open-issue count the badge shows
+curl -s "http://localhost:8788/api/media-issues?status=open" | python3 -m json.tool
+# → {"count": 3, "issues": [ ... ]}
+```
+
+### One-click grooming rerun with safe undo
+
+Grooming is the housekeeping pass that finds **purge candidates** (stale, unwatched, or low-signal titles) so you can prune the library. From **Admin → Dashboard** you can rerun the grooming warm-up in one click (it runs the same scheduled tasks as the multi-task preset), then act on the refreshed candidates.
+
+Deleting purge candidates is destructive, so CuratorX records every bulk delete in a **grooming action log** before it runs. Each entry snapshots the exact CuratorX index rows removed, so you can reverse the last run:
+
+```bash
+# List recent destructive grooming actions (most recent first)
+curl -s http://localhost:8788/api/admin/grooming/actions | python3 -m json.tool
+# → {"actions": [{"id": "…", "action_type": "purge_delete", "item_count": 12,
+#                 "summary": "Deleted 12 purge candidates", "undone_at": null}]}
+
+# Undo one — restores the snapshotted rows
+curl -s -X POST http://localhost:8788/api/admin/grooming/actions/ACTION_ID/undo
+```
+
+Use the **Undo last grooming run** panel on the Dashboard for the same thing without a terminal.
+
+**How it works / honest limits.** Undo restores the CuratorX **index rows** (the metadata, knowledge, and neighbor edges the delete removed); regenerable derived data such as embeddings is rebuilt by the normal idle tasks, so it is not snapshotted. Undo does **not** touch Plex or your files — a purge only prunes CuratorX's own index, never the media on disk. Once an action is undone it is marked `undone_at` and can't be undone twice.
+
+### Collections & courses (publish a list to members)
+
+Any curated list can become a members-visible **collection**, and an ordered **course** with a short note per step (e.g. a "Kurosawa 101" watch-through). Members can view what you publish; only the owner publishes.
+
+- Create or open a list under **Lists**, set its kind to **course** if you want an ordered sequence, and use the owner **Course authoring** panel to reorder items and add a per-step note.
+- Toggle **Publish** to make it visible to members under **Collections**; toggle it off to make it private again.
+
+```bash
+# Publish a list to members (owner-only)
+curl -s -X PATCH http://localhost:8788/api/lists/LIST_ID \
+  -H 'Content-Type: application/json' -d '{"visibility": "published"}'
+
+# Add a step note and set its order
+curl -s -X PATCH http://localhost:8788/api/lists/LIST_ID/items/ITEM_ID \
+  -H 'Content-Type: application/json' -d '{"note": "Start here", "position": 1}'
+
+# What members see
+curl -s http://localhost:8788/api/collections | python3 -m json.tool
+```
+
+**How it works / honest limits.** Publishing sets a list's `visibility` to `published` and stamps `published_at`; the members read path (`GET /api/collections`) only ever returns published lists. Course sequencing reuses the existing item `position`; the `note` is per-step prose. Members can read published collections but cannot publish, reorder, or edit them.
+
+### Weekly digest — "This week in your library"
+
+CuratorX assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
+
+```bash
+# Read the latest digest (owner-only)
+curl -s http://localhost:8788/api/admin/weekly-digest | python3 -m json.tool
+
+# Force a fresh snapshot for the current week
+curl -s -X POST http://localhost:8788/api/admin/weekly-digest/generate
+```
+
+**How it works / honest limits.** The digest is **in-app only** — there is no email/SMTP transport in CuratorX, so nothing is sent anywhere; the snapshot is built from data you already have. Snapshots are keyed to a fixed 7-day bucket, so generating repeatedly within the same week refreshes the single current entry rather than piling up rows.
+
 ### Memory & privacy controls (owner)
 
 Because members can't see this half, here's the exact mechanism behind the member-facing "export or delete your memory" guidance. Each signed-in account can export or purge its own data via `/api/me/memory`:
@@ -228,7 +296,7 @@ curl -s http://localhost:8788/api/me/memory > my-curatorx-export.json
 curl -s -X DELETE http://localhost:8788/api/me/memory
 ```
 
-Export and purge cover **exactly the same set**, so a copy taken before a purge is complete. Shared, sanitized repository research about media is *not* part of an account purge — it isn't tied to any one account. For **Youth-mode** accounts only, an owner may review or export that account's memory for moderation (`GET /api/users/{id}/memory`, owner-only); adult member memory is never owner-readable. Full data map: [Privacy](/privacy).
+Export and purge cover **exactly the same set**, so a copy taken before a purge is complete. Shared, sanitized repository research about media is *not* part of an account purge — it isn't tied to any one account. For **Youth-mode** accounts only, an owner may review that account's memory for moderation from the **Admin → Youth review** dashboard, which lists Youth-flagged accounts and their stored notes. The same data is available over HTTP (`GET /api/users/{id}/memory`, owner-only); adult member memory is never owner-readable, and the endpoint fails closed — it returns memory only for accounts actually flagged Youth. Full data map: [Privacy](/privacy).
 
 ### LLM vs free sources
 

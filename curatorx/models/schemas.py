@@ -345,6 +345,7 @@ class CuratedListItem(BaseModel):
     title: str
     library_item_id: Optional[int] = None
     position: int = 0
+    note: str = ""
     created_at: float
 
 
@@ -353,7 +354,9 @@ class CuratedList(BaseModel):
     user_id: Optional[str] = None
     name: str
     description: str = ""
-    list_kind: Literal["list", "playlist"] = "list"
+    list_kind: Literal["list", "playlist", "course"] = "list"
+    visibility: Literal["private", "published"] = "private"
+    published_at: Optional[float] = None
     created_at: float
     updated_at: float
     item_count: int = 0
@@ -363,13 +366,14 @@ class CuratedList(BaseModel):
 class CuratedListCreate(BaseModel):
     name: str = Field(..., min_length=1)
     description: str = ""
-    list_kind: Literal["list", "playlist"] = "list"
+    list_kind: Literal["list", "playlist", "course"] = "list"
 
 
 class CuratedListUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1)
     description: Optional[str] = None
-    list_kind: Optional[Literal["list", "playlist"]] = None
+    list_kind: Optional[Literal["list", "playlist", "course"]] = None
+    visibility: Optional[Literal["private", "published"]] = None
 
 
 class CuratedListItemCreate(BaseModel):
@@ -378,6 +382,11 @@ class CuratedListItemCreate(BaseModel):
     media_type: MediaType
     title: str = Field(..., min_length=1)
     library_item_id: Optional[int] = None
+
+
+class CuratedListItemUpdate(BaseModel):
+    note: Optional[str] = Field(default=None, max_length=2000)
+    position: Optional[int] = Field(default=None, ge=0, le=10000)
 
 
 class CuratedListCollectionResponse(BaseModel):

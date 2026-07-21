@@ -1,6 +1,43 @@
 {
-  "generated_at": "2026-07-21T04:38:09Z",
+  "generated_at": "2026-07-21T05:06:17Z",
   "releases": [
+    {
+      "version": "1.16.0",
+      "date": "2026-07-21",
+      "summary": "Delight Phase 2 for owners: the Dashboard now opens with an at-a-glance library-health hero and an open-issues badge, destructive grooming is reversible with one click, curated lists can be published to members as ordered courses, Youth memory gets an owner review dashboard, and a weekly in-app digest recaps your library.",
+      "highlights": [
+        "**See your library's health the moment you open Admin.** The Dashboard leads with a health hero — overall health, knowledge coverage, engagement streak, and open issues — and the Admin rail shows a badge when issues are waiting, so nothing quietly piles up.",
+        "**Prune fearlessly — undo the last grooming run.** Deleting purge candidates is now logged with a snapshot, so a single **Undo last grooming run** click puts the CuratorX index rows back. It never touches Plex or your files.",
+        "**Publish a collection or a course to your household.** Turn any curated list into a members-visible collection, or sequence it into an ordered course (think \"Kurosawa 101\") with a short note on each step.",
+        "**Review Youth memory from one screen.** A new owner **Youth review** dashboard surfaces what CuratorX remembers for Youth-flagged accounts — and only those accounts.",
+        "**A weekly recap of your library.** An in-app \"This week in your library\" digest gathers new additions, counts, coverage, and open issues into one snapshot on the Dashboard."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**Grooming action log + safe undo.** New `grooming_action_log` table and `Database` methods (`snapshot_library_items_by_rating_keys`, `restore_library_items_snapshot`, `record_grooming_action`, `get_grooming_action`, `list_grooming_actions`, `undo_grooming_action`) in `curatorx/library/db.py`. `POST /api/library/purge-candidates/delete` now snapshots the exact rows and records a `purge_delete` action before deleting; new owner-only `GET /api/admin/grooming/actions` and `POST /api/admin/grooming/actions/{id}/undo` list and reverse the last run. Frontend: `GroomingUndoPanel` + `frontend/src/lib/groomingActions.js` on the Dashboard, plus a one-click grooming rerun.",
+            "**Collections & courses on curated lists.** `curated_lists` gains `visibility` / `published_at` and `curated_list_items` gains `note`; `list_kind` accepts `course`. New DB methods `set_curated_list_visibility`, `list_published_lists`, `get_published_list`, `update_curated_list_item`. New owner-only publish path via `PATCH /api/lists/{id}` (`visibility`) and `PATCH /api/lists/{id}/items/{item_id}` (note/position), plus members-visible `GET /api/collections` and `GET /api/collections/{id}`. Frontend: `CourseAuthoringPanel` for owners on `ListsPage`, a members `CollectionsPage`, and `frontend/src/lib/collections.js`.",
+            "**Youth moderation dashboard.** New owner `YouthReviewPage` (route `/admin/youth`) over the existing fail-closed `GET /api/users/{id}/memory`, with a `getUserMemory` client method. The fail-closed guard (memory returned only for Youth-flagged accounts) is unchanged.",
+            "**Weekly in-app digest.** New `weekly_digests` table with `save_weekly_digest` / `get_latest_weekly_digest` / `list_weekly_digests`; a `curatorx/digest/` service (`build_weekly_digest`, `snapshot_weekly_digest`, `current_week_start`) that assembles counts, coverage, health, new additions, and open issues; a `weekly_digest` scheduler task; owner-only `GET /api/admin/weekly-digest` and `POST /api/admin/weekly-digest/generate`; and a `WeeklyDigestPanel` (+ `frontend/src/lib/weeklyDigest.js`) on the Dashboard.",
+            "**Library-health hero + issue badge.** `OwnerHealthHero` (+ `frontend/src/lib/ownerHealth.js`) on the Dashboard and an open-issues badge with a new **Issues** entry (and **Youth review**) in `ADMIN_NAV`.",
+            "**Tests:** `tests/test_grooming_undo.py`, `tests/test_collections.py`, `tests/test_weekly_digest.py` (DB + API, including owner-vs-member authz and the youth fail-closed path), and frontend unit suites `ownerHealth`, `groomingActions`, `collections`, `weeklyDigest`."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Every new UI surface (health hero, grooming/undo panel, weekly digest, course authoring, collections, youth review, rail badge) uses shared tokens and theme-safe CSS in `frontend/src/styles.css`, verified in both Lights Up and Lights Down."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Full backend pytest suite green with coverage: **1187 passed, 4 skipped** at **78.05%** total, satisfying `--cov-fail-under=74`. Frontend unit tests **351 passed**, ESLint clean (0 errors), and the production build succeeds. Undo path reasoned through end-to-end (snapshot before delete → restore index rows only; Plex/files untouched; single-use per action) and the Youth review path confirmed fail-closed (owner-only, Youth-flagged accounts only)."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.15.0",
       "date": "2026-07-21",

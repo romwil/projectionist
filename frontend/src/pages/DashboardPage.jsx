@@ -16,6 +16,9 @@ import DonutChart from "../components/charts/DonutChart";
 import Gauge from "../components/charts/Gauge";
 import { useBulkActionProgress } from "../components/BulkActionProgress";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
+import OwnerHealthHero from "../components/OwnerHealthHero";
+import WeeklyDigestPanel from "../components/WeeklyDigestPanel";
+import GroomingUndoPanel from "../components/GroomingUndoPanel";
 import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import { buildRuntimeBuckets, sortPurgeCandidates } from "../lib/dashboardCharts.js";
 import { titleDetailTargetFromPurgeCandidate } from "../lib/titleDetailDrawer.js";
@@ -399,6 +402,15 @@ export default function DashboardPage() {
           Refresh
         </button>
       </header>
+
+      {/* ─── At-a-glance owner health hero (M4) ─── */}
+      <OwnerHealthHero health={hlth} streak={streak.data} />
+
+      {/* ─── Weekly in-app digest (M4) ─── */}
+      <WeeklyDigestPanel />
+
+      {/* ─── One-click grooming rerun + safe undo (M4) ─── */}
+      <GroomingUndoPanel onChanged={purge.reload} />
 
       {/* ─── Panel 1: Library Composition ─── */}
       <div className="dash-grid">
