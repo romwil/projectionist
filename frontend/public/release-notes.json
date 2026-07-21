@@ -1,6 +1,43 @@
 {
-  "generated_at": "2026-07-21T04:25:49Z",
+  "generated_at": "2026-07-21T04:36:59Z",
   "releases": [
+    {
+      "version": "1.15.0",
+      "date": "2026-07-21",
+      "summary": "A quiet hardening release: it tightens who can see a chat thread, keeps your secrets out of the logs in *every* log format, and raises our automated safety net so regressions are caught earlier.",
+      "highlights": [
+        "**Only your threads are yours.** Rating or clearing feedback on a chat message now checks that the thread actually belongs to you, so no one can poke at another household member's conversation by guessing its id.",
+        "**Secrets stay out of the logs — always.** Log redaction used to apply only to the JSON log format; now it runs in plain-text logs too, so API keys and tokens never leak into the console no matter how CuratorX is configured.",
+        "**A stronger safety net.** Our automated test coverage gate jumped from a token 10% to 74%, so a much larger share of the code is guarded against silent regressions on every change."
+      ],
+      "sections": [
+        {
+          "title": "Security",
+          "bullets": [
+            "**Feedback endpoints are now user-scoped.** `POST` / `DELETE /api/chat/messages/{id}/feedback` (`submit_message_feedback` / `delete_message_feedback` in `curatorx/web/app.py`) looked up the thread with `get_chat_thread(session_id)` and no owner scope, unlike their sibling thread routes. They now pass `user_id=_scoped_user_id(user)` and `include_orphans=_include_orphan_threads(user)` (matching `delete_chat_thread` and `chat`), so a member cannot reference another account's thread by id. The subsequent message-ownership and assistant-role checks are unchanged.",
+            "**Log redaction now covers the text formatter.** `sanitize_log_message` previously ran only inside `_JsonFormatter`, so the default text formatter emitted secrets unredacted. A new `logging.Filter` (`_RedactionFilter` in `curatorx/logging_config.py`) redacts the fully-interpolated message on the record before formatting, wired onto the stream handler in `configure_logging`, so both the JSON and text formats are covered. It interpolates `%`-args once and clears them to avoid double-processing structured fields."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Silent excepts now leave a breadcrumb.** Three best-effort `except Exception: pass` blocks in `curatorx/agent/curator.py` — tool-invocation telemetry recording, and the derived-context label update in both the streamed and buffered emit paths — now `logger.debug(..., exc_info=True)` with a short context message. Control flow is unchanged (they remain non-fatal); they just no longer swallow failures without a trace."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "**Coverage gate raised (B4).** `--cov-fail-under` in `pyproject.toml` went from `10` to `74`, a few points below the measured **~77.8%** total to stay clear of flakiness."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Full backend pytest suite green with coverage: **1171 passed, 4 skipped** at **77.84%** total, satisfying the new `--cov-fail-under=74`. The new redaction-filter test confirms a secret (`api_key=…`, `sk-…`) is redacted under the plain-text formatter, and a companion test confirms `%`-args are interpolated once (no double-processing). No pre-existing unrelated failures observed."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.14.0",
       "date": "2026-07-21",

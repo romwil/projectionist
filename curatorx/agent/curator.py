@@ -320,7 +320,7 @@ class CuratorAgent:
                         session_id=session_id,
                     )
                 except Exception:
-                    pass
+                    logger.debug("Failed to record tool-invocation telemetry", exc_info=True)
                 tool_content = (
                     wrap_untrusted_data(result)
                     if str(name) in UNTRUSTED_MEMORY_TOOLS
@@ -602,7 +602,7 @@ async def stream_agent(
         ctx = db.get_active_derived_context()
         db.update_thread_context_label(session_id, str(ctx["inferred_label"] or "General Exploration"))
     except Exception:
-        pass
+        logger.debug("Failed to update thread derived-context label", exc_info=True)
 
     yield json.dumps({
         "type": "done",
@@ -660,7 +660,7 @@ async def _emit_buffered(
         ctx = db.get_active_derived_context()
         db.update_thread_context_label(session_id, str(ctx["inferred_label"] or "General Exploration"))
     except Exception:
-        pass
+        logger.debug("Failed to update thread derived-context label", exc_info=True)
 
     yield json.dumps({
         "type": "done",

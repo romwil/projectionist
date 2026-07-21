@@ -23,6 +23,28 @@ _SK_PREFIX = re.compile(r"\bsk-[a-zA-Z0-9-]{10,}\b")
 _X_API_KEY = re.compile(r"(X-Api-Key:\s*)\S+", re.IGNORECASE)
 
 
+class _RedactionFilter(logging.Filter):
+    """Redact likely secrets on the record itself.
+
+    Runs before formatting so redaction applies under *both* the JSON and the
+    default text formatter. We resolve the fully-interpolated message once via
+    ``record.getMessage()``, redact it, and store it back as ``record.msg`` with
+    ``record.args`` cleared so downstream formatters emit the sanitized text
+    without re-applying ``%`` args (which would raise on the arg-free message).
+    """
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            message = record.getMessage()
+        except Exception:  # pragma: no cover - defensive: never drop a log line
+            return True
+        cleaned = sanitize_log_message(message)
+        if cleaned != message or record.args:
+            record.msg = cleaned
+            record.args = None
+        return True
+
+
 class _JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
@@ -82,6 +104,9 @@ def configure_logging(*, force: bool = False) -> int:
 
     handler = logging.StreamHandler(sys.stdout)
     handler.setLevel(level)
+    # Redact secrets on the record before formatting so both the JSON and the
+    # default text formatter emit sanitized output.
+    handler.addFilter(_RedactionFilter())
     if log_format == "json":
         handler.setFormatter(_JsonFormatter())
     else:

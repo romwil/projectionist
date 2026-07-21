@@ -3074,7 +3074,11 @@ def submit_message_feedback(
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     db = _db()
-    thread = db.get_chat_thread(payload.session_id)
+    thread = db.get_chat_thread(
+        payload.session_id,
+        user_id=_scoped_user_id(user),
+        include_orphans=_include_orphan_threads(user),
+    )
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
     row = db.get_chat_message(message_id)
@@ -3123,7 +3127,11 @@ def delete_message_feedback(
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     db = _db()
-    thread = db.get_chat_thread(session_id)
+    thread = db.get_chat_thread(
+        session_id,
+        user_id=_scoped_user_id(user),
+        include_orphans=_include_orphan_threads(user),
+    )
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
     row = db.get_chat_message(message_id)

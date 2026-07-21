@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import patch
 
 from curatorx.logging_config import (
+    _RedactionFilter,
     configure_logging,
     resolve_log_format,
     resolve_log_level,
@@ -67,6 +68,47 @@ class LoggingConfigTests(unittest.TestCase):
     def test_json_format_option(self) -> None:
         with patch.dict(os.environ, {"LOG_FORMAT": "json"}, clear=False):
             self.assertEqual(resolve_log_format(), "json")
+
+    def test_redaction_filter_redacts_under_text_formatter(self) -> None:
+        """The text formatter path must redact secrets, not just JSON."""
+        buffer = io.StringIO()
+        handler = logging.StreamHandler(buffer)
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
+        )
+        handler.addFilter(_RedactionFilter())
+        test_logger = logging.getLogger("curatorx.tests.redaction.text")
+        test_logger.handlers.clear()
+        test_logger.addHandler(handler)
+        test_logger.setLevel(logging.INFO)
+        test_logger.propagate = False
+
+        test_logger.info("calling https://api.test/movie?api_key=secret123 key=sk-ant-abc123xyz")
+
+        output = buffer.getvalue()
+        self.assertNotIn("secret123", output)
+        self.assertNotIn("sk-ant-abc123xyz", output)
+        self.assertIn("api_key=***", output)
+        self.assertIn("sk-***", output)
+
+    def test_redaction_filter_preserves_percent_args(self) -> None:
+        """The filter interpolates %-args once and must not re-apply them."""
+        buffer = io.StringIO()
+        handler = logging.StreamHandler(buffer)
+        handler.setFormatter(logging.Formatter("%(message)s"))
+        handler.addFilter(_RedactionFilter())
+        test_logger = logging.getLogger("curatorx.tests.redaction.args")
+        test_logger.handlers.clear()
+        test_logger.addHandler(handler)
+        test_logger.setLevel(logging.INFO)
+        test_logger.propagate = False
+
+        test_logger.info("fetch %s with token=%s", "https://api.test", "topsecret")
+
+        output = buffer.getvalue()
+        self.assertIn("https://api.test", output)
+        self.assertIn("token=***", output)
+        self.assertNotIn("topsecret", output)
 
 
 if __name__ == "__main__":
