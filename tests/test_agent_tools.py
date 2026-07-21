@@ -25,6 +25,20 @@ from curatorx.models.schemas import TitleCard
 
 
 class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_remember_about_user_returns_error_when_note_is_unavailable(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID, user_id="user-1")
+            with patch("curatorx.memory.UserMemoryService.remember", return_value={}):
+                result = await registry.execute(
+                    "remember_about_user",
+                    {"kind": "preference", "text": "loves stop-motion"},
+                )
+
+            payload = json.loads(result)
+            self.assertIn("error", payload)
+            self.assertNotIn("saved", payload)
+
     async def test_remember_preference(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

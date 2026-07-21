@@ -2222,6 +2222,9 @@ class ToolRegistry:
             )
         except ValueError as error:
             return json.dumps({"error": str(error)})
+        if not note:
+            logger.error("User memory note was not available after creation for user %s", self.user_id)
+            return json.dumps({"error": "Could not save private memory note; please try again"})
         return json.dumps({"saved": True, "id": note["id"], "kind": note["kind"]})
 
     async def _tool_recall_user_memory(self, args: Mapping[str, Any]) -> str:

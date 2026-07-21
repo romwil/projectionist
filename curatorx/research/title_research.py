@@ -5,6 +5,7 @@ Only official JSON APIs are used here.  This is intentionally not a web browser.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict, Mapping, Optional
 
 from curatorx.config_store import Settings
@@ -14,9 +15,36 @@ from curatorx.connectors.tvdb import TVDBClient
 from curatorx.connectors.wikipedia import fetch_extract
 from curatorx.library.db import Database
 
+logger = logging.getLogger(__name__)
+
 
 def _source(status: str, **values: Any) -> Dict[str, Any]:
     return {"status": status, **values}
+
+
+def _persist_research(
+    result: Dict[str, Any],
+    db: Optional[Database],
+    *,
+    entity_type: str,
+    name: str,
+    external_ids: Mapping[str, Any],
+    library_item_id: Optional[int] = None,
+) -> None:
+    """Persist research opportunistically without losing a usable provider result."""
+    if db is None or not name:
+        return
+    try:
+        result["memory"] = db.save_repository_research(
+            entity_type=entity_type,
+            name=name,
+            payload=result,
+            external_ids=external_ids,
+            library_item_id=library_item_id,
+        )
+    except Exception:
+        logger.exception("Could not persist %s research for %r", entity_type, name)
+        result["warnings"].append("Research was returned but could not be saved to repository memory.")
 
 
 def _clean_credits(details: Mapping[str, Any]) -> Dict[str, list[Dict[str, str]]]:
@@ -156,19 +184,19 @@ def research_title(
 
     if not result["plot"]:
         result["warnings"].append("Configured research sources returned no plot text.")
-    if db is not None:
-        # Only provider-normalized metadata is stored.  Caller-provided Plex paths,
-        # tokens, and provider URLs are intentionally absent from this payload.
-        result["memory"] = db.save_repository_research(
-            entity_type="title",
-            name=str(result["identity"]["title"] or resolved_title),
-            payload=result,
-            external_ids={
-                key: value for key, value in result["identity"].items()
-                if key in {"tmdb_id", "tvdb_id", "imdb_id"} and value
-            },
-            library_item_id=library_item_id,
-        )
+    # Only provider-normalized metadata is stored. Caller-provided Plex paths,
+    # tokens, and provider URLs are intentionally absent from this payload.
+    _persist_research(
+        result,
+        db,
+        entity_type="title",
+        name=str(result["identity"]["title"] or resolved_title),
+        external_ids={
+            key: value for key, value in result["identity"].items()
+            if key in {"tmdb_id", "tvdb_id", "imdb_id"} and value
+        },
+        library_item_id=library_item_id,
+    )
     return result
 
 
@@ -232,11 +260,13 @@ def research_person(
         result["sources_checked"]["tmdb"] = _source("ok")
     except (RuntimeError, ValueError, KeyError):
         result["sources_checked"]["tmdb"] = _source("unavailable")
-    if db is not None and result["identity"]["name"]:
-        result["memory"] = db.save_repository_research(
-            entity_type="person", name=result["identity"]["name"], payload=result,
-            external_ids={"tmdb_id": result["identity"]["tmdb_id"]} if result["identity"]["tmdb_id"] else {},
-        )
+    _persist_research(
+        result,
+        db,
+        entity_type="person",
+        name=str(result["identity"]["name"]),
+        external_ids={"tmdb_id": result["identity"]["tmdb_id"]} if result["identity"]["tmdb_id"] else {},
+    )
     return result
 
 
@@ -271,11 +301,13 @@ def research_company(
         result["sources_checked"]["tmdb"] = _source("ok")
     except (RuntimeError, ValueError, KeyError):
         result["sources_checked"]["tmdb"] = _source("unavailable")
-    if db is not None and result["identity"]["name"]:
-        result["memory"] = db.save_repository_research(
-            entity_type="company", name=result["identity"]["name"], payload=result,
-            external_ids={"tmdb_id": result["identity"]["tmdb_id"]} if result["identity"]["tmdb_id"] else {},
-        )
+    _persist_research(
+        result,
+        db,
+        entity_type="company",
+        name=str(result["identity"]["name"]),
+        external_ids={"tmdb_id": result["identity"]["tmdb_id"]} if result["identity"]["tmdb_id"] else {},
+    )
     return result
 
 

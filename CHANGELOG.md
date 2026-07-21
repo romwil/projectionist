@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [1.8.31] — 2026-07-20
+
+### Fixed
+- Private-memory tools now report a recoverable error when a newly created note cannot be retrieved.
+- Research results remain available when repository-memory persistence encounters a database write failure.
+
 ## [1.8.30] — 2026-07-20
 
 ### Added

@@ -1,6 +1,20 @@
 {
-  "generated_at": "2026-07-20T23:24:38Z",
+  "generated_at": "2026-07-21T00:11:28Z",
   "releases": [
+    {
+      "version": "1.8.31",
+      "date": "2026-07-20",
+      "summary": "",
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Private-memory tools now report a recoverable error when a newly created note cannot be retrieved.",
+            "Research results remain available when repository-memory persistence encounters a database write failure."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.8.30",
       "date": "2026-07-20",
