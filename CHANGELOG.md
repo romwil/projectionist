@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.18.1] — 2026-07-21
+
+Your curator's full reply now stays on screen when results appear. Previously, when the curator narrated an answer and *then* pulled up title cards, the moment the results turnstile slid in it could replace everything you'd just read with a bare "Here are the results I found." This patch keeps the whole conversation — the prose you watched stream in, followed by the cards — exactly as it should be.
+
+### Highlights
+- **Your curator's full reply is preserved when results appear.** If the curator explains its thinking and then surfaces a shelf of recommendations, that explanation no longer vanishes when the results panel opens — you keep both the words and the cards, matching what you watched type out live.
+- **Nothing is lost, even mid-stream.** The fix works whether the reply arrives token-by-token in live chat or is saved to a page you revisit later, so re-opening a thread shows the same complete answer you saw the first time.
+
+### Fixed
+- **Backend dropped earlier-round prose when a later tool round returned only cards.** Both agent assemblers kept only the *last* tool round's text: `stream_agent` overwrote `final_text` each round and `run()` used only the final response's `_extract_text`, so a two-round turn (round 1 narrates + calls a tool, round 2 returns cards with no narration) fell through to the generic `"Here are the results I found."` placeholder — discarding prose the user had already seen stream. Both paths now accumulate prose across every round into a `text_segments` list joined with blank lines (skipping empty and duplicate-consecutive segments, and counting each response's text exactly once), so the persisted/returned text equals what streamed. The placeholder is kept strictly as a last resort for the genuinely-zero-prose case. (`curatorx/agent/curator.py`)
+- **Frontend safety net so a swap can never erase visible prose.** When the streamed `done` message arrives, `App.jsx`'s `onDone` now runs the backend blocks through a new pure helper `frontend/src/lib/mergeStreamedBlocks.js`: if the backend's leading text block is empty or the generic placeholder while the streamed prose is real, it keeps the streamed prose as the text block and appends the backend's non-text blocks (title cards, open-viewport prompt, suggested replies); when the backend text is real, the backend blocks are used unchanged.
+
+### Verification
+- New multi-round regression tests assert the round-1 prose survives and is **not** the placeholder: backend `tests/test_sse_streaming.py` (stream path) and `tests/test_curator.py` (`run()` analog), plus a frontend unit suite `frontend/src/lib/mergeStreamedBlocks.test.mjs` (placeholder + streamed → prose kept and cards appended; real backend text → used as-is). Full backend pytest suite **1193 passed, 4 skipped** at **78.28%** total coverage, satisfying `--cov-fail-under=74`; `test_version` version parity green across `curatorx/_version.py`, `package.json`, `frontend/package.json`, and both lockfiles. Frontend `node --test` unit suite **365 passed**, ESLint **0 errors** (pre-existing warning count unchanged), and the production build succeeds. `frontend/public/release-notes.json` regenerated from this entry via `scripts/generate-release-notes.sh`.
+
 ## [1.18.0] — 2026-07-21
 
 Mark something watched right from the poster ⋮ menu and it syncs to Plex. The kebab (poster action grip) that already carries "open details," Plex playback, watchlist, and lists now offers a one-tap **Mark as watched** on any title you own — and it flips to **Mark as unwatched** when you change your mind. Because the grip is one shared control, the action shows up everywhere posters do (library, recommendations, neighbors, recently added, list rows), on the same in-library rule as the **Play** control, and in your own signed-in Plex context.

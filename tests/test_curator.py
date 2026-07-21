@@ -153,6 +153,58 @@ class CuratorAgentToolLoopTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(call_count["n"], 3)
             self.assertEqual(text_blocks[0]["content"], "Done after two tool rounds.")
 
+    async def test_round1_prose_preserved_when_final_round_has_no_text(self) -> None:
+        """run() analog: prose narrated alongside a round-1 tool call must be
+        preserved even when the final response returns no narration."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            settings = Settings(
+                llm_provider="anthropic",
+                llm_api_key="test-key",
+                llm_model="claude-sonnet-4-6",
+            )
+            agent = CuratorAgent(db, settings)
+
+            # Round 1: narrate prose AND call a tool in the same response.
+            prose_plus_tool_response = _normalize_anthropic_response(
+                {
+                    "content": [
+                        {"type": "text", "text": "Let me search your noir collection for something moody."},
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_1",
+                            "name": "search_library",
+                            "input": {"query": "noir"},
+                        },
+                    ],
+                    "stop_reason": "tool_use",
+                }
+            )
+            # Round 2: only results, no narration at all.
+            empty_text_response = _normalize_anthropic_response(
+                {
+                    "content": [{"type": "text", "text": ""}],
+                    "stop_reason": "end_turn",
+                }
+            )
+
+            call_count = {"n": 0}
+
+            async def mock_chat(messages, tools=None):
+                call_count["n"] += 1
+                return prose_plus_tool_response if call_count["n"] == 1 else empty_text_response
+
+            agent.provider = MagicMock()
+            agent.provider.chat = AsyncMock(side_effect=mock_chat)
+
+            result = await agent.run("session-prose", "find noir movies")
+            text_blocks = [block for block in result["message"]["blocks"] if block.get("type") == "text"]
+
+            self.assertGreaterEqual(call_count["n"], 2)
+            self.assertTrue(text_blocks)
+            self.assertIn("noir collection", text_blocks[0]["content"])
+            self.assertNotEqual(text_blocks[0]["content"], "Here are the results I found.")
+
 
 class DisplayableCardsTests(unittest.TestCase):
     def test_filters_empty_placeholder_cards(self) -> None:

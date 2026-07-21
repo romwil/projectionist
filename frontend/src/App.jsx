@@ -65,6 +65,7 @@ import {
 import { blendAmbientAccent } from "./lib/ambientAccent.js";
 import { shouldSubmitComposerOnEnter } from "./lib/composerKeyboard.js";
 import { createId } from "./lib/id.js";
+import { mergeStreamedBlocks } from "./lib/mergeStreamedBlocks.js";
 import { executeSlashCommand, parseSlashCommand } from "./lib/slashCommands.js";
 import {
   normalizeQuickPickError,
@@ -934,7 +935,7 @@ export default function App() {
           }
         },
         onDone: (data) => {
-          let assistantMessage = data.message;
+          let assistantMessage = mergeStreamedBlocks(data.message, streamAccumulated);
           if (perfectPickPendingRef.current) {
             assistantMessage = appendPerfectPickAck(assistantMessage);
             perfectPickPendingRef.current = false;

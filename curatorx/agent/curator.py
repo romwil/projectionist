@@ -288,6 +288,18 @@ class CuratorAgent:
         tool_defs = build_tool_definitions(self.settings) if use_tools else None
         response = await self.provider.chat(messages, tools=tool_defs)
 
+        # Accumulate prose from the initial response and every tool round so
+        # the final text block preserves earlier-round narration instead of
+        # keeping only the last response (which is often cards with no text).
+        text_segments: List[str] = []
+
+        def _accumulate_response_text(resp: Any) -> None:
+            seg = (_extract_text(resp) or "").strip()
+            if seg and (not text_segments or text_segments[-1] != seg):
+                text_segments.append(seg)
+
+        _accumulate_response_text(response)
+
         for _ in range(MAX_TOOL_ROUNDS):
             tool_calls = _extract_tool_calls(response)
             if not tool_calls:
@@ -334,8 +346,9 @@ class CuratorAgent:
                     }
                 )
             response = await self.provider.chat(messages, tools=tool_defs)
+            _accumulate_response_text(response)
 
-        text = _extract_text(response)
+        text = "\n\n".join(text_segments)
         blocks: List[Dict[str, Any]] = []
         if text:
             blocks.append({"type": "text", "content": text})
@@ -475,7 +488,7 @@ async def stream_agent(
     messages.append({"role": "user", "content": user_message})
 
     tool_defs = build_tool_definitions(settings) if (settings.llm_api_key or settings.llm_provider == "ollama") else None
-    final_text = ""
+    text_segments: List[str] = []
 
     for _ in range(MAX_TOOL_ROUNDS):
         round_text = ""
@@ -527,7 +540,14 @@ async def stream_agent(
                     "arguments": fn.get("arguments", "{}"),
                 }
 
-        final_text = round_text
+        # Accumulate prose across every tool round so the persisted/returned
+        # text matches what the user actually watched stream. Earlier rounds
+        # often narrate ("Let me look…") before a tool call, and a later round
+        # may return only cards; keeping just the last round would drop that
+        # prose and fall back to the generic placeholder.
+        stripped = round_text.strip()
+        if stripped and (not text_segments or text_segments[-1] != stripped):
+            text_segments.append(stripped)
 
         if current_tool_calls:
             tool_calls_list = []
@@ -564,6 +584,7 @@ async def stream_agent(
             break
 
     # --- Assemble final message ---
+    final_text = "\n\n".join(text_segments)
     blocks: List[Dict[str, Any]] = []
     if final_text:
         blocks.append({"type": "text", "content": final_text})

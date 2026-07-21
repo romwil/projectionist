@@ -32,6 +32,7 @@ from curatorx.agent.providers import (
 )
 from curatorx.config_store import Settings
 from curatorx.library.db import DEFAULT_LENS_ID, Database
+from curatorx.models.schemas import TitleCard
 
 
 def _make_db(tmp: Path) -> Database:
@@ -322,6 +323,80 @@ class NoProviderFallbackTests(unittest.IsolatedAsyncioTestCase):
             done_events = [e for e in events if e["type"] == "done"]
             self.assertGreater(len(token_events), 0)
             self.assertEqual(len(done_events), 1)
+
+
+class MultiRoundProsePreservationTests(unittest.IsolatedAsyncioTestCase):
+    """Prose narrated in an early round must survive when a later round returns
+    only cards with no text (regression for the turnstile text-loss bug)."""
+
+    async def test_round1_prose_preserved_when_round2_returns_only_cards(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _make_db(Path(tmp))
+            settings = _make_settings()
+
+            round1_chunks = [
+                {"choices": [{"index": 0, "delta": {
+                    "content": "Let me dig through your noir collection for something moody.",
+                }, "finish_reason": None}]},
+                {"choices": [{"index": 0, "delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "search_library", "arguments": ""},
+                    }],
+                }, "finish_reason": None}]},
+                {"choices": [{"index": 0, "delta": {
+                    "tool_calls": [{"index": 0, "function": {"arguments": '{"query":"noir"}'}}],
+                }, "finish_reason": None}]},
+                {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+            ]
+            # Round 2 returns no narration at all — only the tool results feed cards.
+            round2_chunks = [
+                {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            ]
+
+            call_count = 0
+
+            async def fake_stream(messages, tools=None):
+                nonlocal call_count
+                call_count += 1
+                source = round1_chunks if call_count == 1 else round2_chunks
+                for chunk in source:
+                    yield chunk
+
+            provider = MagicMock()
+            provider.stream = fake_stream
+            provider.chat = AsyncMock()
+
+            mock_registry = MagicMock()
+            mock_registry.cards = [TitleCard(media_type="movie", title="Chinatown", tmdb_id=829)]
+            mock_registry.pending_tokens = []
+            mock_registry.recommendation_context = False
+            mock_registry.discussed_cards = []
+            mock_registry.review_prompts = []
+            mock_registry.review_conflicts = []
+            mock_registry.suggested_replies = []
+            mock_registry.execute = AsyncMock(return_value='[{"title":"Chinatown"}]')
+
+            with (
+                patch("curatorx.agent.curator.get_chat_provider", return_value=provider),
+                patch.object(CuratorAgent, "_registry", return_value=mock_registry),
+            ):
+                chunks = [c async for c in stream_agent(
+                    db, settings, "sess-multi", "noir films",
+                    lens_id=DEFAULT_LENS_ID,
+                )]
+
+            events = _collect_events(chunks)
+            done = next(e for e in events if e["type"] == "done")
+            blocks = done["message"]["blocks"]
+            text_block = blocks[0]
+            self.assertEqual(text_block["type"], "text")
+            self.assertIn("noir collection", text_block["content"])
+            self.assertNotEqual(text_block["content"], "Here are the results I found.")
+            # Cards from the tool round are still attached after the prose.
+            self.assertTrue(any(b["type"] == "title_cards" for b in blocks))
 
 
 class SSEEndpointEventMappingTests(unittest.TestCase):
