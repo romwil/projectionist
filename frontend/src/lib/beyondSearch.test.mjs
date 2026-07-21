@@ -4,11 +4,13 @@ import test from "node:test";
 import { resolveAddCapability } from "./addActions.js";
 import {
   BEYOND_STATUS,
+  BEYOND_TURNSTYLE_TITLE,
   beyondAffordancePlacement,
   beyondItemBadge,
   beyondItemShowsAcquire,
   beyondStatusForError,
   beyondStatusForResult,
+  beyondTurnstyleExpand,
   isBeyondItemAcquirable,
   isTmdbUnavailableError,
   normalizeExternalResults,
@@ -88,4 +90,32 @@ test("owners/members can acquire new titles; guests are info-only", () => {
 
   // Even owners get no acquire control for an already-owned title.
   assert.equal(beyondItemShowsAcquire({ ...item, in_library: true }, owner), false);
+});
+
+test("turnstyle expand is gated on displayable results and counts like the chat", () => {
+  const none = beyondTurnstyleExpand([]);
+  assert.equal(none.show, false);
+  assert.equal(none.count, 0);
+  assert.equal(none.title, BEYOND_TURNSTYLE_TITLE);
+
+  // Bare objects with no title/id/rating_key are not displayable and don't count.
+  const mixed = beyondTurnstyleExpand([
+    { title: "Dune", tmdb_id: 438631 },
+    { tmdb_id: 12345 },
+    {},
+    null,
+  ]);
+  assert.equal(mixed.show, true);
+  assert.equal(mixed.count, 2);
+  assert.equal(mixed.label, "Expand 2 titles in turnstyle view");
+  assert.equal(mixed.title, BEYOND_TURNSTYLE_TITLE);
+});
+
+test("turnstyle expand accepts a custom overlay title", () => {
+  const expand = beyondTurnstyleExpand([{ title: "Heat", tmdb_id: 949 }], {
+    title: "Search results",
+  });
+  assert.equal(expand.title, "Search results");
+  assert.equal(expand.count, 1);
+  assert.equal(expand.label, "Expand 1 titles in turnstyle view");
 });

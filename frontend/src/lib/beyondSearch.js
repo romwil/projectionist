@@ -7,6 +7,11 @@
  * unit-testable and consistent across light/dark themes.
  */
 
+import { turnstyleItemCount } from "./turnstyleItems.js";
+
+/** Title shown on the turnstyle overlay opened from the Beyond section. */
+export const BEYOND_TURNSTYLE_TITLE = "Beyond your collection";
+
 export const BEYOND_STATUS = {
   idle: "idle",
   loading: "loading",
@@ -110,4 +115,24 @@ export function beyondItemBadge(item) {
  */
 export function beyondItemShowsAcquire(item, capability) {
   return isBeyondItemAcquirable(item) && Boolean(capability?.canAdd || capability?.canRequest);
+}
+
+/**
+ * Decide whether a poster-list search section should offer the
+ * "Expand N titles in turnstyle view" control, and with what count/title.
+ *
+ * Mirrors the chat affordance exactly: only displayable cards are counted
+ * (`turnstyleItemCount`), the control is hidden when nothing displayable is
+ * present, and the label wording matches ChatThread's expand button so the two
+ * surfaces stay consistent. The returned `title` is what the overlay header
+ * shows and defaults to the "Beyond your collection" section name.
+ */
+export function beyondTurnstyleExpand(items = [], { title = BEYOND_TURNSTYLE_TITLE } = {}) {
+  const count = turnstyleItemCount(items);
+  return {
+    show: count > 0,
+    count,
+    title,
+    label: `Expand ${count} titles in turnstyle view`,
+  };
 }

@@ -17,6 +17,7 @@ import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
 import TitleCard from "../components/TitleCard";
+import TurnstyleResultsOverlay from "../components/TurnstyleResultsOverlay";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import {
@@ -29,12 +30,14 @@ import {
 } from "../lib/addActions.js";
 import {
   BEYOND_STATUS,
+  BEYOND_TURNSTYLE_TITLE,
   beyondCtaLabel,
   beyondEmptyMessage,
   beyondErrorNote,
   beyondSectionSubtitle,
   beyondStatusForError,
   beyondStatusForResult,
+  beyondTurnstyleExpand,
   beyondUnavailableNote,
   normalizeExternalResults,
   shouldShowBeyondAffordance,
@@ -106,6 +109,7 @@ export default function LibraryBrowsePage() {
     items: [],
     total: 0,
   });
+  const [turnstyleOpen, setTurnstyleOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -157,6 +161,7 @@ export default function LibraryBrowsePage() {
     setDeleteOpen(false);
     setDeleteError("");
     setBeyond({ status: BEYOND_STATUS.idle, items: [], total: 0 });
+    setTurnstyleOpen(false);
 
     const filters = queryFiltersFromBrowse(browse);
     // The reader takes year_from/year_to, not a bare year.
@@ -373,6 +378,7 @@ export default function LibraryBrowsePage() {
   });
   const beyondBusy = beyond.status === BEYOND_STATUS.loading;
   const beyondActivated = beyond.status !== BEYOND_STATUS.idle;
+  const beyondExpand = beyondTurnstyleExpand(beyond.items, { title: BEYOND_TURNSTYLE_TITLE });
 
   const recommendProps = multiUserEnabled
     ? { showRecommend: true, onRecommend: setRecommendItem }
@@ -548,6 +554,18 @@ export default function LibraryBrowsePage() {
                 <h2 data-testid="explore-beyond-title">Beyond your collection</h2>
                 <p className="explore-section-subtitle">{beyondSectionSubtitle({ q })}</p>
               </div>
+              {beyond.status === BEYOND_STATUS.loaded && beyondExpand.show ? (
+                <div className="explore-beyond-actions bulk-confirm-actions">
+                  <button
+                    type="button"
+                    className="confirm-all-button viewport-expand-btn"
+                    data-testid="explore-beyond-expand"
+                    onClick={() => setTurnstyleOpen(true)}
+                  >
+                    {beyondExpand.label}
+                  </button>
+                </div>
+              ) : null}
               {beyondBusy ? (
                 <p className="status status-secondary" data-testid="explore-beyond-loading">
                   Searching beyond your collection…
@@ -614,6 +632,18 @@ export default function LibraryBrowsePage() {
         open={Boolean(recommendItem)}
         onClose={() => setRecommendItem(null)}
       />
+
+      {turnstyleOpen ? (
+        <TurnstyleResultsOverlay
+          payload={{ title: beyondExpand.title, items: beyond.items }}
+          onClose={() => setTurnstyleOpen(false)}
+          onAdd={handleBeyondAdd}
+          onDismiss={handleBeyondDismiss}
+          requestPath={access.requestPath}
+          userRole={access.userRole}
+          multiUserEnabled={access.multiUserEnabled}
+        />
+      ) : null}
     </AppShell>
   );
 }

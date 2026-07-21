@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.19.3] — 2026-07-21
+
+Fan out your "Beyond your collection" search results the same way chat recommendations do. When an Explore search turns up titles you don't own yet, you'll now see an **Expand N titles in turnstyle view** button that opens the big, focused poster turnstyle — the exact same overlay the curator uses for its picks — so you can flip through everything and add or request without squinting at the grid.
+
+### Highlights
+- **See your "Beyond your collection" finds in the turnstyle, just like chat.** Search Explore for something you don't have, and the results now carry an **Expand N titles in turnstyle view** control that opens the same full-screen poster turnstyle the curator's recommendations use — same look, same feel, in Lights Up and Lights Down.
+- **Add and request straight from the turnstyle.** Every poster inside keeps its role-aware action — owners **Add to Radarr/Sonarr**, members **Request in Seerr**, guests get the friendly info-only note — and titles you already own or have queued stay badged and never offer a duplicate add, exactly like the results grid.
+
+### Added
+- **"Expand N titles in turnstyle view" on the Explore browse page's Beyond section.** When `LibraryBrowsePage.jsx` has loaded external "Beyond your collection" results, it now renders the same expand control the chat uses (identical `confirm-all-button viewport-expand-btn` styling and "Expand N titles in turnstyle view" wording from `ChatThread.jsx`) beneath the section heading. Clicking it opens the existing `TurnstyleResultsOverlay` — reused as-is, not forked — driven by local `turnstyleOpen` state on the page, with an `onClose` that dismisses it. The overlay receives the same acquisition-capable handlers/props the Beyond grid already uses (`handleBeyondAdd` → `proposeAction`/`confirmAction` via `buildProposeActionBody`, `handleBeyondDismiss`, and the resolved `requestPath` / `userRole` / `multiUserEnabled`), so owner Add-to-arr, member Request, and guest info-only all work inside the turnstyle, and owned/queued badges + duplicate suppression carry through. The overlay's item list is derived live from the section's results so a dismiss inside the turnstyle stays in sync.
+- **`beyondTurnstyleExpand` pure helper (`frontend/src/lib/beyondSearch.js`).** Centralizes the "should we show expand + with what count/title" decision: it counts only displayable cards (reusing `turnstyleItemCount` from `turnstyleItems.js`, so the count always matches the turnstyle contents and the chat affordance), gates the control off when there are zero external results, and returns the overlay `title` (defaulting to the new `BEYOND_TURNSTYLE_TITLE`, "Beyond your collection") and the exact button `label`.
+
+### Changed
+- **Scope note — the in-library results grid intentionally does not get this affordance.** The `/api/library/query` grid on the same page is a paginated management surface with row selection, bulk pin, and owner delete, rendered through `MediaBrowseResults` with library-only cards. A turnstyle expand there would be ambiguous (which page? how does it interact with selection and bulk actions?) and would need a different, non-acquisition handler set, so adding it was judged out of scope and higher-risk. The turnstyle expand stays on the discovery/acquisition **Beyond your collection** surface, mirroring the chat recommendations use case. The chat path is untouched.
+
+### Verification
+- New unit coverage in `frontend/src/lib/beyondSearch.test.mjs` exercises `beyondTurnstyleExpand`: it hides the control for zero displayable results, counts only displayable cards (bare objects with no title/id/rating_key don't count), returns the chat-matching `Expand N titles in turnstyle view` label, defaults the overlay title to "Beyond your collection", and honors a custom title. Frontend `node --test` unit suite **376 passed** (up from 374 with the two new cases), ESLint **0 errors** (87 pre-existing warnings unchanged), and the production build succeeds. Backend was untouched: full `pytest` suite **1205 passed, 4 skipped** (13 subtests passed) at **78.62%** total coverage, satisfying `--cov-fail-under=74`; `test_version` parity holds across `curatorx/_version.py`, root `package.json`, `frontend/package.json`, and both lockfiles at **1.19.3**. `frontend/public/release-notes.json` regenerated from this entry via `scripts/generate-release-notes.sh`.
+
 ## [1.19.2] — 2026-07-21
 
 A small security-consistency fix for your private notes. CuratorX already treats the personal notes it keeps about you as reference data it can read but never obey — so a note that happens to contain "ignore your instructions and…" can't hijack the curator. This patch closes the one path where that protection wasn't being applied consistently: when the curator looks your notes up on the fly with its recall tool (not just when they're pre-loaded into the conversation), they're now fenced as untrusted data too.

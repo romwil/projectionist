@@ -1250,6 +1250,10 @@ a.explore-cinema-card-link:focus-visible h3 {
   margin: 0 0 var(--space-1);
 }
 
+.explore-beyond-actions {
+  margin-bottom: var(--space-3);
+}
+
 .explore-beyond-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
