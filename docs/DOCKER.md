@@ -1,6 +1,6 @@
 # CuratorX — Docker / Unraid
 
-Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Everyday tag: **`romwil/curatorx:latest`** (CA default). Pin **`:1.8`** or **`:1.8.14`** when you need a fixed line or exact build.
+Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Everyday tag: **`romwil/curatorx:latest`** (CA default). Pin a minor line (e.g. **`:1.11`**) or an exact build (**`:X.Y.Z`**, see [CHANGELOG.md](../CHANGELOG.md)) when you need a fixed target.
 
 ---
 
@@ -103,7 +103,7 @@ Install from the Community Applications template (`templates/curatorx.xml` or `u
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/curatorx/config` → `/config` |
-| **Image** | `romwil/curatorx:latest` (or `:1.8` / `:1.8.14`) — multi-arch amd64+arm64 |
+| **Image** | `romwil/curatorx:latest` (or a `:X.Y` line / `:X.Y.Z` pin) — multi-arch amd64+arm64 |
 
 Optional advanced env (or generate in **Admin → Advanced**): `CURATORX_MCP_API_KEY` (privacy) and `CURATORX_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
@@ -135,7 +135,7 @@ CA XML remains the human install source of truth. For pull/recreate rollouts (po
 ssh automat
 cd /mnt/user/appdata/curatorx
 ./rollout.sh           # :latest
-./rollout.sh 1.8.14    # pin a release tag
+./rollout.sh 1.11.0    # pin a release tag
 # image-only (keep Dockerman template):
 # /path/to/curatorx/scripts/unraid-force-pull.sh latest
 ```
@@ -174,7 +174,7 @@ docker pull romwil/curatorx:latest
 # Docker → Add Container → User Templates → curatorx
 ```
 
-**Pin a release** when you want to avoid floating `:latest`: set Repository to `romwil/curatorx:1.8.14` (or `:1.8`) in the template, then pull that tag. Line tags (`:1.8`) still float within the minor line.
+**Pin a release** when you want to avoid floating `:latest`: set Repository to `romwil/curatorx:X.Y.Z` (an exact version) or `:X.Y` (a minor line) in the template, then pull that tag. Line tags (e.g. `:1.11`) still float within the minor line.
 
 **Verify the running build:**
 
@@ -205,8 +205,8 @@ Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use
 
 ```bash
 ./scripts/docker-release.sh <semver>          # also tags X.Y and latest
-./scripts/docker-release.sh 1.8.14 --also-line 1.8
-./scripts/docker-release.sh 1.8.14 --date-tag # also :latest-YYYYMMDD (CA testing)
+./scripts/docker-release.sh 1.11.0 --also-line 1.11
+./scripts/docker-release.sh 1.11.0 --date-tag # also :latest-YYYYMMDD (CA testing)
 ```
 
 **Release checklist (notes):** ensure `CHANGELOG.md` has a `## [X.Y.Z] — YYYY-MM-DD` heading for the release version. The release script runs `scripts/generate-release-notes.sh --require-version <semver>` **before** `docker buildx` and fails if that heading is missing. Output is `frontend/public/release-notes.json` (served as `/release-notes.json` for What’s New / About).

@@ -59,15 +59,17 @@ With `features.multi_user_enabled` left at `false` (the default), CuratorX runs 
 | Route | Purpose |
 |-------|---------|
 | `/` | Curator chat — single workspace |
-| `/config` | First-run setup wizard or Settings |
+| `/library` and `/library/{pageId}` | Saved curator library — account-scoped saved responses/pages, opened via the ShareActionMenu's authenticated `/library/:id` route (no public links) |
+| `/config` | Legacy path — redirects to `/admin` (first-run setup wizard + Settings now live under Admin) |
 | `/settings/*` | Profile (font size), lists, preferences |
-| `/admin/*` | Owner Admin shell (users, dashboard, advanced) |
+| `/admin/*` | Owner Admin shell (setup wizard, users, dashboard, advanced) |
 | `/admin/dashboard` | Owner library intelligence dashboard (includes Knowledge coverage panel) |
 | `/title/{movie\|show}/{id}` | Title detail — backdrop hero, Plot knowledge panel, trailer modal, Watch on Plex, purge notes |
 | `/privacy` | Privacy disclosure (no login) |
 | `/about` | About / version |
 | `/help` | Help guide — Chat, Explore, Plot Lab, owner idle curation (no login; role-aware sections) |
-| `/explore` | Explore hub — feed rails + compact knowledge-coverage honesty strip |
+| `/explore` | Explore hub — hero library search, Browse Movies/TV entry cards, feed rails, Library Pulse + knowledge strip footer |
+| `/explore/browse` | Unified library browse — server-paginated title list (Movies / TV shows / `q` search) reusing the standard sort/filter/columns/export/bulk stack and the 48/100/500/All page-size selector |
 | `/explore/plot-lab` | Plot Lab — multi-signal / motifs-only walls, theme chips when present, Why? layers, surprising neighbors |
 | `/lists` and `/lists/{id}` | Local curated lists and playlists; a list is a reusable shelf, while a playlist signals a planned viewing sequence |
 | `/admin/issues` | Owner-only media-issue queue with review status and logged supported repairs |
@@ -281,6 +283,12 @@ Single-owner installs have no built-in authentication — run on a trusted LAN o
 
 Library-oriented walls share **MediaBrowseControls**: sort and direction, type/watch/year filtering where data supports it, a poster/list pivot, column preference, and a CSV action. The controls are intentionally a *query interface*: their state is sent as normal library query parameters including `sort_dir`, and the browser may export only the server allowlist (title, year, type, genres, runtime, rating, watch state, counts/dates, and public IDs). This makes an exported slice match the visible filtered library rather than leaking filesystem paths or operational secrets.
 
+### Explore search and unified browse
+
+Explore opens with a **hero search bar** that queries titles and plot summaries (the library `query` parameter) and navigates to the unified browse view `/explore/browse?q=…`. **Browse Movies** / **Browse TV** cards and the Recently Added / Recent Releases *Movies·TV* links open the same view scoped by `media_type` — the full library, not a recency feed.
+
+`/explore/browse` (**LibraryBrowsePage**) is backed by `/api/library/query` with real server-side pagination (`total_matched` / `has_more` / `offset`). It reuses the shared MediaBrowseControls stack plus a **page-size selector**: 48, 100, 500, or **All**. Fixed sizes keep Previous/Next offset paging; **All** issues one request capped at 5,000 rows — mirroring the CSV export ceiling in `curatorx/web/app.py` so a large library never triggers an unbounded payload — and shows a *"Showing first N of M"* notice whenever the match count exceeds the cap. Year/genre filter options are populated from `/api/library/aggregate`. Selection supports pin-to-watchlist for everyone and owner-only removal from the CuratorX index.
+
 The **⋮ poster action grip** appears on LibraryMediaCard posters, list rows, and compact TitleCard overlays. It centralizes detail, Plex playback, watchlist pinning, list/playlist membership, discovery, reporting, and owner-only tools. A repeated control location matters for keyboard and touch users, and prevents each wall from inventing a subtly different action model.
 
 `/lists` uses one local collection model with `list_kind`:
@@ -306,6 +314,8 @@ Anyone may send a typed **Report issue** from the grip. Reports go to `/api/medi
 | Explore hub | Everyone | Compact knowledge-coverage honesty strip |
 
 Jump links on Help highlight **Owners**, Coverage, Dashboard, and Scheduled Tasks for owners; members/guests see browse/chat guidance and are pointed at the server owner for sync.
+
+**Deep-linkable Help.** Every Help heading (h2/h3/h4) is auto-assigned a stable GitHub-style anchor id from its text — no hand-maintained lookup — so any section is addressable as `/help#section-slug`. `HelpPage` scrolls to `location.hash` after the markdown paints (with a `scroll-margin-top` so the sticky header clears). Wire contextual "learn more" links with the shared `helpAnchor(slug)` builder (`src/lib/backNav.js`) or the unobtrusive `HelpHint` component (`src/components/HelpHint.jsx`), which renders a subtle "?" icon or a small text link that jumps straight to the right section. Current contextual entry points: the knowledge-coverage strip/panel, Explore's **Library Pulse**, title-detail **Plot knowledge**, and Plot Lab's sparse-wall note. Slugs are unit-tested in `src/lib/helpAnchors.test.mjs`.
 
 ---
 

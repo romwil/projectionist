@@ -1,5 +1,10 @@
 # Curator memory design
 
+> **Archived / superseded.** The canonical, maintained version of this design now
+> lives in [DESIGN.md](../DESIGN.md) ("Curator memory model" → "Design intent")
+> and [ARCHITECTURE.md](../ARCHITECTURE.md) ("Curator memory subsystem"). This
+> note is kept for provenance.
+
 v1.8.30 separates durable media knowledge from private partnership memory.
 
 - Repository memory is append-only, sanitized research about people, companies, and titles. It has entity, snapshot, relation, insight, and activity records. It never stores Plex paths, tokens, or credentialed URLs.

@@ -14,7 +14,12 @@ import {
   normalizeTagSort,
   parseAndTags,
 } from "../lib/tagSearch.js";
-import { buildMediaBrowseParams, parseMediaBrowse, queryFiltersFromBrowse } from "../lib/mediaBrowse.js";
+import {
+  buildMediaBrowseParams,
+  parseMediaBrowse,
+  queryFiltersFromBrowse,
+  resolvePageSizeLimit,
+} from "../lib/mediaBrowse.js";
 
 export default function TagPage() {
   const { tagName } = useParams();
@@ -35,7 +40,7 @@ export default function TagPage() {
   useEffect(() => {
     let cancelled = false;
     setState({ loading: true, items: [], error: "" });
-    queryLibrary({ ...queryFiltersFromBrowse(browse), keywords, limit: browse.limit, sort: browse.sort })
+    queryLibrary({ ...queryFiltersFromBrowse(browse), keywords, limit: resolvePageSizeLimit(browse.limit), sort: browse.sort })
       .then((data) => {
         if (cancelled) return;
         setState({

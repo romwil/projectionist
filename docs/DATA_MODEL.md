@@ -274,9 +274,115 @@ Key-value job metadata (e.g. `last_sync` JSON with item/embedding counts).
 
 ---
 
+### Curator memory
+
+The curator has **two memory scopes** (dual-scope model installed by `_migrate_curator_memory`): shared, source-cited **repository memory** about titles/people/companies, and private, per-account **user memory**. See [ARCHITECTURE.md](ARCHITECTURE.md#curator-memory-subsystem) and [DESIGN.md](DESIGN.md#curator-memory-model-110).
+
+#### `memory_entities`
+
+The subject of repository knowledge — a title, person, company, location, or other.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | Entity id |
+| `entity_type` | TEXT | `person`, `company`, `title`, `location`, or `other` (CHECK-constrained) |
+| `name` | TEXT | Display name |
+| `external_ids_json` | TEXT | JSON map of external ids (TMDB/TVDB/IMDb), default `{}` |
+| `library_item_id` | INTEGER | Optional link to `library_items.id` |
+| `created_at` / `updated_at` | REAL | Unix timestamps; `created_at` is "known since" |
+| `archived_at` | REAL | Soft-archive timestamp (nullable) |
+
+Unique per `(entity_type, name)`.
+
+#### `memory_snapshots`
+
+Append-only research snapshots for an entity (freshness = latest `fetched_at`). Written by `research_*` tools and idle `entity_memory_enrichment`.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | Snapshot id |
+| `entity_id` | TEXT FK | References `memory_entities(id)` |
+| `payload_json` | TEXT | Provider-normalized, **path-free** research payload |
+| `sources_json` | TEXT | JSON array of provenance sources, default `[]` |
+| `fetched_at` | REAL | When the provider data was retrieved (drives freshness) |
+| `created_at` | REAL | Row insert time |
+
+#### `memory_relations`
+
+Optional edges between entities (e.g. person↔title), attributable to a snapshot.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | Relation id |
+| `source_entity_id` / `target_entity_id` | TEXT FK | Endpoints in `memory_entities` |
+| `relation_type` | TEXT | Relation label |
+| `snapshot_id` | TEXT FK nullable | Sourcing `memory_snapshots(id)` |
+| `created_at` | REAL | Unix timestamp |
+
+#### `memory_insights`
+
+Durable, source-cited synthesis saved via `save_repo_insight` (Scholar cited knowledge).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | Insight id |
+| `entity_id` | TEXT FK | References `memory_entities(id)` |
+| `insight` | TEXT | The lasting fact / synthesis |
+| `citations_json` | TEXT | JSON citations (`{source, ref, note}`) so the claim is repeatable with provenance |
+| `created_at` | REAL | Unix timestamp |
+| `archived_at` | REAL | Soft-archive timestamp (nullable) |
+
+#### `memory_entity_activity`
+
+Best-effort discussion counter per entity (never fatal); lets recall flag "frequently discussed" and grooming prioritize hot entities.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `entity_id` | TEXT PK FK | References `memory_entities(id)` |
+| `discussion_count` | INTEGER | Times the entity has come up (default 0) |
+| `last_discussed_at` | REAL | Unix timestamp (nullable) |
+
+#### `user_memory_notes`
+
+Private per-account memory behind `UserMemoryService` (fail-closed authorization).
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | Note id (migrated preference rows use a `pref-` prefix) |
+| `user_id` | TEXT FK | References `users(id)` **ON DELETE CASCADE** |
+| `kind` | TEXT | `self_disclosure`, `learning_goal`, `watch_intention`, `watched_external`, `follow_up`, or `preference` |
+| `text` | TEXT | The note |
+| `metadata_json` | TEXT | JSON metadata (default `{}`); preference migration stores `signal_type`, `weight`, `tmdb_id`, `tvdb_id`, `media_type` |
+| `created_at` / `updated_at` | REAL | Unix timestamps |
+| `archived_at` | REAL | Soft-archive timestamp (nullable) |
+
+Indexed by `(user_id, created_at DESC)`. `preference_facts` is migrated **idempotently** into this table (`INSERT OR IGNORE`, `pref-`-prefixed ids); legacy `preference_facts` rows are retained only as a rollback-compatibility source and new account-scoped writes use this unified store.
+
+#### `user_memory_events`
+
+Lightweight per-user activity log for memory operations.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT PK | Event id |
+| `user_id` | TEXT | Owning account |
+| `event_type` | TEXT | Event label |
+| `target_id` | TEXT | Optional related id (nullable) |
+| `created_at` | REAL | Unix timestamp |
+| `metadata_json` | TEXT | JSON metadata (default `{}`) |
+
+#### Provenance & freshness rules (memory)
+
+- **Path-free by construction.** Only provider-normalized payloads enter repository memory — local file paths, Plex rating keys, and credentialed URLs are never stored.
+- **Freshness = latest snapshot.** `recall_repo_memory` / `search_memory` derive freshness from the newest `memory_snapshots.fetched_at` vs `memory_entities.created_at` ("known since"); stale entities are refreshed by idle `entity_memory_enrichment`, never per chat turn.
+- **Citations travel with claims.** Insights carry `citations_json` so the curator cites in prose from tool output — there is no separate citation UI.
+- **Privacy scoping.** A user reads only their own `user_memory_notes`; the owner may review/export another account **only** when it is Youth-flagged (`users.is_youth`). Purge hard-deletes a user's notes + chat sessions/messages atomically while shared repository knowledge remains intact.
+
+---
+
 ### PRD cognitive tables
 
-From [curatorx_prd.md](curatorx_prd.md):
+From the archived [curatorx_prd.md](archive/curatorx_prd.md):
 
 #### `curator_system_config`
 
@@ -506,4 +612,4 @@ erDiagram
 - [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) — knowledge dimensions, motifs, idle curation
 - [ARCHITECTURE.md](ARCHITECTURE.md) — sync and chat data flows
 - [DESIGN.md](DESIGN.md) — block schema and API usage
-- [curatorx_prd.md](curatorx_prd.md) — product source spec
+- [curatorx_prd.md](archive/curatorx_prd.md) — product source spec (archived / historical)

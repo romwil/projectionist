@@ -4,9 +4,9 @@ Follow this checklist after deploying CuratorX (Docker, Unraid, or local dev). D
 
 ---
 
-## Guided onboarding wizard (v3.0 — 3 cards)
+## Guided onboarding wizard (3 cards)
 
-Open **Settings** (`/config`). First-time setup runs a **3-step gated wizard** — later steps stay locked until prior requirements succeed.
+Open **Admin** (`/admin`; the legacy `/config` path redirects here). First-time setup runs a **3-step gated wizard** — later steps stay locked until prior requirements succeed.
 
 ```mermaid
 flowchart LR
@@ -51,14 +51,14 @@ Successful LLM verification displays onboarding assistant hints in a 320px scrol
 
 Wizard progress is exposed at `GET /api/setup/wizard` with step keys `identity_seed`, `infrastructure`, and `dropdown_mapping`. Per-service certification status is at `GET /api/setup/certifications` (also embedded in the wizard payload as `certifications`). Active ambient context label is at `GET /api/context/active`.
 
-On first visit to **Settings** (`/config`), uncertified services with configured credentials are tested automatically (sequentially). Successful tests set `certified=1`; changing a service URL or API key clears certification until the next successful test.
+On first visit to **Admin** (`/admin`), uncertified services with configured credentials are tested automatically (sequentially). Successful tests set `certified=1`; changing a service URL or API key clears certification until the next successful test.
 
 ---
 
 ## Index your library
 
-1. Open **Config** / **Settings** and click **Sync library** (or type `/sync` in chat when multi-user is off).
-2. Watch progress in the **status dock** (phase, counts, percent) — or on the Config library sync card.
+1. Open **Admin** / **Settings** and click **Sync library** (or type `/sync` in chat when multi-user is off).
+2. Watch progress in the **status dock** (phase, counts, percent) — or on the Admin library sync card.
 3. Confirm stats via the top-bar movie/show counts (or `GET /api/library/stats`).
 
 Job state is durable across container restarts. An interrupted job is marked failed; starting sync again resumes from the last valid phase checkpoint (≤72h) instead of redoing finished work.
@@ -67,9 +67,9 @@ Job state is durable across container restarts. An interrupted job is marked fai
 
 ## Ambient context (replaces manual lens switching)
 
-CuratorX v3.0 resolves conversational context automatically using rule-based signals (no ML pipeline required). The command bar shows an ambient label (default **General Exploration**) from `derived_contexts` via `GET /api/context/active`. The `derived_contexts` table stores lightweight context shells keyed by hash — this is a simple lookup, not an ML-derived clustering.
+CuratorX resolves conversational context automatically using rule-based signals (no ML pipeline required). The chat surfaces an ambient context tag under the thread title (default **General Exploration**) from `derived_contexts` via `GET /api/context/active`. The `derived_contexts` table stores lightweight context shells keyed by hash — this is a simple lookup, not an ML-derived clustering.
 
-Legacy **curation lenses** remain under Settings for backward compatibility but are not part of first-run onboarding.
+Legacy **curation lenses** remain available (API / advanced config) for backward compatibility but are not part of first-run onboarding.
 
 ---
 
@@ -106,4 +106,4 @@ Sync indexes identity and whatever Plex/TMDB return immediately. **Plot Lab moti
 - [WEB_UI.md](WEB_UI.md) — routes and chat features
 - [wiki/Home.md](wiki/Home.md) — operator wiki
 - [FAQ.md](FAQ.md) — common questions
-- [curatorx_prd.md](curatorx_prd.md) — product vision (historical PRD)
+- [curatorx_prd.md](archive/curatorx_prd.md) — product vision (archived / historical PRD)

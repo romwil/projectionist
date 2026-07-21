@@ -1,4 +1,5 @@
-import { Link } from "react-router-dom";
+import { useEffect } from "react";
+import { Link, useLocation } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import helpMarkdown from "@docs/HELP.md?raw";
@@ -6,6 +7,7 @@ import BackLink from "../components/BackLink";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
+import { slugify, targetIdFromHash } from "../lib/helpAnchors.js";
 
 const GITHUB_DOCS_BASE = "https://github.com/romwil/curatorx/tree/main/docs";
 
@@ -26,24 +28,6 @@ const IN_APP_ROUTES = new Set([
   "/watchlist",
 ]);
 
-/** Stable ids for in-page jump links (must match docs/HELP.md headings). */
-const HEADING_ANCHORS = {
-  "start here": "start-here",
-  "for everyone": "for-everyone--browse--chat",
-  "chat": "chat",
-  "explore": "explore",
-  "plot lab": "plot-lab",
-  "why?": "why-on-posters",
-  "title detail": "title-detail--plot-knowledge",
-  "why motif walls feel sparse": "why-motif-walls-feel-sparse",
-  "for owners": "for-owners--curation--scheduler",
-  "after sync": "after-sync",
-  "coverage over time": "coverage-over-time",
-  "telemetry": "telemetry--tuning",
-  "llm vs free": "llm-vs-free-sources",
-  "related documentation": "related-documentation",
-};
-
 function headingText(children) {
   if (typeof children === "string") return children;
   if (Array.isArray(children)) return children.map(headingText).join("");
@@ -51,12 +35,12 @@ function headingText(children) {
   return "";
 }
 
+/**
+ * GitHub-style anchor id for a heading. Every h2/h3/h4 gets a stable slug so
+ * any section is deep-linkable — no hand-maintained lookup table to drift.
+ */
 function headingId(children) {
-  const text = headingText(children).trim().toLowerCase();
-  for (const [prefix, id] of Object.entries(HEADING_ANCHORS)) {
-    if (text.startsWith(prefix)) return id;
-  }
-  return undefined;
+  return slugify(headingText(children)) || undefined;
 }
 
 /**
@@ -124,6 +108,14 @@ const markdownComponents = {
       </h3>
     );
   },
+  h4: ({ children, ...props }) => {
+    const id = headingId(children);
+    return (
+      <h4 id={id} {...props}>
+        {children}
+      </h4>
+    );
+  },
   table: ({ children }) => (
     <div className="privacy-table-wrap">
       <table>{children}</table>
@@ -155,6 +147,30 @@ export default function HelpPage() {
   const { isOwner, role, multiUserEnabled } = useAuthGate({ redirect: false });
   const showOwnerNav = isOwner || !multiUserEnabled;
   const markdown = markdownForRole(helpMarkdown, { includeOwnerSections: showOwnerNav });
+  const { hash } = useLocation();
+
+  // Scroll to the anchored section once react-markdown has painted the headings.
+  // Runs after render (and on hash change) with a couple of frames + a fallback
+  // timeout so it wins over any route-level scroll reset.
+  useEffect(() => {
+    const id = targetIdFromHash(hash);
+    if (!id) return undefined;
+    let raf1 = 0;
+    let raf2 = 0;
+    const scrollToTarget = () => {
+      const el = typeof document !== "undefined" ? document.getElementById(id) : null;
+      if (el) el.scrollIntoView({ block: "start" });
+    };
+    raf1 = requestAnimationFrame(() => {
+      raf2 = requestAnimationFrame(scrollToTarget);
+    });
+    const timer = setTimeout(scrollToTarget, 250);
+    return () => {
+      cancelAnimationFrame(raf1);
+      cancelAnimationFrame(raf2);
+      clearTimeout(timer);
+    };
+  }, [hash, markdown]);
 
   const roleLabel = !multiUserEnabled
     ? "Single workspace"

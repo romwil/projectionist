@@ -8,6 +8,7 @@ import TitleCard from "../components/TitleCard";
 import AgentAvatar from "../components/AgentAvatar";
 import ShareActionMenu from "../components/ShareActionMenu";
 import { ROUTES } from "../lib/backNav";
+import { savedLibraryBlocks } from "../lib/savedLibraryBlocks";
 
 function groupedByDate(pages) {
   return pages.reduce((groups, page) => {
@@ -45,15 +46,14 @@ export default function LibraryPage() {
         <main className="explore-main">
           <section className="explore-section">
             <div className="section-heading"><p className="eyebrow">Saved curator library</p><h1>{page?.name || "Loading…"}</h1></div>
-            {blocks.map((block, index) => {
-              if (block.type === "title_cards") {
-                return <div className="inline-cards" key={index}>{(block.items || []).map((item) => <TitleCard key={`${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`} item={item} compact />)}</div>;
+            {savedLibraryBlocks(blocks).map((block, index) => {
+              if (block.kind === "title_cards" || block.kind === "recommendations") {
+                return <div className="inline-cards" key={index}>{block.items.map((item) => <TitleCard key={`${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`} item={item} compact />)}</div>;
               }
-              if (block.type === "suggested_replies") {
-                const replies = Array.isArray(block.payload?.replies) ? block.payload.replies.filter(Boolean).slice(0, 4) : [];
-                return replies.length ? (
+              if (block.kind === "suggested_replies") {
+                return (
                   <div className="suggested-replies" key={index} aria-label="Continue this saved conversation">
-                    {replies.map((reply) => (
+                    {block.replies.map((reply) => (
                       <button
                         type="button"
                         className="suggested-reply-chip"
@@ -64,9 +64,9 @@ export default function LibraryPage() {
                       </button>
                     ))}
                   </div>
-                ) : null;
+                );
               }
-              return <MessageText key={index} content={block.content || ""} markdown />;
+              return <MessageText key={index} content={block.content} markdown />;
             })}
             {page ? <div className="library-detail-actions">
               <ShareActionMenu

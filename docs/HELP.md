@@ -52,7 +52,19 @@ Saved pages preserve the curator's structured text, title cards, and reply chips
 
 Cinema browse over the same SQLite feeds the agent uses: Recently Added, Recent Releases, Revisit These (partially watched TV idle 60+ days), On This Day, and links into Plot Lab / Tags. The hub also rotates a well-stocked director filmography and genre each day, then looks for titles matching a nearby maintained calendar occasion (including Arbor Day) or a gentle season-of-the-year fallback. Those rails only appear when the library has enough matching metadata, and their headings open the matching director or genre wall.
 
-**Library Pulse** intentionally sits at the bottom of Explore. It remains the same useful collection-health snapshot, but discovery comes first so the hub opens with titles rather than dashboard metrics. Posters show watched / in-progress overlays from Plex sync. Empty rails usually mean enrichment caches are still cold — not that your library is empty.
+**Library Pulse** intentionally sits at the bottom of Explore, now paired side-by-side with the knowledge-coverage strip in a shared footer (they stack on narrow screens). It remains the same useful collection-health snapshot, but discovery comes first so the hub opens with titles rather than dashboard metrics. Posters show watched / in-progress overlays from Plex sync. Empty rails usually mean enrichment caches are still cold — not that your library is empty.
+
+### Searching and browsing the library
+
+The **search bar** at the top of Explore looks across your library by title and plot summary. Submit it to open the unified browse page with your results. You can also jump straight into a full, paginated list with the **Browse Movies** and **Browse TV** cards, or the *Movies* / *TV* links on the Recently Added and Recent Releases rails — these show your whole library of that type, not just recent additions.
+
+The browse page uses the same controls as every other wall (sort, direction, type, watch state, year, genres, columns, poster/list, CSV). A **Show** selector picks how many titles load at once: **48**, **100**, **500**, or **All**. With a fixed size you page through results with **Previous** / **Next**; **All** loads everything in one go up to a safety ceiling of 5,000 titles and tells you *"Showing first N of M"* when your library is larger than that. Select titles to pin them to your watchlist in bulk (owners can also remove them from the index).
+
+### What knowledge coverage means
+
+"Knowledge coverage" is an honesty gauge, not a grade of your library. It reports how much of each **plot-knowledge layer** the curator has filled in so far: overviews and keywords, semantic embeddings, plot motifs, plot-similarity neighbors, and optional LLM loglines (plus themes and long synopsis when those enrichers run). A high percentage means the curator has rich signals to reason over when it recommends, compares, or explains; a low percentage means idle enrichment still has work to do — recommendations may lean on thinner data until it catches up.
+
+This matters because every "more like *X*", motif wall, and surprising-neighbor answer is only as deep as the layers behind it. Coverage climbs on its own as the container sits idle and the scheduler trickles metadata, embeddings, motifs, and neighbors. Sparse bars are expected right after a big import or an upgrade that improves extraction — they are a to-do list, not a fault. Owners can nudge specific layers from [Scheduled Tasks](#refreshing-plot-lab-motifs-after-an-update) and read the full breakdown under [Coverage over time](#coverage-over-time).
 
 ### Plot Lab
 
@@ -204,9 +216,12 @@ The curator keeps two kinds of memory:
   with, or applied to, another household member. Youth-mode accounts show a badge
   in Profile; only those accounts can be reviewed by the owner for moderation.
 
-Export your private memory from `GET /api/me/memory` (JSON or Markdown).
-Deleting it permanently deletes both your private memory and your chat
-transcripts, so export first if you need a copy.
+Export your private memory from `GET /api/me/memory` (JSON or Markdown). The
+export includes your private notes, your chat transcripts (messages), your
+saved library pages, and your preference facts. Deleting it (`DELETE
+/api/me/memory`) permanently removes all of those — private notes, chat
+transcripts, saved library pages, and preference facts — so export first if you
+need a copy.
 
 ---
 

@@ -5,7 +5,7 @@ import {
   buildKnowledgeCoverageRows,
   summarizeKnowledgeCoverage,
 } from "../lib/knowledgeCoverage.js";
-import { ROUTES } from "../lib/backNav.js";
+import { helpAnchor } from "../lib/backNav.js";
 
 /**
  * Knowledge coverage strip/card for Admin Dashboard / Scheduled Tasks / Explore.
@@ -62,7 +62,10 @@ export default function KnowledgeCoverageCard({
             {showHelpLink ? (
               <>
                 {" "}
-                <Link to={ROUTES.help} className="app-topbar-link">
+                <Link
+                  to={helpAnchor("what-knowledge-coverage-means")}
+                  className="app-topbar-link"
+                >
                   Why this matters
                 </Link>
               </>
@@ -84,7 +87,7 @@ export default function KnowledgeCoverageCard({
         <h3 className="dash-panel-title">Knowledge coverage</h3>
         {showHelpLink ? (
           <Link
-            to={`${ROUTES.help}#coverage-over-time`}
+            to={helpAnchor("coverage-over-time")}
             className="knowledge-coverage-help-link"
             data-testid="knowledge-coverage-help"
           >

@@ -34,16 +34,16 @@ These votes are derived from the current persona-template spectrum: energetic En
 - **Like:** “I could delight users more if I could share a relevant GIF or clip in chat.”
 
 ### The Scholar
-- **Must:** “I could delight users more if I could rely on durable cited knowledge for claims about style and technique.”
+- **Must (✅ shipped 1.10.0):** “I could delight users more if I could rely on durable cited knowledge for claims about style and technique.” — repository memory now persists source-cited research snapshots and insights (`research_*`, `recall_repo_memory`, `save_repo_insight`).
 - **Love:** “I could delight users more if I could build a multi-session film-course syllabus.”
 - **Like:** “I could delight users more if I could render footnote-style source citations inline.”
 
 ### The Concierge
-- **Must:** “I could delight users more if I could remember intentions and safely follow up on promises.”
+- **Must (✅ shipped 1.10.0):** “I could delight users more if I could remember intentions and safely follow up on promises.” — per-user `follow_up` / `watch_intention` notes drive a "resume where we left off" line in the per-turn prompt.
 - **Love:** “I could delight users more if I could coordinate an opt-in cross-service path from availability to acquisition.”
 - **Like:** “I could delight users more if I could suggest around a member’s calendar, weekends, and holidays.”
 
 ### The Companion
-- **Must:** “I could delight users more if I could retain safe long-term memory of who a member is while respecting Youth/adult privacy.”
+- **Must (✅ shipped 1.10.0):** “I could delight users more if I could retain safe long-term memory of who a member is while respecting Youth/adult privacy.” — fail-closed per-user memory (`user_memory_notes` via `UserMemoryService`; owner review limited to Youth-flagged accounts).
 - **Love:** “I could delight users more if I could tune a pick from a quick mood check-in.”
 - **Like:** “I could delight users more if I could remember consented in-jokes and callbacks.”

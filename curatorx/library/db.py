@@ -3512,27 +3512,126 @@ class Database:
         return self.get_user_memory_note(note_id, user_id=user_id)
 
     def export_user_memory(self, user_id: str) -> Dict[str, Any]:
+        """Full data export mirroring exactly what ``purge_user_memory_and_chats``
+        deletes: private notes, chat threads + message transcripts, saved library
+        pages, and preference facts attributed to this account."""
         notes = self.list_user_memory_notes(user_id, limit=500)
         now = time.time()
         with self.connect() as conn:
+            session_rows = conn.execute(
+                "SELECT * FROM chat_sessions WHERE user_id = ? ORDER BY created_at ASC",
+                (user_id,),
+            ).fetchall()
+            chat_threads: List[Dict[str, Any]] = []
+            for session in session_rows:
+                keys = session.keys()
+                message_rows = conn.execute(
+                    """SELECT id, role, blocks_json, created_at, lens_id
+                       FROM chat_messages WHERE session_id = ? ORDER BY created_at ASC""",
+                    (session["id"],),
+                ).fetchall()
+                messages = [
+                    {
+                        "id": str(m["id"]),
+                        "role": str(m["role"]),
+                        "created_at": float(m["created_at"]),
+                        "lens_id": m["lens_id"],
+                        "blocks": json.loads(m["blocks_json"]) if m["blocks_json"] else None,
+                    }
+                    for m in message_rows
+                ]
+                chat_threads.append(
+                    {
+                        "id": str(session["id"]),
+                        "thread_title": session["thread_title"],
+                        "lens_id": session["lens_id"],
+                        "context_hash": session["context_hash"],
+                        "persona_id": session["persona_id"] if "persona_id" in keys else None,
+                        "created_at": float(session["created_at"]),
+                        "updated_at": float(session["updated_at"]),
+                        "messages": messages,
+                    }
+                )
+
+            saved_rows = conn.execute(
+                "SELECT * FROM saved_library_pages WHERE user_id = ? ORDER BY created_at ASC",
+                (user_id,),
+            ).fetchall()
+            saved_library_pages = [self._row_to_saved_library_page(row) for row in saved_rows]
+
+            preference_facts: List[Dict[str, Any]] = []
+            if "user_id" in self._table_columns(conn, "preference_facts"):
+                pref_rows = conn.execute(
+                    """SELECT id, signal_type, text, weight, tmdb_id, tvdb_id, media_type, created_at
+                       FROM preference_facts WHERE user_id = ? ORDER BY created_at ASC""",
+                    (user_id,),
+                ).fetchall()
+                preference_facts = [dict(row) for row in pref_rows]
+
             conn.execute(
                 "INSERT INTO user_memory_events (id, user_id, event_type, created_at) VALUES (?, ?, 'export', ?)",
                 (uuid.uuid4().hex, user_id, now),
             )
-        return {"user_id": user_id, "exported_at": now, "notes": notes}
+        return {
+            "user_id": user_id,
+            "exported_at": now,
+            "notes": notes,
+            "chat_threads": chat_threads,
+            "saved_library_pages": saved_library_pages,
+            "preference_facts": preference_facts,
+        }
 
     def purge_user_memory_and_chats(self, user_id: str) -> Dict[str, int]:
+        """Delete every per-user store that PRIVACY.md promises a purge removes.
+
+        ``PRAGMA foreign_keys`` is not enabled, so ``ON DELETE CASCADE`` is
+        dormant; each child store is deleted explicitly (children before
+        parents) so no chat transcript text, saved library page, or preference
+        fact is left orphaned. Export mirrors exactly this set.
+        """
         now = time.time()
         with self.connect() as conn:
-            notes = conn.execute("SELECT COUNT(*) AS count FROM user_memory_notes WHERE user_id = ?", (user_id,)).fetchone()
-            chats = conn.execute("SELECT COUNT(*) AS count FROM chat_sessions WHERE user_id = ?", (user_id,)).fetchone()
-            conn.execute("DELETE FROM user_memory_notes WHERE user_id = ?", (user_id,))
+
+            def _count(sql: str) -> int:
+                row = conn.execute(sql, (user_id,)).fetchone()
+                return int(row["count"]) if row else 0
+
+            notes = _count("SELECT COUNT(*) AS count FROM user_memory_notes WHERE user_id = ?")
+            chats = _count("SELECT COUNT(*) AS count FROM chat_sessions WHERE user_id = ?")
+            messages = _count(
+                "SELECT COUNT(*) AS count FROM chat_messages "
+                "WHERE session_id IN (SELECT id FROM chat_sessions WHERE user_id = ?)"
+            )
+            saved = _count("SELECT COUNT(*) AS count FROM saved_library_pages WHERE user_id = ?")
+            pref_has_user = "user_id" in self._table_columns(conn, "preference_facts")
+            prefs = (
+                _count("SELECT COUNT(*) AS count FROM preference_facts WHERE user_id = ?")
+                if pref_has_user
+                else 0
+            )
+
+            # Delete children before parents (cascade is dormant without the pragma).
+            conn.execute(
+                "DELETE FROM chat_messages "
+                "WHERE session_id IN (SELECT id FROM chat_sessions WHERE user_id = ?)",
+                (user_id,),
+            )
             conn.execute("DELETE FROM chat_sessions WHERE user_id = ?", (user_id,))
+            conn.execute("DELETE FROM saved_library_pages WHERE user_id = ?", (user_id,))
+            conn.execute("DELETE FROM user_memory_notes WHERE user_id = ?", (user_id,))
+            if pref_has_user:
+                conn.execute("DELETE FROM preference_facts WHERE user_id = ?", (user_id,))
             conn.execute(
                 "INSERT INTO user_memory_events (id, user_id, event_type, created_at) VALUES (?, ?, 'purge', ?)",
                 (uuid.uuid4().hex, user_id, now),
             )
-        return {"notes_deleted": int(notes["count"]), "chat_sessions_deleted": int(chats["count"])}
+        return {
+            "notes_deleted": notes,
+            "chat_sessions_deleted": chats,
+            "chat_messages_deleted": messages,
+            "saved_library_pages_deleted": saved,
+            "preference_facts_deleted": prefs,
+        }
 
     def save_repository_research(
         self, *, entity_type: str, name: str, payload: Mapping[str, Any],
@@ -4635,13 +4734,26 @@ class Database:
         assert row is not None
         return self._row_to_thread_summary(row)
 
-    def get_chat_thread(self, session_id: str, *, user_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def get_chat_thread(
+        self,
+        session_id: str,
+        *,
+        user_id: Optional[str] = None,
+        include_orphans: bool = False,
+    ) -> Optional[Dict[str, Any]]:
         with self.connect() as conn:
             if user_id is None:
                 row = conn.execute("SELECT * FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
-            else:
+            elif include_orphans:
+                # Owner review: also match legacy NULL-owner (orphan) threads.
                 row = conn.execute(
                     "SELECT * FROM chat_sessions WHERE id = ? AND (user_id IS NULL OR user_id = ?)",
+                    (session_id, user_id),
+                ).fetchone()
+            else:
+                # Members only ever see their own threads — never legacy orphans.
+                row = conn.execute(
+                    "SELECT * FROM chat_sessions WHERE id = ? AND user_id = ?",
                     (session_id, user_id),
                 ).fetchone()
             if not row:
@@ -4666,47 +4778,45 @@ class Database:
             preview=preview,
         )
 
-    def list_chat_threads(self, *, limit: int = 50, user_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_chat_threads(
+        self,
+        *,
+        limit: int = 50,
+        user_id: Optional[str] = None,
+        include_orphans: bool = False,
+    ) -> List[Dict[str, Any]]:
+        select_prefix = """
+                    SELECT
+                        s.*,
+                        COUNT(m.id) AS message_count,
+                        (
+                            SELECT blocks_json FROM chat_messages
+                            WHERE session_id = s.id
+                            ORDER BY created_at DESC
+                            LIMIT 1
+                        ) AS last_blocks_json
+                    FROM chat_sessions s
+                    LEFT JOIN chat_messages m ON m.session_id = s.id
+        """
         with self.connect() as conn:
             if user_id is None:
                 rows = conn.execute(
-                    """
-                    SELECT
-                        s.*,
-                        COUNT(m.id) AS message_count,
-                        (
-                            SELECT blocks_json FROM chat_messages
-                            WHERE session_id = s.id
-                            ORDER BY created_at DESC
-                            LIMIT 1
-                        ) AS last_blocks_json
-                    FROM chat_sessions s
-                    LEFT JOIN chat_messages m ON m.session_id = s.id
-                    GROUP BY s.id
-                    ORDER BY s.updated_at DESC
-                    LIMIT ?
-                    """,
+                    select_prefix
+                    + " GROUP BY s.id ORDER BY s.updated_at DESC LIMIT ?",
                     (limit,),
                 ).fetchall()
-            else:
+            elif include_orphans:
+                # Owner view: own threads plus legacy NULL-owner (orphan) threads.
                 rows = conn.execute(
-                    """
-                    SELECT
-                        s.*,
-                        COUNT(m.id) AS message_count,
-                        (
-                            SELECT blocks_json FROM chat_messages
-                            WHERE session_id = s.id
-                            ORDER BY created_at DESC
-                            LIMIT 1
-                        ) AS last_blocks_json
-                    FROM chat_sessions s
-                    LEFT JOIN chat_messages m ON m.session_id = s.id
-                    WHERE s.user_id = ?
-                    GROUP BY s.id
-                    ORDER BY s.updated_at DESC
-                    LIMIT ?
-                    """,
+                    select_prefix
+                    + " WHERE s.user_id IS NULL OR s.user_id = ? GROUP BY s.id ORDER BY s.updated_at DESC LIMIT ?",
+                    (user_id, limit),
+                ).fetchall()
+            else:
+                # Members only ever see their own threads — never legacy orphans.
+                rows = conn.execute(
+                    select_prefix
+                    + " WHERE s.user_id = ? GROUP BY s.id ORDER BY s.updated_at DESC LIMIT ?",
                     (user_id, limit),
                 ).fetchall()
         threads: List[Dict[str, Any]] = []
@@ -4766,17 +4876,32 @@ class Database:
                 (title, session_id),
             )
 
-    def delete_chat_thread(self, session_id: str, *, user_id: Optional[str] = None) -> bool:
+    def delete_chat_thread(
+        self,
+        session_id: str,
+        *,
+        user_id: Optional[str] = None,
+        include_orphans: bool = False,
+    ) -> bool:
         with self.connect() as conn:
             if user_id is None:
                 row = conn.execute("SELECT id FROM chat_sessions WHERE id = ?", (session_id,)).fetchone()
-            else:
+            elif include_orphans:
                 row = conn.execute(
                     "SELECT id FROM chat_sessions WHERE id = ? AND (user_id IS NULL OR user_id = ?)",
                     (session_id, user_id),
                 ).fetchone()
+            else:
+                row = conn.execute(
+                    "SELECT id FROM chat_sessions WHERE id = ? AND user_id = ?",
+                    (session_id, user_id),
+                ).fetchone()
             if not row:
                 return False
+            # PRAGMA foreign_keys is not enabled, so ON DELETE CASCADE is dormant.
+            # Delete the transcript rows explicitly before the session so no
+            # chat_messages content is left orphaned.
+            conn.execute("DELETE FROM chat_messages WHERE session_id = ?", (session_id,))
             conn.execute("DELETE FROM chat_sessions WHERE id = ?", (session_id,))
             return True
 

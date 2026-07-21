@@ -4,6 +4,7 @@ import {
   CHAT_SCROLL_PADDING,
   computeFollowScrollTop,
   isScrolledAwayFromBottom,
+  resolveAutoScroll,
 } from "./chatScroll.js";
 
 describe("computeFollowScrollTop", () => {
@@ -93,6 +94,56 @@ describe("isScrolledAwayFromBottom", () => {
         threshold: 120,
       }),
       true
+    );
+  });
+});
+
+describe("resolveAutoScroll", () => {
+  it("pins the latest turn into view when a new turn starts and the user was following", () => {
+    assert.equal(
+      resolveAutoScroll({ isNewTurn: true, streaming: false, nearBottom: false, wasFollowing: true }),
+      "pin-latest"
+    );
+  });
+
+  it("pins the latest turn when a new turn starts and the user is near the bottom", () => {
+    assert.equal(
+      resolveAutoScroll({ isNewTurn: true, streaming: true, nearBottom: true, wasFollowing: false }),
+      "pin-latest"
+    );
+  });
+
+  it("does not move for a new turn if the user had scrolled away", () => {
+    assert.equal(
+      resolveAutoScroll({ isNewTurn: true, streaming: false, nearBottom: false, wasFollowing: false }),
+      "none"
+    );
+  });
+
+  it("sticks to the bottom while streaming only when the user is near the bottom", () => {
+    assert.equal(
+      resolveAutoScroll({ isNewTurn: false, streaming: true, nearBottom: true, wasFollowing: true }),
+      "stick-bottom"
+    );
+  });
+
+  it("never yanks the user back while streaming after they scroll away (no top pin per chunk)", () => {
+    // The core regression: a streamed chunk must not force the view anywhere
+    // once the user has scrolled up.
+    assert.equal(
+      resolveAutoScroll({ isNewTurn: false, streaming: true, nearBottom: false, wasFollowing: true }),
+      "none"
+    );
+    assert.equal(
+      resolveAutoScroll({ isNewTurn: false, streaming: true, nearBottom: false, wasFollowing: false }),
+      "none"
+    );
+  });
+
+  it("does nothing for non-streaming updates that are not new turns", () => {
+    assert.equal(
+      resolveAutoScroll({ isNewTurn: false, streaming: false, nearBottom: true, wasFollowing: true }),
+      "none"
     );
   });
 });

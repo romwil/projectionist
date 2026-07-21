@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-07-20
+
+Consolidated maintenance + feature release: the Explore browse & search hub, previously-unreleased frontend fixes, privacy-correctness hardening, repo hygiene, a docs reorganization, and a config-only lint/type toolchain.
+
+### Added
+- **Explore is now a real library-browsing hub.** A large hero search bar at the top of Explore searches titles and plot summaries and opens a unified full-page browse view (`/explore/browse`). New **Browse Movies** / **Browse TV** cards and the Recently Added / Recent Releases Movies·TV links open the same paginated view of the *entire* library rather than a 30-day feed slice.
+- **Unified `LibraryBrowsePage`** (`/explore/browse`) backed by the existing `/api/library/query` endpoint with true server-side pagination. It reuses the standard sort / direction / type / watch-state / year / genres / columns / export / poster·list controls, per-card recommend + poster action grip, and select-page / pin-to-watchlist / owner delete bulk actions. The header adapts to "Movies", "TV shows", or "Search: <query>".
+- **Shared page-size selector (48 / 100 / 500 / All)** on the browse controls. "All" issues a single request capped at 5,000 rows (mirroring the CSV export ceiling) and shows a "Showing first N of M" notice when the library exceeds the cap; fixed sizes keep Previous/Next paging.
+- **Config-only lint/type toolchain baseline**: ruff + mypy wiring in `pyproject.toml`, ESLint 9 + Prettier in `frontend/`, and a `.github/workflows/lint.yml` CI job. Conservative rule sets capture the current tree as a green baseline without a mass reformat, so violations can be burned down file-by-file later.
+
+### Changed
+- The knowledge-coverage strip moved from the top of Explore to the bottom, sitting side-by-side with **Library Pulse** in a shared footer that stacks on narrow screens.
+- **Repo hygiene**: the previously-tracked `.coverage` artifact is now untracked and ignored, the version-drift guard (`tests/test_version.py`) asserts the root `package.json` version, and the `npm test` script now runs the pytest suite (chaining frontend + e2e) instead of a stale command.
+- **Docs reorganization**: added memory-subsystem sections to `DATA_MODEL`/`ARCHITECTURE`/`DESIGN`, archived `curatorx_prd.md` and `DESIGN-curator-memory.md` under `docs/archive/`, deduped the wiki FAQ, refreshed the README doc table and DELIGHT-WISHLIST shipped markers, and documented the `/library` route in WEB_UI.
+
+### Fixed
+- **Privacy correctness**: account purge now fully deletes chat transcripts, saved library pages, and preference facts (not just private notes); memory export mirrors exactly what purge removes; and legacy NULL-owner threads are restricted to owner review so they cannot leak across accounts.
+- Saved library pages now render all of their blocks in order instead of showing only a single turnstile/`open_viewport` preview, so opened pages display their full text rather than a truncated preview.
+- Chat autoscroll now only "sticks" when the reader is already near the bottom, so incoming messages no longer yank a user who has scrolled up back down (or push them away from where they were reading).
+- Corrected `savedLibraryBlocks` block classification so saved responses are grouped and ordered correctly when reconstructing a saved library page.
+
+### Verification
+- Full backend pytest suite green apart from 2 pre-existing, unrelated `tests/test_api_authz.py` failures; frontend unit tests and the production build pass; ruff and ESLint baselines remain green.
+
+## [1.11.0] — 2026-07-20
+
+### Added
+- In-app Help is now **deep-linkable**: every heading (h2/h3/h4) gets a stable GitHub-style anchor id automatically, so any section can be linked directly. Navigating to a `/help#section` link now reliably scrolls to that section after the page renders.
+- New contextual "learn more" hints (`HelpHint`) placed unobtrusively next to explain-this surfaces — Library Pulse, the knowledge-coverage strip/panel, title-detail **Plot knowledge**, and Plot Lab's "why walls feel sparse" note — each jumping straight to the relevant Help section instead of the top of Help.
+- New **"What knowledge coverage means"** Help section (member-visible) explaining why coverage percentages matter and that sparse bars are expected while idle enrichment catches up.
+
+### Changed
+- The knowledge-coverage strip's "Why this matters" link now targets the new coverage explainer, and Help links across the app route through a shared `helpAnchor()` builder so section deep-links stay consistent.
+
 ## [1.10.0] — 2026-07-20
 
 ### Added

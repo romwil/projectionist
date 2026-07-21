@@ -30,7 +30,38 @@ export const DEFAULT_MEDIA_BROWSE = {
   keywords: [],
 };
 
+/** Page sizes surfaced in the shared "Show" selector. "all" is a capped fetch. */
+export const MEDIA_BROWSE_PAGE_SIZES = [48, 100, 500, "all"];
+
+/**
+ * Ceiling for an "All" request. Mirrors the CSV export cap in
+ * curatorx/web/app.py so "All" never asks the reader for an unbounded payload.
+ */
+export const MEDIA_BROWSE_ALL_CAP = 5000;
+
 const STORAGE_PREFIX = "curatorx.media-browse.columns.";
+
+/** True when a page-size value represents the capped "All" selection. */
+export function isAllPageSize(value) {
+  return String(value ?? "").trim().toLowerCase() === "all";
+}
+
+/**
+ * Resolve a page-size selection to the concrete request limit.
+ * "All" becomes min(total_matched, MEDIA_BROWSE_ALL_CAP) — or the cap when the
+ * total is unknown — so a single request returns every visible row up to the
+ * ceiling. Fixed sizes are clamped to the same ceiling.
+ */
+export function resolvePageSizeLimit(pageSize, totalMatched) {
+  if (isAllPageSize(pageSize)) {
+    const total = Number(totalMatched);
+    if (Number.isFinite(total) && total > 0) return Math.min(total, MEDIA_BROWSE_ALL_CAP);
+    return MEDIA_BROWSE_ALL_CAP;
+  }
+  const parsed = Number(pageSize);
+  if (Number.isFinite(parsed) && parsed > 0) return Math.min(parsed, MEDIA_BROWSE_ALL_CAP);
+  return DEFAULT_MEDIA_BROWSE.limit;
+}
 
 function stringList(value) {
   if (Array.isArray(value)) return value.map(String).map((item) => item.trim()).filter(Boolean);
@@ -40,6 +71,13 @@ function stringList(value) {
 function numberInRange(value, fallback, min, max) {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
+}
+
+/** Parse a page-size URL value into "all" or a bounded number. */
+function parsePageSizeParam(value, fallback) {
+  if (value == null || value === "") return fallback;
+  if (isAllPageSize(value)) return "all";
+  return numberInRange(value, fallback, 1, MEDIA_BROWSE_ALL_CAP);
 }
 
 export function parseMediaBrowse(searchParams, defaults = {}) {
@@ -53,7 +91,7 @@ export function parseMediaBrowse(searchParams, defaults = {}) {
     view: view === "list" ? "list" : "poster",
     sort: MEDIA_BROWSE_SORTS.some((option) => option.id === sort) ? sort : merged.sort,
     sort_dir: sortDir === "desc" ? "desc" : "asc",
-    limit: numberInRange(get("limit") || merged.limit, merged.limit, 1, 100),
+    limit: parsePageSizeParam(get("limit") || merged.limit, merged.limit),
     offset: numberInRange(get("offset"), 0, 0, Number.MAX_SAFE_INTEGER),
     media_type: get("media_type") || merged.media_type || "",
     watch_state: get("watch_state") || merged.watch_state || "",
@@ -84,6 +122,8 @@ export function queryFiltersFromBrowse(state, extra = {}) {
     const value = state?.[key];
     if (Array.isArray(value) ? value.length : value !== "" && value != null) filters[key] = value;
   }
+  // Never forward the "all" sentinel to the reader — resolve it to the cap.
+  if (isAllPageSize(filters.limit)) filters.limit = MEDIA_BROWSE_ALL_CAP;
   if (state?.watch_state === "unwatched") filters.unwatched_only = true;
   if (state?.watch_state === "watched") filters.min_view_count = 1;
   if (state?.watch_state === "in_progress") filters.in_progress_only = true;

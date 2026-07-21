@@ -71,6 +71,21 @@ export function decadeYearRange(decadeLabel) {
   return { year_from: start, year_to: start + 9 };
 }
 
+/**
+ * Deep-link to the unified library browse page. Pass `mediaType` (movie/show)
+ * and/or a free-text `q` search; omit both for the full library.
+ */
+export function libraryBrowsePath({ mediaType, q } = {}) {
+  const params = new URLSearchParams();
+  if (mediaType === "movie" || mediaType === "show") {
+    params.set("media_type", mediaType);
+  }
+  const query = String(q || "").trim();
+  if (query) params.set("q", query);
+  const search = params.toString();
+  return search ? `${ROUTES.libraryBrowse}?${search}` : ROUTES.libraryBrowse;
+}
+
 /** Drill-down path for an Explore hub section (e.g. recently-added). */
 export function exploreSectionPath(sectionId, { mediaType, limit, offset } = {}) {
   const id = String(sectionId || "").trim();

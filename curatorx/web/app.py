@@ -636,6 +636,16 @@ def _scoped_user_id(user) -> Optional[str]:
     return None
 
 
+def _include_orphan_threads(user) -> bool:
+    """Only owners may see/act on legacy NULL-owner (orphan) chat threads.
+
+    In single-workspace mode scoping is off (all threads visible); in multi-user
+    mode members are strictly limited to their own threads while the owner can
+    still review/clean up pre-multi-user orphan threads.
+    """
+    return _settings().features.multi_user_enabled and getattr(user, "role", None) == "owner"
+
+
 def _secret_hint(value: str) -> str:
     """Last-4 hint for owner UI; never a reversible echo of the secret."""
     cleaned = str(value or "").strip()
@@ -939,8 +949,46 @@ def export_my_memory(
             headers={"Content-Disposition": 'attachment; filename="curatorx-memory.json"'},
         )
     lines = ["# CuratorX memory export", ""]
-    for note in payload["notes"]:
-        lines.extend([f"## {note['kind']}", note["text"], ""])
+
+    lines.append("## Private notes")
+    if payload["notes"]:
+        for note in payload["notes"]:
+            lines.extend([f"### {note['kind']}", note["text"], ""])
+    else:
+        lines.extend(["_No private notes._", ""])
+
+    lines.append("## Saved library pages")
+    saved_pages = payload.get("saved_library_pages") or []
+    if saved_pages:
+        for page in saved_pages:
+            summary = (page.get("summary") or "").strip()
+            lines.append(f"### {page.get('name', 'Untitled')}")
+            if summary:
+                lines.append(summary)
+            lines.append("")
+    else:
+        lines.extend(["_No saved library pages._", ""])
+
+    lines.append("## Chat threads")
+    chat_threads = payload.get("chat_threads") or []
+    if chat_threads:
+        for thread in chat_threads:
+            messages = thread.get("messages") or []
+            lines.append(f"### {thread.get('thread_title') or 'Conversation'}")
+            lines.append(f"_{len(messages)} message(s)._")
+            lines.append("")
+    else:
+        lines.extend(["_No chat threads._", ""])
+
+    lines.append("## Preference facts")
+    preference_facts = payload.get("preference_facts") or []
+    if preference_facts:
+        for fact in preference_facts:
+            lines.append(f"- **{fact.get('signal_type', 'signal')}**: {fact.get('text', '')}")
+        lines.append("")
+    else:
+        lines.extend(["_No preference facts._", ""])
+
     return Response(
         content="\n".join(lines),
         media_type="text/markdown",
@@ -2730,7 +2778,9 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
     db = _db()
     scoped = _scoped_user_id(user)
     if scoped and payload.session_id:
-        existing = db.get_chat_thread(session_id, user_id=scoped)
+        existing = db.get_chat_thread(
+            session_id, user_id=scoped, include_orphans=_include_orphan_threads(user)
+        )
         if existing is None and db.get_chat_thread(session_id) is not None:
             raise HTTPException(status_code=404, detail="Thread not found")
     persona_id = payload.persona_id
@@ -2773,7 +2823,10 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
 
 @app.get("/api/chat/threads")
 def list_chat_threads(user=Depends(get_current_user_dep)) -> List[Dict[str, Any]]:
-    return _db().list_chat_threads(user_id=_scoped_user_id(user))
+    return _db().list_chat_threads(
+        user_id=_scoped_user_id(user),
+        include_orphans=_include_orphan_threads(user),
+    )
 
 
 @app.post("/api/chat/threads")
@@ -2802,7 +2855,11 @@ def get_chat_thread_messages(
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
     db = _db()
-    thread = db.get_chat_thread(session_id, user_id=_scoped_user_id(user))
+    thread = db.get_chat_thread(
+        session_id,
+        user_id=_scoped_user_id(user),
+        include_orphans=_include_orphan_threads(user),
+    )
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
     messages = db.chat_history(session_id, limit=limit)
@@ -2984,7 +3041,11 @@ def update_chat_thread(
     payload: ThreadUpdatePayload,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    if _db().get_chat_thread(session_id, user_id=_scoped_user_id(user)) is None:
+    if _db().get_chat_thread(
+        session_id,
+        user_id=_scoped_user_id(user),
+        include_orphans=_include_orphan_threads(user),
+    ) is None:
         raise HTTPException(status_code=404, detail="Thread not found")
     try:
         return _db().update_thread_title(session_id, payload.thread_title)
@@ -2997,7 +3058,11 @@ def update_chat_thread(
 
 @app.delete("/api/chat/threads/{session_id}")
 def delete_chat_thread(session_id: str, user=Depends(get_current_user_dep)) -> Dict[str, bool]:
-    if not _db().delete_chat_thread(session_id, user_id=_scoped_user_id(user)):
+    if not _db().delete_chat_thread(
+        session_id,
+        user_id=_scoped_user_id(user),
+        include_orphans=_include_orphan_threads(user),
+    ):
         raise HTTPException(status_code=404, detail="Thread not found")
     return {"deleted": True}
 

@@ -45,3 +45,28 @@ export function isScrolledAwayFromBottom({
   const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
   return distanceFromBottom > threshold;
 }
+
+/**
+ * Decide how a messages/loading update should move the scroll position.
+ *
+ * Rules:
+ * - A brand-new turn scrolls the latest turn into view once ("pin-latest"),
+ *   but only if the user was already following or is currently near the bottom.
+ *   If they had scrolled away, we don't move them.
+ * - While a reply is streaming (not a new turn), we only "stick-bottom" when the
+ *   user is genuinely near the bottom right now. We NEVER re-pin to the top of
+ *   the response on each streamed chunk, and we never yank a user who has
+ *   scrolled away.
+ *
+ * @param {{ isNewTurn: boolean, streaming: boolean, nearBottom: boolean, wasFollowing: boolean }} opts
+ * @returns {"pin-latest" | "stick-bottom" | "none"}
+ */
+export function resolveAutoScroll({ isNewTurn, streaming, nearBottom, wasFollowing }) {
+  if (isNewTurn) {
+    return wasFollowing || nearBottom ? "pin-latest" : "none";
+  }
+  if (streaming && nearBottom) {
+    return "stick-bottom";
+  }
+  return "none";
+}

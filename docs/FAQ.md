@@ -1,6 +1,6 @@
 # CuratorX FAQ
 
-Common questions for CuratorX **1.8**. Also mirrored under [wiki/FAQ.md](wiki/FAQ.md).
+Common questions for CuratorX. This is the canonical FAQ; [wiki/FAQ.md](wiki/FAQ.md) points here.
 
 ## What is CuratorX?
 
@@ -11,8 +11,8 @@ A chat-first + Explore curator for self-hosted **Plex** libraries — and a real
 | Tag | When |
 |-----|------|
 | `romwil/curatorx:latest` | Everyday Unraid / Compose (CA template default) |
-| `romwil/curatorx:1.8` | Track the 1.8 line |
-| `romwil/curatorx:1.8.14` | Pin an exact release |
+| `romwil/curatorx:<MAJOR.MINOR>` | Track a minor line (e.g. the current `1.11` line) |
+| `romwil/curatorx:<X.Y.Z>` | Pin an exact release (see [CHANGELOG.md](../CHANGELOG.md) for versions) |
 
 Images are multi-arch (**amd64 + arm64**), run as non-root `curatorx` (UID/GID 1000). See [wiki/Installation.md](wiki/Installation.md).
 

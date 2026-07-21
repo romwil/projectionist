@@ -20,6 +20,7 @@ import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
 import WatchlistPage from "./pages/WatchlistPage";
 import ExplorePage from "./pages/ExplorePage";
 import ExploreSectionPage from "./pages/ExploreSectionPage";
+import LibraryBrowsePage from "./pages/LibraryBrowsePage";
 import PersonPage from "./pages/PersonPage";
 import TagPage from "./pages/TagPage";
 import TagsPage from "./pages/TagsPage";
@@ -41,6 +42,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/explore/tags" element={<TagsPage />} />
           <Route path="/explore/plot-lab" element={<PlotLabPage />} />
+          <Route path="/explore/browse" element={<LibraryBrowsePage />} />
           <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/library" element={<LibraryPage />} />

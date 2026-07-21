@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curatorx"
-version = "1.10.0"
+version = "1.12.0"
 description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -40,6 +40,8 @@ mcp = [
 dev = [
     "coverage>=7.0",
     "pytest-cov>=7.0",
+    "ruff>=0.5",
+    "mypy>=1.10",
 ]
 
 [project.urls]
@@ -60,3 +62,100 @@ include = ["curatorx*"]
 
 [tool.setuptools.package-data]
 "curatorx.web" = ["static/**/*"]
+
+# ---------------------------------------------------------------------------
+# Lint / format toolchain (config-only baseline).
+#
+# This wiring is intentionally *conservative*: it enables a small, high-signal
+# rule set and captures the current state of the tree so the toolchain is green
+# without a mass reformat. Existing violations are parked in per-file-ignores /
+# a scoped mypy target and can be burned down file-by-file in future passes —
+# they are NOT bugs introduced here.
+# ---------------------------------------------------------------------------
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+extend-exclude = [
+    ".venv",
+    ".venv-test",
+    "build",
+    "dist",
+    "node_modules",
+    "frontend",
+    "e2e",
+    "stitch_curatorx_design_system",
+    "curatorx.egg-info",
+]
+
+[tool.ruff.format]
+# Formatter is configured but intentionally NOT run against the tree in this
+# pass. Use `ruff format` in a dedicated cleanup change.
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+# Conservative, high-signal starter set. Two rules are deliberately parked for
+# now because enforcing them would require touching source across the whole
+# tree (out of scope for this config-only pass):
+#   * E501 (line length) — would reflow thousands of existing lines.
+#   * I001 (import sorting) — would reorder imports in ~15+ modules.
+# The `I` category and isort config stay wired so re-enabling is a one-line
+# change (drop "I001" from `ignore`) once a formatting pass lands.
+select = ["E", "F", "W", "I"]
+ignore = ["E501", "I001"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test / script suites legitimately carry unused fixture imports, redefinitions,
+# unused locals, and late imports. Silence those categories there.
+"tests/**" = ["F401", "F811", "F841", "E402"]
+"scripts/**" = ["F401", "E402"]
+# Pre-existing violations in shipped modules, captured as a baseline. Remove an
+# entry (and clean the file) rather than editing source during this config pass.
+"curatorx/agent/tools.py" = ["F401", "F541"]
+"curatorx/config_store.py" = ["F402"]
+"curatorx/connectors/fanart.py" = ["F401"]
+"curatorx/connectors/tautulli.py" = ["F401"]
+"curatorx/library/relations.py" = ["F401"]
+"curatorx/scheduler/engine.py" = ["F401"]
+"curatorx/scheduler/run_log.py" = ["F401"]
+"curatorx/scheduler/tasks/anniversary_scanner.py" = ["F401"]
+"curatorx/scheduler/tasks/gap_analysis.py" = ["F401"]
+"curatorx/web/__main__.py" = ["F401"]
+"curatorx/web/app.py" = ["F401", "E402", "F821"]
+"curatorx/web/setup.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["curatorx"]
+
+[tool.mypy]
+# Lenient transitional baseline — NOT strict. `files` scopes mypy to the
+# packages that are already type-clean so `python -m mypy` is green today.
+# Expand this list (or drop `files`) as more modules gain annotations.
+# python_version tracks the CI/type-check interpreter (3.12); it must be >=3.12
+# so mypy can parse numpy's stubs (which use the 3.12 `type` statement).
+python_version = "3.12"
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_unused_ignores = false
+warn_return_any = false
+files = [
+    "curatorx/_version.py",
+    "curatorx/logging_config.py",
+    "curatorx/config_store.py",
+    "curatorx/connectors",
+    "curatorx/lists",
+    "curatorx/memory",
+    "curatorx/models",
+    "curatorx/persona",
+    "curatorx/privacy",
+    "curatorx/reviews",
+    "curatorx/telemetry",
+]
+
+# numpy ships py.typed stubs that use 3.12+ `type` statement syntax, which the
+# 3.10 target above can't parse. Skip following it (types come from runtime).
+[[tool.mypy.overrides]]
+module = ["numpy", "numpy.*"]
+follow_imports = "skip"
+ignore_missing_imports = true

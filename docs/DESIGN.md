@@ -1,6 +1,6 @@
 # CuratorX — Design Document
 
-Product principles, single-workspace UX, lens isolation, agent behavior, and API design for CuratorX **1.8**. Items marked **Future** are planned but not fully shipped.
+Product principles, single-workspace UX, lens isolation, agent behavior, and API design for the current CuratorX release. Items marked **Future** are planned but not fully shipped.
 
 ---
 
@@ -322,9 +322,20 @@ Typography and accent colors follow persona presets where configured; avoid trea
 
 ---
 
-## Agent tools (1.8)
+## Agent tools
 
 Core tools include library search and facet query (`motif` / `theme` included), **`find_similar_titles`**, **`list_relations`** / **`walk_relations`**, **`titles_by_person`**, genre exploration, gap analysis, hidden gems, watch-tonight / tonight picks, purge candidates, preference recording, Radarr/Sonarr/Seerr propose/confirm, reviews and review dialogue, watchlist and local lists, Plex collections (when enabled), anniversaries, library snapshot, double feature, and quick-pick roulette.
+
+**Research & memory tools** back the two-scope curator memory (see below):
+
+| Tool | Scope | Purpose |
+|------|-------|---------|
+| **`research_title`** / **`research_person`** / **`research_company`** | Repository | Retrieve source-cited public facts from configured official APIs (TMDB details/credits/keywords/images, Wikipedia, optional OMDb/TVDB), persisting a snapshot. Honest source gaps — not arbitrary web browsing. |
+| **`compare_filmographies`** | Repository | Compare two people's TMDB filmographies by counts and shared credits only — never subjective "similarity." |
+| **`recall_repo_memory`** | Repository | Read the latest snapshot + freshness + saved insights + how often an entity has come up. Consult **before** declaring a gap. |
+| **`search_memory`** | Repository | Fuzzy "what do I already know about X"; returns matching entities with type/freshness to then `recall_repo_memory`. |
+| **`save_repo_insight`** | Repository | Persist a durable, cited insight (`{source, ref, note}`) against a known entity — shared library knowledge, not private user facts. |
+| **`remember_about_user`** / **`recall_user_memory`** | Per-user | Store/read the signed-in account's own private disclosures, goals, watch intentions, and follow-ups (fail-closed; never another account). |
 
 Keyword routing still applies when no LLM provider is configured — same heuristics as earlier releases.
 
@@ -341,6 +352,16 @@ The curator has **two memory scopes**, both readable and writable, so it behaves
 **Per-user memory (private, fail-closed).** `user_memory_notes` hold a signed-in account's disclosures, goals, watch intentions, and follow-ups behind `UserMemoryService`, whose `_authorize` is fail-closed: a caller reads only their own notes, and the owner may review **only** Youth-flagged accounts. Adults are isolated from each other and from the owner.
 
 **Per-turn injection.** `build_system_prompt(user_id, user_role)` injects a compact, privacy-safe "what you already know about this signed-in user" block next to the lens/preference context, plus a "resume where we left off" line drawn from `follow_up`/`watch_intention` notes. It reads only the caller's own notes, injects nothing when there is no signed-in user or no notes, and degrades silently on any error. The system and persona prompts state plainly that persistent, cited memory exists and instruct the curator to consult it **before** declaring a gap. The "no arbitrary web browsing/scraping" guardrail is retained; research is framed as durable cited retrieval with staleness-aware refresh.
+
+### Design intent
+
+Folded from the original curator-memory design note; these are the load-bearing invariants:
+
+- **Two clean planes.** Durable, sanitized *media knowledge* (repository) is deliberately separated from private *partnership memory* (per-user). Repository memory is append-only research about people, companies, and titles across entity, snapshot, relation, insight, and activity records; it **never** stores Plex paths, tokens, or credentialed URLs.
+- **Authorization fails closed.** A user reads only their own per-user memory. An owner may review/export another account **only** when that account carries the owner-set **Youth mode** flag (`users.is_youth`). Adult-member memory is never an owner view, and adults are isolated from each other.
+- **Export ↔ purge symmetry.** Export is available to the account holder. Purge hard-deletes that user's notes and chat sessions/messages atomically; shared repository knowledge remains intact.
+- **Transparent research.** Person/company research uses configured official APIs and records public, source-attributed snapshots. Filmography comparison reports only transparent overlap/counts — it does not infer subjective similarity. Idle `entity_memory_enrichment` refreshes a small batch of stale repository entities and never touches private user memory.
+- **Preference migration.** `preference_facts` is migrated idempotently into `user_memory_notes`; legacy rows are retained solely as a rollback-compatibility source, and new account-scoped preference writes use the unified store.
 
 ---
 

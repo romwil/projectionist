@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
-[![Version](https://img.shields.io/badge/version-1.10.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.12.0-green.svg)](CHANGELOG.md)
 
 **Agentic access to your structured + unstructured local media data — chat curator, Explore hub, and privacy-first MCP for self-hosted Plex.**
 
@@ -114,8 +114,8 @@ Published multi-arch images (**amd64 + arm64**):
 | Tag | Use |
 |-----|-----|
 | [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Everyday Unraid / Compose (CA template default) |
-| [`romwil/curatorx:1.8`](https://hub.docker.com/r/romwil/curatorx) | Track the 1.8 line |
-| [`romwil/curatorx:1.8.27`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release |
+| [`romwil/curatorx:<MAJOR.MINOR>`](https://hub.docker.com/r/romwil/curatorx) | Track a minor line (e.g. the current `1.11` line) |
+| [`romwil/curatorx:<X.Y.Z>`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release (see [CHANGELOG.md](CHANGELOG.md)) |
 
 **Unraid:** install from Community Applications using the template (`templates/curatorx.xml` / `unraid/curatorx.xml`; CA icons at `unraid/curatorx-icon.png` / `unraid/curatorx-icon-512.png`), or add the container manually:
 
@@ -163,13 +163,17 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | [Security](docs/SECURITY.md) | Threat model and findings checklist |
 | [Penetration tests](docs/security/pentests/README.md) | Repeatable Protocol v1.0 + harness |
 | [FAQ](docs/FAQ.md) | Common questions |
+| [Help](docs/HELP.md) | In-app Help source (`/help`); role-aware product guide |
+| [Curator knowledge](docs/CURATOR_KNOWLEDGE.md) | Library knowledge depth, motifs, idle curation |
 | [Onboarding](docs/ONBOARDING.md) | First-run checklist |
 | [Web UI](docs/WEB_UI.md) | Workspace layout and routes |
 | [Architecture](docs/ARCHITECTURE.md) | System context and data flows |
 | [Design](docs/DESIGN.md) | UX principles and agent tools |
 | [Data model](docs/DATA_MODEL.md) | SQLite schema |
+| [MCP](docs/MCP.md) | Dual-mode MCP keys, schemas, and tools |
 | [Configuration](docs/CONFIGURATION.md) | Env vars and settings |
 | [Docker / Unraid](docs/DOCKER.md) | Container deployment |
+| [Delight wishlist](docs/DELIGHT-WISHLIST.md) | Living backlog of experience ideas by persona |
 | [Testing (e2e / CA)](docs/TESTING.md) | Playwright and CA release checklist |
 | [Value-based testing](TESTING.md) | How to write logic-level backend tests |
 | [Changelog](CHANGELOG.md) | Release notes |

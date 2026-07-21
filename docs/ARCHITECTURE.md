@@ -65,7 +65,7 @@ flowchart TB
 - **Chat isolation:** `chat_messages.lens_id` filters history per lens within a session.
 - **Explicit lock:** `lens_taste_profile.explicit_lock` blocks automatic telemetry drift on protected clusters.
 
-See [curatorx_prd.md](curatorx_prd.md) for the full product spec.
+See the archived [curatorx_prd.md](archive/curatorx_prd.md) for the original product spec (historical).
 
 ---
 
@@ -492,6 +492,47 @@ Educational guide for owners and household users: **[CURATOR_KNOWLEDGE.md](CURAT
 | D | Coverage UI + title Plot knowledge panel |
 
 Phase B is implemented: Admin Scheduled Tasks show durable recent runs, measured items/hour when history exists, and auto-tuned batch/interval for trickle tasks. Prefer free sources before LLM — provenance rules unchanged.
+
+---
+
+## Curator memory subsystem
+
+CuratorX persists knowledge across sessions in **two distinct scopes** so the curator behaves as if it remembers rather than starting cold each turn. The dual-scope model is installed by `_migrate_curator_memory` in `db.py`; per-scope tables are in [DATA_MODEL.md](DATA_MODEL.md#curator-memory).
+
+| Scope | Store | Trust | Written by | Read by |
+|-------|-------|-------|-----------|---------|
+| **Repository memory** (shared, source-cited) | `memory_entities` + `memory_snapshots` + `memory_relations` + `memory_insights` + `memory_entity_activity` | Household-wide media knowledge | `research_*` tools, `save_repo_insight`, idle `entity_memory_enrichment` | `recall_repo_memory`, `search_memory`, agent prose |
+| **Per-user memory** (private, fail-closed) | `user_memory_notes` (+ `user_memory_events`) | One `user_id` only | `remember_about_user` (and migrated `preference_facts`) | `recall_user_memory`, per-turn prompt injection |
+
+### Research → snapshot → insight flow
+
+```
+recall_repo_memory / search_memory   (do I already know this?)
+        │  miss / stale
+        ▼
+research_title / research_person / research_company
+   → official APIs (TMDB, Wikipedia, optional OMDb/TVDB)
+   → append memory_snapshots (payload + sources + fetched_at)
+        │
+        ▼
+save_repo_insight  → memory_insights (+ citations {source, ref, note})
+```
+
+- Research is **durable cited retrieval**, not arbitrary web browsing/scraping — that guardrail is retained. Snapshots store only provider-normalized, **path-free** payloads (no Plex paths, rating keys, or credentialed URLs).
+- **Freshness** is derived from the newest snapshot `fetched_at` vs the entity's "known since" (`created_at`). Idle `entity_memory_enrichment` refreshes a small batch of stale repository entities without pegging the box and never touches private user memory.
+- `compare_filmographies` reports only transparent overlap/counts from TMDB — it never infers subjective similarity.
+
+### Discussion activity
+
+`memory_entity_activity` counts how often each entity comes up (incremented best-effort by recall/research; failures are non-fatal). Recall flags an entity as "frequently discussed" (≥3) so the curator can lean on established context and grooming can prioritize hot entities.
+
+### Per-turn injection
+
+`build_system_prompt(user_id, user_role)` injects a compact, privacy-safe "what you already know about this signed-in user" block plus a "resume where we left off" line drawn from `follow_up` / `watch_intention` notes. It reads **only the caller's own** notes, injects nothing when there is no signed-in user or no notes, and degrades silently on error. Prompts state plainly that persistent, cited memory exists and instruct the curator to consult it **before** declaring a gap.
+
+### Privacy scoping
+
+`UserMemoryService._authorize` is **fail-closed**: a caller reads only its own per-user notes; adults are isolated from each other and from the owner. The one exception is **owner youth review** — the owner may review/export a member account **only** when it carries the owner-set Youth flag (`users.is_youth`). Export is available to the account holder; purge hard-deletes that user's notes and chat sessions/messages atomically while shared repository knowledge remains intact. (Cross-user prompt-injection hardening for globally shared insights/snapshots is a tracked security follow-up, not yet landed.)
 
 ---
 

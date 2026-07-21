@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import HelpHint from "./HelpHint";
 import {
   isAddableToRadarr,
   isAddableToSonarr,
@@ -389,7 +390,14 @@ export default function TitleDetailContent({
               className="title-detail-section title-plot-knowledge"
               data-testid="title-plot-knowledge"
             >
-              <h2 className="title-detail-section-label">Plot knowledge</h2>
+              <h2 className="title-detail-section-label">
+                Plot knowledge
+                <HelpHint
+                  anchor="title-detail--plot-knowledge"
+                  title="What Plot knowledge means"
+                  testId="title-plot-knowledge-help"
+                />
+              </h2>
               {plotKnowledge.empty ? (
                 <p className="status status-secondary">
                   No plot signals yet — idle enrichment may still be catching up.

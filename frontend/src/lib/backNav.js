@@ -5,6 +5,7 @@ export const ROUTES = {
   explore: "/explore",
   tags: "/explore/tags",
   plotLab: "/explore/plot-lab",
+  libraryBrowse: "/explore/browse",
   watchlist: "/watchlist",
   library: "/library",
   /** Sync/token settings only — browse pins on /watchlist. */
@@ -17,6 +18,16 @@ export const ROUTES = {
   help: "/help",
   privacy: "/privacy",
 };
+
+/**
+ * Deep-link to a specific Help section anchor. Pass a slug (see
+ * frontend/src/lib/helpAnchors.js) matching a docs/HELP.md heading; omit it for
+ * the top of Help.
+ */
+export function helpAnchor(anchor = "") {
+  const slug = String(anchor || "").replace(/^#/, "").trim();
+  return slug ? `${ROUTES.help}#${slug}` : ROUTES.help;
+}
 
 /** @deprecated Use ROUTES.watchlist — kept for legacy deep links. */
 export const WATCHLIST_PANEL_PARAM = "watchlist";
@@ -124,6 +135,7 @@ export function backLabelForPath(path, { defaultLabel = "Back" } = {}) {
     return "Back to tag search";
   }
   if (normalized === ROUTES.plotLab) return "Back to Plot Lab";
+  if (normalized === ROUTES.libraryBrowse) return "Back to Explore";
   if (normalized === ROUTES.watchlist) return "Back to chat";
   if (normalized.startsWith("/explore/section/")) return "Back to Explore";
   if (normalized.startsWith("/tag/")) return "Back to tag";

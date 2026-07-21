@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getExploreFeedDirectorSpotlight,
   getExploreFeedGenreSpotlight,
@@ -13,6 +13,7 @@ import {
   queryLibrary,
 } from "../api/client";
 import BackLink from "../components/BackLink";
+import HelpHint from "../components/HelpHint";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
@@ -21,7 +22,7 @@ import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
-import { ROUTES, decadeYearRange, exploreSectionPath } from "../lib/browseLinks.js";
+import { ROUTES, decadeYearRange, exploreSectionPath, libraryBrowsePath } from "../lib/browseLinks.js";
 import { formatLanguageName } from "../lib/languageNames.js";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
 import {
@@ -54,6 +55,8 @@ function ExploreSection({
   note,
   titleHref,
   mediaTypeLinks,
+  helpAnchorId,
+  helpTitle = "Learn more in Help",
   isOwner = false,
 }) {
   const message = empty || note || null;
@@ -90,6 +93,13 @@ function ExploreSection({
                   </Link>
                 ))}
               </nav>
+            ) : null}
+            {helpAnchorId ? (
+              <HelpHint
+                anchor={helpAnchorId}
+                title={helpTitle}
+                testId={`explore-section-help-${id}`}
+              />
             ) : null}
           </div>
           {subtitle ? <p className="explore-section-subtitle">{subtitle}</p> : null}
@@ -174,9 +184,11 @@ function useFeed(loader, deps = []) {
 
 export default function ExplorePage() {
   const { isOwner, multiUserEnabled } = useAuthGate();
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [recommendItem, setRecommendItem] = useState(null);
   const [facetColumns, setFacetColumns] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
   const revisitThese = useFeed(() => getExploreFeedRevisitThese({ limit: 20, idleDays: 60 }), []);
@@ -305,6 +317,12 @@ export default function ExplorePage() {
     setSearchParams(params, { replace: true });
   }
 
+  function handleSearchSubmit(event) {
+    event.preventDefault();
+    const query = searchQuery.trim();
+    navigate(query ? libraryBrowsePath({ q: query }) : libraryBrowsePath());
+  }
+
   function exportFacetPage(columns) {
     const blob = new Blob([mediaBrowseRowsToCsv(facetItems, columns)], { type: "text/csv;charset=utf-8" });
     const href = URL.createObjectURL(blob);
@@ -324,7 +342,45 @@ export default function ExplorePage() {
       actions={<BackLink fallbackTo={ROUTES.chat} testId="explore-back-chat" label="Back to chat" />}
     >
       <main className="explore-main">
+        <form
+          className="explore-search"
+          data-testid="explore-search"
+          role="search"
+          onSubmit={handleSearchSubmit}
+        >
+          <label className="library-search library-search--hero">
+            <span className="material-symbols-outlined" aria-hidden="true">search</span>
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search your library by title or plot…"
+              aria-label="Search your library"
+              data-testid="explore-search-input"
+            />
+          </label>
+          <button type="submit" className="explore-search-submit" data-testid="explore-search-submit">
+            Search
+          </button>
+        </form>
+
         <section className="explore-hub-links" data-testid="explore-hub-links">
+          <Link
+            to={libraryBrowsePath({ mediaType: "movie" })}
+            className="explore-hub-card"
+            data-testid="explore-hub-browse-movies"
+          >
+            <h2>Browse Movies</h2>
+            <p>Page through every film with sort, filters, and columns</p>
+          </Link>
+          <Link
+            to={libraryBrowsePath({ mediaType: "show" })}
+            className="explore-hub-card"
+            data-testid="explore-hub-browse-tv"
+          >
+            <h2>Browse TV</h2>
+            <p>Page through every series with sort, filters, and columns</p>
+          </Link>
           <Link to={ROUTES.plotLab} className="explore-hub-card" data-testid="explore-hub-plot-lab">
             <h2>Plot Lab</h2>
             <p>Motifs, poster walls, and surprising narrative neighbors</p>
@@ -334,8 +390,6 @@ export default function ExplorePage() {
             <p>Find keyword tags across your full library index</p>
           </Link>
         </section>
-
-        <KnowledgeCoverageCard variant="strip" />
 
         <ExploreSection
           id="recently-added"
@@ -347,12 +401,12 @@ export default function ExplorePage() {
             {
               mediaType: "movie",
               label: "Movies",
-              href: exploreSectionPath("recently-added", { mediaType: "movie" }),
+              href: libraryBrowsePath({ mediaType: "movie" }),
             },
             {
               mediaType: "show",
               label: "TV",
-              href: exploreSectionPath("recently-added", { mediaType: "show" }),
+              href: libraryBrowsePath({ mediaType: "show" }),
             },
           ]}
           empty={
@@ -378,12 +432,12 @@ export default function ExplorePage() {
             {
               mediaType: "movie",
               label: "Movies",
-              href: exploreSectionPath("recent-releases", { mediaType: "movie" }),
+              href: libraryBrowsePath({ mediaType: "movie" }),
             },
             {
               mediaType: "show",
               label: "TV",
-              href: exploreSectionPath("recent-releases", { mediaType: "show" }),
+              href: libraryBrowsePath({ mediaType: "show" }),
             },
           ]}
           empty={
@@ -486,10 +540,13 @@ export default function ExplorePage() {
           </ExploreSection>
         ) : null}
 
+        <div className="explore-footer" data-testid="explore-footer">
         <ExploreSection
           id="library-pulse"
           title="Library Pulse"
           subtitle="A quick read on collection health"
+          helpAnchorId="what-knowledge-coverage-means"
+          helpTitle="What Library Pulse & knowledge coverage mean"
           isOwner={isOwner}
           empty={pulse.error || (!pulse.loading && !pulse.stats.length ? "No overview stats yet." : null)}
         >
@@ -539,6 +596,8 @@ export default function ExplorePage() {
             </div>
           ) : null}
         </ExploreSection>
+          <KnowledgeCoverageCard variant="strip" className="explore-footer-knowledge" />
+        </div>
 
         {facetWall.label ? (
           <ExploreSection

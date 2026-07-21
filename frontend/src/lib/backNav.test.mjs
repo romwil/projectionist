@@ -35,6 +35,8 @@ describe("backLabelForPath", () => {
     assert.equal(backLabelForPath("/explore/tags"), "Back to tag search");
     assert.equal(backLabelForPath("/explore/plot-lab"), "Back to Plot Lab");
     assert.equal(backLabelForPath("/explore/section/recently-added"), "Back to Explore");
+    assert.equal(backLabelForPath("/explore/browse"), "Back to Explore");
+    assert.equal(backLabelForPath("/explore/browse?media_type=movie"), "Back to Explore");
     assert.equal(backLabelForPath("/explore"), "Back to Explore");
     assert.equal(backLabelForPath("/"), "Back to chat");
     assert.equal(backLabelForPath("/privacy"), "Back to Privacy");

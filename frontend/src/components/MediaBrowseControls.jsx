@@ -20,6 +20,7 @@ export default function MediaBrowseControls({
   sortOptions = MEDIA_BROWSE_SORTS,
   exportItems,
   onExport,
+  pageSizes,
 }) {
   const [columnOpen, setColumnOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -77,6 +78,25 @@ export default function MediaBrowseControls({
             <option value="">Any</option><option value="unwatched">Unwatched</option><option value="in_progress">In progress</option><option value="watched">Watched</option>
           </select>
         </label>
+        {pageSizes?.length ? (
+          <label>
+            <span>Show</span>
+            <select
+              value={String(state.limit)}
+              data-testid="media-browse-page-size"
+              onChange={(event) => {
+                const raw = event.target.value;
+                update({ limit: raw === "all" ? "all" : Number(raw) });
+              }}
+            >
+              {pageSizes.map((size) => (
+                <option key={String(size)} value={String(size)}>
+                  {String(size).toLowerCase() === "all" ? "All" : size}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         {filterOptions.years?.length ? (
           <label><span>Year</span><select value={state.year || ""} onChange={(event) => update({ year: event.target.value })}>
             <option value="">Any</option>{filterOptions.years.map((year) => <option key={year} value={year}>{year}</option>)}

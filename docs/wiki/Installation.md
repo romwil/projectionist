@@ -18,8 +18,8 @@ docker run -d --name curatorx --restart unless-stopped \
 | Tag | Meaning |
 |-----|---------|
 | `romwil/curatorx:latest` | Newest stable (CA template default) |
-| `romwil/curatorx:1.7` | 1.7 line |
-| `romwil/curatorx:1.7.13` | Exact release |
+| `romwil/curatorx:X.Y` | Minor line (e.g. `:1.12`) — floats within the line |
+| `romwil/curatorx:X.Y.Z` | Exact release (e.g. `:1.12.0`) |
 
 Open **http://\<host\>:8788**.
 

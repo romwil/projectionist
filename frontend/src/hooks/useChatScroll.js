@@ -3,6 +3,7 @@ import {
   CHAT_SCROLL_PADDING,
   computeFollowScrollTop,
   isScrolledAwayFromBottom,
+  resolveAutoScroll,
 } from "../lib/chatScroll.js";
 
 export default function useChatScroll({ messages, loading, sessionId }) {
@@ -104,33 +105,47 @@ export default function useChatScroll({ messages, loading, sessionId }) {
       prevCountRef.current = count;
     }
 
+    const isNewTurn =
+      isNewMessage &&
+      (last.role === "user" || last.role === "assistant" || last.role === "error");
+
     requestAnimationFrame(() => {
-      if (!wasFollowing) {
-        // Re-check actual scroll position — content growth during streaming
-        // can change scrollHeight without user interaction, so verify we're
-        // genuinely scrolled away before showing the chip.
-        if (!isScrolledUp()) {
-          followingRef.current = true;
-          return;
-        }
-        if (isNewMessage || loading) {
-          setShowNewReplyChip(true);
-        }
-        return;
-      }
+      // Use the *actual* scroll position, not a stale following flag: content
+      // growth during streaming changes scrollHeight without user interaction.
+      const nearBottom = !isScrolledUp();
+      const action = resolveAutoScroll({
+        isNewTurn,
+        streaming: loading,
+        nearBottom,
+        wasFollowing,
+      });
 
-      // Following: pin the latest user turn near the top so the question
-      // stays visible while the reply / typing indicator grows below.
-      if (isNewMessage && (last.role === "user" || last.role === "assistant" || last.role === "error")) {
+      if (action === "pin-latest") {
+        // A brand-new turn: bring the latest user turn near the top once so the
+        // question stays visible while the reply grows below it.
         scrollToLatestTurn("smooth");
         return;
       }
 
-      if (loading) {
-        scrollToLatestTurn("smooth");
+      if (action === "stick-bottom") {
+        // User is reading at the bottom while the reply streams — keep them
+        // pinned to the bottom. Never re-pin to the top of the response.
+        scrollToBottom("auto");
+        return;
+      }
+
+      // Otherwise leave the scroll position untouched. Surface the "new reply"
+      // chip when there is fresh content below and the user is scrolled away.
+      if (nearBottom) {
+        followingRef.current = true;
+        return;
+      }
+      followingRef.current = false;
+      if (isNewMessage || loading) {
+        setShowNewReplyChip(true);
       }
     });
-  }, [messages, loading, scrollToLatestTurn, isScrolledUp]);
+  }, [messages, loading, scrollToLatestTurn, scrollToBottom, isScrolledUp]);
 
   // When loading ends (streaming finishes) and user is at/near bottom, dismiss
   // the chip — the scroll handler won't fire if no scroll actually happens.

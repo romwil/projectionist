@@ -1,6 +1,6 @@
 # CuratorX security assessment
 
-Living pen-test brief for operators on the current **1.7** product surface. Status values move between **Open**, **Mitigated**, and **Accepted** as findings land — residual notes describe what remains after mitigations.
+Living pen-test brief for operators on the current CuratorX product surface. Status values move between **Open**, **Mitigated**, and **Accepted** as findings land — residual notes describe what remains after mitigations.
 
 ## Scope
 

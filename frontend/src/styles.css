@@ -4912,6 +4912,45 @@ button.ghost.inline-link {
   display: none;
 }
 
+/* h4 sections are deep-linkable too — clear the sticky header on jump. */
+.help-page .help-article.privacy-prose h4 {
+  scroll-margin-top: 5rem;
+}
+
+/* Unobtrusive contextual help affordance (HelpHint). */
+.help-hint {
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.help-hint:hover,
+.help-hint:focus-visible {
+  color: var(--accent);
+}
+
+.help-hint-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+.help-hint-icon .material-symbols-outlined {
+  font-size: 1rem;
+  opacity: 0.75;
+}
+
+.help-hint-icon:hover .material-symbols-outlined,
+.help-hint-icon:focus-visible .material-symbols-outlined {
+  opacity: 1;
+}
+
+.help-hint-link {
+  font-size: var(--text-sm);
+}
+
 .about-page .about-main {
   width: min(720px, 100%);
 }
@@ -8319,6 +8358,67 @@ a.explore-cinema-card-link:focus-visible h3 {
   gap: 1rem;
   flex-wrap: wrap;
   margin-top: 1.5rem;
+}
+
+/* Explore hero search + browse entry */
+.explore-search {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 var(--space-5);
+}
+.explore-search .library-search--hero {
+  flex: 1;
+  margin: 0;
+  padding: var(--space-4) var(--space-5);
+  font-size: var(--text-lg);
+}
+.explore-search .library-search--hero .material-symbols-outlined {
+  font-size: 26px;
+}
+.explore-search .library-search--hero input {
+  font-size: var(--text-lg);
+}
+.explore-search-submit {
+  flex: 0 0 auto;
+  padding: 0 var(--space-5);
+  border-radius: var(--radius-lg, 14px);
+  border: 1px solid color-mix(in srgb, var(--accent, #c4a35a) 45%, transparent);
+  color: var(--bg, #10141b);
+  background: var(--accent, #c4a35a);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 140ms ease;
+}
+.explore-search-submit:hover {
+  filter: brightness(1.08);
+}
+
+/* Explore footer: Library Pulse beside the knowledge strip */
+.explore-footer {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+.explore-footer .explore-section {
+  margin: 0;
+}
+.explore-footer .explore-footer-knowledge {
+  margin: 0;
+  align-self: stretch;
+}
+@media (max-width: 720px) {
+  .explore-search {
+    flex-direction: column;
+  }
+  .explore-search-submit {
+    padding: var(--space-3) var(--space-5);
+  }
+  .explore-footer {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 /* Library media card hover actions — corner icons on the poster only */

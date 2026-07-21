@@ -1,6 +1,6 @@
 # Unraid
 
-CuratorX is packaged for Unraid Community Applications as a single container with one config volume. The CA template uses **`romwil/curatorx:latest`**. Pin `:1.8` or `:1.8.11` if you prefer a fixed tag.
+CuratorX is packaged for Unraid Community Applications as a single container with one config volume. The CA template uses **`romwil/curatorx:latest`**. Pin a minor line (e.g. `:1.12`) or an exact release (e.g. `:1.12.0`) if you prefer a fixed tag.
 
 CA packaging in this repo:
 
@@ -32,7 +32,7 @@ Resize from a larger master if needed: `sips -z 256 256 source.png --out unraid/
 
 | Field | Value |
 |-------|-------|
-| Repository | `romwil/curatorx:latest` (or `:1.8` / `:1.8.11`) |
+| Repository | `romwil/curatorx:latest` (or a `:X.Y` line / `:X.Y.Z` pin, e.g. `:1.12` / `:1.12.0`) |
 | Host port | `8788` (or map freely) |
 | Config | `/mnt/user/appdata/curatorx/config` → `/config` |
 | TZ (advanced) | e.g. `America/New_York` — needed so preferred `library_sync_hour` matches wall clock |

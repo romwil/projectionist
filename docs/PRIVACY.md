@@ -52,7 +52,7 @@ Other household members cannot open your chats or confirm your pending actions t
 
 Your private memory stays tied to your account. An owner cannot read an adult member's memory. If the owner explicitly flags an account **Youth mode**, the account profile shows a Youth badge and the owner may review or export that account's memory for moderation. This is not a consent toggle and does not apply to adult accounts.
 
-Use `GET /api/me/memory` to download your memory as JSON or Markdown. `DELETE /api/me/memory` permanently deletes your private memory **and all of your chat transcripts** together. It does not delete shared, sanitized repository research about media.
+Use `GET /api/me/memory` to download your memory as JSON or Markdown; the export includes your private notes, your chat transcripts (messages), your saved library pages, and your preference facts. `DELETE /api/me/memory` permanently deletes all of those together — private notes, chat transcripts (messages), saved library pages, and preference facts. It does not delete shared, sanitized repository research about media.
 
 Curator research about titles, people, and production companies is shared repository knowledge drawn from configured official media APIs. It is kept separate from account memory; the idle refresh task never reads private notes or chats.
 
@@ -193,6 +193,9 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 | Watch telemetry (detailed) | SQLite | Own signals in UI | Y | — | Y | Y (agent tools) |
 | Chat messages | SQLite | Own | Own + admin host access | — | — | Y\* (provider) |
 | Private user memory | SQLite | Own | Youth accounts only | — | — | Current user's agent context |
+| Chat transcripts (messages) | SQLite | Own | Own + admin host access | — | — | Y\* (provider) |
+| Saved library pages | SQLite | Own | — | — | — | Y (agent tools) |
+| Preference facts | SQLite | Own | — | — | — | Current user's agent context |
 | Watchlist pins | SQLite | Own | Own | Snapshot tool may list pins (no account token) | Same | Y (agent tools) |
 | Ratings / reviews | SQLite | Own | Own | — | — | Y (agent tools) |
 | Preferred name | User row | Own | Household user admin | — | — | Y (addressing) |

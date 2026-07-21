@@ -7,6 +7,7 @@ import {
   queryLibrary,
 } from "../api/client";
 import BackLink from "../components/BackLink";
+import HelpHint from "../components/HelpHint";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
@@ -462,7 +463,14 @@ export default function PlotLabPage() {
               {selectedThemes.length
                 ? ` Themes also required: ${selectedThemes.join(" · ")}.`
                 : ""}{" "}
-              Tap Why? on a poster for which layer matched.
+              Tap Why? on a poster for which layer matched.{" "}
+              <HelpHint
+                anchor="why-motif-walls-feel-sparse"
+                variant="link"
+                label="Why walls feel sparse"
+                title="Why motif walls feel sparse"
+                testId="plot-lab-sparse-help"
+              />
             </p>
             <MediaBrowseControls
               state={browse}

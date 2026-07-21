@@ -1,6 +1,6 @@
 # Product Requirement Document (PRD)
 
-> **Historical design archive.** This PRD documents early design thinking. CuratorX **1.0+** ships a single chat workspace (see [WEB_UI.md](WEB_UI.md) and [wiki/Home.md](wiki/Home.md)). For the current roadmap and system overview, see [ARCHITECTURE.md](ARCHITECTURE.md). Prefer the wiki and README for operator docs.
+> **Historical design archive.** This PRD documents early design thinking. CuratorX **1.0+** ships a single chat workspace (see [WEB_UI.md](../WEB_UI.md) and [wiki/Home.md](../wiki/Home.md)). For the current roadmap and system overview, see [ARCHITECTURE.md](../ARCHITECTURE.md). Prefer the wiki and README for operator docs.
 
 **Project CuratorX: Ambient Intent Derivation & Zero-Touch UI**  
 **Version 3.0 (design archive)**
@@ -56,7 +56,7 @@ Removed from first-run wizard (maintenance dashboard only):
 
 ### Maintenance dashboard
 
-Post-onboarding `/config` exposes integration re-testing, persona sliders, optional metadata services, legacy lens management, and advanced paths.
+Post-onboarding Settings exposes integration re-testing, persona sliders, optional metadata services, legacy lens management, and advanced paths.
 
 ## 4. Technical Schema
 
@@ -92,7 +92,7 @@ Default derived context: `context_hash='general'`, label **General Exploration**
 
 ## 6. Deferred Work
 
-Historical PRD backlog — several items below are **shipped in 1.7** (see [ARCHITECTURE.md](ARCHITECTURE.md) extension points):
+Historical PRD backlog — several items below are **shipped** (see [ARCHITECTURE.md](../ARCHITECTURE.md) extension points):
 
 ~~- Telemetry ingestion from playback streams~~ → **Implemented** (admin telemetry APIs)
 ~~- True LLM SSE streaming~~ → **Implemented**
@@ -107,4 +107,4 @@ Still deferred / partial:
 
 ---
 
-> **Current roadmap:** This PRD is a historical design archive. For the living roadmap and system overview, see [ARCHITECTURE.md](ARCHITECTURE.md).
+> **Current roadmap:** This PRD is a historical design archive. For the living roadmap and system overview, see [ARCHITECTURE.md](../ARCHITECTURE.md).
