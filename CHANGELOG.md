@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+## [1.8.32] — 2026-07-20
+
+### Added
+- Curator responses can now carry safe, persisted suggested-reply chips in live Chat and saved-library continuations.
+
+### Fixed
+- Gap and recommendation poster strips now show the discussed missing titles instead of owned library context titles.
+- Chat response blocks are sanitized before persistence and member delivery, preventing local metadata and tokenized media URLs from leaking through cards.
+
 ## [1.8.31] — 2026-07-20
 
 ### Fixed

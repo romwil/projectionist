@@ -34,9 +34,29 @@ export default function LibraryPage() {
         <main className="explore-main">
           <section className="explore-section">
             <div className="section-heading"><p className="eyebrow">Saved curator library</p><h1>{page?.name || "Loading…"}</h1></div>
-            {blocks.map((block, index) => block.type === "title_cards" ? (
-              <div className="inline-cards" key={index}>{(block.items || []).map((item) => <TitleCard key={`${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`} item={item} compact />)}</div>
-            ) : <MessageText key={index} content={block.content || ""} markdown />)}
+            {blocks.map((block, index) => {
+              if (block.type === "title_cards") {
+                return <div className="inline-cards" key={index}>{(block.items || []).map((item) => <TitleCard key={`${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`} item={item} compact />)}</div>;
+              }
+              if (block.type === "suggested_replies") {
+                const replies = Array.isArray(block.payload?.replies) ? block.payload.replies.filter(Boolean).slice(0, 4) : [];
+                return replies.length ? (
+                  <div className="suggested-replies" key={index} aria-label="Continue this saved conversation">
+                    {replies.map((reply) => (
+                      <button
+                        type="button"
+                        className="suggested-reply-chip"
+                        key={reply}
+                        onClick={() => navigate(`/?saved_library=${encodeURIComponent(page.id)}&follow_up=${encodeURIComponent(reply)}`)}
+                      >
+                        {reply}
+                      </button>
+                    ))}
+                  </div>
+                ) : null;
+              }
+              return <MessageText key={index} content={block.content || ""} markdown />;
+            })}
             {page ? <div className="bulk-confirm-actions">
               <a className="ghost" href={`/api/saved-library/${page.id}/export?format=markdown`}>Download Markdown</a>
               <a className="ghost" href={`/api/saved-library/${page.id}/export?format=json`}>Download JSON</a>

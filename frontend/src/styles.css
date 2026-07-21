@@ -1844,6 +1844,36 @@ button.watchlist-chip {
   margin-top: 10px;
 }
 
+.suggested-replies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.suggested-reply-chip {
+  min-height: 34px;
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.suggested-reply-chip:hover:not(:disabled),
+.suggested-reply-chip:focus-visible {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.suggested-reply-chip:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .message-reaction-btn {
   display: inline-flex;
   align-items: center;

@@ -87,7 +87,7 @@ class TitleDetail(TitleCard):
 
 
 class ChatMessageBlock(BaseModel):
-    type: Literal["text", "title_cards", "action_prompt"]
+    type: Literal["text", "title_cards", "action_prompt", "suggested_replies"]
     content: str = ""
     items: List[TitleCard] = Field(default_factory=list)
     action: str = ""

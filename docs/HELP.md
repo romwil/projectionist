@@ -31,6 +31,8 @@ Keyboard cheat sheet: press `?` (outside a text field). Slash commands in chat: 
 
 Ask in natural language: taste gaps, tonight picks, purge candidates, “more like *X*”. The curator uses tools against your indexed library — it does not invent titles you do not have unless you are in a discovery flow that explicitly searches outside the library.
 
+When Chat finds collection gaps, its poster strip mirrors the missing titles being discussed rather than the owned titles it used as context. A gap card is marked as new or queued and can offer an allowed request/add action; **Play** appears only for a true in-library title with a playable Plex identity. The short reply chips below a useful curator response are suggested next turns. Select one to send that text as your next chat message.
+
 Useful slash commands (no LLM call):
 
 - `/help` — command list
@@ -44,7 +46,7 @@ Thumbs up / down on curator replies train future recommendations. Personal **rev
 
 Use **Save to library** on a curator response when a recommendation set or explanation is worth returning to. Give it a useful name; saved pages are private to your account, searchable by title and response text, and grouped by the day you saved them.
 
-Saved pages preserve the curator's structured text and title cards. Download a page as **Markdown**, **JSON** (the structured source), or **TXT**. **Chat from here** opens a new conversation with the saved analysis and recommendations as context, so it continues the idea without changing the original conversation.
+Saved pages preserve the curator's structured text, title cards, and reply chips. Download a page as **Markdown**, **JSON** (the structured source), or **TXT**. **Chat from here** opens a new conversation with the saved analysis and recommendations as context, so it continues the idea without changing the original conversation. Selecting a saved reply chip starts that same continuation with the selected next step.
 
 ### Explore
 

@@ -12,6 +12,7 @@ from curatorx.agent.tools import build_tool_definitions, ToolRegistry, build_sys
 from curatorx.config_store import Settings, uses_seerr_request_path
 from curatorx.library.db import DEFAULT_LENS_ID, Database
 from curatorx.models.schemas import TitleCard
+from curatorx.privacy.schema import sanitize
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +61,19 @@ def _cards_for_response(registry: ToolRegistry) -> List[TitleCard]:
     """Cards shown in title_cards blocks — drop owned/queued titles during add/recommend flows."""
     cards = registry.cards
     if registry.recommendation_context:
-        cards = [card for card in cards if _actionable_recommendation_card(card, registry)]
+        discussed = registry.discussed_cards
+        if discussed:
+            # Gap/recommendation tools explicitly identify the titles under discussion.
+            # Do not replace them with earlier library-inspection context cards.
+            cards = [
+                card
+                for card in discussed
+                if not card.in_library and not card.in_radarr and not card.in_sonarr
+            ]
+        else:
+            # Compatibility for recommendation tools that have not yet been migrated
+            # to the discussed-card channel.
+            cards = [card for card in cards if _actionable_recommendation_card(card, registry)]
     return _displayable_cards(cards)
 
 
@@ -131,6 +144,33 @@ def _append_review_conflict_blocks(blocks: List[Dict[str, Any]], registry: ToolR
         blocks.append({"type": "plex_rating_conflict", "payload": conflict})
 
 
+def _suggested_reply_block(registry: ToolRegistry) -> Optional[Dict[str, Any]]:
+    replies = registry.suggested_replies
+    if not isinstance(replies, list):
+        replies = []
+    replies = [reply for reply in replies if isinstance(reply, str) and reply][:4]
+    if not replies and registry.recommendation_context and registry.discussed_cards:
+        replies = [
+            "Dive deeper into the gaps",
+            "Show me where to watch these",
+            "Add these to a list",
+        ]
+    if not replies:
+        return None
+    return {"type": "suggested_replies", "payload": {"replies": replies}}
+
+
+def _append_suggested_reply_block(blocks: List[Dict[str, Any]], registry: ToolRegistry) -> None:
+    block = _suggested_reply_block(registry)
+    if block:
+        blocks.append(block)
+
+
+def _sanitize_chat_blocks(blocks: List[Dict[str, Any]], registry: ToolRegistry) -> List[Dict[str, Any]]:
+    """Persist and return member-safe message blocks without local media metadata."""
+    return sanitize(blocks, audience="member", settings=registry.settings)
+
+
 class CuratorAgent:
     def __init__(
         self,
@@ -197,6 +237,8 @@ class CuratorAgent:
                     )
             _append_review_prompt_blocks(blocks, registry)
             _append_review_conflict_blocks(blocks, registry)
+            _append_suggested_reply_block(blocks, registry)
+            blocks = _sanitize_chat_blocks(blocks, registry)
             user_id = uuid.uuid4().hex
             assistant_id = uuid.uuid4().hex
             self.db.save_chat_message(
@@ -313,6 +355,8 @@ class CuratorAgent:
                 )
         _append_review_prompt_blocks(blocks, registry)
         _append_review_conflict_blocks(blocks, registry)
+        _append_suggested_reply_block(blocks, registry)
+        blocks = _sanitize_chat_blocks(blocks, registry)
 
         user_id = uuid.uuid4().hex
         assistant_id = uuid.uuid4().hex
@@ -509,6 +553,8 @@ async def stream_agent(
 
     _append_review_prompt_blocks(blocks, registry)
     _append_review_conflict_blocks(blocks, registry)
+    _append_suggested_reply_block(blocks, registry)
+    blocks = _sanitize_chat_blocks(blocks, registry)
 
     user_msg_id = uuid.uuid4().hex
     assistant_id = uuid.uuid4().hex
@@ -565,6 +611,8 @@ async def _emit_buffered(
             })
     _append_review_prompt_blocks(blocks, registry)
     _append_review_conflict_blocks(blocks, registry)
+    _append_suggested_reply_block(blocks, registry)
+    blocks = _sanitize_chat_blocks(blocks, registry)
 
     user_msg_id = uuid.uuid4().hex
     assistant_id = uuid.uuid4().hex

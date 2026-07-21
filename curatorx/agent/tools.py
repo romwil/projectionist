@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 import uuid
 from datetime import datetime as _dt
@@ -1199,6 +1200,28 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "suggest_follow_ups",
+            "description": (
+                "Offer 2-4 concise, safe next user messages after a useful answer. "
+                "Use after recommendation or gap results; this only renders reply chips and never performs an action."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "replies": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "minItems": 2,
+                        "maxItems": 4,
+                    },
+                },
+                "required": ["replies"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "quick_pick_roulette",
             "description": (
                 "Pick ONE random unwatched title matching taste profile. "
@@ -1610,7 +1633,11 @@ def _append_recommendation_cards(registry: "ToolRegistry", cards: List[TitleCard
         if identity in existing:
             continue
         existing.add(identity)
+        # Keep the historical aggregate for tool-to-tool enrichment, but mark this
+        # card as the discussion subject so response rendering cannot substitute
+        # earlier owned library context.
         registry._cards.append(card)
+        registry._discussed_cards.append(card)
 
 
 def _excluded_add_tmdb_ids(db: Database, media_type: str) -> set[int]:
@@ -1647,8 +1674,10 @@ class ToolRegistry:
         self.seerr_user_id = seerr_user_id
         self.user_role = user_role
         self._cards: List[TitleCard] = []
+        self._discussed_cards: List[TitleCard] = []
         self._pending_token_entries: List[Dict[str, str]] = []
         self._recommendation_context = False
+        self._suggested_replies: List[str] = []
         self._review_conflicts: List[Dict[str, Any]] = []
         self._review_prompts: List[Dict[str, Any]] = []
 
@@ -1662,6 +1691,14 @@ class ToolRegistry:
     @property
     def recommendation_context(self) -> bool:
         return self._recommendation_context
+
+    @property
+    def discussed_cards(self) -> List[TitleCard]:
+        return list(self._discussed_cards)
+
+    @property
+    def suggested_replies(self) -> List[str]:
+        return list(self._suggested_replies)
 
     @property
     def pending_tokens(self) -> List[Dict[str, str]]:
@@ -1705,6 +1742,31 @@ class ToolRegistry:
             str(args.get("query") or ""),
             media_type=args.get("media_type"),
         )
+
+    async def _tool_suggest_follow_ups(self, args: Mapping[str, Any]) -> str:
+        """Store presentation-only, safe next-turn suggestions from the agent."""
+        replies = args.get("replies")
+        if not isinstance(replies, list):
+            return json.dumps({"error": "replies must be a list of 2-4 strings"})
+        cleaned: List[str] = []
+        seen: set[str] = set()
+        for raw in replies:
+            text = " ".join(str(raw or "").split()).strip()
+            key = text.casefold()
+            if (
+                not text
+                or len(text) > 120
+                or key in seen
+                or text.startswith(("/", "~", "\\"))
+                or re.search(r"(?:^|[\s])(?:[A-Za-z]:[\\/]|file:|https?://)", text, re.I)
+            ):
+                continue
+            seen.add(key)
+            cleaned.append(text)
+            if len(cleaned) == 4:
+                break
+        self._suggested_replies = cleaned
+        return json.dumps({"replies": cleaned})
         self._cards.extend(cards)
         items = [_card_to_tool_item(c) for c in cards]
         return json.dumps(
@@ -3887,6 +3949,7 @@ def build_system_prompt(
         "the open web. Report source provenance and gaps; never invent confidence from an incomplete record. "
         "When recommending external titles, set a specific taste-based reason via search_tmdb(reason=…) "
         "or set_recommendation_reasons — never leave Why this? as a pipeline label. "
+        "After a useful recommendation or gap response, call suggest_follow_ups with 2-4 concise, safe next user turns. "
         "For movies use tmdb_id with add_to_radarr; for shows use tvdb_id with add_to_sonarr.\n"
         "When Seerr is enabled for household members, use request_via_seerr instead of add_to_radarr/add_to_sonarr.\n"
         "Star ratings accept half-stars (e.g. 4.5); never ask users to round fractional ratings.\n"

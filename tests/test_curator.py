@@ -14,6 +14,7 @@ from curatorx.agent.curator import (
     _displayable_cards,
     _extract_text,
     _extract_tool_calls,
+    _suggested_reply_block,
 )
 from curatorx.agent.tools import ToolRegistry
 from curatorx.agent.providers import _normalize_anthropic_response
@@ -189,6 +190,59 @@ class DisplayableCardsTests(unittest.TestCase):
             ]
             filtered = _cards_for_response(registry)
             self.assertEqual([card.title for card in filtered], ["Ready", "Film"])
+
+    def test_cards_for_response_prefers_discussed_missing_titles(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            registry._recommendation_context = True
+            registry._cards = [TitleCard(media_type="movie", title="Owned context", tmdb_id=1, in_library=True)]
+            registry._discussed_cards = [
+                TitleCard(media_type="movie", title="Missing discussion", tmdb_id=2, in_library=False),
+                TitleCard(media_type="movie", title="Queued discussion", tmdb_id=3, in_radarr=True),
+            ]
+            filtered = _cards_for_response(registry)
+            self.assertEqual([card.title for card in filtered], ["Missing discussion"])
+
+
+class SuggestedRepliesTests(unittest.IsolatedAsyncioTestCase):
+    async def test_agent_suggestions_are_sanitized_and_capped(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            await registry.execute(
+                "suggest_follow_ups",
+                {
+                    "replies": [
+                        "Dive deeper into the gaps",
+                        "Dive deeper into the gaps",
+                        "/private/library/path",
+                        "Show me where to watch these",
+                        "Add these to a list",
+                        "Compare the top two first",
+                        "One more reply that should be capped",
+                    ]
+                },
+            )
+            self.assertEqual(
+                registry.suggested_replies,
+                [
+                    "Dive deeper into the gaps",
+                    "Show me where to watch these",
+                    "Add these to a list",
+                    "Compare the top two first",
+                ],
+            )
+
+    async def test_gap_fallback_suggestions_are_emitted_when_agent_omits_them(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            registry._recommendation_context = True
+            registry._discussed_cards = [TitleCard(media_type="movie", title="Missing", tmdb_id=2)]
+            block = _suggested_reply_block(registry)
+            self.assertEqual(block["type"], "suggested_replies")
+            self.assertIn("Dive deeper into the gaps", block["payload"]["replies"])
 
 
 if __name__ == "__main__":

@@ -987,14 +987,19 @@ export default function App() {
 
   useEffect(() => {
     const pageId = searchParams.get("saved_library");
+    const followUp = searchParams.get("follow_up");
     if (!authReady || !threadsReady || loading || !pageId || savedLibraryStartedRef.current) return;
     savedLibraryStartedRef.current = true;
     searchParams.delete("saved_library");
+    searchParams.delete("follow_up");
     setSearchParams(searchParams, { replace: true });
     getLibraryPage(pageId)
       .then((page) => {
         const source = JSON.stringify(page.content?.blocks || []).slice(0, 8000);
-        return sendMessage(`Continue this saved curator response, keeping its recommendations and analysis as context:\n\n${source}`);
+        const continuation = followUp ? `\n\nThe user selected this next step: ${followUp}` : "";
+        return sendMessage(
+          `Continue this saved curator response, keeping its recommendations and analysis as context:\n\n${source}${continuation}`,
+        );
       })
       .catch((error) => appendChatError(formatApiError(error)));
   }, [authReady, threadsReady, loading, searchParams, setSearchParams]);
@@ -1669,6 +1674,7 @@ export default function App() {
               draggableToDock={dockDropEnabled}
               onReviewConflictResolved={handleReviewConflictResolved}
               onSaveToLibrary={handleSaveToLibrary}
+              onSuggestedReply={sendMessage}
             />
             {loading || agentActivityLog.length > 0 ? (
               <TypingIndicator

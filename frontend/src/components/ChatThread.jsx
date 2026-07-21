@@ -156,6 +156,25 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
       </>
     );
   }
+  if (block.type === "suggested_replies" && role === "assistant") {
+    const replies = Array.isArray(block.payload?.replies) ? block.payload.replies.filter(Boolean).slice(0, 4) : [];
+    if (!replies.length) return null;
+    return (
+      <div className="suggested-replies" aria-label="Suggested replies">
+        {replies.map((reply) => (
+          <button
+            key={reply}
+            type="button"
+            className="suggested-reply-chip"
+            disabled={handlers.actionsDisabled}
+            onClick={() => handlers.onSuggestedReply?.(reply)}
+          >
+            {reply}
+          </button>
+        ))}
+      </div>
+    );
+  }
   if (block.type === "review_batch" && Array.isArray(block.payload?.prompts)) {
     return (
       <div className="review-batch-strip" data-testid="review-batch-strip">
@@ -247,6 +266,7 @@ export default function ChatThread({
   showErrors = true,
   draggableToDock = false,
   onSaveToLibrary,
+  onSuggestedReply,
 }) {
   const lastAssistantId = [...messages].reverse().find((message) => message.role === "assistant")?.id;
 
@@ -298,6 +318,7 @@ export default function ChatThread({
                       userRole,
                       multiUserEnabled,
                       draggableToDock,
+                      onSuggestedReply,
                     },
                     message.role,
                     message,
