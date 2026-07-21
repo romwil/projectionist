@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.19.2] — 2026-07-21
+
+A small security-consistency fix for your private notes. CuratorX already treats the personal notes it keeps about you as reference data it can read but never obey — so a note that happens to contain "ignore your instructions and…" can't hijack the curator. This patch closes the one path where that protection wasn't being applied consistently: when the curator looks your notes up on the fly with its recall tool (not just when they're pre-loaded into the conversation), they're now fenced as untrusted data too.
+
+### Highlights
+- **Your private notes are reference data the curator can never be tricked into obeying — now consistently.** Whether a note is injected into the conversation up front or pulled in mid-chat when the curator recalls it, the same "treat this as data, never as instructions" fence is applied. No behavior you'd notice day to day — just the guarantee holding on every path.
+- **One less way a saved note could try to steer the curator.** Even a note crafted to read like a command stays inert; the curator uses it to answer you, never as an order to change what it does or which tools it runs.
+
+### Security
+- **Wrapped `recall_user_memory` results as untrusted DATA, closing an inconsistency in the prompt-injection defense.** `recall_user_memory` was missing from the `UNTRUSTED_MEMORY_TOOLS` frozenset (`curatorx/agent/tools/__init__.py`), so when the model called that tool its result — the signed-in user's own private notes — was appended to the conversation *without* the `wrap_untrusted_data(...)` fence, unlike every other memory/research tool. This contradicted both the system-prompt security clause (which labels per-user notes as untrusted DATA and directs the model to call `recall_user_memory`) and the `_user_memory_context_block` injection path, which already wraps the same notes. Adding `"recall_user_memory"` to the set means both curator tool-loops — the buffered `run()` (~line 337) and the streaming `stream_agent` (~line 576) in `curatorx/agent/curator.py`, which already consult the set — now fence the recalled notes automatically. Defense-in-depth for a private, single-account surface; no cross-account exposure was involved. (`curatorx/agent/tools/__init__.py`)
+
+### Verification
+- Extended `tests/test_prompt_injection.py` (TC-PROMPT-01 family) with regression coverage that seeds a poisoned per-user note and asserts the `recall_user_memory` tool result reaches the model fenced in the untrusted-data delimiters — on **both** the buffered (`CuratorAgent.run`) and streaming (`stream_agent`) tool loops — with the injection string bracketed *inside* the fence, mirroring the existing `recall_repo_memory` assertions; plus a membership check that `"recall_user_memory" in UNTRUSTED_MEMORY_TOOLS`. Full backend `pytest` suite **1205 passed, 4 skipped** (13 subtests passed) at **78.62%** total coverage, satisfying `--cov-fail-under=74`; `test_version` parity holds across `curatorx/_version.py`, root `package.json`, `frontend/package.json`, and both lockfiles at **1.19.2**. Frontend `node --test` unit suite **374 passed**, ESLint **0 errors** (87 pre-existing warnings unchanged), and the production build succeeds. `frontend/public/release-notes.json` regenerated from this entry via `scripts/generate-release-notes.sh`.
+
 ## [1.19.1] — 2026-07-21
 
 A small security fix for your saved pages. The pages you save from a curator conversation are private to you — and now the app enforces that on every read path. Signed-out requests are turned away instead of being quietly answered, and one household member can never open another member's saved page.

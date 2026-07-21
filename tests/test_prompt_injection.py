@@ -20,13 +20,14 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
-from curatorx.agent.curator import CuratorAgent
+from curatorx.agent.curator import CuratorAgent, stream_agent
 from curatorx.agent.providers import _normalize_anthropic_response
 from curatorx.agent.tools import (
     UNTRUSTED_DATA_CLOSE,
     UNTRUSTED_DATA_OPEN,
+    UNTRUSTED_MEMORY_TOOLS,
     build_system_prompt,
     wrap_untrusted_data,
 )
@@ -185,6 +186,160 @@ class RepositoryMemoryInjectionToModelTests(unittest.IsolatedAsyncioTestCase):
         blocks = result["message"]["blocks"]
         text = " ".join(b.get("content", "") for b in blocks if b.get("type") == "text")
         self.assertNotIn("SYSTEM PROMPT", text)
+
+
+class UntrustedMemoryToolsMembershipTests(unittest.TestCase):
+    def test_recall_user_memory_is_untrusted(self) -> None:
+        # Per-user notes are untrusted DATA whether injected into the prompt or
+        # recalled via tool; the recall tool must be fenced like the others.
+        self.assertIn("recall_user_memory", UNTRUSTED_MEMORY_TOOLS)
+        self.assertIn("recall_repo_memory", UNTRUSTED_MEMORY_TOOLS)
+
+
+class UserMemoryInjectionToModelTests(unittest.IsolatedAsyncioTestCase):
+    """A poisoned per-user note recalled via ``recall_user_memory`` must reach
+    the model fenced as untrusted DATA, on both the buffered and streaming loops.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self.tmp.name) / "curatorx.db")
+        self.db.create_local_user(
+            user_id="u1", display_name="U", password_hash="x", role="member"
+        )
+        self.db.add_user_memory_note(
+            "u1", kind="self_disclosure", text=f"{CLEAN_FACT} {INJECTION}"
+        )
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    @staticmethod
+    def _recall_then_text_responses() -> tuple[Any, Any]:
+        tool_response = _normalize_anthropic_response(
+            {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "id": "toolu_1",
+                        "name": "recall_user_memory",
+                        "input": {"limit": 20},
+                    }
+                ],
+                "stop_reason": "tool_use",
+            }
+        )
+        text_response = _normalize_anthropic_response(
+            {
+                "content": [{"type": "text", "text": "Noted your preferences."}],
+                "stop_reason": "end_turn",
+            }
+        )
+        return tool_response, text_response
+
+    async def test_buffered_path_fences_recalled_user_note_as_data(self) -> None:
+        settings = Settings(
+            llm_provider="anthropic", llm_api_key="test-key", llm_model="claude-sonnet-4-6"
+        )
+        agent = CuratorAgent(self.db, settings, user_id="u1", user_role="member")
+        captured: dict = {}
+        call_count = {"n": 0}
+        tool_response, text_response = self._recall_then_text_responses()
+
+        async def mock_chat(messages, tools=None):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                return tool_response
+            captured["messages"] = list(messages)
+            return text_response
+
+        agent.provider = MagicMock()
+        agent.provider.chat = AsyncMock(side_effect=mock_chat)
+
+        await agent.run("s-user-inj", "what do you remember about me?")
+
+        self.assertGreaterEqual(call_count["n"], 2)
+        tool_msgs = [m for m in captured["messages"] if m.get("role") == "tool"]
+        self.assertTrue(tool_msgs, "expected a tool result to reach the model")
+        joined = "\n".join(str(m["content"]) for m in tool_msgs)
+
+        self.assertIn(UNTRUSTED_DATA_OPEN, joined)
+        self.assertIn(UNTRUSTED_DATA_CLOSE, joined)
+        self.assertIn(INJECTION, joined)
+        self.assertIn(CLEAN_FACT, joined)
+        # The recalled note is bracketed as untrusted DATA, not loose text.
+        open_at = joined.index(UNTRUSTED_DATA_OPEN)
+        close_at = joined.index(UNTRUSTED_DATA_CLOSE, open_at)
+        self.assertLess(open_at, joined.index(INJECTION))
+        self.assertLess(joined.index(INJECTION), close_at)
+
+    async def test_streaming_path_fences_recalled_user_note_as_data(self) -> None:
+        settings = Settings(
+            llm_provider="openai",
+            llm_base_url="http://localhost:11434/v1",
+            llm_api_key="test-key",
+            llm_model="test-model",
+        )
+        captured: dict = {}
+        call_count = {"n": 0}
+
+        first_chunks = [
+            {"choices": [{"index": 0, "delta": {
+                "tool_calls": [{
+                    "index": 0,
+                    "id": "call_1",
+                    "type": "function",
+                    "function": {"name": "recall_user_memory", "arguments": ""},
+                }],
+            }, "finish_reason": None}]},
+            {"choices": [{"index": 0, "delta": {
+                "tool_calls": [{"index": 0, "function": {"arguments": '{"limit":20}'}}],
+            }, "finish_reason": None}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "tool_calls"}]},
+        ]
+        second_chunks = [
+            {"choices": [{"index": 0, "delta": {"content": "Noted."}, "finish_reason": None}]},
+            {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+        ]
+
+        async def fake_stream(messages, tools=None):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                source = first_chunks
+            else:
+                captured["messages"] = list(messages)
+                source = second_chunks
+            for chunk in source:
+                yield chunk
+
+        provider = MagicMock()
+        provider.stream = fake_stream
+        provider.chat = AsyncMock()
+
+        with patch("curatorx.agent.curator.get_chat_provider", return_value=provider):
+            _ = [
+                c
+                async for c in stream_agent(
+                    self.db,
+                    settings,
+                    "s-user-inj-stream",
+                    "what do you remember about me?",
+                    lens_id=DEFAULT_LENS_ID,
+                    user_id="u1",
+                    user_role="member",
+                )
+            ]
+
+        tool_msgs = [m for m in captured["messages"] if m.get("role") == "tool"]
+        self.assertTrue(tool_msgs, "expected a tool result to reach the model")
+        joined = "\n".join(str(m["content"]) for m in tool_msgs)
+        self.assertIn(UNTRUSTED_DATA_OPEN, joined)
+        self.assertIn(UNTRUSTED_DATA_CLOSE, joined)
+        self.assertIn(INJECTION, joined)
+        open_at = joined.index(UNTRUSTED_DATA_OPEN)
+        close_at = joined.index(UNTRUSTED_DATA_CLOSE, open_at)
+        self.assertLess(open_at, joined.index(INJECTION))
+        self.assertLess(joined.index(INJECTION), close_at)
 
 
 if __name__ == "__main__":

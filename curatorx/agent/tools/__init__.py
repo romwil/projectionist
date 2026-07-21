@@ -92,6 +92,7 @@ UNTRUSTED_DATA_CLOSE = "<<<END_UNTRUSTED_MEMORY_DATA>>>"
 UNTRUSTED_MEMORY_TOOLS: frozenset = frozenset(
     {
         "recall_repo_memory",
+        "recall_user_memory",
         "search_memory",
         "research_title",
         "research_person",
