@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { buildAppNavItems } from "../lib/appNavItems.js";
 import { ROUTES, watchlistBrowseHref } from "../lib/backNav.js";
+import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 
 export default function AppNav({
   open,
@@ -11,27 +11,13 @@ export default function AppNav({
   showSettings = true,
 }) {
   const location = useLocation();
-  const panelRef = useRef(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    function onKey(event) {
-      if (event.key === "Escape") onClose?.();
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    function onClick(event) {
-      if (panelRef.current && !panelRef.current.contains(event.target)) {
-        onClose?.();
-      }
-    }
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
-  }, [open, onClose]);
+  const { rootRef: panelRef } = useAnchoredPopover({
+    open,
+    onOpenChange: (next) => {
+      if (!next) onClose?.();
+    },
+    closeOnEscape: true,
+  });
 
   if (!open) return null;
 

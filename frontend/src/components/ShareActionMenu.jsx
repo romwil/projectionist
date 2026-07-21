@@ -1,9 +1,18 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { saveLibraryPage } from "../api/client";
+import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 
 function libraryUrl(id) {
   return new URL(`/library/${encodeURIComponent(id)}`, window.location.origin).toString();
+}
+
+function placeShareMenu(anchor, menu) {
+  const margin = 8;
+  return {
+    top: `${Math.max(margin, Math.min(anchor.bottom + margin, window.innerHeight - menu.height - margin))}px`,
+    left: `${Math.max(margin, Math.min(anchor.right - menu.width, window.innerWidth - menu.width - margin))}px`,
+  };
 }
 
 export default function ShareActionMenu({
@@ -16,47 +25,17 @@ export default function ShareActionMenu({
   onSaved,
   label = "Share and export",
 }) {
-  const [open, setOpen] = useState(false);
   const [savedPage, setSavedPage] = useState(page || null);
   const [status, setStatus] = useState("");
-  const rootRef = useRef(null);
-  const popoverRef = useRef(null);
   const savePromiseRef = useRef(null);
-  const [popoverStyle, setPopoverStyle] = useState(null);
+  const { open, setOpen, rootRef, popoverRef, popoverStyle } = useAnchoredPopover({
+    closeOnEscape: true,
+    anchorSelector: ".share-action-grip",
+    placement: placeShareMenu,
+    repositionKey: status,
+  });
 
   useEffect(() => setSavedPage(page || null), [page]);
-  useEffect(() => {
-    const close = (event) => {
-      if (!rootRef.current?.contains(event.target) && !popoverRef.current?.contains(event.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
-  useEffect(() => {
-    const close = (event) => event.key === "Escape" && setOpen(false);
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
-  }, []);
-  useLayoutEffect(() => {
-    if (!open) return undefined;
-    const position = () => {
-      const anchor = rootRef.current?.querySelector(".share-action-grip")?.getBoundingClientRect();
-      const menu = popoverRef.current?.getBoundingClientRect();
-      if (!anchor || !menu) return;
-      const margin = 8;
-      setPopoverStyle({
-        top: `${Math.max(margin, Math.min(anchor.bottom + margin, window.innerHeight - menu.height - margin))}px`,
-        left: `${Math.max(margin, Math.min(anchor.right - menu.width, window.innerWidth - menu.width - margin))}px`,
-      });
-    };
-    position();
-    window.addEventListener("resize", position);
-    window.addEventListener("scroll", position, true);
-    return () => {
-      window.removeEventListener("resize", position);
-      window.removeEventListener("scroll", position, true);
-    };
-  }, [open, status]);
 
   async function ensureSaved() {
     if (savedPage?.id) return savedPage;

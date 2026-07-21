@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curatorx"
-version = "1.16.0"
+version = "1.17.0"
 description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -112,7 +112,7 @@ ignore = ["E501", "I001"]
 "scripts/**" = ["F401", "E402"]
 # Pre-existing violations in shipped modules, captured as a baseline. Remove an
 # entry (and clean the file) rather than editing source during this config pass.
-"curatorx/agent/tools.py" = ["F401", "F541"]
+"curatorx/agent/tools/**" = ["F401", "F541"]
 "curatorx/config_store.py" = ["F402"]
 "curatorx/connectors/fanart.py" = ["F401"]
 "curatorx/connectors/tautulli.py" = ["F401"]

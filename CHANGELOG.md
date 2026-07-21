@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.17.0] — 2026-07-21
+
+An internal maintainability release. CuratorX behaves exactly as it did in 1.16.0 — same features, same API, same prompts, same look — but several of the largest source files were broken into smaller, focused modules so the codebase is easier to navigate, review, and extend. There is nothing to relearn and nothing to reconfigure.
+
+### Highlights
+- **No change to how CuratorX behaves.** This release is pure refactoring: no new features, no API/schema changes, no prompt wording changes, and the UI (Lights Up and Lights Down) is pixel-identical. Upgrading is a no-op for your setup.
+- **A more maintainable codebase.** The three biggest backend files and the biggest stylesheet were split into cohesive, well-named modules, and duplicated popover/menu logic in the web UI was unified into one shared hook — making future fixes and features faster and safer to land.
+
+### Changed
+- **`curatorx/library/db.py` → a `curatorx/library/db/` package.** The monolithic `Database` class is now composed from topic mixins (`_schema`, `_users`, `_library_items`, `_library_lookup`, `_library_query`, `_enrichment`, `_memory`, `_chat`, `_curated_lists`, `_watchlist`, `_recommendations`, `_telemetry`, `_saved_library`, `_persona`, `_grooming`, `_media_issues`), with module-level constants/helpers and SQL DDL in `_shared`. `db/__init__.py` composes `Database(...)` from the mixins and re-exports the full public surface, so `from curatorx.library.db import Database` (and every helper/constant, including patch targets like `curatorx.library.db.time`) resolves unchanged.
+- **`curatorx/agent/tools.py` → a `curatorx/agent/tools/` package.** The verbatim `TOOL_DEFINITIONS` schema list, `build_tool_definitions`, and the `PLEX_COLLECTION_TOOL_NAMES` / `SEERR_TOOL_NAMES` sets moved to `tools/_definitions.py`; `tools/__init__.py` keeps the `ToolRegistry` class (so dynamic dispatch `getattr(self, f"_tool_{name}")` and all `_tool_*` handlers stay methods of one class), the prompt-injection wrapping, `build_system_prompt`, and every patched symbol, and re-exports the definitions. All 60 tool names/wording and the system-prompt clause are unchanged.
+- **`frontend/src/styles.css` → 10 CSS partials in `frontend/src/styles/`.** The stylesheet was split at its existing section boundaries (tokens, nav/chrome, browse controls, config/onboarding, chat, reading/admin/settings, persona, dashboard/coverage cards, title-detail/home, explore/delight) and re-assembled via `@import` in the exact prior cascade order. The concatenated partials are **byte-for-byte identical** to the former single file, so the built CSS is equivalent.
+- **New `useAnchoredPopover` hook (`frontend/src/hooks/useAnchoredPopover.js`).** Unifies the previously duplicated open-state / outside-click / Escape / portal-placement logic. Adopted in `ShareActionMenu`, `PosterActionMenu` (portal + `getBoundingClientRect` placement, resize/scroll reposition, mousedown + Escape dismiss), and `PersonaSelector`, `UserMenu`, `AppNav` (outside-click / Escape dismiss). Placement math, dismissal semantics, a11y, and all component props are preserved exactly.
+- **Deliberately left intact:** `curatorx/web/app.py` (route-registration order and extensive module-level monkeypatching across interdependent routes make an APIRouter split too risky for a behavior-preserving pass), and `MediaBrowseControls.jsx`'s column/export menus (they currently have no outside-click/Escape dismissal, so adopting the dismissing hook would change behavior). Both are reported rather than forced.
+
+### Verification
+- Backend: full pytest suite **1187 passed, 4 skipped** at **78.20%** total coverage, satisfying `--cov-fail-under=74`; `ruff check` clean. Frontend: **351 unit tests passed**, ESLint **0 errors** (pre-existing warning count unchanged), production build succeeds. Public import paths confirmed via a smoke import of `Database`, `ToolRegistry`, `TOOL_DEFINITIONS`, `build_tool_definitions`, `build_system_prompt`, and prior patch targets. CSS equivalence confirmed by a byte-identical diff of the concatenated partials against the former `styles.css`.
+
 ## [1.16.0] — 2026-07-21
 
 Delight Phase 2 for owners: the Dashboard now opens with an at-a-glance library-health hero and an open-issues badge, destructive grooming is reversible with one click, curated lists can be published to members as ordered courses, Youth memory gets an owner review dashboard, and a weekly in-app digest recaps your library.

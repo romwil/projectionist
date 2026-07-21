@@ -16,11 +16,9 @@ import {
   LIBRARY_DELETE_NOTICE_KEY,
   partitionBulkDeleteSelection,
 } from "./bulkLibraryDelete.js";
+import { readAllStyles } from "./readStyles.mjs";
 
-const styles = readFileSync(
-  join(dirname(fileURLToPath(import.meta.url)), "..", "styles.css"),
-  "utf8",
-);
+const styles = readAllStyles();
 
 function itemKey(item) {
   return `${item?.media_type || ""}:${item?.tmdb_id || item?.rating_key || item?.title || ""}`;

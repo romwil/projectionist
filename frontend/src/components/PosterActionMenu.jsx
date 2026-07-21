@@ -1,6 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
+import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 import {
   addCuratedListItem,
   addWatchlistPin,
@@ -12,6 +13,17 @@ import { useAuthGate } from "./UserMenu";
 import ReportMediaIssueModal from "./ReportMediaIssueModal";
 import { recommendLikeHref } from "../lib/backNav.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
+
+function placePosterMenu(anchor, menu) {
+  const margin = 8;
+  const above = anchor.top - margin - menu.height;
+  const below = anchor.bottom + margin;
+  const top = above >= margin || below + menu.height > window.innerHeight
+    ? Math.max(margin, Math.min(above, window.innerHeight - menu.height - margin))
+    : Math.min(below, window.innerHeight - menu.height - margin);
+  const left = Math.max(margin, Math.min(anchor.left, window.innerWidth - menu.width - margin));
+  return { top: `${top}px`, left: `${left}px` };
+}
 
 export default function PosterActionMenu({
   item,
@@ -26,60 +38,18 @@ export default function PosterActionMenu({
   motifWhy,
 }) {
   const { isOwner, multiUserEnabled } = useAuthGate();
-  const [open, setOpen] = useState(false);
   const [lists, setLists] = useState([]);
   const [listOpen, setListOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [status, setStatus] = useState("");
-  const rootRef = useRef(null);
-  const popoverRef = useRef(null);
-  const [popoverStyle, setPopoverStyle] = useState(null);
+  const { open, setOpen, rootRef, popoverRef, popoverStyle } = useAnchoredPopover({
+    closeOnEscape: true,
+    anchorSelector: ".poster-action-grip",
+    placement: placePosterMenu,
+    repositionKey: `${listOpen}|${status}`,
+  });
   const detailPath = titleDetailPath({ ...item, in_library: true });
   const plexHref = item?.plex_watch_url || (canWatchOnPlex(item) ? plexWatchUrl(item.rating_key) : "");
-
-  useEffect(() => {
-    function close(event) {
-      if (!rootRef.current?.contains(event.target) && !popoverRef.current?.contains(event.target)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", close);
-    return () => document.removeEventListener("mousedown", close);
-  }, []);
-
-  useEffect(() => {
-    function close(event) {
-      if (event.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", close);
-    return () => document.removeEventListener("keydown", close);
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!open) return undefined;
-    function position() {
-      const grip = rootRef.current?.querySelector(".poster-action-grip");
-      const popover = popoverRef.current;
-      if (!grip || !popover) return;
-      const anchor = grip.getBoundingClientRect();
-      const menu = popover.getBoundingClientRect();
-      const margin = 8;
-      const above = anchor.top - margin - menu.height;
-      const below = anchor.bottom + margin;
-      const top = above >= margin || below + menu.height > window.innerHeight
-        ? Math.max(margin, Math.min(above, window.innerHeight - menu.height - margin))
-        : Math.min(below, window.innerHeight - menu.height - margin);
-      const left = Math.max(margin, Math.min(anchor.left, window.innerWidth - menu.width - margin));
-      setPopoverStyle({ top: `${top}px`, left: `${left}px` });
-    }
-    position();
-    window.addEventListener("resize", position);
-    window.addEventListener("scroll", position, true);
-    return () => {
-      window.removeEventListener("resize", position);
-      window.removeEventListener("scroll", position, true);
-    };
-  }, [open, listOpen, status]);
 
   async function openLists() {
     setListOpen(true);

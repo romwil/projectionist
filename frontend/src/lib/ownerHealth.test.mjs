@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { buildHealthHeroTiles } from "./ownerHealth.js";
+import { readAllStyles } from "./readStyles.mjs";
 
-const root = join(dirname(fileURLToPath(import.meta.url)), "..");
-const styles = readFileSync(join(root, "styles.css"), "utf8");
+const styles = readAllStyles();
 
 describe("buildHealthHeroTiles", () => {
   it("derives all six tiles from aggregations", () => {

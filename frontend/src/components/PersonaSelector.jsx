@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useCallback } from "react";
+import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 
 const SLIDER_LABELS = [
   { key: "val_bro_prof", lo: "Casual", hi: "Professorial" },
@@ -124,20 +125,10 @@ export default function PersonaSelector({
   onSetDefault,
   defaultPersonaId,
 }) {
-  const [open, setOpen] = useState(false);
   const [modal, setModal] = useState(null);
-  const ref = useRef(null);
+  const { open, setOpen, rootRef } = useAnchoredPopover();
 
   const active = personas.find((p) => p.id === activePersonaId);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, [open]);
 
   const grouped = {
     builtin: personas.filter((p) => p.visibility === "builtin"),
@@ -215,7 +206,7 @@ export default function PersonaSelector({
   };
 
   return (
-    <div className="persona-selector" ref={ref}>
+    <div className="persona-selector" ref={rootRef}>
       <button
         type="button"
         className="persona-trigger selectable-oval"

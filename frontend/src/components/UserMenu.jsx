@@ -1,28 +1,18 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getAuthMe, getFeatures, logout } from "../api/client";
 import UserAvatar from "./UserAvatar";
+import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 
 export default function UserMenu() {
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
   const [user, setUser] = useState(null);
-  const menuRef = useRef(null);
+  const { open, setOpen, rootRef: menuRef } = useAnchoredPopover();
 
   useEffect(() => {
     getAuthMe()
       .then((payload) => setUser(payload?.user || null))
       .catch(() => setUser(null));
-  }, []);
-
-  useEffect(() => {
-    function handleClick(event) {
-      if (!menuRef.current?.contains(event.target)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
   async function handleLogout() {
