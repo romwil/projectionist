@@ -81,6 +81,31 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             payload = json.loads(result)
             self.assertEqual(payload["unwatched_count"], 1)
 
+    async def test_search_library_returns_structured_matches(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "search-1",
+                    "media_type": "movie",
+                    "title": "Blade Runner",
+                    "year": 1982,
+                    "summary": "A noir detective hunts replicants.",
+                    "genres": ["Science Fiction"],
+                }
+            )
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+
+            result = await registry.execute("search_library", {"query": "Blade Runner"})
+
+            self.assertIsNotNone(result)
+            payload = json.loads(result)
+            self.assertEqual(payload["total_matched"], 1)
+            self.assertEqual(payload["returned"], 1)
+            self.assertFalse(payload["has_more"])
+            self.assertEqual(payload["items"][0]["title"], "Blade Runner")
+            self.assertEqual(registry.cards[0].title, "Blade Runner")
+
     def test_tool_definitions_include_library_query_tools(self) -> None:
         names = {tool["function"]["name"] for tool in TOOL_DEFINITIONS}
         for expected in (

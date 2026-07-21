@@ -1742,6 +1742,17 @@ class ToolRegistry:
             str(args.get("query") or ""),
             media_type=args.get("media_type"),
         )
+        self._cards.extend(cards)
+        items = [_card_to_tool_item(c) for c in cards]
+        return json.dumps(
+            {
+                "total_matched": len(cards),
+                "returned": len(cards),
+                "offset": 0,
+                "has_more": False,
+                "items": items,
+            }
+        )
 
     async def _tool_suggest_follow_ups(self, args: Mapping[str, Any]) -> str:
         """Store presentation-only, safe next-turn suggestions from the agent."""
@@ -1767,17 +1778,6 @@ class ToolRegistry:
                 break
         self._suggested_replies = cleaned
         return json.dumps({"replies": cleaned})
-        self._cards.extend(cards)
-        items = [_card_to_tool_item(c) for c in cards]
-        return json.dumps(
-            {
-                "total_matched": len(cards),
-                "returned": len(cards),
-                "offset": 0,
-                "has_more": False,
-                "items": items,
-            }
-        )
 
     async def _tool_research_title(self, args: Mapping[str, Any]) -> str:
         """Return source-attributed enrichment without exposing local file metadata."""
