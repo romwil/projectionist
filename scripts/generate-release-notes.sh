@@ -102,12 +102,25 @@ for index, match in enumerate(matches):
                 # blank line ends the summary paragraph block
                 in_summary = False
 
+    # Promote a "### Highlights" section to a top-level, benefit-led list so the
+    # What's New modal can lead with human copy while the changelog keeps the
+    # engineering detail. Backward compatible: releases without a Highlights
+    # section simply get an empty list and render exactly as before.
+    highlights: list[str] = []
+    technical_sections: list[dict] = []
+    for section in sections:
+        if section["title"].strip().lower() == "highlights":
+            highlights.extend(section["bullets"])
+        else:
+            technical_sections.append(section)
+
     releases.append(
         {
             "version": version,
             "date": date,
             "summary": " ".join(summary_lines).strip(),
-            "sections": sections,
+            "highlights": highlights,
+            "sections": technical_sections,
         }
     )
 

@@ -1,10 +1,47 @@
 {
-  "generated_at": "2026-07-21T03:19:06Z",
+  "generated_at": "2026-07-21T04:08:00Z",
   "releases": [
+    {
+      "version": "1.13.0",
+      "date": "2026-07-20",
+      "summary": "A documentation-focused release: a world-class rewrite of the user-facing guides (Help, Privacy, Onboarding, FAQ) to a warm-but-authoritative standard, a durable documentation standard that keeps future work at that bar, and a benefit-led \"Highlights\" convention for release notes.",
+      "highlights": [
+        "**Help that teaches, not just tells.** The in-app guide now walks you through real tasks with example chat prompts and copy-paste commands — ask \"what should we watch tonight under two hours?\" and the docs show you exactly what you'll get back.",
+        "**A clear, honest privacy map.** The Privacy page now spells out *exactly* what an export and a purge cover — your notes, chat transcripts, saved pages, and preferences — with nothing left vague.",
+        "**Owner setup you can paste.** Onboarding and the FAQ lead with runnable Docker/Compose/env snippets for connecting Plex, Radarr/Sonarr, TMDB, and your LLM.",
+        "**Release notes for humans.** \"What's New\" now leads with a plain-language Highlights summary of what each release means for you, while the changelog keeps the engineering detail."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**`docs/DOCS_STYLE.md`** — the durable documentation standard: quality rubric, audience/voice matrix (member vs owner vs developer), worked-example + runnable-snippet requirements, an E-E-A-T trust checklist, the release-notes Highlights convention, and a \"definition of done for docs\" checklist. Written to its own standard as an exemplar.",
+            "**`.cursor/rules/docs-style.mdc`** — a project rule that holds future doc and user-facing-copy changes to `DOCS_STYLE.md` (right-audience depth, worked examples, runnable snippets, the render split, and a benefit-led CHANGELOG Highlight).",
+            "**Two-part CHANGELOG convention** — each release now carries a benefit-led `### Highlights` block plus the technical sections. `scripts/generate-release-notes.sh` promotes Highlights into a top-level `highlights` field, and the What's New modal leads with that human copy while the About page and changelog keep full detail. Backward compatible: releases without a Highlights section render exactly as before."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "**`docs/HELP.md`** rewritten to the rubric: the member half (Chat, Explore/browse, saving to Library, Plot Lab) now uses worked example prompts and step-by-step guides, and raw HTTP verbs were removed from member prose (memory export/delete is restated as a guided action pointing at the Privacy page). The owner half keeps runnable `curl`/Compose/config snippets with \"how it works / why it matters\" explainers. The `## For owners` render split and every deep-link anchor are preserved.",
+            "**`docs/PRIVACY.md`** rewritten as a plain-language but authoritative \"what we store / what leaves the box / how to export or purge\" model, with an exact export/purge coverage map verified against `curatorx/library/db.py` (`export_user_memory` / `purge_user_memory_and_chats`): private notes, chat threads + message transcripts, saved library pages, and preference facts.",
+            "**`docs/ONBOARDING.md`** and **`docs/FAQ.md`** reworked to task-first owner guidance with real setup snippets (Compose/env, connecting Plex/Radarr/Sonarr/TMDB/Ollama, enabling household sign-in) instead of settings-key/table-internal phrasing; each FAQ answer now earns trust with a concrete example or command.",
+            "**`README.md`** and **`docs/WEB_UI.md`** polished for accuracy; `DOCS_STYLE.md` added to the README documentation table, a docs gate added to the Contributing steps, and cross-links added from `docs/TESTING.md`."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`tests/test_version.py` and `tests/test_release_notes_static.py` green; `frontend/public/release-notes.json` regenerates cleanly with the new `highlights` field; frontend unit tests and the production build pass. Verified `/help` and `/privacy` heading anchors still resolve and the owner render split still hides owner-only depth from members."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.12.0",
       "date": "2026-07-20",
       "summary": "Consolidated maintenance + feature release: the Explore browse & search hub, previously-unreleased frontend fixes, privacy-correctness hardening, repo hygiene, a docs reorganization, and a config-only lint/type toolchain.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -44,6 +81,7 @@
       "version": "1.11.0",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -65,6 +103,7 @@
       "version": "1.10.0",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -87,6 +126,7 @@
       "version": "1.9.1",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -100,6 +140,7 @@
       "version": "1.9.0",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -123,6 +164,7 @@
       "version": "1.8.32",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -143,6 +185,7 @@
       "version": "1.8.31",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -157,6 +200,7 @@
       "version": "1.8.30",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -171,6 +215,7 @@
       "version": "1.8.29",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -191,6 +236,7 @@
       "version": "1.8.28",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -212,6 +258,7 @@
       "version": "1.8.27",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -225,6 +272,7 @@
       "version": "1.8.26",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -239,6 +287,7 @@
       "version": "1.8.25",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -265,6 +314,7 @@
       "version": "1.8.24",
       "date": "2026-07-20",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -286,6 +336,7 @@
       "version": "1.8.23",
       "date": "2026-07-18",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -305,6 +356,7 @@
       "version": "1.8.22",
       "date": "2026-07-18",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -320,6 +372,7 @@
       "version": "1.8.21",
       "date": "2026-07-18",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -333,6 +386,7 @@
       "version": "1.8.20",
       "date": "2026-07-18",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Changed",
@@ -346,6 +400,7 @@
       "version": "1.8.19",
       "date": "2026-07-18",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -359,6 +414,7 @@
       "version": "1.8.18",
       "date": "2026-07-18",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -372,6 +428,7 @@
       "version": "1.8.17",
       "date": "2026-07-18",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -385,6 +442,7 @@
       "version": "1.8.16",
       "date": "2026-07-18",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -404,6 +462,7 @@
       "version": "1.8.15",
       "date": "2026-07-18",
       "summary": "Browse actions and Surprise Me now follow the same compact recommendation language across CuratorX.",
+      "highlights": [],
       "sections": [
         {
           "title": "Changed",
@@ -425,6 +484,7 @@
       "version": "1.8.14",
       "date": "2026-07-18",
       "summary": "Explore feed browsing now uses the same visible controls as the rest of CuratorX.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -439,6 +499,7 @@
       "version": "1.8.13",
       "date": "2026-07-18",
       "summary": "Shared media browsing, local collections, and safe owner-reviewed media repair.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -467,6 +528,7 @@
       "version": "1.8.12",
       "date": "2026-07-18",
       "summary": "AppNav hamburger on every core shell (chat, browse, Settings, Admin, Privacy); chat footer links move into the drawer.",
+      "highlights": [],
       "sections": [
         {
           "title": "Changed",
@@ -480,6 +542,7 @@
       "version": "1.8.11",
       "date": "2026-07-18",
       "summary": "Watched poster badges, Revisit These rail, and durable Unraid update hygiene after Force Update 0 B no-ops.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -511,6 +574,7 @@
       "version": "1.8.10",
       "date": "2026-07-17",
       "summary": "Wikipedia-default long synopsis and first-start idle bootstrap so fresh installs gain plot depth without waiting days or spending LLM tokens.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -531,6 +595,7 @@
       "version": "1.8.9",
       "date": "2026-07-17",
       "summary": "Library knowledge Wave 2: optional long synopsis enrichment, free keyword→theme facets, knowledge coverage UI across Admin/Explore/Tasks, Plot knowledge on title detail, and Plot Lab theme chips.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -557,6 +622,7 @@
       "version": "1.8.8",
       "date": "2026-07-17",
       "summary": "Library knowledge Wave 1: richer motif extraction, multi-signal Plot Lab AND, durable scheduled-task run history with measured rate and auto-tune, in-app Help + curator knowledge guide, plus About/Surprise Me/sidebar polish.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -595,6 +661,7 @@
       "version": "1.8.7",
       "date": "2026-07-17",
       "summary": "Sidebar conversation layout polish, turnstile Why? collapsed by default, faster watchlist loads, and consistent centered Play on in-library posters.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -617,6 +684,7 @@
       "version": "1.8.6",
       "date": "2026-07-17",
       "summary": "Security hardening (proxy-aware rate limits, OpenAPI off by default), pentest protocol v1.0, Scheduled Tasks cadence/ETA controls, Discover watchlist GUID enrichment, person-page credit grouping, and Plot Lab motif Why?.",
+      "highlights": [],
       "sections": [
         {
           "title": "Security",
@@ -651,6 +719,7 @@
       "version": "1.8.5",
       "date": "2026-07-16",
       "summary": "Watchlist explore page, title detail drawer and polish, Settings/Admin UX, Plex Discover pagination, bulk library delete, watched-state controls, and scheduled-task outcome messaging.",
+      "highlights": [],
       "sections": [
         {
           "title": "Changed",
@@ -697,6 +766,7 @@
       "version": "1.8.4",
       "date": "2026-07-16",
       "summary": "Shared AppShell chrome and Watchlist IA, What’s New release notes, capability/empty CTAs, and Explore/page completeness across title, person, tags, and chat.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -732,6 +802,7 @@
       "version": "1.8.3",
       "date": "2026-07-16",
       "summary": "Explore navigation and section drill-downs, Scheduled Tasks admin, avatar upload/cache, concurrent card adds, and agent library-search quality.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -769,6 +840,7 @@
       "version": "1.8.2",
       "date": "2026-07-16",
       "summary": "Hot-path latency, Surprise Me reliability, responsive Explore/recommendations, composer chrome, and scheduled purge-candidate caching.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -801,6 +873,7 @@
       "version": "1.8.1",
       "date": "2026-07-16",
       "summary": "Person/tag browse surfaces on Explore and Title Detail, plus Windows-native e2e/dev tooling and Unraid rollout docs.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -819,6 +892,7 @@
       "version": "1.8.0",
       "date": "2026-07-16",
       "summary": "Platform expansion: structured credits + metadata enrichment, layered plot embeddings with materialized neighbors, title relations graph, Explore feed APIs, dual theme, and structural UI (Title Detail, Explore shell, agent avatar). Teaching-kit docs updated for sync-vs-idle trickle, honest provenance, and homelab SQLite constraints.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -852,6 +926,7 @@
       "version": "1.7.13",
       "date": "2026-07-15",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -882,6 +957,7 @@
       "version": "1.7.12",
       "date": "2026-07-15",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -915,6 +991,7 @@
       "version": "1.7.11",
       "date": "2026-07-15",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -931,6 +1008,7 @@
       "version": "1.7.10",
       "date": "2026-07-15",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -945,6 +1023,7 @@
       "version": "1.7.9",
       "date": "2026-07-15",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -970,6 +1049,7 @@
       "version": "1.7.8",
       "date": "2026-07-15",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -992,6 +1072,7 @@
       "version": "1.7.7",
       "date": "2026-07-15",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1006,6 +1087,7 @@
       "version": "1.7.6",
       "date": "2026-07-15",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1020,6 +1102,7 @@
       "version": "1.7.5",
       "date": "2026-07-15",
       "summary": "",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1033,6 +1116,7 @@
       "version": "1.7.4",
       "date": "2026-07-15",
       "summary": "Persona audit: wire selector, complete slider set, sanitize error responses.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1049,6 +1133,7 @@
       "version": "1.7.3",
       "date": "2026-07-15",
       "summary": "Fix Docker startup failure on existing installs with root-owned `/config` volumes.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1063,6 +1148,7 @@
       "version": "1.7.2",
       "date": "2026-07-15",
       "summary": "Heartbeat deadline bug fix, test suite isolation, zero failures.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1085,6 +1171,7 @@
       "version": "1.7.1",
       "date": "2026-07-15",
       "summary": "Scheduler hardening, data retention, and trickle embedding ingestion.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1119,6 +1206,7 @@
       "version": "1.7.0",
       "date": "2026-07-15",
       "summary": "Non-root Docker, true SSE streaming, multi-method auth, and telemetry ingestion.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1156,6 +1244,7 @@
       "version": "1.6.0",
       "date": "2026-07-15",
       "summary": "Owner dashboard, background idle task scheduler, and 5 chat delight features.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1192,6 +1281,7 @@
       "version": "1.5.0",
       "date": "2026-07-15",
       "summary": "Per-conversation persona selection, expanded personality sliders, login cleanup, test coverage infrastructure.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1228,6 +1318,7 @@
       "version": "1.4.0",
       "date": "2026-07-15",
       "summary": "Documentation alignment, security hardening, and roadmap cleanup.",
+      "highlights": [],
       "sections": [
         {
           "title": "Security",
@@ -1263,6 +1354,7 @@
       "version": "1.3.0",
       "date": "2026-07-14",
       "summary": "Privacy-safe MCP, Admin/Settings split, household management, wide/mobile chat, voice, watchlist sync, and local curated lists.",
+      "highlights": [],
       "sections": [
         {
           "title": "Security / Privacy",
@@ -1298,6 +1390,7 @@
       "version": "1.2.0",
       "date": "2026-07-14",
       "summary": "Pre-CA security hardening, multi-user API enforcement, MCP product surface, and Unraid CA packaging freeze.",
+      "highlights": [],
       "sections": [
         {
           "title": "Security",
@@ -1335,6 +1428,7 @@
       "version": "1.1.6",
       "date": "2026-07-13",
       "summary": "Unraid CA application icon plus friendlier Config / first-run copy. Preserves 1.1.5 **Sign in with Plex** (PIN) as the household login path; Config now clearly separates the Plex *server* token (library sync) from user PIN sign-in.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1358,6 +1452,7 @@
       "version": "1.1.5",
       "date": "2026-07-13",
       "summary": "Overseerr-style **Sign in with Plex** for multi-user login (plex.tv PIN / link flow).",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1384,6 +1479,7 @@
       "version": "1.1.4",
       "date": "2026-07-12",
       "summary": "Pin turnstyle recommendation cards to the exact recommended work when year or `tmdb_id` is known.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1404,6 +1500,7 @@
       "version": "1.1.3",
       "date": "2026-07-12",
       "summary": "Chat composer: **Enter** sends the message; a trailing send button mirrors that action.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1418,6 +1515,7 @@
       "version": "1.1.2",
       "date": "2026-07-12",
       "summary": "Fix `/stats` showing **Last sync: Invalid Date**.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1432,6 +1530,7 @@
       "version": "1.1.1",
       "date": "2026-07-12",
       "summary": "Resume interrupted library syncs without redoing finished work, and skip unchanged recommendation embeddings.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1453,12 +1552,14 @@
       "version": "1.1.0",
       "date": "2026-07-12",
       "summary": "Cinema-dark UI/UX refactor: Fraunces + DM Sans, amber accent (no violet gradients), brand-first top bar, wider sidebar with in-rail status dock, poster-forward title cards, and Config/Login aligned to the same visual system.",
+      "highlights": [],
       "sections": []
     },
     {
       "version": "1.0.13",
       "date": "2026-07-12",
       "summary": "Track confirmed adds, simplify batch rating, and accept half-star reviews.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1486,6 +1587,7 @@
       "version": "1.0.12",
       "date": "2026-07-12",
       "summary": "Make “Why this?” useful and keep library sync finishing visible.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1506,6 +1608,7 @@
       "version": "1.0.11",
       "date": "2026-07-12",
       "summary": "Stop duplicating bulk “Confirm all” between chat and StatusDock.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1521,6 +1624,7 @@
       "version": "1.0.10",
       "date": "2026-07-12",
       "summary": "Show the running CuratorX version on the Config screen.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1534,6 +1638,7 @@
       "version": "1.0.9",
       "date": "2026-07-12",
       "summary": "Hotfix: top-bar agent pulse no longer shows **Agent error** during healthy library sync.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1549,6 +1654,7 @@
       "version": "1.0.8",
       "date": "2026-07-12",
       "summary": "Speed up TV episode sync for large libraries (~800 shows).",
+      "highlights": [],
       "sections": [
         {
           "title": "Changed",
@@ -1573,6 +1679,7 @@
       "version": "1.0.7",
       "date": "2026-07-12",
       "summary": "Preferred time-of-day scheduling for automatic library sync.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",
@@ -1595,6 +1702,7 @@
       "version": "1.0.6",
       "date": "2026-07-12",
       "summary": "Hotfix: keep the sync/job status dock inside the conversation sidebar.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1608,6 +1716,7 @@
       "version": "1.0.5",
       "date": "2026-07-12",
       "summary": "Hotfix: library sync no longer hangs silently on **Building search facets…** for multi-thousand-title libraries.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1628,6 +1737,7 @@
       "version": "1.0.4",
       "date": "2026-07-12",
       "summary": "Hotfix: stop SQLite `database is locked` API failures during large parallel library enrich on Unraid.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1650,6 +1760,7 @@
       "version": "1.0.3",
       "date": "2026-07-12",
       "summary": "Faster library sync metadata enrichment via bounded parallel network fetches.",
+      "highlights": [],
       "sections": [
         {
           "title": "Changed",
@@ -1670,6 +1781,7 @@
       "version": "1.0.2",
       "date": "2026-07-12",
       "summary": "Hotfix: Unraid containers hung after the startup log and never finished FastAPI lifespan / never served HTTP.",
+      "highlights": [],
       "sections": [
         {
           "title": "Fixed",
@@ -1686,6 +1798,7 @@
       "version": "1.0.1",
       "date": "2026-07-12",
       "summary": "Patch for Community Applications: chat scroll pins the latest user turn while replies grow, plus e2e onboarding isolation when a shared server already completed setup.",
+      "highlights": [],
       "sections": [
         {
           "title": "Changed",
@@ -1706,6 +1819,7 @@
       "version": "1.0.0",
       "date": "2026-07-12",
       "summary": "Community Applications–ready release: single chat workspace, durable library sync jobs, and Unraid/Docker Hub images.",
+      "highlights": [],
       "sections": [
         {
           "title": "Added",

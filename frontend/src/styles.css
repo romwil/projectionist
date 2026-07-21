@@ -5165,6 +5165,15 @@ button.ghost.inline-link {
   font-size: var(--text-sm);
 }
 
+.release-notes-highlights {
+  border-left: 3px solid var(--accent);
+  padding: var(--space-1) 0 var(--space-1) var(--space-3);
+}
+
+.release-notes-highlights h4 {
+  color: var(--accent);
+}
+
 .whats-new-backdrop {
   position: fixed;
   inset: 0;

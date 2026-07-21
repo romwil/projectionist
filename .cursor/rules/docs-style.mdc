@@ -1,0 +1,37 @@
+---
+description: Hold all user-facing docs and copy to the CuratorX documentation standard (docs/DOCS_STYLE.md)
+globs: docs/**/*.md,*.md,CHANGELOG.md,frontend/src/**/*.jsx,frontend/src/**/*.js
+alwaysApply: false
+---
+
+# Documentation standard (first-class deliverable)
+
+Any change to user-facing documentation or copy MUST meet the durable standard in
+[docs/DOCS_STYLE.md](../../docs/DOCS_STYLE.md). Documentation is a first-class deliverable
+that teaches — not an afterthought — alongside the project's education/"explain the why"
+commitment.
+
+Applies to: files under `docs/`, the root `README.md`, in-app markdown rendered at
+`/help` and `/privacy` (`docs/HELP.md`, `docs/PRIVACY.md`), release notes in `CHANGELOG.md`,
+and member-facing UI strings in `frontend/src/`.
+
+## Required behavior
+
+- **Warm + E-E-A-T.** Warm, engaging voice, but demonstrably authoritative: worked examples,
+  honest limits, and a short "how it works / why it matters" for each non-trivial capability.
+- **Right audience, right depth.** Members get plain-language actions and example chat prompts —
+  **never raw HTTP verbs, `settings.json` keys, or table names**. Owners/developers get runnable
+  `curl` / Compose / env / config snippets that are correct and self-contained.
+- **Preserve the render split.** In `docs/HELP.md`, owner-only depth lives below the `## For owners`
+  heading (dropped for members by `markdownForRole` in `frontend/src/pages/HelpPage.jsx`). Don't move
+  owner API/config depth above it, and don't rename the anchor headings the app deep-links to
+  (`#start-here`, `#chat`, `#plot-lab`, `#coverage-over-time`, etc.) or the mapped `PrivacyPage.jsx` h2 anchors.
+- **Release notes.** Every release adds a benefit-led `### Highlights` block to `CHANGELOG.md`
+  (what it means for the user) plus the technical sections. The generator surfaces Highlights to the
+  What's New modal.
+- **Theme-safe.** In-app docs must render cleanly in Lights Up and Lights Down; use fenced code blocks
+  with a language hint.
+- **Definition of done.** Update the relevant guide in the same change, match in-app label terminology
+  exactly, and satisfy the "definition of done for docs" checklist in `docs/DOCS_STYLE.md`.
+
+When in doubt, open `docs/DOCS_STYLE.md` and follow its rubric, audience/voice matrix, and checklists.

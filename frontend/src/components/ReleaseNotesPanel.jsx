@@ -8,17 +8,24 @@ import { plainChangelogText } from "../lib/releaseNotes.js";
  *     version: string,
  *     date?: string,
  *     summary?: string,
+ *     highlights?: string[],
  *     sections?: Array<{ title: string, bullets?: string[] }>,
  *   }>,
  *   showJumpLinks?: boolean,
  *   scrollable?: boolean,
+ *   preferHighlights?: boolean,
  *   testId?: string,
  * }} props
+ *
+ * `preferHighlights` (used by the What's New modal) leads with the benefit-led
+ * "Highlights" copy and hides the technical sections when highlights exist.
+ * The About page leaves it off, so it shows highlights *and* the full detail.
  */
 export default function ReleaseNotesPanel({
   releases = [],
   showJumpLinks = false,
   scrollable = false,
+  preferHighlights = false,
   testId = "release-notes-panel",
 }) {
   const panelRef = useRef(null);
@@ -74,7 +81,20 @@ export default function ReleaseNotesPanel({
             {release.date ? <time dateTime={release.date}>{release.date}</time> : null}
           </header>
           {release.summary ? <p className="release-notes-summary">{release.summary}</p> : null}
-          {(release.sections || []).map((section) => (
+          {(release.highlights || []).length ? (
+            <div className="release-notes-section release-notes-highlights">
+              <h4>Highlights</h4>
+              <ul>
+                {release.highlights.map((bullet) => (
+                  <li key={bullet}>{plainChangelogText(bullet)}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {(preferHighlights && (release.highlights || []).length
+            ? []
+            : release.sections || []
+          ).map((section) => (
             <div key={`${release.version}-${section.title}`} className="release-notes-section">
               <h4>{section.title}</h4>
               <ul>

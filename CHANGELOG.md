@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-07-20
+
+A documentation-focused release: a world-class rewrite of the user-facing guides (Help, Privacy, Onboarding, FAQ) to a warm-but-authoritative standard, a durable documentation standard that keeps future work at that bar, and a benefit-led "Highlights" convention for release notes.
+
+### Highlights
+- **Help that teaches, not just tells.** The in-app guide now walks you through real tasks with example chat prompts and copy-paste commands — ask "what should we watch tonight under two hours?" and the docs show you exactly what you'll get back.
+- **A clear, honest privacy map.** The Privacy page now spells out *exactly* what an export and a purge cover — your notes, chat transcripts, saved pages, and preferences — with nothing left vague.
+- **Owner setup you can paste.** Onboarding and the FAQ lead with runnable Docker/Compose/env snippets for connecting Plex, Radarr/Sonarr, TMDB, and your LLM.
+- **Release notes for humans.** "What's New" now leads with a plain-language Highlights summary of what each release means for you, while the changelog keeps the engineering detail.
+
+### Added
+- **`docs/DOCS_STYLE.md`** — the durable documentation standard: quality rubric, audience/voice matrix (member vs owner vs developer), worked-example + runnable-snippet requirements, an E-E-A-T trust checklist, the release-notes Highlights convention, and a "definition of done for docs" checklist. Written to its own standard as an exemplar.
+- **`.cursor/rules/docs-style.mdc`** — a project rule that holds future doc and user-facing-copy changes to `DOCS_STYLE.md` (right-audience depth, worked examples, runnable snippets, the render split, and a benefit-led CHANGELOG Highlight).
+- **Two-part CHANGELOG convention** — each release now carries a benefit-led `### Highlights` block plus the technical sections. `scripts/generate-release-notes.sh` promotes Highlights into a top-level `highlights` field, and the What's New modal leads with that human copy while the About page and changelog keep full detail. Backward compatible: releases without a Highlights section render exactly as before.
+
+### Changed
+- **`docs/HELP.md`** rewritten to the rubric: the member half (Chat, Explore/browse, saving to Library, Plot Lab) now uses worked example prompts and step-by-step guides, and raw HTTP verbs were removed from member prose (memory export/delete is restated as a guided action pointing at the Privacy page). The owner half keeps runnable `curl`/Compose/config snippets with "how it works / why it matters" explainers. The `## For owners` render split and every deep-link anchor are preserved.
+- **`docs/PRIVACY.md`** rewritten as a plain-language but authoritative "what we store / what leaves the box / how to export or purge" model, with an exact export/purge coverage map verified against `curatorx/library/db.py` (`export_user_memory` / `purge_user_memory_and_chats`): private notes, chat threads + message transcripts, saved library pages, and preference facts.
+- **`docs/ONBOARDING.md`** and **`docs/FAQ.md`** reworked to task-first owner guidance with real setup snippets (Compose/env, connecting Plex/Radarr/Sonarr/TMDB/Ollama, enabling household sign-in) instead of settings-key/table-internal phrasing; each FAQ answer now earns trust with a concrete example or command.
+- **`README.md`** and **`docs/WEB_UI.md`** polished for accuracy; `DOCS_STYLE.md` added to the README documentation table, a docs gate added to the Contributing steps, and cross-links added from `docs/TESTING.md`.
+
+### Verification
+- `tests/test_version.py` and `tests/test_release_notes_static.py` green; `frontend/public/release-notes.json` regenerates cleanly with the new `highlights` field; frontend unit tests and the production build pass. Verified `/help` and `/privacy` heading anchors still resolve and the owner render split still hides owner-only depth from members.
+
 ## [1.12.0] — 2026-07-20
 
 Consolidated maintenance + feature release: the Explore browse & search hub, previously-unreleased frontend fixes, privacy-correctness hardening, repo hygiene, a docs reorganization, and a config-only lint/type toolchain.

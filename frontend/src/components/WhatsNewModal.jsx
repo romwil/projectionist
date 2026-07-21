@@ -32,7 +32,7 @@ export default function WhatsNewModal({ open, version, release, onDismiss, onRea
 
         <div className="whats-new-body">
           {release ? (
-            <ReleaseNotesPanel releases={[release]} testId="whats-new-notes" />
+            <ReleaseNotesPanel releases={[release]} preferHighlights testId="whats-new-notes" />
           ) : (
             <p className="status status-secondary" data-testid="whats-new-fallback">
               CuratorX {version} is ready. Open About for the full release history.

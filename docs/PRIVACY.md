@@ -1,8 +1,14 @@
 # Privacy & data use
 
-This page explains what CuratorX stores, who can see it, and what leaves your machine. It is written for people who use the app — not only for operators reading the [security assessment](SECURITY.md).
+This page explains what CuratorX stores, who can see it, and what leaves your machine. It's written for the people who use the app — not only for operators reading the [security assessment](SECURITY.md).
 
-CuratorX is a **self-hosted** app. The server owner chooses where it runs, which LLM provider to use, and whether to enable household login or MCP. There is no CuratorX cloud account that receives your library by default.
+CuratorX is a **self-hosted** app. The server owner chooses where it runs, which LLM provider to use, and whether to enable household login or MCP. **There is no CuratorX cloud account that receives your library by default.**
+
+The short version:
+
+- **What we store** — your indexed library, your chats and preferences, and (for the owner) the connection credentials. All in one local SQLite database and `settings.json` on the owner's disk.
+- **What leaves the box** — only what you send to the LLM provider the owner configured (your prompts + the tool results needed to answer), and TMDB image URLs. Not your Plex token, not your `settings.json`.
+- **How to export or purge** — every account can download a full copy of its own data or permanently delete it. Exactly what that covers is mapped below, under **What export and purge cover**.
 
 Jump to: [Household members](#household-members) · [Server owners](#server-owners) · [MCP](#mcp) · [Exposure matrices](#exposure-matrices) · [We do not](#we-do-not)
 
@@ -15,11 +21,11 @@ Jump to: [Household members](#household-members) · [Server owners](#server-owne
 | **Server owner** | First Plex sign-in when multi-user is on, or the single operator when multi-user is off | Connections, libraries, sync, persona, household users, MCP keys, fleet credentials |
 | **Household member** | Later **Sign in with Plex** after multi-user is enabled | Your own profile preferences, chats, watchlist, ratings — not the server |
 
-Default install is **single-owner with no login**: anyone on the trusted network who can reach the UI is effectively an admin. Multi-user adds Sign in with Plex and separates personal data; it is still a household product on a LAN, not a multi-tenant SaaS.
+Default install is **single-owner with no login**: anyone on the trusted network who can reach the UI is effectively an admin. Multi-user adds Sign in with Plex and separates personal data; it's still a household product on a LAN, not a multi-tenant SaaS.
 
 ---
 
-## From the household member’s perspective
+## From the household member's perspective
 
 ### What you share when you sign in
 
@@ -27,7 +33,7 @@ When you use **Sign in with Plex**, CuratorX asks Plex who you are and stores a 
 
 - Plex display name
 - Optional email and avatar URL (if Plex provides them)
-- Plex user id (for identity, not shown as a “shareable” library field)
+- Plex user id (for identity, not shown as a "shareable" library field)
 - Role (`owner` or `member`)
 - Optional Seerr link (user id / permissions) when the owner has Seerr enabled and linking succeeds
 
@@ -50,11 +56,26 @@ Other household members cannot open your chats or confirm your pending actions t
 
 ### Memory, Youth mode, export, and purge
 
-Your private memory stays tied to your account. An owner cannot read an adult member's memory. If the owner explicitly flags an account **Youth mode**, the account profile shows a Youth badge and the owner may review or export that account's memory for moderation. This is not a consent toggle and does not apply to adult accounts.
+Your private memory stays tied to your account. **An owner cannot read an adult member's memory.** If the owner explicitly flags an account **Youth mode**, that account's profile shows a Youth badge and the owner may review or export that account's memory for moderation. This is not a consent toggle and does not apply to adult accounts.
 
-Use `GET /api/me/memory` to download your memory as JSON or Markdown; the export includes your private notes, your chat transcripts (messages), your saved library pages, and your preference facts. `DELETE /api/me/memory` permanently deletes all of those together — private notes, chat transcripts (messages), saved library pages, and preference facts. It does not delete shared, sanitized repository research about media.
+#### What export and purge cover
 
-Curator research about titles, people, and production companies is shared repository knowledge drawn from configured official media APIs. It is kept separate from account memory; the idle refresh task never reads private notes or chats.
+CuratorX can hand you a full **export** of your account data, or permanently **purge** it. The two operate on **exactly the same set** — verified in `curatorx/library/db.py` (`export_user_memory` mirrors `purge_user_memory_and_chats`), so a copy taken before a purge is complete and nothing is left orphaned.
+
+| Data | In the export? | Removed by purge? | Where it lives |
+|------|:--------------:|:-----------------:|----------------|
+| **Private memory notes** — goals, watch intentions, follow-ups | Yes | Yes | `user_memory_notes` |
+| **Chat threads** — titles, personas, context, timestamps | Yes | Yes | `chat_sessions` |
+| **Message transcripts** — every message in your threads | Yes | Yes | `chat_messages` |
+| **Saved library pages** — your saved curator responses | Yes | Yes | `saved_library_pages` |
+| **Preference / taste facts** | Yes | Yes | `preference_facts` |
+| Shared, sanitized media research (titles/people/companies) | No | No | Repository knowledge — not tied to any account |
+
+The export is a single JSON (or Markdown) document containing your notes, your chat threads with their full message transcripts, your saved pages, and your preference facts. **Purge is permanent — export first if you want a copy.** Both actions record a small event (`export` / `purge`) so the account has an audit trail that it happened.
+
+Curator research about titles, people, and production companies is **shared repository knowledge** drawn from configured official media APIs. It's kept separate from account memory, and the idle refresh task never reads private notes or chats — so purging your account never erases (and never leaks) that shared media knowledge.
+
+> **How to run it:** each account can export or purge its own data through the CuratorX API (`GET /api/me/memory` returns the export; `DELETE /api/me/memory` purges the same set). If your build doesn't surface a button for this yet, ask your server owner, who can run it for your account. Owners: the exact commands are in the owner half of [Help](/help).
 
 ### What is shared household
 
@@ -67,12 +88,12 @@ Everyone on the same CuratorX instance shares:
 
 ### What the LLM provider receives
 
-Chat uses the **owner’s configured LLM** (OpenAI, Anthropic, Ollama, OpenRouter, etc.). The model receives:
+Chat uses the **owner's configured LLM** (OpenAI, Anthropic, Ollama, OpenRouter, etc.). The model receives:
 
 - Your prompts and conversation context
 - Tool results the agent needs (title metadata, library matches, watch signals the tools return)
 
-It should **not** receive Plex server tokens, live `X-Plex-Token` media URLs, webhook secrets, or settings dumps. Your chat content goes to whichever provider the owner configured — including a local Ollama if they chose one.
+It should **not** receive Plex server tokens, live `X-Plex-Token` media URLs, webhook secrets, or settings dumps. Your chat content goes to whichever provider the owner configured — including a local Ollama if they chose one, in which case nothing leaves the LAN.
 
 ### Voice mode
 
@@ -81,7 +102,7 @@ If you enable voice input:
 - The **browser / OS speech service** may process microphone audio (some browsers use a cloud speech-to-text service).
 - CuratorX does **not** upload raw audio to its own servers and does **not** store raw audio on disk.
 - Transcripts become normal chat text and then follow the usual chat → LLM path.
-- Optional “speak replies” uses the browser’s `speechSynthesis` for assistant text.
+- Optional "speak replies" uses the browser's `speechSynthesis` for assistant text.
 
 ### Preferred name
 
@@ -93,11 +114,11 @@ Local watchlist pins are yours. When watchlist ↔ Plex Discover sync is enabled
 
 - CuratorX may store an **encrypted** copy of your Plex account token from Sign in with Plex (`plex_token_enc`) solely to pull/push your Discover watchlist (and related account features such as Seerr linking).
 - That token is **not** returned by API responses, MCP tools, or the UI.
-- If the token is missing, sync asks you to re-sign in — it does not fall back to exposing the server library token as “your” account token.
+- If the token is missing, sync asks you to re-sign in — it does not fall back to exposing the server library token as "your" account token.
 
 ### Curated lists
 
-Named lists you create in CuratorX (for example “Friday picks”) are stored locally and owned by your user. Visibility may be private, household, or link-based inside CuratorX. Publishing to **Plex Lists** (when supported) uses your encrypted account token; CuratorX will not pretend a Plex publish succeeded if the API is unavailable.
+Named lists you create in CuratorX (for example "Friday picks") are stored locally and owned by your user. Visibility may be private, household, or link-based inside CuratorX. Publishing to **Plex Lists** (when supported) uses your encrypted account token; CuratorX will not pretend a Plex publish succeeded if the API is unavailable.
 
 ### What other members cannot see
 
@@ -112,7 +133,7 @@ Household members do **not** control MCP API keys. The owner may expose library 
 
 ---
 
-## From the server owner’s perspective
+## From the server owner's perspective
 
 ### Fleet credentials
 
@@ -127,7 +148,7 @@ Stored under the app data directory (typically `/config` → `settings.json` and
 
 ### MCP keys
 
-CuratorX supports two trust planes (selected by which secret is presented — never by a client “mode” flag alone):
+CuratorX supports two trust planes (selected by which secret is presented — never by a client "mode" flag alone):
 
 | Key | Typical env | Purpose |
 |-----|-------------|---------|
@@ -143,7 +164,7 @@ For privacy-safe and member-facing library JSON, CuratorX prefers **TMDB CDN** p
 ### Webhooks, logging, backups
 
 - Plex webhooks (if enabled) require a configured webhook secret.
-- Application logs may include titles, job phases, and user ids — not raw API keys by design — but still treat log volume access as sensitive.
+- Application logs may include titles, job phases, and user ids — not raw API keys by design — but still treat log-volume access as sensitive.
 - Backups of `/config` include credentials; store them like password vaults.
 
 ### Network expectations
@@ -227,6 +248,7 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 - Store raw microphone audio on the CuratorX data volume (voice transcripts only)
 - Email household invites or scrape contacts from Plex beyond the signed-in profile fields above
 - Pretend Plex Lists publish succeeded when the Discover API path is unavailable
+- Leave anything behind after a purge — an account purge removes every store listed under **What export and purge cover**
 
 ---
 
@@ -234,6 +256,7 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 
 - Keep **multi-user off** for a single trusted operator on a private network
 - Turn **multi-user on** so chats, watchlists, and ratings partition per Plex identity
+- **Export or purge** your account data at any time — same set either way (see **What export and purge cover**)
 - **Do not enable** full MCP (or leave `CURATORX_MCP_FULL_API_KEY` unset) if you only want the privacy schema
 - **Rotate** MCP keys if a client or paste leaked
 - Choose an **LLM provider** you trust (including fully local Ollama)
@@ -247,4 +270,5 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 - [SECURITY.md](SECURITY.md) — operator threat model and findings
 - [MCP.md](MCP.md) — MCP tools, keys, and transport
 - [wiki/Multi-User.md](wiki/Multi-User.md) — Sign in with Plex
+- [HELP.md](HELP.md) — in-app Help (`/help`); owner half has the export/purge commands
 - In-app copy of this page: **`/privacy`** (no login required)

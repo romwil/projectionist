@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
-[![Version](https://img.shields.io/badge/version-1.12.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.13.0-green.svg)](CHANGELOG.md)
 
 **Agentic access to your structured + unstructured local media data — chat curator, Explore hub, and privacy-first MCP for self-hosted Plex.**
 
@@ -174,6 +174,7 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | [Configuration](docs/CONFIGURATION.md) | Env vars and settings |
 | [Docker / Unraid](docs/DOCKER.md) | Container deployment |
 | [Delight wishlist](docs/DELIGHT-WISHLIST.md) | Living backlog of experience ideas by persona |
+| [Documentation style](docs/DOCS_STYLE.md) | The durable docs standard (warm + E-E-A-T, worked examples, runnable snippets) |
 | [Testing (e2e / CA)](docs/TESTING.md) | Playwright and CA release checklist |
 | [Value-based testing](TESTING.md) | How to write logic-level backend tests |
 | [Changelog](CHANGELOG.md) | Release notes |
@@ -203,6 +204,8 @@ CA-focused suites and live optional gates: [TESTING.md](docs/TESTING.md).
 2. Create a feature branch: `git checkout -b feat/your-idea`
 3. Install: `pip install -e ".[web]"` and `cd frontend && npm install`
 4. Run the unit suites above, then open a PR with a clear description and test plan
+
+**Docs gate:** user-facing changes update the relevant guide **and** add a benefit-led CHANGELOG `### Highlights` entry, meeting [docs/DOCS_STYLE.md](docs/DOCS_STYLE.md). Documentation is a first-class deliverable, checked in every PR.
 
 Open [issues](https://github.com/romwil/curatorx/issues) for ideas and bugs.
 

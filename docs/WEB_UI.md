@@ -326,3 +326,4 @@ Jump links on Help highlight **Owners**, Coverage, Dashboard, and Scheduled Task
 - [SECURITY.md](SECURITY.md) — threat model and living findings (S1–S13)
 - [DESIGN.md](DESIGN.md) — block schema, interaction patterns
 - [ARCHITECTURE.md](ARCHITECTURE.md) — chat and sync data flows
+- [DOCS_STYLE.md](DOCS_STYLE.md) — documentation standard for user-facing copy
