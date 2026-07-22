@@ -15,13 +15,13 @@ import {
   getLibraryOverview,
   queryLibrary,
 } from "../api/client";
-import BackLink from "../components/BackLink";
 import HelpHint from "../components/HelpHint";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
+import PosterRailLoader from "../components/PosterRailLoader";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
@@ -132,7 +132,7 @@ function FeedRail({
   chatLabel = "Chat about these",
 }) {
   if (loading) {
-    return <p className="status status-secondary">Loading…</p>;
+    return <PosterRailLoader testId={`${testId}-loader`} />;
   }
   if (!items.length) return null;
   return (
@@ -369,7 +369,6 @@ export default function ExplorePage() {
       testId="explore-page"
       title="Explore"
       eyebrow="Browse your cinema"
-      actions={<BackLink fallbackTo={ROUTES.chat} testId="explore-back-chat" label="Back to chat" />}
     >
       <main className="explore-main">
         <form

@@ -73,8 +73,8 @@ export default function AppNav({
               );
             }
             const active =
-              item.to === ROUTES.chat
-                ? location.pathname === "/"
+              item.id === "chat" || item.to === ROUTES.chat
+                ? location.pathname === ROUTES.chat || location.pathname === "/"
                 : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
             return (
               <li key={item.id}>

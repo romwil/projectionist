@@ -38,16 +38,16 @@ describe("browseLinks", () => {
     assert.equal(exploreSectionPath("recent-releases"), "/explore/section/recent-releases");
   });
 
-  it("builds unified library browse deep-links", () => {
-    assert.equal(libraryBrowsePath(), "/explore/browse");
-    assert.equal(libraryBrowsePath({ mediaType: "movie" }), "/explore/browse?media_type=movie");
-    assert.equal(libraryBrowsePath({ mediaType: "show" }), "/explore/browse?media_type=show");
+  it("builds unified Search deep-links", () => {
+    assert.equal(libraryBrowsePath(), "/search");
+    assert.equal(libraryBrowsePath({ mediaType: "movie" }), "/search?media_type=movie");
+    assert.equal(libraryBrowsePath({ mediaType: "show" }), "/search?media_type=show");
     // Unknown media types are dropped rather than forwarded.
-    assert.equal(libraryBrowsePath({ mediaType: "episode" }), "/explore/browse");
-    assert.equal(libraryBrowsePath({ q: "blade runner" }), "/explore/browse?q=blade+runner");
+    assert.equal(libraryBrowsePath({ mediaType: "episode" }), "/search");
+    assert.equal(libraryBrowsePath({ q: "blade runner" }), "/search?q=blade+runner");
     assert.equal(
       libraryBrowsePath({ mediaType: "movie", q: "noir" }),
-      "/explore/browse?media_type=movie&q=noir",
+      "/search?media_type=movie&q=noir",
     );
   });
 });

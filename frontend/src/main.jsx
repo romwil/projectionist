@@ -22,8 +22,10 @@ import NotificationsSettingsPage from "./pages/settings/NotificationsSettingsPag
 import WatchlistPage from "./pages/WatchlistPage";
 import ExplorePage from "./pages/ExplorePage";
 import ExploreSectionPage from "./pages/ExploreSectionPage";
-import EngagementPage from "./pages/EngagementPage";
+import MyJourneyPage from "./pages/MyJourneyPage";
 import LibraryBrowsePage from "./pages/LibraryBrowsePage";
+import SearchPage from "./pages/SearchPage";
+import InboxPage from "./pages/InboxPage";
 import PersonPage from "./pages/PersonPage";
 import TagPage from "./pages/TagPage";
 import TagsPage from "./pages/TagsPage";
@@ -46,12 +48,16 @@ createRoot(document.getElementById("root")).render(
       <BulkActionProgressProvider>
         <WhatsNewGate />
         <Routes>
-          <Route path="/" element={<App />} />
+          <Route path="/" element={<Navigate to="/chat" replace />} />
+          <Route path="/chat" element={<App />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/my-journey" element={<MyJourneyPage />} />
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/explore/tags" element={<TagsPage />} />
           <Route path="/explore/plot-lab" element={<PlotLabPage />} />
           <Route path="/explore/browse" element={<LibraryBrowsePage />} />
-          <Route path="/explore/engagement" element={<EngagementPage />} />
+          <Route path="/explore/engagement" element={<Navigate to="/my-journey" replace />} />
           <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/library" element={<LibraryPage />} />

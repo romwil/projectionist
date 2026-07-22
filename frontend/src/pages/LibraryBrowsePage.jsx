@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import {
   addWatchlistPin,
   confirmAction,
@@ -73,9 +73,12 @@ function browseSubtitle(mediaType, q) {
 }
 
 export default function LibraryBrowsePage() {
+  const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isOwner, multiUserEnabled } = useAuthGate();
   const { start, update, finish } = useBulkActionProgress();
+  const isSearchRoute =
+    location.pathname === ROUTES.search || location.pathname.startsWith(`${ROUTES.search}/`);
 
   const browse = useMemo(() => parseMediaBrowse(searchParams), [searchParams]);
   const q = (searchParams.get("q") || "").trim();
@@ -386,18 +389,26 @@ export default function LibraryBrowsePage() {
 
   return (
     <AppShell
-      className="app-root explore-section-page library-browse-page"
-      testId="library-browse-page"
-      variant="browse"
-      leading={<BackLink fallbackTo={ROUTES.explore} testId="library-browse-back" />}
+      className={`app-root explore-section-page library-browse-page${isSearchRoute ? " search-page" : ""}`}
+      testId={isSearchRoute ? "search-page" : "library-browse-page"}
+      variant={isSearchRoute ? "topbar" : "browse"}
+      title={isSearchRoute ? "Search" : undefined}
+      eyebrow={isSearchRoute ? "Your collection and beyond" : undefined}
+      leading={
+        isSearchRoute ? null : (
+          <BackLink fallbackTo={ROUTES.explore} testId="library-browse-back" />
+        )
+      }
       actions={
-        <Link to={ROUTES.explore} className="app-topbar-link" data-testid="library-browse-hub-link">
-          Explore hub
-        </Link>
+        isSearchRoute ? null : (
+          <Link to={ROUTES.explore} className="app-topbar-link" data-testid="library-browse-hub-link">
+            Explore hub
+          </Link>
+        )
       }
     >
       <section className="explore-section-hero" data-testid="library-browse-hero">
-        <p className="person-eyebrow">Explore</p>
+        <p className="person-eyebrow">{isSearchRoute ? "Search" : "Explore"}</p>
         <h1 data-testid="library-browse-title">{browseHeading(browse.media_type, q)}</h1>
         <p className="explore-section-subtitle">{browseSubtitle(browse.media_type, q)}</p>
       </section>

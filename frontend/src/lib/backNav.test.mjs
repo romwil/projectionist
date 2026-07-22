@@ -73,7 +73,7 @@ describe("watchlist browse route", () => {
 
 describe("watchlist panel deep link (legacy)", () => {
   it("builds chat href that opens the panel", () => {
-    assert.equal(watchlistPanelHref(), "/?watchlist=1");
+    assert.equal(watchlistPanelHref(), "/chat?watchlist=1");
   });
 
   it("detects open request values", () => {
@@ -95,7 +95,7 @@ describe("recommend like chat deep link", () => {
   it("preserves a concise media context in the chat URL", () => {
     assert.equal(
       recommendLikeHref({ title: "Arrival", year: 2016, media_type: "movie" }),
-      "/?recommend_like=Arrival&year=2016&type=movie",
+      "/chat?recommend_like=Arrival&year=2016&type=movie",
     );
   });
 
@@ -122,7 +122,8 @@ describe("chat from rail deep link", () => {
     });
     assert.match(href, /from_rail=1/);
     assert.match(href, /rail_title=For\+you\+this\+week/);
-    const params = new URLSearchParams(href.replace("/?", ""));
+    assert.match(href, /^\/chat\?/);
+    const params = new URLSearchParams(href.split("?")[1] || "");
     assert.match(
       chatFromRailPrompt(params),
       /For you this week/,
@@ -135,7 +136,7 @@ describe("chat from rail deep link", () => {
       { railTitle: "For you this week" },
       { title: "Heat", why: "Fits your noir lean" },
     );
-    const params = new URLSearchParams(href.replace("/?", ""));
+    const params = new URLSearchParams(href.split("?")[1] || "");
     const prompt = chatFromRailPrompt(params);
     assert.match(prompt, /Heat/);
     assert.match(prompt, /noir lean/);

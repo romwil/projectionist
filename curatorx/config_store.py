@@ -483,6 +483,7 @@ class FeatureFlags:
     multi_user_enabled: bool = False
     seerr_enabled: bool = False
     plex_collections_enabled: bool = False
+    guest_tour_enabled: bool = False
 
 
 @dataclass
@@ -764,3 +765,20 @@ def save_settings(data_dir: Path, settings: Settings) -> Path:
     path = data_dir / "settings.json"
     settings.save(path)
     return path
+
+
+def _env_bool(name: str) -> bool | None:
+    """Return True/False when env is set, else None (unset)."""
+    raw = os.environ.get(name)
+    if raw is None or str(raw).strip() == "":
+        return None
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def resolve_guest_tour_enabled(settings: Settings | None = None) -> bool:
+    """Guest tour flag — CURATORX_GUEST_TOUR_ENABLED wins when set."""
+    env_value = _env_bool("CURATORX_GUEST_TOUR_ENABLED")
+    if env_value is not None:
+        return env_value
+    flags = getattr(settings, "features", None) if settings is not None else None
+    return bool(getattr(flags, "guest_tour_enabled", False))

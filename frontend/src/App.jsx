@@ -12,7 +12,6 @@ import {
   getAuthMe,
   getFeatures,
   getLibraryPage,
-  patchAuthMe,
   getThreadFeedback,
   getThreadMessages,
   getTypingPhrases,
@@ -22,7 +21,6 @@ import {
   listReviews,
   listThreads,
   listWatchlist,
-  markNotificationsSeen,
   proposeAction,
   removeWatchlistPin,
   runWatchlistSync,
@@ -86,11 +84,8 @@ import { extractSpeakableText } from "./lib/voiceSpeech.js";
 import {
   applyUiFontSize,
   applyUiTheme,
-  cycleUiTheme,
   loadStoredUiTheme,
   normalizeUiTheme,
-  themeControlIcon,
-  themePreferenceLabel,
 } from "./lib/uiPrefs.js";
 import {
   chatFromRailPrompt,
@@ -112,11 +107,8 @@ import PersonaSelector from "./components/PersonaSelector";
 import KeyboardHelpModal from "./components/KeyboardHelpModal";
 import NewReplyChip from "./components/NewReplyChip";
 import RecommendModal from "./components/RecommendModal";
-import RecommendationsInbox from "./components/RecommendationsInbox";
-import InboxBadgeButton from "./components/InboxBadgeButton";
 import StatusDock from "./components/StatusDock";
-import AppNav, { AppNavToggle } from "./components/AppNav";
-import CuratorXBrand from "./components/CuratorXBrand";
+import PrimaryTopbar from "./components/PrimaryTopbar";
 import ThreadList from "./components/ThreadList";
 import TurnstyleResultsOverlay from "./components/TurnstyleResultsOverlay";
 import TypingIndicator from "./components/TypingIndicator";
@@ -125,7 +117,7 @@ import WatchlistPanel from "./components/WatchlistPanel";
 import WelcomePanel from "./components/WelcomePanel";
 import OnThisDayCard from "./components/OnThisDayCard";
 import LibraryGlanceCard from "./components/LibraryGlanceCard";
-import UserMenu, { useAuthGate } from "./components/UserMenu";
+import { useAuthGate } from "./components/UserMenu";
 import { reviewPromptBlock } from "./components/ReviewPromptCard";
 import useChatScroll from "./hooks/useChatScroll";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
@@ -189,7 +181,6 @@ export default function App() {
   const [keyboardHelpOpen, setKeyboardHelpOpen] = useState(false);
   const [watchlistPins, setWatchlistPins] = useState([]);
   const [recommendItem, setRecommendItem] = useState(null);
-  const [incomingRecommendations, setIncomingRecommendations] = useState([]);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [reviewPrompts, setReviewPrompts] = useState([]);
   const [reviewLookup, setReviewLookup] = useState({});
@@ -304,11 +295,9 @@ export default function App() {
   const refreshRecommendations = useCallback(() => {
     listNotifications({ unread_only: true, limit: 20 })
       .then((data) => {
-        setIncomingRecommendations(data.items || []);
         setInboxUnreadCount(Number(data.unread_count) || (data.items || []).length);
       })
       .catch(() => {
-        setIncomingRecommendations([]);
         setInboxUnreadCount(0);
       });
   }, []);
@@ -1354,49 +1343,6 @@ export default function App() {
     setRecommendItem(item);
   }
 
-  async function handleDismissRecommendation(rec) {
-    if (!rec?.id) return;
-    setIncomingRecommendations((prev) => prev.filter((item) => item.id !== rec.id));
-    setInboxUnreadCount((n) => Math.max(0, n - 1));
-    try {
-      await markNotificationsSeen({ ids: [rec.id] });
-    } catch (error) {
-      console.error(error);
-      refreshRecommendations();
-    }
-  }
-
-  async function handleDismissAllRecommendations(items) {
-    setIncomingRecommendations([]);
-    setInboxUnreadCount(0);
-    try {
-      if (items?.length) {
-        await markNotificationsSeen({ ids: items.map((item) => item.id) });
-      } else {
-        await markNotificationsSeen({ all_unread: true });
-      }
-    } catch (error) {
-      console.error(error);
-      refreshRecommendations();
-    }
-  }
-
-  function handleOpenInbox() {
-    const el = document.getElementById("notifications-inbox");
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "start" });
-      return;
-    }
-    // No unread cards yet — refresh then scroll if any appear.
-    refreshRecommendations();
-    window.setTimeout(() => {
-      document.getElementById("notifications-inbox")?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    }, 120);
-  }
-
   async function handleReviewSave({ prompt, stars, review_text: reviewText, session_id: reviewSessionId, replace_plex_rating: replacePlexRating }) {
     const slashRate = String(prompt.id || "").startsWith("slash-rate-");
     const viewedUnrated = String(prompt.id || "").startsWith("viewed-unrated-");
@@ -1479,20 +1425,21 @@ export default function App() {
       style={{ "--ambient-accent": ambientAccent }}
       data-shell={isYouth ? "youth" : userRole === "guest" ? "guest" : "default"}
     >
-      <AppNav
-        open={appNavOpen}
-        onClose={() => setAppNavOpen(false)}
+      <PrimaryTopbar
+        showNavToggle
         isOwner={isOwner}
         isYouth={isYouth}
         role={userRole}
-      />
-      <header className={`app-topbar ${nightOwl ? "night-owl" : ""} ${isYouth ? "youth-shell-topbar" : ""} ${userRole === "guest" ? "guest-shell-topbar" : ""}`}>
-        <div className="app-topbar-brand">
-          <AppNavToggle
-            open={appNavOpen}
-            onClick={() => setAppNavOpen(true)}
-            testId="app-nav-toggle"
-          />
+        multiUserEnabled={multiUserEnabled}
+        navOpen={appNavOpen}
+        onNavOpenChange={setAppNavOpen}
+        brandPulse={agentPulse}
+        chatError={chatError}
+        inboxUnreadCount={inboxUnreadCount}
+        uiTheme={uiTheme}
+        onThemeChange={setUiTheme}
+        className={`${nightOwl ? "night-owl" : ""} ${isYouth ? "youth-shell-topbar" : ""} ${userRole === "guest" ? "guest-shell-topbar" : ""}`}
+        leadingExtra={
           <button
             type="button"
             className="app-topbar-menu ghost app-topbar-threads"
@@ -1503,72 +1450,11 @@ export default function App() {
             onClick={() => setMobileNavOpen(true)}
           >
             <span className="material-symbols-outlined" aria-hidden="true">
-              chat
+              forum
             </span>
           </button>
-          <CuratorXBrand pulse={agentPulse} chatError={chatError} />
-        </div>
-        <div className="app-topbar-actions">
-          <InboxBadgeButton unreadCount={inboxUnreadCount} onOpen={handleOpenInbox} />
-          <Link
-            to="/explore"
-            className="app-topbar-icon"
-            data-testid="topbar-explore-link"
-            aria-label="Explore"
-            data-tooltip="Explore"
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">
-              explore
-            </span>
-          </Link>
-          <button
-            type="button"
-            className="app-topbar-icon"
-            data-testid="topbar-theme-toggle"
-            aria-label={`Theme: ${themePreferenceLabel(uiTheme)}. Click to change.`}
-            data-tooltip={themePreferenceLabel(uiTheme)}
-            onClick={async () => {
-              const next = cycleUiTheme(uiTheme);
-              setUiTheme(next);
-              applyUiTheme(next);
-              try {
-                await patchAuthMe({ ui_theme: next });
-              } catch {
-                // Persist locally even if auth/profile API is unavailable
-              }
-            }}
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">
-              {themeControlIcon(uiTheme)}
-            </span>
-          </button>
-          {isOwner ? (
-            <Link
-              to="/admin"
-              className="app-topbar-icon"
-              data-testid="topbar-admin-link"
-              aria-label="Admin"
-              data-tooltip="Admin"
-            >
-              <span className="material-symbols-outlined" aria-hidden="true">
-                admin_panel_settings
-              </span>
-            </Link>
-          ) : null}
-          <Link
-            to="/settings"
-            className="app-topbar-icon"
-            data-testid="topbar-settings-link"
-            aria-label="Settings"
-            data-tooltip="Settings"
-          >
-            <span className="material-symbols-outlined" aria-hidden="true">
-              settings
-            </span>
-          </Link>
-          {multiUserEnabled ? <UserMenu /> : null}
-        </div>
-      </header>
+        }
+      />
 
       {setup && !setup.onboarding_complete ? (
         <div className="banner workspace-banner" data-testid="setup-banner">
@@ -1643,14 +1529,6 @@ export default function App() {
               </p>
             ) : null}
             <div className="sidebar-bottom-actions" data-testid="sidebar-bottom-actions">
-              <Link
-                to="/explore"
-                className="sidebar-nav-btn"
-                data-testid="sidebar-explore"
-                onClick={() => setMobileNavOpen(false)}
-              >
-                Explore
-              </Link>
               <WatchlistPanel count={watchlistPins.length} />
             </div>
           </div>
@@ -1678,13 +1556,6 @@ export default function App() {
 
         <main className="workspace-main" data-testid="workspace-main">
           <div className="chat-scroll-region" data-testid="chat-scroll-region" ref={scrollRef}>
-            {incomingRecommendations.length ? (
-              <RecommendationsInbox
-                items={incomingRecommendations}
-                onDismiss={handleDismissRecommendation}
-                onDismissAll={handleDismissAllRecommendations}
-              />
-            ) : null}
             {showWelcomePanel ? (
               <>
                 {(anniversaries.length > 0 || (libraryGlance && !glanceShown)) ? (

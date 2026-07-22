@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
-import { getAuthMe, getFeatures } from "../api/client";
-import AppNav, { AppNavToggle } from "../components/AppNav";
+import { getAuthMe, getFeatures, listNotifications } from "../api/client";
+import PrimaryTopbar from "../components/PrimaryTopbar";
+import { ROUTES } from "../lib/backNav.js";
+import { applyUiTheme, loadStoredUiTheme } from "../lib/uiPrefs.js";
 
 export const SETTINGS_NAV = [
   { to: "/settings/profile", id: "profile", label: "Profile" },
@@ -18,6 +20,11 @@ export default function SettingsLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [appNavOpen, setAppNavOpen] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [role, setRole] = useState("owner");
+  const [isYouth, setIsYouth] = useState(false);
+  const [multiUserEnabled, setMultiUserEnabled] = useState(false);
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
+  const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
 
   useEffect(() => {
     let cancelled = false;
@@ -28,13 +35,15 @@ export default function SettingsLayout() {
         const multiUser = Boolean(features?.features?.multi_user_enabled);
         const me = await getAuthMe().catch(() => null);
         if (me?.user?.ui_font_size || me?.user?.ui_theme) {
-          const { applyUiFontSize, applyUiTheme } = await import("../lib/uiPrefs.js");
+          const { applyUiFontSize, applyUiTheme: applyTheme } = await import("../lib/uiPrefs.js");
           if (me.user.ui_font_size) applyUiFontSize(me.user.ui_font_size);
-          if (me.user.ui_theme) applyUiTheme(me.user.ui_theme);
+          if (me.user.ui_theme) applyTheme(me.user.ui_theme);
         }
         if (!multiUser) {
           if (!cancelled) {
             setIsOwner(true);
+            setRole("owner");
+            setMultiUserEnabled(false);
             setReady(true);
           }
           return;
@@ -45,6 +54,9 @@ export default function SettingsLayout() {
           return;
         }
         setIsOwner(me.user.role === "owner");
+        setRole(String(me.user.role || "member"));
+        setIsYouth(Boolean(me.user.is_youth));
+        setMultiUserEnabled(true);
         setReady(true);
       } catch {
         if (!cancelled) {
@@ -59,6 +71,25 @@ export default function SettingsLayout() {
     };
   }, [navigate]);
 
+  useEffect(() => {
+    if (!ready) return undefined;
+    let cancelled = false;
+    listNotifications({ unread_only: true, limit: 1 })
+      .then((data) => {
+        if (!cancelled) setInboxUnreadCount(Number(data.unread_count) || 0);
+      })
+      .catch(() => {
+        if (!cancelled) setInboxUnreadCount(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready]);
+
+  useEffect(() => {
+    applyUiTheme(uiTheme);
+  }, [uiTheme]);
+
   if (!ready) {
     return (
       <div className="settings-shell settings-shell-loading" data-testid="settings-layout-loading">
@@ -72,13 +103,19 @@ export default function SettingsLayout() {
       className={`settings-shell ${drawerOpen ? "settings-drawer-open" : ""}`}
       data-testid="settings-layout"
     >
-      <AppNav open={appNavOpen} onClose={() => setAppNavOpen(false)} isOwner={isOwner} />
+      <PrimaryTopbar
+        showNavToggle
+        isOwner={isOwner}
+        isYouth={isYouth}
+        role={role}
+        multiUserEnabled={multiUserEnabled}
+        navOpen={appNavOpen}
+        onNavOpenChange={setAppNavOpen}
+        inboxUnreadCount={inboxUnreadCount}
+        uiTheme={uiTheme}
+        onThemeChange={setUiTheme}
+      />
       <header className="shell-app-chrome" data-testid="settings-app-chrome">
-        <AppNavToggle
-          open={appNavOpen}
-          onClick={() => setAppNavOpen(true)}
-          testId="settings-app-nav-toggle"
-        />
         <button
           type="button"
           className="settings-drawer-toggle"
@@ -125,7 +162,7 @@ export default function SettingsLayout() {
               Admin
             </Link>
           ) : null}
-          <Link to="/" className="settings-rail-meta-link">
+          <Link to={ROUTES.chat} className="settings-rail-meta-link">
             Back to chat
           </Link>
         </div>

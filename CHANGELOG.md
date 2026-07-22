@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.25.0] — 2026-07-22
+
+Top-level navigation elevation: Search, Chat, Explore, Inbox, Admin, My Journey, and Settings are peer toolbar destinations; achievements become **My Journey** with list and Civ-style trees; public chrome cleanup, Take a Tour, and centered poster-rail loaders.
+
+### Highlights
+- **Everything important is one click away.** Search, Chat, Explore, Inbox, My Journey, and Settings sit together in the top bar — My Journey right next to Settings.
+- **A cinema journey, not a scoreboard.** Browse achievements as a list or an Achievements Tree, follow persona pathways, and uncover a few secret awards along the way.
+- **Tour when you’re ready.** Owners can enable Take a Tour on the login page (or via env); guests get a public walkthrough without the hamburger menu.
+- **Rails that don’t blink empty.** While titles load, Explore and Search show a centered “Loading titles…” indicator that fits Lights Up and Lights Down.
+
+### Added
+- **PrimaryTopbar** + `primaryNav` role matrix (owner / member / youth / guest).
+- Routes `/search`, `/chat`, `/inbox`, `/my-journey`; `/` redirects to `/chat`; SPA HTML routes in `app.py`.
+- **My Journey** page — list + tree, persona pathways, hidden achievements, hover callouts, detail slide-out; `/explore/engagement` redirects.
+- `guest_tour_enabled` feature flag + `CURATORX_GUEST_TOUR_ENABLED` env override; login **Take a Tour**; public `/tour`.
+- **PosterRailLoader** on Explore rails.
+
+### Changed
+- Inbox lives only on `/inbox` (removed from chat main); Inbox badge navigates there.
+- AppNav drawer is secondary (Plot Lab, Tags, Watchlist, Library, Help…); no duplicate Explore CTA in the chat sidebar.
+- Logged-out Help / Privacy / About / Tour use minimal chrome (no hamburger).
+- HELP updated for toolbar peers, Search vs Explore, Tour toggle, and My Journey.
+
+### Verification
+- Backend `pytest` **1251 passed**, 4 skipped (27 subtests) at **77.98%** total coverage (`--cov-fail-under=74`). Includes `tests/test_guest_tour_flag.py`.
+- Frontend `node --test` unit suite **428 passed**. ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- `test_version` lockstep holds at **1.25.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.24.0] — 2026-07-22
 
 Phase 5 of the delight program: curator-depth features for Enthusiast, Scholar, Concierge, and Companion — opt-in nudges, multi-session syllabi, a consented acquire path, and one-shot mood picks with callback memory.

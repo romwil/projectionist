@@ -1,13 +1,19 @@
 /** Shared return-navigation helpers for browse / detail pages. */
 
 export const ROUTES = {
-  chat: "/",
+  chat: "/chat",
+  search: "/search",
+  inbox: "/inbox",
+  myJourney: "/my-journey",
   explore: "/explore",
   tags: "/explore/tags",
   plotLab: "/explore/plot-lab",
   libraryBrowse: "/explore/browse",
+  /** @deprecated Prefer ROUTES.myJourney — legacy engagement path redirects. */
+  engagement: "/explore/engagement",
   watchlist: "/watchlist",
   library: "/library",
+  tour: "/tour",
   /** Sync/token settings only — browse pins on /watchlist. */
   watchlistSettings: "/settings/watchlist",
   settings: "/settings",
@@ -192,7 +198,12 @@ export function resolveBackTarget(locationState, fallback = ROUTES.chat) {
 
 export function backLabelForPath(path, { defaultLabel = "Back" } = {}) {
   const normalized = String(path || "").split("?")[0];
-  if (normalized === ROUTES.chat || normalized === "") return "Back to chat";
+  if (normalized === ROUTES.chat || normalized === "/" || normalized === "") {
+    return "Back to chat";
+  }
+  if (normalized === ROUTES.search) return "Back to Search";
+  if (normalized === ROUTES.inbox) return "Back to Inbox";
+  if (normalized === ROUTES.myJourney) return "Back to My Journey";
   if (normalized === ROUTES.explore) return "Back to Explore";
   if (normalized === ROUTES.tags || normalized.startsWith(`${ROUTES.tags}/`)) {
     return "Back to tag search";

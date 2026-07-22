@@ -41,7 +41,7 @@ export default function LoginPage() {
       .then((data) => {
         setFeatures(data);
         if (!data?.features?.multi_user_enabled) {
-          navigate("/", { replace: true });
+          navigate("/chat", { replace: true });
         }
       })
       .catch((fetchError) => setError(formatApiError(fetchError)));
@@ -88,7 +88,7 @@ export default function LoginPage() {
           popupRef.current = null;
           setWaitingForPlex(false);
           setLoading(false);
-          navigate("/", { replace: true });
+          navigate("/chat", { replace: true });
           return;
         }
         schedulePinPoll(pinId, deadline);
@@ -134,7 +134,7 @@ export default function LoginPage() {
     setError("");
     try {
       await loginWithPlex(token);
-      navigate("/", { replace: true });
+      navigate("/chat", { replace: true });
     } catch (signInError) {
       setError(formatApiError(signInError));
     } finally {
@@ -152,7 +152,7 @@ export default function LoginPage() {
     setError("");
     try {
       await loginWithLocal(localUsername.trim(), localPassword);
-      navigate("/", { replace: true });
+      navigate("/chat", { replace: true });
     } catch (signInError) {
       setError(formatApiError(signInError));
     } finally {
@@ -429,6 +429,14 @@ export default function LoginPage() {
         </div>
 
         <p className="login-footer">
+          {features?.features?.guest_tour_enabled ? (
+            <>
+              <Link to="/tour" data-testid="login-take-tour">
+                Take a Tour
+              </Link>
+              {" · "}
+            </>
+          ) : null}
           <Link to="/help" data-testid="help-link">
             Help
           </Link>

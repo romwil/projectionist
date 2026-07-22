@@ -131,6 +131,12 @@ button.app-topbar-icon:focus-visible,
   border-bottom-color: transparent;
 }
 
+a.app-topbar-icon.is-active,
+.app-topbar-icon.is-active {
+  color: var(--text);
+  background: var(--accent-soft);
+}
+
 .app-topbar-icon .material-symbols-outlined {
   font-size: 22px;
 }
@@ -1967,3 +1973,23 @@ button.watchlist-chip {
   font-size: 13px;
 }
 
+
+/* Page bar under PrimaryTopbar (Explore / Search / My Journey titles) */
+.app-shell-page-bar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.65rem 1.25rem 0.35rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.app-shell-page-titles h1 {
+  margin: 0;
+  font-size: var(--text-xl, 1.35rem);
+  font-weight: 650;
+}
+.app-shell-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}

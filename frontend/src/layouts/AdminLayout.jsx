@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
-import { getAuthMe, getFeatures, listMediaIssues } from "../api/client";
-import AppNav, { AppNavToggle } from "../components/AppNav";
+import { getAuthMe, getFeatures, listMediaIssues, listNotifications } from "../api/client";
+import PrimaryTopbar from "../components/PrimaryTopbar";
+import { ROUTES } from "../lib/backNav.js";
+import { applyUiTheme, loadStoredUiTheme } from "../lib/uiPrefs.js";
 
 export const ADMIN_NAV = [
   { to: "/admin/overview", id: "overview", label: "Overview" },
@@ -28,6 +30,9 @@ export default function AdminLayout() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [appNavOpen, setAppNavOpen] = useState(false);
   const [openIssues, setOpenIssues] = useState(null);
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
+  const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
+  const [multiUserEnabled, setMultiUserEnabled] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -36,6 +41,7 @@ export default function AdminLayout() {
       try {
         const features = await getFeatures();
         const multiUser = Boolean(features?.features?.multi_user_enabled);
+        if (!cancelled) setMultiUserEnabled(multiUser);
         if (!multiUser) {
           if (!cancelled) {
             setAllowed(true);
@@ -82,10 +88,21 @@ export default function AdminLayout() {
       .catch(() => {
         if (!cancelled) setOpenIssues(null);
       });
+    listNotifications({ unread_only: true, limit: 1 })
+      .then((data) => {
+        if (!cancelled) setInboxUnreadCount(Number(data.unread_count) || 0);
+      })
+      .catch(() => {
+        if (!cancelled) setInboxUnreadCount(0);
+      });
     return () => {
       cancelled = true;
     };
   }, [allowed]);
+
+  useEffect(() => {
+    applyUiTheme(uiTheme);
+  }, [uiTheme]);
 
   const badgeValue = { openIssues };
 
@@ -106,15 +123,20 @@ export default function AdminLayout() {
       className={`admin-shell ${wizardMode ? "admin-shell-wizard" : ""} ${drawerOpen ? "admin-drawer-open" : ""}`}
       data-testid="admin-layout"
     >
-      <AppNav open={appNavOpen} onClose={() => setAppNavOpen(false)} isOwner />
       {!wizardMode ? (
         <>
+          <PrimaryTopbar
+            showNavToggle
+            isOwner
+            role="owner"
+            multiUserEnabled={multiUserEnabled}
+            navOpen={appNavOpen}
+            onNavOpenChange={setAppNavOpen}
+            inboxUnreadCount={inboxUnreadCount}
+            uiTheme={uiTheme}
+            onThemeChange={setUiTheme}
+          />
           <header className="shell-app-chrome" data-testid="admin-app-chrome">
-            <AppNavToggle
-              open={appNavOpen}
-              onClick={() => setAppNavOpen(true)}
-              testId="admin-app-nav-toggle"
-            />
             <button
               type="button"
               className="admin-drawer-toggle"
@@ -171,7 +193,7 @@ export default function AdminLayout() {
               <Link to="/settings" className="admin-rail-meta-link">
                 Personal settings
               </Link>
-              <Link to="/" className="admin-rail-meta-link">
+              <Link to={ROUTES.chat} className="admin-rail-meta-link">
                 Back to chat
               </Link>
             </div>

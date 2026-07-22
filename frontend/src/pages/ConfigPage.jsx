@@ -1791,6 +1791,33 @@ export default function ConfigPage() {
               />
               <span>Require Plex sign-in for the app</span>
             </label>
+            <label className="config-toggle" data-testid="guest-tour-enabled-toggle">
+              <input
+                type="checkbox"
+                checked={Boolean(settings?.features?.guest_tour_enabled)}
+                onChange={(event) => {
+                  const enabled = event.target.checked;
+                  updateFeatureFlags({ guest_tour_enabled: enabled });
+                  persistSettings({
+                    features: { ...(settings.features || {}), guest_tour_enabled: enabled },
+                  })
+                    .then(() =>
+                      setActionFeedback(
+                        "guest-tour",
+                        "success",
+                        enabled
+                          ? "Take a Tour is on — visitors see it on the login page."
+                          : "Take a Tour is off.",
+                      ),
+                    )
+                    .catch((error) => setActionFeedback("guest-tour", "error", error.message));
+                }}
+              />
+              <span>Enable public Take a Tour (/tour)</span>
+            </label>
+            <p className="wizard-note">
+              Optional. Env <code>CURATORX_GUEST_TOUR_ENABLED</code> overrides this toggle when set.
+            </p>
             {settings?.features?.multi_user_enabled ? (
               <>
                 <div className="service-fields">

@@ -450,6 +450,7 @@ class FeatureFlagsPayload(BaseModel):
     multi_user_enabled: bool = False
     seerr_enabled: bool = False
     plex_collections_enabled: bool = False
+    guest_tour_enabled: bool = False
 
 
 class AuthSettingsPayload(BaseModel):
@@ -799,10 +800,14 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
     if user is None:
         user = bootstrap_owner(_db())
     request_path = "seerr" if uses_seerr_request_path(settings, role=user.role) else "arr"
+    from curatorx.config_store import resolve_guest_tour_enabled
+
     payload: Dict[str, Any] = {
         "features": {
             "multi_user_enabled": settings.features.multi_user_enabled,
             "seerr_enabled": settings.features.seerr_enabled,
+            "plex_collections_enabled": settings.features.plex_collections_enabled,
+            "guest_tour_enabled": resolve_guest_tour_enabled(settings),
         },
         "auth": {
             "mode": settings.auth.mode,
@@ -872,6 +877,11 @@ def _serve_index() -> HTMLResponse:
 
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/chat", response_class=HTMLResponse)
+@app.get("/search", response_class=HTMLResponse)
+@app.get("/inbox", response_class=HTMLResponse)
+@app.get("/my-journey", response_class=HTMLResponse)
+@app.get("/tour", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     return _serve_index()
 
@@ -884,6 +894,8 @@ def config_page() -> HTMLResponse:
 @app.get("/explore", response_class=HTMLResponse)
 @app.get("/explore/tags", response_class=HTMLResponse)
 @app.get("/explore/plot-lab", response_class=HTMLResponse)
+@app.get("/explore/browse", response_class=HTMLResponse)
+@app.get("/explore/engagement", response_class=HTMLResponse)
 @app.get("/explore/section/{section_id}", response_class=HTMLResponse)
 def explore_page(section_id: str = "") -> HTMLResponse:
     del section_id
@@ -4558,11 +4570,12 @@ def list_published_collections(
 
 
 @app.get("/api/guest/tour")
-def guest_tour(
-    user=Depends(get_current_user_dep),
-) -> Dict[str, Any]:
-    """What's great here — published collections for the guest tour shell."""
-    del user
+def guest_tour() -> Dict[str, Any]:
+    """What's great here — published collections for the public guest tour."""
+    from curatorx.config_store import resolve_guest_tour_enabled
+
+    if not resolve_guest_tour_enabled(_settings()):
+        raise HTTPException(status_code=404, detail="Guest tour is not enabled")
     items = _db().list_published_lists()
     return {
         "title": "What's great here",

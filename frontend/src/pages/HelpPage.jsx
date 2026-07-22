@@ -14,6 +14,11 @@ const GITHUB_DOCS_BASE = "https://github.com/romwil/curatorx/tree/main/docs";
 /** In-app routes that should use React Router navigation. */
 const IN_APP_ROUTES = new Set([
   "/",
+  "/chat",
+  "/search",
+  "/inbox",
+  "/my-journey",
+  "/tour",
   "/help",
   "/privacy",
   "/about",
@@ -25,6 +30,7 @@ const IN_APP_ROUTES = new Set([
   "/explore",
   "/explore/tags",
   "/explore/plot-lab",
+  "/explore/browse",
   "/watchlist",
 ]);
 

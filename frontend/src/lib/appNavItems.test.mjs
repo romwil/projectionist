@@ -9,47 +9,42 @@ import {
 } from "./appNavItems.js";
 
 describe("buildAppNavItems", () => {
-  it("includes chat, explore family, library, and footer destinations", () => {
+  it("keeps secondary destinations in the drawer (peers live in the toolbar)", () => {
     const ids = buildAppNavItems().map((item) => item.id);
     assert.deepEqual(ids, [
-      "chat",
-      "explore",
       "plot-lab",
       "tags",
       "watchlist",
       "library",
-      "settings",
+      "my-journey",
       "help",
       "privacy",
       "about",
     ]);
   });
 
-  it("adds Admin for owners and keeps Help · Privacy · About", () => {
+  it("does not duplicate Admin/Settings peers in the drawer", () => {
     const items = buildAppNavItems({ isOwner: true });
-    const byId = Object.fromEntries(items.map((item) => [item.id, item]));
-    assert.equal(byId.admin.to, ROUTES.admin);
-    assert.equal(byId.help.to, ROUTES.help);
-    assert.equal(byId.privacy.to, ROUTES.privacy);
-    assert.equal(byId.about.to, ROUTES.about);
-  });
-
-  it("can omit Settings when requested", () => {
-    const ids = buildAppNavItems({ showSettings: false }).map((item) => item.id);
+    const ids = items.map((item) => item.id);
+    assert.equal(ids.includes("admin"), false);
     assert.equal(ids.includes("settings"), false);
     assert.equal(ids.includes("help"), true);
   });
 
   it("keeps core browse destinations stable", () => {
-    assert.equal(APP_NAV_CORE_ITEMS[0].to, ROUTES.chat);
     assert.equal(APP_NAV_CORE_ITEMS.find((item) => item.id === "watchlist")?.kind, "watchlist");
+    assert.equal(
+      APP_NAV_CORE_ITEMS.find((item) => item.id === "my-journey")?.to,
+      ROUTES.myJourney,
+    );
   });
 
-  it("uses a simplified youth nav", () => {
+  it("uses a simplified youth nav without Badges-only entry", () => {
     const ids = buildAppNavItems({ isYouth: true, role: "member" }).map((item) => item.id);
     assert.deepEqual(ids.slice(0, YOUTH_NAV_ITEMS.length), YOUTH_NAV_ITEMS.map((i) => i.id));
     assert.equal(ids.includes("plot-lab"), false);
     assert.equal(ids.includes("admin"), false);
+    assert.equal(ids.includes("my-journey"), true);
   });
 
   it("uses a guest tour nav", () => {

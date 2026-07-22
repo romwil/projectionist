@@ -1,8 +1,8 @@
 # Help
 
-CuratorX is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Explore**, **Plot Lab**, and — for owners — idle curation.
+CuratorX is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Inbox**, **My Journey**, **Plot Lab**, and — for owners — idle curation.
 
-New here? Start with **[Chat](/)** and just ask for something in plain language. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
+New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
 
 Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [Privacy](/privacy)
 
@@ -12,8 +12,11 @@ Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [P
 
 | Goal | Where |
 |------|--------|
-| Talk to your curator | [Chat](/) |
+| Talk to your curator | [Chat](/chat) |
+| Search your collection (and beyond) | [Search](/search) |
 | Browse rails & Pulse | [Explore](/explore) |
+| Recommendations & notices | [Inbox](/inbox) |
+| Achievements & cinema pathways | [My Journey](/my-journey) |
 | Motif walls & surprising neighbors | [Plot Lab](/explore/plot-lab) |
 | Tag / keyword search | [Tags](/explore/tags) |
 | Pins | [Watchlist](/watchlist) |
@@ -100,17 +103,18 @@ Tune the underlying weights under **Settings → Taste** — raise a cluster, lo
 
 **Settings → Taste** shows the cluster tags CuratorX learned for you (genres, moods, eras). Drag a weight, lock it, or **Reset** an override to fall back to the household lens baseline.
 
-### Engagement — badges, streaks, courses
+### My Journey — achievements, pathways, and secrets
 
-Open **Explore → Engagement** (or the Engagement hub card) for:
+Open **[My Journey](/my-journey)** from the top bar (the route icon, immediately left of Settings) for your cinema discovery path:
 
-- **Streak** — consecutive chat days plus your 30-day conversation count
-- **Challenges** — e.g. **Rate 5 films** / **Rate 10 films**, synced from your reviews
-- **Badges** — milestones like first review or a three-day chat streak
-- **Cinema courses** — published ordered collections with step progress; **Open multi-session syllabus** starts a Scholar-style study path that spans chat sessions
-- **Explainers** — short notes on taste weights, courses, and the weekly rail
+- **List** or **Achievements Tree** — Civ-style pathways toward ultimate category badges
+- **Progress** — earned, in progress, and hidden secrets found
+- **Persona pathways** — branches that encourage trying curator voices
+- **Hidden achievements** — silhouette / "???" awards until you earn them
+- **Cinema courses** and **Explainers** — learning along the way
+- **Chat streak** — consecutive chat days plus your 30-day conversation count
 
-Youth-mode accounts see **youth-safe** badges, challenges, and explainers only (including Ask the curator and why some titles stay hidden).
+Youth-mode accounts see youth-safe achievements only. Member-facing copy never says “engagement.”
 
 **Surprise Me with a mood.** Above the dice in chat, optional mood chips (**Cozy**, **Thrill**, **Laugh**, **Think**, **Escape**) bias a *single* pick. They do not overwrite your durable taste profile.
 
@@ -124,7 +128,7 @@ Youth-mode accounts see **youth-safe** badges, challenges, and explainers only (
 
 ### Inbox & notifications
 
-The **bell** in the top bar opens your inbox. Unread items show a badge. Household recommendations, title arrivals, digests, and curator **nudges** all land there.
+**[Inbox](/inbox)** is a top-bar peer (the notifications icon). Unread items show a badge. Household recommendations, title arrivals, digests, and curator **nudges** all land there — not inside Chat.
 
 Under **Settings → Notifications** you can:
 
@@ -139,6 +143,8 @@ Dismiss a card when you’re done; **Dismiss all** clears the unread stack.
 **Library Pulse** sits at the bottom of Explore, paired side-by-side with the knowledge-coverage strip in a shared footer (they stack on narrow screens). Discovery comes first so the hub opens with titles, not dashboard metrics. Posters show watched / in-progress overlays from Plex sync. **Empty rails usually mean enrichment caches are still cold — not that your library is empty.**
 
 ### Searching and browsing the library
+
+**[Search](/search)** is the top-level collection search. Explore’s search box sends you there. Browse filters, facets, and **Beyond your collection** live on the same page.
 
 The **search bar** at the top of Explore looks across your library by title and plot summary. Submit it to open the unified browse page with your results. You can also jump straight into a full, paginated list with the **Browse Movies** and **Browse TV** cards, or the *Movies* / *TV* links on the Recently Added and Recent Releases rails — these show your whole library of that type, not just recent additions.
 
@@ -218,11 +224,11 @@ The curator keeps two kinds of memory:
 
 ### Youth mode
 
-If your account has **Youth mode** on, CuratorX uses a distinct big-poster layout with a simpler menu (**Ask**, **Browse**, **My list**, **Badges**). Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
+If your account has **Youth mode** on, CuratorX uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, **Inbox**, and **My Journey** (plus Search and Settings). The hamburger holds secondary destinations like **My list**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
 
 ### Guest tour
 
-Signed-in **guests** land in a tour shell. Open **What's great** for published collections your host shared, then browse or ask without destructive actions. Visitors who are not signed in yet can **Request access** on the login page — that queue is owned by CuratorX (not Seerr); the owner approves from **Admin → Access requests**.
+When the owner enables **Take a Tour** (Admin household toggle, or env `CURATORX_GUEST_TOUR_ENABLED`), the login page offers a public tour at **/tour** — no hamburger chrome. Signed-in **guests** also get a tour shell. Open **What's great** for published collections your host shared, then browse or ask without destructive actions. Visitors who are not signed in yet can **Request access** on the login page — that queue is owned by CuratorX (not Seerr); the owner approves from **Admin → Access requests**.
 
 ---
 
@@ -329,7 +335,7 @@ The safety model is deliberately conservative: auto-repair is an owner policy ov
 
 ### Library-health hero & issue badge
 
-The **Admin → Dashboard** now opens with a **library-health hero**: at-a-glance tiles for overall health, knowledge coverage, engagement streak, and the count of **open issues**, each linking into the page that fixes it. The Admin rail carries the same open-issue count as a badge next to **Issues**, so you can see the queue is backing up without opening it.
+The **Admin → Dashboard** now opens with a **library-health hero**: at-a-glance tiles for overall health, knowledge coverage, chat streak, and the count of **open issues**, each linking into the page that fixes it. The Admin rail carries the same open-issue count as a badge next to **Issues**, so you can see the queue is backing up without opening it.
 
 The hero reuses the same aggregations the rest of the Dashboard already loads — nothing new is fetched per tile. The open-issue count comes from the existing queue:
 

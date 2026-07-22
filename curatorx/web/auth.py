@@ -46,7 +46,7 @@ from curatorx.web.session_tokens import (
 )
 
 _API_AUTH_ALLOWLIST_EXACT = frozenset(
-    {"/api/health", "/api/features", "/api/access-requests"}
+    {"/api/health", "/api/features", "/api/access-requests", "/api/guest/tour"}
 )
 _API_AUTH_ALLOWLIST_PREFIXES = ("/api/auth/", "/api/webhooks/", "/mcp")
 PLEX_PIN_NONCE_COOKIE = "plex_pin_nonce"

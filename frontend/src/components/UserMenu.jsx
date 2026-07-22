@@ -81,6 +81,7 @@ export function useAuthGate({ redirect = true } = {}) {
   const [isOwner, setIsOwner] = useState(true);
   const [role, setRole] = useState("owner");
   const [isYouth, setIsYouth] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -96,6 +97,7 @@ export function useAuthGate({ redirect = true } = {}) {
           setIsOwner(true);
           setRole("owner");
           setIsYouth(false);
+          setAuthenticated(true);
           setAuthReady(true);
           try {
             const me = await getAuthMe();
@@ -111,7 +113,7 @@ export function useAuthGate({ redirect = true } = {}) {
         }
         const me = await getAuthMe();
         if (cancelled) return;
-        if (!me) {
+        if (!me?.user) {
           if (redirect) {
             navigate("/login", { replace: true });
             return;
@@ -119,6 +121,7 @@ export function useAuthGate({ redirect = true } = {}) {
           setIsOwner(false);
           setRole("guest");
           setIsYouth(false);
+          setAuthenticated(false);
           setAuthReady(true);
           return;
         }
@@ -131,6 +134,7 @@ export function useAuthGate({ redirect = true } = {}) {
         setRole(nextRole === "owner" || nextRole === "member" || nextRole === "guest" ? nextRole : "guest");
         setIsOwner(nextRole === "owner");
         setIsYouth(Boolean(me.user?.is_youth));
+        setAuthenticated(true);
         setAuthReady(true);
       } catch {
         if (cancelled) return;
@@ -143,12 +147,14 @@ export function useAuthGate({ redirect = true } = {}) {
           setIsOwner(false);
           setRole("guest");
           setIsYouth(false);
+          setAuthenticated(false);
           setAuthReady(true);
           return;
         }
         setIsOwner(true);
         setRole("owner");
         setIsYouth(false);
+        setAuthenticated(true);
         setAuthReady(true);
       }
     }
@@ -159,5 +165,5 @@ export function useAuthGate({ redirect = true } = {}) {
     };
   }, [navigate, redirect]);
 
-  return { authReady, multiUserEnabled, isOwner, role, isYouth };
+  return { authReady, multiUserEnabled, isOwner, role, isYouth, authenticated };
 }
