@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — CuratorX 1.20.0 -->
+<!-- Unraid Community Applications template — CuratorX 1.21.0 -->
 <Container version="2">
   <Name>curatorx</Name>
   <Repository>romwil/curatorx:latest</Repository>
@@ -21,6 +21,12 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.21.0
+- Top-chrome inbox with unread badge; generalized notification kinds
+- Owner mail settings (SMTP + Resend), test send, template fields
+- Member notification prefs + weekly newsletter; owner monthly curation; arrivals
+- Full notes: https://github.com/romwil/curatorx/blob/main/CHANGELOG.md
+
 ### 1.20.0
 - Availability line on title detail and chat: In library / Requestable / Not here yet (Seerr-aware)
 - Optimistic watchlist pin add/remove with background Plex Discover reconcile
@@ -175,7 +181,7 @@
 CuratorX helps you curate your movie and TV collection through conversation. Connect Plex, Radarr, Sonarr, TMDB, and your preferred LLM provider (cloud API or Ollama).
 
 **Updating (important)**
-- Repository default: `romwil/curatorx:latest` (pin `:1.20` / `:1.20.0` if preferred).
+- Repository default: `romwil/curatorx:latest` (pin `:1.21` / `:1.21.0` if preferred).
 - If **Force Update** reports **TOTAL DATA PULLED: 0 B** and the app stays on an old version, Docker kept a stale local tag. SSH: `docker pull romwil/curatorx:latest` then Force Update / Apply, or `cd /mnt/user/appdata/curatorx && ./rollout.sh latest`. Do not wipe `/config`.
 - Full notes: https://github.com/romwil/curatorx/blob/main/docs/wiki/Unraid.md
 

@@ -2,9 +2,34 @@
 
 ## [Unreleased]
 
+### Changed
+- **Login screen leads with real Plex sign-in.** The multi-user `/login` page puts **Sign in with Plex** (PIN / link) first with household-friendly copy — no “multi-user mode” or token jargon on the front door. Manual Plex token paste stays available only behind a discreet **Advanced** disclosure for recovery. Layout/theme polish uses Lights Up / Lights Down wash tokens; method order is Plex → SSO → local password.
+
+## [1.21.0] — 2026-07-22
+
+Phase 3b of the delight program: a real notification inbox in the top chrome, optional owner-configured mail (SMTP or Resend), and weekly / monthly / arrival messages that reuse the same transport.
+
+### Highlights
+- **Inbox with an unread badge.** The top-bar bell opens your For you stack — recommendations, arrivals, digests, and nudges — with a clear unread count.
+- **Email when you want it.** Set a notification email and channel prefs under **Settings → Notifications**; owners turn on SMTP or Resend under **Admin → Mail** (test send + subject prefix / footer / logo).
+- **Weekly newsletter + monthly curation + arrivals.** Opt into a persona-voiced weekly note; owners get a monthly collection update; gap / watchlist titles ping the inbox when they land.
+
+### Added
+- **Generalized notification inbox** (`user_notifications`) with kinds `recommendation`, `arrival`, `access-request`, `digest`, `nudge`; APIs `GET /api/notifications` and `POST /api/notifications/seen`. Household recommendations also create inbox rows (and optional email).
+- **Top-chrome inbox entry** (`InboxBadgeButton`) with unread badge; `RecommendationsInbox` renders multi-kind cards.
+- **Member notification prefs** on `/settings/notifications` — notification email, inbox / email channels, weekly newsletter opt-in (`PATCH /api/auth/me`).
+- **Owner mail settings** (`MailSettings` in `settings.json`, secrets `0600`) — SMTP **and** Resend, template fields, `POST /api/admin/mail/test` (`curatorx/mail/`).
+- **Scheduler tasks** `member_newsletter`, `owner_monthly_curation`, `arrival_notifications` plus `curatorx/notifications/` fan-out helpers.
+- **HELP** member inbox/prefs section and owner mail + digest transport notes with runnable curl snippets.
+
 ### Fixed
 - **Title detail Rating meta is back.** The sidebar **Rating** tile (MPAA / content rating like PG-13) was dropped when title detail was extracted into `TitleDetailContent`; it is restored next to Your rating. TMDB enrichment now reads US certifications from `release_dates` / `content_ratings` so the tile fills when Plex did not supply one.
 - **Completed curator replies no longer grow nested scrollbars.** The 1.19.4 streaming-class gate removed the permanent `max-height`, but `overflow-x: auto|hidden` paired with `overflow-y: visible` still computes to a vertical scrollport (and the horizontal scrollbar’s height often triggers a second bar). Completed `.inline-cards` now use `overflow-y: hidden`, review strips use `overflow: visible`, and message/markdown hosts use `overflow-x: clip` so only `.chat-scroll-region` scrolls after the turn finishes.
+
+### Verification
+- Backend `pytest` **1222 passed**, 4 skipped (27 subtests) at **78.14%** total coverage (`--cov-fail-under=74`). New coverage in `tests/test_notifications_mail.py`.
+- Frontend `node --test` unit suite **394 passed** (up from 388), including inbox kind / badge cases in `recommendationInbox.test.mjs`. ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- `test_version` lockstep holds at **1.21.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
 
 ## [1.20.0] — 2026-07-22
 

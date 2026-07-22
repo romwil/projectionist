@@ -87,6 +87,19 @@ Those discovery rails only appear when your library has enough matching metadata
 
 **Watchlist pins feel instant.** Adding or removing a pin updates your wall immediately; CuratorX reconciles with Plex Discover in the background when sync is enabled.
 
+### Inbox & notifications
+
+The **bell** in the top bar opens your inbox. Unread items show a badge. Household recommendations, title arrivals, digests, and (later) nudges all land there.
+
+Under **Settings → Notifications** you can:
+
+- Set a **notification email** (or leave blank to use your account email)
+- Turn the **in-app inbox** on or off
+- Opt into **email alerts** when the owner has mail configured
+- Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available)
+
+Dismiss a card when you’re done; **Dismiss all** clears the unread stack.
+
 **Library Pulse** sits at the bottom of Explore, paired side-by-side with the knowledge-coverage strip in a shared footer (they stack on narrow screens). Discovery comes first so the hub opens with titles, not dashboard metrics. Posters show watched / in-progress overlays from Plex sync. **Empty rails usually mean enrichment caches are still cold — not that your library is empty.**
 
 ### Searching and browsing the library
@@ -328,6 +341,8 @@ curl -s http://localhost:8788/api/collections | python3 -m json.tool
 
 CuratorX assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
 
+Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library.
+
 ```bash
 # Read the latest digest (owner-only)
 curl -s http://localhost:8788/api/admin/weekly-digest | python3 -m json.tool
@@ -336,7 +351,23 @@ curl -s http://localhost:8788/api/admin/weekly-digest | python3 -m json.tool
 curl -s -X POST http://localhost:8788/api/admin/weekly-digest/generate
 ```
 
-**How it works / honest limits.** The digest is **in-app only** — there is no email/SMTP transport in CuratorX, so nothing is sent anywhere; the snapshot is built from data you already have. Snapshots are keyed to a fixed 7-day bucket, so generating repeatedly within the same week refreshes the single current entry rather than piling up rows.
+**How it works / honest limits.** The owner Dashboard digest remains an in-app snapshot keyed to a fixed 7-day bucket. Member newsletters and arrival alerts reuse the shared notification inbox; email only sends when **Admin → Mail** is enabled and the member has opted in.
+
+### Mail (SMTP + Resend)
+
+Configure outbound mail under **Admin → Mail**. Choose **SMTP** or **Resend**, set from-address / template fields (subject prefix, footer, logo URL), and use **Send test email**. Secrets are stored in `settings.json` with mode `0600`, like other API keys.
+
+```bash
+# Inspect masked mail settings (owner session cookie required)
+curl -s http://localhost:8788/api/settings | python3 -c "import sys,json; print(json.load(sys.stdin).get('mail'))"
+
+# Test send (uses your notification email if to_email is omitted)
+curl -s -X POST http://localhost:8788/api/admin/mail/test \
+  -H 'Content-Type: application/json' \
+  -d '{"to_email":"you@example.com"}'
+```
+
+**How it works / honest limits.** One provider is active at a time (`smtp` or `resend`). Empty password / API-key fields on save keep the previously stored secret. Without mail configured, notifications still appear in the in-app inbox.
 
 ### Memory & privacy controls (owner)
 

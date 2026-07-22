@@ -135,6 +135,27 @@ button.app-topbar-icon:focus-visible,
   font-size: 22px;
 }
 
+.inbox-badge-btn {
+  position: relative;
+}
+
+.inbox-unread-badge {
+  position: absolute;
+  top: 4px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--accent, #c45c26);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
 /* Fast tooltips (~120ms delay) for top-bar icon chrome */
 .app-topbar-icon[data-tooltip]::after {
   content: attr(data-tooltip);

@@ -50,6 +50,7 @@ from ._chat import ChatThreadsMixin
 from ._saved_library import SavedLibraryMixin
 from ._watchlist import WatchlistMixin
 from ._recommendations import RecommendationsMixin
+from ._notifications import NotificationsMixin
 from ._curated_lists import CuratedListsMixin
 from ._media_issues import MediaIssuesMixin
 
@@ -69,6 +70,7 @@ class Database(
     SavedLibraryMixin,
     WatchlistMixin,
     RecommendationsMixin,
+    NotificationsMixin,
     CuratedListsMixin,
     MediaIssuesMixin,
 ):

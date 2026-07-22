@@ -17,6 +17,7 @@ import ProfilePage from "./pages/settings/ProfilePage";
 import VoicePage from "./pages/settings/VoicePage";
 import WatchlistSettingsPage from "./pages/settings/WatchlistSettingsPage";
 import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
+import NotificationsSettingsPage from "./pages/settings/NotificationsSettingsPage";
 import WatchlistPage from "./pages/WatchlistPage";
 import ExplorePage from "./pages/ExplorePage";
 import ExploreSectionPage from "./pages/ExploreSectionPage";
@@ -30,6 +31,7 @@ import CollectionsPage from "./pages/CollectionsPage";
 import LibraryPage from "./pages/LibraryPage";
 import MediaIssuesPage from "./pages/MediaIssuesPage";
 import YouthReviewPage from "./pages/YouthReviewPage";
+import MailSettingsPage from "./pages/MailSettingsPage";
 import { BulkActionProgressProvider } from "./components/BulkActionProgress";
 import WhatsNewGate from "./components/WhatsNewGate";
 import "./styles.css";
@@ -64,6 +66,7 @@ createRoot(document.getElementById("root")).render(
             <Route path="tasks" element={<ScheduledTasksPage />} />
             <Route path="issues" element={<MediaIssuesPage />} />
             <Route path="youth" element={<YouthReviewPage />} />
+            <Route path="mail" element={<MailSettingsPage />} />
             <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
             <Route path=":section" element={<ConfigPage />} />
           </Route>
@@ -71,6 +74,7 @@ createRoot(document.getElementById("root")).render(
             <Route index element={<Navigate to="profile" replace />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="voice" element={<VoicePage />} />
+            <Route path="notifications" element={<NotificationsSettingsPage />} />
             <Route path="watchlist" element={<WatchlistSettingsPage />} />
             <Route path="lists" element={<ListsSettingsPage />} />
           </Route>

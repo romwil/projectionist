@@ -19,7 +19,7 @@ The delight work is sequenced by *who* it serves, easiest-to-reach substrate fir
 | ----- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------- |
 | **1** | Curator memory foundation — cited knowledge, follow-ups, fail-closed per-user memory                                          | The AI curators (Scholar, Concierge, Companion) | ✅ Shipped **1.10.0** |
 | **2** | Owner delight tools — health hero, safe grooming undo, collections/courses, Youth review, weekly digest                       | Owner / Curator                                 | ✅ Shipped **1.16.0** |
-| **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | 🔜 P3a ✅ **1.20.0**; P3b–P3c planned |
+| **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | 🔜 P3a ✅ **1.20.0**; P3b ✅ **1.21.0**; P3c planned |
 | **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, CuratorX request-access    | Youth members, guests                           | 🔜 Planned           |
 | **5** | Curator depth — Enthusiast nudge (no live now-watching), Scholar syllabus, Concierge acquire path, Companion mood + callbacks | The four curator archetypes                     | 🔜 Planned           |
 
@@ -81,15 +81,15 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 
 
 
-#### P3b — Notification platform (shared with Phase 5)
+#### P3b — Notification platform (shared with Phase 5) ✅ Shipped **1.21.0**
 
 **Must — inbox + mail**
 
-- **Prominent inbox + unread badge.** *Build on:* `RecommendationsInbox.jsx` and existing `unread_count` / `seen_at`. *Extension:* top-of-chrome entry; generalize inbox kinds (recommendation, arrival, access-request, digest, nudge).
-- **Owner mail settings + member email prefs.** *Greenfield:* SMTP **and** Resend behind one owner UI (test send, template fields); per-user notification email, channel prefs, and sub/unsub in Account settings. Secrets stored like other settings (`0600`).
-- **Weekly member newsletter.** Opt-in, personalized, written in the default persona's voice; guest personas for guest-facing pieces. *Build on:* digest cadence (`curatorx/digest/service.py`, `weekly_digest` scheduler task) — today owner-facing and in-app only.
-- **Owner monthly collection-curation digest.** Same transport (inbox + email if configured).
-- **Arrival notifications** for gap titles → inbox (+ email if configured). *Build on:* `gap_analysis`, `anniversary_scanner`, RecommendationsInbox.
+- **Prominent inbox + unread badge.** ✅ Top-of-chrome bell + unread badge; kinds recommendation / arrival / access-request / digest / nudge.
+- **Owner mail settings + member email prefs.** ✅ SMTP **and** Resend under Admin → Mail (test send, template fields); Settings → Notifications for email + channel prefs + newsletter opt-in. Secrets `0600`.
+- **Weekly member newsletter.** ✅ Opt-in, personalized, default-persona voice (guest-friendly when available).
+- **Owner monthly collection-curation digest.** ✅ Same transport (inbox + email if configured).
+- **Arrival notifications** for gap / watchlist titles → inbox (+ email if configured).
 
 
 

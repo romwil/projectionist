@@ -177,6 +177,29 @@ export async function markRecommendationsSeen(payload) {
   });
 }
 
+export async function listNotifications(params = {}) {
+  const query = new URLSearchParams();
+  if (params.unread_only) query.set("unread_only", "true");
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.kind) query.set("kind", String(params.kind));
+  const suffix = query.toString() ? `?${query}` : "";
+  return api(`/notifications${suffix}`);
+}
+
+export async function markNotificationsSeen(payload) {
+  return api("/notifications/seen", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function testMailSend(payload = {}) {
+  return api("/admin/mail/test", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function startPlexPinLogin() {
   return api("/auth/plex/pin", { method: "POST" });
 }

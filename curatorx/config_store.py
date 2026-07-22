@@ -506,11 +506,32 @@ class SeerrSettings:
     require_linked_user_for_requests: bool = False
 
 
+@dataclass
+class MailSettings:
+    """Owner-configured outbound mail (SMTP and/or Resend)."""
+
+    enabled: bool = False
+    # off | smtp | resend
+    provider: str = "off"
+    from_email: str = ""
+    from_name: str = "CuratorX"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+    resend_api_key: str = ""
+    subject_prefix: str = "[CuratorX]"
+    footer_text: str = ""
+    logo_url: str = ""
+
+
 NESTED_SETTINGS_TYPES.update(
     {
         "features": FeatureFlags,
         "auth": AuthSettings,
         "seerr": SeerrSettings,
+        "mail": MailSettings,
     }
 )
 
@@ -566,6 +587,7 @@ class Settings:
     features: FeatureFlags = field(default_factory=FeatureFlags)
     auth: AuthSettings = field(default_factory=AuthSettings)
     seerr: SeerrSettings = field(default_factory=SeerrSettings)
+    mail: MailSettings = field(default_factory=MailSettings)
 
     def apply_to_environ(self) -> None:
         for env_name, field_name in ENV_TO_FIELD.items():

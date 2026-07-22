@@ -79,6 +79,10 @@ class CurrentUser:
     ui_font_size: str = "medium"
     ui_theme: str = "system"
     is_youth: bool = False
+    notification_email: Optional[str] = None
+    notify_channel_inbox: bool = True
+    notify_channel_email: bool = False
+    newsletter_opt_in: bool = False
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -93,6 +97,10 @@ class CurrentUser:
             "ui_font_size": self.ui_font_size or "medium",
             "ui_theme": self.ui_theme or "system",
             "is_youth": self.is_youth,
+            "notification_email": self.notification_email,
+            "notify_channel_inbox": self.notify_channel_inbox,
+            "notify_channel_email": self.notify_channel_email,
+            "newsletter_opt_in": self.newsletter_opt_in,
         }
 
 
@@ -120,6 +128,18 @@ def row_to_current_user(row) -> CurrentUser:
         if cleaned_theme in {"lights_up", "lights_down", "system"}:
             ui_theme = cleaned_theme
     is_youth = bool(int(row["is_youth"])) if "is_youth" in keys and row["is_youth"] is not None else False
+    notification_email = None
+    if "notification_email" in keys and row["notification_email"] is not None:
+        notification_email = str(row["notification_email"]).strip() or None
+    notify_channel_inbox = True
+    if "notify_channel_inbox" in keys and row["notify_channel_inbox"] is not None:
+        notify_channel_inbox = bool(int(row["notify_channel_inbox"]))
+    notify_channel_email = False
+    if "notify_channel_email" in keys and row["notify_channel_email"] is not None:
+        notify_channel_email = bool(int(row["notify_channel_email"]))
+    newsletter_opt_in = False
+    if "newsletter_opt_in" in keys and row["newsletter_opt_in"] is not None:
+        newsletter_opt_in = bool(int(row["newsletter_opt_in"]))
     user_id = str(row["id"])
     return CurrentUser(
         id=user_id,
@@ -133,6 +153,10 @@ def row_to_current_user(row) -> CurrentUser:
         ui_font_size=ui_font_size,
         ui_theme=ui_theme,
         is_youth=is_youth,
+        notification_email=notification_email,
+        notify_channel_inbox=notify_channel_inbox,
+        notify_channel_email=notify_channel_email,
+        newsletter_opt_in=newsletter_opt_in,
     )
 
 

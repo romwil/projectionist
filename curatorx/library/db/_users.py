@@ -170,6 +170,10 @@ class UsersAuthMixin:
         ui_font_size: Any = ...,
         ui_theme: Any = ...,
         avatar_url: Any = ...,
+        notification_email: Any = ...,
+        notify_channel_inbox: Any = ...,
+        notify_channel_email: Any = ...,
+        newsletter_opt_in: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -200,6 +204,21 @@ class UsersAuthMixin:
                 cleaned_avatar = (avatar_url or "").strip() or None
                 updates.append("avatar_url = ?")
                 params.append(cleaned_avatar)
+            if notification_email is not ... and "notification_email" in cols:
+                cleaned_email = (notification_email or "").strip() or None
+                if cleaned_email and "@" not in cleaned_email:
+                    cleaned_email = None
+                updates.append("notification_email = ?")
+                params.append(cleaned_email)
+            if notify_channel_inbox is not ... and "notify_channel_inbox" in cols:
+                updates.append("notify_channel_inbox = ?")
+                params.append(1 if notify_channel_inbox else 0)
+            if notify_channel_email is not ... and "notify_channel_email" in cols:
+                updates.append("notify_channel_email = ?")
+                params.append(1 if notify_channel_email else 0)
+            if newsletter_opt_in is not ... and "newsletter_opt_in" in cols:
+                updates.append("newsletter_opt_in = ?")
+                params.append(1 if newsletter_opt_in else 0)
             if updates:
                 params.append(user_id)
                 conn.execute(
@@ -419,6 +438,18 @@ class UsersAuthMixin:
             disabled = bool(int(row["disabled"]))
         is_youth = bool(int(row["is_youth"])) if "is_youth" in keys and row["is_youth"] is not None else False
         seerr_user_id = int(row["seerr_user_id"]) if row["seerr_user_id"] is not None else None
+        notification_email = None
+        if "notification_email" in keys and row["notification_email"] is not None:
+            notification_email = str(row["notification_email"])
+        notify_channel_inbox = True
+        if "notify_channel_inbox" in keys and row["notify_channel_inbox"] is not None:
+            notify_channel_inbox = bool(int(row["notify_channel_inbox"]))
+        notify_channel_email = False
+        if "notify_channel_email" in keys and row["notify_channel_email"] is not None:
+            notify_channel_email = bool(int(row["notify_channel_email"]))
+        newsletter_opt_in = False
+        if "newsletter_opt_in" in keys and row["newsletter_opt_in"] is not None:
+            newsletter_opt_in = bool(int(row["newsletter_opt_in"]))
         return {
             "id": str(row["id"]),
             "display_name": str(row["display_name"]),
@@ -426,6 +457,10 @@ class UsersAuthMixin:
             "ui_font_size": ui_font_size,
             "ui_theme": ui_theme,
             "email": str(row["email"]) if row["email"] is not None else None,
+            "notification_email": notification_email,
+            "notify_channel_inbox": notify_channel_inbox,
+            "notify_channel_email": notify_channel_email,
+            "newsletter_opt_in": newsletter_opt_in,
             "role": str(row["role"]),
             "disabled": disabled,
             "is_youth": is_youth,

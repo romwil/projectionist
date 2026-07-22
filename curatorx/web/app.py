@@ -486,6 +486,10 @@ class AuthMeUpdatePayload(BaseModel):
     preferred_name: Optional[str] = Field(default=None, max_length=80)
     ui_font_size: Optional[str] = Field(default=None, pattern="^(small|medium|large)$")
     ui_theme: Optional[str] = Field(default=None, pattern="^(lights_up|lights_down|system)$")
+    notification_email: Optional[str] = Field(default=None, max_length=320)
+    notify_channel_inbox: Optional[bool] = None
+    notify_channel_email: Optional[bool] = None
+    newsletter_opt_in: Optional[bool] = None
 
 
 class LibraryItemWatchedPayload(BaseModel):
@@ -510,6 +514,15 @@ class RecommendationsSeenPayload(BaseModel):
     all_unread: bool = False
 
 
+class NotificationsSeenPayload(BaseModel):
+    ids: List[str] = Field(default_factory=list)
+    all_unread: bool = False
+
+
+class MailTestPayload(BaseModel):
+    to_email: Optional[str] = Field(default=None, max_length=320)
+
+
 class SavedLibraryPagePayload(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     source_session_id: Optional[str] = Field(default=None, max_length=128)
@@ -528,6 +541,22 @@ class SeerrSettingsPayload(BaseModel):
     api_key: str = ""
     link_on_login: bool = True
     require_linked_user_for_requests: bool = False
+
+
+class MailSettingsPayload(BaseModel):
+    enabled: bool = False
+    provider: str = "off"
+    from_email: str = ""
+    from_name: str = "CuratorX"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_use_tls: bool = True
+    resend_api_key: str = ""
+    subject_prefix: str = "[CuratorX]"
+    footer_text: str = ""
+    logo_url: str = ""
 
 
 class SettingsPayload(BaseModel):
@@ -572,6 +601,7 @@ class SettingsPayload(BaseModel):
     features: FeatureFlagsPayload = Field(default_factory=FeatureFlagsPayload)
     auth: AuthSettingsPayload = Field(default_factory=AuthSettingsPayload)
     seerr: SeerrSettingsPayload = Field(default_factory=SeerrSettingsPayload)
+    mail: MailSettingsPayload = Field(default_factory=MailSettingsPayload)
 
 
 class McpKeyWhichPayload(BaseModel):
@@ -711,6 +741,17 @@ def _mask_settings(settings: Settings) -> Dict[str, Any]:
     auth_payload["oidc_client_secret_set"] = bool(settings.auth.oidc_client_secret)
     auth_payload["oidc_client_secret"] = ""
     payload["auth"] = auth_payload
+    mail_payload = dict(payload.get("mail") or {})
+    mail_payload["smtp_password_set"] = bool(settings.mail.smtp_password)
+    mail_payload["smtp_password"] = ""
+    mail_payload["resend_api_key_set"] = bool(settings.mail.resend_api_key)
+    mail_payload["resend_api_key"] = ""
+    mail_payload["configured"] = bool(
+        settings.mail.enabled
+        and str(settings.mail.provider or "off").lower() in {"smtp", "resend"}
+        and str(settings.mail.from_email or "").strip()
+    )
+    payload["mail"] = mail_payload
     return payload
 
 
@@ -1035,6 +1076,14 @@ def patch_auth_me(
         updates["ui_font_size"] = payload.ui_font_size
     if "ui_theme" in fields_set:
         updates["ui_theme"] = payload.ui_theme
+    if "notification_email" in fields_set:
+        updates["notification_email"] = payload.notification_email
+    if "notify_channel_inbox" in fields_set:
+        updates["notify_channel_inbox"] = payload.notify_channel_inbox
+    if "notify_channel_email" in fields_set:
+        updates["notify_channel_email"] = payload.notify_channel_email
+    if "newsletter_opt_in" in fields_set:
+        updates["newsletter_opt_in"] = payload.newsletter_opt_in
     if not updates:
         return {"user": user.to_dict(), "authenticated": True}
     try:
@@ -4351,6 +4400,7 @@ def create_recommendations(
     if not payload.tmdb_id and not payload.tvdb_id and not payload.rating_key:
         raise HTTPException(status_code=400, detail="Provide tmdb_id, tvdb_id, or rating_key")
     db = _db()
+    settings = _settings()
     recipient_ids = []
     for raw_id in payload.to_user_ids:
         rid = str(raw_id or "").strip()
@@ -4364,23 +4414,47 @@ def create_recommendations(
         recipient_ids.append(rid)
     if not recipient_ids:
         raise HTTPException(status_code=400, detail="Choose at least one recipient")
+    from curatorx.notifications import deliver_notification
+
     created = []
     for rid in recipient_ids:
-        created.append(
-            db.create_recommendation(
-                recommendation_id=str(uuid.uuid4()),
-                from_user_id=user.id,
-                to_user_id=rid,
+        rec = db.create_recommendation(
+            recommendation_id=str(uuid.uuid4()),
+            from_user_id=user.id,
+            to_user_id=rid,
+            media_type=payload.media_type,
+            title=payload.title.strip(),
+            tmdb_id=payload.tmdb_id,
+            tvdb_id=payload.tvdb_id,
+            rating_key=(payload.rating_key or "").strip() or None,
+            year=payload.year,
+            poster_url=(payload.poster_url or "").strip() or None,
+            message=(payload.message or "").strip() or None,
+        )
+        from_name = user.preferred_name or user.display_name or "Someone"
+        title_bit = payload.title.strip()
+        year_bit = f" ({payload.year})" if payload.year else ""
+        try:
+            deliver_notification(
+                db,
+                settings,
+                user_id=rid,
+                kind="recommendation",
+                title=f"{from_name} recommended {title_bit}{year_bit}",
+                body=(payload.message or "").strip() or None,
                 media_type=payload.media_type,
-                title=payload.title.strip(),
                 tmdb_id=payload.tmdb_id,
                 tvdb_id=payload.tvdb_id,
                 rating_key=(payload.rating_key or "").strip() or None,
                 year=payload.year,
                 poster_url=(payload.poster_url or "").strip() or None,
-                message=(payload.message or "").strip() or None,
+                from_user_id=user.id,
+                related_id=rec["id"],
+                email_subject=f"{from_name} recommended {title_bit}",
             )
-        )
+        except Exception:  # noqa: BLE001
+            logger.exception("Failed to fan out recommendation notification to %s", rid)
+        created.append(rec)
     return {"items": created, "count": len(created)}
 
 
@@ -4396,7 +4470,123 @@ def mark_recommendations_seen(
         recommendation_ids=payload.ids or None,
         all_unread=payload.all_unread,
     )
+    # Keep the generalized inbox in sync when recommendations are dismissed.
+    try:
+        if payload.all_unread:
+            notifs = _db().list_notifications_for_user(
+                user.id, unread_only=True, kinds=["recommendation"], limit=50
+            )
+            if notifs:
+                _db().mark_notifications_seen(
+                    user.id, notification_ids=[n["id"] for n in notifs]
+                )
+        elif payload.ids:
+            related = []
+            for rid in payload.ids:
+                match = _db().find_notification_by_related(
+                    user.id, kind="recommendation", related_id=str(rid)
+                )
+                if match:
+                    related.append(match["id"])
+            if related:
+                _db().mark_notifications_seen(user.id, notification_ids=related)
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not sync notification seen state for recommendations", exc_info=True)
     return {"updated": updated}
+
+
+@app.get("/api/notifications")
+def list_notifications(
+    unread_only: bool = False,
+    limit: int = 20,
+    kind: Optional[str] = None,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Generalized inbox: recommendation, arrival, access-request, digest, nudge."""
+    kinds = None
+    if kind:
+        kinds = [k.strip() for k in str(kind).split(",") if k.strip()]
+    items = _db().list_notifications_for_user(
+        user.id,
+        unread_only=unread_only,
+        kinds=kinds,
+        limit=min(max(1, limit), 50),
+    )
+    unread_count = _db().count_unread_notifications(user.id)
+    return {"items": items, "count": len(items), "unread_count": unread_count}
+
+
+@app.post("/api/notifications/seen")
+def mark_notifications_seen(
+    payload: NotificationsSeenPayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    updated = _db().mark_notifications_seen(
+        user.id,
+        notification_ids=payload.ids or None,
+        all_unread=payload.all_unread,
+    )
+    # Also mark related recommendations seen when dismissing recommendation notifs.
+    try:
+        if payload.all_unread:
+            _db().mark_recommendations_seen(user.id, all_unread=True)
+        elif payload.ids:
+            id_set = {str(i) for i in payload.ids}
+            rec_ids = []
+            rows = _db().list_notifications_for_user(user.id, limit=50)
+            for row in rows:
+                if row["id"] in id_set and row.get("kind") == "recommendation" and row.get("related_id"):
+                    rec_ids.append(row["related_id"])
+            if rec_ids:
+                _db().mark_recommendations_seen(user.id, recommendation_ids=rec_ids)
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not sync recommendation seen state", exc_info=True)
+    return {"updated": updated}
+
+
+@app.post("/api/admin/mail/test")
+def test_mail_send(
+    payload: MailTestPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Send a test email using the configured SMTP or Resend transport."""
+    from curatorx.mail import MailSendError, mail_configured, send_mail
+    from curatorx.notifications.service import resolve_notification_email
+
+    settings = _settings()
+    if not mail_configured(settings):
+        raise HTTPException(
+            status_code=400,
+            detail="Configure and enable SMTP or Resend under Admin → Mail first.",
+        )
+    to_email = str(payload.to_email or "").strip()
+    if not to_email:
+        owner_row = _db().get_user(user.id)
+        owner = _db()._row_to_user(owner_row) if owner_row is not None else user.to_dict()
+        to_email = resolve_notification_email(owner) or ""
+    if not to_email or "@" not in to_email:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide to_email or set a notification email on your account.",
+        )
+    try:
+        result = send_mail(
+            settings,
+            to_email=to_email,
+            subject="CuratorX mail test",
+            body_text=(
+                "This is a test message from CuratorX.\n\n"
+                "If you received it, your mail settings are working."
+            ),
+        )
+    except MailSendError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "provider": result.provider,
+        "message_id": result.message_id,
+        "to_email": to_email,
+    }
 
 
 @app.get("/api/reviews")

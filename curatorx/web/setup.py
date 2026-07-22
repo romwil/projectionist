@@ -504,6 +504,14 @@ def merge_secret_fields(incoming: Mapping[str, Any], existing: Settings) -> Dict
         merged["seerr"] = seerr_merged
     elif not str(merged.get("seerr_api_key") or "").strip():
         merged["seerr_api_key"] = existing.seerr.api_key
+    mail_incoming = merged.get("mail")
+    if isinstance(mail_incoming, Mapping):
+        mail_merged = dict(mail_incoming)
+        if not str(mail_merged.get("smtp_password") or "").strip():
+            mail_merged["smtp_password"] = existing.mail.smtp_password
+        if not str(mail_merged.get("resend_api_key") or "").strip():
+            mail_merged["resend_api_key"] = existing.mail.resend_api_key
+        merged["mail"] = mail_merged
     for field in PRESERVE_IF_EMPTY_FIELDS:
         if not str(merged.get(field) or "").strip():
             merged[field] = getattr(existing, field)

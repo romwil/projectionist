@@ -17,12 +17,12 @@ import {
   getThreadMessages,
   getTypingPhrases,
   listJobs,
-  listRecommendations,
+  listNotifications,
   listReviewPrompts,
   listReviews,
   listThreads,
   listWatchlist,
-  markRecommendationsSeen,
+  markNotificationsSeen,
   proposeAction,
   removeWatchlistPin,
   runWatchlistSync,
@@ -110,6 +110,7 @@ import KeyboardHelpModal from "./components/KeyboardHelpModal";
 import NewReplyChip from "./components/NewReplyChip";
 import RecommendModal from "./components/RecommendModal";
 import RecommendationsInbox from "./components/RecommendationsInbox";
+import InboxBadgeButton from "./components/InboxBadgeButton";
 import StatusDock from "./components/StatusDock";
 import AppNav, { AppNavToggle } from "./components/AppNav";
 import CuratorXBrand from "./components/CuratorXBrand";
@@ -186,6 +187,7 @@ export default function App() {
   const [watchlistPins, setWatchlistPins] = useState([]);
   const [recommendItem, setRecommendItem] = useState(null);
   const [incomingRecommendations, setIncomingRecommendations] = useState([]);
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [reviewPrompts, setReviewPrompts] = useState([]);
   const [reviewLookup, setReviewLookup] = useState({});
   const [typingPhrases, setTypingPhrases] = useState([]);
@@ -295,14 +297,16 @@ export default function App() {
   }, []);
 
   const refreshRecommendations = useCallback(() => {
-    if (!multiUserEnabled) {
-      setIncomingRecommendations([]);
-      return;
-    }
-    listRecommendations({ unread_only: true, limit: 8 })
-      .then((data) => setIncomingRecommendations(data.items || []))
-      .catch(() => setIncomingRecommendations([]));
-  }, [multiUserEnabled]);
+    listNotifications({ unread_only: true, limit: 20 })
+      .then((data) => {
+        setIncomingRecommendations(data.items || []);
+        setInboxUnreadCount(Number(data.unread_count) || (data.items || []).length);
+      })
+      .catch(() => {
+        setIncomingRecommendations([]);
+        setInboxUnreadCount(0);
+      });
+  }, []);
 
   const refreshTypingPhrases = useCallback(() => {
     getTypingPhrases()
@@ -1329,8 +1333,9 @@ export default function App() {
   async function handleDismissRecommendation(rec) {
     if (!rec?.id) return;
     setIncomingRecommendations((prev) => prev.filter((item) => item.id !== rec.id));
+    setInboxUnreadCount((n) => Math.max(0, n - 1));
     try {
-      await markRecommendationsSeen({ ids: [rec.id] });
+      await markNotificationsSeen({ ids: [rec.id] });
     } catch (error) {
       console.error(error);
       refreshRecommendations();
@@ -1339,16 +1344,33 @@ export default function App() {
 
   async function handleDismissAllRecommendations(items) {
     setIncomingRecommendations([]);
+    setInboxUnreadCount(0);
     try {
       if (items?.length) {
-        await markRecommendationsSeen({ ids: items.map((item) => item.id) });
+        await markNotificationsSeen({ ids: items.map((item) => item.id) });
       } else {
-        await markRecommendationsSeen({ all_unread: true });
+        await markNotificationsSeen({ all_unread: true });
       }
     } catch (error) {
       console.error(error);
       refreshRecommendations();
     }
+  }
+
+  function handleOpenInbox() {
+    const el = document.getElementById("notifications-inbox");
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    // No unread cards yet — refresh then scroll if any appear.
+    refreshRecommendations();
+    window.setTimeout(() => {
+      document.getElementById("notifications-inbox")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 120);
   }
 
   async function handleReviewSave({ prompt, stars, review_text: reviewText, session_id: reviewSessionId, replace_plex_rating: replacePlexRating }) {
@@ -1460,6 +1482,7 @@ export default function App() {
           <CuratorXBrand pulse={agentPulse} chatError={chatError} />
         </div>
         <div className="app-topbar-actions">
+          <InboxBadgeButton unreadCount={inboxUnreadCount} onOpen={handleOpenInbox} />
           <Link
             to="/explore"
             className="app-topbar-icon"

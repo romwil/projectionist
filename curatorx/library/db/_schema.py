@@ -56,6 +56,7 @@ class SchemaMigrationsMixin:
             self._migrate_media_issues(conn)
             self._migrate_persona_templates(conn)
             self._migrate_recommendations(conn)
+            self._migrate_notifications(conn)
             self._migrate_saved_library(conn)
             self._migrate_library_metadata_enrichment(conn)
             self._migrate_people_credits(conn)
@@ -873,6 +874,52 @@ class SchemaMigrationsMixin:
                 ON user_recommendations(to_user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_user_recommendations_unread
                 ON user_recommendations(to_user_id, seen_at);
+            """
+        )
+
+    def _migrate_notifications(self, conn: sqlite3.Connection) -> None:
+        """Generalized notification inbox + per-user mail/channel prefs."""
+        user_cols = self._table_columns(conn, "users")
+        if user_cols:
+            notify_cols = {
+                "notification_email": "TEXT",
+                "notify_channel_inbox": "INTEGER NOT NULL DEFAULT 1",
+                "notify_channel_email": "INTEGER NOT NULL DEFAULT 0",
+                "newsletter_opt_in": "INTEGER NOT NULL DEFAULT 0",
+            }
+            for name, typedef in notify_cols.items():
+                if name not in user_cols:
+                    conn.execute(f"ALTER TABLE users ADD COLUMN {name} {typedef}")
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS user_notifications (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (
+                    kind IN ('recommendation', 'arrival', 'access-request', 'digest', 'nudge')
+                ),
+                title TEXT NOT NULL,
+                body TEXT,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                media_type TEXT,
+                tmdb_id INTEGER,
+                tvdb_id INTEGER,
+                rating_key TEXT,
+                year INTEGER,
+                poster_url TEXT,
+                from_user_id TEXT,
+                related_id TEXT,
+                created_at REAL NOT NULL,
+                seen_at REAL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_notifications_user
+                ON user_notifications(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_user_notifications_unread
+                ON user_notifications(user_id, seen_at);
+            CREATE INDEX IF NOT EXISTS idx_user_notifications_related
+                ON user_notifications(user_id, kind, related_id);
             """
         )
 
