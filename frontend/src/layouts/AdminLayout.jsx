@@ -13,6 +13,7 @@ export const ADMIN_NAV = [
   { to: "/admin/household", id: "household", label: "Household" },
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },
   { to: "/admin/mail", id: "mail", label: "Mail" },
+  { to: "/admin/access", id: "access", label: "Access requests" },
   { to: "/admin/advanced", id: "advanced", label: "Advanced" },
   { to: "/admin/dashboard", id: "dashboard", label: "Dashboard" },
   { to: "/admin/issues", id: "issues", label: "Issues", badge: "openIssues" },

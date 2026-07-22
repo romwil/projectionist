@@ -61,6 +61,8 @@ class LibraryFilters:
     themes: List[str] = field(default_factory=list)
     countries: List[str] = field(default_factory=list)
     content_ratings: List[str] = field(default_factory=list)
+    # When set (Youth gate): require non-empty content_rating at or below this max.
+    youth_max_content_rating: Optional[str] = None
     collection_name: Optional[str] = None
     original_language: Optional[str] = None
     query: Optional[str] = None
@@ -159,6 +161,11 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         themes=_parse_csv_list(data.get("themes")),
         countries=_parse_csv_list(data.get("countries")),
         content_ratings=_parse_csv_list(data.get("content_ratings")),
+        youth_max_content_rating=(
+            str(data["youth_max_content_rating"]).strip()
+            if data.get("youth_max_content_rating")
+            else None
+        ),
         collection_name=str(data["collection_name"]).strip() if data.get("collection_name") else None,
         original_language=str(data["original_language"]).strip() if data.get("original_language") else None,
         query=str(data["query"]).strip() if data.get("query") else None,
@@ -538,6 +545,20 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
             rating_clauses.append("lower(content_rating) LIKE ?")
             params.append(f"%{rating.lower()}%")
         clauses.append(f"({' OR '.join(rating_clauses)})")
+    if filters.youth_max_content_rating:
+        from curatorx.youth.rating_gate import allowed_rating_labels
+
+        # Fail-closed: empty/null content_rating never matches.
+        clauses.append("content_rating IS NOT NULL AND trim(content_rating) != ''")
+        labels = allowed_rating_labels(filters.youth_max_content_rating)
+        if labels:
+            like_clauses = []
+            for label in labels:
+                like_clauses.append("lower(content_rating) LIKE ?")
+                params.append(f"%{label.lower()}%")
+            clauses.append(f"({' OR '.join(like_clauses)})")
+        else:
+            clauses.append("1 = 0")
     if filters.runtime_min is not None:
         clauses.append("runtime_minutes >= ?")
         params.append(filters.runtime_min)

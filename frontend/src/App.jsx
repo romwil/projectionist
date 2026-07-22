@@ -73,6 +73,7 @@ import {
   quickPickToAssistantMessage,
 } from "./lib/quickPick.js";
 import { resolveActivePersonaId } from "./lib/resolveActivePersona.js";
+import { preferYouthFriendlyPersona } from "./lib/youthPersona.js";
 import {
   createKonamiTracker,
   easterEggAlreadyFired,
@@ -157,7 +158,7 @@ function appendPerfectPickAck(message) {
 }
 
 export default function App() {
-  const { authReady, multiUserEnabled, isOwner, role: userRole } = useAuthGate();
+  const { authReady, multiUserEnabled, isOwner, role: userRole, isYouth } = useAuthGate();
   const { start: startBulkProgress, update: updateBulkProgress, finish: finishBulkProgress } = useBulkActionProgress();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -323,14 +324,17 @@ export default function App() {
       const list = data.items || data || [];
       setPersonas(list);
       const def = list.find((p) => p.is_default);
-      const nextDefaultId = def?.id ?? null;
+      let nextDefaultId = def?.id ?? null;
+      if (isYouth) {
+        nextDefaultId = preferYouthFriendlyPersona(list, nextDefaultId);
+      }
       setDefaultPersonaId(nextDefaultId);
       return { list, defaultPersonaId: nextDefaultId };
     } catch (error) {
       console.error(error);
       return { list: [], defaultPersonaId: null };
     }
-  }, []);
+  }, [isYouth]);
 
   const refreshThreads = useCallback(async () => {
     try {
@@ -1467,15 +1471,18 @@ export default function App() {
 
   return (
     <div
-      className="app-root workspace"
+      className={`app-root workspace${isYouth ? " app-root--youth youth-shell" : ""}${userRole === "guest" ? " app-root--guest guest-shell" : ""}`}
       style={{ "--ambient-accent": ambientAccent }}
+      data-shell={isYouth ? "youth" : userRole === "guest" ? "guest" : "default"}
     >
       <AppNav
         open={appNavOpen}
         onClose={() => setAppNavOpen(false)}
         isOwner={isOwner}
+        isYouth={isYouth}
+        role={userRole}
       />
-      <header className={`app-topbar ${nightOwl ? "night-owl" : ""}`}>
+      <header className={`app-topbar ${nightOwl ? "night-owl" : ""} ${isYouth ? "youth-shell-topbar" : ""} ${userRole === "guest" ? "guest-shell-topbar" : ""}`}>
         <div className="app-topbar-brand">
           <AppNavToggle
             open={appNavOpen}

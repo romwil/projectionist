@@ -561,6 +561,10 @@ class MailSettingsPayload(BaseModel):
     logo_url: str = ""
 
 
+class YouthSettingsPayload(BaseModel):
+    max_content_rating: str = "PG-13"
+
+
 class SettingsPayload(BaseModel):
     plex_url: str = ""
     plex_token: str = ""
@@ -604,6 +608,7 @@ class SettingsPayload(BaseModel):
     auth: AuthSettingsPayload = Field(default_factory=AuthSettingsPayload)
     seerr: SeerrSettingsPayload = Field(default_factory=SeerrSettingsPayload)
     mail: MailSettingsPayload = Field(default_factory=MailSettingsPayload)
+    youth: YouthSettingsPayload = Field(default_factory=YouthSettingsPayload)
 
 
 class McpKeyWhichPayload(BaseModel):
@@ -772,7 +777,17 @@ def _idle_scheduler() -> Optional[IdleScheduler]:
 
 
 def _sanitize_library_payload(payload: Any, user) -> Any:
-    return sanitize_library_payload(payload, settings=_settings(), user=user)
+    settings = _settings()
+    sanitized = sanitize_library_payload(payload, settings=settings, user=user)
+    from curatorx.youth.apply import filter_payload_for_youth
+
+    return filter_payload_for_youth(sanitized, user=user, settings=settings)
+
+
+def _apply_youth_filters(filters, user):
+    from curatorx.youth.apply import apply_youth_gate_to_filters
+
+    return apply_youth_gate_to_filters(filters, user=user, settings=_settings())
 
 
 register_webhook_routes(app, db_factory=_db, settings_factory=_settings)
@@ -809,11 +824,26 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "display_name": user.display_name,
             "preferred_name": user.preferred_name,
             "role": user.role,
+            "is_youth": bool(getattr(user, "is_youth", False)),
             "seerr_user_id": user.seerr_user_id,
             "avatar_url": user.avatar_url,
         }
+        payload["youth"] = {
+            "max_content_rating": str(
+                getattr(getattr(settings, "youth", None), "max_content_rating", None)
+                or "PG-13"
+            ),
+            "gate_active": bool(getattr(user, "is_youth", False)),
+        }
     else:
         payload["user"] = None
+        payload["youth"] = {
+            "max_content_rating": str(
+                getattr(getattr(settings, "youth", None), "max_content_rating", None)
+                or "PG-13"
+            ),
+            "gate_active": False,
+        }
     return payload
 
 
@@ -1231,6 +1261,89 @@ def auth_oidc_callback(
 def auth_logout(request: Request, response: Response) -> Dict[str, bool]:
     clear_session_cookie(response, request)
     return {"logged_out": True}
+
+
+class AccessRequestCreatePayload(BaseModel):
+    display_name: str = Field(min_length=2, max_length=120)
+    email: Optional[str] = Field(default=None, max_length=320)
+    message: Optional[str] = Field(default=None, max_length=2000)
+
+
+@app.post("/api/access-requests")
+def create_access_request_endpoint(
+    payload: AccessRequestCreatePayload,
+    request: Request,
+) -> Dict[str, Any]:
+    """Public: guest asks the owner for household membership (CuratorX-owned queue)."""
+    enforce_rate_limit(request, bucket="access_request", limit=5, window_seconds=3600)
+    from curatorx.access_requests import notify_owners_of_access_request
+
+    try:
+        row = _db().create_access_request(
+            display_name=payload.display_name,
+            email=payload.email,
+            message=payload.message,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Invalid access request"),
+        ) from error
+    notify_owners_of_access_request(_db(), _settings(), row)
+    return {"request": {"id": row["id"], "status": row["status"], "created_at": row["created_at"]}}
+
+
+@app.get("/api/admin/access-requests")
+def list_access_requests_endpoint(
+    status: Optional[str] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    del user
+    try:
+        items = _db().list_access_requests(status=status, limit=100)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Invalid status filter"),
+        ) from error
+    return {"items": items, "count": len(items)}
+
+
+@app.post("/api/admin/access-requests/{request_id}/approve")
+def approve_access_request_endpoint(
+    request_id: str,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    from curatorx.access_requests import approve_access_request
+
+    try:
+        return approve_access_request(
+            _db(),
+            _settings(),
+            request_id=request_id,
+            owner_id=str(user.id),
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Could not approve request"),
+        ) from error
+
+
+@app.post("/api/admin/access-requests/{request_id}/deny")
+def deny_access_request_endpoint(
+    request_id: str,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    from curatorx.access_requests import deny_access_request
+
+    try:
+        return {"request": deny_access_request(_db(), request_id=request_id, owner_id=str(user.id))}
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Could not deny request"),
+        ) from error
 
 
 @app.get("/api/users")
@@ -2193,6 +2306,37 @@ def library_feed_for_you(
     )
 
 
+@app.get("/api/library/feeds/pick-for-me")
+def library_feed_pick_for_me(
+    limit: int = 8,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Youth-friendly pick-for-me spinner: random unwatched, age-gated titles."""
+    filters = filters_from_mapping(
+        {
+            "unwatched_only": True,
+            "sort": "vote_average",
+            "sort_dir": "desc",
+            "limit": max(1, min(int(limit), 24)),
+        }
+    )
+    filters = _apply_youth_filters(filters, user)
+    result = query_library(_db(), filters)
+    items = list(result.get("items") or [])
+    import random
+
+    random.shuffle(items)
+    return _sanitize_library_payload(
+        {
+            "feed": "pick-for-me",
+            "title": "Pick for me",
+            "items": items[: max(1, min(int(limit), 24))],
+            "total_matched": result.get("total_matched", len(items)),
+        },
+        user,
+    )
+
+
 @app.get("/api/library/feeds/on-this-day")
 def library_feed_on_this_day(
     limit: int = 12,
@@ -2416,6 +2560,7 @@ async def library_query_endpoint(
             "limit": limit,
         }
     )
+    filters = _apply_youth_filters(filters, user)
     if filters.semantic_query:
         result = await query_library_async(_db(), filters, _settings())
     else:
@@ -2492,6 +2637,7 @@ async def library_export_csv(
     raw["limit"] = 5000
     raw["offset"] = 0
     filters = filters_from_mapping(raw)
+    filters = _apply_youth_filters(filters, user)
     result = (
         await query_library_async(_db(), filters, _settings())
         if filters.semantic_query
@@ -2571,6 +2717,7 @@ def library_aggregate_endpoint(
             "keywords": keywords,
         }
     )
+    filters = _apply_youth_filters(filters, user)
     return _sanitize_library_payload(
         aggregate_library(_db(), normalized, filters),  # type: ignore[arg-type]
         user,
@@ -3030,6 +3177,7 @@ async def chat(request: Request, payload: ChatRequest, user=Depends(get_current_
             user_id=scoped,
             seerr_user_id=user.seerr_user_id,
             user_role=user.role,
+            is_youth=bool(getattr(user, "is_youth", False)),
         ).run(session_id, payload.message)
     except LLMProviderError as error:
         raise HTTPException(
@@ -3420,6 +3568,7 @@ async def chat_stream(
                 seerr_user_id=user.seerr_user_id,
                 user_role=user.role,
                 persona_id=persona_id,
+                is_youth=bool(getattr(user, "is_youth", False)),
             ):
                 data = json.loads(chunk)
                 event_type = data.get("type", "message")
@@ -3462,7 +3611,12 @@ def title_detail(
     else:
         kwargs["tmdb_id"] = int(item_id)
     detail = get_title_detail(db, settings, **kwargs)
-    return _sanitize_library_payload(detail.model_dump(), user)
+    dumped = detail.model_dump()
+    from curatorx.youth.apply import title_allowed_for_user
+
+    if not title_allowed_for_user(dumped, user=user, settings=settings):
+        raise HTTPException(status_code=404, detail="Title not available")
+    return _sanitize_library_payload(dumped, user)
 
 
 def _library_titles_for_person_payload(
@@ -3532,7 +3686,10 @@ def person_resolve(
         for facet_key in ("cast", "directors"):
             result = query_library(
                 db,
-                filters_from_mapping({facet_key: cleaned, "limit": 50}),
+                _apply_youth_filters(
+                    filters_from_mapping({facet_key: cleaned, "limit": 50}),
+                    user,
+                ),
             )
             items = list(result.get("items") or [])
             if items:
@@ -3989,8 +4146,41 @@ def delete_member_taste_cluster(
 ) -> Dict[str, Any]:
     deleted = _db().delete_user_taste_weight(str(user.id), cluster_tag)
     if not deleted:
-        raise HTTPException(status_code=404, detail="Taste cluster override not found")
-    return {"deleted": True, "cluster_tag": cluster_tag}
+        raise HTTPException(status_code=404, detail="Taste cluster not found")
+    from curatorx.taste import build_member_taste_payload
+
+    return build_member_taste_payload(_db(), user_id=str(user.id))
+
+
+class TasteQuizPayload(BaseModel):
+    likes: List[str] = Field(default_factory=list, max_length=20)
+    dislikes: List[str] = Field(default_factory=list, max_length=20)
+
+
+@app.post("/api/taste/quiz")
+def submit_taste_quiz(
+    payload: TasteQuizPayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Seed Phase 3 taste weights from a short genre/mood quiz."""
+    from curatorx.taste import build_member_taste_payload
+
+    db = _db()
+    user_id = str(user.id)
+    updated = []
+    for tag in payload.likes:
+        cleaned = str(tag or "").strip().lower()
+        if not cleaned:
+            continue
+        updated.append(db.set_user_taste_weight(user_id, cleaned, 0.85, explicit_lock=True))
+    for tag in payload.dislikes:
+        cleaned = str(tag or "").strip().lower()
+        if not cleaned:
+            continue
+        updated.append(db.set_user_taste_weight(user_id, cleaned, 0.15, explicit_lock=True))
+    result = build_member_taste_payload(db, user_id=user_id)
+    result["updated"] = updated
+    return result
 
 
 @app.post("/api/admin/weekly-rail/generate")
@@ -4289,6 +4479,21 @@ def list_published_collections(
         items=[CuratedList(**item) for item in items],
         count=len(items),
     )
+
+
+@app.get("/api/guest/tour")
+def guest_tour(
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """What's great here — published collections for the guest tour shell."""
+    del user
+    items = _db().list_published_lists()
+    return {
+        "title": "What's great here",
+        "lede": "A short tour of collections your host published for visitors.",
+        "items": items,
+        "count": len(items),
+    }
 
 
 @app.get("/api/collections/{list_id}", response_model=CuratedList)

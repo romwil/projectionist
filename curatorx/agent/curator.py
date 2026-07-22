@@ -187,6 +187,7 @@ class CuratorAgent:
         user_id: Optional[str] = None,
         seerr_user_id: Optional[int] = None,
         user_role: Optional[str] = None,
+        is_youth: bool = False,
     ) -> None:
         self.db = db
         self.settings = settings
@@ -194,6 +195,7 @@ class CuratorAgent:
         self.user_id = user_id
         self.seerr_user_id = seerr_user_id
         self.user_role = user_role
+        self.is_youth = bool(is_youth)
         self.provider = get_chat_provider(settings) if settings.llm_api_key or settings.llm_provider == "ollama" else None
 
     async def _fallback_run(self, registry: ToolRegistry, user_message: str) -> str:
@@ -221,6 +223,7 @@ class CuratorAgent:
             user_id=self.user_id,
             seerr_user_id=self.seerr_user_id,
             user_role=self.user_role,
+            is_youth=self.is_youth,
         )
 
     async def run(self, session_id: str, user_message: str) -> Dict[str, Any]:
@@ -270,6 +273,7 @@ class CuratorAgent:
                     persona_id=thread_persona_id,
                     user_id=self.user_id,
                     user_role=self.user_role,
+                    is_youth=self.is_youth,
                 ),
             }
         ]
@@ -423,6 +427,7 @@ async def stream_agent(
     seerr_user_id: Optional[int] = None,
     user_role: Optional[str] = None,
     persona_id: Optional[str] = None,
+    is_youth: bool = False,
 ) -> AsyncIterator[str]:
     """Stream agent responses with true token-by-token LLM streaming.
 
@@ -445,6 +450,7 @@ async def stream_agent(
         user_id=user_id,
         seerr_user_id=seerr_user_id,
         user_role=user_role,
+        is_youth=is_youth,
     )
     resolved_lens = agent.lens_id
     db.ensure_chat_session(session_id, resolved_lens, user_id=user_id, persona_id=persona_id)
@@ -474,6 +480,7 @@ async def stream_agent(
                 persona_id=thread_persona_id,
                 user_id=user_id,
                 user_role=user_role,
+                is_youth=is_youth,
             ),
         },
     ]

@@ -9,6 +9,8 @@ export default function AppNav({
   onClose,
   isOwner = false,
   showSettings = true,
+  isYouth = false,
+  role = "owner",
 }) {
   const location = useLocation();
   const { rootRef: panelRef } = useAnchoredPopover({
@@ -21,7 +23,7 @@ export default function AppNav({
 
   if (!open) return null;
 
-  const items = buildAppNavItems({ isOwner, showSettings });
+  const items = buildAppNavItems({ isOwner, showSettings, isYouth, role });
 
   function handleWatchlistClick() {
     onClose?.();

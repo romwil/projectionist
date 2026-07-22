@@ -58,6 +58,7 @@ class SchemaMigrationsMixin:
             self._migrate_recommendations(conn)
             self._migrate_notifications(conn)
             self._migrate_taste_engagement(conn)
+            self._migrate_access_requests(conn)
             self._migrate_saved_library(conn)
             self._migrate_library_metadata_enrichment(conn)
             self._migrate_people_credits(conn)
@@ -1075,6 +1076,22 @@ class SchemaMigrationsMixin:
                 '{"event":"chat_streak","min_count":3}',
                 1,
             ),
+            (
+                "badge-story-explorer",
+                "story-explorer",
+                "Story explorer",
+                "Asked the curator about three different titles.",
+                '{"event":"chat_streak","min_count":2}',
+                1,
+            ),
+            (
+                "badge-family-picks",
+                "family-picks",
+                "Family picks starter",
+                "Rated three age-friendly titles.",
+                '{"event":"review","min_count":3}',
+                1,
+            ),
         )
         for badge_id, slug, name, description, criteria, youth_safe in badges:
             conn.execute(
@@ -1086,6 +1103,15 @@ class SchemaMigrationsMixin:
                 (badge_id, slug, name, description, criteria, youth_safe, now),
             )
         challenges = (
+            (
+                "challenge-rate-3",
+                "rate-3-films",
+                "rate_n",
+                "Rate 3 films",
+                "Share stars on three titles you liked.",
+                3,
+                1,
+            ),
             (
                 "challenge-rate-5",
                 "rate-5-films",
@@ -1102,8 +1128,12 @@ class SchemaMigrationsMixin:
                 "Rate 10 films",
                 "A deeper pass — ten ratings to tune your taste profile.",
                 10,
-                1,
+                0,
             ),
+        )
+        # Adult-only challenge: flip youth_safe if an older seed already inserted it.
+        conn.execute(
+            "UPDATE engagement_challenges SET youth_safe = 0 WHERE slug = 'rate-10-films'"
         )
         for challenge_id, slug, kind, title, description, target, youth_safe in challenges:
             conn.execute(
@@ -1149,6 +1179,29 @@ class SchemaMigrationsMixin:
                 "rail",
                 1,
             ),
+            (
+                "explainer-ask-curator",
+                "ask-the-curator",
+                "Ask the curator (Youth)",
+                (
+                    "You can ask for something fun to watch, a movie like one you loved, "
+                    "or a gentle surprise. The curator only suggests titles that fit your "
+                    "household's Youth rating rules."
+                ),
+                "youth",
+                1,
+            ),
+            (
+                "explainer-youth-ratings",
+                "youth-content-ratings",
+                "Why some titles stay hidden",
+                (
+                    "Youth mode hides titles without a content rating and anything above "
+                    "the max rating your owner set — so Explore and Chat stay age-friendly."
+                ),
+                "youth",
+                1,
+            ),
         )
         for explainer_id, slug, title, body, tag, youth_safe in explainers:
             conn.execute(
@@ -1159,6 +1212,30 @@ class SchemaMigrationsMixin:
                 """,
                 (explainer_id, slug, title, body, tag, youth_safe, now),
             )
+
+    def _migrate_access_requests(self, conn: sqlite3.Connection) -> None:
+        """CuratorX-owned guest request-access queue (Delight Phase 4)."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS access_requests (
+                id TEXT PRIMARY KEY,
+                display_name TEXT NOT NULL,
+                email TEXT,
+                message TEXT,
+                status TEXT NOT NULL CHECK (
+                    status IN ('pending', 'approved', 'denied')
+                ),
+                created_at REAL NOT NULL,
+                resolved_at REAL,
+                resolved_by TEXT,
+                created_user_id TEXT,
+                FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY (created_user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_access_requests_status
+                ON access_requests(status, created_at DESC);
+            """
+        )
 
     def _migrate_saved_library(self, conn: sqlite3.Connection) -> None:
         """Saved curator responses, private to the user who saved them."""

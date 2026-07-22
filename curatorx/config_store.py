@@ -526,12 +526,21 @@ class MailSettings:
     logo_url: str = ""
 
 
+@dataclass
+class YouthSettings:
+    """Owner Youth-mode content gate (fail-closed for unrated titles)."""
+
+    # US movie/TV ladder; empty resolves to PG-13 at runtime.
+    max_content_rating: str = "PG-13"
+
+
 NESTED_SETTINGS_TYPES.update(
     {
         "features": FeatureFlags,
         "auth": AuthSettings,
         "seerr": SeerrSettings,
         "mail": MailSettings,
+        "youth": YouthSettings,
     }
 )
 
@@ -588,6 +597,7 @@ class Settings:
     auth: AuthSettings = field(default_factory=AuthSettings)
     seerr: SeerrSettings = field(default_factory=SeerrSettings)
     mail: MailSettings = field(default_factory=MailSettings)
+    youth: YouthSettings = field(default_factory=YouthSettings)
 
     def apply_to_environ(self) -> None:
         for env_name, field_name in ENV_TO_FIELD.items():

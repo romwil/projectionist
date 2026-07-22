@@ -1,7 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { deleteTasteCluster, getTasteProfile, patchTasteProfile } from "../../api/client";
+import { deleteTasteCluster, getTasteProfile, patchTasteProfile, submitTasteQuiz } from "../../api/client";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
+
+const QUIZ_OPTIONS = [
+  "animation",
+  "comedy",
+  "adventure",
+  "family",
+  "fantasy",
+  "sci-fi",
+  "mystery",
+  "musical",
+];
 
 function formatWeight(weight) {
   const n = Number(weight);
@@ -16,6 +27,8 @@ export default function TasteSettingsPage() {
   const [drafts, setDrafts] = useState({});
   const [status, setStatus] = useState(null);
   const [error, setError] = useState("");
+  const [quizLikes, setQuizLikes] = useState([]);
+  const [quizBusy, setQuizBusy] = useState(false);
 
   function reload() {
     setLoading(true);
@@ -124,6 +137,54 @@ export default function TasteSettingsPage() {
       {error ? <p className="status status-error">{error}</p> : null}
 
       <form onSubmit={handleSave}>
+        <SettingsPanel title="Quick taste quiz">
+          <p className="settings-field-hint">
+            Tap a few moods you like — we seed your taste weights so rails and chat start closer to you.
+          </p>
+          <div className="taste-quiz-chips" data-testid="taste-quiz-chips">
+            {QUIZ_OPTIONS.map((tag) => {
+              const on = quizLikes.includes(tag);
+              return (
+                <button
+                  key={tag}
+                  type="button"
+                  className={`taste-quiz-chip${on ? " is-on" : ""}`}
+                  data-testid={`taste-quiz-${tag}`}
+                  onClick={() =>
+                    setQuizLikes((prev) =>
+                      on ? prev.filter((t) => t !== tag) : [...prev, tag],
+                    )
+                  }
+                >
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+          <button
+            type="button"
+            className="primary"
+            disabled={quizBusy || !quizLikes.length}
+            data-testid="taste-quiz-submit"
+            onClick={async () => {
+              setQuizBusy(true);
+              setStatus(null);
+              try {
+                await submitTasteQuiz({ likes: quizLikes });
+                setStatus({ type: "success", message: "Taste quiz saved." });
+                setQuizLikes([]);
+                reload();
+              } catch (err) {
+                setStatus({ type: "error", message: err.message || "Quiz failed." });
+              } finally {
+                setQuizBusy(false);
+              }
+            }}
+          >
+            {quizBusy ? "Saving…" : "Apply quiz picks"}
+          </button>
+        </SettingsPanel>
+
         <SettingsPanel title="Your clusters" testId="taste-clusters-panel">
           {!clusters.length ? (
             <p className="status status-secondary">

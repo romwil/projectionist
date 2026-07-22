@@ -1,0 +1,167 @@
+/* Distinct Youth + Guest shells (Delight Phase 4) */
+
+.app-root--youth {
+  --youth-poster-min: 9.5rem;
+}
+
+.app-root--youth .explore-card-rail .library-media-card,
+.app-root--youth .explore-card-rail .poster-wrap,
+.app-root--youth .feed-rail .library-media-card,
+.app-root--youth .title-card {
+  min-width: var(--youth-poster-min);
+}
+
+.app-root--youth .explore-card-rail .poster-wrap img,
+.app-root--youth .feed-rail .poster-wrap img {
+  min-height: 14rem;
+  object-fit: cover;
+}
+
+.app-root--youth .explore-hub-links {
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.app-root--youth .app-topbar-eyebrow,
+.youth-shell .app-topbar-eyebrow {
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.app-root--guest,
+.guest-shell {
+  background:
+    radial-gradient(ellipse at top, color-mix(in srgb, var(--accent, #c4a574) 18%, transparent), transparent 55%),
+    var(--bg, transparent);
+}
+
+.guest-tour-main {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 1.25rem 1.5rem 3rem;
+}
+
+.guest-tour-lede {
+  font-size: 1.05rem;
+  max-width: 40rem;
+  margin-bottom: 1.5rem;
+  color: var(--text-muted, var(--text));
+}
+
+.guest-tour-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin-bottom: 2rem;
+}
+
+.guest-tour-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1.1rem 1.15rem;
+  text-decoration: none;
+  color: inherit;
+  border: 1px solid color-mix(in srgb, var(--text) 14%, transparent);
+  background: color-mix(in srgb, var(--surface, var(--bg)) 88%, transparent);
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+
+.guest-tour-card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--accent, #c4a574) 55%, transparent);
+}
+
+.guest-tour-card-kind {
+  margin: 0;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+
+.guest-tour-card h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.guest-tour-card p {
+  margin: 0;
+  opacity: 0.85;
+}
+
+.guest-tour-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.access-request-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.access-request-row {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.access-request-email {
+  display: inline-block;
+  margin-left: 0.5rem;
+  opacity: 0.75;
+}
+
+.access-request-message {
+  margin: 0.4rem 0 0;
+}
+
+.access-request-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.taste-quiz-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.taste-quiz-chip {
+  border: 1px solid color-mix(in srgb, var(--text) 18%, transparent);
+  background: transparent;
+  color: inherit;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+
+.taste-quiz-chip.is-on {
+  border-color: color-mix(in srgb, var(--accent, #c4a574) 70%, transparent);
+  background: color-mix(in srgb, var(--accent, #c4a574) 18%, transparent);
+}
+
+.login-request-access {
+  margin-top: 1.25rem;
+}
+
+.login-request-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.05rem;
+}
+
+.login-request-access textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 3.5rem;
+}

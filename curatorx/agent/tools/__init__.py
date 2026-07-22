@@ -320,7 +320,7 @@ def _attach_query_cards(
             facet_matches: List[str] = []
             if filters is not None:
                 reason, facet_matches = build_facet_match_details(filters, item)
-            registry._cards.append(
+            registry._offer_card(
                 row_to_title_card(row, reason=reason, facet_matches=facet_matches)
             )
 
@@ -363,8 +363,10 @@ def _append_recommendation_cards(registry: "ToolRegistry", cards: List[TitleCard
         # Keep the historical aggregate for tool-to-tool enrichment, but mark this
         # card as the discussion subject so response rendering cannot substitute
         # earlier owned library context.
-        registry._cards.append(card)
-        registry._discussed_cards.append(card)
+        before = len(registry._cards)
+        registry._offer_card(card)
+        if len(registry._cards) > before:
+            registry._discussed_cards.append(card)
 
 
 def _excluded_add_tmdb_ids(db: Database, media_type: str) -> set[int]:
@@ -381,6 +383,7 @@ class ToolRegistry:
         user_id: Optional[str] = None,
         seerr_user_id: Optional[int] = None,
         user_role: Optional[str] = None,
+        is_youth: bool = False,
     ) -> None:
         self.db = db
         self.settings = settings
@@ -388,6 +391,7 @@ class ToolRegistry:
         self.user_id = user_id
         self.seerr_user_id = seerr_user_id
         self.user_role = user_role
+        self.is_youth = bool(is_youth)
         self._cards: List[TitleCard] = []
         self._discussed_cards: List[TitleCard] = []
         self._pending_token_entries: List[Dict[str, str]] = []
@@ -395,6 +399,30 @@ class ToolRegistry:
         self._suggested_replies: List[str] = []
         self._review_conflicts: List[Dict[str, Any]] = []
         self._review_prompts: List[Dict[str, Any]] = []
+
+    def _apply_youth_filters(self, filters: LibraryFilters) -> LibraryFilters:
+        if not self.is_youth:
+            return filters
+        from curatorx.youth.apply import apply_youth_gate_to_filters
+
+        class _YouthUser:
+            is_youth = True
+
+        return apply_youth_gate_to_filters(filters, user=_YouthUser(), settings=self.settings)
+
+    def _card_allowed(self, card: TitleCard) -> bool:
+        if not self.is_youth:
+            return True
+        from curatorx.youth.rating_gate import content_rating_allowed, resolve_youth_max_rating
+
+        return content_rating_allowed(
+            getattr(card, "content_rating", "") or "",
+            max_rating=resolve_youth_max_rating(self.settings),
+        )
+
+    def _offer_card(self, card: TitleCard) -> None:
+        if self._card_allowed(card):
+            self._cards.append(card)
 
     def _register_pending_token(self, token: str, action: str) -> None:
         self._pending_token_entries.append({"token": token, "action": action})
@@ -693,7 +721,7 @@ class ToolRegistry:
         )
 
     async def _tool_query_library(self, args: Mapping[str, Any]) -> str:
-        filters = filters_from_mapping(args)
+        filters = self._apply_youth_filters(filters_from_mapping(args))
         if filters.semantic_query:
             result = await query_library_async(self.db, filters, self.settings)
         else:
@@ -1362,7 +1390,9 @@ class ToolRegistry:
             return json.dumps({"error": "Provide tmdb_id, tvdb_id, or rating_key"})
         detail = get_title_detail(self.db, self.settings, **kwargs)
         card = TitleCard.model_validate(detail.model_dump())
-        self._cards.append(card)
+        if not self._card_allowed(card):
+            return json.dumps({"error": "Title not available under Youth content rules"})
+        self._offer_card(card)
         return json.dumps(_detail_to_tool_payload(detail, self.settings))
 
     async def _tool_explore_genre(self, args: Mapping[str, Any]) -> str:
@@ -1372,18 +1402,22 @@ class ToolRegistry:
         offset = int(args.get("offset") or 0)
         page_limit = int(args.get("limit") or 16)
 
-        filters = LibraryFilters(
-            media_type=media_type,
-            genres=[genre] if genre else [],
-            offset=offset,
-            limit=page_limit,
+        filters = self._apply_youth_filters(
+            LibraryFilters(
+                media_type=media_type,
+                genres=[genre] if genre else [],
+                offset=offset,
+                limit=page_limit,
+            )
         )
         owned_result = query_library(self.db, filters)
         owned_cards: List[TitleCard] = []
         for item in owned_result["items"]:
             row = self.db.library_item_by_id(int(item["id"]))
             if row is not None:
-                owned_cards.append(row_to_title_card(row, reason=f"In library · {genre.title()}"))
+                card = row_to_title_card(row, reason=f"In library · {genre.title()}")
+                if self._card_allowed(card):
+                    owned_cards.append(card)
         missing_cards: List[TitleCard] = []
 
         if include_missing and self.settings.tmdb_api_key:
@@ -1408,6 +1442,8 @@ class ToolRegistry:
                     )
                     if card.in_radarr or card.in_sonarr:
                         continue
+                    if not self._card_allowed(card):
+                        continue
                     missing_cards.append(card)
                     if len(missing_cards) >= page_limit:
                         break
@@ -1415,7 +1451,8 @@ class ToolRegistry:
         if include_missing:
             _append_recommendation_cards(self, missing_cards)
         else:
-            self._cards.extend(owned_cards)
+            for card in owned_cards:
+                self._offer_card(card)
 
         response_items = [_card_to_tool_item(c) for c in owned_cards + missing_cards]
         return json.dumps(
@@ -2033,7 +2070,7 @@ class ToolRegistry:
                 dict(row),
                 reason=context,
             )
-            self._cards.append(card)
+            self._offer_card(card)
             items.append({**_card_to_tool_item(card), "anniversary_context": context})
 
         return json.dumps({"items": items, "count": len(items)})
@@ -2118,7 +2155,7 @@ class ToolRegistry:
             reason = f"{runtime} min" if runtime else "Unwatched"
             card = row_to_title_card(dict(row), reason=reason)
             cards.append(card)
-            self._cards.append(card)
+            self._offer_card(card)
 
         return json.dumps({
             "items": [_card_to_tool_item(c) for c in cards],
@@ -2187,8 +2224,8 @@ class ToolRegistry:
 
         card_a = row_to_title_card(title_a_row, reason="Double feature — first half")
         card_b = row_to_title_card(title_b_row, reason="Double feature — second half")
-        self._cards.append(card_a)
-        self._cards.append(card_b)
+        self._offer_card(card_a)
+        self._offer_card(card_b)
 
         runtime_a = title_a_row.get("runtime_minutes") or 0
         runtime_b = title_b_row.get("runtime_minutes") or 0
@@ -2258,7 +2295,7 @@ class ToolRegistry:
         item = dict(row)
         item["genres"] = json.dumps(genres_list)
         card = row_to_title_card(item, reason=reason)
-        self._cards.append(card)
+        self._offer_card(card)
 
         return json.dumps({
             "quick_pick": True,
@@ -2646,6 +2683,7 @@ def build_system_prompt(
     persona_id: Optional[str] = None,
     user_id: Optional[str] = None,
     user_role: Optional[str] = None,
+    is_youth: bool = False,
 ) -> str:
     """Assemble the full system prompt for the Curator agent.
 
@@ -2749,4 +2787,17 @@ def build_system_prompt(
         f"{lens_block}\n\n"
         + _user_memory_context_block(db, user_id, user_role)
         + preference_context(db, lens_id=resolved, user_id=user_id)
+        + _youth_guardrails_block(db, user_id=user_id, is_youth=is_youth)
     )
+
+
+def _youth_guardrails_block(
+    db: Database,
+    *,
+    user_id: Optional[str],
+    is_youth: bool,
+) -> str:
+    from curatorx.youth.guardrails import resolve_is_youth, youth_system_prompt_block
+
+    youth = bool(is_youth) or resolve_is_youth(user_id=user_id, db=db)
+    return youth_system_prompt_block(is_youth=youth)

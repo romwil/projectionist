@@ -110,7 +110,7 @@ Open **Explore → Engagement** (or the Engagement hub card) for:
 - **Cinema courses** — published ordered collections with step progress
 - **Explainers** — short notes on taste weights, courses, and the weekly rail
 
-Youth-safe presets for these same tables arrive in a later phase; the substrate is shared.
+Youth-mode accounts see **youth-safe** badges, challenges, and explainers only (including Ask the curator and why some titles stay hidden).
 
 **Where can I watch this?** On title detail (and on chat recommendation posters) CuratorX shows a compact availability line: **In your library ✓**, **Requestable** (when Seerr is your request path), or **Not here yet**. It does not look up Netflix, Max, or other external streamers.
 
@@ -208,6 +208,14 @@ The curator keeps two kinds of memory:
 - **Your private memory** — preferences, stated goals, watch intentions, and follow-ups for *your* account only. It's surfaced back to you at the start of a conversation (including a "resume where we left off" nudge) and is never shared with, or applied to, another household member. Youth-mode accounts show a badge in **Profile**; only those accounts can be reviewed by the owner for moderation.
 
 **Your private memory is yours.** CuratorX can hand you a full copy or permanently delete everything it remembers for your account — private notes, chat transcripts, saved library pages, and preference facts. See the [Privacy](/privacy) page for exactly what that export and purge cover, and how to run them.
+
+### Youth mode
+
+If your account has **Youth mode** on, CuratorX uses a distinct big-poster layout with a simpler menu (**Ask**, **Browse**, **My list**, **Badges**). Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
+
+### Guest tour
+
+Signed-in **guests** land in a tour shell. Open **What's great** for published collections your host shared, then browse or ask without destructive actions. Visitors who are not signed in yet can **Request access** on the login page — that queue is owned by CuratorX (not Seerr); the owner approves from **Admin → Access requests**.
 
 ---
 
@@ -401,6 +409,23 @@ curl -s -X POST http://localhost:8788/api/admin/mail/test \
 ```
 
 **How it works / honest limits.** One provider is active at a time (`smtp` or `resend`). Empty password / API-key fields on save keep the previously stored secret. Without mail configured, notifications still appear in the in-app inbox.
+
+### Youth gate & guest access requests
+
+Under **Admin → Household**, set **Youth max content rating** (default `PG-13`). Youth-mode members never see empty/`content_rating` titles or anything above that max — browse, feeds, title detail, and chat cards all fail closed.
+
+```bash
+# Inspect current youth gate (owner session cookie)
+curl -s http://localhost:8788/api/settings | jq '.youth'
+
+# List pending CuratorX access requests (not Seerr)
+curl -s http://localhost:8788/api/admin/access-requests?status=pending
+
+# Approve → creates a local member + one-time password when local login is on
+curl -s -X POST http://localhost:8788/api/admin/access-requests/REQUEST_ID/approve
+```
+
+Visitors submit **Request access** on `/login` (`POST /api/access-requests`). Approvals also notify you via the inbox (`access-request` kind) and email when mail is configured. Seerr stays for post-member *media* requests only. Manage the queue in **Admin → Access requests**.
 
 ### Memory & privacy controls (owner)
 

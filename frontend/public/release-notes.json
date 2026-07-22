@@ -1,6 +1,45 @@
 {
-  "generated_at": "2026-07-22T00:58:59Z",
+  "generated_at": "2026-07-22T01:16:34Z",
   "releases": [
+    {
+      "version": "1.23.0",
+      "date": "2026-07-22",
+      "summary": "Phase 4 of the delight program: distinct Youth and Guest doors — a fail-closed content-rating gate, youth-safe engagement and chat voice, a guest tour shell, and a CuratorX-owned request-access queue for owners.",
+      "highlights": [
+        "**A Youth home that feels different.** Youth accounts get their own shell and nav, age-gated browse/chat results, and friendlier engagement prompts — not a thinner adult chrome.",
+        "**Guests can look around safely.** A guest tour shows what CuratorX is like before anyone joins the household.",
+        "**Ask to join from the login screen.** Visitors can request access; owners approve or deny from **Admin → Access**, with inbox (and optional email) notify.",
+        "**Owners set the Youth ceiling.** Household config picks the max content rating (default PG-13); empty or unrated titles stay hidden for Youth."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "**Fail-closed Youth content-rating gate** — `curatorx/youth/` normalize/rank US movie+TV ratings; `LibraryFilters.youth_max_content_rating`; applied on library query/export/aggregate, title detail, person facet fallback, and agent offer cards. Default max **PG-13** via `YouthSettings` in `settings.json`.",
+            "**Youth chat guardrails + persona preference** — system-prompt block for Youth turns; frontend prefers a youth-friendly persona when available.",
+            "**Youth engagement presets** — story-explorer / family-picks / rate-3 / ask-curator seeds; `rate-10-films` forced non-youth-safe.",
+            "**Distinct YouthShell + GuestShell** — `resolveMemberShell` / root CSS classes; youth/guest nav; guest tour page (`GET /api/guest/tour`); styles in `11-youth-guest.css`.",
+            "**CuratorX access-request queue** — public `POST /api/access-requests`; owner list/approve/deny under `/api/admin/access-requests`; local member + temp password on approve when local login is enabled; owner notify via `access-request` kind.",
+            "**Youth likes extras** — taste quiz chips (`POST /api/taste/quiz`) and Explore **Pick for me** (`GET /api/library/feeds/pick-for-me`).",
+            "**HELP** Youth mode, Guest tour, and owner gate / access-request curls; wishlist Phase 4 marked shipped."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**`resolve_is_youth` with sqlite3.Row** — bracket-key access so Youth resolution no longer AttributeErrors during system-prompt assembly."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` **1238 passed**, 4 skipped (27 subtests) at **78.14%** total coverage (`--cov-fail-under=74`). New coverage in `tests/test_youth_guest_phase4.py`.",
+            "Frontend `node --test` unit suite **416 passed** (includes `memberShell.test.mjs`, `youthPersona.test.mjs`). ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.",
+            "`test_version` lockstep holds at **1.23.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.22.1",
       "date": "2026-07-22",

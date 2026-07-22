@@ -34,6 +34,8 @@ import LibraryPage from "./pages/LibraryPage";
 import MediaIssuesPage from "./pages/MediaIssuesPage";
 import YouthReviewPage from "./pages/YouthReviewPage";
 import MailSettingsPage from "./pages/MailSettingsPage";
+import AccessRequestsPage from "./pages/AccessRequestsPage";
+import GuestTourPage from "./pages/GuestTourPage";
 import { BulkActionProgressProvider } from "./components/BulkActionProgress";
 import WhatsNewGate from "./components/WhatsNewGate";
 import "./styles.css";
@@ -58,6 +60,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="/lists/:listId" element={<ListsPage />} />
           <Route path="/collections" element={<CollectionsPage />} />
           <Route path="/collections/:listId" element={<CollectionsPage />} />
+          <Route path="/tour" element={<GuestTourPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/about" element={<AboutPage />} />
@@ -69,6 +72,7 @@ createRoot(document.getElementById("root")).render(
             <Route path="tasks" element={<ScheduledTasksPage />} />
             <Route path="issues" element={<MediaIssuesPage />} />
             <Route path="youth" element={<YouthReviewPage />} />
+            <Route path="access" element={<AccessRequestsPage />} />
             <Route path="mail" element={<MailSettingsPage />} />
             <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
             <Route path=":section" element={<ConfigPage />} />

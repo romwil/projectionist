@@ -10,6 +10,7 @@ import {
   getExploreFeedRecentlyAdded,
   getExploreFeedRevisitThese,
   getExploreFeedSeasonalSpotlight,
+  getPickForMeFeed,
   getLibraryHealth,
   getLibraryOverview,
   queryLibrary,
@@ -209,7 +210,7 @@ function useFeed(loader, deps = []) {
 }
 
 export default function ExplorePage() {
-  const { isOwner, multiUserEnabled } = useAuthGate();
+  const { isOwner, multiUserEnabled, isYouth } = useAuthGate();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [recommendItem, setRecommendItem] = useState(null);
@@ -217,6 +218,7 @@ export default function ExplorePage() {
   const [searchQuery, setSearchQuery] = useState("");
   const continueWatching = useFeed(() => getExploreFeedContinueWatching({ limit: 12 }), []);
   const forYou = useFeed(() => getExploreFeedForYou({ limit: 12 }), []);
+  const pickForMe = useFeed(() => getPickForMeFeed({ limit: 8 }), []);
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
   const revisitThese = useFeed(() => getExploreFeedRevisitThese({ limit: 20, idleDays: 60 }), []);
@@ -449,6 +451,35 @@ export default function ExplorePage() {
             {...recommendProps}
           />
         </ExploreSection>
+
+        {isYouth ? (
+          <ExploreSection
+            id="pick-for-me"
+            title="Pick for me"
+            subtitle="Spin up a handful of age-friendly titles you haven't watched yet"
+            isOwner={isOwner}
+            empty={
+              pickForMe.error ||
+              (!pickForMe.loading && !pickForMe.items.length
+                ? "No picks right now — try Ask instead."
+                : null)
+            }
+          >
+            <FeedRail
+              testId="explore-pick-for-me-rail"
+              items={pickForMe.items}
+              loading={pickForMe.loading}
+              chatHref={
+                pickForMe.items.length
+                  ? chatFromRailHref({
+                      railTitle: "Pick for me",
+                      items: pickForMe.items,
+                    })
+                  : null
+              }
+            />
+          </ExploreSection>
+        ) : null}
 
         <ExploreSection
           id="for-you"

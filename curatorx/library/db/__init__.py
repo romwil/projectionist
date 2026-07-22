@@ -52,6 +52,7 @@ from ._watchlist import WatchlistMixin
 from ._recommendations import RecommendationsMixin
 from ._notifications import NotificationsMixin
 from ._engagement import EngagementMixin
+from ._access_requests import AccessRequestsMixin
 from ._curated_lists import CuratedListsMixin
 from ._media_issues import MediaIssuesMixin
 
@@ -73,6 +74,7 @@ class Database(
     RecommendationsMixin,
     NotificationsMixin,
     EngagementMixin,
+    AccessRequestsMixin,
     CuratedListsMixin,
     MediaIssuesMixin,
 ):

@@ -547,6 +547,36 @@ export async function getPublishedCollection(listId) {
   return api(`/collections/${encodeURIComponent(listId)}`);
 }
 
+/** Guest tour — what's great here over published collections. */
+export async function getGuestTour() {
+  return api("/guest/tour");
+}
+
+export async function createAccessRequest(payload) {
+  return api("/access-requests", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listAccessRequests({ status } = {}) {
+  const search = new URLSearchParams();
+  if (status) search.set("status", status);
+  return api(`/admin/access-requests${search.toString() ? `?${search}` : ""}`);
+}
+
+export async function approveAccessRequest(requestId) {
+  return api(`/admin/access-requests/${encodeURIComponent(requestId)}/approve`, {
+    method: "POST",
+  });
+}
+
+export async function denyAccessRequest(requestId) {
+  return api(`/admin/access-requests/${encodeURIComponent(requestId)}/deny`, {
+    method: "POST",
+  });
+}
+
 export async function createMediaIssue(payload) {
   return api("/media-issues", {
     method: "POST",
@@ -601,6 +631,18 @@ export async function patchTasteProfile(clusters) {
 
 export async function deleteTasteCluster(clusterTag) {
   return api(`/taste/${encodeURIComponent(clusterTag)}`, { method: "DELETE" });
+}
+
+export async function submitTasteQuiz({ likes = [], dislikes = [] } = {}) {
+  return api("/taste/quiz", {
+    method: "POST",
+    body: JSON.stringify({ likes, dislikes }),
+  });
+}
+
+export async function getPickForMeFeed({ limit = 8 } = {}) {
+  const search = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/feeds/pick-for-me?${search}`);
 }
 
 /** Owner-only: review a Youth-flagged account's memory notes (fail-closed on the server). */

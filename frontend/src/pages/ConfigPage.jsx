@@ -604,6 +604,13 @@ export default function ConfigPage() {
     }));
   }
 
+  function updateYouthSettings(patch) {
+    setSettings((prev) => ({
+      ...prev,
+      youth: { ...(prev?.youth || {}), ...patch },
+    }));
+  }
+
   async function refreshManagedUsers() {
     if (!settings?.features?.multi_user_enabled) {
       setManagedUsers([]);
@@ -1955,6 +1962,37 @@ export default function ConfigPage() {
                 ) : (
                   <p className="wizard-note">Sign in as owner to manage household users.</p>
                 )}
+                <label className="config-field" data-testid="youth-max-rating-field">
+                  <span>Youth max content rating</span>
+                  <select
+                    value={settings?.youth?.max_content_rating || "PG-13"}
+                    onChange={(event) => {
+                      const max_content_rating = event.target.value;
+                      updateYouthSettings({ max_content_rating });
+                      persistSettings({
+                        youth: { ...(settings.youth || {}), max_content_rating },
+                      })
+                        .then(() =>
+                          setActionFeedback(
+                            "users",
+                            "success",
+                            `Youth max rating set to ${max_content_rating}. Unrated titles stay hidden.`,
+                          ),
+                        )
+                        .catch((error) => setActionFeedback("users", "error", error.message));
+                    }}
+                    data-testid="youth-max-rating"
+                  >
+                    {["G", "PG", "PG-13", "R", "TV-Y", "TV-Y7", "TV-G", "TV-PG", "TV-14"].map((rating) => (
+                      <option key={rating} value={rating}>
+                        {rating}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="wizard-note">
+                    Youth-mode accounts never see empty ratings or anything above this max (fail-closed).
+                  </span>
+                </label>
               </>
             ) : null}
           </section>

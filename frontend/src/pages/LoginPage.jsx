@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   formatApiError,
   getFeatures,
+  createAccessRequest,
   loginWithLocal,
   loginWithPlex,
   pollPlexPinLogin,
@@ -29,6 +30,11 @@ export default function LoginPage() {
 
   const [localUsername, setLocalUsername] = useState("");
   const [localPassword, setLocalPassword] = useState("");
+  const [requestName, setRequestName] = useState("");
+  const [requestEmail, setRequestEmail] = useState("");
+  const [requestMessage, setRequestMessage] = useState("");
+  const [requestStatus, setRequestStatus] = useState(null);
+  const [requestBusy, setRequestBusy] = useState(false);
 
   useEffect(() => {
     getFeatures()
@@ -333,6 +339,94 @@ export default function LoginPage() {
             </form>
           </div>
         ) : null}
+
+        <div className="login-form login-request-access" data-testid="request-access-section">
+          {plexEnabled || oidcEnabled || localEnabled ? methodDivider : null}
+          <h2 className="login-request-title">Request access</h2>
+          <p className="login-help">
+            Visiting? Ask the household owner to invite you — no Seerr account required.
+          </p>
+          <form
+            onSubmit={async (event) => {
+              event.preventDefault();
+              setRequestBusy(true);
+              setRequestStatus(null);
+              try {
+                await createAccessRequest({
+                  display_name: requestName.trim(),
+                  email: requestEmail.trim() || undefined,
+                  message: requestMessage.trim() || undefined,
+                });
+                setRequestStatus({
+                  type: "success",
+                  message: "Request sent. The owner will see it in their inbox.",
+                });
+                setRequestName("");
+                setRequestEmail("");
+                setRequestMessage("");
+              } catch (err) {
+                setRequestStatus({
+                  type: "error",
+                  message: formatApiError(err) || "Could not send request.",
+                });
+              } finally {
+                setRequestBusy(false);
+              }
+            }}
+          >
+            <label className="login-field">
+              <span>Your name</span>
+              <input
+                type="text"
+                data-testid="access-request-name"
+                value={requestName}
+                onChange={(e) => setRequestName(e.target.value)}
+                placeholder="Name"
+                required
+                minLength={2}
+                disabled={requestBusy}
+              />
+            </label>
+            <label className="login-field">
+              <span>Email (optional)</span>
+              <input
+                type="email"
+                data-testid="access-request-email"
+                value={requestEmail}
+                onChange={(e) => setRequestEmail(e.target.value)}
+                placeholder="you@example.com"
+                disabled={requestBusy}
+              />
+            </label>
+            <label className="login-field">
+              <span>Note (optional)</span>
+              <textarea
+                data-testid="access-request-message"
+                value={requestMessage}
+                onChange={(e) => setRequestMessage(e.target.value)}
+                placeholder="How do you know this household?"
+                rows={2}
+                disabled={requestBusy}
+              />
+            </label>
+            {requestStatus ? (
+              <p
+                className={`status ${requestStatus.type === "error" ? "status-error" : "status-success"}`}
+                data-testid="access-request-status"
+              >
+                {requestStatus.message}
+              </p>
+            ) : null}
+            <button
+              type="submit"
+              className="login-secondary"
+              data-testid="access-request-submit"
+              disabled={requestBusy || requestName.trim().length < 2}
+            >
+              {requestBusy ? "Sending…" : "Send request"}
+            </button>
+          </form>
+        </div>
 
         <p className="login-footer">
           <Link to="/help" data-testid="help-link">

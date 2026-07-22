@@ -80,6 +80,7 @@ export function useAuthGate({ redirect = true } = {}) {
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
   const [isOwner, setIsOwner] = useState(true);
   const [role, setRole] = useState("owner");
+  const [isYouth, setIsYouth] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +95,7 @@ export function useAuthGate({ redirect = true } = {}) {
         if (!enabled) {
           setIsOwner(true);
           setRole("owner");
+          setIsYouth(false);
           setAuthReady(true);
           try {
             const me = await getAuthMe();
@@ -116,6 +118,7 @@ export function useAuthGate({ redirect = true } = {}) {
           }
           setIsOwner(false);
           setRole("guest");
+          setIsYouth(false);
           setAuthReady(true);
           return;
         }
@@ -127,6 +130,7 @@ export function useAuthGate({ redirect = true } = {}) {
         const nextRole = String(me.user?.role || "guest").toLowerCase();
         setRole(nextRole === "owner" || nextRole === "member" || nextRole === "guest" ? nextRole : "guest");
         setIsOwner(nextRole === "owner");
+        setIsYouth(Boolean(me.user?.is_youth));
         setAuthReady(true);
       } catch {
         if (cancelled) return;
@@ -138,11 +142,13 @@ export function useAuthGate({ redirect = true } = {}) {
           }
           setIsOwner(false);
           setRole("guest");
+          setIsYouth(false);
           setAuthReady(true);
           return;
         }
         setIsOwner(true);
         setRole("owner");
+        setIsYouth(false);
         setAuthReady(true);
       }
     }
@@ -153,5 +159,5 @@ export function useAuthGate({ redirect = true } = {}) {
     };
   }, [navigate, redirect]);
 
-  return { authReady, multiUserEnabled, isOwner, role };
+  return { authReady, multiUserEnabled, isOwner, role, isYouth };
 }

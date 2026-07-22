@@ -19,8 +19,8 @@ The delight work is sequenced by *who* it serves, easiest-to-reach substrate fir
 | ----- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------- |
 | **1** | Curator memory foundation — cited knowledge, follow-ups, fail-closed per-user memory                                          | The AI curators (Scholar, Concierge, Companion) | ✅ Shipped **1.10.0** |
 | **2** | Owner delight tools — health hero, safe grooming undo, collections/courses, Youth review, weekly digest                       | Owner / Curator                                 | ✅ Shipped **1.16.0** |
-| **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | 🔜 P3a ✅ **1.20.0**; P3b ✅ **1.21.0**; P3c ✅ **1.22.0** |
-| **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, CuratorX request-access    | Youth members, guests                           | 🔜 Planned           |
+| **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | ✅ P3a **1.20.0**; P3b **1.21.0**; P3c **1.22.0** |
+| **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, CuratorX request-access    | Youth members, guests                           | ✅ Shipped **1.23.0** |
 | **5** | Curator depth — Enthusiast nudge (no live now-watching), Scholar syllabus, Concierge acquire path, Companion mood + callbacks | The four curator archetypes                     | 🔜 Planned           |
 
 
@@ -112,22 +112,22 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 
 
 
-### Phase 4 — Distinct youth + guest doors
+### Phase 4 — Distinct youth + guest doors ✅ Shipped **1.23.0**
 
 **Why this matters / who it delights.** Two audiences share a theme: people who need a *gentler, narrower* CuratorX. Younger household members need age-appropriate results and a friendly voice; guests need to look around safely before they join. Owners already got the Youth **moderation** side in 1.16.0 (the Youth review dashboard and fail-closed youth memory); Phase 4 builds the **member-facing** youth experience and a welcoming guest tour — as **distinct shells**, not a thinner adult chrome.
 
 **Youth member**
 
-- **Must:** fail-closed content-rating gate on browse + chat results (hide empty/`content_rating` and ratings above the owner-configured max); moderated memory; a clear, friendly youth persona; **distinct big-poster youth layout**. *Build on:* the youth role, fail-closed per-user memory (`UserMemoryService`, owner review shipped 1.16.0), `sanitize_library_payload`, and existing MediaBrowse components.
-- **Love:** youth-safe engagement presets on the Phase 3 substrate; ask-the-curator guardrails; gentle explainers. *Build on:* Phase 3 badges/streaks/courses — Phase 4 presets them for youth rather than inventing a second reward model.
-- **Like:** themed kid rails and a pick-for-me spinner (if capacity allows).
+- **Must:** ✅ fail-closed content-rating gate on browse + chat results (hide empty/`content_rating` and ratings above the owner-configured max); moderated memory; a clear, friendly youth persona default; **distinct big-poster youth layout**.
+- **Love:** ✅ youth-safe engagement presets on the Phase 3 substrate; ask-the-curator guardrails; gentle explainers.
+- **Like:** ✅ themed kid **Pick for me** spinner; taste quiz seeding Phase 3 profile.
 
 **Guest / visitor**
 
-- **Must (substrate ✅):** browse without owner-only data; an obvious sign-in route; no destructive actions. *Status:* largely **shipped** — the guest role plus `sanitize_library_payload` already gate owner-only data and destructive actions.
-- **Must (new UX):** distinct guest layout / tour shell.
-- **Love:** a public-friendly "what's great here" tour over published collections; **CuratorX-owned request-access** queue → owner inbox (+ email if configured); approve → invite/member. Do not require prior Seerr login. Seerr remains for *media* requests after membership.
-- **Like:** a taste quiz that can seed a Phase 3 profile after joining.
+- **Must (substrate ✅):** browse without owner-only data; an obvious sign-in route; no destructive actions.
+- **Must (new UX):** ✅ distinct guest layout / tour shell.
+- **Love:** ✅ a public-friendly "what's great here" tour over published collections; **CuratorX-owned request-access** queue → owner inbox (+ email if configured); approve → invite/member. Do not require prior Seerr login. Seerr remains for *media* requests after membership.
+- **Like:** ✅ a taste quiz that can seed a Phase 3 profile after joining.
 
 ---
 
@@ -191,7 +191,7 @@ The phases above are drawn from this backlog. It stays as the living, persona-or
 
 
 
-### Youth member — *Phase 4*
+### Youth member — *Phase 4 ✅ 1.23.0*
 
 - **Must:** fail-closed content-rating gate (hide unrated); moderated memory; friendly youth persona; **distinct big-poster youth layout**.
 - **Love:** youth-safe engagement presets on Phase 3 substrate; ask-the-curator guardrails; gentle explainers.
@@ -199,7 +199,7 @@ The phases above are drawn from this backlog. It stays as the living, persona-or
 
 
 
-### Guest / visitor — *Phase 4*
+### Guest / visitor — *Phase 4 ✅ 1.23.0*
 
 - **Must (✅ substrate):** browse sanitized; sign-in route; no destructive actions.
 - **Must (new UX):** distinct guest layout / tour shell.
