@@ -503,6 +503,7 @@ export default function ExplorePage() {
               forYou.items.length
                 ? chatFromRailHref({
                     railTitle: forYou.meta?.title || "For you this week",
+                    railId: forYou.meta?.rail_id,
                     items: forYou.items,
                   })
                 : null

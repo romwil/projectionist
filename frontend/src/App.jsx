@@ -88,6 +88,7 @@ import {
   normalizeUiTheme,
 } from "./lib/uiPrefs.js";
 import {
+  chatFromRailItems,
   chatFromRailPrompt,
   isRateFlowRequest,
   isWatchlistPanelRequest,
@@ -98,6 +99,7 @@ import {
   stripRateFlowParam,
   stripWatchlistPanelParam,
 } from "./lib/backNav.js";
+import { mergeRailSeedCards, takeRailSeed } from "./lib/railChatSeed.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import { applyOptimisticPinToggle, upsertPin } from "./lib/optimisticWatchlist.js";
 import ChatThread from "./components/ChatThread";
@@ -211,6 +213,7 @@ export default function App() {
   const rateFlowStartedRef = useRef(false);
   const recommendLikeStartedRef = useRef(false);
   const chatFromRailStartedRef = useRef(false);
+  const chatFromRailSeedRef = useRef(null);
   const savedLibraryStartedRef = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -941,6 +944,11 @@ export default function App() {
         },
         onDone: (data) => {
           let assistantMessage = mergeStreamedBlocks(data.message, streamAccumulated);
+          const railSeed = chatFromRailSeedRef.current;
+          if (railSeed?.length) {
+            assistantMessage = mergeRailSeedCards(assistantMessage, railSeed);
+            chatFromRailSeedRef.current = null;
+          }
           if (perfectPickPendingRef.current) {
             assistantMessage = appendPerfectPickAck(assistantMessage);
             perfectPickPendingRef.current = false;
@@ -1031,6 +1039,10 @@ export default function App() {
       return;
     }
     chatFromRailStartedRef.current = true;
+    const packedItems = chatFromRailItems(searchParams);
+    const stashed = takeRailSeed();
+    chatFromRailSeedRef.current =
+      stashed?.items?.length ? stashed.items : packedItems.length ? packedItems : null;
     setSearchParams(stripChatFromRailParam(searchParams), { replace: true });
     sendMessage(prompt);
   }, [authReady, threadsReady, loading, searchParams, setSearchParams]);

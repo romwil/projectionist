@@ -79,19 +79,19 @@ Saved pages preserve the structured text, title cards, and reply chips. From the
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — in-progress titles from Plex On Deck (resume + Play), not a live "now playing" session list
-- **For you this week** — personalized unwatched picks with a short persona-voiced *why* (built on the weekly digest cadence)
+- **For you this week** — personalized unwatched picks with a short persona-voiced *why* (built on the weekly digest cadence). Tap **Why this?** on a card, or use **Chat about these** to discuss the same saved picks with those reasons attached.
 - **Recently Added** and **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
 - **On This Day**
 - A daily-rotating **director filmography** and **genre**, plus a nearby calendar-occasion rail (holidays and observances, including Arbor Day) or a gentle season-of-the-year fallback
 
-**Chat about a rail.** Most Explore rails offer **Chat about these** — it opens a new conversation seeded with that rail's titles (and the persona *why* when present), so you can refine the shortlist without retyping context.
+**Chat about a rail.** Most Explore rails offer **Chat about these** — it opens a new conversation seeded with that rail's titles, stable library identities, and the persona *why* when present, so the curator discusses those same in-library picks (not outside search replacements).
 
 Those discovery rails only appear when your library has enough matching metadata, and their headings open the matching director or genre wall.
 
 ### For you weekly rail
 
-Your **For you** rail is rebuilt about once a week alongside the library digest. It prefers unwatched titles that match your taste clusters and writes a short reason in your default curator's voice.
+Your **For you** rail is rebuilt about once a week alongside the library digest. It prefers unwatched titles that match your taste clusters, saves each pick with its library id and a short reason in your default curator's voice, and surfaces that reason on **Why this?** and when you **Chat about these**.
 
 Tune the underlying weights under **Settings → Taste** — raise a cluster, lower another, and **Lock** anything you don't want the automatic refresh to drift. Locked weights stay put; unlocked ones can still learn from reviews and chat feedback.
 

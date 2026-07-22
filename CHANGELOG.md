@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.25.1] — 2026-07-22
+
+Chat-from-rail and For you reliability: curated picks keep stable library ids and per-title why reasons into chat, the poster strip matches the rail you came from, and kebab copy/save confirmations flash clearly.
+
+### Highlights
+- **Chat about these remembers the rail.** For you (and other curated lists) carry each title’s library id and short why into chat — no more “which Michael?” confusion.
+- **Posters stay on the picks you asked about.** The chat strip shows the same in-library titles from the rail, not random outside-library Add cards.
+- **Why this? stays with the pick.** Weekly For you reasons are saved with each title and show up on cards and in the seeded chat intro.
+- **Copy link is obvious.** Kebab success (“Library link copied.” and friends) flashes as a clear toast in Lights Up and Lights Down.
+
+### Fixed
+- **Chat-from-rail** (`chatFromRailHref` / `chatFromRailPrompt`) now encodes a compact `rail_pack` of id / `rating_key` / media type / year / why, stashes full poster payloads in sessionStorage, and instructs the agent to use library lookups — not TMDB replacements.
+- Assistant poster strip for chat-from-rail merges seeded in-library cards over external Add/Radarr results (`mergeRailSeedCards`).
+- **For you feed** normalizes persisted rail items with `recommendation_reason`, `in_library`, and `rail_id` for Why this? and deep links.
+- **Share / poster kebab** confirmations close the menu and show a high-contrast `menu-action-flash` toast instead of tiny muted text inside the open menu.
+
+### Verification
+- Backend `pytest` **1251 passed**, 4 skipped (27 subtests) at **78.01%** total coverage (`--cov-fail-under=74`). Includes strengthened `test_weekly_rail_persists_items_with_why` (ids + why + feed `recommendation_reason`).
+- Frontend `node --test` unit suite **436 passed**. ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- `test_version` lockstep holds at **1.25.1** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.25.0] — 2026-07-22
 
 Top-level navigation elevation: Search, Chat, Explore, Inbox, Admin, My Journey, and Settings are peer toolbar destinations; achievements become **My Journey** with list and Civ-style trees; public chrome cleanup, Take a Tour, and centered poster-rail loaders.

@@ -26,16 +26,29 @@ export default function ShareActionMenu({
   label = "Share and export",
 }) {
   const [savedPage, setSavedPage] = useState(page || null);
-  const [status, setStatus] = useState("");
+  const [flash, setFlash] = useState("");
   const savePromiseRef = useRef(null);
+  const flashTimerRef = useRef(null);
   const { open, setOpen, rootRef, popoverRef, popoverStyle } = useAnchoredPopover({
     closeOnEscape: true,
     anchorSelector: ".share-action-grip",
     placement: placeShareMenu,
-    repositionKey: status,
   });
 
   useEffect(() => setSavedPage(page || null), [page]);
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    };
+  }, []);
+
+  function showFlash(message) {
+    setOpen(false);
+    setFlash(message);
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => setFlash(""), 2800);
+  }
 
   async function ensureSaved() {
     if (savedPage?.id) return savedPage;
@@ -60,28 +73,30 @@ export default function ShareActionMenu({
     try {
       const item = await ensureSaved();
       const url = libraryUrl(item.id);
-      if (action === "save") setStatus("Saved to your library.");
+      if (action === "save") showFlash("Saved to your library.");
       if (action === "copy") {
         await navigator.clipboard?.writeText(url);
-        setStatus("Library link copied.");
+        showFlash("Library link copied.");
       }
       if (action.startsWith("export:")) {
         window.open(`/api/saved-library/${encodeURIComponent(item.id)}/export?format=${action.slice(7)}`, "_blank", "noopener");
-        setStatus("Export opened.");
+        showFlash("Export opened.");
       }
       if (action === "pdf") {
         window.open(`${url}?print=1`, "_blank", "noopener");
-        setStatus("Print view opened.");
+        showFlash("Print view opened.");
       }
       if (action === "more") {
-        if (navigator.share) await navigator.share({ title: item.name, url });
-        else {
+        if (navigator.share) {
+          await navigator.share({ title: item.name, url });
+          showFlash("Shared.");
+        } else {
           await navigator.clipboard?.writeText(url);
-          setStatus("System share is unavailable; link copied.");
+          showFlash("System share is unavailable; link copied.");
         }
       }
     } catch (error) {
-      setStatus(error.message || "Could not prepare this library item.");
+      showFlash(error.message || "Could not prepare this library item.");
     }
   }
 
@@ -99,7 +114,13 @@ export default function ShareActionMenu({
           {action.icon ? <span className="material-symbols-outlined">{action.icon}</span> : null}{action.label}
         </button>
       ))}</div> : null}
-      {status ? <p className="share-action-status" role="status">{status}</p> : null}
+    </div>,
+    document.body,
+  ) : null;
+
+  const flashToast = flash && typeof document !== "undefined" ? createPortal(
+    <div className="menu-action-flash" role="status" aria-live="polite" data-testid="share-action-flash">
+      {flash}
     </div>,
     document.body,
   ) : null;
@@ -109,5 +130,6 @@ export default function ShareActionMenu({
       <span className="material-symbols-outlined" aria-hidden="true">more_vert</span>
     </button>
     {popover}
+    {flashToast}
   </div>;
 }

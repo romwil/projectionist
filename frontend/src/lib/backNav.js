@@ -1,5 +1,15 @@
 /** Shared return-navigation helpers for browse / detail pages. */
 
+import {
+  CHAT_FROM_RAIL_ID_PARAM,
+  CHAT_FROM_RAIL_PACK_PARAM,
+  buildRailChatPrompt,
+  decodeRailPack,
+  encodeRailPack,
+  expandRailItem,
+  stashRailSeed,
+} from "./railChatSeed.js";
+
 export const ROUTES = {
   chat: "/chat",
   search: "/search",
@@ -90,22 +100,35 @@ const CHAT_FROM_RAIL_TITLE_PARAM = "rail_title";
 const CHAT_FROM_RAIL_WHY_PARAM = "rail_why";
 
 /**
- * Deep-link to chat with rail context (titles + optional persona why).
- * @param {{ railTitle?: string, railId?: string, items?: Array<{ title?: string, why?: string, year?: number }> }} rail
- * @param {{ title?: string, why?: string } | null} [focusItem]
+ * Deep-link to chat with rail context (stable ids + why per title).
+ * Also stashes full items (posters) in sessionStorage for the chat turn.
+ * @param {{ railTitle?: string, railId?: string, items?: Array<Record<string, unknown>> }} rail
+ * @param {{ title?: string, why?: string, rating_key?: string, id?: number } | null} [focusItem]
  */
 export function chatFromRailHref(rail, focusItem = null) {
   const params = new URLSearchParams();
   const railTitle = String(rail?.railTitle || rail?.title || "this rail").trim();
   params.set(CHAT_FROM_RAIL_PARAM, "1");
   params.set(CHAT_FROM_RAIL_TITLE_PARAM, railTitle.slice(0, 120));
+  const railId = String(rail?.railId || rail?.id || "").trim();
+  if (railId) params.set(CHAT_FROM_RAIL_ID_PARAM, railId.slice(0, 64));
+
+  const sourceItems = Array.isArray(rail?.items) ? rail.items : [];
+  stashRailSeed({ railTitle, railId, items: sourceItems });
+
+  const pack = encodeRailPack(focusItem?.title ? [focusItem, ...sourceItems] : sourceItems);
+  if (pack) params.set(CHAT_FROM_RAIL_PACK_PARAM, pack);
+
   if (focusItem?.title) {
     params.set(RECOMMEND_LIKE_PARAM, String(focusItem.title).trim().slice(0, 120));
-    if (focusItem.why) {
-      params.set(CHAT_FROM_RAIL_WHY_PARAM, String(focusItem.why).trim().slice(0, 280));
+    const why = focusItem.why || focusItem.recommendation_reason;
+    if (why) {
+      params.set(CHAT_FROM_RAIL_WHY_PARAM, String(why).trim().slice(0, 280));
     }
+    if (focusItem.year) params.set(RECOMMEND_LIKE_YEAR_PARAM, String(focusItem.year));
+    if (focusItem.media_type) params.set(RECOMMEND_LIKE_TYPE_PARAM, String(focusItem.media_type));
   } else {
-    const titles = (rail?.items || [])
+    const titles = sourceItems
       .map((item) => String(item?.title || "").trim())
       .filter(Boolean)
       .slice(0, 8);
@@ -116,6 +139,20 @@ export function chatFromRailHref(rail, focusItem = null) {
   return `${ROUTES.chat}?${params.toString()}`;
 }
 
+/** Decode curated items from a chat-from-rail URL (pack preferred, titles fallback). */
+export function chatFromRailItems(searchParams) {
+  if (!searchParams || typeof searchParams.get !== "function") return [];
+  if (String(searchParams.get(CHAT_FROM_RAIL_PARAM) || "") !== "1") return [];
+  const packed = decodeRailPack(searchParams.get(CHAT_FROM_RAIL_PACK_PARAM));
+  if (packed.length) return packed;
+  return String(searchParams.get("rail_titles") || "")
+    .split("|")
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .map((title) => expandRailItem({ t: title }))
+    .filter(Boolean);
+}
+
 /** Build the seeded chat prompt from a chat-from-rail URL. */
 export function chatFromRailPrompt(searchParams) {
   if (!searchParams || typeof searchParams.get !== "function") return "";
@@ -123,16 +160,13 @@ export function chatFromRailPrompt(searchParams) {
   const railTitle = String(searchParams.get(CHAT_FROM_RAIL_TITLE_PARAM) || "this rail").trim();
   const focus = String(searchParams.get(RECOMMEND_LIKE_PARAM) || "").trim();
   const why = String(searchParams.get(CHAT_FROM_RAIL_WHY_PARAM) || "").trim();
-  if (focus) {
-    const whyBit = why ? ` The curator said: "${why}"` : "";
-    return `Let's talk about "${focus}" from my "${railTitle}" picks.${whyBit} What should I know, and what else fits that vibe in my library?`;
-  }
-  const titles = String(searchParams.get("rail_titles") || "")
-    .split("|")
-    .map((t) => t.trim())
-    .filter(Boolean);
-  const list = titles.length ? ` Titles: ${titles.map((t) => `"${t}"`).join(", ")}.` : "";
-  return `I want to chat about my "${railTitle}" picks.${list} Help me choose what to watch and why.`;
+  const items = chatFromRailItems(searchParams);
+  return buildRailChatPrompt({
+    railTitle,
+    items,
+    focusTitle: focus,
+    focusWhy: why,
+  });
 }
 
 export function stripChatFromRailParam(searchParams) {
@@ -140,6 +174,8 @@ export function stripChatFromRailParam(searchParams) {
   next.delete(CHAT_FROM_RAIL_PARAM);
   next.delete(CHAT_FROM_RAIL_TITLE_PARAM);
   next.delete(CHAT_FROM_RAIL_WHY_PARAM);
+  next.delete(CHAT_FROM_RAIL_PACK_PARAM);
+  next.delete(CHAT_FROM_RAIL_ID_PARAM);
   next.delete("rail_titles");
   next.delete(RECOMMEND_LIKE_PARAM);
   next.delete(RECOMMEND_LIKE_YEAR_PARAM);

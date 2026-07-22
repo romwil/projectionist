@@ -11,7 +11,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from curatorx.library.db import DEFAULT_LENS_ID, Database
-from curatorx.taste import build_weekly_rail_for_user, deliver_member_weekly_rails
+from curatorx.taste import build_weekly_rail_for_user, deliver_member_weekly_rails, feed_for_you_weekly
 from curatorx.engagement import engagement_summary, sync_review_challenges
 from curatorx.config_store import Settings
 from curatorx.web.auth import clear_pin_bindings
@@ -58,9 +58,16 @@ class TasteEngagementDbTests(unittest.TestCase):
         )
         self.assertTrue(rail["items"])
         self.assertTrue(all(item.get("why") for item in rail["items"]))
+        self.assertTrue(all(item.get("rating_key") for item in rail["items"]))
+        self.assertTrue(all(item.get("id") is not None for item in rail["items"]))
         latest = self.db.get_latest_user_weekly_rail(self.user_id)
         assert latest is not None
         self.assertEqual(latest["id"], rail["id"])
+        feed = feed_for_you_weekly(self.db, user_id=self.user_id)
+        self.assertTrue(feed["items"])
+        self.assertTrue(all(item.get("recommendation_reason") for item in feed["items"]))
+        self.assertTrue(all(item.get("in_library") for item in feed["items"]))
+        self.assertEqual(feed.get("rail_id"), rail["id"])
 
     def test_engagement_summary_seeds_challenges(self) -> None:
         summary = engagement_summary(self.db, user_id=self.user_id)

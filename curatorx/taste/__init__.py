@@ -211,6 +211,20 @@ def deliver_member_weekly_rails(
     }
 
 
+def _normalize_weekly_rail_feed_item(item: Any) -> Dict[str, Any]:
+    """Ensure feed items expose stable ids + Why-this reason for UI and chat-from-rail."""
+    if not isinstance(item, dict):
+        return {}
+    out = dict(item)
+    why = str(out.get("why") or out.get("recommendation_reason") or "").strip()
+    if why:
+        out["why"] = why
+        out["recommendation_reason"] = why
+    if out.get("rating_key") or out.get("id") is not None:
+        out["in_library"] = True
+    return out
+
+
 def feed_for_you_weekly(
     db: Database,
     *,
@@ -229,6 +243,7 @@ def feed_for_you_weekly(
             "empty": True,
         }
     items = list(rail.get("items") or [])[: max(1, int(limit))]
+    items = [_normalize_weekly_rail_feed_item(item) for item in items]
     return {
         "feed": "for-you",
         "items": items,

@@ -144,4 +144,32 @@ describe("chat from rail deep link", () => {
     assert.equal(stripped.get("from_rail"), null);
     assert.equal(stripped.get("rail_why"), null);
   });
+
+  it("encodes stable ids and why into the prompt pack", () => {
+    const href = chatFromRailHref({
+      railTitle: "For you this week",
+      railId: "rail-abc",
+      items: [
+        {
+          id: 42,
+          title: "Heat",
+          year: 1995,
+          media_type: "movie",
+          rating_key: "rk-heat",
+          why: "Fits your noir lean",
+        },
+      ],
+    });
+    assert.match(href, /rail_id=rail-abc/);
+    assert.match(href, /rail_pack=/);
+    const params = new URLSearchParams(href.split("?")[1] || "");
+    const prompt = chatFromRailPrompt(params);
+    assert.match(prompt, /library_id=42/);
+    assert.match(prompt, /rating_key=rk-heat/);
+    assert.match(prompt, /noir lean/);
+    assert.match(prompt, /Do NOT search TMDB/);
+    const stripped = stripChatFromRailParam(params);
+    assert.equal(stripped.get("rail_pack"), null);
+    assert.equal(stripped.get("rail_id"), null);
+  });
 });

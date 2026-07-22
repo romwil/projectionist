@@ -398,6 +398,30 @@
 .share-action-popover .material-symbols-outlined { font-size: 18px; color: var(--muted); }
 .share-action-extra { display: grid; gap: 2px; padding-top: 5px; border-top: 1px solid var(--border); }
 .share-action-status { margin: 4px 8px 0; color: var(--muted); font-size: var(--text-xs); }
+
+/* High-contrast flash after kebab actions (copy link, save, export). */
+.menu-action-flash {
+  position: fixed;
+  z-index: 1200;
+  left: 50%;
+  bottom: max(24px, env(safe-area-inset-bottom, 0px) + 16px);
+  transform: translateX(-50%);
+  max-width: min(420px, calc(100vw - 32px));
+  padding: 12px 18px;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--border);
+  background: var(--surface-raised, var(--surface));
+  color: var(--text);
+  font-size: var(--text-sm, 0.95rem);
+  font-weight: 600;
+  box-shadow: 0 12px 32px color-mix(in srgb, var(--text) 22%, transparent);
+  text-align: center;
+  animation: menu-action-flash-in 0.18s ease-out;
+}
+@keyframes menu-action-flash-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
 @keyframes portal-menu-in { from { opacity: 0; transform: translateY(-3px); } to { opacity: 1; transform: translateY(0); } }
 
 @media print {

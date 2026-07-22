@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router-dom";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
@@ -43,7 +43,8 @@ export default function PosterActionMenu({
   const [lists, setLists] = useState([]);
   const [listOpen, setListOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
-  const [status, setStatus] = useState("");
+  const [flash, setFlash] = useState("");
+  const flashTimerRef = useRef(null);
   // Optimistic overlay so the menu label + card reflect a completed scrobble
   // without waiting on a parent refresh.
   const [watchPatch, setWatchPatch] = useState(null);
@@ -51,12 +52,26 @@ export default function PosterActionMenu({
     closeOnEscape: true,
     anchorSelector: ".poster-action-grip",
     placement: placePosterMenu,
-    repositionKey: `${listOpen}|${status}`,
+    repositionKey: `${listOpen}`,
   });
   const detailPath = titleDetailPath({ ...item, in_library: true });
   const plexHref = item?.plex_watch_url || (canWatchOnPlex(item) ? plexWatchUrl(item.rating_key) : "");
   const effectiveItem = watchPatch ? { ...item, ...watchPatch } : item;
   const watchAction = posterWatchAction(effectiveItem, { role, multiUserEnabled });
+
+  useEffect(() => {
+    return () => {
+      if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    };
+  }, []);
+
+  function flashStatus(message) {
+    setOpen(false);
+    setListOpen(false);
+    setFlash(message);
+    if (flashTimerRef.current) clearTimeout(flashTimerRef.current);
+    flashTimerRef.current = setTimeout(() => setFlash(""), 2800);
+  }
 
   async function openLists() {
     setListOpen(true);
@@ -64,7 +79,7 @@ export default function PosterActionMenu({
       const payload = await listCuratedLists();
       setLists(payload?.items || payload || []);
     } catch (error) {
-      setStatus(error.message || "Could not load lists.");
+      flashStatus(error.message || "Could not load lists.");
     }
   }
 
@@ -77,10 +92,9 @@ export default function PosterActionMenu({
         title: item?.title,
         library_item_id: item?.id && Number.isInteger(Number(item.id)) ? Number(item.id) : undefined,
       });
-      setStatus(`Added to ${list.name || "list"}.`);
-      setListOpen(false);
+      flashStatus(`Added to ${list.name || "list"}.`);
     } catch (error) {
-      setStatus(error.message || "Could not add to list.");
+      flashStatus(error.message || "Could not add to list.");
     }
   }
 
@@ -88,9 +102,9 @@ export default function PosterActionMenu({
     try {
       if (onTogglePin) await onTogglePin(item);
       else await addWatchlistPin({ tmdb_id: item?.tmdb_id, tvdb_id: item?.tvdb_id, media_type: item?.media_type, title: item?.title });
-      setStatus(pinned ? "Removed from watchlist." : "Pinned to watchlist.");
+      flashStatus(pinned ? "Removed from watchlist." : "Pinned to watchlist.");
     } catch (error) {
-      setStatus(error.message || "Could not update watchlist.");
+      flashStatus(error.message || "Could not update watchlist.");
     }
   }
 
@@ -111,9 +125,9 @@ export default function PosterActionMenu({
               ? " (saved locally; Plex sync failed)"
               : " (local only)"
           : "";
-      setStatus(nextWatched ? `Marked as watched${plexNote}.` : `Marked as unwatched${plexNote}.`);
+      flashStatus(nextWatched ? `Marked as watched${plexNote}.` : `Marked as unwatched${plexNote}.`);
     } catch (error) {
-      setStatus(error.message || "Could not update watched state.");
+      flashStatus(error.message || "Could not update watched state.");
     }
   }
 
@@ -121,9 +135,9 @@ export default function PosterActionMenu({
     if (!window.confirm(`Remove "${item.title || "this title"}" from the CuratorX index? Plex files are not deleted.`)) return;
     try {
       await deleteLibraryItems([item.rating_key || item.plex_rating_key]);
-      setStatus("Removed from the CuratorX index.");
+      flashStatus("Removed from the CuratorX index.");
     } catch (error) {
-      setStatus(error.message || "Could not remove title.");
+      flashStatus(error.message || "Could not remove title.");
     }
   }
 
@@ -133,7 +147,7 @@ export default function PosterActionMenu({
       {plexHref ? <a href={plexHref} target="_blank" rel="noopener noreferrer">Watch on Plex</a> : null}
       {watchAction ? <button type="button" className="poster-action-watched" onClick={toggleWatched}>{watchAction.label}</button> : null}
       <button type="button" onClick={togglePin}>{pinned ? "Remove from watchlist" : "Add to watchlist"}</button>
-      {listId && onRemoveFromList ? <button type="button" onClick={async () => { await onRemoveFromList(listId, listItemId); onRemovedFromList?.(); }}>Remove from this collection</button> : null}
+      {listId && onRemoveFromList ? <button type="button" onClick={async () => { await onRemoveFromList(listId, listItemId); onRemovedFromList?.(); flashStatus("Removed from this collection."); }}>Remove from this collection</button> : null}
       <button type="button" onClick={openLists}>Add to list or playlist…</button>
       {listOpen ? <div className="poster-action-submenu">
         {lists.length ? lists.map((list) => <button key={list.id} type="button" onClick={() => addToList(list)}>{list.name} <span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span></button>) : <span>No lists yet</span>}
@@ -141,13 +155,19 @@ export default function PosterActionMenu({
       {onRecommend && multiUserEnabled ? <button type="button" onClick={() => { onRecommend(item); setOpen(false); }}>Recommend</button> : null}
       {item?.title ? <Link to={recommendLikeHref(item)} onClick={() => setOpen(false)}>Recommend like this in chat</Link> : null}
       {onSeed ? <button type="button" onClick={() => { onSeed(item); setOpen(false); }}>More like this</button> : null}
-      {motifWhy ? <button type="button" onClick={() => { setStatus(motifWhy.summary || "This title matches the current context."); }}>Why this?</button> : null}
+      {motifWhy ? <button type="button" onClick={() => { flashStatus(motifWhy.summary || "This title matches the current context."); }}>Why this?</button> : null}
       <button type="button" onClick={() => setReportOpen(true)}>Report issue…</button>
       {isOwner ? <div className="poster-action-owner">
         <span>Owner tools</span>
         {item?.rating_key || item?.plex_rating_key ? <button type="button" onClick={deleteIndex}>Delete from index</button> : null}
       </div> : null}
-      {status ? <p className="poster-action-status">{status}</p> : null}
+    </div>,
+    document.body,
+  ) : null;
+
+  const flashToast = flash && typeof document !== "undefined" ? createPortal(
+    <div className="menu-action-flash" role="status" aria-live="polite" data-testid="poster-action-flash">
+      {flash}
     </div>,
     document.body,
   ) : null;
@@ -157,6 +177,7 @@ export default function PosterActionMenu({
       <span aria-hidden="true">⋮</span>
     </button>
     {popover}
-    <ReportMediaIssueModal item={item} open={reportOpen} onClose={() => setReportOpen(false)} onReported={() => setStatus("Issue reported to the owner queue.")} />
+    {flashToast}
+    <ReportMediaIssueModal item={item} open={reportOpen} onClose={() => setReportOpen(false)} onReported={() => flashStatus("Issue reported to the owner queue.")} />
   </div>;
 }
