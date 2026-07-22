@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.22.1] — 2026-07-22
+
+Help and Privacy body copy is readable again in **Lights Up** (and still readable in **Lights Down**).
+
+### Highlights
+- **Help you can actually read.** Intro paragraphs and lists on `/help` (and `/privacy`) use normal theme text in Lights Up — no more near-white wash on cream paper.
+- **Same docs, both themes.** Privacy and Help share one prose style that follows Lights Up / Lights Down tokens.
+
+### Fixed
+- **Docs prose contrast** — `.privacy-prose p/li` no longer hardcodes Lights Down cream (`rgba(243, 239, 230, 0.92)`); body copy uses `var(--text)` so Help/Privacy stay readable on gallery paper (`frontend/src/styles/06-reading-admin-settings.css`). Guarded by `privacyProseContrast.test.mjs`.
+
+### Verification
+- Backend `pytest` **1231 passed**, 4 skipped (27 subtests) at **77.44%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **407 passed** (includes new `privacyProseContrast.test.mjs`). ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- `test_version` lockstep holds at **1.22.1** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.22.0] — 2026-07-22
 
 Phase 3c of the delight program: tunable taste, a persona-voiced weekly For you rail, chat-from-here on Explore rails, and the shared engagement substrate (badges, streaks, challenges, courses, explainers).

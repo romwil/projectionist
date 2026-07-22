@@ -44,9 +44,14 @@
   color: var(--text);
 }
 
+/* Theme-safe body copy — never hardcode Lights Down cream (breaks Lights Up). */
 .privacy-prose p,
 .privacy-prose li {
-  color: rgba(243, 239, 230, 0.92);
+  color: var(--text);
+}
+
+.privacy-prose strong {
+  color: var(--text);
 }
 
 .privacy-table-wrap {

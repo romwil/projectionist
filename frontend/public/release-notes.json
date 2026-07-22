@@ -1,6 +1,31 @@
 {
-  "generated_at": "2026-07-22T00:54:04Z",
+  "generated_at": "2026-07-22T00:58:59Z",
   "releases": [
+    {
+      "version": "1.22.1",
+      "date": "2026-07-22",
+      "summary": "Help and Privacy body copy is readable again in **Lights Up** (and still readable in **Lights Down**).",
+      "highlights": [
+        "**Help you can actually read.** Intro paragraphs and lists on `/help` (and `/privacy`) use normal theme text in Lights Up — no more near-white wash on cream paper.",
+        "**Same docs, both themes.** Privacy and Help share one prose style that follows Lights Up / Lights Down tokens."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Docs prose contrast** — `.privacy-prose p/li` no longer hardcodes Lights Down cream (`rgba(243, 239, 230, 0.92)`); body copy uses `var(--text)` so Help/Privacy stay readable on gallery paper (`frontend/src/styles/06-reading-admin-settings.css`). Guarded by `privacyProseContrast.test.mjs`."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` **1231 passed**, 4 skipped (27 subtests) at **77.44%** total coverage (`--cov-fail-under=74`).",
+            "Frontend `node --test` unit suite **407 passed** (includes new `privacyProseContrast.test.mjs`). ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.",
+            "`test_version` lockstep holds at **1.22.1** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.22.0",
       "date": "2026-07-22",
