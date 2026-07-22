@@ -10,6 +10,7 @@ import {
   startPlexPinLogin,
 } from "../api/client";
 import InlineAlert from "../components/InlineAlert";
+import { loginLede, plexAdvancedCopy, resolveAuthMethods } from "../lib/loginScreen";
 
 const PIN_POLL_MS = 1000;
 const PIN_TIMEOUT_MS = 15 * 60 * 1000;
@@ -116,9 +117,10 @@ export default function LoginPage() {
 
   async function handleTokenSignIn(event) {
     event.preventDefault();
+    const advanced = plexAdvancedCopy({ open: true });
     const token = authToken.trim();
     if (!token) {
-      setError("Paste a Plex auth token to continue.");
+      setError(advanced.emptyError);
       return;
     }
     stopPinWait();
@@ -160,7 +162,7 @@ export default function LoginPage() {
       if (data?.authorize_url) {
         window.location.href = data.authorize_url;
       } else {
-        setError("OIDC provider did not return an authorization URL.");
+        setError("Sign-in provider did not return an authorization URL.");
         setLoading(false);
       }
     } catch (signInError) {
@@ -169,91 +171,34 @@ export default function LoginPage() {
     }
   }
 
-  const authMethods = features?.auth_methods || [];
-  const plexEnabled = authMethods.includes("plex");
-  const localEnabled = authMethods.includes("local");
-  const oidcEnabled = authMethods.includes("oidc");
+  const methods = resolveAuthMethods(features?.auth_methods);
+  const plexEnabled = methods.includes("plex");
+  const localEnabled = methods.includes("local");
+  const oidcEnabled = methods.includes("oidc");
   const oidcProviderName = features?.auth?.oidc_provider_name || "SSO";
-  const noMethods = !plexEnabled && !localEnabled && !oidcEnabled;
+  const noMethods = features != null && methods.length === 0;
+  const lede = loginLede(methods);
+  const advanced = plexAdvancedCopy({ open: showTokenInput });
+
+  const methodDivider = (
+    <div className="login-divider" role="separator">
+      <span>or</span>
+    </div>
+  );
 
   return (
     <div className="login-page" data-testid="login-page">
       <div className="login-card">
         <p className="eyebrow">CuratorX</p>
         <h1>Sign in</h1>
-        <p className="login-lede">
-          Multi-user mode is enabled. Sign in to access your conversations and watchlist.
-        </p>
+        <p className="login-lede">{lede}</p>
 
         {error ? <InlineAlert type="error" message={error} /> : null}
 
         {noMethods ? (
-          <InlineAlert type="error" message="No sign-in methods are enabled in Configuration." />
+          <InlineAlert type="error" message="No sign-in methods are enabled. Ask the owner to check Configuration." />
         ) : null}
 
-        {/* --- Local password login --- */}
-        {localEnabled ? (
-          <div className="login-form" data-testid="local-login-section">
-            <form onSubmit={handleLocalLogin}>
-              <label className="login-token-field">
-                <span>Username</span>
-                <input
-                  type="text"
-                  data-testid="local-username"
-                  value={localUsername}
-                  onChange={(e) => setLocalUsername(e.target.value)}
-                  placeholder="Username"
-                  autoComplete="username"
-                  disabled={loading}
-                />
-              </label>
-              <label className="login-token-field">
-                <span>Password</span>
-                <input
-                  type="password"
-                  data-testid="local-password"
-                  value={localPassword}
-                  onChange={(e) => setLocalPassword(e.target.value)}
-                  placeholder="Password"
-                  autoComplete="current-password"
-                  disabled={loading}
-                />
-              </label>
-              <button
-                type="submit"
-                className="login-primary"
-                data-testid="local-login-submit"
-                disabled={loading}
-              >
-                {loading ? "Signing in…" : "Sign in"}
-              </button>
-            </form>
-          </div>
-        ) : null}
-
-        {/* --- Divider between methods --- */}
-        {localEnabled && (plexEnabled || oidcEnabled) ? (
-          <div className="login-divider">
-            <span>or</span>
-          </div>
-        ) : null}
-
-        {/* --- OIDC login --- */}
-        {oidcEnabled ? (
-          <div className="login-form" data-testid="oidc-login-section">
-            <button
-              type="button"
-              className="login-primary login-oidc"
-              data-testid="oidc-login-button"
-              disabled={loading}
-              onClick={handleOidcLogin}
-            >
-              {loading ? "Redirecting…" : `Sign in with ${oidcProviderName}`}
-            </button>
-          </div>
-        ) : null}
-
-        {/* --- Plex login --- */}
         {plexEnabled ? (
           <div className="login-form" data-testid="plex-login-section">
             {!waitingForPlex ? (
@@ -269,8 +214,7 @@ export default function LoginPage() {
             ) : (
               <div className="login-waiting" data-testid="plex-pin-waiting">
                 <p className="login-help">
-                  Complete sign-in in the Plex window. This page updates automatically when you are
-                  done.
+                  Finish signing in in the Plex window. This page updates when you are done.
                 </p>
                 {authUrl ? (
                   <a
@@ -295,47 +239,98 @@ export default function LoginPage() {
             )}
 
             {!waitingForPlex ? (
-              <div className="login-advanced">
-                {!showTokenInput ? (
-                  <button
-                    type="button"
-                    className="login-advanced-toggle"
-                    data-testid="show-token-login"
-                    onClick={() => setShowTokenInput(true)}
-                  >
-                    Use a Plex auth token instead
-                  </button>
-                ) : (
+              <div className="login-advanced" data-testid="plex-advanced">
+                <button
+                  type="button"
+                  className="login-advanced-toggle"
+                  data-testid="show-token-login"
+                  aria-expanded={showTokenInput}
+                  onClick={() => setShowTokenInput((open) => !open)}
+                >
+                  {advanced.toggleLabel}
+                </button>
+                {showTokenInput ? (
                   <form className="login-form" onSubmit={handleTokenSignIn}>
-                    <label className="login-token-field">
-                      <span>Plex auth token (advanced)</span>
+                    <label className="login-field">
+                      <span>{advanced.tokenLabel}</span>
                       <input
                         type="password"
                         data-testid="plex-token-input"
                         value={authToken}
                         onChange={(event) => setAuthToken(event.target.value)}
-                        placeholder="Paste X-Plex-Token value"
+                        placeholder={advanced.tokenPlaceholder}
                         autoComplete="off"
                         disabled={loading}
                       />
                     </label>
-                    <p className="login-help">
-                      Prefer Sign in with Plex above. Plex no longer shows tokens on the account
-                      settings page for most users. Only paste a token if you already have one from
-                      another app or API session.
-                    </p>
+                    <p className="login-help">{advanced.tokenHelp}</p>
                     <button
                       type="submit"
-                      className="login-primary"
+                      className="login-secondary"
                       data-testid="submit-plex-login"
                       disabled={loading}
                     >
-                      {loading ? "Signing in…" : "Continue with token"}
+                      {loading ? "Signing in…" : advanced.submitLabel}
                     </button>
                   </form>
-                )}
+                ) : null}
               </div>
             ) : null}
+          </div>
+        ) : null}
+
+        {oidcEnabled ? (
+          <div className="login-form" data-testid="oidc-login-section">
+            {plexEnabled ? methodDivider : null}
+            <button
+              type="button"
+              className="login-primary login-oidc"
+              data-testid="oidc-login-button"
+              disabled={loading || waitingForPlex}
+              onClick={handleOidcLogin}
+            >
+              {loading ? "Redirecting…" : `Sign in with ${oidcProviderName}`}
+            </button>
+          </div>
+        ) : null}
+
+        {localEnabled ? (
+          <div className="login-form" data-testid="local-login-section">
+            {plexEnabled || oidcEnabled ? methodDivider : null}
+            <form onSubmit={handleLocalLogin}>
+              <label className="login-field">
+                <span>Username</span>
+                <input
+                  type="text"
+                  data-testid="local-username"
+                  value={localUsername}
+                  onChange={(e) => setLocalUsername(e.target.value)}
+                  placeholder="Username"
+                  autoComplete="username"
+                  disabled={loading || waitingForPlex}
+                />
+              </label>
+              <label className="login-field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  data-testid="local-password"
+                  value={localPassword}
+                  onChange={(e) => setLocalPassword(e.target.value)}
+                  placeholder="Password"
+                  autoComplete="current-password"
+                  disabled={loading || waitingForPlex}
+                />
+              </label>
+              <button
+                type="submit"
+                className="login-primary"
+                data-testid="local-login-submit"
+                disabled={loading || waitingForPlex}
+              >
+                {loading ? "Signing in…" : "Sign in"}
+              </button>
+            </form>
           </div>
         ) : null}
 

@@ -2,8 +2,22 @@
 
 ## [Unreleased]
 
+## [1.21.1] — 2026-07-22
+
+The multi-user login screen leads with **Sign in with Plex** — household-friendly copy up front, token paste tucked behind Advanced.
+
+### Highlights
+- **Plex first at the door.** Sign in opens with **Sign in with Plex** and clear household copy — no “multi-user mode” or token jargon on the front.
+- **Token only when you need it.** Manual Plex token paste stays available behind a discreet **Advanced** disclosure for recovery.
+- **Same paths, cleaner order.** When SSO or a local password is also enabled, they appear after Plex with a simple divider.
+
 ### Changed
-- **Login screen leads with real Plex sign-in.** The multi-user `/login` page puts **Sign in with Plex** (PIN / link) first with household-friendly copy — no “multi-user mode” or token jargon on the front door. Manual Plex token paste stays available only behind a discreet **Advanced** disclosure for recovery. Layout/theme polish uses Lights Up / Lights Down wash tokens; method order is Plex → SSO → local password.
+- **Login screen leads with real Plex sign-in.** The multi-user `/login` page puts **Sign in with Plex** (PIN / link) first with household-friendly copy. Manual Plex token paste stays available only behind a discreet **Advanced** disclosure for recovery. Layout/theme polish uses Lights Up / Lights Down wash tokens; method order is Plex → SSO → local password (`frontend/src/lib/loginScreen.js`, `LoginPage.jsx`).
+
+### Verification
+- Backend `pytest` **1222 passed**, 4 skipped (27 subtests) at **76.54%** total coverage (`--cov-fail-under=74`). No backend changes in this patch.
+- Frontend `node --test` unit suite **403 passed** (up from 394), including `loginScreen.test.mjs`. ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds. Playwright `e2e/login.spec.ts` updated for Advanced disclosure / recovery copy.
+- `test_version` lockstep holds at **1.21.1** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
 
 ## [1.21.0] — 2026-07-22
 

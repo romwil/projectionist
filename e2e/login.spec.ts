@@ -31,6 +31,9 @@ test.describe("Login flow", () => {
     await expect(page.getByTestId("sign-in-with-plex")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
     await expect(page.getByTestId("login-page")).toContainText("Plex");
+    await expect(page.getByTestId("login-page")).not.toContainText("Multi-user");
+    await expect(page.getByTestId("plex-token-input")).toHaveCount(0);
+    await expect(page.getByTestId("show-token-login")).toHaveText("Advanced");
   });
 
   test("plex PIN login returns to chat workspace", async ({ page }) => {
@@ -47,15 +50,17 @@ test.describe("Login flow", () => {
     await expect(page.getByTestId("login-page")).toHaveCount(0);
   });
 
-  test("advanced token login still works", async ({ page }) => {
+  test("advanced token login stays behind Advanced disclosure", async ({ page }) => {
     await mockFeatures(page, { multi_user_enabled: true });
     await mockPlexLogin(page);
 
     await page.goto("/login");
     await expect(page.getByTestId("login-page")).toBeVisible();
+    await expect(page.getByTestId("plex-token-input")).toHaveCount(0);
     await page.getByTestId("show-token-login").click();
     await expect(page.getByTestId("plex-token-input")).toBeVisible();
-    await expect(page.getByTestId("login-page")).toContainText("no longer shows tokens");
+    await expect(page.getByTestId("login-page")).toContainText("Recovery only");
+    await expect(page.getByTestId("show-token-login")).toHaveText("Hide advanced");
     await page.getByTestId("plex-token-input").fill("mock-plex-token");
     await page.getByTestId("submit-plex-login").click();
 
