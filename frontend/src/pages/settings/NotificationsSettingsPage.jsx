@@ -9,6 +9,7 @@ export default function NotificationsSettingsPage() {
   const [inboxOn, setInboxOn] = useState(true);
   const [emailOn, setEmailOn] = useState(false);
   const [newsletterOn, setNewsletterOn] = useState(false);
+  const [nudgeOn, setNudgeOn] = useState(false);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [ready, setReady] = useState(false);
@@ -21,6 +22,7 @@ export default function NotificationsSettingsPage() {
         setInboxOn(user.notify_channel_inbox !== false);
         setEmailOn(Boolean(user.notify_channel_email));
         setNewsletterOn(Boolean(user.newsletter_opt_in));
+        setNudgeOn(Boolean(user.nudge_opt_in));
         setReady(true);
       })
       .catch(() => setReady(true));
@@ -36,12 +38,14 @@ export default function NotificationsSettingsPage() {
         notify_channel_inbox: inboxOn,
         notify_channel_email: emailOn,
         newsletter_opt_in: newsletterOn,
+        nudge_opt_in: nudgeOn,
       });
       const user = result.user || {};
       setNotificationEmail(user.notification_email || user.email || "");
       setInboxOn(user.notify_channel_inbox !== false);
       setEmailOn(Boolean(user.notify_channel_email));
       setNewsletterOn(Boolean(user.newsletter_opt_in));
+      setNudgeOn(Boolean(user.nudge_opt_in));
       setStatus({ type: "success", message: "Notification preferences saved." });
     } catch (error) {
       setStatus({ type: "error", message: error.message || "Could not save." });
@@ -104,6 +108,14 @@ export default function NotificationsSettingsPage() {
             label="Weekly newsletter"
             help="Opt in to a personalized weekly note in your default curator’s voice."
             testId="notifications-newsletter-toggle"
+          />
+          <SettingsToggle
+            id="notify-nudge"
+            checked={nudgeOn}
+            onChange={setNudgeOn}
+            label="Curator nudges"
+            help="Opt in to occasional “you have to see this” nudges (inbox + email if enabled). Never live session alerts."
+            testId="notifications-nudge-toggle"
           />
         </SettingsPanel>
 

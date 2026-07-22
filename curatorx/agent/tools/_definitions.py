@@ -269,12 +269,16 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "remember_about_user",
-            "description": "Remember a user-provided private fact, goal, intention, or external watch for that same user only.",
+            "description": (
+                "Remember a user-provided private fact, goal, intention, callback/in-joke, "
+                "or external watch for that same user only. Use kind=callback only when the "
+                "user consents to remembering an in-joke or shared reference."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "text": {"type": "string"},
-                    "kind": {"type": "string", "enum": ["self_disclosure", "learning_goal", "watch_intention", "watched_external", "follow_up", "preference"]},
+                    "kind": {"type": "string", "enum": ["self_disclosure", "learning_goal", "watch_intention", "watched_external", "follow_up", "preference", "callback"]},
                 },
                 "required": ["text"],
             },
@@ -329,6 +333,27 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     "title": {"type": "string"},
                 },
                 "required": ["media_type", "tmdb_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "propose_acquire_path",
+            "description": (
+                "Build an explicit consented find→availability→request path for a title "
+                "(library check, then Seerr request with confirmation token). Prefer this "
+                "when walking a member through acquisition step by step."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "media_type": {"type": "string", "enum": ["movie", "show"]},
+                    "tmdb_id": {"type": "integer"},
+                    "tvdb_id": {"type": "integer"},
+                    "title": {"type": "string"},
+                },
+                "required": ["title", "media_type"],
             },
         },
     },
@@ -1291,6 +1316,7 @@ PLEX_COLLECTION_TOOL_NAMES = frozenset(
 SEERR_TOOL_NAMES = frozenset(
     {
         "request_via_seerr",
+        "propose_acquire_path",
         "approve_seerr_request",
         "search_seerr_movie",
         "search_seerr_tv",

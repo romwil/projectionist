@@ -1642,6 +1642,35 @@ button.watchlist-chip {
   color: var(--muted);
 }
 
+.markdown-body .markdown-footnote-ref,
+.markdown-body sup.markdown-footnote-ref a {
+  color: var(--accent);
+  font-size: 0.75em;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.markdown-body .markdown-footnotes {
+  margin-top: 1.25em;
+  padding-top: 0.75em;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--muted);
+  font-size: 0.9em;
+}
+
+.markdown-body .markdown-footnotes ol {
+  margin: 0.35em 0 0;
+  padding-left: 1.25em;
+}
+
+.markdown-body .markdown-footnotes li {
+  margin: 0.25em 0;
+}
+
+.markdown-body .markdown-footnotes a {
+  color: var(--accent);
+}
+
 .composer .inline-alert {
   margin-top: 0;
 }

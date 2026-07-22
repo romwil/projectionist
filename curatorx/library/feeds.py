@@ -283,9 +283,61 @@ def _seasonal_context(today: date) -> tuple[str, tuple[str, ...], str]:
 def feed_seasonal_spotlight(
     db: Database, *, limit: int = DEFAULT_FEED_LIMIT, today: Optional[date] = None
 ) -> Dict[str, Any]:
-    """Holiday-near matching with a modest, explicit season fallback."""
+    """Holiday-near matching with a modest, explicit season fallback.
+
+    On weekends (and when a holiday window is active), prefer titles surfaced by
+    the anniversary scanner when available — no calendar connector required.
+    """
     selected_day = today or date.today()
     label, terms, mode = _seasonal_context(selected_day)
+    is_weekend = selected_day.weekday() >= 5
+    anniversary_items: List[Mapping[str, Any]] = []
+    if is_weekend or mode == "holiday":
+        try:
+            with db.connect() as conn:
+                has = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='daily_anniversaries'"
+                ).fetchone()
+                if has:
+                    rows = conn.execute(
+                        """
+                        SELECT li.*, a.anniversary_type, a.anniversary_text
+                        FROM daily_anniversaries a
+                        JOIN library_items li ON li.id = a.item_id
+                        WHERE a.scanned_date = ?
+                        ORDER BY a.id ASC
+                        LIMIT ?
+                        """,
+                        (selected_day.isoformat(), _cap_limit(limit)),
+                    ).fetchall()
+                    anniversary_items = list(rows)
+        except Exception:  # noqa: BLE001
+            anniversary_items = []
+
+    if anniversary_items:
+        items = [_feed_item(row) for row in anniversary_items]
+        for item, row in zip(items, anniversary_items):
+            try:
+                item["anniversary_text"] = str(row["anniversary_text"] or "")
+            except (TypeError, KeyError, IndexError):
+                pass
+        weekend_label = label
+        if is_weekend and mode != "holiday":
+            weekend_label = "Weekend anniversaries"
+            mode = "weekend_anniversary"
+        elif mode == "holiday":
+            weekend_label = f"{label} · On this day"
+            mode = "holiday_anniversary"
+        return {
+            "feed": "seasonal-spotlight",
+            "date": selected_day.isoformat(),
+            "label": weekend_label,
+            "mode": mode,
+            "items": items,
+            "total": len(items),
+            "note": None,
+        }
+
     matches: List[Mapping[str, Any]] = []
     for row in db.all_library_items():
         haystack = " ".join(
@@ -299,6 +351,9 @@ def feed_seasonal_spotlight(
         if any(term.casefold() in haystack for term in terms):
             matches.append(row)
     items = _sort_rail_items(matches, _cap_limit(limit))
+    if is_weekend and mode == "season":
+        label = f"Weekend · {label}"
+        mode = "weekend"
     return {
         "feed": "seasonal-spotlight", "date": selected_day.isoformat(), "label": label,
         "mode": mode, "items": items, "total": len(matches),

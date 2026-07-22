@@ -203,6 +203,7 @@ export default function App() {
   const [libraryGlance, setLibraryGlance] = useState(null);
   const [glanceShown, setGlanceShown] = useState(false);
   const [quickPickLoading, setQuickPickLoading] = useState(false);
+  const [surpriseMood, setSurpriseMood] = useState("");
   const [undoToast, setUndoToast] = useState(null);
   const [personas, setPersonas] = useState([]);
   const [activePersonaId, setActivePersonaId] = useState(null);
@@ -823,17 +824,20 @@ export default function App() {
     setDefaultPersonaId(id);
   }
 
-  async function handleQuickPick() {
+  async function handleQuickPick(moodOverride) {
     if (quickPickLoading) return;
     setQuickPickLoading(true);
+    const mood = typeof moodOverride === "string" ? moodOverride : surpriseMood;
     try {
-      const result = await api("/library/quick-pick");
+      const query = mood ? `?mood=${encodeURIComponent(mood)}` : "";
+      const result = await api(`/library/quick-pick${query}`);
       const message = {
         id: createId(),
         ...quickPickToAssistantMessage(normalizeQuickPickResult(result)),
       };
       setMessages((prev) => [...prev, message]);
       speakAssistantMessage(message);
+      setSurpriseMood("");
     } catch (error) {
       const message = {
         id: createId(),
@@ -1872,15 +1876,49 @@ export default function App() {
                         {ttsMuted ? "Unmute" : "Mute"}
                       </button>
                     ) : null}
+                    <div className="composer-mood-row" data-testid="surprise-mood-chips">
+                      {[
+                        { id: "cozy", label: "Cozy" },
+                        { id: "thrill", label: "Thrill" },
+                        { id: "laugh", label: "Laugh" },
+                        { id: "think", label: "Think" },
+                        { id: "escape", label: "Escape" },
+                      ].map((chip) => (
+                        <button
+                          key={chip.id}
+                          type="button"
+                          className={`composer-mood-chip ghost${surpriseMood === chip.id ? " is-active" : ""}`}
+                          data-testid={`surprise-mood-${chip.id}`}
+                          disabled={loading || !threadsReady || quickPickLoading}
+                          aria-pressed={surpriseMood === chip.id}
+                          title={`Bias Surprise Me toward a ${chip.label.toLowerCase()} mood (this pick only)`}
+                          onClick={() =>
+                            setSurpriseMood((current) => (current === chip.id ? "" : chip.id))
+                          }
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
                     <button
                       type="button"
                       className={`composer-surprise ghost ${quickPickLoading ? "is-loading" : ""}`}
                       data-testid="surprise-me-button"
                       disabled={loading || !threadsReady || quickPickLoading}
                       aria-busy={quickPickLoading}
-                      aria-label={quickPickLoading ? "Picking a surprise…" : "Surprise me"}
-                      title="Surprise me — random pick"
-                      onClick={handleQuickPick}
+                      aria-label={
+                        quickPickLoading
+                          ? "Picking a surprise…"
+                          : surpriseMood
+                            ? `Surprise me — ${surpriseMood} mood`
+                            : "Surprise me"
+                      }
+                      title={
+                        surpriseMood
+                          ? `Surprise me — ${surpriseMood} mood (one-shot, no profile change)`
+                          : "Surprise me — random pick"
+                      }
+                      onClick={() => handleQuickPick()}
                     >
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                         <rect x="3" y="3" width="18" height="18" rx="3" stroke="currentColor" strokeWidth="1.8" />

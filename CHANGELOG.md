@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.24.0] — 2026-07-22
+
+Phase 5 of the delight program: curator-depth features for Enthusiast, Scholar, Concierge, and Companion — opt-in nudges, multi-session syllabi, a consented acquire path, and one-shot mood picks with callback memory.
+
+### Highlights
+- **A timely “you have to see this.”** Opt into curator nudges under Notifications; they land in the same inbox (and email) as digests — never live Plex session alerts.
+- **Study a course across chats.** Open a multi-session syllabus from Engagement; Scholar replies can show theme-safe footnote citations.
+- **Ask to acquire, step by step.** Chat can walk find → availability → Seerr request with explicit confirmation before anything is requested.
+- **Mood for one pick.** Optional chips before Surprise Me bias a single suggestion; consented in-jokes land as callback memory under the same privacy/export rules.
+
+### Added
+- **Enthusiast nudges** — `nudge_opt_in` on members; `enthusiast_nudge` scheduler task; `curatorx/notifications/nudges.py` with optional recently-watched / continue-watching context; Settings → Notifications toggle; `kind=nudge` gated by opt-in.
+- **Scholar multi-session syllabus** — `user_syllabus_sessions` + `/api/syllabus/*`; Engagement **Open multi-session syllabus**; chat footnote rendering in `MessageText.jsx` (theme-safe CSS).
+- **Concierge acquire path** — agent tool `propose_acquire_path` (`curatorx/acquire/`); weekend/holiday seasonal spotlight prefers `daily_anniversaries` (no calendar connector).
+- **Companion mood + callbacks** — `GET /api/library/quick-pick?mood=` + chat mood chips; `remember_about_user` kind `callback` under existing purge/export.
+- **HELP / wishlist** — Phase 5 member and owner notes; wishlist Phase 5 and persona backlog marked shipped **1.24.0**.
+
+### Verification
+- Backend `pytest` **1247 passed**, 4 skipped (27 subtests) at **77.96%** total coverage (`--cov-fail-under=74`). New coverage in `tests/test_delight_phase5.py`.
+- Frontend `node --test` unit suite **418 passed** (includes `chatFootnotes.test.mjs`). ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- `test_version` lockstep holds at **1.24.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.23.0] — 2026-07-22
 
 Phase 4 of the delight program: distinct Youth and Guest doors — a fail-closed content-rating gate, youth-safe engagement and chat voice, a guest tour shell, and a CuratorX-owned request-access queue for owners.

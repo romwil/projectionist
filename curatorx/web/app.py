@@ -492,6 +492,7 @@ class AuthMeUpdatePayload(BaseModel):
     notify_channel_inbox: Optional[bool] = None
     notify_channel_email: Optional[bool] = None
     newsletter_opt_in: Optional[bool] = None
+    nudge_opt_in: Optional[bool] = None
 
 
 class LibraryItemWatchedPayload(BaseModel):
@@ -1116,6 +1117,8 @@ def patch_auth_me(
         updates["notify_channel_email"] = payload.notify_channel_email
     if "newsletter_opt_in" in fields_set:
         updates["newsletter_opt_in"] = payload.newsletter_opt_in
+    if "nudge_opt_in" in fields_set:
+        updates["nudge_opt_in"] = payload.nudge_opt_in
     if not updates:
         return {"user": user.to_dict(), "authenticated": True}
     try:
@@ -2408,11 +2411,29 @@ def library_motifs_endpoint(
 def library_quick_pick_endpoint(
     max_runtime: Optional[int] = None,
     genre: Optional[str] = None,
+    mood: Optional[str] = None,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Pick ONE random unwatched title, optionally constrained by runtime/genre."""
+    """Pick ONE random unwatched title, optionally constrained by runtime/genre/mood.
+
+    ``mood`` is a one-shot bias for this pick only — it does not write taste profile.
+    """
     del user
     db = _db()
+
+    mood_genre_map = {
+        "cozy": "drama,romance,family,comedy",
+        "thrill": "thriller,action,horror,crime",
+        "laugh": "comedy",
+        "think": "drama,documentary,history,war",
+        "escape": "fantasy,adventure,science fiction,animation",
+    }
+    mood_key = str(mood or "").strip().lower()
+    effective_genre = genre
+    mood_label = None
+    if mood_key and mood_key in mood_genre_map and not genre:
+        effective_genre = mood_genre_map[mood_key]
+        mood_label = mood_key
 
     # Treat NULL view_count as unwatched (matches episode/query helpers).
     where_clauses = ["COALESCE(view_count, 0) = 0"]
@@ -2420,8 +2441,8 @@ def library_quick_pick_endpoint(
     if max_runtime is not None:
         where_clauses.append("runtime_minutes IS NOT NULL AND runtime_minutes <= ?")
         params.append(max_runtime)
-    if genre:
-        genre_parts = [g.strip() for g in genre.split(",") if g.strip()]
+    if effective_genre:
+        genre_parts = [g.strip() for g in effective_genre.split(",") if g.strip()]
         if genre_parts:
             genre_or = " OR ".join("LOWER(genres) LIKE ?" for _ in genre_parts)
             where_clauses.append(f"({genre_or})")
@@ -2443,7 +2464,7 @@ def library_quick_pick_endpoint(
         ).fetchone()
 
     if not row:
-        return {"item": None, "why": "No unwatched titles match the criteria."}
+        return {"item": None, "why": "No unwatched titles match the criteria.", "mood": mood_label}
 
     genres_raw = row["genres"]
     genres_list: list = []
@@ -2458,11 +2479,13 @@ def library_quick_pick_endpoint(
 
     runtime = row["runtime_minutes"]
     reason_parts = []
+    if mood_label:
+        reason_parts.append(f"Tuned for a {mood_label} mood (this pick only)")
     if genres_list:
         reason_parts.append(f"Matches your {str(genres_list[0]).lower()} taste")
     if runtime:
         reason_parts.append(f"{runtime} min")
-    reason = " \u00b7 ".join(reason_parts) if reason_parts else "Unwatched pick for you"
+    reason = " · ".join(reason_parts) if reason_parts else "Unwatched pick for you"
 
     item = {key: row[key] for key in row.keys()}
     item["genres"] = genres_list
@@ -2471,7 +2494,7 @@ def library_quick_pick_endpoint(
     item["overview"] = str(item.get("summary") or "")
     item["in_library"] = True
 
-    return {"item": item, "why": reason}
+    return {"item": item, "why": reason, "mood": mood_label}
 
 
 @app.get("/api/library/query")
@@ -4099,6 +4122,59 @@ def post_course_progress(
             if criteria.get("event") == "course_progress":
                 db.award_badge(str(user.id), badge["id"])
     return progress
+
+
+class SyllabusSessionUpdate(BaseModel):
+    chat_session_id: Optional[str] = Field(default=None, max_length=64)
+    completed: bool = False
+
+
+@app.post("/api/syllabus/courses/{list_id}")
+def start_course_syllabus(
+    list_id: str,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Build (or return) a multi-session Scholar syllabus for a published course."""
+    from curatorx.syllabus import build_syllabus_for_course
+
+    try:
+        return build_syllabus_for_course(_db(), user_id=str(user.id), list_id=list_id)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@app.get("/api/syllabus/courses/{list_id}")
+def get_course_syllabus(
+    list_id: str,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    from curatorx.syllabus import list_syllabus_sessions
+
+    sessions = list_syllabus_sessions(_db(), user_id=str(user.id), list_id=list_id)
+    return {"list_id": list_id, "sessions": sessions}
+
+
+@app.post("/api/syllabus/sessions/{session_id}")
+def update_syllabus_session(
+    session_id: str,
+    payload: SyllabusSessionUpdate,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    from curatorx.syllabus import mark_syllabus_session, syllabus_chat_prompt
+
+    session = mark_syllabus_session(
+        _db(),
+        user_id=str(user.id),
+        session_id=session_id,
+        chat_session_id=payload.chat_session_id,
+        completed=payload.completed,
+    )
+    if session is None:
+        raise HTTPException(status_code=404, detail="Syllabus session not found")
+    return {
+        "session": session,
+        "chat_prompt": syllabus_chat_prompt(session),
+    }
 
 
 @app.get("/api/taste")

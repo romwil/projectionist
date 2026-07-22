@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getEngagementSummary, postCourseProgress } from "../api/client";
+import { getEngagementSummary, postCourseProgress, startCourseSyllabus } from "../api/client";
 import AppShell from "../layouts/AppShell";
 import BackLink from "../components/BackLink";
-import { ROUTES } from "../lib/backNav.js";
+import { ROUTES, chatFromRailHref } from "../lib/backNav.js";
 
 export default function EngagementPage() {
   const [state, setState] = useState({ loading: true, data: null, error: "" });
   const [busyCourse, setBusyCourse] = useState("");
+  const [syllabusBusy, setSyllabusBusy] = useState("");
+  const [syllabusNote, setSyllabusNote] = useState("");
 
   function reload() {
     setState((prev) => ({ ...prev, loading: true }));
@@ -37,6 +39,32 @@ export default function EngagementPage() {
       /* keep prior state */
     } finally {
       setBusyCourse("");
+    }
+  }
+
+  async function openSyllabus(course) {
+    setSyllabusBusy(course.id);
+    setSyllabusNote("");
+    try {
+      const payload = await startCourseSyllabus(course.id);
+      const sessions = payload.sessions || [];
+      const next = sessions.find((session) => !session.completed_at) || sessions[0];
+      if (!next) {
+        setSyllabusNote("No syllabus sessions yet for this course.");
+        return;
+      }
+      const href = chatFromRailHref(
+        {
+          railTitle: `Syllabus · ${payload.course_name || course.name}`,
+          items: [{ title: next.title, why: next.focus_note }],
+        },
+        { title: next.title, why: next.focus_note },
+      );
+      window.location.assign(href);
+    } catch (err) {
+      setSyllabusNote(err.message || "Could not start syllabus.");
+    } finally {
+      setSyllabusBusy("");
     }
   }
 
@@ -136,17 +164,28 @@ export default function EngagementPage() {
                         Step {course.position || 0} of {course.item_count || 0}
                         {course.completed_at ? " · completed" : ""}
                       </p>
-                      {!course.completed_at && (course.item_count || 0) > 0 ? (
+                      <div className="engagement-course-actions">
+                        {!course.completed_at && (course.item_count || 0) > 0 ? (
+                          <button
+                            type="button"
+                            className="text-button"
+                            disabled={busyCourse === course.id}
+                            onClick={() => advanceCourse(course)}
+                            data-testid={`engagement-course-advance-${course.id}`}
+                          >
+                            Mark next step
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className="text-button"
-                          disabled={busyCourse === course.id}
-                          onClick={() => advanceCourse(course)}
-                          data-testid={`engagement-course-advance-${course.id}`}
+                          disabled={syllabusBusy === course.id}
+                          onClick={() => openSyllabus(course)}
+                          data-testid={`engagement-syllabus-${course.id}`}
                         >
-                          Mark next step
+                          {syllabusBusy === course.id ? "Opening syllabus…" : "Open multi-session syllabus"}
                         </button>
-                      ) : null}
+                      </div>
                     </li>
                   ))}
                 </ul>
@@ -155,6 +194,11 @@ export default function EngagementPage() {
                   No published courses yet. When your curator publishes one, it shows up here.
                 </p>
               )}
+              {syllabusNote ? (
+                <p className="status status-secondary" data-testid="engagement-syllabus-note">
+                  {syllabusNote}
+                </p>
+              ) : null}
             </section>
 
             <section className="explore-section" data-testid="engagement-explainers">

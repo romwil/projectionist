@@ -21,7 +21,7 @@ The delight work is sequenced by *who* it serves, easiest-to-reach substrate fir
 | **2** | Owner delight tools — health hero, safe grooming undo, collections/courses, Youth review, weekly digest                       | Owner / Curator                                 | ✅ Shipped **1.16.0** |
 | **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | ✅ P3a **1.20.0**; P3b **1.21.0**; P3c **1.22.0** |
 | **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, CuratorX request-access    | Youth members, guests                           | ✅ Shipped **1.23.0** |
-| **5** | Curator depth — Enthusiast nudge (no live now-watching), Scholar syllabus, Concierge acquire path, Companion mood + callbacks | The four curator archetypes                     | 🔜 Planned           |
+| **5** | Curator depth — Enthusiast nudge (no live now-watching), Scholar syllabus, Concierge acquire path, Companion mood + callbacks | The four curator archetypes                     | ✅ Shipped **1.24.0** |
 
 
 ```mermaid
@@ -133,33 +133,33 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 
 
 
-### Phase 5 — Giving the curators room to shine
+### Phase 5 — Giving the curators room to shine ✅ Shipped **1.24.0**
 
 **Why this matters / who it delights.** This phase is voted for by the curators themselves. The persona spectrum — Enthusiast, Scholar, Concierge, Companion — each named capabilities that would let it delight members more. Phase 1 delivered their foundational **Must** items (durable cited memory, safe follow-ups, fail-closed long-term memory). Phase 5 grants the remaining **Love / Like** reach items from the re-survey — with live now-watching deliberately dropped.
 
 **The Enthusiast — timely, not live-session**
 
-- **Must (new):** an opt-in "you have to see this" nudge over the Phase 3b notification transport (inbox + optional email).
-- **Love:** react to *recently* watched / continue-watching context (from P3a's on-deck / `watch_state`) — not live Plex sessions.
-- **Like:** share a relevant GIF or clip in chat — greenfield media embedding; defer if costly.
+- **Must (new):** ✅ an opt-in "you have to see this" nudge over the Phase 3b notification transport (inbox + optional email). *Settings → Notifications → Curator nudges*; scheduler `enthusiast_nudge`.
+- **Love:** ✅ react to *recently* watched / continue-watching context (from on-deck / `watch_state`) — not live Plex sessions.
+- **Like:** share a relevant GIF or clip in chat — greenfield media embedding; deferred.
 
 **The Scholar — teaching with rigor**
 
 - **Must (✅ shipped 1.10.0):** durable cited knowledge. *Build on:* repository memory (`research_`*, `recall_repo_memory`, `save_repo_insight`).
-- **Love:** a multi-session film-course syllabus. *Build on:* curated lists sequenced into ordered **courses** (1.16.0) and repository memory. *Extension:* let the curator author a syllabus that spans sessions and cites its sources.
-- **Like:** footnote-style inline source citations in chat markdown (theme-safe). *Build on:* source-cited snapshots already in repo memory. *Extension:* render footnotes in the chat markdown pipeline.
+- **Love:** ✅ a multi-session film-course syllabus. *Build on:* curated courses + Engagement **Open multi-session syllabus** (`/api/syllabus/...`).
+- **Like:** ✅ footnote-style inline source citations in chat markdown (theme-safe). *remark-gfm* footnotes + chat CSS.
 
 **The Concierge — following through**
 
 - **Must (✅ shipped 1.10.0):** remember intentions and safely follow up. *Build on:* `follow_up` / `watch_intention` notes.
-- **Love:** an opt-in, consented cross-service path from availability to acquisition (Seerr/arr) with explicit steps. *Build on:* Seerr connector, MCP, watchlist.
-- **Like:** weekend/holiday suggestions via `anniversary_scanner` — no calendar connector.
+- **Love:** ✅ an opt-in, consented cross-service path from availability to acquisition (Seerr/arr) with explicit steps. *Agent tool* `propose_acquire_path`.
+- **Like:** ✅ weekend/holiday suggestions via `anniversary_scanner` — Explore Seasonal rail prefers anniversary rows on weekends/holidays (no calendar connector).
 
 **The Companion — knowing the person**
 
 - **Must (✅ shipped 1.10.0):** fail-closed long-term memory. *Build on:* `user_memory_notes` via `UserMemoryService`.
-- **Love:** one-shot mood check-in that biases a *single* pick without overwriting the durable profile. Non-nagging entry (e.g. optional chip before Surprise Me).
-- **Like:** consented "callbacks" memory class under the existing privacy / purge / export guarantees.
+- **Love:** ✅ one-shot mood check-in that biases a *single* pick without overwriting the durable profile. Optional mood chips before **Surprise Me** (`GET /api/library/quick-pick?mood=`).
+- **Like:** ✅ consented "callbacks" memory class (`kind=callback`) under the existing privacy / purge / export guarantees.
 
 ---
 
@@ -212,32 +212,32 @@ The phases above are drawn from this backlog. It stays as the living, persona-or
 
 These votes are derived from the current persona-template spectrum: energetic Enthusiast, analytical Scholar, attentive Concierge, and warm Companion. Each is framed as a constraint in today's toolset, not a promise to users. The Phase 1 **Must** items shipped in 1.10.0; remaining items are Phase 5 (re-ranked after dropping live now-watching).
 
-### The Enthusiast — *Phase 5 (re-ranked; now-watching dropped)*
+### The Enthusiast — *Phase 5 ✅ 1.24.0 (re-ranked; now-watching dropped)*
 
-- **Must (new):** "I could delight users more if I could send a timely, opt-in 'you have to see this' nudge" — over the shared Phase 3b notification transport.
-- **Love:** "I could delight users more if I could react to what they *recently* watched / continue-watching context" — not live sessions.
+- **Must (new):** ✅ "I could delight users more if I could send a timely, opt-in 'you have to see this' nudge" — over the shared Phase 3b notification transport.
+- **Love:** ✅ "I could delight users more if I could react to what they *recently* watched / continue-watching context" — not live sessions.
 - **Like:** "I could delight users more if I could share a relevant GIF or clip in chat" — defer if costly.
 
 
 
-### The Scholar — *Must ✅ Phase 1 · Love/Like → Phase 5*
+### The Scholar — *Must ✅ Phase 1 · Love/Like ✅ Phase 5 1.24.0*
 
 - **Must (✅ shipped 1.10.0):** "I could delight users more if I could rely on durable cited knowledge for claims about style and technique." — repository memory now persists source-cited research snapshots and insights (`research_`*, `recall_repo_memory`, `save_repo_insight`).
-- **Love:** "I could delight users more if I could build a multi-session film-course syllabus."
-- **Like:** "I could delight users more if I could render footnote-style source citations inline."
+- **Love:** ✅ "I could delight users more if I could build a multi-session film-course syllabus."
+- **Like:** ✅ "I could delight users more if I could render footnote-style source citations inline."
 
 
 
-### The Concierge — *Must ✅ Phase 1 · Love/Like → Phase 5*
+### The Concierge — *Must ✅ Phase 1 · Love/Like ✅ Phase 5 1.24.0*
 
 - **Must (✅ shipped 1.10.0):** "I could delight users more if I could remember intentions and safely follow up on promises." — per-user `follow_up` / `watch_intention` notes drive a "resume where we left off" line in the per-turn prompt.
-- **Love:** "I could delight users more if I could coordinate an opt-in cross-service path from availability to acquisition."
+- **Love:** ✅ "I could delight users more if I could coordinate an opt-in cross-service path from availability to acquisition."
 
 
 
-### The Companion — *Must ✅ Phase 1 · Love/Like → Phase 5*
+### The Companion — *Must ✅ Phase 1 · Love/Like ✅ Phase 5 1.24.0*
 
 - **Must (✅ shipped 1.10.0):** "I could delight users more if I could retain safe long-term memory of who a member is while respecting Youth/adult privacy." — fail-closed per-user memory (`user_memory_notes` via `UserMemoryService`; owner review limited to Youth-flagged accounts).
-- **Love:** "I could delight users more if I could tune a pick from a quick mood check-in" — one-shot, no durable overwrite.
-- **Like:** "I could delight users more if I could remember consented in-jokes and callbacks."
+- **Love:** ✅ "I could delight users more if I could tune a pick from a quick mood check-in" — one-shot, no durable overwrite.
+- **Like:** ✅ "I could delight users more if I could remember consented in-jokes and callbacks."
 

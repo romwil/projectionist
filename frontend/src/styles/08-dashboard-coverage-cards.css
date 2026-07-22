@@ -746,6 +746,27 @@ a.on-this-day-item:focus-visible {
 
 /* ── Surprise Me Button ───────────────────────────────────── */
 
+.composer-mood-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-right: 0.35rem;
+}
+
+.composer-mood-chip {
+  min-height: 28px;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+
+.composer-mood-chip.is-active {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+}
+
 .composer-surprise {
   display: inline-flex;
   align-items: center;

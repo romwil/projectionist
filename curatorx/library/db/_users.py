@@ -174,6 +174,7 @@ class UsersAuthMixin:
         notify_channel_inbox: Any = ...,
         notify_channel_email: Any = ...,
         newsletter_opt_in: Any = ...,
+        nudge_opt_in: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -219,6 +220,9 @@ class UsersAuthMixin:
             if newsletter_opt_in is not ... and "newsletter_opt_in" in cols:
                 updates.append("newsletter_opt_in = ?")
                 params.append(1 if newsletter_opt_in else 0)
+            if nudge_opt_in is not ... and "nudge_opt_in" in cols:
+                updates.append("nudge_opt_in = ?")
+                params.append(1 if nudge_opt_in else 0)
             if updates:
                 params.append(user_id)
                 conn.execute(
@@ -450,6 +454,9 @@ class UsersAuthMixin:
         newsletter_opt_in = False
         if "newsletter_opt_in" in keys and row["newsletter_opt_in"] is not None:
             newsletter_opt_in = bool(int(row["newsletter_opt_in"]))
+        nudge_opt_in = False
+        if "nudge_opt_in" in keys and row["nudge_opt_in"] is not None:
+            nudge_opt_in = bool(int(row["nudge_opt_in"]))
         return {
             "id": str(row["id"]),
             "display_name": str(row["display_name"]),
@@ -461,6 +468,7 @@ class UsersAuthMixin:
             "notify_channel_inbox": notify_channel_inbox,
             "notify_channel_email": notify_channel_email,
             "newsletter_opt_in": newsletter_opt_in,
+            "nudge_opt_in": nudge_opt_in,
             "role": str(row["role"]),
             "disabled": disabled,
             "is_youth": is_youth,

@@ -48,7 +48,7 @@ When multi-user is enabled, these stay scoped to your user:
 - Watchlist pins
 - Ratings and review prompts tied to you
 - Preference / taste facts the curator keeps for you
-- Private memory notes (for example stated goals, watch intentions, and external watches)
+- Private memory notes (for example stated goals, watch intentions, callbacks/in-jokes, and external watches)
 - **Preferred conversation name** — how the curator addresses you in chat (may differ from your Plex display name)
 - Voice toggles (listen / speak replies), when voice mode is available
 
@@ -64,7 +64,7 @@ CuratorX can hand you a full **export** of your account data, or permanently **p
 
 | Data | In the export? | Removed by purge? | Where it lives |
 |------|:--------------:|:-----------------:|----------------|
-| **Private memory notes** — goals, watch intentions, follow-ups | Yes | Yes | `user_memory_notes` |
+| **Private memory notes** — goals, watch intentions, follow-ups, callbacks | Yes | Yes | `user_memory_notes` |
 | **Chat threads** — titles, personas, context, timestamps | Yes | Yes | `chat_sessions` |
 | **Message transcripts** — every message in your threads | Yes | Yes | `chat_messages` |
 | **Saved library pages** — your saved curator responses | Yes | Yes | `saved_library_pages` |

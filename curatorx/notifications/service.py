@@ -35,6 +35,9 @@ def user_wants_channel(user: Dict[str, Any], *, kind: str, channel: str) -> bool
     cleaned_channel = str(channel or "").strip().lower()
     if cleaned_kind not in NOTIFICATION_KINDS:
         return False
+    # Enthusiast nudges are opt-in even when inbox/email channels are otherwise on.
+    if cleaned_kind == "nudge" and not user.get("nudge_opt_in"):
+        return False
     if cleaned_channel == "inbox":
         if user.get("notify_channel_inbox") is False:
             return False

@@ -618,6 +618,21 @@ export async function postCourseProgress(listId, { position = 0, completed = fal
   });
 }
 
+export async function startCourseSyllabus(listId) {
+  return api(`/syllabus/courses/${encodeURIComponent(listId)}`, { method: "POST" });
+}
+
+export async function getCourseSyllabus(listId) {
+  return api(`/syllabus/courses/${encodeURIComponent(listId)}`);
+}
+
+export async function updateSyllabusSession(sessionId, payload = {}) {
+  return api(`/syllabus/sessions/${encodeURIComponent(sessionId)}`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getTasteProfile() {
   return api("/taste");
 }

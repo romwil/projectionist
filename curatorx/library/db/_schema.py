@@ -888,6 +888,7 @@ class SchemaMigrationsMixin:
                 "notify_channel_inbox": "INTEGER NOT NULL DEFAULT 1",
                 "notify_channel_email": "INTEGER NOT NULL DEFAULT 0",
                 "newsletter_opt_in": "INTEGER NOT NULL DEFAULT 0",
+                "nudge_opt_in": "INTEGER NOT NULL DEFAULT 0",
             }
             for name, typedef in notify_cols.items():
                 if name not in user_cols:

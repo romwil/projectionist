@@ -107,10 +107,16 @@ Open **Explore → Engagement** (or the Engagement hub card) for:
 - **Streak** — consecutive chat days plus your 30-day conversation count
 - **Challenges** — e.g. **Rate 5 films** / **Rate 10 films**, synced from your reviews
 - **Badges** — milestones like first review or a three-day chat streak
-- **Cinema courses** — published ordered collections with step progress
+- **Cinema courses** — published ordered collections with step progress; **Open multi-session syllabus** starts a Scholar-style study path that spans chat sessions
 - **Explainers** — short notes on taste weights, courses, and the weekly rail
 
 Youth-mode accounts see **youth-safe** badges, challenges, and explainers only (including Ask the curator and why some titles stay hidden).
+
+**Surprise Me with a mood.** Above the dice in chat, optional mood chips (**Cozy**, **Thrill**, **Laugh**, **Think**, **Escape**) bias a *single* pick. They do not overwrite your durable taste profile.
+
+**Scholar footnotes in chat.** When the curator cites sources with footnote-style markdown (`claim[^1]` plus `[^1]: source` definitions), chat renders them as theme-safe footnote refs under the reply.
+
+**Ask to acquire a title.** In chat you can ask the Concierge to walk find → availability → Seerr request with explicit steps. Nothing is requested until you confirm.
 
 **Where can I watch this?** On title detail (and on chat recommendation posters) CuratorX shows a compact availability line: **In your library ✓**, **Requestable** (when Seerr is your request path), or **Not here yet**. It does not look up Netflix, Max, or other external streamers.
 
@@ -118,7 +124,7 @@ Youth-mode accounts see **youth-safe** badges, challenges, and explainers only (
 
 ### Inbox & notifications
 
-The **bell** in the top bar opens your inbox. Unread items show a badge. Household recommendations, title arrivals, digests, and (later) nudges all land there.
+The **bell** in the top bar opens your inbox. Unread items show a badge. Household recommendations, title arrivals, digests, and curator **nudges** all land there.
 
 Under **Settings → Notifications** you can:
 
@@ -126,6 +132,7 @@ Under **Settings → Notifications** you can:
 - Turn the **in-app inbox** on or off
 - Opt into **email alerts** when the owner has mail configured
 - Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available)
+- Opt into **curator nudges** — occasional “you have to see this” picks (optionally reacting to what you recently watched / continue-watching). These are never live Plex session alerts.
 
 Dismiss a card when you’re done; **Dismiss all** clears the unread stack.
 
@@ -378,12 +385,13 @@ curl -s http://localhost:8788/api/collections | python3 -m json.tool
 
 CuratorX assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
 
-Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
+Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
 
 ```bash
 curl -s -X POST http://localhost:8788/api/admin/weekly-rail/generate | python3 -m json.tool
 ```
 
+Weekend / holiday **Seasonal picks** on Explore prefer anniversary-scanner rows when available (no calendar connector).
 ```bash
 # Read the latest digest (owner-only)
 curl -s http://localhost:8788/api/admin/weekly-digest | python3 -m json.tool
