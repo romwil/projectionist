@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- **Completed curator replies no longer grow nested scrollbars.** The 1.19.4 streaming-class gate removed the permanent `max-height`, but `overflow-x: auto|hidden` paired with `overflow-y: visible` still computes to a vertical scrollport (and the horizontal scrollbar’s height often triggers a second bar). Completed `.inline-cards` now use `overflow-y: hidden`, review strips use `overflow: visible`, and message/markdown hosts use `overflow-x: clip` so only `.chat-scroll-region` scrolls after the turn finishes.
+
 ## [1.20.0] — 2026-07-22
 
 Phase 3a of the delight program: know at a glance whether a title is already yours, requestable through Seerr, or not here yet; pin and unpin without waiting on Plex; and pick up where you left off from an Explore Continue Watching rail.

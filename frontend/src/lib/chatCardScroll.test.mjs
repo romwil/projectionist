@@ -7,6 +7,7 @@ import {
   chatMediaStripClassName,
   chatMediaStripUsesNestedScroll,
 } from "./chatCardScroll.js";
+import { readAllStyles } from "./readStyles.mjs";
 
 describe("chatMediaStripUsesNestedScroll", () => {
   it("is false for completed turns", () => {
@@ -46,5 +47,42 @@ describe("chatMediaStripClassName", () => {
     assert.ok(INLINE_CARDS_STREAMING_MAX_HEIGHT_VH <= 60);
     assert.ok(REVIEW_BATCH_STREAMING_MAX_HEIGHT_VH >= 20);
     assert.ok(REVIEW_BATCH_STREAMING_MAX_HEIGHT_VH <= INLINE_CARDS_STREAMING_MAX_HEIGHT_VH);
+  });
+});
+
+describe("completed chat media strip CSS (no nested vertical scroll)", () => {
+  const styles = readAllStyles();
+
+  it("keeps completed inline-cards on overflow-y hidden (not visible)", () => {
+    assert.match(
+      styles,
+      /\.chat-scroll-region\s+\.inline-cards\s*\{[^}]*overflow-y:\s*hidden/s,
+    );
+    assert.doesNotMatch(
+      styles,
+      /\.chat-scroll-region\s+\.inline-cards\s*\{[^}]*overflow-y:\s*visible/s,
+    );
+  });
+
+  it("gates nested vertical scroll behind the streaming class", () => {
+    assert.match(
+      styles,
+      /\.chat-scroll-region\s+\.inline-cards\.chat-inline-cards--streaming\s*\{[^}]*overflow-y:\s*auto/s,
+    );
+    assert.match(
+      styles,
+      /\.chat-scroll-region\s+\.review-batch-strip\.chat-inline-cards--streaming\s*\{[^}]*overflow-y:\s*auto/s,
+    );
+  });
+
+  it("uses overflow:visible for completed review-batch strips", () => {
+    assert.match(
+      styles,
+      /\.chat-scroll-region\s+\.review-batch-strip\s*\{[^}]*overflow:\s*visible/s,
+    );
+  });
+
+  it("clips message-inner horizontally without creating vertical scroll via hidden", () => {
+    assert.match(styles, /\.message-inner\s*\{[^}]*overflow-x:\s*clip/s);
   });
 });

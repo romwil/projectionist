@@ -56,17 +56,20 @@
   grid-auto-columns: minmax(clamp(160px, 22vw, 200px), 240px);
   gap: var(--space-4);
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: hidden; /* paired with overflow-x:auto — visible would compute to auto */
   padding-bottom: var(--space-2);
   margin-top: var(--space-3);
 }
 
 /* Completed turns: one poster-card row (+ actions), horizontal swipe only.
+   Use overflow-y: hidden (not visible): with overflow-x: auto, CSS computes
+   overflow-y:visible → auto, which reintroduces a nested vertical scrollbar
+   (especially once the horizontal bar eats a few pixels of height).
    Nested vertical scroll is temporary while streaming (see --streaming). */
 .chat-scroll-region .inline-cards {
   max-height: none;
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: hidden;
   align-content: start;
 }
 

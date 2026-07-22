@@ -34,7 +34,7 @@ describe("chatLayout containment", () => {
   it("messageTextContainmentStyle returns viewport-safe defaults", () => {
     const style = messageTextContainmentStyle();
     assert.equal(isHorizontallyContained(style), true);
-    assert.equal(style.overflowX, "hidden");
+    assert.equal(style.overflowX, "clip");
     assert.equal(style.minWidth, "0");
   });
 });

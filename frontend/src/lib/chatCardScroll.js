@@ -4,6 +4,10 @@
  * Nested vertical scroll is allowed only while an assistant turn is still
  * streaming. Once the turn completes, strips size to their natural height
  * (one poster row for inline cards) and only `.chat-scroll-region` scrolls.
+ *
+ * CSS note: do not pair `overflow-x: auto|hidden` with `overflow-y: visible`
+ * on completed strips — the cascade computes visible → auto and recreates a
+ * nested vertical scrollport (classic horizontal-scrollbar height bleed).
  */
 
 /** Class toggled on chat media strips / activity panels while streaming. */

@@ -28,6 +28,8 @@ export function isHorizontallyContained(style = {}) {
 
 /**
  * Recommended inline containment for markdown / message text hosts.
+ * Prefer overflow-x: clip so overflow-y stays non-scrolling (hidden/auto on X
+ * forces visible Y to compute to auto per CSS Overflow).
  */
 export function messageTextContainmentStyle() {
   return {
@@ -35,6 +37,6 @@ export function messageTextContainmentStyle() {
     maxWidth: "100%",
     overflowWrap: "anywhere",
     wordBreak: "break-word",
-    overflowX: "hidden",
+    overflowX: "clip",
   };
 }

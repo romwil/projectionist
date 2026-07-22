@@ -328,7 +328,8 @@ button.app-topbar-icon:focus-visible,
   min-height: auto;
   min-width: 0;
   max-width: 100%;
-  overflow-x: hidden;
+  /* clip (not hidden+visible): avoids CSS pairing that promotes overflow-y to auto */
+  overflow-x: clip;
   overflow-y: visible;
   padding: 0;
 }
@@ -1480,9 +1481,24 @@ button.watchlist-chip {
   white-space: normal;
   min-width: 0;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+/* Completed curator replies: no nested vertical scroll inside the bubble.
+   Streaming (`.is-streaming`) may still use temporary strip containment. */
+.chat-scroll-region .message:not(.is-streaming) .message-inner,
+.chat-scroll-region .message:not(.is-streaming) .markdown-body {
+  overflow-y: visible;
+}
+
+.chat-scroll-region .message:not(.is-streaming) .inline-cards {
+  overflow-y: hidden;
+}
+
+.chat-scroll-region .message:not(.is-streaming) .review-batch-strip {
+  overflow: visible;
 }
 
 .markdown-body > :first-child {
@@ -1553,6 +1569,7 @@ button.watchlist-chip {
   margin: 0 0 0.75em;
   padding: 12px;
   overflow-x: auto;
+  overflow-y: hidden; /* keep horizontal code scroll without vertical bleed */
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -1566,6 +1583,7 @@ button.watchlist-chip {
 
 .markdown-table-wrap {
   overflow-x: auto;
+  overflow-y: hidden;
   margin: 0 0 0.75em;
   -webkit-overflow-scrolling: touch;
 }
@@ -1616,7 +1634,9 @@ button.watchlist-chip {
   border: 1px solid var(--border-subtle);
   animation: message-enter 0.28s ease-out;
   box-sizing: border-box;
-  overflow-x: hidden;
+  /* clip (not overflow-x hidden): pairing hidden on X with default visible Y
+     computes to overflow-y auto and can nest a vertical scrollbar inside the reply. */
+  overflow-x: clip;
   overflow-wrap: anywhere;
 }
 
@@ -1740,15 +1760,17 @@ button.watchlist-chip {
   margin-top: 10px;
 }
 
-/* Completed turns: natural height; outer `.chat-scroll-region` scrolls. */
+/* Completed turns: natural height; outer `.chat-scroll-region` scrolls.
+   overflow:visible (not overflow-x:hidden + overflow-y:visible) — the latter
+   computes overflow-y to auto and recreates nested vertical scroll. */
 .chat-scroll-region .review-batch-strip {
   max-height: none;
-  overflow-x: hidden;
-  overflow-y: visible;
+  overflow: visible;
 }
 
 .chat-scroll-region .review-batch-strip.chat-inline-cards--streaming {
   max-height: min(36vh, 300px);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
