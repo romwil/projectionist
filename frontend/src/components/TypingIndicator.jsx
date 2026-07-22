@@ -60,7 +60,7 @@ export default function TypingIndicator({
 
   return (
     <div
-      className={`typing-indicator-wrap${expanded ? " is-expanded" : ""}${interactive ? " is-interactive" : ""}`}
+      className={`typing-indicator-wrap${expanded ? " is-expanded" : ""}${interactive ? " is-interactive" : ""}${streaming ? " is-streaming" : ""}`}
       data-testid="typing-indicator-wrap"
     >
       <div

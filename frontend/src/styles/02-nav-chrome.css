@@ -564,9 +564,9 @@ button.app-topbar-icon:focus-visible,
 }
 
 .agent-activity-panel {
-  max-height: 180px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  /* Post-stream: grow with the chat column — no nested vertical scrollbar. */
+  max-height: none;
+  overflow-y: visible;
   border: 1px solid var(--border-subtle);
   border-radius: 12px;
   background: var(--surface-2);
@@ -575,6 +575,12 @@ button.app-topbar-icon:focus-visible,
   flex-direction: column;
   gap: 6px;
   scrollbar-width: thin;
+}
+
+.typing-indicator-wrap.is-streaming .agent-activity-panel {
+  max-height: 180px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .agent-activity-empty {
@@ -1734,9 +1740,15 @@ button.watchlist-chip {
   margin-top: 10px;
 }
 
+/* Completed turns: natural height; outer `.chat-scroll-region` scrolls. */
 .chat-scroll-region .review-batch-strip {
-  max-height: min(36vh, 300px);
+  max-height: none;
   overflow-x: hidden;
+  overflow-y: visible;
+}
+
+.chat-scroll-region .review-batch-strip.chat-inline-cards--streaming {
+  max-height: min(36vh, 300px);
   overflow-y: auto;
   overscroll-behavior: contain;
 }

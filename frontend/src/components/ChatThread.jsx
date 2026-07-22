@@ -10,6 +10,7 @@ import TitleCard from "./TitleCard";
 import InlineAlert from "./InlineAlert";
 import MessageText from "./MessageText";
 import ShareActionMenu from "./ShareActionMenu";
+import { chatMediaStripClassName } from "../lib/chatCardScroll.js";
 
 function renderBulkConfirmActions(message, handlers, showTokenConfirm, viewportBlock) {
   const { radarr, sonarr, seerr } = collectAddableFromMessage(message, {
@@ -98,7 +99,7 @@ function enrichTitleCard(item, reviewLookup = {}) {
   return { ...item, user_stars: stars };
 }
 
-function renderBlock(block, handlers, role, message, blockIndex, blocks) {
+function renderBlock(block, handlers, role, message, blockIndex, blocks, streaming) {
   if (block.type === "text") {
     return <MessageText content={block.content} markdown={role === "assistant"} />;
   }
@@ -131,7 +132,7 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
     );
     return (
       <>
-        <div className="inline-cards">
+        <div className={chatMediaStripClassName("inline-cards", { streaming })}>
           {items.map((item) => (
             <TitleCard
               key={`${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`}
@@ -178,7 +179,10 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks) {
   }
   if (block.type === "review_batch" && Array.isArray(block.payload?.prompts)) {
     return (
-      <div className="review-batch-strip" data-testid="review-batch-strip">
+      <div
+        className={chatMediaStripClassName("review-batch-strip", { streaming })}
+        data-testid="review-batch-strip"
+      >
         {block.payload.prompts.map((prompt) => (
           <ReviewPromptCard
             key={prompt.id || prompt.rating_key}
@@ -324,7 +328,8 @@ export default function ChatThread({
                     message.role,
                     message,
                     index,
-                    message.blocks
+                    message.blocks,
+                    streaming,
                   )}
                 </div>
               ))}

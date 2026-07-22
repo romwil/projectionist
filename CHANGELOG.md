@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.19.4] — 2026-07-21
+
+Chat recommendation posters finally sit at their natural height — one poster row you can swipe sideways — instead of living in a short box that invents a second vertical scrollbar. While the curator is still writing, a temporary nested scroll is fine; once the turn finishes, only the main chat column scrolls.
+
+### Highlights
+- **Poster strips sized for one row.** Recommendation cards in chat no longer clip into a short scroll box — you get a full poster row (plus actions) and horizontal swipe only.
+- **One scrollbar when the reply is done.** Nested vertical scroll around posters, review prompts, and the agent-activity panel is temporary while a reply is streaming; after the turn completes, only the chat column scrolls.
+
+### Fixed
+- **Nested vertical scroll on completed chat poster / review strips.** `.chat-scroll-region .inline-cards` and `.chat-scroll-region .review-batch-strip` no longer apply a permanent `max-height` + `overflow-y: auto`. Completed strips use natural height with `overflow-x: auto; overflow-y: visible` (horizontal swipe only for posters). Temporary containment (`max-height` + nested `overflow-y: auto`) is gated behind the `chat-inline-cards--streaming` class while a message is still `_streaming` / loading. The full-screen turnstyle overlay (`.viewport`) is unchanged.
+- **Agent activity panel nested scroll after stream ends.** `.agent-activity-panel` keeps temporary nested scroll only while `.typing-indicator-wrap.is-streaming` is active; once generation completes, the panel grows with the chat column.
+
+### Changed
+- **`chatMediaStripClassName` / `chatMediaStripUsesNestedScroll` (`frontend/src/lib/chatCardScroll.js`).** Pure helpers decide the streaming vs complete class rule from `_streaming` / `loading`. `ChatThread.jsx` applies the class to `inline-cards` and `review-batch-strip`; `TypingIndicator.jsx` toggles `is-streaming` on the wrap. Replaces the old always-on `scrollableCardStripStyle` max-height helper.
+
+### Verification
+- New/updated unit coverage in `frontend/src/lib/chatCardScroll.test.mjs` asserts nested scroll is off for completed turns, on while streaming/loading, and that `chatMediaStripClassName` appends `chat-inline-cards--streaming` only in the streaming case. Frontend `node --test` unit suite **378 passed** (up from 376), ESLint **0 errors**, and the production build succeeds. `test_version` parity holds across `curatorx/_version.py`, root `package.json`, `frontend/package.json`, and both lockfiles at **1.19.4**. `frontend/public/release-notes.json` regenerated from this entry via `scripts/generate-release-notes.sh`.
+
 ## [1.19.3] — 2026-07-21
 
 Fan out your "Beyond your collection" search results the same way chat recommendations do. When an Explore search turns up titles you don't own yet, you'll now see an **Expand N titles in turnstyle view** button that opens the big, focused poster turnstyle — the exact same overlay the curator uses for its picks — so you can flip through everything and add or request without squinting at the grid.

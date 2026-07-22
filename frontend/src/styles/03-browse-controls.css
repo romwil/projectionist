@@ -61,12 +61,19 @@
   margin-top: var(--space-3);
 }
 
+/* Completed turns: one poster-card row (+ actions), horizontal swipe only.
+   Nested vertical scroll is temporary while streaming (see --streaming). */
 .chat-scroll-region .inline-cards {
-  max-height: min(42vh, 360px);
+  max-height: none;
   overflow-x: auto;
+  overflow-y: visible;
+  align-content: start;
+}
+
+.chat-scroll-region .inline-cards.chat-inline-cards--streaming {
+  max-height: min(42vh, 360px);
   overflow-y: auto;
   overscroll-behavior: contain;
-  align-content: flex-start;
 }
 
 .title-card {
