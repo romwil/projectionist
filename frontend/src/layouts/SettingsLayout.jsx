@@ -6,6 +6,7 @@ import AppNav, { AppNavToggle } from "../components/AppNav";
 export const SETTINGS_NAV = [
   { to: "/settings/profile", id: "profile", label: "Profile" },
   { to: "/settings/voice", id: "voice", label: "Voice" },
+  { to: "/settings/taste", id: "taste", label: "Taste" },
   { to: "/settings/notifications", id: "notifications", label: "Notifications" },
   { to: "/settings/watchlist", id: "watchlist", label: "Watchlist" },
   { to: "/settings/lists", id: "lists", label: "Lists" },

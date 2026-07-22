@@ -19,7 +19,7 @@ The delight work is sequenced by *who* it serves, easiest-to-reach substrate fir
 | ----- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------- |
 | **1** | Curator memory foundation — cited knowledge, follow-ups, fail-closed per-user memory                                          | The AI curators (Scholar, Concierge, Companion) | ✅ Shipped **1.10.0** |
 | **2** | Owner delight tools — health hero, safe grooming undo, collections/courses, Youth review, weekly digest                       | Owner / Curator                                 | ✅ Shipped **1.16.0** |
-| **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | 🔜 P3a ✅ **1.20.0**; P3b ✅ **1.21.0**; P3c planned |
+| **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | 🔜 P3a ✅ **1.20.0**; P3b ✅ **1.21.0**; P3c ✅ **1.22.0** |
 | **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, CuratorX request-access    | Youth members, guests                           | 🔜 Planned           |
 | **5** | Curator depth — Enthusiast nudge (no live now-watching), Scholar syllabus, Concierge acquire path, Companion mood + callbacks | The four curator archetypes                     | 🔜 Planned           |
 
@@ -93,14 +93,14 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 
 
 
-#### P3c — Taste, weekly rail, chat-from-here, engagement
+#### P3c — Taste, weekly rail, chat-from-here, engagement ✅ Shipped **1.22.0**
 
 **Love — the moments that make it feel generous**
 
-- **A personalized weekly rail with a persona-voiced "why."** *Build on:* `taste_refresh` + `lens_taste_profile`, `recommendation_warmup`, the persona prompt system, and digest infrastructure. *Extension:* per-member rail on a weekly cadence; each pick carries a short persona-voiced reason. *Budget:* ride digest cadence with per-user fan-out; hard cap on LLM calls.
-- **Chat-from-here on every rail.** *Build on:* chat threads and rails both exist. *Extension:* a "chat about this" affordance that seeds a thread with the rail's context.
-- **A visible, tunable taste profile.** *Build on:* `lens_taste_profile` already stores per-cluster `weight` and an `explicit_lock` flag; `taste_refresh` only recomputes *unlocked* weights. *Greenfield:* member-facing screen and APIs (today owner/scheduler only) to view and adjust those weights.
-- **Engagement substrate.** Cinema courses, genre badges/streaks, "rate N films" challenges, movie-learning explainers. *Build on:* curated `course` lists from 1.16.0 and health/engagement metrics as a starting signal. *Greenfield:* the reward model, shared tables/APIs that Phase 4 will preset for youth. The point is a platform people *want* to return to — not a one-shot recommend box.
+- **A personalized weekly rail with a persona-voiced "why."** ✅ Explore **For you this week**; scheduler `member_weekly_rail` rides digest cadence with per-user fan-out and a hard LLM polish cap.
+- **Chat-from-here on every rail.** ✅ **Chat about these** seeds a thread with rail context (and persona why when present).
+- **A visible, tunable taste profile.** ✅ **Settings → Taste** over member overrides on `lens_taste_profile` / `explicit_lock` (`GET`/`PATCH` `/api/taste`).
+- **Engagement substrate.** ✅ Badges, streaks, rate-N challenges, cinema course progress, explainers — shared tables/APIs Phase 4 will preset for youth (`/explore/engagement`).
 
 **Like — nice-to-haves**
 

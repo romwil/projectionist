@@ -78,6 +78,69 @@ export function recommendLikePrompt(searchParams) {
   return `Recommend titles like "${title}"${details.length ? ` (${details.join(", ")})` : ""} and help me discuss what makes it work.`;
 }
 
+/** Query flag that opens chat seeded from an Explore rail. */
+export const CHAT_FROM_RAIL_PARAM = "from_rail";
+const CHAT_FROM_RAIL_TITLE_PARAM = "rail_title";
+const CHAT_FROM_RAIL_WHY_PARAM = "rail_why";
+
+/**
+ * Deep-link to chat with rail context (titles + optional persona why).
+ * @param {{ railTitle?: string, railId?: string, items?: Array<{ title?: string, why?: string, year?: number }> }} rail
+ * @param {{ title?: string, why?: string } | null} [focusItem]
+ */
+export function chatFromRailHref(rail, focusItem = null) {
+  const params = new URLSearchParams();
+  const railTitle = String(rail?.railTitle || rail?.title || "this rail").trim();
+  params.set(CHAT_FROM_RAIL_PARAM, "1");
+  params.set(CHAT_FROM_RAIL_TITLE_PARAM, railTitle.slice(0, 120));
+  if (focusItem?.title) {
+    params.set(RECOMMEND_LIKE_PARAM, String(focusItem.title).trim().slice(0, 120));
+    if (focusItem.why) {
+      params.set(CHAT_FROM_RAIL_WHY_PARAM, String(focusItem.why).trim().slice(0, 280));
+    }
+  } else {
+    const titles = (rail?.items || [])
+      .map((item) => String(item?.title || "").trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    if (titles.length) {
+      params.set("rail_titles", titles.join("|").slice(0, 400));
+    }
+  }
+  return `${ROUTES.chat}?${params.toString()}`;
+}
+
+/** Build the seeded chat prompt from a chat-from-rail URL. */
+export function chatFromRailPrompt(searchParams) {
+  if (!searchParams || typeof searchParams.get !== "function") return "";
+  if (String(searchParams.get(CHAT_FROM_RAIL_PARAM) || "") !== "1") return "";
+  const railTitle = String(searchParams.get(CHAT_FROM_RAIL_TITLE_PARAM) || "this rail").trim();
+  const focus = String(searchParams.get(RECOMMEND_LIKE_PARAM) || "").trim();
+  const why = String(searchParams.get(CHAT_FROM_RAIL_WHY_PARAM) || "").trim();
+  if (focus) {
+    const whyBit = why ? ` The curator said: "${why}"` : "";
+    return `Let's talk about "${focus}" from my "${railTitle}" picks.${whyBit} What should I know, and what else fits that vibe in my library?`;
+  }
+  const titles = String(searchParams.get("rail_titles") || "")
+    .split("|")
+    .map((t) => t.trim())
+    .filter(Boolean);
+  const list = titles.length ? ` Titles: ${titles.map((t) => `"${t}"`).join(", ")}.` : "";
+  return `I want to chat about my "${railTitle}" picks.${list} Help me choose what to watch and why.`;
+}
+
+export function stripChatFromRailParam(searchParams) {
+  const next = new URLSearchParams(searchParams);
+  next.delete(CHAT_FROM_RAIL_PARAM);
+  next.delete(CHAT_FROM_RAIL_TITLE_PARAM);
+  next.delete(CHAT_FROM_RAIL_WHY_PARAM);
+  next.delete("rail_titles");
+  next.delete(RECOMMEND_LIKE_PARAM);
+  next.delete(RECOMMEND_LIKE_YEAR_PARAM);
+  next.delete(RECOMMEND_LIKE_TYPE_PARAM);
+  return next;
+}
+
 /** True when URL search asks to open the Watchlist panel. */
 export function isWatchlistPanelRequest(searchParams) {
   if (!searchParams || typeof searchParams.get !== "function") return false;

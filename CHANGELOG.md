@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.22.0] — 2026-07-22
+
+Phase 3c of the delight program: tunable taste, a persona-voiced weekly For you rail, chat-from-here on Explore rails, and the shared engagement substrate (badges, streaks, challenges, courses, explainers).
+
+### Highlights
+- **Tune your taste.** Under **Settings → Taste**, raise or lock cluster weights so recommendations stay aligned with what you actually like.
+- **For you this week.** Explore opens with a personalized rail of unwatched picks, each with a short curator *why*.
+- **Chat about these.** Every Explore rail can seed a conversation with that rail’s titles (and why lines) so you can refine the shortlist in chat.
+- **Engagement that sticks.** Badges, chat streaks, rate-N challenges, cinema course progress, and explainers live under **Explore → Engagement** — substrate Phase 4 will preset for youth.
+
+### Added
+- **Member taste APIs** — `GET`/`PATCH` `/api/taste`, `DELETE /api/taste/{cluster_tag}` over per-user overrides merged onto `lens_taste_profile` / `explicit_lock`; **Settings → Taste** UI.
+- **Weekly For you rail** — `user_weekly_rails`, scheduler `member_weekly_rail` (digest cadence, hard LLM polish cap), `GET /api/library/feeds/for-you`, owner `POST /api/admin/weekly-rail/generate`.
+- **Chat-from-here** — `chatFromRailHref` / `chatFromRailPrompt` deep links; **Chat about these** on Explore rails.
+- **Engagement substrate** — badges, streaks, rate-N challenges, explainers, course progress tables + `GET /api/engagement/summary`, course progress POST, Explore Engagement page; extended streak response fields.
+- **HELP** member sections for For you / Taste / Engagement; owner weekly-rail generate curl.
+
+### Fixed
+- **Streaming fallback tolerates a null extract text** — buffered chat fallback no longer AttributeErrors when round text is unexpectedly `None` (`stream_agent` + regression in `tests/test_sse_streaming.py`).
+
+### Verification
+- Backend `pytest` **1231 passed**, 4 skipped (27 subtests) at **78.27%** total coverage (`--cov-fail-under=74`). New coverage in `tests/test_taste_engagement.py`.
+- Frontend `node --test` unit suite **405 passed** (up from 403), including chat-from-rail cases in `backNav.test.mjs`. ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- `test_version` lockstep holds at **1.22.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.21.1] — 2026-07-22
 
 The multi-user login screen leads with **Sign in with Plex** — household-friendly copy up front, token paste tucked behind Advanced.

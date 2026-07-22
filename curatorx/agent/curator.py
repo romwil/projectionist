@@ -545,7 +545,9 @@ async def stream_agent(
         # often narrate ("Let me look…") before a tool call, and a later round
         # may return only cards; keeping just the last round would drop that
         # prose and fall back to the generic placeholder.
-        stripped = round_text.strip()
+        # Guard like _accumulate_response_text: buffered fallback / odd payloads
+        # must not AttributeError if round_text is unexpectedly None.
+        stripped = (round_text or "").strip()
         if stripped and (not text_segments or text_segments[-1] != stripped):
             text_segments.append(stripped)
 

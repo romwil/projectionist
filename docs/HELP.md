@@ -76,12 +76,41 @@ Saved pages preserve the structured text, title cards, and reply chips. From the
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — in-progress titles from Plex On Deck (resume + Play), not a live "now playing" session list
+- **For you this week** — personalized unwatched picks with a short persona-voiced *why* (built on the weekly digest cadence)
 - **Recently Added** and **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
 - **On This Day**
 - A daily-rotating **director filmography** and **genre**, plus a nearby calendar-occasion rail (holidays and observances, including Arbor Day) or a gentle season-of-the-year fallback
 
+**Chat about a rail.** Most Explore rails offer **Chat about these** — it opens a new conversation seeded with that rail's titles (and the persona *why* when present), so you can refine the shortlist without retyping context.
+
 Those discovery rails only appear when your library has enough matching metadata, and their headings open the matching director or genre wall.
+
+### For you weekly rail
+
+Your **For you** rail is rebuilt about once a week alongside the library digest. It prefers unwatched titles that match your taste clusters and writes a short reason in your default curator's voice.
+
+Tune the underlying weights under **Settings → Taste** — raise a cluster, lower another, and **Lock** anything you don't want the automatic refresh to drift. Locked weights stay put; unlocked ones can still learn from reviews and chat feedback.
+
+> **Example:** You lock `noir` high and leave `comedy` unlocked. Next week's For you leans hard into noir thrillers you haven't watched, while comedy weights can still soften if you keep rating rom-coms highly.
+
+**How it works / honest limits.** The scheduler fans out one rail per member with a hard cap on optional LLM polish (v1 uses persona template voice). Empty rails usually mean cold taste data — rate a few titles or chat first.
+
+### Taste profile
+
+**Settings → Taste** shows the cluster tags CuratorX learned for you (genres, moods, eras). Drag a weight, lock it, or **Reset** an override to fall back to the household lens baseline.
+
+### Engagement — badges, streaks, courses
+
+Open **Explore → Engagement** (or the Engagement hub card) for:
+
+- **Streak** — consecutive chat days plus your 30-day conversation count
+- **Challenges** — e.g. **Rate 5 films** / **Rate 10 films**, synced from your reviews
+- **Badges** — milestones like first review or a three-day chat streak
+- **Cinema courses** — published ordered collections with step progress
+- **Explainers** — short notes on taste weights, courses, and the weekly rail
+
+Youth-safe presets for these same tables arrive in a later phase; the substrate is shared.
 
 **Where can I watch this?** On title detail (and on chat recommendation posters) CuratorX shows a compact availability line: **In your library ✓**, **Requestable** (when Seerr is your request path), or **Not here yet**. It does not look up Netflix, Max, or other external streamers.
 
@@ -317,7 +346,7 @@ Use the **Undo last grooming run** panel on the Dashboard for the same thing wit
 
 ### Collections & courses (publish a list to members)
 
-Any curated list can become a members-visible **collection**, and an ordered **course** with a short note per step (e.g. a "Kurosawa 101" watch-through). Members can view what you publish; only the owner publishes.
+Any curated list can become a members-visible **collection**, and an ordered **course** with a short note per step (e.g. a "Kurosawa 101" watch-through). Members can view what you publish; only the owner publishes. Members track course step progress under **Explore → Engagement**.
 
 - Create or open a list under **Lists**, set its kind to **course** if you want an ordered sequence, and use the owner **Course authoring** panel to reorder items and add a per-step note.
 - Toggle **Publish** to make it visible to members under **Collections**; toggle it off to make it private again.
@@ -341,7 +370,11 @@ curl -s http://localhost:8788/api/collections | python3 -m json.tool
 
 CuratorX assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
 
-Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library.
+Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
+
+```bash
+curl -s -X POST http://localhost:8788/api/admin/weekly-rail/generate | python3 -m json.tool
+```
 
 ```bash
 # Read the latest digest (owner-only)

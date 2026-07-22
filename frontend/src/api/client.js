@@ -577,6 +577,32 @@ export async function getEngagementStreak() {
   return api("/engagement/streak");
 }
 
+export async function getEngagementSummary() {
+  return api("/engagement/summary");
+}
+
+export async function postCourseProgress(listId, { position = 0, completed = false } = {}) {
+  return api(`/engagement/courses/${encodeURIComponent(listId)}/progress`, {
+    method: "POST",
+    body: JSON.stringify({ position, completed }),
+  });
+}
+
+export async function getTasteProfile() {
+  return api("/taste");
+}
+
+export async function patchTasteProfile(clusters) {
+  return api("/taste", {
+    method: "PATCH",
+    body: JSON.stringify({ clusters }),
+  });
+}
+
+export async function deleteTasteCluster(clusterTag) {
+  return api(`/taste/${encodeURIComponent(clusterTag)}`, { method: "DELETE" });
+}
+
 /** Owner-only: review a Youth-flagged account's memory notes (fail-closed on the server). */
 export async function getUserMemory(userId) {
   return api(`/users/${encodeURIComponent(userId)}/memory`);
@@ -978,6 +1004,11 @@ export async function getExploreFeedRevisitThese({ limit = 20, idleDays = 60 } =
 export async function getExploreFeedContinueWatching({ limit = 12 } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   return api(`/library/feeds/continue-watching?${params}`);
+}
+
+export async function getExploreFeedForYou({ limit = 12 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/feeds/for-you?${params}`);
 }
 
 export async function getLibraryMotifs({ limit = 160 } = {}) {

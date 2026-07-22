@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getExploreFeedContinueWatching,
   getExploreFeedDirectorSpotlight,
+  getExploreFeedForYou,
   getExploreFeedGenreSpotlight,
   getExploreFeedOnThisDay,
   getExploreFeedRecentReleases,
@@ -23,6 +24,7 @@ import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
+import { chatFromRailHref } from "../lib/backNav.js";
 import { ROUTES, decadeYearRange, exploreSectionPath, libraryBrowsePath } from "../lib/browseLinks.js";
 import { formatLanguageName } from "../lib/languageNames.js";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
@@ -117,27 +119,46 @@ function ExploreSection({
   );
 }
 
-function FeedRail({ testId, items, loading, cardMeta, onSeed, onRecommend, showRecommend }) {
+function FeedRail({
+  testId,
+  items,
+  loading,
+  cardMeta,
+  onSeed,
+  onRecommend,
+  showRecommend,
+  chatHref,
+  chatLabel = "Chat about these",
+}) {
   if (loading) {
     return <p className="status status-secondary">Loading…</p>;
   }
   if (!items.length) return null;
   return (
-    <div className="explore-card-rail" data-testid={testId}>
-      {items.map((item) => (
-        <ExplorePosterCard
-          key={item.id || item.rating_key || `${item.media_type}-${item.tmdb_id || item.title}`}
-          item={item}
-          meta={
-            cardMeta
-              ? cardMeta(item)
-              : item.resume_label || item.anniversary_context || null
-          }
-          onSeed={onSeed}
-          onRecommend={onRecommend}
-          showRecommend={showRecommend}
-        />
-      ))}
+    <div className="explore-rail-wrap">
+      {chatHref ? (
+        <div className="explore-rail-actions">
+          <Link to={chatHref} className="explore-rail-chat-link" data-testid={`${testId}-chat`}>
+            {chatLabel}
+          </Link>
+        </div>
+      ) : null}
+      <div className="explore-card-rail" data-testid={testId}>
+        {items.map((item) => (
+          <ExplorePosterCard
+            key={item.id || item.rating_key || `${item.media_type}-${item.tmdb_id || item.title}`}
+            item={item}
+            meta={
+              cardMeta
+                ? cardMeta(item)
+                : item.resume_label || item.anniversary_context || item.why || null
+            }
+            onSeed={onSeed}
+            onRecommend={onRecommend}
+            showRecommend={showRecommend}
+          />
+        ))}
+      </div>
     </div>
   );
 }
@@ -153,7 +174,7 @@ function exploreFacetPath(key, value) {
 }
 
 function useFeed(loader, deps = []) {
-  const [state, setState] = useState({ loading: true, items: [], note: null, error: "" });
+  const [state, setState] = useState({ loading: true, items: [], note: null, error: "", meta: {} });
   useEffect(() => {
     let cancelled = false;
     setState((prev) => ({ ...prev, loading: true, error: "" }));
@@ -166,7 +187,7 @@ function useFeed(loader, deps = []) {
           items: normalized.items,
           note: normalized.note,
           error: "",
-          meta: normalized.meta,
+          meta: normalized.meta || {},
         });
       })
       .catch((err) => {
@@ -195,6 +216,7 @@ export default function ExplorePage() {
   const [facetColumns, setFacetColumns] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const continueWatching = useFeed(() => getExploreFeedContinueWatching({ limit: 12 }), []);
+  const forYou = useFeed(() => getExploreFeedForYou({ limit: 12 }), []);
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
   const revisitThese = useFeed(() => getExploreFeedRevisitThese({ limit: 20, idleDays: 60 }), []);
@@ -395,6 +417,10 @@ export default function ExplorePage() {
             <h2>Tag search</h2>
             <p>Find keyword tags across your full library index</p>
           </Link>
+          <Link to="/explore/engagement" className="explore-hub-card" data-testid="explore-hub-engagement">
+            <h2>Engagement</h2>
+            <p>Badges, streaks, rate challenges, and cinema courses</p>
+          </Link>
         </section>
 
         <ExploreSection
@@ -412,6 +438,45 @@ export default function ExplorePage() {
             items={continueWatching.items}
             loading={continueWatching.loading}
             cardMeta={(item) => item.resume_label || null}
+            chatHref={
+              continueWatching.items.length
+                ? chatFromRailHref({
+                    railTitle: "Continue Watching",
+                    items: continueWatching.items,
+                  })
+                : null
+            }
+            {...recommendProps}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="for-you"
+          title={forYou.meta?.title || "For you this week"}
+          subtitle={
+            forYou.meta?.voice_line ||
+            "Personalized picks with a persona-voiced why — tune weights under Settings → Taste"
+          }
+          helpAnchorId="for-you-weekly-rail"
+          isOwner={isOwner}
+          empty={
+            forYou.error ||
+            (!forYou.loading && !forYou.items.length ? forYou.note : null)
+          }
+        >
+          <FeedRail
+            testId="explore-for-you-rail"
+            items={forYou.items}
+            loading={forYou.loading}
+            cardMeta={(item) => item.why || null}
+            chatHref={
+              forYou.items.length
+                ? chatFromRailHref({
+                    railTitle: forYou.meta?.title || "For you this week",
+                    items: forYou.items,
+                  })
+                : null
+            }
             {...recommendProps}
           />
         </ExploreSection>
@@ -443,6 +508,11 @@ export default function ExplorePage() {
             testId="explore-recently-added-rail"
             items={recentlyAdded.items}
             loading={recentlyAdded.loading}
+            chatHref={
+              recentlyAdded.items.length
+                ? chatFromRailHref({ railTitle: "Recently Added", items: recentlyAdded.items })
+                : null
+            }
             {...recommendProps}
           />
         </ExploreSection>

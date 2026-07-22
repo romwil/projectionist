@@ -34,6 +34,7 @@ def register_all(scheduler: IdleScheduler) -> None:
         title_relations_refresh,
         weekly_digest,
         member_newsletter,
+        member_weekly_rail,
         owner_monthly_curation,
         arrival_notifications,
     )
@@ -57,5 +58,6 @@ def register_all(scheduler: IdleScheduler) -> None:
     purge_candidates.register(scheduler)
     weekly_digest.register(scheduler)
     member_newsletter.register(scheduler)
+    member_weekly_rail.register(scheduler)
     owner_monthly_curation.register(scheduler)
     arrival_notifications.register(scheduler)

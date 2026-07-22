@@ -109,6 +109,7 @@ from curatorx.models.schemas import (
     CuratedListItemUpdate,
     CuratedListUpdate,
     EngagementStreakResponse,
+    CourseProgressUpdate,
     Lens,
     LensCreate,
     LensUpdate,
@@ -127,6 +128,7 @@ from curatorx.models.schemas import (
     PreferenceSignal,
     RatingPrompt,
     SystemConfigUpdate,
+    TasteClusterPatch,
     UserReview,
     UserReviewCreate,
     WatchlistCreate,
@@ -2174,6 +2176,23 @@ def library_feed_continue_watching(
     )
 
 
+@app.get("/api/library/feeds/for-you")
+def library_feed_for_you(
+    limit: int = 12,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore For you rail — personalized weekly picks with persona-voiced whys."""
+    from curatorx.taste import feed_for_you_weekly
+
+    user_id = user.id if _settings().features.multi_user_enabled else (
+        getattr(user, "id", None) or "bootstrap-owner"
+    )
+    return _sanitize_library_payload(
+        feed_for_you_weekly(_db(), user_id=str(user_id), limit=limit),
+        user,
+    )
+
+
 @app.get("/api/library/feeds/on-this-day")
 def library_feed_on_this_day(
     limit: int = 12,
@@ -3873,9 +3892,114 @@ def get_persona_ui_copy() -> PersonaUiCopy:
 
 
 @app.get("/api/engagement/streak", response_model=EngagementStreakResponse)
-def get_engagement_streak() -> EngagementStreakResponse:
-    count = _db().count_chat_sessions_last_days(30)
-    return EngagementStreakResponse(session_count_30d=count, streak_visible=count >= 3)
+def get_engagement_streak(user=Depends(get_current_user_dep)) -> EngagementStreakResponse:
+    db = _db()
+    count = db.count_chat_sessions_last_days(30)
+    streak = {"current_count": 0, "best_count": 0}
+    user_id = getattr(user, "id", None)
+    if user_id:
+        try:
+            from curatorx.engagement import sync_chat_streak
+
+            sync_chat_streak(db, str(user_id))
+            streak = db.get_user_streak(str(user_id), "chat")
+        except Exception:  # noqa: BLE001
+            streak = db.get_user_streak(str(user_id), "chat")
+    current = int(streak.get("current_count") or 0)
+    best = int(streak.get("best_count") or 0)
+    return EngagementStreakResponse(
+        session_count_30d=count,
+        streak_visible=count >= 3 or current >= 3,
+        current_count=current,
+        best_count=best,
+    )
+
+
+@app.get("/api/engagement/summary")
+def get_engagement_summary(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    from curatorx.engagement import engagement_summary
+
+    youth = bool(getattr(user, "is_youth", False))
+    return engagement_summary(_db(), user_id=str(user.id), youth_safe_only=youth)
+
+
+@app.post("/api/engagement/courses/{list_id}/progress")
+def post_course_progress(
+    list_id: str,
+    payload: CourseProgressUpdate,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    db = _db()
+    progress = db.set_course_progress(
+        str(user.id),
+        list_id,
+        payload.position,
+        completed=payload.completed,
+    )
+    if payload.position > 0 or payload.completed:
+        for badge in db.list_engagement_badges():
+            criteria = badge.get("criteria") or {}
+            if criteria.get("event") == "course_progress":
+                db.award_badge(str(user.id), badge["id"])
+    return progress
+
+
+@app.get("/api/taste")
+def get_member_taste(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    from curatorx.taste import build_member_taste_payload
+
+    user_id = str(user.id) if _settings().features.multi_user_enabled else str(user.id)
+    return build_member_taste_payload(_db(), user_id=user_id)
+
+
+@app.patch("/api/taste")
+def patch_member_taste(
+    payload: TasteClusterPatch,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    from curatorx.taste import build_member_taste_payload
+
+    db = _db()
+    user_id = str(user.id)
+    updated = []
+    for cluster in payload.clusters:
+        try:
+            updated.append(
+                db.set_user_taste_weight(
+                    user_id,
+                    cluster.cluster_tag,
+                    cluster.weight,
+                    explicit_lock=cluster.explicit_lock if cluster.explicit_lock is not None else True,
+                )
+            )
+        except ValueError as error:
+            raise HTTPException(
+                status_code=400,
+                detail=_safe_error_detail(error, "Invalid taste cluster"),
+            ) from error
+    result = build_member_taste_payload(db, user_id=user_id)
+    result["updated"] = updated
+    return result
+
+
+@app.delete("/api/taste/{cluster_tag}")
+def delete_member_taste_cluster(
+    cluster_tag: str,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    deleted = _db().delete_user_taste_weight(str(user.id), cluster_tag)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Taste cluster override not found")
+    return {"deleted": True, "cluster_tag": cluster_tag}
+
+
+@app.post("/api/admin/weekly-rail/generate")
+def generate_member_weekly_rails(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Owner on-demand rebuild of member weekly For-you rails."""
+    del user
+    from curatorx.taste import deliver_member_weekly_rails
+
+    return deliver_member_weekly_rails(_db(), _settings())
 
 
 @app.get("/api/watchlist", response_model=WatchlistListResponse)

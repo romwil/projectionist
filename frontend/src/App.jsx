@@ -92,10 +92,12 @@ import {
   themePreferenceLabel,
 } from "./lib/uiPrefs.js";
 import {
+  chatFromRailPrompt,
   isRateFlowRequest,
   isWatchlistPanelRequest,
   recommendLikePrompt,
   ROUTES,
+  stripChatFromRailParam,
   stripRecommendLikeParam,
   stripRateFlowParam,
   stripWatchlistPanelParam,
@@ -215,6 +217,7 @@ export default function App() {
   const pendingDeleteRef = useRef(null);
   const rateFlowStartedRef = useRef(false);
   const recommendLikeStartedRef = useRef(false);
+  const chatFromRailStartedRef = useRef(false);
   const savedLibraryStartedRef = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
@@ -1012,6 +1015,7 @@ export default function App() {
 
   useEffect(() => {
     if (!authReady || !threadsReady || loading || recommendLikeStartedRef.current) return;
+    if (String(searchParams.get("from_rail") || "") === "1") return;
     const prompt = recommendLikePrompt(searchParams);
     if (!prompt) {
       recommendLikeStartedRef.current = false;
@@ -1019,6 +1023,18 @@ export default function App() {
     }
     recommendLikeStartedRef.current = true;
     setSearchParams(stripRecommendLikeParam(searchParams), { replace: true });
+    sendMessage(prompt);
+  }, [authReady, threadsReady, loading, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    if (!authReady || !threadsReady || loading || chatFromRailStartedRef.current) return;
+    const prompt = chatFromRailPrompt(searchParams);
+    if (!prompt) {
+      chatFromRailStartedRef.current = false;
+      return;
+    }
+    chatFromRailStartedRef.current = true;
+    setSearchParams(stripChatFromRailParam(searchParams), { replace: true });
     sendMessage(prompt);
   }, [authReady, threadsReady, loading, searchParams, setSearchParams]);
 

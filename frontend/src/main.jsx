@@ -17,10 +17,12 @@ import ProfilePage from "./pages/settings/ProfilePage";
 import VoicePage from "./pages/settings/VoicePage";
 import WatchlistSettingsPage from "./pages/settings/WatchlistSettingsPage";
 import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
+import TasteSettingsPage from "./pages/settings/TasteSettingsPage";
 import NotificationsSettingsPage from "./pages/settings/NotificationsSettingsPage";
 import WatchlistPage from "./pages/WatchlistPage";
 import ExplorePage from "./pages/ExplorePage";
 import ExploreSectionPage from "./pages/ExploreSectionPage";
+import EngagementPage from "./pages/EngagementPage";
 import LibraryBrowsePage from "./pages/LibraryBrowsePage";
 import PersonPage from "./pages/PersonPage";
 import TagPage from "./pages/TagPage";
@@ -47,6 +49,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="/explore/tags" element={<TagsPage />} />
           <Route path="/explore/plot-lab" element={<PlotLabPage />} />
           <Route path="/explore/browse" element={<LibraryBrowsePage />} />
+          <Route path="/explore/engagement" element={<EngagementPage />} />
           <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
           <Route path="/library" element={<LibraryPage />} />
@@ -74,6 +77,7 @@ createRoot(document.getElementById("root")).render(
             <Route index element={<Navigate to="profile" replace />} />
             <Route path="profile" element={<ProfilePage />} />
             <Route path="voice" element={<VoicePage />} />
+            <Route path="taste" element={<TasteSettingsPage />} />
             <Route path="notifications" element={<NotificationsSettingsPage />} />
             <Route path="watchlist" element={<WatchlistSettingsPage />} />
             <Route path="lists" element={<ListsSettingsPage />} />

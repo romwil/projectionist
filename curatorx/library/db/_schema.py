@@ -57,6 +57,7 @@ class SchemaMigrationsMixin:
             self._migrate_persona_templates(conn)
             self._migrate_recommendations(conn)
             self._migrate_notifications(conn)
+            self._migrate_taste_engagement(conn)
             self._migrate_saved_library(conn)
             self._migrate_library_metadata_enrichment(conn)
             self._migrate_people_credits(conn)
@@ -922,6 +923,242 @@ class SchemaMigrationsMixin:
                 ON user_notifications(user_id, kind, related_id);
             """
         )
+
+    def _migrate_taste_engagement(self, conn: sqlite3.Connection) -> None:
+        """Member taste overrides, weekly rails, and engagement substrate (P3c)."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS user_taste_profile (
+                user_id TEXT NOT NULL,
+                cluster_tag TEXT NOT NULL,
+                weight REAL NOT NULL DEFAULT 0.5,
+                explicit_lock INTEGER NOT NULL DEFAULT 0,
+                last_updated REAL NOT NULL,
+                PRIMARY KEY (user_id, cluster_tag),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_taste_profile_user
+                ON user_taste_profile(user_id, weight DESC);
+
+            CREATE TABLE IF NOT EXISTS user_weekly_rails (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                week_bucket INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                voice_line TEXT,
+                items_json TEXT NOT NULL DEFAULT '[]',
+                created_at REAL NOT NULL,
+                UNIQUE (user_id, week_bucket),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_user_weekly_rails_user
+                ON user_weekly_rails(user_id, week_bucket DESC);
+
+            CREATE TABLE IF NOT EXISTS engagement_badges (
+                id TEXT PRIMARY KEY,
+                slug TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                criteria_json TEXT NOT NULL DEFAULT '{}',
+                youth_safe INTEGER NOT NULL DEFAULT 1,
+                created_at REAL NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS user_badges (
+                user_id TEXT NOT NULL,
+                badge_id TEXT NOT NULL,
+                earned_at REAL NOT NULL,
+                PRIMARY KEY (user_id, badge_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (badge_id) REFERENCES engagement_badges(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS user_streaks (
+                user_id TEXT NOT NULL,
+                streak_kind TEXT NOT NULL,
+                current_count INTEGER NOT NULL DEFAULT 0,
+                best_count INTEGER NOT NULL DEFAULT 0,
+                last_event_at REAL,
+                PRIMARY KEY (user_id, streak_kind),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS engagement_challenges (
+                id TEXT PRIMARY KEY,
+                slug TEXT NOT NULL UNIQUE,
+                kind TEXT NOT NULL,
+                title TEXT NOT NULL,
+                description TEXT NOT NULL DEFAULT '',
+                target_count INTEGER NOT NULL DEFAULT 5,
+                youth_safe INTEGER NOT NULL DEFAULT 1,
+                active INTEGER NOT NULL DEFAULT 1,
+                created_at REAL NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS user_challenge_progress (
+                user_id TEXT NOT NULL,
+                challenge_id TEXT NOT NULL,
+                progress INTEGER NOT NULL DEFAULT 0,
+                completed_at REAL,
+                updated_at REAL NOT NULL,
+                PRIMARY KEY (user_id, challenge_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (challenge_id) REFERENCES engagement_challenges(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS engagement_explainers (
+                id TEXT PRIMARY KEY,
+                slug TEXT NOT NULL UNIQUE,
+                title TEXT NOT NULL,
+                body_md TEXT NOT NULL DEFAULT '',
+                related_tag TEXT,
+                youth_safe INTEGER NOT NULL DEFAULT 1,
+                created_at REAL NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS user_course_progress (
+                user_id TEXT NOT NULL,
+                list_id TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0,
+                completed_at REAL,
+                updated_at REAL NOT NULL,
+                PRIMARY KEY (user_id, list_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            """
+        )
+        self._seed_engagement_defaults(conn)
+
+    def _seed_engagement_defaults(self, conn: sqlite3.Connection) -> None:
+        """Insert default badges, challenges, and explainers (idempotent)."""
+        import time as _time
+
+        now = _time.time()
+        badges = (
+            (
+                "badge-first-review",
+                "first-review",
+                "First review",
+                "You rated a title — taste starts here.",
+                '{"event":"review","min_count":1}',
+                1,
+            ),
+            (
+                "badge-rate-5",
+                "rate-5",
+                "Five stars of opinions",
+                "Rated five titles. Your lens is sharpening.",
+                '{"event":"review","min_count":5}',
+                1,
+            ),
+            (
+                "badge-genre-explorer",
+                "genre-explorer",
+                "Genre explorer",
+                "Touched three different genres in reviews.",
+                '{"event":"genre_diversity","min_count":3}',
+                1,
+            ),
+            (
+                "badge-course-starter",
+                "course-starter",
+                "Course starter",
+                "Began a curated cinema course.",
+                '{"event":"course_progress","min_count":1}',
+                1,
+            ),
+            (
+                "badge-chat-streak-3",
+                "chat-streak-3",
+                "Three-day chat streak",
+                "Talked with the curator three days in a row.",
+                '{"event":"chat_streak","min_count":3}',
+                1,
+            ),
+        )
+        for badge_id, slug, name, description, criteria, youth_safe in badges:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO engagement_badges (
+                    id, slug, name, description, criteria_json, youth_safe, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (badge_id, slug, name, description, criteria, youth_safe, now),
+            )
+        challenges = (
+            (
+                "challenge-rate-5",
+                "rate-5-films",
+                "rate_n",
+                "Rate 5 films",
+                "Leave a star rating on five titles you have watched.",
+                5,
+                1,
+            ),
+            (
+                "challenge-rate-10",
+                "rate-10-films",
+                "rate_n",
+                "Rate 10 films",
+                "A deeper pass — ten ratings to tune your taste profile.",
+                10,
+                1,
+            ),
+        )
+        for challenge_id, slug, kind, title, description, target, youth_safe in challenges:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO engagement_challenges (
+                    id, slug, kind, title, description, target_count, youth_safe, active, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+                """,
+                (challenge_id, slug, kind, title, description, target, youth_safe, now),
+            )
+        explainers = (
+            (
+                "explainer-taste-weights",
+                "taste-weights",
+                "How taste weights work",
+                (
+                    "CuratorX learns cluster tags (genres, moods, eras) from your reviews "
+                    "and chat feedback. **Locked** weights stay put when the scheduler "
+                    "refreshes — unlock to let telemetry drift again."
+                ),
+                "taste",
+                1,
+            ),
+            (
+                "explainer-cinema-courses",
+                "cinema-courses",
+                "What is a cinema course?",
+                (
+                    "A **course** is a curated list your owner published in order, with a "
+                    "short note on each step — like a film-school syllabus for your shelves."
+                ),
+                "course",
+                1,
+            ),
+            (
+                "explainer-weekly-rail",
+                "weekly-for-you",
+                "Your weekly For you rail",
+                (
+                    "Once a week CuratorX picks unwatched titles that match your taste "
+                    "clusters and writes a short persona-voiced *why* for each pick."
+                ),
+                "rail",
+                1,
+            ),
+        )
+        for explainer_id, slug, title, body, tag, youth_safe in explainers:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO engagement_explainers (
+                    id, slug, title, body_md, related_tag, youth_safe, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (explainer_id, slug, title, body, tag, youth_safe, now),
+            )
 
     def _migrate_saved_library(self, conn: sqlite3.Connection) -> None:
         """Saved curator responses, private to the user who saved them."""

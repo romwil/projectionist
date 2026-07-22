@@ -4,10 +4,13 @@ import {
   RECOMMEND_LIKE_PARAM,
   ROUTES,
   backLabelForPath,
+  chatFromRailHref,
+  chatFromRailPrompt,
   recommendLikeHref,
   recommendLikePrompt,
   isWatchlistPanelRequest,
   resolveBackTarget,
+  stripChatFromRailParam,
   stripRecommendLikeParam,
   stripWatchlistPanelParam,
   watchlistBrowseHref,
@@ -108,5 +111,36 @@ describe("recommend like chat deep link", () => {
     assert.equal(next.get("year"), null);
     assert.equal(next.get("type"), null);
     assert.equal(next.get("foo"), "bar");
+  });
+});
+
+describe("chat from rail deep link", () => {
+  it("seeds a rail-level conversation", () => {
+    const href = chatFromRailHref({
+      railTitle: "For you this week",
+      items: [{ title: "Heat" }, { title: "Arrival" }],
+    });
+    assert.match(href, /from_rail=1/);
+    assert.match(href, /rail_title=For\+you\+this\+week/);
+    const params = new URLSearchParams(href.replace("/?", ""));
+    assert.match(
+      chatFromRailPrompt(params),
+      /For you this week/,
+    );
+    assert.match(chatFromRailPrompt(params), /Heat/);
+  });
+
+  it("seeds a single focused title with why", () => {
+    const href = chatFromRailHref(
+      { railTitle: "For you this week" },
+      { title: "Heat", why: "Fits your noir lean" },
+    );
+    const params = new URLSearchParams(href.replace("/?", ""));
+    const prompt = chatFromRailPrompt(params);
+    assert.match(prompt, /Heat/);
+    assert.match(prompt, /noir lean/);
+    const stripped = stripChatFromRailParam(params);
+    assert.equal(stripped.get("from_rail"), null);
+    assert.equal(stripped.get("rail_why"), null);
   });
 });

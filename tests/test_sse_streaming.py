@@ -244,6 +244,48 @@ class GracefulFallbackTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(done["message"]["blocks"][0]["content"], "Buffered response")
             provider.chat.assert_awaited_once()
 
+    async def test_fallback_tolerates_none_extract_text(self) -> None:
+        """Streaming fallback must not AttributeError if extract yields None."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _make_db(Path(tmp))
+            settings = _make_settings()
+
+            async def failing_stream(messages, tools=None):
+                raise ConnectionError("Streaming not supported")
+                yield  # pragma: no cover — makes this an async generator
+
+            provider = MagicMock()
+            provider.stream = failing_stream
+            provider.chat = AsyncMock(
+                return_value={
+                    "choices": [{
+                        "index": 0,
+                        "message": {"role": "assistant", "content": None},
+                        "finish_reason": "stop",
+                    }],
+                }
+            )
+
+            with (
+                patch("curatorx.agent.curator.get_chat_provider", return_value=provider),
+                patch("curatorx.agent.curator._extract_text", return_value=None),
+            ):
+                chunks = [
+                    c
+                    async for c in stream_agent(
+                        db,
+                        settings,
+                        "sess-fb-none",
+                        "fallback none",
+                        lens_id=DEFAULT_LENS_ID,
+                    )
+                ]
+
+            events = _collect_events(chunks)
+            done = next(e for e in events if e["type"] == "done")
+            self.assertEqual(done["type"], "done")
+            provider.chat.assert_awaited_once()
+
 
 class CompleteMessageAssemblyTests(unittest.IsolatedAsyncioTestCase):
     """Done event should contain a fully assembled message with blocks."""

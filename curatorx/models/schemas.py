@@ -432,6 +432,23 @@ class MediaIssue(BaseModel):
 class EngagementStreakResponse(BaseModel):
     session_count_30d: int = 0
     streak_visible: bool = False
+    current_count: int = 0
+    best_count: int = 0
+
+
+class TasteClusterUpdate(BaseModel):
+    cluster_tag: str = Field(min_length=1, max_length=80)
+    weight: float = Field(ge=0.0, le=1.0)
+    explicit_lock: Optional[bool] = True
+
+
+class TasteClusterPatch(BaseModel):
+    clusters: List[TasteClusterUpdate] = Field(default_factory=list, max_length=40)
+
+
+class CourseProgressUpdate(BaseModel):
+    position: int = Field(ge=0, default=0)
+    completed: bool = False
 
 
 # --- Persona Templates (per-conversation persona selection) ---
