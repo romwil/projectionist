@@ -75,12 +75,17 @@ Saved pages preserve the structured text, title cards, and reply chips. From the
 
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
+- **Continue Watching** — in-progress titles from Plex On Deck (resume + Play), not a live "now playing" session list
 - **Recently Added** and **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
 - **On This Day**
 - A daily-rotating **director filmography** and **genre**, plus a nearby calendar-occasion rail (holidays and observances, including Arbor Day) or a gentle season-of-the-year fallback
 
 Those discovery rails only appear when your library has enough matching metadata, and their headings open the matching director or genre wall.
+
+**Where can I watch this?** On title detail (and on chat recommendation posters) CuratorX shows a compact availability line: **In your library ✓**, **Requestable** (when Seerr is your request path), or **Not here yet**. It does not look up Netflix, Max, or other external streamers.
+
+**Watchlist pins feel instant.** Adding or removing a pin updates your wall immediately; CuratorX reconciles with Plex Discover in the background when sync is enabled.
 
 **Library Pulse** sits at the bottom of Explore, paired side-by-side with the knowledge-coverage strip in a shared footer (they stack on narrow screens). Discovery comes first so the hub opens with titles, not dashboard metrics. Posters show watched / in-progress overlays from Plex sync. **Empty rails usually mean enrichment caches are still cold — not that your library is empty.**
 

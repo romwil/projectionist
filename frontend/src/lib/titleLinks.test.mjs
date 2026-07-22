@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "./titleLinks.js";
+import { canWatchOnPlex, plexPlayRatingKey, plexWatchUrl, titleDetailPath } from "./titleLinks.js";
 
 test("titleDetailPath prefers tmdb id", () => {
   assert.equal(
@@ -44,4 +44,10 @@ test("canWatchOnPlex only when in library with rating_key", () => {
   assert.equal(canWatchOnPlex({ in_library: false, rating_key: "1" }), false);
   assert.equal(canWatchOnPlex({ in_library: true, rating_key: "" }), false);
   assert.equal(canWatchOnPlex({ in_library: true }), false);
+  assert.equal(canWatchOnPlex({ in_library: true, play_rating_key: "ep-9" }), true);
+});
+
+test("plexPlayRatingKey prefers play_rating_key for resume", () => {
+  assert.equal(plexPlayRatingKey({ play_rating_key: "ep-1", rating_key: "show-1" }), "ep-1");
+  assert.equal(plexPlayRatingKey({ rating_key: "movie-1" }), "movie-1");
 });

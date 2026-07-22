@@ -101,6 +101,7 @@ import {
   stripWatchlistPanelParam,
 } from "./lib/backNav.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
+import { applyOptimisticPinToggle, upsertPin } from "./lib/optimisticWatchlist.js";
 import ChatThread from "./components/ChatThread";
 import { useBulkActionProgress } from "./components/BulkActionProgress";
 import InlineAlert from "./components/InlineAlert";
@@ -1294,20 +1295,30 @@ export default function App() {
   }
 
   async function handleToggleWatchlistPin(item, pinRecord) {
+    const adding = !pinRecord?.id;
+    const { next, rollback } = applyOptimisticPinToggle(watchlistPins, {
+      item,
+      pinRecord,
+      adding,
+    });
+    setWatchlistPins(next);
     try {
       if (pinRecord?.id) {
         await removeWatchlistPin(pinRecord.id);
       } else {
-        await addWatchlistPin({
+        const saved = await addWatchlistPin({
           tmdb_id: item.tmdb_id,
           tvdb_id: item.tvdb_id,
           media_type: item.media_type,
           title: item.title || "Unknown title",
         });
+        if (saved?.id) {
+          setWatchlistPins((prev) => upsertPin(prev, { ...saved, _optimistic: false }));
+        }
       }
-      refreshWatchlist();
     } catch (error) {
       console.error(error);
+      setWatchlistPins(rollback);
     }
   }
 

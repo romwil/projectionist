@@ -19,7 +19,7 @@ from pathlib import Path
 import asyncio
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -76,6 +76,7 @@ from curatorx.library.facets import ensure_library_facet_index
 from curatorx.library.episodes import query_episodes, summarize_tv_progress
 from curatorx.library.facets import library_facet_catalog
 from curatorx.library.feeds import (
+    feed_continue_watching,
     feed_director_spotlight,
     feed_genre_spotlight,
     feed_on_this_day,
@@ -2103,6 +2104,27 @@ def library_feed_revisit_these(
     )
 
 
+@app.get("/api/library/feeds/continue-watching")
+def library_feed_continue_watching(
+    limit: int = 12,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore Continue Watching rail — Plex on-deck / in-progress (not live sessions)."""
+    settings = _settings()
+    plex_client = None
+    if settings.plex_url and settings.plex_token:
+        plex_client = PlexClient(
+            settings.plex_url,
+            settings.plex_token,
+            movie_section=settings.plex_movie_section or None,
+            tv_section=settings.plex_tv_section or None,
+        )
+    return _sanitize_library_payload(
+        feed_continue_watching(_db(), limit=limit, plex_client=plex_client),
+        user,
+    )
+
+
 @app.get("/api/library/feeds/on-this-day")
 def library_feed_on_this_day(
     limit: int = 12,
@@ -3886,6 +3908,7 @@ def run_watchlist_sync(
 @app.post("/api/watchlist", response_model=WatchlistPin)
 def add_watchlist_pin(
     payload: WatchlistCreate,
+    background_tasks: BackgroundTasks,
     user=Depends(get_current_user_dep),
 ) -> WatchlistPin:
     from curatorx.watchlist.plex_sync import push_pin_to_plex
@@ -3908,18 +3931,28 @@ def add_watchlist_pin(
             status_code=400,
             detail=_safe_error_detail(error, "Invalid watchlist pin"),
         ) from error
-    try:
-        push_result = push_pin_to_plex(_db(), settings, pin, user_id=user.id)
-        if push_result.get("plex_rating_key") and pin.get("id"):
-            pin = {**pin, "plex_rating_key": push_result["plex_rating_key"]}
-    except Exception:
-        logger.debug("Watchlist push-on-pin failed", exc_info=True)
+
+    # Return the local pin immediately; reconcile with Plex Discover in the background.
+    pin_snapshot = dict(pin)
+    actor_user_id = user.id
+
+    def _reconcile_push() -> None:
+        try:
+            push_result = push_pin_to_plex(_db(), _settings(), pin_snapshot, user_id=actor_user_id)
+            plex_key = push_result.get("plex_rating_key")
+            if plex_key and pin_snapshot.get("id"):
+                _db().set_watchlist_pin_plex_rating_key(str(pin_snapshot["id"]), str(plex_key))
+        except Exception:
+            logger.debug("Watchlist background push-on-pin failed", exc_info=True)
+
+    background_tasks.add_task(_reconcile_push)
     return WatchlistPin(**pin)
 
 
 @app.delete("/api/watchlist/{pin_id}")
 def delete_watchlist_pin(
     pin_id: str,
+    background_tasks: BackgroundTasks,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, bool]:
     from curatorx.watchlist.plex_sync import remove_pin_from_plex
@@ -3934,10 +3967,16 @@ def delete_watchlist_pin(
     if not removed:
         raise HTTPException(status_code=404, detail="Watchlist pin not found")
     if existing is not None:
-        try:
-            remove_pin_from_plex(_db(), settings, existing, user_id=user.id)
-        except Exception:
-            logger.debug("Watchlist remove-from-plex failed", exc_info=True)
+        existing_snapshot = dict(existing)
+        actor_user_id = user.id
+
+        def _reconcile_remove() -> None:
+            try:
+                remove_pin_from_plex(_db(), _settings(), existing_snapshot, user_id=actor_user_id)
+            except Exception:
+                logger.debug("Watchlist background remove-from-plex failed", exc_info=True)
+
+        background_tasks.add_task(_reconcile_remove)
     return {"removed": True}
 
 

@@ -8,6 +8,8 @@ For **value-based backend unit tests** (assert exact tool/SQL results, not just 
 
 > **Docs gate:** every user-facing change updates the relevant guide **and** adds a benefit-led `### Highlights` entry to `CHANGELOG.md`, meeting [DOCS_STYLE.md](DOCS_STYLE.md). Docs are a first-class deliverable, checked in every PR.
 
+For the full maintainer/agent ship path (version bump, GitHub release, Docker Hub), see **[RELEASE.md](RELEASE.md)**. The table below is the CA test gate that feeds that runbook.
+
 Run these layers before tagging a Community Applications release. Default CI and local discover paths need **no** live Plex / Radarr / Sonarr / Seerr / LLM secrets.
 
 | Layer | Command | Secrets? |

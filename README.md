@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
-[![Version](https://img.shields.io/badge/version-1.13.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.20.0-green.svg)](CHANGELOG.md)
 
 **Agentic access to your structured + unstructured local media data — chat curator, Explore hub, and privacy-first MCP for self-hosted Plex.**
 
@@ -173,6 +173,7 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | [MCP](docs/MCP.md) | Dual-mode MCP keys, schemas, and tools |
 | [Configuration](docs/CONFIGURATION.md) | Env vars and settings |
 | [Docker / Unraid](docs/DOCKER.md) | Container deployment |
+| [Release runbook](docs/RELEASE.md) | Version bump, CHANGELOG, GitHub release, multi-arch Docker Hub |
 | [Delight wishlist](docs/DELIGHT-WISHLIST.md) | Persona backlog + the phased delight roadmap (Phases 1–2 shipped; 3–5 planned) |
 | [Documentation style](docs/DOCS_STYLE.md) | The durable docs standard (warm + E-E-A-T, worked examples, runnable snippets) |
 | [Testing (e2e / CA)](docs/TESTING.md) | Playwright and CA release checklist |

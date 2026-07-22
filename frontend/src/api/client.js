@@ -952,6 +952,11 @@ export async function getExploreFeedRevisitThese({ limit = 20, idleDays = 60 } =
   return api(`/library/feeds/revisit-these?${params}`);
 }
 
+export async function getExploreFeedContinueWatching({ limit = 12 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/feeds/continue-watching?${params}`);
+}
+
 export async function getLibraryMotifs({ limit = 160 } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   return api(`/library/motifs?${params}`);

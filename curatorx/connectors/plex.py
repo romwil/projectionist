@@ -142,6 +142,28 @@ class PlexEpisode:
     user_rating_stars: Optional[float] = None
 
 
+@dataclass
+class PlexOnDeckItem:
+    """In-progress / on-deck title from Plex (not a live playback session)."""
+
+    rating_key: str
+    media_type: str  # movie | episode
+    title: str
+    year: Optional[int] = None
+    view_offset_ms: Optional[int] = None
+    duration_ms: Optional[int] = None
+    view_count: int = 0
+    last_viewed_at: Optional[int] = None
+    thumb: str = ""
+    # Episode → show mapping for library resolve + Play deep-links.
+    show_rating_key: Optional[str] = None
+    show_title: str = ""
+    season_number: Optional[int] = None
+    episode_number: Optional[int] = None
+    tmdb_id: Optional[str] = None
+    tvdb_id: Optional[str] = None
+
+
 class PlexClient:
     def __init__(
         self,
@@ -296,6 +318,29 @@ class PlexClient:
         """Mark a library item unwatched on Plex (`/:/unscrobble`)."""
         self._set_watched_state(rating_key, watched=False)
 
+    def on_deck(self, *, limit: int = 20) -> List[PlexOnDeckItem]:
+        """Return Plex Continue Watching / On Deck items (in-progress, not sessions).
+
+        Uses ``GET /library/onDeck``. Episodes include ``show_rating_key``
+        (grandparent) so callers can resolve the parent series in CuratorX.
+        """
+        capped = max(1, min(int(limit or 20), 50))
+        root = self._request_xml(
+            f"/library/onDeck?X-Plex-Container-Start=0&X-Plex-Container-Size={capped}"
+        )
+        items: List[PlexOnDeckItem] = []
+        for element in self._container_children(root, "Video"):
+            parsed = self._parse_on_deck_video(element)
+            if parsed is not None:
+                items.append(parsed)
+            if len(items) >= capped:
+                break
+        return items
+
+    def continue_watching(self, *, limit: int = 20) -> List[PlexOnDeckItem]:
+        """Alias for :meth:`on_deck` — Explore Continue Watching rail."""
+        return self.on_deck(limit=limit)
+
     def _set_watched_state(self, rating_key: str, *, watched: bool) -> None:
         key = str(rating_key or "").strip()
         if not key:
@@ -449,6 +494,48 @@ class PlexClient:
                 )
             )
         return episodes
+
+    def _parse_on_deck_video(self, element) -> Optional[PlexOnDeckItem]:
+        rating_key = str(element.attrib.get("ratingKey") or "").strip()
+        if not rating_key:
+            return None
+        plex_type = str(element.attrib.get("type") or "").strip().lower()
+        if plex_type == "episode":
+            media_type = "episode"
+        elif plex_type in {"movie", "video", ""}:
+            # On Deck movies often omit type; treat non-episode Video as movie.
+            media_type = "movie"
+        else:
+            return None
+        guid = str(element.attrib.get("guid") or "")
+        child_guids = [
+            str(child.attrib.get("id") or "")
+            for child in element.findall("Guid")
+            if child.attrib.get("id")
+        ]
+        ids = merge_plex_provider_ids(guid, *child_guids)
+        show_rating_key = str(element.attrib.get("grandparentRatingKey") or "").strip() or None
+        show_title = str(element.attrib.get("grandparentTitle") or "").strip()
+        title = str(element.attrib.get("title") or "").strip()
+        if media_type == "episode" and show_title and not title:
+            title = show_title
+        return PlexOnDeckItem(
+            rating_key=rating_key,
+            media_type=media_type,
+            title=title or show_title or "Untitled",
+            year=optional_int(element.attrib.get("year")),
+            view_offset_ms=optional_int(element.attrib.get("viewOffset")),
+            duration_ms=optional_int(element.attrib.get("duration")),
+            view_count=int(element.attrib.get("viewCount") or 0),
+            last_viewed_at=optional_int(element.attrib.get("lastViewedAt")),
+            thumb=str(element.attrib.get("thumb") or element.attrib.get("grandparentThumb") or ""),
+            show_rating_key=show_rating_key,
+            show_title=show_title,
+            season_number=optional_int(element.attrib.get("parentIndex")),
+            episode_number=optional_int(element.attrib.get("index")),
+            tmdb_id=ids.get("tmdb_id"),
+            tvdb_id=ids.get("tvdb_id"),
+        )
 
     def _find_section_key(self, section_type: str) -> str:
         for section in self.list_sections():

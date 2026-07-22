@@ -201,6 +201,8 @@ If Unraid, Caddy, Nginx Proxy Manager, Cloudflare, or another reverse proxy repl
 
 ## Publishing multi-arch images (maintainers)
 
+Full ship checklist (version parity, tests, CHANGELOG, GitHub release, then images): **[RELEASE.md](RELEASE.md)**.
+
 Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use the release script:
 
 ```bash

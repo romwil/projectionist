@@ -18,6 +18,7 @@ from curatorx.agent.tools import ToolRegistry
 from curatorx.config_store import Settings
 from curatorx.library.db import DEFAULT_LENS_ID, Database
 from curatorx.library.feeds import (
+    feed_continue_watching,
     feed_director_spotlight,
     feed_genre_spotlight,
     feed_on_this_day,
@@ -272,6 +273,107 @@ class FeedHelperTests(unittest.TestCase):
             self.assertEqual(payload["items"], [])
             self.assertEqual(payload["total"], 0)
             self.assertIn("partially watched", (payload["note"] or "").lower())
+
+    def test_continue_watching_local_in_progress_movie(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            now = int(time.time())
+            db.upsert_library_item(
+                {
+                    "rating_key": "cw-movie",
+                    "media_type": "movie",
+                    "title": "Half Watched",
+                    "year": 2020,
+                    "view_count": 0,
+                    "view_offset_ms": 1_200_000,
+                    "duration_ms": 6_000_000,
+                    "last_viewed_at": now,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "done-movie",
+                    "media_type": "movie",
+                    "title": "Finished",
+                    "year": 2019,
+                    "view_count": 1,
+                    "view_offset_ms": 0,
+                    "last_viewed_at": now,
+                }
+            )
+            payload = feed_continue_watching(db, limit=12)
+            self.assertEqual(payload["feed"], "continue-watching")
+            self.assertEqual(payload["source"], "local")
+            self.assertEqual(len(payload["items"]), 1)
+            self.assertEqual(payload["items"][0]["title"], "Half Watched")
+            self.assertEqual(payload["items"][0]["card_kind"], "continue_watching")
+            self.assertIn("resume_label", payload["items"][0])
+            self.assertEqual(payload["items"][0]["play_rating_key"], "cw-movie")
+
+    def test_continue_watching_prefers_plex_on_deck(self) -> None:
+        from curatorx.connectors.plex import PlexOnDeckItem
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "show-1",
+                    "media_type": "show",
+                    "title": "The Wire",
+                    "year": 2002,
+                    "total_episode_count": 13,
+                    "unwatched_episode_count": 10,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "movie-1",
+                    "media_type": "movie",
+                    "title": "Heat",
+                    "year": 1995,
+                    "view_count": 0,
+                    "view_offset_ms": 100,
+                }
+            )
+
+            class FakePlex:
+                def on_deck(self, *, limit: int = 20):
+                    del limit
+                    return [
+                        PlexOnDeckItem(
+                            rating_key="ep-9",
+                            media_type="episode",
+                            title="Pilot",
+                            show_rating_key="show-1",
+                            show_title="The Wire",
+                            season_number=1,
+                            episode_number=1,
+                            view_offset_ms=600_000,
+                            duration_ms=3_600_000,
+                        ),
+                        PlexOnDeckItem(
+                            rating_key="movie-1",
+                            media_type="movie",
+                            title="Heat",
+                            view_offset_ms=1_000_000,
+                            duration_ms=10_000_000,
+                        ),
+                    ]
+
+            payload = feed_continue_watching(db, limit=12, plex_client=FakePlex())
+            self.assertEqual(payload["source"], "plex_on_deck")
+            self.assertEqual(len(payload["items"]), 2)
+            self.assertEqual(payload["items"][0]["title"], "The Wire")
+            self.assertEqual(payload["items"][0]["play_rating_key"], "ep-9")
+            self.assertIn("S1E1", payload["items"][0]["resume_label"])
+            self.assertEqual(payload["items"][1]["title"], "Heat")
+
+    def test_continue_watching_honest_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            payload = feed_continue_watching(db, limit=12)
+            self.assertEqual(payload["items"], [])
+            self.assertIn("in progress", (payload["note"] or "").lower())
 
     def test_on_this_day_calendar_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

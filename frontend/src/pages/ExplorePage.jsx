@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  getExploreFeedContinueWatching,
   getExploreFeedDirectorSpotlight,
   getExploreFeedGenreSpotlight,
   getExploreFeedOnThisDay,
@@ -127,7 +128,11 @@ function FeedRail({ testId, items, loading, cardMeta, onSeed, onRecommend, showR
         <ExplorePosterCard
           key={item.id || item.rating_key || `${item.media_type}-${item.tmdb_id || item.title}`}
           item={item}
-          meta={cardMeta ? cardMeta(item) : item.anniversary_context || null}
+          meta={
+            cardMeta
+              ? cardMeta(item)
+              : item.resume_label || item.anniversary_context || null
+          }
           onSeed={onSeed}
           onRecommend={onRecommend}
           showRecommend={showRecommend}
@@ -189,6 +194,7 @@ export default function ExplorePage() {
   const [recommendItem, setRecommendItem] = useState(null);
   const [facetColumns, setFacetColumns] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const continueWatching = useFeed(() => getExploreFeedContinueWatching({ limit: 12 }), []);
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
   const revisitThese = useFeed(() => getExploreFeedRevisitThese({ limit: 20, idleDays: 60 }), []);
@@ -390,6 +396,25 @@ export default function ExplorePage() {
             <p>Find keyword tags across your full library index</p>
           </Link>
         </section>
+
+        <ExploreSection
+          id="continue-watching"
+          title="Continue Watching"
+          subtitle="Pick up where you left off — in-progress titles from Plex"
+          isOwner={isOwner}
+          empty={
+            continueWatching.error ||
+            (!continueWatching.loading && !continueWatching.items.length ? continueWatching.note : null)
+          }
+        >
+          <FeedRail
+            testId="explore-continue-watching-rail"
+            items={continueWatching.items}
+            loading={continueWatching.loading}
+            cardMeta={(item) => item.resume_label || null}
+            {...recommendProps}
+          />
+        </ExploreSection>
 
         <ExploreSection
           id="recently-added"

@@ -139,7 +139,7 @@ pytest tests/test_db_query_validation.py::TestTelemetrySummary -v
 pytest tests/test_db_query_validation.py::TestTelemetrySummary::test_counts_grouped_by_event_class -v
 ```
 
-Coverage is configured in `pyproject.toml` and runs automatically with `pytest`. The threshold is set to 10% (`--cov-fail-under=10`), which gives room to grow as tests are added.
+Coverage is configured in `pyproject.toml` and runs automatically with `pytest`. The release / CI floor is **74%** (`--cov-fail-under=74` in local addopts and `.github/workflows/ci.yml`).
 
 ## Security / penetration tests
 

@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.20.0] — 2026-07-22
+
+Phase 3a of the delight program: know at a glance whether a title is already yours, requestable through Seerr, or not here yet; pin and unpin without waiting on Plex; and pick up where you left off from an Explore Continue Watching rail.
+
+### Highlights
+- **Where can I watch this?** Title detail and chat posters now show a compact availability line — **In your library ✓**, **Requestable** (when Seerr is your request path), or **Not here yet**. No Netflix/Max lookup; library + Seerr only.
+- **Watchlist pins feel instant.** Add or remove a pin and the wall updates immediately; CuratorX reconciles with Plex Discover in the background when sync is on.
+- **Continue Watching on Explore.** A new top rail surfaces in-progress titles from Plex On Deck (with resume + Play). This is not a live “now playing” session list.
+
+### Added
+- **Availability line** (`frontend/src/lib/titleAvailability.js`) on `TitleDetailContent` and chat `TitleCard` badges — Seerr-aware status without external streaming connectors.
+- **`PlexClient.on_deck` / `continue_watching`** (`curatorx/connectors/plex.py`) reading `GET /library/onDeck` into `PlexOnDeckItem` (movies + episodes with show mapping).
+- **`feed_continue_watching`** + **`GET /api/library/feeds/continue-watching`** — prefers Plex on-deck when configured, falls back to local in-progress rows; Explore hub rail with resume labels and Play via `play_rating_key`.
+- **Optimistic watchlist helpers** (`frontend/src/lib/optimisticWatchlist.js`) wired through chat pin toggle and Watchlist page remove/bulk-remove; API add/delete return after the local DB write and push/remove Plex Discover in FastAPI `BackgroundTasks`.
+
+### Changed
+- **Play deep-links** prefer `play_rating_key` when present so Continue Watching episodes resume the in-progress episode while the rail shows the parent show.
+- **HELP** documents Continue Watching, the availability line, and optimistic watchlist reconcile.
+- **Version lockstep** enforcement (`tests/test_version.py`) covers package.json, lockfiles, `pyproject.toml`, and identical Unraid CA XML templates; CI coverage floor aligned to **74**.
+
+### Verification
+- Backend `pytest` **1211 passed**, 4 skipped (27 subtests) at **78.65%** total coverage (`--cov-fail-under=74`). New coverage in `tests/test_plex_on_deck.py` and Continue Watching cases in `tests/test_explore_wave3.py`.
+- Frontend `node --test` unit suite **388 passed** (up from 378), including `titleAvailability.test.mjs` and `optimisticWatchlist.test.mjs`. ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- `test_version` lockstep holds at **1.20.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.19.4] — 2026-07-21
 
 Chat recommendation posters finally sit at their natural height — one poster row you can swipe sideways — instead of living in a short box that invents a second vertical scrollbar. While the curator is still writing, a temporary nested scroll is fine; once the turn finishes, only the main chat column scrolls.

@@ -32,5 +32,11 @@ export function plexWatchUrl(ratingKey, machineId = "") {
 
 /** True when a card should offer a Watch on Plex action. */
 export function canWatchOnPlex(item) {
-  return Boolean(item?.in_library && String(item?.rating_key || "").trim());
+  const playKey = String(item?.play_rating_key || item?.rating_key || "").trim();
+  return Boolean(item?.in_library && playKey);
+}
+
+/** Prefer play_rating_key (episode resume) when present, else library rating_key. */
+export function plexPlayRatingKey(item) {
+  return String(item?.play_rating_key || item?.rating_key || item?.plex_rating_key || "").trim();
 }

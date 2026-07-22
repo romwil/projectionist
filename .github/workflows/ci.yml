@@ -39,7 +39,7 @@ jobs:
 
       - name: Run tests with coverage
         run: |
-          python -m pytest tests/ -v --cov=curatorx --cov-report=term-missing --cov-fail-under=10
+          python -m pytest tests/ -v --cov=curatorx --cov-report=term-missing --cov-fail-under=74
           npm run test:e2e
         env:
           CI: true

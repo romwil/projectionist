@@ -5,6 +5,10 @@ import { itemNeedsAddGuidance, resolveAddCapability } from "../lib/addActions.js
 import { setTitleCardDragData } from "../lib/easterEggs.js";
 import { formatMatchPercent } from "../lib/matchScore.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
+import {
+  titleAvailability,
+  titleAvailabilityClassName,
+} from "../lib/titleAvailability.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 import { watchProgressState } from "../lib/watchProgress.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
@@ -77,7 +81,13 @@ export default function TitleCard({
   const [whyOpen, setWhyOpen] = useState(false);
   const [addStatus, setAddStatus] = useState(null); // idle | loading | success | error
   const [plexHref, setPlexHref] = useState(() => String(item?.plex_watch_url || "").trim());
-  const badge = item.in_library ? "In library" : item.in_radarr || item.in_sonarr ? "In queue" : "New";
+  const availability = titleAvailability(item, { requestPath });
+  const badge =
+    availability.status === "in_library"
+      ? availability.shortLabel
+      : item.in_radarr || item.in_sonarr
+        ? "In queue"
+        : availability.shortLabel;
   const matchLabel = formatMatchPercent(item);
   const userStars = item.user_stars;
   const capability = resolveAddCapability({ role: userRole, requestPath, multiUserEnabled });
@@ -297,7 +307,13 @@ export default function TitleCard({
           onTogglePin={onTogglePin ? (target) => onTogglePin(target, pinRecord) : undefined}
           pinned={isPinned}
         />
-        <span className="badge">{badge}</span>
+        <span
+          className={`badge title-availability ${titleAvailabilityClassName(availability.status)}`}
+          data-testid="title-availability-badge"
+          data-availability={availability.status}
+        >
+          {badge}
+        </span>
         {matchLabel ? (
           <span className="title-card-match-badge" data-testid="title-card-match-badge">
             {matchLabel}

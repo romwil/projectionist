@@ -31,6 +31,10 @@ import {
   languageBrowseMeta,
 } from "../lib/titleDetailMeta.js";
 import { buildPlotKnowledgePanel } from "../lib/plotKnowledge.js";
+import {
+  titleAvailability,
+  titleAvailabilityClassName,
+} from "../lib/titleAvailability.js";
 import { canWatchOnPlex, plexWatchUrl } from "../lib/titleLinks.js";
 import { ROUTES } from "../lib/backNav.js";
 
@@ -187,6 +191,7 @@ export default function TitleDetailContent({
   const tagLimit = compact ? 5 : 8;
   const chipLimit = compact ? 4 : 8;
   const plotKnowledge = buildPlotKnowledgePanel(detail);
+  const availability = titleAvailability(detail, { requestPath });
 
   const headlineId = titleId || "title-detail-headline";
 
@@ -227,7 +232,15 @@ export default function TitleDetailContent({
                 {tvProgress.label}
               </span>
             ) : null}
-            {detail.in_library ? <span className="title-chip title-chip-success">In library</span> : null}
+            <span
+              className={`title-chip title-availability ${titleAvailabilityClassName(availability.status)}${
+                availability.status === "in_library" ? " title-chip-success" : ""
+              }`}
+              data-testid="title-availability-line"
+              data-availability={availability.status}
+            >
+              {availability.label}
+            </span>
             {detail.rating ? (
               <span className="title-chip title-chip-accent" data-testid="title-tmdb-rating-chip">
                 TMDB ★ {Number(detail.rating).toFixed(1)}

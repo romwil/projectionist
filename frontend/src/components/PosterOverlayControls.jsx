@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, getPlexMachineId } from "../api/client";
-import { canWatchOnPlex, plexWatchUrl } from "../lib/titleLinks.js";
+import { canWatchOnPlex, plexPlayRatingKey, plexWatchUrl } from "../lib/titleLinks.js";
 import { watchProgressState } from "../lib/watchProgress.js";
 import PosterActionMenu from "./PosterActionMenu";
 import WatchProgressBadge from "./WatchProgressBadge";
@@ -57,12 +57,12 @@ export default function PosterOverlayControls({
     }
     let cancelled = false;
     loadPlexMachineId().then((machineId) => {
-      if (!cancelled) setPlexHref(plexWatchUrl(item.rating_key, machineId));
+      if (!cancelled) setPlexHref(plexWatchUrl(plexPlayRatingKey(item), machineId));
     });
     return () => {
       cancelled = true;
     };
-  }, [item?.plex_watch_url, item?.rating_key, showWatch]);
+  }, [item?.plex_watch_url, item?.rating_key, item?.play_rating_key, showWatch]);
 
   useEffect(() => {
     if (!trailerOpen) return undefined;

@@ -1,0 +1,35 @@
+---
+description: Follow docs/RELEASE.md for version bumps, CHANGELOG releases, GitHub releases, and Docker image publishes
+globs: CHANGELOG.md,curatorx/_version.py,package.json,frontend/package.json,frontend/public/release-notes.json,scripts/docker-release.sh,scripts/generate-release-notes.sh,docs/RELEASE.md,pyproject.toml,templates/curatorx.xml,unraid/curatorx.xml,README.md,tests/test_version.py,.github/workflows/ci.yml
+alwaysApply: false
+---
+
+# Release process (agents)
+
+When shipping a version, bumping versions, writing a release CHANGELOG entry, cutting a
+GitHub release, or pushing Docker images, **read and follow**
+[docs/RELEASE.md](../../docs/RELEASE.md). Do not rediscover the process.
+
+## Hard rules
+
+- **Commit / push / tag / `gh release` / Docker Hub push only when the user explicitly asks**
+  to ship (or clearly asks for those steps). Otherwise prepare files and stop.
+- **Do not** bump versions or cut a release while unrelated WIP (another agent’s feature)
+  is mid-edit on the same files unless the user coordinates it.
+- Keep versions in lockstep (enforced by `tests/test_version.py` except the README badge):
+  `curatorx/_version.py`, root + `frontend` `package.json` and both lockfiles’
+  top-level + `packages[""]` version fields, `pyproject.toml` `[project].version`, and
+  identical `templates/curatorx.xml` / `unraid/curatorx.xml` (comment version, leading
+  `<Changes>` `### X.Y.Z`, pin examples). Also update the README version badge.
+  Runtime image version comes from `scripts/docker-release.sh` build args.
+- Coverage floor is **74%** locally (`pyproject.toml` addopts) and in CI
+  (`.github/workflows/ci.yml`).
+- CHANGELOG is **two-part**: benefit-led `### Highlights` + technical sections +
+  `### Verification`. Voice: [docs/DOCS_STYLE.md](../../docs/DOCS_STYLE.md).
+- Regenerate notes with `./scripts/generate-release-notes.sh --require-version X.Y.Z`.
+- Publish images only via `./scripts/docker-release.sh X.Y.Z` → `romwil/curatorx`
+  (`:X.Y.Z`, `:X.Y`, `:latest`). Never invent alternate registries or skip the script’s
+  Unraid-compatible manifest flags.
+
+Checklist, exact test commands (pytest cov ≥74, frontend unit/lint/build), `gh release`
+notes shape, and failure modes: **docs/RELEASE.md**.

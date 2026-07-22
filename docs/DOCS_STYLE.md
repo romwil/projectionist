@@ -149,4 +149,6 @@ If you can't check a box, the doc isn't finished — the same way a failing test
 - [PRIVACY.md](PRIVACY.md) — the authoritative data map exemplar
 - [WEB_UI.md](WEB_UI.md) — routes, Help anchors, and how docs render in-app
 - [TESTING.md](../TESTING.md) · [docs/TESTING.md](TESTING.md) — the docs gate in the release checklist
+- [RELEASE.md](RELEASE.md) — version bump, CHANGELOG, GitHub release, Docker Hub ship steps
 - `.cursor/rules/docs-style.mdc` — the enforcement rule that points every future change back here
+- `.cursor/rules/release.mdc` — points agents at `RELEASE.md` for ship work

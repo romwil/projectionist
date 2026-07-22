@@ -1,10 +1,12 @@
-"""Explore hub feed helpers — recently added, recent releases, on-this-day, revisit.
+"""Explore hub feed helpers — recently added, recent releases, on-this-day, revisit,
+continue-watching.
 
 Honest empties: recent-releases returns ``[]`` when no ``release_date`` /
 ``first_air_date`` rows exist. On-this-day prefers calendar month-day matches
 from those dates; when none exist it falls back to the legacy milestone-year
 anniversaries behavior used by ``GET /api/library/anniversaries``.
 Revisit These samples partially watched TV idle for 60+ days.
+Continue Watching prefers live Plex on-deck reads, then local in-progress rows.
 """
 
 from __future__ import annotations
@@ -14,6 +16,7 @@ import time
 from datetime import date
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
+from curatorx.connectors.plex import PlexClient, PlexOnDeckItem
 from curatorx.library.db import Database
 from curatorx.library.query import row_to_query_item
 
@@ -696,4 +699,208 @@ def neighbors_payload(
             if items
             else "Empty — plot_neighbors cache not built yet for this title."
         ),
+    }
+
+
+def _continue_watching_resume_label(
+    *,
+    media_type: str,
+    view_offset_ms: Optional[int],
+    duration_ms: Optional[int],
+    season_number: Optional[int] = None,
+    episode_number: Optional[int] = None,
+    episode_title: str = "",
+) -> str:
+    parts: List[str] = []
+    if media_type == "episode" or season_number is not None or episode_number is not None:
+        if season_number is not None and episode_number is not None:
+            parts.append(f"S{int(season_number)}E{int(episode_number)}")
+        elif episode_title:
+            parts.append(episode_title)
+    offset = int(view_offset_ms or 0)
+    duration = int(duration_ms or 0)
+    if offset > 0 and duration > 0:
+        pct = min(99, max(1, int(round(100 * offset / duration))))
+        parts.append(f"{pct}% watched")
+    elif offset > 0:
+        mins = max(1, int(round(offset / 60000)))
+        parts.append(f"Resume at {mins}m")
+    else:
+        parts.append("Resume")
+    return " · ".join(parts)
+
+
+def _library_row_for_on_deck(db: Database, entry: "PlexOnDeckItem"):
+    """Resolve an on-deck Plex entry to a CuratorX library row."""
+    if entry.media_type == "episode":
+        if entry.show_rating_key:
+            row = db.library_item_by_rating_key(entry.show_rating_key)
+            if row is not None:
+                return row, "show"
+        # Fall back to episode key (rare — usually not indexed as library_items).
+        row = db.library_item_by_rating_key(entry.rating_key)
+        if row is not None:
+            return row, str(row["media_type"] or "show")
+        return None, "show"
+    row = db.library_item_by_rating_key(entry.rating_key)
+    if row is not None:
+        return row, str(row["media_type"] or "movie")
+    return None, "movie"
+
+
+def _items_from_plex_on_deck(
+    db: Database,
+    on_deck: Sequence["PlexOnDeckItem"],
+    *,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    items: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for entry in on_deck:
+        row, resolved_type = _library_row_for_on_deck(db, entry)
+        if row is None:
+            continue
+        key = str(row["rating_key"] or "")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        play_key = entry.rating_key  # episode or movie play target
+        resume = _continue_watching_resume_label(
+            media_type=entry.media_type,
+            view_offset_ms=entry.view_offset_ms,
+            duration_ms=entry.duration_ms,
+            season_number=entry.season_number,
+            episode_number=entry.episode_number,
+            episode_title=entry.title if entry.media_type == "episode" else "",
+        )
+        extra: Dict[str, Any] = {
+            "in_library": True,
+            "card_kind": "continue_watching",
+            "resume_label": resume,
+            "view_offset_ms": entry.view_offset_ms,
+            "duration_ms": entry.duration_ms or (
+                int(row["duration_ms"]) if "duration_ms" in row.keys() and row["duration_ms"] is not None else None
+            ),
+            "play_rating_key": play_key,
+            "watch_state": "partial",
+        }
+        if entry.media_type == "episode":
+            extra["continue_episode_title"] = entry.title
+            extra["continue_season"] = entry.season_number
+            extra["continue_episode"] = entry.episode_number
+            if resolved_type == "show":
+                # Prefer show poster/title for the rail while Play targets the episode.
+                pass
+        item = _feed_item(row, **extra)
+        # Ensure Play uses the in-progress media (episode) when distinct from show.
+        if play_key and play_key != key:
+            item["play_rating_key"] = play_key
+        items.append(item)
+        if len(items) >= limit:
+            break
+    return items
+
+
+def _local_continue_watching(db: Database, *, limit: int) -> List[Dict[str, Any]]:
+    """Fallback: local in-progress movies + partially watched shows."""
+    items: List[Dict[str, Any]] = []
+    with db.connect() as conn:
+        movie_rows = conn.execute(
+            """
+            SELECT *
+            FROM library_items
+            WHERE media_type = 'movie'
+              AND COALESCE(view_count, 0) = 0
+              AND view_offset_ms IS NOT NULL
+              AND view_offset_ms > 0
+            ORDER BY COALESCE(last_viewed_at, 0) DESC, title ASC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        for row in movie_rows:
+            resume = _continue_watching_resume_label(
+                media_type="movie",
+                view_offset_ms=int(row["view_offset_ms"] or 0) if "view_offset_ms" in row.keys() else None,
+                duration_ms=int(row["duration_ms"] or 0) if "duration_ms" in row.keys() and row["duration_ms"] is not None else None,
+            )
+            items.append(
+                _feed_item(
+                    row,
+                    in_library=True,
+                    card_kind="continue_watching",
+                    resume_label=resume,
+                    watch_state="partial",
+                    play_rating_key=str(row["rating_key"] or ""),
+                )
+            )
+        remaining = max(0, limit - len(items))
+        if remaining:
+            show_rows = conn.execute(
+                """
+                SELECT *
+                FROM library_items
+                WHERE media_type = 'show'
+                  AND total_episode_count > 0
+                  AND unwatched_episode_count > 0
+                  AND unwatched_episode_count < total_episode_count
+                ORDER BY COALESCE(last_viewed_at, last_episode_watched_at, 0) DESC, title ASC
+                LIMIT ?
+                """,
+                (remaining,),
+            ).fetchall()
+            for row in show_rows:
+                items.append(
+                    _feed_item(
+                        row,
+                        in_library=True,
+                        card_kind="continue_watching",
+                        resume_label="Resume",
+                        watch_state="partial",
+                        play_rating_key=str(row["rating_key"] or ""),
+                    )
+                )
+    return items
+
+
+def feed_continue_watching(
+    db: Database,
+    *,
+    limit: int = DEFAULT_FEED_LIMIT,
+    plex_client: Optional["PlexClient"] = None,
+) -> Dict[str, Any]:
+    """Continue Watching rail — Plex on-deck when available, else local progress.
+
+    This is **not** live session / now-playing polling. On-deck is Plex's
+    in-progress shelf (``/library/onDeck``).
+    """
+    capped = _cap_limit(limit)
+    source = "local"
+    items: List[Dict[str, Any]] = []
+    plex_error = None
+    if plex_client is not None:
+        try:
+            on_deck = plex_client.on_deck(limit=capped)
+            items = _items_from_plex_on_deck(db, on_deck, limit=capped)
+            source = "plex_on_deck"
+        except Exception as error:  # noqa: BLE001 — degrade to local
+            plex_error = str(error)
+            items = []
+    if not items:
+        items = _local_continue_watching(db, limit=capped)
+        source = "local" if not plex_error else "local_after_plex_error"
+    note = None
+    if not items:
+        note = (
+            "Nothing in progress — start something in Plex, or wait for watch "
+            "progress to sync."
+        )
+    return {
+        "feed": "continue-watching",
+        "source": source,
+        "items": items,
+        "total": len(items),
+        "limit": capped,
+        "note": note,
+        "plex_error": plex_error,
     }

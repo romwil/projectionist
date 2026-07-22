@@ -184,6 +184,14 @@
   background: color-mix(in srgb, var(--success) 10%, transparent);
 }
 
+.title-availability--requestable {
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
+}
+
+.title-availability--not-here {
+  opacity: 0.92;
+}
+
 .title-detail-headline {
   margin: 0;
   font-family: var(--font-display);

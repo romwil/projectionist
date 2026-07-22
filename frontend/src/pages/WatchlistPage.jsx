@@ -24,6 +24,7 @@ import {
   mediaBrowseRowsToCsv,
   parseMediaBrowse,
 } from "../lib/mediaBrowse.js";
+import { removePinById } from "../lib/optimisticWatchlist.js";
 import { titleDetailTargetFromItem } from "../lib/titleDetailDrawer.js";
 
 function pinKey(pin) {
@@ -145,6 +146,14 @@ export default function WatchlistPage() {
     });
     setRemoving(true);
     setActionStatus("");
+    const previousItems = state.items;
+    // Optimistic: drop selected pins from the wall immediately.
+    const removeIds = new Set(targets.map((pin) => pinKey(pin)).filter(Boolean));
+    setState((prev) => ({
+      ...prev,
+      items: prev.items.filter((pin) => !removeIds.has(pinKey(pin))),
+    }));
+    setSelected(new Set());
     let ok = 0;
     let failed = 0;
     for (const pin of targets) {
@@ -158,7 +167,9 @@ export default function WatchlistPage() {
       }
     }
     setRemoving(false);
-    setSelected(new Set());
+    if (failed) {
+      setState((prev) => ({ ...prev, items: previousItems }));
+    }
     const summary = (
       failed
         ? `Removed ${ok}; ${failed} failed.`
@@ -166,15 +177,21 @@ export default function WatchlistPage() {
     );
     setActionStatus(summary);
     finish(progressId, { label: summary, state: failed ? "error" : "success" });
-    await refresh();
+    if (failed) await refresh();
   }
 
   async function handleToggleCardPin(card) {
     const pin = sortedItems.find((item) => pinKey(item) === pinKey(card));
     if (!pin) return;
-    await removeWatchlistPin(pin.id);
+    const previousItems = state.items;
+    setState((prev) => ({ ...prev, items: removePinById(prev.items, pin.id) }));
     setActionStatus("Removed from your watchlist.");
-    await refresh();
+    try {
+      await removeWatchlistPin(pin.id);
+    } catch (error) {
+      setState((prev) => ({ ...prev, items: previousItems }));
+      setActionStatus(formatApiError(error) || "Could not remove from watchlist.");
+    }
   }
 
   function openBulkDelete() {
