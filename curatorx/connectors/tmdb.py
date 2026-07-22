@@ -55,14 +55,20 @@ class TMDBClient:
 
     def movie_details(self, tmdb_id: int) -> Mapping[str, Any]:
         payload = request_json(
-            self._url(f"/movie/{tmdb_id}", append_to_response="credits,keywords,external_ids,videos"),
+            self._url(
+                f"/movie/{tmdb_id}",
+                append_to_response="credits,keywords,external_ids,videos,release_dates",
+            ),
             timeout=self.timeout,
         )
         return payload if isinstance(payload, dict) else {}
 
     def tv_details(self, tmdb_id: int) -> Mapping[str, Any]:
         payload = request_json(
-            self._url(f"/tv/{tmdb_id}", append_to_response="credits,keywords,external_ids,videos"),
+            self._url(
+                f"/tv/{tmdb_id}",
+                append_to_response="credits,keywords,external_ids,videos,content_ratings",
+            ),
             timeout=self.timeout,
         )
         return payload if isinstance(payload, dict) else {}
@@ -140,6 +146,60 @@ class TMDBClient:
 
         best = max(candidates, key=rank)
         return str(best.get("key") or "").strip()
+
+    @staticmethod
+    def us_content_rating(payload: Mapping[str, Any]) -> str:
+        """US MPAA / TV parental rating from a TMDB details payload.
+
+        Movies use ``release_dates`` (prefer theatrical); TV uses ``content_ratings``.
+        """
+        if not isinstance(payload, dict):
+            return ""
+
+        release_dates = payload.get("release_dates")
+        if isinstance(release_dates, dict):
+            results = release_dates.get("results")
+            if isinstance(results, list):
+                for country in results:
+                    if not isinstance(country, dict):
+                        continue
+                    if str(country.get("iso_3166_1") or "").upper() != "US":
+                        continue
+                    releases = country.get("release_dates")
+                    if not isinstance(releases, list):
+                        break
+                    theatrical = ""
+                    any_cert = ""
+                    for entry in releases:
+                        if not isinstance(entry, dict):
+                            continue
+                        cert = str(entry.get("certification") or "").strip()
+                        if not cert:
+                            continue
+                        if not any_cert:
+                            any_cert = cert
+                        # TMDB type 3 = theatrical
+                        try:
+                            release_type = int(entry.get("type") or 0)
+                        except (TypeError, ValueError):
+                            release_type = 0
+                        if release_type == 3:
+                            theatrical = cert
+                            break
+                    return theatrical or any_cert
+
+        content_ratings = payload.get("content_ratings")
+        if isinstance(content_ratings, dict):
+            results = content_ratings.get("results")
+            if isinstance(results, list):
+                for entry in results:
+                    if not isinstance(entry, dict):
+                        continue
+                    if str(entry.get("iso_3166_1") or "").upper() != "US":
+                        continue
+                    return str(entry.get("rating") or "").strip()
+
+        return str(payload.get("content_rating") or "").strip()
 
     def discover_movies(
         self,

@@ -334,6 +334,11 @@ def _apply_tmdb_enrichment(
     if tagline:
         row["tagline"] = tagline
 
+    if not str(row.get("content_rating") or "").strip():
+        rating = TMDBClient.us_content_rating(details)
+        if rating:
+            row["content_rating"] = rating
+
     if media_type == "movie":
         runtime = details.get("runtime")
         if runtime:

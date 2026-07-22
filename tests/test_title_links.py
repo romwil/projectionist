@@ -43,6 +43,43 @@ class YoutubeTrailerKeyTests(unittest.TestCase):
         self.assertEqual(TMDBClient.youtube_trailer_key({}), "")
 
 
+class UsContentRatingTests(unittest.TestCase):
+    def test_movie_prefers_us_theatrical_certification(self) -> None:
+        payload = {
+            "release_dates": {
+                "results": [
+                    {
+                        "iso_3166_1": "GB",
+                        "release_dates": [{"certification": "15", "type": 3}],
+                    },
+                    {
+                        "iso_3166_1": "US",
+                        "release_dates": [
+                            {"certification": "PG", "type": 1},
+                            {"certification": "PG-13", "type": 3},
+                        ],
+                    },
+                ]
+            }
+        }
+        self.assertEqual(TMDBClient.us_content_rating(payload), "PG-13")
+
+    def test_tv_uses_us_content_ratings(self) -> None:
+        payload = {
+            "content_ratings": {
+                "results": [
+                    {"iso_3166_1": "CA", "rating": "14+"},
+                    {"iso_3166_1": "US", "rating": "TV-14"},
+                ]
+            }
+        }
+        self.assertEqual(TMDBClient.us_content_rating(payload), "TV-14")
+
+    def test_empty_when_missing(self) -> None:
+        self.assertEqual(TMDBClient.us_content_rating({}), "")
+        self.assertEqual(TMDBClient.us_content_rating({"release_dates": {"results": []}}), "")
+
+
 class TitleDetailTrailerTests(unittest.TestCase):
     @patch("curatorx.library.titles.cached_machine_identifier", return_value="machine-xyz")
     @patch("curatorx.library.titles.TMDBClient")
@@ -66,6 +103,7 @@ class TitleDetailTrailerTests(unittest.TestCase):
         mock_tmdb.poster_url.return_value = "https://img/p.jpg"
         mock_tmdb.backdrop_url.return_value = "https://img/b.jpg"
         mock_tmdb_cls.youtube_trailer_key.return_value = "m8e-LF8Z4Cw"
+        mock_tmdb_cls.us_content_rating.return_value = "R"
 
         settings = MagicMock()
         settings.tmdb_api_key = "tmdb"
@@ -88,10 +126,51 @@ class TitleDetailTrailerTests(unittest.TestCase):
 
             detail = get_title_detail(db, settings, media_type="movie", tmdb_id=603)
             self.assertEqual(detail.trailer_youtube_key, "m8e-LF8Z4Cw")
+            self.assertEqual(detail.content_rating, "R")
             self.assertTrue(detail.in_library)
             self.assertEqual(detail.rating_key, "rk-1")
             self.assertIn("machine-xyz", detail.plex_watch_url)
             self.assertIn("rk-1", detail.plex_watch_url)
+
+    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
+    @patch("curatorx.library.titles.TMDBClient")
+    def test_detail_keeps_plex_content_rating_without_enrichment(
+        self, mock_tmdb_cls, _mock_machine
+    ) -> None:
+        settings = MagicMock()
+        settings.tmdb_api_key = ""
+        settings.fanart_api_key = ""
+        settings.plex_url = ""
+        settings.plex_token = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "rk-pg13",
+                    "media_type": "movie",
+                    "title": "Jurassic Park",
+                    "year": 1993,
+                    "tmdb_id": 329,
+                    "summary": "Dinosaurs",
+                    "content_rating": "PG-13",
+                    "vote_average": 7.9,
+                    "poster_url": "https://img/p.jpg",
+                    "backdrop_url": "https://img/b.jpg",
+                    "runtime_minutes": 127,
+                    "release_date": "1993-06-11",
+                    "keywords": ["dinosaur"],
+                    "cast": ["Sam Neill"],
+                    "directors": ["Steven Spielberg"],
+                }
+            )
+
+            detail = get_title_detail(
+                db, settings, media_type="movie", tmdb_id=329, enrich=False
+            )
+            self.assertEqual(detail.content_rating, "PG-13")
+            self.assertAlmostEqual(float(detail.rating or 0), 7.9)
+            mock_tmdb_cls.assert_not_called()
 
 
 class TitleDetailHotPathTests(unittest.TestCase):

@@ -170,6 +170,8 @@ def _needs_tmdb_enrichment(detail: TitleDetail) -> bool:
         return True
     if detail.media_type == "show" and not detail.first_air_date:
         return True
+    if not detail.content_rating:
+        return True
     return False
 
 
@@ -193,8 +195,7 @@ def _apply_tmdb_movie_meta(detail: TitleDetail, meta: Mapping[str, Any], tmdb: T
     if not detail.original_language:
         detail.original_language = str(meta.get("original_language") or "")
     if not detail.content_rating:
-        # Prefer US certification when present in release_dates append; else skip.
-        detail.content_rating = str(meta.get("content_rating") or "")
+        detail.content_rating = TMDBClient.us_content_rating(meta)
     if not detail.countries:
         countries = meta.get("production_countries") or []
         if isinstance(countries, list):
@@ -229,6 +230,8 @@ def _apply_tmdb_tv_meta(detail: TitleDetail, meta: Mapping[str, Any], tmdb: TMDB
         detail.first_air_date = str(meta.get("first_air_date") or "")[:10]
     if not detail.original_language:
         detail.original_language = str(meta.get("original_language") or "")
+    if not detail.content_rating:
+        detail.content_rating = TMDBClient.us_content_rating(meta)
     if not detail.status:
         detail.status = str(meta.get("status") or "")
     if not detail.countries:

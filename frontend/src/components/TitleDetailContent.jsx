@@ -81,10 +81,10 @@ function formatFileSize(bytes) {
   return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
 }
 
-function MetaTile({ label, value }) {
+function MetaTile({ label, value, testId }) {
   if (!value) return null;
   return (
-    <div className="title-meta-tile">
+    <div className="title-meta-tile" data-testid={testId || undefined}>
       <span className="title-meta-tile-label">{label}</span>
       <span className={META_STATIC_CLASS}>{value}</span>
     </div>
@@ -546,6 +546,11 @@ export default function TitleDetailContent({
                 value={reviewsCta.label.replace(/^Your rating:\s*/, "")}
               />
             ) : null}
+            <MetaTile
+              label="Rating"
+              value={contentRating || null}
+              testId="title-content-rating-meta"
+            />
             {languageMeta ? (
               <div className="title-meta-tile">
                 <span className="title-meta-tile-label">Language</span>

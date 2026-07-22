@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+- **Title detail Rating meta is back.** The sidebar **Rating** tile (MPAA / content rating like PG-13) was dropped when title detail was extracted into `TitleDetailContent`; it is restored next to Your rating. TMDB enrichment now reads US certifications from `release_dates` / `content_ratings` so the tile fills when Plex did not supply one.
 - **Completed curator replies no longer grow nested scrollbars.** The 1.19.4 streaming-class gate removed the permanent `max-height`, but `overflow-x: auto|hidden` paired with `overflow-y: visible` still computes to a vertical scrollport (and the horizontal scrollbar’s height often triggers a second bar). Completed `.inline-cards` now use `overflow-y: hidden`, review strips use `overflow: visible`, and message/markdown hosts use `overflow-x: clip` so only `.chat-scroll-region` scrolls after the turn finishes.
 
 ## [1.20.0] — 2026-07-22
