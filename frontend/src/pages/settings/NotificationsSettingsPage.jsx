@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
-import { getAuthMe, patchAuthMe } from "../../api/client";
+import { generateWeeklyNewsletter, getAuthMe, patchAuthMe } from "../../api/client";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
 import SettingsToggle from "../../components/settings/SettingsToggle";
+import {
+  newsletterConfirmMessage,
+  newsletterResultMessage,
+} from "../../lib/weeklyNewsletter.js";
 
 export default function NotificationsSettingsPage() {
   const [notificationEmail, setNotificationEmail] = useState("");
@@ -10,9 +14,12 @@ export default function NotificationsSettingsPage() {
   const [emailOn, setEmailOn] = useState(false);
   const [newsletterOn, setNewsletterOn] = useState(false);
   const [nudgeOn, setNudgeOn] = useState(false);
+  const [isOwner, setIsOwner] = useState(false);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [ready, setReady] = useState(false);
+  const [sendingSelf, setSendingSelf] = useState(false);
+  const [selfStatus, setSelfStatus] = useState(null);
 
   useEffect(() => {
     getAuthMe()
@@ -23,6 +30,7 @@ export default function NotificationsSettingsPage() {
         setEmailOn(Boolean(user.notify_channel_email));
         setNewsletterOn(Boolean(user.newsletter_opt_in));
         setNudgeOn(Boolean(user.nudge_opt_in));
+        setIsOwner(user.role === "owner");
         setReady(true);
       })
       .catch(() => setReady(true));
@@ -51,6 +59,30 @@ export default function NotificationsSettingsPage() {
       setStatus({ type: "error", message: error.message || "Could not save." });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSendSelf() {
+    if (!newsletterOn) {
+      setSelfStatus({
+        type: "error",
+        message: "Turn on Weekly newsletter and save before sending yourself a copy.",
+      });
+      return;
+    }
+    if (!window.confirm(newsletterConfirmMessage("self"))) return;
+    setSendingSelf(true);
+    setSelfStatus(null);
+    try {
+      const result = await generateWeeklyNewsletter({ scope: "self" });
+      setSelfStatus({ type: "success", message: newsletterResultMessage(result) });
+    } catch (error) {
+      setSelfStatus({
+        type: "error",
+        message: error.message || "Could not send the newsletter.",
+      });
+    } finally {
+      setSendingSelf(false);
     }
   }
 
@@ -134,6 +166,32 @@ export default function NotificationsSettingsPage() {
           </button>
         </div>
       </form>
+
+      {isOwner ? (
+        <SettingsPanel title="Send me this week’s newsletter">
+          <p className="settings-field-hint">
+            Owners can also push to selected members or everyone under Admin → Mail. This only
+            sends to you, and only if Weekly newsletter is on.
+          </p>
+          <button
+            type="button"
+            className="ghost"
+            onClick={handleSendSelf}
+            disabled={sendingSelf}
+            data-testid="notifications-newsletter-self-send"
+          >
+            {sendingSelf ? "Sending…" : "Send to me now"}
+          </button>
+          {selfStatus ? (
+            <p
+              className={`status ${selfStatus.type === "error" ? "status-error" : "status-success"}`}
+              data-testid="notifications-newsletter-self-status"
+            >
+              {selfStatus.message}
+            </p>
+          ) : null}
+        </SettingsPanel>
+      ) : null}
     </div>
   );
 }

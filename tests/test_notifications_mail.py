@@ -233,6 +233,99 @@ class NotificationPlatformTests(unittest.TestCase):
         result = deliver_weekly_newsletters(self.db, settings)
         self.assertGreaterEqual(result["delivered"], 1)
 
+    def test_weekly_newsletter_scoped_skips_opt_out(self) -> None:
+        self._enable_multi_user()
+        opted = self.db.create_local_user(
+            user_id="local-opted",
+            display_name="OptedIn",
+            password_hash="x",
+            role="member",
+            email="opted@example.com",
+        )
+        quiet = self.db.create_local_user(
+            user_id="local-quiet",
+            display_name="Quiet",
+            password_hash="x",
+            role="member",
+            email="quiet@example.com",
+        )
+        self.db.update_user_profile(
+            opted["id"],
+            newsletter_opt_in=True,
+            notify_channel_inbox=True,
+        )
+        self.db.update_user_profile(
+            quiet["id"],
+            newsletter_opt_in=False,
+            notify_channel_inbox=True,
+        )
+        settings = Settings.load(Path(self._tmpdir.name) / "settings.json")
+        result = deliver_weekly_newsletters(
+            self.db,
+            settings,
+            user_ids=[opted["id"], quiet["id"]],
+        )
+        self.assertEqual(result["delivered"], 1)
+        self.assertEqual(result["skipped_opt_out"], 1)
+        self.assertEqual(result["targeted"], 2)
+
+    def test_admin_weekly_newsletter_generate_scopes(self) -> None:
+        self._enable_multi_user()
+        owner = self._login(plex_id=30, title="Owner", email="owner30@example.com")
+        member = self.db.create_local_user(
+            user_id="local-nl-member",
+            display_name="NlMember",
+            password_hash="x",
+            role="member",
+            email="nl@example.com",
+        )
+        self.db.update_user_profile(
+            owner["id"],
+            newsletter_opt_in=True,
+            notify_channel_inbox=True,
+        )
+        self.db.update_user_profile(
+            member["id"],
+            newsletter_opt_in=True,
+            notify_channel_inbox=True,
+        )
+
+        bad = self.client.post(
+            "/api/admin/weekly-newsletter/generate",
+            json={"scope": "users", "user_ids": []},
+        )
+        self.assertEqual(bad.status_code, 400)
+
+        missing = self.client.post(
+            "/api/admin/weekly-newsletter/generate",
+            json={"scope": "users", "user_ids": ["no-such-user"]},
+        )
+        self.assertEqual(missing.status_code, 404)
+
+        self_resp = self.client.post(
+            "/api/admin/weekly-newsletter/generate",
+            json={"scope": "self"},
+        )
+        self.assertEqual(self_resp.status_code, 200, self_resp.text)
+        self.assertEqual(self_resp.json()["scope"], "self")
+        self.assertGreaterEqual(self_resp.json()["delivered"], 1)
+
+        users_resp = self.client.post(
+            "/api/admin/weekly-newsletter/generate",
+            json={"scope": "users", "user_ids": [member["id"]]},
+        )
+        self.assertEqual(users_resp.status_code, 200, users_resp.text)
+        self.assertEqual(users_resp.json()["scope"], "users")
+        self.assertGreaterEqual(users_resp.json()["delivered"], 1)
+
+        all_resp = self.client.post(
+            "/api/admin/weekly-newsletter/generate",
+            json={"scope": "all"},
+        )
+        self.assertEqual(all_resp.status_code, 200, all_resp.text)
+        self.assertEqual(all_resp.json()["scope"], "all")
+        self.assertGreaterEqual(all_resp.json()["delivered"], 1)
+
     def test_arrival_notifications_for_gap_title(self) -> None:
         self._enable_multi_user()
         owner = self.db.create_local_user(

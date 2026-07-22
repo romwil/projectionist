@@ -527,6 +527,13 @@ class MailTestPayload(BaseModel):
     to_email: Optional[str] = Field(default=None, max_length=320)
 
 
+class WeeklyNewsletterGeneratePayload(BaseModel):
+    """Owner on-demand weekly newsletter fan-out."""
+
+    scope: Literal["self", "users", "all"] = "all"
+    user_ids: List[str] = Field(default_factory=list)
+
+
 class SavedLibraryPagePayload(BaseModel):
     name: str = Field(min_length=1, max_length=160)
     source_session_id: Optional[str] = Field(default=None, max_length=128)
@@ -4278,6 +4285,37 @@ def generate_member_weekly_rails(user=Depends(require_role("owner"))) -> Dict[st
     from curatorx.taste import deliver_member_weekly_rails
 
     return deliver_member_weekly_rails(_db(), _settings())
+
+
+@app.post("/api/admin/weekly-newsletter/generate")
+def generate_weekly_newsletters(
+    payload: WeeklyNewsletterGeneratePayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner on-demand weekly newsletter for self, selected members, or all opt-ins."""
+    from curatorx.notifications.newsletters import deliver_weekly_newsletters
+
+    scope = payload.scope
+    target_ids: Optional[List[str]]
+    if scope == "self":
+        target_ids = [str(user.id)]
+    elif scope == "users":
+        cleaned = [str(uid or "").strip() for uid in payload.user_ids if str(uid or "").strip()]
+        if not cleaned:
+            raise HTTPException(status_code=400, detail="Choose at least one member")
+        # Validate existence up front so the owner gets a clear 404.
+        db = _db()
+        for uid in cleaned:
+            if db.get_user(uid) is None:
+                raise HTTPException(status_code=404, detail=f"User not found: {uid}")
+        target_ids = cleaned
+    elif scope == "all":
+        target_ids = None
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown scope: {scope}")
+
+    result = deliver_weekly_newsletters(_db(), _settings(), user_ids=target_ids)
+    return {"scope": scope, **result}
 
 
 @app.get("/api/watchlist", response_model=WatchlistListResponse)

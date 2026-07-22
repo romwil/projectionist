@@ -135,7 +135,7 @@ Under **Settings → Notifications** you can:
 - Set a **notification email** (or leave blank to use your account email)
 - Turn the **in-app inbox** on or off
 - Opt into **email alerts** when the owner has mail configured
-- Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available)
+- Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available). It usually arrives on the weekly schedule; the owner can also push one early from Admin.
 - Opt into **curator nudges** — occasional “you have to see this” picks (optionally reacting to what you recently watched / continue-watching). These are never live Plex session alerts.
 
 Dismiss a card when you’re done; **Dismiss all** clears the unread stack.
@@ -391,10 +391,26 @@ curl -s http://localhost:8788/api/collections | python3 -m json.tool
 
 CuratorX assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
 
-Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
+Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). Owners can push that newsletter early from **Admin → Mail → Weekly newsletter** (just me / selected members / everyone opted in), or send a self-only copy from **Settings → Notifications**. A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
 
 ```bash
 curl -s -X POST http://localhost:8788/api/admin/weekly-rail/generate | python3 -m json.tool
+```
+
+```bash
+# Push the weekly newsletter now (owner session cookie required)
+# scope: self | users | all — users also needs user_ids
+curl -s -X POST http://localhost:8788/api/admin/weekly-newsletter/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"scope":"all"}' | python3 -m json.tool
+
+curl -s -X POST http://localhost:8788/api/admin/weekly-newsletter/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"scope":"self"}' | python3 -m json.tool
+
+curl -s -X POST http://localhost:8788/api/admin/weekly-newsletter/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"scope":"users","user_ids":["USER_ID_1","USER_ID_2"]}' | python3 -m json.tool
 ```
 
 Weekend / holiday **Seasonal picks** on Explore prefer anniversary-scanner rows when available (no calendar connector).
@@ -406,11 +422,11 @@ curl -s http://localhost:8788/api/admin/weekly-digest | python3 -m json.tool
 curl -s -X POST http://localhost:8788/api/admin/weekly-digest/generate
 ```
 
-**How it works / honest limits.** The owner Dashboard digest remains an in-app snapshot keyed to a fixed 7-day bucket. Member newsletters and arrival alerts reuse the shared notification inbox; email only sends when **Admin → Mail** is enabled and the member has opted in.
+**How it works / honest limits.** The owner Dashboard digest remains an in-app snapshot keyed to a fixed 7-day bucket. Member newsletters and arrival alerts reuse the shared notification inbox; email only sends when **Admin → Mail** is enabled and the member has opted in. On-demand newsletter pushes still respect newsletter opt-in and each member’s inbox/email channel prefs — opted-out people are skipped, not forced.
 
 ### Mail (SMTP + Resend)
 
-Configure outbound mail under **Admin → Mail**. Choose **SMTP** or **Resend**, set from-address / template fields (subject prefix, footer, logo URL), and use **Send test email**. Secrets are stored in `settings.json` with mode `0600`, like other API keys.
+Configure outbound mail under **Admin → Mail**. Choose **SMTP** or **Resend**, set from-address / template fields (subject prefix, footer, logo URL), and use **Send test email**. The same page has **Weekly newsletter → Send weekly newsletter now** for an early push to yourself, selected members, or everyone opted in. Secrets are stored in `settings.json` with mode `0600`, like other API keys.
 
 ```bash
 # Inspect masked mail settings (owner session cookie required)

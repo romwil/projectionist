@@ -200,6 +200,14 @@ export async function testMailSend(payload = {}) {
   });
 }
 
+/** Owner-only: fan out the weekly newsletter now (self / selected / all opt-ins). */
+export async function generateWeeklyNewsletter(payload = {}) {
+  return api("/admin/weekly-newsletter/generate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function startPlexPinLogin() {
   return api("/auth/plex/pin", { method: "POST" });
 }

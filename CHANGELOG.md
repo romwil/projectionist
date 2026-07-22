@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.25.2] — 2026-07-22
+
+Owners can push the weekly newsletter on demand — to themselves, selected members, or everyone who’s opted in — without waiting for the scheduler.
+
+### Highlights
+- **Send the weekly newsletter when you’re ready.** From Admin → Mail, push this week’s note to yourself, picked members, or everyone opted in.
+- **Opt-in still wins.** Early sends skip people who turned the newsletter off; inbox and email channel prefs still apply.
+- **Owners can try it on themselves first.** Settings → Notifications has a “Send to me now” control when you’re the owner.
+
+### Added
+- `POST /api/admin/weekly-newsletter/generate` with `scope`: `self` | `users` | `all` (and `user_ids` for `users`).
+- `deliver_weekly_newsletters(..., user_ids=…)` scoped fan-out with skip counters (`skipped_opt_out`, etc.).
+- **Admin → Mail → Weekly newsletter** scope picker + member checklist + confirm.
+- **Settings → Notifications** owner self-send for the weekly newsletter.
+- HELP notes (member + For owners curl examples).
+
+### Verification
+- Backend `pytest` **1253 passed**, 4 skipped (27 subtests) at **78.01%** total coverage (`--cov-fail-under=74`). Includes scoped newsletter delivery + `POST /api/admin/weekly-newsletter/generate` authz/scope tests.
+- Frontend `node --test` unit suite **439 passed**. ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- `test_version` lockstep holds at **1.25.2** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.25.1] — 2026-07-22
 
 Chat-from-rail and For you reliability: curated picks keep stable library ids and per-title why reasons into chat, the poster strip matches the rail you came from, and kebab copy/save confirmations flash clearly.

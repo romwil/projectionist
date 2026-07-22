@@ -6,7 +6,7 @@ import logging
 import time
 from calendar import monthrange
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from curatorx.config_store import Settings
 from curatorx.digest.service import build_weekly_digest
@@ -87,15 +87,44 @@ def deliver_weekly_newsletters(
     settings: Settings,
     *,
     now: Optional[float] = None,
+    user_ids: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
-    """Fan out opt-in weekly newsletters to members (inbox + email prefs)."""
-    users = db.list_users(limit=500)
+    """Fan out opt-in weekly newsletters (inbox + email prefs).
+
+    When ``user_ids`` is provided, only those accounts are considered; otherwise
+    every non-disabled user is eligible. Opt-in and channel prefs still apply —
+    opted-out users are skipped (counted in ``skipped_opt_out``).
+    """
+    skipped_disabled = 0
+    skipped_opt_out = 0
+    skipped_missing = 0
+    candidates: List[Dict[str, Any]] = []
+
+    if user_ids is None:
+        candidates = list(db.list_users(limit=500))
+    else:
+        seen: set[str] = set()
+        for raw_id in user_ids:
+            uid = str(raw_id or "").strip()
+            if not uid or uid in seen:
+                continue
+            seen.add(uid)
+            row = db.get_user(uid)
+            if row is None:
+                skipped_missing += 1
+                continue
+            candidates.append(db._row_to_user(row))
+
     delivered = 0
     emailed = 0
-    for user in users:
+    targeted = 0
+    for user in candidates:
         if user.get("disabled"):
+            skipped_disabled += 1
             continue
+        targeted += 1
         if not user.get("newsletter_opt_in"):
+            skipped_opt_out += 1
             continue
         content = build_member_newsletter(db, settings, user=user, now=now)
         result = deliver_notification(
@@ -113,7 +142,14 @@ def deliver_weekly_newsletters(
             delivered += 1
         if result.get("emailed"):
             emailed += 1
-    return {"delivered": delivered, "emailed": emailed}
+    return {
+        "delivered": delivered,
+        "emailed": emailed,
+        "targeted": targeted,
+        "skipped_opt_out": skipped_opt_out,
+        "skipped_disabled": skipped_disabled,
+        "skipped_missing": skipped_missing,
+    }
 
 
 def _month_bucket(now: Optional[float] = None) -> str:

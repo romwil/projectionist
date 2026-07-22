@@ -444,6 +444,27 @@
   align-items: center;
 }
 
+.settings-checklist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.settings-checklist label {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  color: var(--text);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+
+.settings-checklist input[type="checkbox"] {
+  margin-top: 0.2em;
+}
+
 .settings-inline-link {
   color: var(--accent);
   font-size: var(--text-sm);
