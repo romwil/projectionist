@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Maintainer multi-role GUI / QA sidecar tooling is **local-only** again: compose, seed script, Playwright QA config/specs, and `.env.qa.example` are gitignored and removed from the shared tree. Mocked CI e2e (`npm run test:e2e`) stays. Personal runbooks live on the host (e.g. automat `curatorx-qa-scripts`).
+
 ## [1.25.4] — 2026-07-24
 
 Multi-role QA sidecar and full Playwright coverage for owner, member, youth, guest role, and public guest tour — so household auth stays on while you still exercise every chrome surface.

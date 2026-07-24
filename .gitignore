@@ -1,9 +1,6 @@
 .DS_Store
 .env
-.env.qa
 config/settings.json
-config-qa/
-e2e/.auth/
 config/mediacurator.db
 config/mediacurator.db-*
 config/curatorx.db
@@ -32,3 +29,17 @@ htmlcov/
 frontend/coverage/
 # Local Stitch design exports — keep on disk, never commit.
 stitch_curatorx_design_system/
+
+# Maintainer-local GUI QA (not shared)
+# Multi-role auth-ON sidecar / Playwright role matrix — keep on disk or on
+# automat curatorx-qa-scripts; do not commit.
+.env.qa
+.env.qa.example
+docker-compose.qa.yml
+playwright.qa.config.ts
+scripts/seed-qa-roles.sh
+e2e/auth.setup.ts
+e2e/live-roles.spec.ts
+e2e/fixtures/auth-roles.ts
+config-qa/
+e2e/.auth/
