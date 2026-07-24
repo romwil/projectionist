@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.25.4] — 2026-07-24
+
+Multi-role QA sidecar and full Playwright coverage for owner, member, youth, guest role, and public guest tour — so household auth stays on while you still exercise every chrome surface.
+
+### Highlights
+- **Test every household role without turning auth off.** A separate QA stack on LAN :8790 seeds owner, member, youth, and guest accounts with local login.
+- **Playwright walks the real toolbar per role.** Owner sees Admin; members and youth do not; guests get the limited shell; the public tour stays on `/tour`.
+- **CI stays green offline.** The mocked e2e suite ignores QA specs; live role runs only when you opt in with `CURATORX_E2E_QA_ROLES=1`.
+
+### Added
+- QA sidecar: `docker-compose.qa.yml`, `.env.qa.example`, `scripts/seed-qa-roles.sh` (isolated `config-qa` / Unraid `curatorx-qa` volume — never prod `/config`).
+- Playwright QA config + helpers: `playwright.qa.config.ts`, `e2e/auth.setup.ts`, `e2e/fixtures/auth-roles.ts`, `npm run test:e2e:qa-roles`.
+- Full per-role UI suite in `e2e/live-roles.spec.ts` (chat/explore/search/inbox/journey/settings/admin/help/privacy + theme toggle + guest-tour public path).
+- Docs: [TESTING.md](docs/TESTING.md) QA stand-up, storageState table, and role UI matrix.
+
+### Verification
+- Backend `pytest` **1253 passed**, 4 skipped (27 subtests) at **78.01%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **445 passed**. ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- Mocked Playwright (`npm run test:e2e`) green; `auth.setup.ts` / `live-roles.spec.ts` ignored by default config (opt-in via `npm run test:e2e:qa-roles`).
+- `test_version` lockstep holds at **1.25.4** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+- Stale mocked e2e aligned to current chrome: login lands on `/chat`, Inbox at `/inbox` + `/api/notifications`, title availability badge text.
+
 ## [1.25.3] — 2026-07-24
 
 Mood Surprise Me chips fire an instant pick, and Surprise Me scrolls to the new entry instead of an earlier turn.

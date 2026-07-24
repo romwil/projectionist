@@ -119,7 +119,13 @@ test.describe("Title cards in chat", () => {
 
     await expect(page.getByTestId("chat-message-assistant")).toContainText("Blade Runner");
     await expect(page.getByTestId("chat-message-assistant")).toContainText("Chinatown");
-    await expect(page.getByTestId("chat-message-assistant").getByText("New").first()).toBeVisible();
+    // Outside-library picks use the availability badge ("Not here yet").
+    await expect(
+      page.getByTestId("chat-message-assistant").getByTestId("title-availability-badge").first(),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("chat-message-assistant").getByTestId("title-availability-badge").first(),
+    ).toContainText(/Not here yet|New/);
   });
 
   test("expand titles button opens turnstyle overlay with cards", async ({ page }) => {

@@ -44,7 +44,8 @@ test.describe("Login flow", () => {
     await expect(page.getByTestId("login-page")).toBeVisible();
     await page.getByTestId("sign-in-with-plex").click();
     await expect(page.getByTestId("plex-pin-waiting")).toBeVisible();
-    await expect(page).toHaveURL("/");
+    // Post-login home is the chat workspace (`/` redirects to `/chat`).
+    await expect(page).toHaveURL(/\/(chat)?$/);
     await page.getByTestId("composer-input").waitFor();
     await expect(page.getByTestId("workspace-main")).toBeVisible();
     await expect(page.getByTestId("login-page")).toHaveCount(0);
@@ -64,7 +65,7 @@ test.describe("Login flow", () => {
     await page.getByTestId("plex-token-input").fill("mock-plex-token");
     await page.getByTestId("submit-plex-login").click();
 
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL(/\/(chat)?$/);
     await page.getByTestId("composer-input").waitFor();
     await expect(page.getByTestId("workspace-main")).toBeVisible();
   });

@@ -1,6 +1,9 @@
 .DS_Store
 .env
+.env.qa
 config/settings.json
+config-qa/
+e2e/.auth/
 config/mediacurator.db
 config/mediacurator.db-*
 config/curatorx.db
