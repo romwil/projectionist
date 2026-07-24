@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.25.3] — 2026-07-24
+
+Mood Surprise Me chips fire an instant pick, and Surprise Me scrolls to the new entry instead of an earlier turn.
+
+### Highlights
+- **Tap a mood, get a pick.** Cozy, Thrill, Laugh, Think, and Escape each run Surprise Me for that mood — no second click on the dice.
+- **You land on the new pick.** After Surprise Me (mood or dice), chat scrolls to the new recommendation instead of jumping up to an older question.
+- **Dice still means random.** The Surprise Me control stays a fully random unwatched pick when you want no mood bias.
+
+### Fixed
+- Composer mood chips call `handleQuickPick(mood)` (`GET /api/library/quick-pick?mood=`) instead of only toggling selection state.
+- `resolveLatestTurnAnchorIndex` / `useChatScroll.scrollToLatestTurn` pin assistant-only Surprise Me entries to the new message, not the last prior user turn.
+- HELP: mood chips described as instant one-shot picks.
+
+### Verification
+- Backend `pytest` **1253 passed**, 4 skipped (27 subtests) at **78.01%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **445 passed**. ESLint **0 errors** (pre-existing warnings unchanged). Production build succeeds.
+- `test_version` lockstep holds at **1.25.3** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.25.2] — 2026-07-22
 
 Owners can push the weekly newsletter on demand — to themselves, selected members, or everyone who’s opted in — without waiting for the scheduler.

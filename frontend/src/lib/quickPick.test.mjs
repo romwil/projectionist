@@ -4,10 +4,13 @@ import test from "node:test";
 import {
   QUICK_PICK_EMPTY_MESSAGE,
   QUICK_PICK_ERROR_FALLBACK,
+  SURPRISE_MOOD_CHIPS,
   normalizeQuickPickError,
   normalizeQuickPickGenres,
   normalizeQuickPickResult,
+  quickPickMoodQuery,
   quickPickToAssistantMessage,
+  resolveQuickPickMood,
 } from "./quickPick.js";
 
 test("normalizeQuickPickResult keeps a successful pick", () => {
@@ -105,4 +108,25 @@ test("quickPickToAssistantMessage gives empty and failed picks a clear agent rep
     role: "assistant",
     blocks: [{ type: "text", content: "Nothing unwatched fits." }],
   });
+});
+
+test("SURPRISE_MOOD_CHIPS covers Companion mood ids", () => {
+  assert.deepEqual(
+    SURPRISE_MOOD_CHIPS.map((chip) => chip.id),
+    ["cozy", "thrill", "laugh", "think", "escape"],
+  );
+});
+
+test("resolveQuickPickMood prefers chip override over selected mood", () => {
+  assert.equal(resolveQuickPickMood("cozy", "thrill"), "cozy");
+  assert.equal(resolveQuickPickMood("  laugh  ", ""), "laugh");
+  assert.equal(resolveQuickPickMood(undefined, "think"), "think");
+  assert.equal(resolveQuickPickMood({ preventDefault() {} }, "escape"), "escape");
+  assert.equal(resolveQuickPickMood(null, ""), "");
+});
+
+test("quickPickMoodQuery encodes mood for the quick-pick API", () => {
+  assert.equal(quickPickMoodQuery(""), "");
+  assert.equal(quickPickMoodQuery("cozy"), "?mood=cozy");
+  assert.equal(quickPickMoodQuery("sci fi"), "?mood=sci%20fi");
 });

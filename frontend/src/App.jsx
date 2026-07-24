@@ -68,7 +68,10 @@ import { executeSlashCommand, parseSlashCommand } from "./lib/slashCommands.js";
 import {
   normalizeQuickPickError,
   normalizeQuickPickResult,
+  quickPickMoodQuery,
   quickPickToAssistantMessage,
+  resolveQuickPickMood,
+  SURPRISE_MOOD_CHIPS,
 } from "./lib/quickPick.js";
 import { resolveActivePersonaId } from "./lib/resolveActivePersona.js";
 import { preferYouthFriendlyPersona } from "./lib/youthPersona.js";
@@ -819,10 +822,10 @@ export default function App() {
   async function handleQuickPick(moodOverride) {
     if (quickPickLoading) return;
     setQuickPickLoading(true);
-    const mood = typeof moodOverride === "string" ? moodOverride : surpriseMood;
+    const mood = resolveQuickPickMood(moodOverride, surpriseMood);
+    if (mood) setSurpriseMood(mood);
     try {
-      const query = mood ? `?mood=${encodeURIComponent(mood)}` : "";
-      const result = await api(`/library/quick-pick${query}`);
+      const result = await api(`/library/quick-pick${quickPickMoodQuery(mood)}`);
       const message = {
         id: createId(),
         ...quickPickToAssistantMessage(normalizeQuickPickResult(result)),
@@ -1760,13 +1763,7 @@ export default function App() {
                       </button>
                     ) : null}
                     <div className="composer-mood-row" data-testid="surprise-mood-chips">
-                      {[
-                        { id: "cozy", label: "Cozy" },
-                        { id: "thrill", label: "Thrill" },
-                        { id: "laugh", label: "Laugh" },
-                        { id: "think", label: "Think" },
-                        { id: "escape", label: "Escape" },
-                      ].map((chip) => (
+                      {SURPRISE_MOOD_CHIPS.map((chip) => (
                         <button
                           key={chip.id}
                           type="button"
@@ -1774,10 +1771,9 @@ export default function App() {
                           data-testid={`surprise-mood-${chip.id}`}
                           disabled={loading || !threadsReady || quickPickLoading}
                           aria-pressed={surpriseMood === chip.id}
-                          title={`Bias Surprise Me toward a ${chip.label.toLowerCase()} mood (this pick only)`}
-                          onClick={() =>
-                            setSurpriseMood((current) => (current === chip.id ? "" : chip.id))
-                          }
+                          aria-label={`Surprise me — ${chip.label} mood`}
+                          title={`Surprise me with a ${chip.label.toLowerCase()} mood (this pick only)`}
+                          onClick={() => handleQuickPick(chip.id)}
                         >
                           {chip.label}
                         </button>

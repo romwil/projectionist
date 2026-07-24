@@ -116,7 +116,7 @@ Open **[My Journey](/my-journey)** from the top bar (the route icon, immediately
 
 Youth-mode accounts see youth-safe achievements only. Member-facing copy never says “engagement.”
 
-**Surprise Me with a mood.** Above the dice in chat, optional mood chips (**Cozy**, **Thrill**, **Laugh**, **Think**, **Escape**) bias a *single* pick. They do not overwrite your durable taste profile.
+**Surprise Me with a mood.** Above the dice in chat, tap a mood chip (**Cozy**, **Thrill**, **Laugh**, **Think**, **Escape**) for an instant one-shot pick in that mood — or use the dice for a fully random surprise. Mood chips do not overwrite your durable taste profile.
 
 **Scholar footnotes in chat.** When the curator cites sources with footnote-style markdown (`claim[^1]` plus `[^1]: source` definitions), chat renders them as theme-safe footnote refs under the reply.
 

@@ -5,6 +5,7 @@ import {
   computeFollowScrollTop,
   isScrolledAwayFromBottom,
   resolveAutoScroll,
+  resolveLatestTurnAnchorIndex,
 } from "./chatScroll.js";
 
 describe("computeFollowScrollTop", () => {
@@ -145,5 +146,22 @@ describe("resolveAutoScroll", () => {
       resolveAutoScroll({ isNewTurn: false, streaming: false, nearBottom: true, wasFollowing: true }),
       "none"
     );
+  });
+});
+
+describe("resolveLatestTurnAnchorIndex", () => {
+  it("pins the user message for a normal Q&A turn", () => {
+    assert.equal(resolveLatestTurnAnchorIndex(["user", "assistant", "user", "assistant"]), 2);
+    assert.equal(resolveLatestTurnAnchorIndex(["user"]), 0);
+  });
+
+  it("pins the new assistant entry for Surprise Me (no new user message)", () => {
+    assert.equal(resolveLatestTurnAnchorIndex(["user", "assistant", "assistant"]), 2);
+    assert.equal(resolveLatestTurnAnchorIndex(["assistant"]), 0);
+  });
+
+  it("returns -1 for an empty transcript", () => {
+    assert.equal(resolveLatestTurnAnchorIndex([]), -1);
+    assert.equal(resolveLatestTurnAnchorIndex(null), -1);
   });
 });

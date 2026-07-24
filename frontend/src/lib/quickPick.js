@@ -3,6 +3,38 @@
 export const QUICK_PICK_EMPTY_MESSAGE = "No unwatched titles match the criteria.";
 export const QUICK_PICK_ERROR_FALLBACK = "Couldn't pick a title right now.";
 
+/** One-shot mood chips above Surprise Me (Companion Phase 5). */
+export const SURPRISE_MOOD_CHIPS = [
+  { id: "cozy", label: "Cozy" },
+  { id: "thrill", label: "Thrill" },
+  { id: "laugh", label: "Laugh" },
+  { id: "think", label: "Think" },
+  { id: "escape", label: "Escape" },
+];
+
+/**
+ * Resolve the mood string sent with a Surprise Me request.
+ * Chip clicks pass a string id; the dice button uses the optional selected mood.
+ *
+ * @param {unknown} moodOverride
+ * @param {string} [selectedMood]
+ * @returns {string}
+ */
+export function resolveQuickPickMood(moodOverride, selectedMood = "") {
+  if (typeof moodOverride === "string") return moodOverride.trim();
+  return String(selectedMood || "").trim();
+}
+
+/**
+ * @param {string} [mood]
+ * @returns {string} Query suffix including `?`, or empty string
+ */
+export function quickPickMoodQuery(mood) {
+  const key = String(mood || "").trim();
+  if (!key) return "";
+  return `?mood=${encodeURIComponent(key)}`;
+}
+
 /**
  * Coerce API genres (array or JSON string) so TitleCard never crashes on `.join`.
  * @param {unknown} genres

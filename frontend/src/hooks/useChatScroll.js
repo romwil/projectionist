@@ -4,6 +4,7 @@ import {
   computeFollowScrollTop,
   isScrolledAwayFromBottom,
   resolveAutoScroll,
+  resolveLatestTurnAnchorIndex,
 } from "../lib/chatScroll.js";
 
 export default function useChatScroll({ messages, loading, sessionId }) {
@@ -32,17 +33,20 @@ export default function useChatScroll({ messages, loading, sessionId }) {
   }, []);
 
   /**
-   * Keep the latest user question near the top of the viewport so the
-   * assistant reply (or typing indicator) can grow beneath it without
-   * yanking the question off-screen.
+   * Bring the latest turn into view. For a normal Q&A turn, pin the user
+   * question near the top so the reply can grow beneath it. For assistant-only
+   * entries (Surprise Me / mood chips), pin the new assistant message itself —
+   * never an earlier user turn from the same thread.
    */
   const scrollToLatestTurn = useCallback((behavior = "smooth") => {
     const el = scrollRef.current;
     if (!el) return;
 
-    const userNodes = el.querySelectorAll('[data-message-role="user"]');
-    const userNode = userNodes.length ? userNodes[userNodes.length - 1] : null;
-    if (!userNode) {
+    const messageNodes = el.querySelectorAll("[data-message-role]");
+    const roles = Array.from(messageNodes, (node) => node.getAttribute("data-message-role"));
+    const anchorIndex = resolveLatestTurnAnchorIndex(roles);
+    const targetNode = anchorIndex >= 0 ? messageNodes[anchorIndex] : null;
+    if (!targetNode) {
       scrollToBottom(behavior);
       return;
     }
@@ -50,7 +54,7 @@ export default function useChatScroll({ messages, loading, sessionId }) {
     const top = computeFollowScrollTop({
       viewportHeight: el.clientHeight,
       scrollHeight: el.scrollHeight,
-      userTop: userNode.offsetTop,
+      userTop: targetNode.offsetTop,
       padding: CHAT_SCROLL_PADDING,
     });
     el.scrollTo({ top, behavior });
