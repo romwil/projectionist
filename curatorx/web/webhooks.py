@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from curatorx.config_store import Settings
 from curatorx.library.db import Database
+from curatorx.library.db_io import run_db
 from curatorx.reviews.store import COMPLETION_THRESHOLD, queue_rating_prompt
 
 logger = logging.getLogger(__name__)
@@ -165,7 +166,8 @@ def register_webhook_routes(
         if not provided or not secrets.compare_digest(provided, secret):
             raise HTTPException(status_code=401, detail="Invalid webhook secret")
         payload = await parse_plex_webhook_payload(request)
-        result = handle_plex_webhook(db_factory(), payload)
+        # Offload sync sqlite (user lookup + prompt enqueue) from the event loop.
+        result = await run_db(handle_plex_webhook, db_factory(), payload)
         logger.info(
             "Plex webhook event=%s handled=%s queued=%s rating_key=%s",
             result.get("event") or payload.get("event"),

@@ -37,6 +37,7 @@ import MediaIssuesPage from "./pages/MediaIssuesPage";
 import YouthReviewPage from "./pages/YouthReviewPage";
 import MailSettingsPage from "./pages/MailSettingsPage";
 import AccessRequestsPage from "./pages/AccessRequestsPage";
+import JoinPage from "./pages/JoinPage";
 import GuestTourPage from "./pages/GuestTourPage";
 import { BulkActionProgressProvider } from "./components/BulkActionProgress";
 import WhatsNewGate from "./components/WhatsNewGate";
@@ -68,6 +69,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="/collections/:listId" element={<CollectionsPage />} />
           <Route path="/tour" element={<GuestTourPage />} />
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/join" element={<JoinPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/about" element={<AboutPage />} />
           <Route path="/help" element={<HelpPage />} />

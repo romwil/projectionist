@@ -138,3 +138,40 @@ def add_items_to_collection(
         method="PUT",
         timeout=client.timeout,
     )
+
+
+def delete_collection(client: PlexClient, collection_rating_key: str) -> None:
+    """Delete a Plex collection by rating key.
+
+    Only call this for collections CuratorX marked as ephemeral — never for
+    owner-named evergreen collections without a DB marker.
+    """
+    collection_key = str(collection_rating_key or "").strip()
+    if not collection_key:
+        raise ValueError("collection_rating_key is required")
+    request_empty(
+        _auth_url(client, f"/library/collections/{collection_key}"),
+        method="DELETE",
+        timeout=client.timeout,
+    )
+
+
+def is_ephemeral_collection_title(title: str, *, prefix: str) -> bool:
+    """True when the title carries the CuratorX ephemeral prefix."""
+    cleaned = str(title or "").strip()
+    # Preserve trailing space in the marker (e.g. ``"[CuratorX] "``).
+    marker = str(prefix or "").lstrip()
+    if not cleaned or not marker:
+        return False
+    return cleaned.casefold().startswith(marker.casefold())
+
+
+def apply_ephemeral_title_prefix(title: str, *, prefix: str) -> str:
+    """Ensure ``title`` starts with the ephemeral prefix (no double-prefix)."""
+    cleaned = str(title or "").strip()
+    marker = str(prefix or "").lstrip()
+    if not marker:
+        return cleaned
+    if is_ephemeral_collection_title(cleaned, prefix=marker):
+        return cleaned
+    return f"{marker}{cleaned}"

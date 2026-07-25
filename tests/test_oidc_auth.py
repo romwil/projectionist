@@ -83,7 +83,7 @@ class OIDCAuthTests(unittest.TestCase):
     def _enable_oidc(self) -> None:
         path = Path(self._tmpdir.name) / "settings.json"
         payload = {
-            "features": {"multi_user_enabled": True},
+            "features": {"multi_user_enabled": True, "open_auto_provision": True},
             "auth": {
                 "mode": "oidc",
                 "plex_login_enabled": False,
@@ -172,13 +172,19 @@ class OIDCAuthTests(unittest.TestCase):
 
     @patch("curatorx.web.auth.httpx")
     def test_oidc_user_auto_created_as_member(self, mock_httpx) -> None:
-        """First OIDC login auto-creates users with member role."""
+        """OIDC login auto-creates members when a real household owner already exists."""
         self._enable_oidc()
-        # Create an existing owner first so the OIDC user isn't the first
+        # Bootstrap owner alone does not count — seed a real owner first.
         from curatorx.web.jobs import get_job_manager
 
         db = get_job_manager().db
-        db.ensure_bootstrap_owner()
+        db.upsert_plex_user(
+            user_id="owner-1",
+            display_name="Owner",
+            email="owner@example.com",
+            plex_user_id="1",
+            role="owner",
+        )
 
         mock_disc_resp = MagicMock()
         mock_disc_resp.json.return_value = _mock_discovery()

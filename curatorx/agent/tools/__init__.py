@@ -1881,7 +1881,8 @@ class ToolRegistry:
             }
             prompts.append(prompt)
             if str(item.get("reason")) == "near_complete" and not str(prompt["id"]).startswith("viewed-"):
-                mark_prompts_surfaced(self.db, [prompt["id"]])
+                if self.user_id:
+                    mark_prompts_surfaced(self.db, [prompt["id"]], user_id=self.user_id)
         self._review_prompts.extend(prompts)
         return json.dumps(
             {
@@ -2144,7 +2145,10 @@ class ToolRegistry:
             matching = [prompt for prompt in prompts if prompt["rating_key"] == rating_key]
             if matching:
                 completion_pct = float(matching[0].get("completion_pct") or completion_pct)
-                mark_prompts_surfaced(self.db, [str(matching[0]["id"])])
+                if self.user_id:
+                    mark_prompts_surfaced(
+                        self.db, [str(matching[0]["id"])], user_id=self.user_id
+                    )
 
         dialogue = build_review_dialogue(
             preset_id,
@@ -2700,18 +2704,42 @@ async def execute_confirmed_action(
         }
     if action == "create_plex_collection":
         from curatorx.connectors.plex import PlexClient
-        from curatorx.connectors.plex_collections import create_collection
+        from curatorx.connectors.plex_collections import (
+            apply_ephemeral_title_prefix,
+            create_collection,
+        )
+        from curatorx.library.db import (
+            DEFAULT_EPHEMERAL_TTL_HOURS,
+            EPHEMERAL_COLLECTION_PREFIX,
+        )
 
         config_error = plex_collections_configuration_error(settings)
         if config_error:
             raise RuntimeError(config_error)
         client = PlexClient(settings.plex_url, settings.plex_token)
+        # Agent / movie-night shelves are ephemeral: prefix + TTL registry.
+        titled = apply_ephemeral_title_prefix(
+            str(payload["title"]),
+            prefix=EPHEMERAL_COLLECTION_PREFIX,
+        )
         collection = create_collection(
             client,
             section_id=str(payload["section_id"]),
-            title=str(payload["title"]),
+            title=titled,
             media_type=str(payload["media_type"]),
             rating_keys=list(payload.get("rating_keys") or []),
+        )
+        ttl_hours = int(
+            getattr(settings, "ephemeral_collection_ttl_hours", None)
+            or DEFAULT_EPHEMERAL_TTL_HOURS
+        )
+        db.record_ephemeral_plex_collection(
+            plex_rating_key=collection.rating_key,
+            section_id=collection.section_id,
+            title=collection.title,
+            media_type=collection.media_type,
+            ttl_hours=ttl_hours,
+            created_by_user_id=user_id,
         )
         return {
             "action": action,
@@ -2719,6 +2747,8 @@ async def execute_confirmed_action(
                 "rating_key": collection.rating_key,
                 "title": collection.title,
                 "section_id": collection.section_id,
+                "ephemeral": True,
+                "ttl_hours": ttl_hours,
             },
         }
     if action == "add_to_plex_collection":

@@ -31,7 +31,7 @@ Port-forwarding or exposing `8788` (or a reverse proxy without auth) exposes the
 
 ### Multi-user household
 
-When multi-user is enabled, middleware requires a session for almost all `/api/*` (allowlist: health, features, auth, webhooks). Chat, pending actions, watchlist, reviews, and preferences are scoped by `user_id`. Owner-only routes cover settings, setup tests, sync mutate, and persona/lens writes. Guests cannot request media / *arr writes. The shared library catalog remains household-wide; members see a public-content library browse schema. Login may use Plex PIN, local password (PBKDF2), and/or OIDC depending on `auth_*` flags; `GET /api/features` exposes `auth_methods`.
+When multi-user is enabled, middleware requires a session for almost all `/api/*` (allowlist: health, features, access-requests, invite validate/redeem, auth, webhooks). Chat, pending actions, watchlist, reviews, and preferences are scoped by `user_id`. Owner-only routes cover settings, setup tests, sync mutate, and persona/lens writes. Guests cannot request media / *arr writes. The shared library catalog remains household-wide; members see a public-content library browse schema. Login may use Plex PIN, local password (PBKDF2), and/or OIDC depending on `auth_*` flags; `GET /api/features` exposes `auth_methods`. **New** Plex/OIDC identities require a `/join` invite by default (`features.invite_only`); opt into LAN-open auto-provision with `features.open_auto_provision`.
 
 ```text
 SPA AuthGate ──no session──► /login

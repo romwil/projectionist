@@ -89,7 +89,7 @@ class NotificationPlatformTests(unittest.TestCase):
     def _enable_multi_user(self) -> None:
         path = Path(self._tmpdir.name) / "settings.json"
         payload = {
-            "features": {"multi_user_enabled": True},
+            "features": {"multi_user_enabled": True, "open_auto_provision": True},
             "auth": {"mode": "plex", "plex_login_enabled": True},
             "llm_provider": "ollama",
             "mail": {

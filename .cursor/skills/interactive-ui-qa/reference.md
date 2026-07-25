@@ -41,6 +41,8 @@ Target: `http://10.10.1.202:8790`. Creds: `curatorx-qa-scripts/.env.qa`.
 
 Nav peers for member (`primaryNavVisibleIds`): Search, Chat, Explore, Inbox, My Journey, Settings — **no Admin**.
 
+Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a role sees as topbar icons must also appear as labelled links in the drawer's **Navigate** block. A peer in one surface and missing from the other is a failure, not a cosmetic gap.
+
 ### `nav.peers-member`
 
 - **roles:** `member`
@@ -69,9 +71,9 @@ Nav peers for member (`primaryNavVisibleIds`): Search, Chat, Explore, Inbox, My 
 
 - **roles:** `member`
 - **tags:** `nav`
-- **source:** `frontend/src/components/AppNav.jsx`, `frontend/src/lib/appNavItems.js`
-- **steps:** Open hamburger (`app-nav-toggle`). Scan drawer links.
-- **pass:** Drawer opens; includes Plot Lab, Tags, Watchlist, Library, My Journey, Help, Privacy, About. No Admin entry. Close works.
+- **source:** `frontend/src/components/AppNav.jsx`, `frontend/src/lib/appNavItems.js`, `frontend/src/lib/primaryNav.js`
+- **steps:** Open hamburger (`app-nav-toggle`). Scan drawer links under each heading.
+- **pass:** Drawer opens with a **Navigate** heading (`app-nav-heading-navigate`) whose block carries **every primary peer this role sees in the topbar**, labelled: `app-nav-search`, `app-nav-chat`, `app-nav-explore`, `app-nav-inbox`, `app-nav-my-journey`, `app-nav-settings`. Then a **More** heading (`app-nav-heading-more`) with Plot Lab, Tags, Watchlist, Library, Help, Privacy, About. My Journey appears **once** (Navigate only). No `app-nav-admin` and no `app-nav-admin-*`. Close works.
 
 ### `chat.starter-or-send`
 
@@ -291,9 +293,9 @@ Owner peers: member set **plus** Admin (before My Journey).
 
 - **roles:** `owner`
 - **tags:** `nav`
-- **source:** `frontend/src/lib/appNavItems.js`
+- **source:** `frontend/src/lib/appNavItems.js`, `frontend/src/lib/primaryNav.js`
 - **steps:** Outside `/admin`, open hamburger drawer. On `/admin/*`, open hamburger again.
-- **pass:** Off Admin: core drawer items only (Plot Lab, Tags, Watchlist, Library, My Journey, Help, Privacy, About) — no Admin section dump. On Admin: Admin section links prepended, then the same secondary items under a More heading.
+- **pass:** Both times the drawer opens on a **Navigate** heading (`app-nav-heading-navigate`) carrying **every primary peer the owner sees in the topbar**, labelled: `app-nav-search`, `app-nav-chat`, `app-nav-explore`, `app-nav-inbox`, `app-nav-admin`, `app-nav-my-journey`, `app-nav-settings`. Off Admin: no Admin *section* dump (no `app-nav-admin-*`), then **More** with Plot Lab, Tags, Watchlist, Library, Help, Privacy, About. On Admin: an **Admin** heading (`app-nav-heading-admin`) with the section links (`app-nav-admin-*`) sits **between** Navigate and More — it adds to Navigate, never replaces it. My Journey appears once (Navigate only).
 
 ### `settings.role-owner`
 
@@ -363,9 +365,9 @@ Youth uses member peer set (no Admin). Topbar labels: Chat → **Ask**, Explore 
 
 - **roles:** `youth`
 - **tags:** `nav`, `shell`
-- **source:** `frontend/src/lib/appNavItems.js`
+- **source:** `frontend/src/lib/appNavItems.js`, `frontend/src/lib/primaryNav.js`
 - **steps:** Open hamburger.
-- **pass:** Youth drawer: My list (watchlist), My Journey, Help — not full adult Plot Lab/Tags/Library set.
+- **pass:** **Navigate** block carries every peer youth sees in the topbar — `app-nav-search`, `app-nav-chat` (labelled **Ask**), `app-nav-explore` (labelled **Browse**), `app-nav-inbox`, `app-nav-my-journey`, `app-nav-settings` — and no `app-nav-admin`. **More** stays reduced: My list (`app-nav-watchlist`) and Help only — not the adult Plot Lab / Tags / Library set. My Journey appears once (Navigate only).
 
 ### `settings.role-youth`
 
@@ -403,9 +405,9 @@ Guest peers only: Search, Chat (Ask), Explore (Browse). No Inbox / Admin / My Jo
 
 - **roles:** `guest`
 - **tags:** `nav`, `tour`
-- **source:** `frontend/src/lib/appNavItems.js`
+- **source:** `frontend/src/lib/appNavItems.js`, `frontend/src/lib/primaryNav.js`
 - **steps:** Open hamburger.
-- **pass:** What’s great (`/tour`), Collections, Help, About.
+- **pass:** **Navigate** block carries only the peers a guest sees in the topbar — `app-nav-search`, `app-nav-chat` (**Ask**), `app-nav-explore` (**Browse**) — with no Inbox, My Journey, Settings, or Admin entry. **More** holds What’s great (`/tour`), Collections, Help, About.
 
 ### `nav.admin-redirect-guest`
 

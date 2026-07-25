@@ -16,6 +16,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     """Register every built-in task with the scheduler."""
     from curatorx.scheduler.tasks import (
         anniversary_scanner,
+        collection_gc,
         data_retention,
         entity_memory_enrichment,
         gap_analysis,
@@ -47,6 +48,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     recommendation_warmup.register(scheduler)
     gap_analysis.register(scheduler)
     data_retention.register(scheduler)
+    collection_gc.register(scheduler)
     entity_memory_enrichment.register(scheduler)
     metadata_enrichment.register(scheduler)
     plot_neighbors.register(scheduler)

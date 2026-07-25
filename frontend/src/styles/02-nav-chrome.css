@@ -67,6 +67,25 @@
   flex-wrap: wrap;
 }
 
+/* Owner density: 7 peers + theme + user menu must stay on one row, so the
+   brand yields space instead of the peer cluster wrapping to a second line. */
+.primary-topbar .app-topbar-actions {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  margin-left: auto;
+}
+
+.primary-topbar .app-topbar-brand {
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.primary-topbar .app-topbar-brand h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 a.app-topbar-link,
 .app-topbar-link {
   display: inline-flex;
@@ -137,6 +156,25 @@ a.app-topbar-icon.is-active,
   background: var(--accent-soft);
 }
 
+a.app-topbar-icon:focus-visible,
+button.app-topbar-icon:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* Active peer keeps a readable marker even where accent-soft is very subtle. */
+.primary-topbar .app-topbar-icon.is-active::before {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  width: 14px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  transform: translateX(-50%);
+}
+
 .app-topbar-icon .material-symbols-outlined {
   font-size: 22px;
 }
@@ -192,6 +230,26 @@ a.app-topbar-icon.is-active,
 .app-topbar-icon:focus-visible[data-tooltip]::after {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
+}
+
+/* Right-edge peers (Settings, theme, user menu): anchor the tooltip inside the
+   viewport instead of letting it run off the right of the header. */
+.primary-topbar .app-topbar-actions > :nth-last-child(-n + 2)[data-tooltip]::after {
+  left: auto;
+  right: 0;
+  transform: translateX(0) translateY(-2px);
+}
+
+.primary-topbar .app-topbar-actions > :nth-last-child(-n + 2):hover[data-tooltip]::after,
+.primary-topbar .app-topbar-actions > :nth-last-child(-n + 2):focus-visible[data-tooltip]::after {
+  transform: translateX(0) translateY(0);
+}
+
+/* Touch chrome: a tap leaves the hover tooltip stuck over the next surface. */
+@media (hover: none) {
+  .app-topbar-icon[data-tooltip]::after {
+    content: none;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

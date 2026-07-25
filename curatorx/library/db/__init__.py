@@ -53,8 +53,14 @@ from ._recommendations import RecommendationsMixin
 from ._notifications import NotificationsMixin
 from ._engagement import EngagementMixin
 from ._access_requests import AccessRequestsMixin
+from ._invites import InvitesMixin
 from ._curated_lists import CuratedListsMixin
 from ._media_issues import MediaIssuesMixin
+from ._ephemeral_collections import (
+    DEFAULT_EPHEMERAL_TTL_HOURS,
+    EPHEMERAL_COLLECTION_PREFIX,
+    EphemeralCollectionsMixin,
+)
 
 
 class Database(
@@ -75,6 +81,8 @@ class Database(
     NotificationsMixin,
     EngagementMixin,
     AccessRequestsMixin,
+    InvitesMixin,
+    EphemeralCollectionsMixin,
     CuratedListsMixin,
     MediaIssuesMixin,
 ):
@@ -97,6 +105,8 @@ __all__ = [
     "DEFAULT_CONTEXT_HASH",
     "DEFAULT_LENS_ID",
     "DEFAULT_PERSONA_ID",
+    "DEFAULT_EPHEMERAL_TTL_HOURS",
+    "EPHEMERAL_COLLECTION_PREFIX",
     "SCHEMA",
     "SQLITE_BUSY_TIMEOUT_MS",
     "SQLITE_LOCK_RETRIES",

@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { ROUTES } from "./backNav.js";
 import {
   PRIMARY_NAV_ITEMS,
+  buildPrimaryDrawerItems,
   buildPrimaryNavItems,
   isPrimaryNavActive,
   primaryNavVisibleIds,
@@ -80,6 +81,28 @@ describe("primaryNav", () => {
       "chat",
       "explore",
     ]);
+  });
+
+  it("shapes the same peers for the drawer with app-nav test ids", () => {
+    const owner = buildPrimaryDrawerItems({ role: "owner", isOwner: true });
+    assert.deepEqual(
+      owner.map((item) => item.id),
+      buildPrimaryNavItems({ role: "owner", isOwner: true }).map((item) => item.id),
+    );
+    assert.deepEqual(
+      owner.map((item) => item.testId),
+      [
+        "app-nav-search",
+        "app-nav-chat",
+        "app-nav-explore",
+        "app-nav-inbox",
+        "app-nav-admin",
+        "app-nav-my-journey",
+        "app-nav-settings",
+      ],
+    );
+    assert.ok(owner.every((item) => item.kind === "primary" && item.label && item.to));
+    assert.deepEqual(buildPrimaryDrawerItems({ isOwner: true, authReady: false }), []);
   });
 
   it("marks chat active for /chat", () => {

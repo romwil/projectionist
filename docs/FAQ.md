@@ -75,11 +75,13 @@ No. Defaults are **single-owner, no login, Seerr off**. Enable them only if you 
 
 ## How do I enable household sign-in?
 
-Turn on multi-user in **Admin**, then enable the sign-in methods you want. Members appear after they sign in — there's no email invite flow.
+Turn on multi-user in **Admin**, then enable the sign-in methods you want. New members join with a one-time **/join** invite from **Admin → Access** (invite-only is on by default). Existing accounts keep signing in as usual.
 
 - **Sign in with Plex** — Overseerr-style plex.tv PIN / link flow (most common)
-- **Local password** — owner-registered accounts (PBKDF2)
+- **Local password** — set on the join page when the invite allows it, or owner-registered accounts
 - **OIDC** — Authelia, Authentik, Keycloak, or another OIDC IdP
+
+Want the old LAN-open behavior (anyone who can reach Plex/SSO becomes a member)? Enable **Open auto-provision** in Admin household settings.
 
 Pasting a Plex token on `/login` is an advanced fallback only. The **Plex server token** in Config is separate — it's for library sync, not household login. Full walkthrough: [wiki/Multi-User.md](wiki/Multi-User.md).
 

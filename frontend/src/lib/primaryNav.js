@@ -1,5 +1,10 @@
 /**
- * Shared primary toolbar destinations and role gating for CuratorX chrome.
+ * Shared primary destinations and role gating for CuratorX chrome.
+ *
+ * This is the single source of truth for peer destinations: `PrimaryTopbar`
+ * renders `buildPrimaryNavItems` as icons and the AppNav drawer renders
+ * `buildPrimaryDrawerItems` as labelled links, so role gating cannot drift
+ * between the two surfaces.
  *
  * Icon order (L→R after hamburger + brand):
  * Search → Chat → Explore → Inbox → Admin → My Journey → Settings
@@ -120,6 +125,24 @@ export function buildPrimaryNavItems({
     if (String(role).toLowerCase() === "guest" && item.guestLabel) label = item.guestLabel;
     return { ...item, label };
   });
+}
+
+/**
+ * The same peers, shaped for the AppNav drawer: labelled links with
+ * `app-nav-*` test ids instead of toolbar icons. Role gating comes from
+ * `buildPrimaryNavItems`, so the drawer can never show a peer the toolbar
+ * hides (or miss one it shows).
+ * @returns {Array<object>}
+ */
+export function buildPrimaryDrawerItems(opts = {}) {
+  return buildPrimaryNavItems(opts).map((item) => ({
+    id: item.id,
+    to: item.to,
+    label: item.label,
+    icon: item.icon,
+    kind: "primary",
+    testId: `app-nav-${item.id}`,
+  }));
 }
 
 /** True when pathname is the chat workspace (including legacy `/`). */

@@ -11,6 +11,7 @@ import sqlite3
 import time
 from pathlib import Path
 from typing import (
+    Callable,
     Optional,
 )
 
@@ -24,16 +25,48 @@ from ._shared import (
     DEFAULT_LENS_ID,
     DEFAULT_PERSONA_ID,
     SCHEMA,
+    T,
     run_with_db_lock_retry,
 )
 
 
 class SchemaMigrationsMixin:
     def __init__(self, path: Path) -> None:
+        from ._write_serializer import WriteSerializer
+
         self.path = path
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        # Dedicated writer thread — ambient mutators enqueue via run_write.
+        # Schema bootstrap below still uses connect() on this thread only.
+        self._write_serializer = WriteSerializer()
         self._bootstrap_owner_ready = False
-        self._init_schema()
+        try:
+            self._init_schema()
+        except Exception:
+            self._write_serializer.shutdown(timeout=5.0)
+            raise
+
+    def run_write(self, operation: Callable[[], T], *, label: str = "write") -> T:
+        """Run a mutating callable on the dedicated writer thread.
+
+        Re-entrant when already on the writer. Applies ``run_with_db_lock_retry``
+        inside the worker so blocking ``time.sleep`` never pins the asyncio loop.
+        Readers should keep using short-lived ``connect()`` WAL connections.
+        """
+        return self._write_serializer.run(
+            lambda: run_with_db_lock_retry(operation, label=label),
+            label=label,
+        )
+
+    def write_queue_stats(self) -> dict:
+        """Queue depth and wait-time samples for the write serializer."""
+        return self._write_serializer.stats()
+
+    def close(self) -> None:
+        """Drain and stop the write serializer (process shutdown)."""
+        serializer = getattr(self, "_write_serializer", None)
+        if serializer is not None:
+            serializer.shutdown()
 
     def _init_schema(self) -> None:
         with self.connect() as conn:
@@ -60,6 +93,7 @@ class SchemaMigrationsMixin:
             self._migrate_notifications(conn)
             self._migrate_taste_engagement(conn)
             self._migrate_access_requests(conn)
+            self._migrate_invites(conn)
             self._migrate_saved_library(conn)
             self._migrate_library_metadata_enrichment(conn)
             self._migrate_people_credits(conn)
@@ -69,6 +103,7 @@ class SchemaMigrationsMixin:
             self._migrate_item_neighbors(conn)
             self._migrate_title_relations(conn)
             self._migrate_curator_memory(conn)
+            self._migrate_ephemeral_plex_collections(conn)
             self._seed_defaults(conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
@@ -368,9 +403,9 @@ class SchemaMigrationsMixin:
     def _migrate_item_neighbors(self, conn: sqlite3.Connection) -> None:
         """Cached plot neighbors + surprise scores (Stage 3).
 
-        v1 fills this via pure-Python cosine over stored embeddings (idle trickle).
-        Future: optional sqlite-vec ANN index can prefilter candidates before scoring;
-        keep this table as the read cache either way so Explore/Plot Lab stay cheap.
+        Idle ``plot_neighbors`` fills this via exact cosine (+ surprise). Optional
+        sqlite-vec ANN may prefilter candidates before scoring when the extension
+        is installed; this table stays the read cache either way.
         """
         conn.executescript(
             """
@@ -387,6 +422,24 @@ class SchemaMigrationsMixin:
                 ON item_neighbors(item_id, score DESC);
             CREATE INDEX IF NOT EXISTS idx_neighbors_item_surprise
                 ON item_neighbors(item_id, surprise_score DESC);
+            """
+        )
+
+    def _migrate_ephemeral_plex_collections(self, conn: sqlite3.Connection) -> None:
+        """Agent / movie-night Plex collections tagged for TTL garbage collection."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS ephemeral_plex_collections (
+                plex_rating_key TEXT PRIMARY KEY,
+                section_id TEXT NOT NULL DEFAULT '',
+                title TEXT NOT NULL DEFAULT '',
+                media_type TEXT NOT NULL DEFAULT 'movie',
+                created_at REAL NOT NULL,
+                expires_at REAL NOT NULL,
+                created_by_user_id TEXT
+            );
+            CREATE INDEX IF NOT EXISTS idx_ephemeral_collections_expires
+                ON ephemeral_plex_collections(expires_at);
             """
         )
 
@@ -1291,6 +1344,39 @@ class SchemaMigrationsMixin:
             """
         )
 
+    def _migrate_invites(self, conn: sqlite3.Connection) -> None:
+        """Invite-only household join tokens (1.26)."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS invites (
+                id TEXT PRIMARY KEY,
+                token_hash TEXT NOT NULL UNIQUE,
+                expires_at REAL NOT NULL,
+                status TEXT NOT NULL CHECK (
+                    status IN ('pending', 'redeemed', 'revoked')
+                ),
+                email TEXT,
+                expected_plex_user_id TEXT,
+                expected_oidc_sub TEXT,
+                role TEXT NOT NULL CHECK (role IN ('member', 'guest')),
+                is_youth INTEGER NOT NULL DEFAULT 0,
+                allowed_methods TEXT NOT NULL DEFAULT '["plex","oidc","local"]',
+                created_by TEXT,
+                created_at REAL NOT NULL,
+                redeemed_at REAL,
+                redeemed_user_id TEXT,
+                access_request_id TEXT,
+                FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY (redeemed_user_id) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY (access_request_id) REFERENCES access_requests(id) ON DELETE SET NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_invites_status
+                ON invites(status, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_invites_token_hash
+                ON invites(token_hash);
+            """
+        )
+
     def _migrate_saved_library(self, conn: sqlite3.Connection) -> None:
         """Saved curator responses, private to the user who saved them."""
         conn.executescript(
@@ -1467,6 +1553,6 @@ class SchemaMigrationsMixin:
             with self.connect() as managed:
                 _ensure(managed)
 
-        run_with_db_lock_retry(_managed, label="ensure_bootstrap_owner")
+        self.run_write(_managed, label="ensure_bootstrap_owner")
         self._bootstrap_owner_ready = True
 

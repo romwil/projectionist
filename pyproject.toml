@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "curatorx"
-version = "1.25.6"
+version = "1.26.0"
 description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,6 +35,12 @@ web = [
 
 mcp = [
     "mcp>=1.0.0",
+]
+
+# Optional ANN prefilter for neighbor rebuild / semantic search. Not required
+# for default Docker/Unraid images — exact cosine remains the fallback.
+vec = [
+    "sqlite-vec>=0.1.0",
 ]
 
 dev = [

@@ -303,18 +303,23 @@ class ChatThreadsMixin:
     ) -> None:
         now = time.time()
         resolved = lens_id or DEFAULT_LENS_ID
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT INTO chat_messages (id, session_id, role, blocks_json, created_at, lens_id)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """,
-                (message_id, session_id, role, json.dumps(list(blocks)), now, resolved),
-            )
-            conn.execute(
-                "UPDATE chat_sessions SET updated_at = ?, lens_id = ? WHERE id = ?",
-                (now, resolved, session_id),
-            )
+        payload = json.dumps(list(blocks))
+
+        def _write() -> None:
+            with self.connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO chat_messages (id, session_id, role, blocks_json, created_at, lens_id)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (message_id, session_id, role, payload, now, resolved),
+                )
+                conn.execute(
+                    "UPDATE chat_sessions SET updated_at = ?, lens_id = ? WHERE id = ?",
+                    (now, resolved, session_id),
+                )
+
+        self.run_write(_write, label="save_chat_message")
 
     def chat_history(
         self,

@@ -838,6 +838,42 @@ export default function ConfigPage() {
     }
   }
 
+  async function handleEphemeralCollectionGcToggle(enabled) {
+    updateFeatureFlags({ ephemeral_collection_gc_enabled: enabled });
+    try {
+      await persistSettings({
+        features: { ...(settings.features || {}), ephemeral_collection_gc_enabled: enabled },
+      });
+      setActionFeedback(
+        "plex-sections",
+        "success",
+        enabled
+          ? "Ephemeral collection cleanup is on — expired [CuratorX] movie-night shelves will be pruned."
+          : "Ephemeral collection cleanup is off — expired agent shelves stay on Plex until you delete them.",
+      );
+    } catch (error) {
+      setActionFeedback("plex-sections", "error", error.message);
+    }
+  }
+
+  async function handleEphemeralCollectionGcDryRunToggle(enabled) {
+    updateFeatureFlags({ ephemeral_collection_gc_dry_run: enabled });
+    try {
+      await persistSettings({
+        features: { ...(settings.features || {}), ephemeral_collection_gc_dry_run: enabled },
+      });
+      setActionFeedback(
+        "plex-sections",
+        "success",
+        enabled
+          ? "Collection GC dry-run is on — the idle task logs what it would delete without removing anything."
+          : "Collection GC dry-run is off — expired ephemeral collections will be deleted from Plex.",
+      );
+    } catch (error) {
+      setActionFeedback("plex-sections", "error", error.message);
+    }
+  }
+
   async function handleSectionChange(field, value) {
     const nextMovie = field === "plex_movie_section" ? value : settings.plex_movie_section;
     const nextTv = field === "plex_tv_section" ? value : settings.plex_tv_section;
@@ -1754,8 +1790,9 @@ export default function ConfigPage() {
             <h2>Household login (optional)</h2>
             <p className="wizard-note">
               When enabled, people open CuratorX via <strong>Sign in with Plex</strong> (plex.tv PIN / link
-              on the login page). The first account becomes owner; later accounts start as members. This is
-              separate from the Plex <em>server</em> token above used for library sync.
+              on the login page). The first account becomes owner; later accounts join via an invite link
+              from <strong>Admin → Access</strong> (invite-only by default). This is separate from the Plex{" "}
+              <em>server</em> token above used for library sync.
             </p>
             <label className="config-toggle" data-testid="multi-user-enabled-toggle">
               <input
@@ -1817,6 +1854,61 @@ export default function ConfigPage() {
             </p>
             {settings?.features?.multi_user_enabled ? (
               <>
+                <label className="config-toggle" data-testid="invite-only-toggle">
+                  <input
+                    type="checkbox"
+                    checked={settings?.features?.invite_only !== false}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      updateFeatureFlags({ invite_only: enabled });
+                      persistSettings({
+                        features: { ...(settings.features || {}), invite_only: enabled },
+                      })
+                        .then(() =>
+                          setActionFeedback(
+                            "invite-only",
+                            "success",
+                            enabled
+                              ? "Invite-only join is on — new Plex/SSO users need a /join link."
+                              : "Invite-only is off — new sign-ins can auto-provision (unless open auto-provision is also considered).",
+                          ),
+                        )
+                        .catch((error) => setActionFeedback("invite-only", "error", error.message));
+                    }}
+                  />
+                  <span>Require invite to join (recommended)</span>
+                </label>
+                <label className="config-toggle" data-testid="open-auto-provision-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings?.features?.open_auto_provision)}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      updateFeatureFlags({ open_auto_provision: enabled });
+                      persistSettings({
+                        features: { ...(settings.features || {}), open_auto_provision: enabled },
+                      })
+                        .then(() =>
+                          setActionFeedback(
+                            "open-auto-provision",
+                            "success",
+                            enabled
+                              ? "Open auto-provision is on — anyone who can reach sign-in becomes a member (pre-1.26 LAN behavior)."
+                              : "Open auto-provision is off — invite-only applies when Require invite is on.",
+                          ),
+                        )
+                        .catch((error) =>
+                          setActionFeedback("open-auto-provision", "error", error.message),
+                        );
+                    }}
+                  />
+                  <span>Open auto-provision (LAN-open; opt-in)</span>
+                </label>
+                <p className="wizard-note field-help">
+                  Default is invite-only. Create links under <strong>Admin → Access</strong>. Turn on{" "}
+                  <em>Open auto-provision</em> only if you want any reachable Plex/SSO identity to join
+                  without an invite.
+                </p>
                 <div className="service-fields">
                   <label>
                     <span>Sign-in method</span>
@@ -2193,7 +2285,51 @@ export default function ConfigPage() {
           </label>
           <p className="wizard-note">
             The curator can suggest creating a collection or adding titles you already own — you always confirm first.
+            Agent / movie-night shelves are tagged with a <code>[CuratorX]</code> prefix and expire after the TTL below.
           </p>
+          <label className="config-toggle" data-testid="ephemeral-collection-gc-toggle">
+            <input
+              type="checkbox"
+              checked={settings?.features?.ephemeral_collection_gc_enabled !== false}
+              onChange={(event) => handleEphemeralCollectionGcToggle(event.target.checked)}
+              disabled={!settings?.features?.plex_collections_enabled}
+            />
+            <span>Auto-clean expired CuratorX movie-night collections</span>
+          </label>
+          <label className="config-toggle" data-testid="ephemeral-collection-gc-dry-run-toggle">
+            <input
+              type="checkbox"
+              checked={Boolean(settings?.features?.ephemeral_collection_gc_dry_run)}
+              onChange={(event) => handleEphemeralCollectionGcDryRunToggle(event.target.checked)}
+              disabled={
+                !settings?.features?.plex_collections_enabled ||
+                settings?.features?.ephemeral_collection_gc_enabled === false
+              }
+            />
+            <span>Dry-run only (log what would be deleted)</span>
+          </label>
+          <label>
+            <span>Ephemeral collection TTL (hours)</span>
+            <input
+              type="number"
+              min={1}
+              data-testid="ephemeral-collection-ttl-hours"
+              value={settings?.ephemeral_collection_ttl_hours ?? 168}
+              onChange={(event) => {
+                const next = Math.max(1, Number(event.target.value) || 168);
+                updateSettings({ ephemeral_collection_ttl_hours: next });
+              }}
+              onBlur={() =>
+                persistSettings({
+                  ephemeral_collection_ttl_hours: Math.max(
+                    1,
+                    Number(settings?.ephemeral_collection_ttl_hours) || 168,
+                  ),
+                }).catch((error) => setActionFeedback("plex-sections", "error", error.message))
+              }
+              disabled={!settings?.features?.plex_collections_enabled}
+            />
+          </label>
           <InlineAlert
             type={actionAlert?.area === "plex-sections" ? actionAlert.type : null}
             message={actionAlert?.area === "plex-sections" ? actionAlert.message : null}

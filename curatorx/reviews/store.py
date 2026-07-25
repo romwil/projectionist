@@ -159,40 +159,59 @@ def queue_rating_prompt(
     if not cleaned_user:
         return False
     now = time.time()
-    with db.connect() as conn:
-        if not _can_queue_prompt(conn, rating_key, user_id=cleaned_user, now=now):
-            return False
-        _upsert_prompt(
-            conn,
-            rating_key=rating_key,
-            media_type=media_type,
-            title=title,
-            completion_pct=completion_pct,
-            user_id=cleaned_user,
-            now=now,
-        )
-    return True
+
+    def _write() -> bool:
+        with db.connect() as conn:
+            if not _can_queue_prompt(conn, rating_key, user_id=cleaned_user, now=now):
+                return False
+            _upsert_prompt(
+                conn,
+                rating_key=rating_key,
+                media_type=media_type,
+                title=title,
+                completion_pct=completion_pct,
+                user_id=cleaned_user,
+                now=now,
+            )
+        return True
+
+    return bool(db.run_write(_write, label="queue_rating_prompt"))
 
 
-def mark_prompts_surfaced(db: Database, prompt_ids: List[str]) -> int:
-    """Set prompted_at when review prompts are shown in chat."""
+def mark_prompts_surfaced(
+    db: Database,
+    prompt_ids: List[str],
+    *,
+    user_id: str,
+) -> int:
+    """Set prompted_at when review prompts are shown in chat.
+
+    Requires the owning ``user_id`` so one account cannot mark another user's
+    prompts as surfaced by id alone.
+    """
     ids = [str(prompt_id).strip() for prompt_id in prompt_ids if str(prompt_id).strip()]
-    if not ids:
+    cleaned_user = str(user_id or "").strip()
+    if not ids or not cleaned_user:
         return 0
     now = time.time()
     placeholders = ", ".join("?" for _ in ids)
-    with db.connect() as conn:
-        cursor = conn.execute(
-            f"""
-            UPDATE rating_prompt_queue
-            SET prompted_at = ?
-            WHERE id IN ({placeholders})
-              AND prompted_at IS NULL
-              AND dismissed_at IS NULL
-            """,
-            [now, *ids],
-        )
-    return int(cursor.rowcount)
+
+    def _write() -> int:
+        with db.connect() as conn:
+            cursor = conn.execute(
+                f"""
+                UPDATE rating_prompt_queue
+                SET prompted_at = ?
+                WHERE id IN ({placeholders})
+                  AND user_id = ?
+                  AND prompted_at IS NULL
+                  AND dismissed_at IS NULL
+                """,
+                [now, *ids, cleaned_user],
+            )
+            return int(cursor.rowcount)
+
+    return int(db.run_write(_write, label="mark_prompts_surfaced"))
 
 
 def scan_for_rating_prompts(

@@ -24,6 +24,7 @@ const IN_APP_ROUTES = new Set([
   "/about",
   "/settings",
   "/login",
+  "/join",
   "/admin",
   "/admin/tasks",
   "/admin/dashboard",

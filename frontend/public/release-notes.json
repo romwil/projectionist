@@ -1,6 +1,69 @@
 {
-  "generated_at": "2026-07-25T00:17:00Z",
+  "generated_at": "2026-07-25T03:05:34Z",
   "releases": [
+    {
+      "version": "1.26.0",
+      "date": "2026-07-24",
+      "summary": "Invite-only household join arrives with shareable and emailed join links, and chat stays responsive under load: SQLite writes and long similarity scans no longer block the event loop, and every write lines up behind a single serializer. Youth picks honor the rating ceiling exactly, TV taste respects mid-series stops, agent-created Plex shelves clean themselves up, and similarity search can opt into an sqlite-vec ANN speed-up.",
+      "highlights": [
+        "**Invite-only household join.** New Plex/SSO sign-ins need a one-time `/join` link from Admin → Access (default on when multi-user is enabled).",
+        "**Copy a join link — or email it.** Approving a request or creating an invite returns a shareable URL; Mail sends it when configured.",
+        "**Opt back into LAN-open.** Prefer the old “anyone who can reach sign-in becomes a member” behavior? Enable Open auto-provision in Admin household settings.",
+        "**Chat stays snappy when the house is busy.** Streaming chat, webhooks, and library search no longer stall the event loop on SQLite or long cosine scans; writes line up behind one serializer so telemetry and sync bursts don’t lock the UI.",
+        "**Youth picks match the rating ceiling exactly.** Surprise Me and library filters no longer let `Unrated` / `NR` slip through when the ceiling includes R.",
+        "**TV taste respects mid-series stops.** Abandoning a show after early seasons no longer keeps forcing later-season neighbors — episode ratings and season decay feed the taste profile.",
+        "**Movie-night Plex shelves clean themselves up.** Agent-created collections get a `[CuratorX]` tag and TTL; an idle task prunes expired ones (evergreen shelves stay untouched).",
+        "**Optional vector speed-up.** Install `sqlite-vec` when you want ANN prefiltering for similarity search; default images keep the exact cosine path."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "`invites` table + Admin Access create/revoke; public `/join?token=` redeem UI (Plex / OIDC / local password).",
+            "Feature flags `features.invite_only` (default true) and `features.open_auto_provision` (default false).",
+            "Auth gate for new Plex/OIDC identities; owner bootstrap via `count_users_with_role(\"owner\")`.",
+            "Soft-block: denied access-request emails cannot redeem invites.",
+            "SQLite **write serializer** (`Database.run_write`) with queue-depth / wait-time stats; `await run_db(...)` helper for SSE hot paths.",
+            "Optional **sqlite-vec** ANN prefilter (`curatorx[vec]` / `CURATORX_SQLITE_VEC`) before exact neighbor / semantic scoring; `item_neighbors` remains the read cache.",
+            "TV **season-decay + episode sentiment** weighting in `taste_refresh` (from `library_episodes`).",
+            "Ephemeral Plex collection registry + idle `collection_gc` task; Admin toggles for enable / dry-run + TTL hours.",
+            "Opt-in contract snapshot fixtures for Radarr / Sonarr / TMDB lookup & add-error shapes; live TMDB ping behind `CURATORX_LIVE_INTEGRATION=1`."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Approving an access request creates a join invite (no longer mints a temporary local password alone).",
+            "HELP / FAQ / Multi-User docs rewrite for invite-only join; owner `## For owners` Access section updated.",
+            "ARCHITECTURE: “Why not a single-writer queue?” replaced by **Write serializer model** + event-loop offload notes (WAL / busy_timeout / lock-retry remain).",
+            "ARCHITECTURE: sqlite-vec ANN, TV season-decay taste, and ephemeral collection GC moved from Future → Implemented (optional where noted).",
+            "CONFIGURATION: personal watch nudges require a mapped Plex webhook identity.",
+            "HELP Taste profile: short member note on TV mid-series / season-decay behavior.",
+            "Agent `create_plex_collection` applies `[CuratorX]` prefix and records TTL for GC."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Youth SQL allow-lists used `LIKE '%label%'`, so a ceiling of R could over-match `Unrated` / `Not Rated` / `NR` (and G could over-match PG). Exact canonical token binding now matches the Python `content_rating_allowed` gate (fail-closed)."
+          ]
+        },
+        {
+          "title": "Security",
+          "bullets": [
+            "`mark_prompts_surfaced` requires the owning `user_id` (prompt id alone can no longer mark another account’s rating nudges)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` **1313 passed**, 6 skipped (27 subtests) at **78.16%** total coverage (`--cov-fail-under=74`).",
+            "Frontend `node --test` unit suite **470 passed**. ESLint **0 errors** (94 pre-existing warnings). Production build succeeds.",
+            "`test_version` lockstep holds at **1.26.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.25.6",
       "date": "2026-07-25",

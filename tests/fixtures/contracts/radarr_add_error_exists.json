@@ -1,0 +1,7 @@
+{
+  "service": "radarr",
+  "operation": "add_error_exists",
+  "description": "Radarr HTTP body when movie already exists (MovieExistsValidator)",
+  "http_status": 400,
+  "response_body": "[{\"propertyName\":\"\",\"errorMessage\":\"This movie has already been added\",\"errorCode\":\"MovieExistsValidator\",\"isWarning\":false}]"
+}

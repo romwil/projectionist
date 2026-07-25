@@ -1,0 +1,19 @@
+{
+  "service": "sonarr",
+  "operation": "lookup",
+  "description": "Sonarr series lookup by term — recorded response shape",
+  "response": [
+    {
+      "title": "Breaking Bad",
+      "year": 2008,
+      "tvdbId": 81189,
+      "tmdbId": 1396,
+      "overview": "A high school chemistry teacher turned methamphetamine producer.",
+      "network": "AMC",
+      "status": "ended",
+      "seasons": [{ "seasonNumber": 1, "monitored": true }],
+      "images": [],
+      "remotePoster": "https://artworks.thetvdb.com/poster.jpg"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "service": "tmdb",
+  "operation": "search_movie",
+  "description": "TMDB /search/movie page shape",
+  "response": {
+    "page": 1,
+    "total_pages": 1,
+    "total_results": 1,
+    "results": [
+      {
+        "id": 603,
+        "title": "The Matrix",
+        "original_title": "The Matrix",
+        "overview": "A computer hacker learns about the true nature of reality.",
+        "release_date": "1999-03-30",
+        "poster_path": "/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg",
+        "backdrop_path": "/fNG7i7RqMErkcqhohV2aJunMFtO.jpg",
+        "vote_average": 8.2,
+        "vote_count": 24000,
+        "genre_ids": [28, 878],
+        "adult": false,
+        "popularity": 70.1
+      }
+    ]
+  }
+}

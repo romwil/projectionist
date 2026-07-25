@@ -1,0 +1,278 @@
+"""Household invite tokens (invite-only join when multi-user is on)."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+import time
+import uuid
+from typing import Any, Dict, List, Optional
+
+
+INVITE_STATUSES = frozenset({"pending", "redeemed", "revoked"})
+INVITE_ROLES = frozenset({"member", "guest"})
+INVITE_METHODS = frozenset({"plex", "oidc", "local"})
+
+
+class InvitesMixin:
+    def create_invite(
+        self,
+        *,
+        token_hash: str,
+        created_by: str,
+        role: str = "member",
+        is_youth: bool = False,
+        allowed_methods: Optional[List[str]] = None,
+        expires_at: Optional[float] = None,
+        email: Optional[str] = None,
+        expected_plex_user_id: Optional[str] = None,
+        expected_oidc_sub: Optional[str] = None,
+        access_request_id: Optional[str] = None,
+        invite_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        cleaned_role = str(role or "member").strip().lower()
+        if cleaned_role not in INVITE_ROLES:
+            raise ValueError("role must be member or guest")
+        methods = _normalize_methods(allowed_methods)
+        email_clean = str(email or "").strip() or None
+        plex_clean = str(expected_plex_user_id or "").strip() or None
+        oidc_clean = str(expected_oidc_sub or "").strip() or None
+        request_clean = str(access_request_id or "").strip() or None
+        hash_clean = str(token_hash or "").strip()
+        if not hash_clean:
+            raise ValueError("token_hash is required")
+        iid = invite_id or uuid.uuid4().hex
+        now = time.time()
+        exp = float(expires_at) if expires_at is not None else now + 7 * 24 * 3600
+        with self.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO invites (
+                    id, token_hash, expires_at, status, email,
+                    expected_plex_user_id, expected_oidc_sub, role, is_youth,
+                    allowed_methods, created_by, created_at,
+                    redeemed_at, redeemed_user_id, access_request_id
+                ) VALUES (?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?)
+                """,
+                (
+                    iid,
+                    hash_clean,
+                    exp,
+                    email_clean,
+                    plex_clean,
+                    oidc_clean,
+                    cleaned_role,
+                    1 if is_youth else 0,
+                    json.dumps(methods),
+                    created_by,
+                    now,
+                    request_clean,
+                ),
+            )
+            row = conn.execute("SELECT * FROM invites WHERE id = ?", (iid,)).fetchone()
+        assert row is not None
+        return self._row_to_invite(row)
+
+    def get_invite(self, invite_id: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM invites WHERE id = ?",
+                (invite_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_invite(row)
+
+    def get_invite_by_token_hash(self, token_hash: str) -> Optional[Dict[str, Any]]:
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM invites WHERE token_hash = ?",
+                (token_hash,),
+            ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_invite(row)
+
+    def list_invites(
+        self,
+        *,
+        status: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        query = "SELECT * FROM invites"
+        params: List[Any] = []
+        cleaned = str(status or "").strip().lower()
+        if cleaned:
+            if cleaned not in INVITE_STATUSES:
+                raise ValueError(f"Unsupported status: {status}")
+            query += " WHERE status = ?"
+            params.append(cleaned)
+        query += " ORDER BY created_at DESC LIMIT ?"
+        params.append(max(1, min(int(limit), 200)))
+        with self.connect() as conn:
+            rows = conn.execute(query, tuple(params)).fetchall()
+        return [self._row_to_invite(row) for row in rows]
+
+    def revoke_invite(self, invite_id: str, *, revoked_by: Optional[str] = None) -> Dict[str, Any]:
+        del revoked_by  # reserved for audit; status alone is enough for v1
+        now = time.time()
+        with self.connect() as conn:
+            existing = conn.execute(
+                "SELECT * FROM invites WHERE id = ?",
+                (invite_id,),
+            ).fetchone()
+            if existing is None:
+                raise ValueError(f"Unknown invite: {invite_id}")
+            if str(existing["status"]) != "pending":
+                raise ValueError("Invite is not pending")
+            conn.execute(
+                "UPDATE invites SET status = 'revoked' WHERE id = ?",
+                (invite_id,),
+            )
+            row = conn.execute("SELECT * FROM invites WHERE id = ?", (invite_id,)).fetchone()
+        assert row is not None
+        # Touch now so callers can distinguish revoke timing if needed later.
+        _ = now
+        return self._row_to_invite(row)
+
+    def redeem_invite(
+        self,
+        invite_id: str,
+        *,
+        redeemed_user_id: str,
+    ) -> Dict[str, Any]:
+        now = time.time()
+        with self.connect() as conn:
+            existing = conn.execute(
+                "SELECT * FROM invites WHERE id = ?",
+                (invite_id,),
+            ).fetchone()
+            if existing is None:
+                raise ValueError(f"Unknown invite: {invite_id}")
+            if str(existing["status"]) != "pending":
+                raise ValueError("Invite is not pending")
+            if float(existing["expires_at"]) < now:
+                raise ValueError("Invite has expired")
+            conn.execute(
+                """
+                UPDATE invites
+                SET status = 'redeemed', redeemed_at = ?, redeemed_user_id = ?
+                WHERE id = ? AND status = 'pending'
+                """,
+                (now, redeemed_user_id, invite_id),
+            )
+            row = conn.execute("SELECT * FROM invites WHERE id = ?", (invite_id,)).fetchone()
+        assert row is not None
+        if str(row["status"]) != "redeemed":
+            raise ValueError("Invite could not be redeemed")
+        return self._row_to_invite(row)
+
+    def has_denied_identity(
+        self,
+        *,
+        email: Optional[str] = None,
+        plex_user_id: Optional[str] = None,
+        oidc_sub: Optional[str] = None,
+    ) -> bool:
+        """Soft-block: a denied access request matching a known identity."""
+        email_clean = str(email or "").strip().lower() or None
+        plex_clean = str(plex_user_id or "").strip() or None
+        oidc_clean = str(oidc_sub or "").strip() or None
+        if not email_clean and not plex_clean and not oidc_clean:
+            return False
+        with self.connect() as conn:
+            cols = {str(r["name"]) for r in conn.execute("PRAGMA table_info(access_requests)").fetchall()}
+            if email_clean and "email" in cols:
+                row = conn.execute(
+                    """
+                    SELECT 1 FROM access_requests
+                    WHERE status = 'denied' AND lower(email) = ?
+                    LIMIT 1
+                    """,
+                    (email_clean,),
+                ).fetchone()
+                if row is not None:
+                    return True
+            # Optional identity columns (future-proof); ignore if absent.
+            if plex_clean and "plex_user_id" in cols:
+                row = conn.execute(
+                    """
+                    SELECT 1 FROM access_requests
+                    WHERE status = 'denied' AND plex_user_id = ?
+                    LIMIT 1
+                    """,
+                    (plex_clean,),
+                ).fetchone()
+                if row is not None:
+                    return True
+            if oidc_clean and "oidc_sub" in cols:
+                row = conn.execute(
+                    """
+                    SELECT 1 FROM access_requests
+                    WHERE status = 'denied' AND oidc_sub = ?
+                    LIMIT 1
+                    """,
+                    (oidc_clean,),
+                ).fetchone()
+                if row is not None:
+                    return True
+        return False
+
+    @staticmethod
+    def _row_to_invite(row: sqlite3.Row) -> Dict[str, Any]:
+        methods_raw = row["allowed_methods"]
+        try:
+            methods = json.loads(methods_raw) if methods_raw else ["plex"]
+        except (json.JSONDecodeError, TypeError):
+            methods = ["plex"]
+        if not isinstance(methods, list):
+            methods = ["plex"]
+        methods = [str(m).strip().lower() for m in methods if str(m).strip().lower() in INVITE_METHODS]
+        if not methods:
+            methods = ["plex"]
+        keys = set(row.keys()) if hasattr(row, "keys") else set()
+        return {
+            "id": str(row["id"]),
+            "token_hash": str(row["token_hash"]),
+            "expires_at": float(row["expires_at"]),
+            "status": str(row["status"]),
+            "email": str(row["email"]) if row["email"] is not None else None,
+            "expected_plex_user_id": (
+                str(row["expected_plex_user_id"]) if row["expected_plex_user_id"] is not None else None
+            ),
+            "expected_oidc_sub": (
+                str(row["expected_oidc_sub"]) if row["expected_oidc_sub"] is not None else None
+            ),
+            "role": str(row["role"]),
+            "is_youth": bool(int(row["is_youth"])) if row["is_youth"] is not None else False,
+            "allowed_methods": methods,
+            "created_by": str(row["created_by"]) if row["created_by"] is not None else None,
+            "created_at": float(row["created_at"]),
+            "redeemed_at": float(row["redeemed_at"]) if row["redeemed_at"] is not None else None,
+            "redeemed_user_id": (
+                str(row["redeemed_user_id"]) if row["redeemed_user_id"] is not None else None
+            ),
+            "access_request_id": (
+                str(row["access_request_id"])
+                if "access_request_id" in keys and row["access_request_id"] is not None
+                else None
+            ),
+        }
+
+
+def _normalize_methods(allowed_methods: Optional[List[str]]) -> List[str]:
+    if not allowed_methods:
+        return ["plex", "oidc", "local"]
+    cleaned = [
+        str(m).strip().lower()
+        for m in allowed_methods
+        if str(m).strip().lower() in INVITE_METHODS
+    ]
+    # Preserve order, drop dupes.
+    seen: set[str] = set()
+    out: List[str] = []
+    for method in cleaned:
+        if method not in seen:
+            seen.add(method)
+            out.append(method)
+    return out or ["plex", "oidc", "local"]

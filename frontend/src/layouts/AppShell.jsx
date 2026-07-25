@@ -132,6 +132,8 @@ export default function AppShell({
               isOwner={isOwner}
               isYouth={isYouth}
               role={role}
+              multiUserEnabled={multiUserEnabled}
+              authReady={authReady}
             />
             <AppNavToggle open={navOpen} onClick={() => setNavOpen(true)} />
             {leading}

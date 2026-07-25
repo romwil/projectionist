@@ -1,4 +1,4 @@
-"""Opt-in live integration tests against real Plex / Radarr / Sonarr / Seerr.
+"""Opt-in live integration tests against real Plex / Radarr / Sonarr / Seerr / TMDB.
 
 Skipped by default so normal ``unittest discover`` never needs live services.
 
@@ -11,6 +11,7 @@ Enable for a hoster or CI with secrets:
       RADARR_URL=... RADARR_API_KEY=... \\
       SONARR_URL=... SONARR_API_KEY=... \\
       SEERR_URL=... SEERR_API_KEY=... \\
+      TMDB_API_KEY=... \\
       .venv/bin/python -m unittest tests.test_live_integrations -v
 
 Credentials are read from the environment (and ``.env`` unless
@@ -33,6 +34,7 @@ from curatorx.web.setup import (
     test_radarr as check_radarr,
     test_seerr as check_seerr,
     test_sonarr as check_sonarr,
+    test_tmdb as check_tmdb,
 )
 
 _LIVE_FLAG = os.environ.get("CURATORX_LIVE_INTEGRATION", "").strip().lower()
@@ -69,6 +71,7 @@ class LiveIntegrationTests(unittest.TestCase):
         cls.sonarr_api_key = _env_or(os.environ.get("SONARR_API_KEY"), settings.sonarr_api_key)
         cls.seerr_url = _env_or(os.environ.get("SEERR_URL"), settings.seerr.url)
         cls.seerr_api_key = _env_or(os.environ.get("SEERR_API_KEY"), settings.seerr.api_key)
+        cls.tmdb_api_key = _env_or(os.environ.get("TMDB_API_KEY"), settings.tmdb_api_key)
 
     def test_plex_lists_sections(self) -> None:
         if not self.plex_url or not self.plex_token:
@@ -105,6 +108,12 @@ class LiveIntegrationTests(unittest.TestCase):
         result = check_seerr(self.seerr_url, self.seerr_api_key)
         self.assertTrue(result["ok"], result.get("message"))
         self.assertIn("user_id", result)
+
+    def test_tmdb_genre_list(self) -> None:
+        if not self.tmdb_api_key:
+            self.skipTest("TMDB not configured (need TMDB_API_KEY)")
+        result = check_tmdb(self.tmdb_api_key)
+        self.assertTrue(result["ok"], result.get("message"))
 
 
 class LiveIntegrationGateTests(unittest.TestCase):

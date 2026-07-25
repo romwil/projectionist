@@ -46,6 +46,19 @@
     min-width: 0;
   }
 
+  /* Peer cluster stays whole: tighten the gutters (and the 44px tap squares to
+     40px) before the row can overflow the header on phones. */
+  .primary-topbar .app-topbar-actions {
+    gap: var(--space-1);
+  }
+
+  .primary-topbar a.app-topbar-icon,
+  .primary-topbar button.app-topbar-icon {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+  }
+
   .app-topbar-actions .app-topbar-meta {
     display: none;
   }
@@ -217,6 +230,36 @@
   .title-hero-content,
   .turnstyle-topbar {
     flex-direction: column;
+  }
+}
+
+/* Smallest phones: an owner's peer cluster genuinely cannot fit. Scroll it
+   horizontally rather than clipping Settings and the user menu off-screen.
+   Tooltips are suppressed here — they would be cropped by the scroll box, and
+   `hover: none` already drops them on touch. */
+@media (max-width: 560px) {
+  .primary-topbar .app-topbar-brand {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+
+  .primary-topbar .app-topbar-actions {
+    flex: 1 1 auto;
+    justify-content: flex-end;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+  }
+
+  .primary-topbar .app-topbar-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .primary-topbar .app-topbar-icon[data-tooltip]::after {
+    content: none;
   }
 }
 

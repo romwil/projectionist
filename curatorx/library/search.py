@@ -8,6 +8,7 @@ from typing import List, Optional
 
 from curatorx.config_store import Settings
 from curatorx.library.db import Database
+from curatorx.library.db_io import run_db
 from curatorx.library.embeddings import semantic_embedding_search_available
 from curatorx.library.query import filters_from_mapping, query_library, query_library_async
 from curatorx.models.schemas import TitleCard
@@ -120,7 +121,8 @@ async def search_library(
 
     # 1) Exact-ish keyword / facet match — highest precision for tag asks.
     if looks_like_facet_tag_query(cleaned):
-        keyword_result = query_library(
+        keyword_result = await run_db(
+            query_library,
             db,
             filters_from_mapping(
                 {
@@ -141,7 +143,8 @@ async def search_library(
             )
 
     # 2) Title / summary substring match.
-    text_result = query_library(
+    text_result = await run_db(
+        query_library,
         db,
         filters_from_mapping(
             {
@@ -164,7 +167,8 @@ async def search_library(
     # whole sentence; retry only cleaned, deterministic candidates so a title
     # such as “Simpsley” is not lost behind “how about … 2026?”.
     for candidate in _title_candidates(cleaned):
-        candidate_result = query_library(
+        candidate_result = await run_db(
+            query_library,
             db,
             filters_from_mapping(
                 {

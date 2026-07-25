@@ -484,6 +484,14 @@ class FeatureFlags:
     seerr_enabled: bool = False
     plex_collections_enabled: bool = False
     guest_tour_enabled: bool = False
+    # When multi-user is on, new Plex/OIDC identities require a valid invite by default.
+    invite_only: bool = True
+    # Opt-in LAN-open behavior: auto-provision new sign-ins as members (pre-1.26).
+    open_auto_provision: bool = False
+    # Idle prune of agent / movie-night Plex collections tagged ephemeral.
+    ephemeral_collection_gc_enabled: bool = True
+    # When true, collection_gc only logs what it would delete.
+    ephemeral_collection_gc_dry_run: bool = False
 
 
 @dataclass
@@ -585,6 +593,8 @@ class Settings:
     tv_page_size: int = 500
     library_enrich_workers: int = 6
     sync_reviews_to_plex: bool = True
+    # TTL for agent-created / movie-night ephemeral Plex collections (hours).
+    ephemeral_collection_ttl_hours: int = 168
     # Explicit allowlist: empty keeps all reported repairs owner-approved.
     auto_repair_issue_codes: list[str] = field(default_factory=list)
     webhook_secret: str = ""
@@ -782,3 +792,20 @@ def resolve_guest_tour_enabled(settings: Settings | None = None) -> bool:
         return env_value
     flags = getattr(settings, "features", None) if settings is not None else None
     return bool(getattr(flags, "guest_tour_enabled", False))
+
+
+def invite_required_for_new_users(settings: Settings | None = None) -> bool:
+    """True when new Plex/OIDC identities must redeem a valid invite.
+
+    Defaults to invite-only whenever multi-user is on. Owners opt into today's
+    LAN-open auto-provision with ``features.open_auto_provision``, or by turning
+    ``features.invite_only`` off.
+    """
+    flags = getattr(settings, "features", None) if settings is not None else None
+    if flags is None:
+        return False
+    if not bool(getattr(flags, "multi_user_enabled", False)):
+        return False
+    if bool(getattr(flags, "open_auto_provision", False)):
+        return False
+    return bool(getattr(flags, "invite_only", True))

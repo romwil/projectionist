@@ -15,9 +15,6 @@ from typing import (
     Tuple,
 )
 
-from ._shared import (
-    run_with_db_lock_retry,
-)
 
 
 class LibraryQueryMixin:
@@ -52,7 +49,7 @@ class LibraryQueryMixin:
                     )
             return len(normalized)
 
-        return run_with_db_lock_retry(_write, label="replace_facets_of_type")
+        return self.run_write(_write, label="replace_facets_of_type")
 
     def facet_values_for_items(
         self,
