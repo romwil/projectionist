@@ -12,6 +12,21 @@ export function resolveMemberShell({ role = "owner", isYouth = false, multiUserE
 }
 
 /**
+ * True when a signed-in guest must not reach member-only surfaces
+ * (My Journey, Inbox) via deep links.
+ *
+ * @param {{ role?: string, multiUserEnabled?: boolean, authReady?: boolean }} opts
+ */
+export function guestDeepLinkBlocked({
+  role = "owner",
+  multiUserEnabled = false,
+  authReady = true,
+} = {}) {
+  if (!authReady || !multiUserEnabled) return false;
+  return String(role || "").toLowerCase() === "guest";
+}
+
+/**
  * Root class names for the active shell.
  * @param {string} shell
  * @param {string} [base]

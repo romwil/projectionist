@@ -297,7 +297,7 @@ Prompts are skipped when you already saved a review, or if you dismissed the sam
 - **No prompt after finishing** — Confirm the webhook URL is saved in Plex and CuratorX logs show `Plex webhook` entries. Try a full stop (not just back-button) past 85%.
 - **Connection refused** — Use the LAN IP CuratorX listens on, not `localhost`, unless Plex runs on the same host.
 - **Prompt only after sync** — Webhook not reaching CuratorX; fix URL/firewall. Sync-based detection still works via `viewOffset` during library sync.
-- **Duplicate prompts** — One row per `rating_key` in `rating_prompt_queue`; re-watching updates completion but won't spam if you already reviewed.
+- **Duplicate prompts** — One row per `(user_id, rating_key)` in `rating_prompt_queue`; re-watching updates completion but won't spam if you already reviewed.
 
 ---
 

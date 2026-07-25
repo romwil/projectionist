@@ -27,6 +27,8 @@ class TitleCard(BaseModel):
     in_library: bool = False
     in_radarr: bool = False
     in_sonarr: bool = False
+    # Carried on every card so the Youth rating gate can judge it; "" fails closed.
+    content_rating: str = ""
     recommendation_reason: str = ""
     facet_matches: List[str] = Field(default_factory=list)
     runtime_minutes: Optional[int] = None
@@ -294,6 +296,7 @@ class RatingPrompt(BaseModel):
     prompted_at: Optional[float] = None
     dismissed_at: Optional[float] = None
     review_id: Optional[str] = None
+    user_id: Optional[str] = None
 
 
 class WatchlistPin(BaseModel):

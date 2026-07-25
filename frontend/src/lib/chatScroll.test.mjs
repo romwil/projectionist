@@ -160,6 +160,11 @@ describe("resolveLatestTurnAnchorIndex", () => {
     assert.equal(resolveLatestTurnAnchorIndex(["assistant"]), 0);
   });
 
+  it("still pins Surprise Me when callers exclude trailing review-prompt roles", () => {
+    // useChatScroll omits [data-message-kind=review-prompt] before calling this helper.
+    assert.equal(resolveLatestTurnAnchorIndex(["user", "assistant", "assistant"]), 2);
+  });
+
   it("returns -1 for an empty transcript", () => {
     assert.equal(resolveLatestTurnAnchorIndex([]), -1);
     assert.equal(resolveLatestTurnAnchorIndex(null), -1);

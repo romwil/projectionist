@@ -189,6 +189,26 @@ def list_task_runs(
     return [_row_to_dict(row) for row in rows]
 
 
+def list_all_task_runs(
+    db: Database,
+    *,
+    limit: int = DEFAULT_HISTORY_LIMIT,
+) -> List[Dict[str, Any]]:
+    """Return newest-first durable runs across all scheduled tasks."""
+    capped = max(1, min(int(limit or DEFAULT_HISTORY_LIMIT), 500))
+    with db.connect() as conn:
+        ensure_run_history_table(conn)
+        rows = conn.execute(
+            """
+            SELECT * FROM scheduled_task_runs
+            ORDER BY COALESCE(finished_at, started_at) DESC, id DESC
+            LIMIT ?
+            """,
+            (capped,),
+        ).fetchall()
+    return [_row_to_dict(row) for row in rows]
+
+
 def _percentile(sorted_values: List[float], pct: float) -> Optional[float]:
     if not sorted_values:
         return None

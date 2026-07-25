@@ -1292,6 +1292,11 @@ export async function getScheduledTaskHistory(name, { limit = 50 } = {}) {
   return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/history?${search}`);
 }
 
+export async function getAllScheduledTaskHistory({ limit = 100 } = {}) {
+  const search = new URLSearchParams({ limit: String(limit || 100) });
+  return api(`/admin/scheduled-tasks-history?${search}`);
+}
+
 export async function getScheduledTaskRate(name, { lookback_hours = 72 } = {}) {
   const search = new URLSearchParams({
     lookback_hours: String(lookback_hours || 72),

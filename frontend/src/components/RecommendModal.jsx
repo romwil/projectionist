@@ -52,14 +52,15 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
       setError("Pick at least one person.");
       return;
     }
-    const progressId = start({
-      label: "Sending recommendations",
-      total: selected.size,
-      asynchronous: true,
-    });
     setSending(true);
     setError("");
+    let progressId = null;
     try {
+      progressId = start({
+        label: "Sending recommendations",
+        total: selected.size,
+        asynchronous: true,
+      });
       const result = await createRecommendations({
         to_user_ids: [...selected],
         media_type: item.media_type === "show" ? "show" : "movie",

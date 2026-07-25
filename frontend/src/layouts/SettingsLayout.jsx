@@ -109,6 +109,7 @@ export default function SettingsLayout() {
         isYouth={isYouth}
         role={role}
         multiUserEnabled={multiUserEnabled}
+        authReady
         navOpen={appNavOpen}
         onNavOpenChange={setAppNavOpen}
         inboxUnreadCount={inboxUnreadCount}

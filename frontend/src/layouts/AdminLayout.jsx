@@ -2,32 +2,17 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { getAuthMe, getFeatures, listMediaIssues, listNotifications } from "../api/client";
 import PrimaryTopbar from "../components/PrimaryTopbar";
+import { ADMIN_NAV } from "../lib/adminNav.js";
 import { ROUTES } from "../lib/backNav.js";
 import { applyUiTheme, loadStoredUiTheme } from "../lib/uiPrefs.js";
 
-export const ADMIN_NAV = [
-  { to: "/admin/overview", id: "overview", label: "Overview" },
-  { to: "/admin/connections", id: "connections", label: "Connections" },
-  { to: "/admin/libraries", id: "libraries", label: "Libraries" },
-  { to: "/admin/sync", id: "sync", label: "Sync" },
-  { to: "/admin/tasks", id: "tasks", label: "Scheduled Tasks" },
-  { to: "/admin/persona", id: "persona", label: "Persona" },
-  { to: "/admin/household", id: "household", label: "Household" },
-  { to: "/admin/seerr", id: "seerr", label: "Seerr" },
-  { to: "/admin/mail", id: "mail", label: "Mail" },
-  { to: "/admin/access", id: "access", label: "Access requests" },
-  { to: "/admin/advanced", id: "advanced", label: "Advanced" },
-  { to: "/admin/dashboard", id: "dashboard", label: "Dashboard" },
-  { to: "/admin/issues", id: "issues", label: "Issues", badge: "openIssues" },
-  { to: "/admin/youth", id: "youth", label: "Youth review" },
-];
+export { ADMIN_NAV };
 
 export default function AdminLayout() {
   const navigate = useNavigate();
   const [ready, setReady] = useState(false);
   const [allowed, setAllowed] = useState(false);
   const [wizardMode, setWizardMode] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
   const [appNavOpen, setAppNavOpen] = useState(false);
   const [openIssues, setOpenIssues] = useState(null);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
@@ -120,7 +105,7 @@ export default function AdminLayout() {
 
   return (
     <div
-      className={`admin-shell ${wizardMode ? "admin-shell-wizard" : ""} ${drawerOpen ? "admin-drawer-open" : ""}`}
+      className={`admin-shell ${wizardMode ? "admin-shell-wizard" : ""}`}
       data-testid="admin-layout"
     >
       {!wizardMode ? (
@@ -135,27 +120,8 @@ export default function AdminLayout() {
             inboxUnreadCount={inboxUnreadCount}
             uiTheme={uiTheme}
             onThemeChange={setUiTheme}
+            adminBadges={badgeValue}
           />
-          <header className="shell-app-chrome" data-testid="admin-app-chrome">
-            <button
-              type="button"
-              className="admin-drawer-toggle"
-              data-testid="admin-drawer-toggle"
-              aria-expanded={drawerOpen}
-              aria-controls="admin-nav"
-              onClick={() => setDrawerOpen((open) => !open)}
-            >
-              {drawerOpen ? "Close menu" : "Admin menu"}
-            </button>
-          </header>
-          {drawerOpen ? (
-            <button
-              type="button"
-              className="admin-drawer-backdrop"
-              aria-label="Close admin menu"
-              onClick={() => setDrawerOpen(false)}
-            />
-          ) : null}
           <aside className="admin-rail" id="admin-nav" data-testid="admin-rail">
             <div className="admin-rail-brand">
               <p className="eyebrow">CuratorX</p>
@@ -173,7 +139,6 @@ export default function AdminLayout() {
                       `admin-rail-link ${isActive ? "admin-rail-link-active" : ""}`
                     }
                     data-testid={`admin-nav-${item.id}`}
-                    onClick={() => setDrawerOpen(false)}
                   >
                     <span>{item.label}</span>
                     {showBadge ? (

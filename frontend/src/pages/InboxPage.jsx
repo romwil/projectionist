@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
+import { Navigate } from "react-router-dom";
 import {
   listNotifications,
   markNotificationsSeen,
 } from "../api/client";
 import RecommendationsInbox from "../components/RecommendationsInbox";
+import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
+import { guestDeepLinkBlocked } from "../lib/memberShell.js";
 
 /**
  * Top-level Inbox — household notifications live here (not on Chat).
  */
 export default function InboxPage() {
+  const { authReady, role, multiUserEnabled } = useAuthGate();
   const [state, setState] = useState({ loading: true, items: [], error: "", unread: 0 });
 
   function reload() {
@@ -35,8 +39,9 @@ export default function InboxPage() {
   }
 
   useEffect(() => {
+    if (!authReady || guestDeepLinkBlocked({ role, multiUserEnabled, authReady })) return;
     reload();
-  }, []);
+  }, [authReady, role, multiUserEnabled]);
 
   async function handleDismiss(rec) {
     if (!rec?.id) return;
@@ -63,6 +68,18 @@ export default function InboxPage() {
     } catch {
       reload();
     }
+  }
+
+  if (!authReady) {
+    return (
+      <div className="app-root app-loading" data-testid="inbox-auth-loading">
+        <p className="login-lede">Loading…</p>
+      </div>
+    );
+  }
+
+  if (guestDeepLinkBlocked({ role, multiUserEnabled, authReady: true })) {
+    return <Navigate to={ROUTES.explore} replace />;
   }
 
   return (

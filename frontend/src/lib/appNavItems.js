@@ -1,5 +1,6 @@
 /** Secondary AppNav destinations — drawer only; peers live in PrimaryTopbar. */
 
+import { buildAdminDrawerItems, isAdminPath } from "./adminNav.js";
 import { ROUTES } from "./backNav.js";
 
 export const APP_NAV_CORE_ITEMS = [
@@ -33,15 +34,16 @@ export const GUEST_NAV_ITEMS = [
 /**
  * Build the ordered AppNav link list for the current role / youth mode.
  * Primary peers (Search/Chat/Explore/Inbox/Admin/My Journey/Settings) live in the toolbar.
- * @param {{ isOwner?: boolean, showSettings?: boolean, isYouth?: boolean, role?: string }} [opts]
+ * On `/admin/*` for owners, Admin section links are prepended (not dumped into every role’s menu).
+ * @param {{ isOwner?: boolean, showSettings?: boolean, isYouth?: boolean, role?: string, pathname?: string }} [opts]
  */
 export function buildAppNavItems({
   isOwner = false,
   showSettings = true,
   isYouth = false,
   role = "owner",
+  pathname = "",
 } = {}) {
-  void isOwner;
   void showSettings;
   if (role === "guest") {
     const items = [...GUEST_NAV_ITEMS];
@@ -58,5 +60,14 @@ export function buildAppNavItems({
   items.push({ id: "help", to: ROUTES.help, label: "Help", testId: "app-nav-help" });
   items.push({ id: "privacy", to: ROUTES.privacy, label: "Privacy", testId: "app-nav-privacy" });
   items.push({ id: "about", to: ROUTES.about, label: "About", testId: "app-nav-about" });
+
+  if (isOwner && isAdminPath(pathname)) {
+    return [
+      { kind: "heading", id: "heading-admin", label: "Admin" },
+      ...buildAdminDrawerItems(),
+      { kind: "heading", id: "heading-more", label: "More" },
+      ...items,
+    ];
+  }
   return items;
 }

@@ -65,12 +65,18 @@ test.describe("Config onboarding wizard", () => {
     });
   });
 
-  test("secret show/hide toggle works in wizard", async ({ page }) => {
+  test("secret show/hide toggle works in wizard after typing a draft", async ({ page }) => {
     await goToInfrastructureStep(page);
 
+    const secretInput = page.getByTestId("secret-input-llm_api_key");
     const toggle = page.getByTestId("secret-toggle-llm_api_key");
-    await expect(page.locator('input[type="password"]').first()).toBeVisible();
+    await expect(secretInput).toHaveAttribute("type", "password");
+    await expect(toggle).toHaveCount(0);
+
+    await secretInput.fill("sk-wizard-draft");
+    await expect(toggle).toBeVisible();
     await toggle.click();
-    await expect(page.locator('input[type="text"]').first()).toBeVisible();
+    await expect(secretInput).toHaveAttribute("type", "text");
+    await expect(secretInput).toHaveValue("sk-wizard-draft");
   });
 });

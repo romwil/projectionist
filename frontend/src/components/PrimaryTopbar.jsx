@@ -26,6 +26,7 @@ export default function PrimaryTopbar({
   isYouth = false,
   role = "owner",
   multiUserEnabled = false,
+  authReady = true,
   navOpen = false,
   onNavOpenChange,
   brandPulse = "idle",
@@ -37,6 +38,7 @@ export default function PrimaryTopbar({
   className = "",
   showUserMenu = true,
   showThemeToggle = true,
+  adminBadges = null,
 }) {
   const location = useLocation();
   const items = buildPrimaryNavItems({
@@ -44,6 +46,7 @@ export default function PrimaryTopbar({
     isOwner,
     isYouth,
     multiUserEnabled,
+    authReady,
   });
 
   async function handleThemeClick() {
@@ -67,6 +70,7 @@ export default function PrimaryTopbar({
           isOwner={isOwner}
           isYouth={isYouth}
           role={role}
+          adminBadges={adminBadges}
         />
       ) : null}
       <header

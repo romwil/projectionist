@@ -37,14 +37,23 @@ test.describe("Admin maintenance dashboard", () => {
     await expect(page.getByTestId("certified-badge-llm")).toBeVisible();
   });
 
-  test("secret show/hide toggle switches input type", async ({ page }) => {
+  test("secret show/hide only appears for a typed draft (API never returns keys)", async ({ page }) => {
     await page.goto("/admin/connections");
+    const secretInput = page.getByTestId("secret-input-llm_api_key");
     const toggle = page.getByTestId("secret-toggle-llm_api_key");
-    const secretInput = page.locator('input[type="password"]').first();
 
     await expect(secretInput).toBeVisible();
+    await expect(secretInput).toHaveAttribute("type", "password");
+    // Stored secrets are redacted — Show would be a false affordance on an empty field.
+    await expect(toggle).toHaveCount(0);
+
+    await secretInput.fill("sk-draft-for-reveal");
+    await expect(toggle).toBeVisible();
     await toggle.click();
-    await expect(page.locator('input[type="text"]').first()).toBeVisible();
+    await expect(secretInput).toHaveAttribute("type", "text");
+    await expect(secretInput).toHaveValue("sk-draft-for-reveal");
+    await toggle.click();
+    await expect(secretInput).toHaveAttribute("type", "password");
   });
 
   test("persona and libraries live on their admin routes", async ({ page }) => {

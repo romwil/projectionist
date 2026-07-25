@@ -8,7 +8,7 @@ import re
 import time
 import uuid
 from datetime import datetime as _dt
-from typing import Any, Callable, Dict, List, Mapping, Optional
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from curatorx.config_store import (
     Settings,
@@ -247,6 +247,8 @@ def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
         item["tvdb_id"] = card.tvdb_id
     if card.rating_key:
         item["rating_key"] = card.rating_key
+    if getattr(card, "content_rating", ""):
+        item["content_rating"] = card.content_rating
     if card.in_radarr:
         item["in_radarr"] = True
     if card.in_sonarr:
@@ -399,6 +401,8 @@ class ToolRegistry:
         self._suggested_replies: List[str] = []
         self._review_conflicts: List[Dict[str, Any]] = []
         self._review_prompts: List[Dict[str, Any]] = []
+        # Titles stripped from Youth tool JSON this turn — for post-generation scrub.
+        self._youth_blocked_titles: set[str] = set()
 
     def _apply_youth_filters(self, filters: LibraryFilters) -> LibraryFilters:
         if not self.is_youth:
@@ -410,6 +414,13 @@ class ToolRegistry:
 
         return apply_youth_gate_to_filters(filters, user=_YouthUser(), settings=self.settings)
 
+    def _note_youth_blocked_title(self, title: Any) -> None:
+        if not self.is_youth:
+            return
+        text = str(title or "").strip()
+        if text:
+            self._youth_blocked_titles.add(text)
+
     def _card_allowed(self, card: TitleCard) -> bool:
         if not self.is_youth:
             return True
@@ -420,9 +431,70 @@ class ToolRegistry:
             max_rating=resolve_youth_max_rating(self.settings),
         )
 
+    def _allowed_cards(self, cards: Sequence[TitleCard]) -> List[TitleCard]:
+        """Youth-safe subset of ``cards`` — also used to build tool JSON items.
+
+        Tool payloads must be filtered too, not just the rendered cards: an
+        over-ceiling title left in the JSON is a title the model can name in prose.
+        """
+        if not self.is_youth:
+            return list(cards)
+        allowed: List[TitleCard] = []
+        for card in cards:
+            if self._card_allowed(card):
+                allowed.append(card)
+            else:
+                self._note_youth_blocked_title(getattr(card, "title", ""))
+        return allowed
+
+    def _youth_filter_tool_items(
+        self,
+        items: Sequence[Mapping[str, Any]],
+        *,
+        cards: Optional[Sequence[TitleCard]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Fail-closed Youth filter for external discovery tool JSON items.
+
+        Prefers ``content_rating`` on the item when present; otherwise matches
+        ``tmdb_id`` against allowed cards. Unrated / unmatched titles are omitted
+        and recorded for the post-generation scrub.
+        """
+        if not self.is_youth:
+            return [dict(item) for item in items if isinstance(item, Mapping)]
+
+        from curatorx.youth.rating_gate import content_rating_allowed, resolve_youth_max_rating
+
+        max_rating = resolve_youth_max_rating(self.settings)
+        allowed_ids: set[int] = set()
+        if cards is not None:
+            for card in self._allowed_cards(cards):
+                if card.tmdb_id:
+                    allowed_ids.add(int(card.tmdb_id))
+
+        kept: List[Dict[str, Any]] = []
+        for item in items:
+            if not isinstance(item, Mapping):
+                continue
+            rating = item.get("content_rating")
+            if rating is not None and str(rating).strip() != "":
+                if content_rating_allowed(rating, max_rating=max_rating):
+                    kept.append(dict(item))
+                else:
+                    self._note_youth_blocked_title(item.get("title"))
+                continue
+            tmdb_id = int(item.get("tmdb_id") or 0)
+            if tmdb_id and tmdb_id in allowed_ids:
+                kept.append(dict(item))
+            else:
+                # Unrated / no matching allowed card → fail closed.
+                self._note_youth_blocked_title(item.get("title"))
+        return kept
+
     def _offer_card(self, card: TitleCard) -> None:
         if self._card_allowed(card):
             self._cards.append(card)
+        else:
+            self._note_youth_blocked_title(getattr(card, "title", ""))
 
     def _register_pending_token(self, token: str, action: str) -> None:
         self._pending_token_entries.append({"token": token, "action": action})
@@ -430,6 +502,10 @@ class ToolRegistry:
     @property
     def cards(self) -> List[TitleCard]:
         return list(self._cards)
+
+    @property
+    def youth_blocked_titles(self) -> List[str]:
+        return sorted(self._youth_blocked_titles)
 
     @property
     def recommendation_context(self) -> bool:
@@ -479,11 +555,13 @@ class ToolRegistry:
             raise
 
     async def _tool_search_library(self, args: Mapping[str, Any]) -> str:
-        cards = await search_library(
-            self.db,
-            self.settings,
-            str(args.get("query") or ""),
-            media_type=args.get("media_type"),
+        cards = self._allowed_cards(
+            await search_library(
+                self.db,
+                self.settings,
+                str(args.get("query") or ""),
+                media_type=args.get("media_type"),
+            )
         )
         self._cards.extend(cards)
         items = [_card_to_tool_item(c) for c in cards]
@@ -691,6 +769,8 @@ class ToolRegistry:
         items = []
         for row in neighbors:
             card = row_to_title_card(row)
+            if not self._card_allowed(card):
+                continue
             cards.append(card)
             payload = _card_to_tool_item(card)
             payload["score"] = float(row["score"] or 0)
@@ -880,6 +960,8 @@ class ToolRegistry:
         items = []
         for row in rows[:limit]:
             card = row_to_title_card(row)
+            if not self._card_allowed(card):
+                continue
             cards.append(card)
             payload = _card_to_tool_item(card)
             payload["department"] = str(row["department"] or "") if "department" in row.keys() else ""
@@ -896,7 +978,7 @@ class ToolRegistry:
                 },
                 "items": items,
                 "returned": len(items),
-                "total_matched": len(rows),
+                "total_matched": len(items) if self.is_youth else len(rows),
             }
         )
 
@@ -1001,23 +1083,30 @@ class ToolRegistry:
             cards.append(card)
             if len(cards) >= 12:
                 break
-        _append_recommendation_cards(self, cards)
+        # Youth: unrated TMDB cards fail closed — strip from JSON so the model cannot name them.
+        allowed = self._allowed_cards(cards)
+        _append_recommendation_cards(self, allowed)
         note = (
             "TMDB titles missing from the library and not already queued in Radarr/Sonarr. "
             "Do not re-propose already_queued / in_radarr / in_sonarr titles."
         )
-        if keywords_text and not cards:
+        if self.is_youth and not allowed:
+            note = (
+                "No external titles available under Youth content rules "
+                "(unrated and over-ceiling titles are omitted)."
+            )
+        elif keywords_text and not allowed:
             note = (
                 "Keyword discover returned no missing titles after ownership/queue filtering. "
                 "Broaden keywords or use search_tmdb with title+year — do not invent TMDB ids."
             )
         return json.dumps(
             {
-                "total_matched": len(cards),
-                "returned": len(cards),
+                "total_matched": len(allowed),
+                "returned": len(allowed),
                 "offset": 0,
                 "has_more": False,
-                "items": [_card_to_tool_item(c) for c in cards],
+                "items": [_card_to_tool_item(c) for c in allowed],
                 "keywords_resolved": keyword_meta.get("resolved") or [],
                 "note": note,
             }
@@ -1057,20 +1146,29 @@ class ToolRegistry:
             cards.append(card)
             if len(cards) >= 10:
                 break
-        _append_recommendation_cards(self, cards)
+        allowed = self._allowed_cards(cards)
+        _append_recommendation_cards(self, allowed)
+        note = "Highly rated TMDB titles not in the library and not already queued."
+        if self.is_youth and not allowed:
+            note = (
+                "No external titles available under Youth content rules "
+                "(unrated and over-ceiling titles are omitted)."
+            )
         return json.dumps(
             {
-                "total_matched": len(cards),
-                "returned": len(cards),
+                "total_matched": len(allowed),
+                "returned": len(allowed),
                 "offset": 0,
                 "has_more": False,
-                "items": [_card_to_tool_item(c) for c in cards],
-                "note": "Highly rated TMDB titles not in the library and not already queued.",
+                "items": [_card_to_tool_item(c) for c in allowed],
+                "note": note,
             }
         )
 
     async def _tool_suggest_purge_candidates(self, args: Mapping[str, Any]) -> str:
-        cards = suggest_purge_candidates(self.db, self.settings, limit=int(args.get("limit") or 12))
+        cards = self._allowed_cards(
+            suggest_purge_candidates(self.db, self.settings, limit=int(args.get("limit") or 12))
+        )
         self._cards.extend(cards)
         return json.dumps(
             {
@@ -1353,23 +1451,30 @@ class ToolRegistry:
                 error_payload["items"] = []
             return json.dumps(error_payload)
 
-        items = result.items
-        total_matched = result.total_matched
-        _append_recommendation_cards(self, result.cards)
+        allowed_cards = self._allowed_cards(result.cards)
+        items = self._youth_filter_tool_items(result.items, cards=result.cards)
+        total_matched = len(items) if self.is_youth else result.total_matched
+        _append_recommendation_cards(self, allowed_cards)
+        note = (
+            "Prefer tmdb_id (exact) or title+year so turnstyle cards pin one work. "
+            "Only propose adds for in_library=false AND already_queued=false "
+            "(also respect in_radarr/in_sonarr). Use tmdb_id for add_to_radarr; tvdb_id for add_to_sonarr. "
+            "Pass reason on search_tmdb or call set_recommendation_reasons so Why this? "
+            "shows curator rationale (never pipeline labels)."
+        )
+        if self.is_youth and not items:
+            note = (
+                "No external titles available under Youth content rules "
+                "(unrated and over-ceiling titles are omitted)."
+            )
         return json.dumps(
             {
                 "total_matched": total_matched,
                 "returned": len(items),
                 "offset": 0,
-                "has_more": total_matched > len(items),
+                "has_more": (not self.is_youth) and result.total_matched > len(items),
                 "items": items,
-                "note": (
-                    "Prefer tmdb_id (exact) or title+year so turnstyle cards pin one work. "
-                    "Only propose adds for in_library=false AND already_queued=false "
-                    "(also respect in_radarr/in_sonarr). Use tmdb_id for add_to_radarr; tvdb_id for add_to_sonarr. "
-                    "Pass reason on search_tmdb or call set_recommendation_reasons so Why this? "
-                    "shows curator rationale (never pipeline labels)."
-                ),
+                "note": note,
             }
         )
 
@@ -1407,7 +1512,11 @@ class ToolRegistry:
         if not any(k in kwargs for k in ("rating_key", "tmdb_id", "tvdb_id")):
             return json.dumps({"error": "Provide tmdb_id, tvdb_id, or rating_key"})
         detail = get_title_detail(self.db, self.settings, **kwargs)
-        card = TitleCard.model_validate(detail.model_dump())
+        dumped = detail.model_dump()
+        # A rating of an unexpected shape must read as unrated so the gate fails closed.
+        if not isinstance(dumped.get("content_rating"), str):
+            dumped["content_rating"] = ""
+        card = TitleCard.model_validate(dumped)
         if not self._card_allowed(card):
             return json.dumps({"error": "Title not available under Youth content rules"})
         self._offer_card(card)
@@ -1511,6 +1620,7 @@ class ToolRegistry:
                 candidates.append((score, row_to_title_card(row, reason="Good pick for tonight")))
             candidates.sort(key=lambda item: item[0], reverse=True)
             cards = [card for _, card in candidates[:limit]]
+        cards = self._allowed_cards(cards)
         self._cards.extend(cards[:limit])
         return json.dumps(
             {
@@ -1752,7 +1862,13 @@ class ToolRegistry:
 
     async def _tool_suggest_titles_to_rate(self, args: Mapping[str, Any]) -> str:
         limit = int(args.get("limit") or 10)
-        suggestions = list_titles_to_rate(self.db, limit=limit)
+        include_household = not self.settings.features.multi_user_enabled
+        suggestions = list_titles_to_rate(
+            self.db,
+            user_id=self.user_id,
+            limit=limit,
+            include_household_viewed=include_household,
+        )
         prompts: List[Dict[str, Any]] = []
         for item in suggestions:
             prompt = {
@@ -2024,7 +2140,7 @@ class ToolRegistry:
         curator_name = str(persona["curator_name"]) if persona and persona.get("curator_name") else "Curator"
 
         if rating_key:
-            prompts = list_pending_prompts(self.db, limit=50)
+            prompts = list_pending_prompts(self.db, user_id=self.user_id, limit=50)
             matching = [prompt for prompt in prompts if prompt["rating_key"] == rating_key]
             if matching:
                 completion_pct = float(matching[0].get("completion_pct") or completion_pct)
@@ -2158,7 +2274,7 @@ class ToolRegistry:
                 f"""
                 SELECT id, rating_key, media_type, title, year, genres, poster_url,
                        backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
-                       runtime_minutes, summary, in_radarr, in_sonarr
+                       runtime_minutes, summary, in_radarr, in_sonarr, content_rating
                 FROM library_items
                 WHERE {where_sql}
                 ORDER BY RANDOM()
@@ -2172,6 +2288,8 @@ class ToolRegistry:
             runtime = row["runtime_minutes"]
             reason = f"{runtime} min" if runtime else "Unwatched"
             card = row_to_title_card(dict(row), reason=reason)
+            if not self._card_allowed(card):
+                continue
             cards.append(card)
             self._offer_card(card)
 
@@ -2198,7 +2316,7 @@ class ToolRegistry:
                 f"""
                 SELECT id, rating_key, media_type, title, year, genres, poster_url,
                        backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
-                       runtime_minutes, summary, in_radarr, in_sonarr
+                       runtime_minutes, summary, in_radarr, in_sonarr, content_rating
                 FROM library_items
                 WHERE {where_clause}
                 ORDER BY RANDOM()
@@ -2207,10 +2325,14 @@ class ToolRegistry:
                 params,
             ).fetchall()
 
-        if len(rows) < 2:
+        candidates = [dict(r) for r in rows]
+        if self.is_youth:
+            candidates = [
+                row for row in candidates if self._card_allowed(row_to_title_card(row))
+            ]
+        if len(candidates) < 2:
             return json.dumps({"error": "Not enough titles to form a double feature."})
 
-        candidates = [dict(r) for r in rows]
         random.shuffle(candidates)
 
         title_a_row = candidates[0]
@@ -2274,20 +2396,26 @@ class ToolRegistry:
                 params.extend(f"%{g.lower()}%" for g in genre_parts)
 
         where_sql = " AND ".join(where_clauses)
+        # Draw a small random pool rather than one row so the Youth gate can reject
+        # an over-ceiling draw without turning the roulette into a dead end.
         with self.db.connect() as conn:
-            row = conn.execute(
+            rows = conn.execute(
                 f"""
                 SELECT id, rating_key, media_type, title, year, genres, poster_url,
                        backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
-                       runtime_minutes, summary, in_radarr, in_sonarr
+                       runtime_minutes, summary, in_radarr, in_sonarr, content_rating
                 FROM library_items
                 WHERE {where_sql}
                 ORDER BY RANDOM()
-                LIMIT 1
+                LIMIT 25
                 """,
                 params,
-            ).fetchone()
+            ).fetchall()
 
+        row = next(
+            (r for r in rows if self._card_allowed(row_to_title_card(dict(r)))),
+            None,
+        )
         if not row:
             return json.dumps({"error": "No unwatched titles match the criteria."})
 

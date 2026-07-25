@@ -1,6 +1,98 @@
 {
-  "generated_at": "2026-07-24T04:02:18Z",
+  "generated_at": "2026-07-25T00:17:00Z",
   "releases": [
+    {
+      "version": "1.25.6",
+      "date": "2026-07-25",
+      "summary": "Owners get a clearer Scheduled Tasks console (detail actions, next-run order, unified run log). Youth content-rating gates harden at the tool boundary, and Admin Connections stops pretending stored secrets can be revealed.",
+      "highlights": [
+        "**Scheduled Tasks is easier to drive from the detail pane.** Run now and Enable/Disable sit next to the selected task, not only on the list row.",
+        "**See what’s firing next — and what already ran.** Tasks sort by soonest next run; an expandable log lists recent runs across everything.",
+        "**Youth picks stay within your household ceiling.** Chat, Surprise Me, and reopened threads no longer surface over-ceiling titles.",
+        "**Saved API keys stay hidden.** Admin Connections no longer shows a fake Show on keys already stored on the server."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Admin Scheduled Tasks detail pane: `task-detail-run-now` / `task-detail-toggle-enabled` reuse the same run/update handlers as the list.",
+            "Unified execution history: `GET /api/admin/scheduled-tasks-history` over `scheduled_task_runs` (newest first), plus expandable Execution log pane on `/admin/tasks`.",
+            "Task list ordered by next run ascending (`sortTasksByNextRun`); Next run column + detail schedule line."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Maintainer multi-role GUI / QA sidecar tooling is **local-only** again: compose, seed script, Playwright QA config/specs, and `.env.qa.example` are gitignored and removed from the shared tree. Mocked CI e2e (`npm run test:e2e`) stays. Personal runbooks live on the host (e.g. automat `curatorx-qa-scripts`).",
+            "**Admin hamburger adapts on `/admin/*`.** Owners see Admin section links in the AppNav drawer (with normal secondary items underneath); outside Admin the drawer stays the usual secondary menu. The yellow mobile “Admin menu” control is retired — narrow viewports use the hamburger; desktop keeps the Admin rail."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "**Admin Connections no longer shows a fake Show button on saved API keys.** `GET /api/settings` redacts secrets (empty value + `{field}_set`); Show/Hide now appears only for a draft you typed in the field, so it can never pretend to reveal a stored LLM/Plex/Radarr/Sonarr/TMDB/Seerr/etc. key.",
+            "Admin Scheduled Tasks now preserves a readable detail pane and contains wide-table overflow inside the task list, preventing crushed descriptions, clipped Last/Next run columns, and jammed detail actions at desktop widths.",
+            "**Youth chat could be handed titles above the household ceiling.** `TitleCard` never carried `content_rating`, so the agent's Youth gate (`ToolRegistry._card_allowed`) judged every card as unrated — blocking legitimate PG picks while five tool paths (`search_library`, `what_to_watch_tonight`, `suggest_purge_candidates`, plot neighbours, `titles_by_person`) appended cards straight to `self._cards`, skipping the gate entirely. `TitleCard.content_rating` is now populated by `row_to_title_card` (and carried into tool JSON), those paths route through the gate via a new `_allowed_cards` helper, and `get_tonight_picks` / `suggest_double_feature` / `quick_pick_roulette` select `content_rating` so their raw-SQL draws can be judged rather than blanket-failed. Tool payloads are filtered alongside the cards, so an over-ceiling title is not left in the JSON for the model to name in prose.",
+            "`TitleDetail.content_rating` is coerced with `str(...)` at the TMDB enrichment assignment (matching its neighbours), and the Youth gate treats a non-string rating as unrated — fail-closed rather than raising mid-turn.",
+            "**Youth Surprise Me / quick-pick ignored the rating ceiling** (`GET /api/library/quick-pick` dropped the user and never filtered `content_rating`). Youth picks now use the same fail-closed SQL allow-list as library query and return `content_rating` on the item.",
+            "**Youth chat thread reopen no longer resurfaces pre-fix over-ceiling posters.** History load re-filters persisted `title_cards` / viewport items for Youth (fail-closed on missing ratings)."
+          ]
+        },
+        {
+          "title": "Security",
+          "bullets": [
+            "Youth content-rating enforcement in chat no longer depends on the model honouring its system-prompt guardrails: the ceiling is applied at the tool boundary for owned-library card paths, so a prompt-injected or jailbroken turn cannot surface an over-ceiling card. External TMDB discovery cards remain fail-closed (no rating available ⇒ never offered to Youth).",
+            "**Youth hardening pass 2:** external discovery tool JSON (`search_tmdb`, `recommend_hidden_gems`, `find_collection_gaps`) strips unrated/over-ceiling titles before they re-enter the model; blocked titles are recorded for a lightweight post-generation scrub on Youth turns (cards + known title strings in prose); Youth system-prompt guardrails now explicitly forbid naming over-ceiling titles from world knowledge or jailbreaks.",
+            "**Youth chat thread history no longer resurfaces pre-fix over-ceiling cards.** `GET /api/chat/threads/{id}/messages` re-applies the fail-closed Youth gate via `scrub_youth_history_messages` (shared with generation scrub), so persisted `title_cards` / viewport items with missing, empty, NR, unrecognized, or over-ceiling `content_rating` are dropped for Youth on read. Owner/member history is unchanged."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` **1274 passed**, 4 skipped (27 subtests) at **78.07%** total coverage (`--cov-fail-under=74`).",
+            "Frontend `node --test` unit suite **465 passed**. ESLint **0 errors** (93 pre-existing warnings). Production build succeeds.",
+            "`test_version` lockstep holds at **1.25.6** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.25.5",
+      "date": "2026-07-24",
+      "summary": "Members no longer see a brief Admin link while Explore (and other AppShell pages) finish loading auth. Near-complete rating nudges stay private to the watcher who earned them — never the whole household.",
+      "highlights": [
+        "**No Admin flash for household members.** Browse chrome waits until your role is known before showing the toolbar.",
+        "**Owner Admin still appears once you’re signed in as owner.** Same peers as before — just no wrong peek for everyone else.",
+        "**Nav stays honest while loading.** Until auth settles, peer icons (including Admin) stay hidden.",
+        "**Review nudges are personal.** “You’re X% through…” only appears for your own watch progress — not someone else’s Plex session shared through the server token.",
+        "**Guests can’t deep-link into Journey or Inbox.** Those member surfaces redirect to Explore.",
+        "**Recommend still works on plain HTTP.** Sending a title to a household peer no longer dies quietly on LAN QA URLs without HTTPS."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`AppShell` gates primary topbar / owner-only chrome on `authReady` from `useAuthGate` (matches Chat/`App.jsx`), showing neutral loading chrome instead of default-owner Admin.",
+            "`primaryNavVisibleIds` / `buildPrimaryNavItems` accept `authReady`; while unresolved, return no peers even if `isOwner` defaults true. `PrimaryTopbar` passes the flag through.",
+            "`rating_prompt_queue` is scoped by `user_id` (`UNIQUE(user_id, rating_key)`). `GET/POST /api/reviews/prompts*` and dismiss only return or mutate the current user’s prompts. Household `PLEX_TOKEN` library scans no longer enqueue personal nudges in multi-user mode; Plex webhooks require a mapped `Account.id`.",
+            "Guests hitting `/my-journey` or `/inbox` are redirected to Explore (`guestDeepLinkBlocked`).",
+            "Login shows Username/Password fields on first paint while features settle (disabled until ready).",
+            "Chat scroll ignores synthetic review-prompt messages so Surprise Me / mood picks stay on-screen.",
+            "Admin Sync shows “Syncing…” instead of “Never synced” while a library sync is running.",
+            "Recommend send no longer silent-fails on HTTP LAN: `BulkActionProgress` uses `createId()` (getRandomValues fallback) instead of `crypto.randomUUID`, which is missing/throws off HTTPS. `createId` also catches throwers.",
+            "Inbox recommendation cards no longer double-compose lead copy: notification `title` stores the media title; UI strips legacy “{name} recommended {title} ({year})” rows."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` focused review/webhook suites (full suite pending).",
+            "Frontend `node --test` for `primaryNav`, `memberShell`, `chatScroll`, `id`, `recommendationInbox` (full suite pending).",
+            "`test_version` lockstep holds at **1.25.5** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.25.4",
       "date": "2026-07-24",

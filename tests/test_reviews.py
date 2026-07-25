@@ -13,11 +13,12 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from curatorx.config_store import Settings
-from curatorx.library.db import Database
+from curatorx.library.db import BOOTSTRAP_OWNER_ID, Database
 from curatorx.reviews.store import (
     dismiss_prompt,
     get_reviews,
     list_pending_prompts,
+    list_titles_to_rate,
     mark_prompts_surfaced,
     queue_rating_prompt,
     save_review,
@@ -29,6 +30,7 @@ class ReviewStoreTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         self.db = Database(Path(self._tmpdir.name) / "reviews.db")
+        self.user_id = BOOTSTRAP_OWNER_ID
 
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
@@ -77,9 +79,7 @@ class ReviewStoreTests(unittest.TestCase):
         items = get_reviews(self.db, rating_key="gits-2")
         self.assertEqual(items[0]["stars"], 4.5)
 
-    def test_list_titles_to_rate_prefers_viewed_unrated(self) -> None:
-        from curatorx.reviews.store import list_titles_to_rate
-
+    def test_list_titles_to_rate_prefers_viewed_unrated_when_household_allowed(self) -> None:
         now = time.time()
         with self.db.connect() as conn:
             conn.execute(
@@ -90,20 +90,87 @@ class ReviewStoreTests(unittest.TestCase):
                 """,
                 (now, now),
             )
-        items = list_titles_to_rate(self.db, limit=5)
+        items = list_titles_to_rate(
+            self.db,
+            user_id=self.user_id,
+            limit=5,
+            include_household_viewed=True,
+        )
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0]["title"], "Heat")
         self.assertEqual(items[0]["reason"], "watched_no_review")
 
+    def test_list_titles_to_rate_skips_household_viewed_by_default(self) -> None:
+        now = time.time()
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO library_items (
+                    rating_key, media_type, title, view_count, last_viewed_at, updated_at
+                ) VALUES ('viewed-1', 'movie', 'Heat', 2, ?, ?)
+                """,
+                (now, now),
+            )
+        items = list_titles_to_rate(self.db, user_id=self.user_id, limit=5)
+        self.assertEqual(items, [])
+
+    def test_scan_without_user_id_queues_nothing(self) -> None:
+        self._seed_near_complete_movie()
+        self.assertEqual(scan_for_rating_prompts(self.db), 0)
+        self.assertEqual(list_pending_prompts(self.db), [])
+
     def test_scan_queues_near_complete_without_review(self) -> None:
         self._seed_near_complete_movie()
-        queued = scan_for_rating_prompts(self.db)
+        queued = scan_for_rating_prompts(self.db, user_id=self.user_id)
         self.assertEqual(queued, 1)
 
-        prompts = list_pending_prompts(self.db)
+        prompts = list_pending_prompts(self.db, user_id=self.user_id)
         self.assertEqual(len(prompts), 1)
         self.assertEqual(prompts[0]["title"], "Inception")
+        self.assertEqual(prompts[0]["user_id"], self.user_id)
         self.assertGreaterEqual(prompts[0]["completion_pct"], 85.0)
+
+    def test_list_pending_prompts_is_scoped_per_user(self) -> None:
+        self._seed_near_complete_movie()
+        other_id = "member-other"
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (id, display_name, role, created_at)
+                VALUES (?, 'Other', 'member', ?)
+                """,
+                (other_id, time.time()),
+            )
+        scan_for_rating_prompts(self.db, user_id=self.user_id)
+        queue_rating_prompt(
+            self.db,
+            rating_key="movie-other",
+            media_type="movie",
+            title="Other Watch",
+            completion_pct=91.0,
+            user_id=other_id,
+        )
+
+        owner_prompts = list_pending_prompts(self.db, user_id=self.user_id)
+        other_prompts = list_pending_prompts(self.db, user_id=other_id)
+        self.assertEqual([p["title"] for p in owner_prompts], ["Inception"])
+        self.assertEqual([p["title"] for p in other_prompts], ["Other Watch"])
+        self.assertEqual(list_pending_prompts(self.db), [])
+
+    def test_dismiss_prompt_requires_matching_user(self) -> None:
+        queue_rating_prompt(
+            self.db,
+            rating_key="movie-owned",
+            media_type="movie",
+            title="Owned",
+            completion_pct=90.0,
+            user_id=self.user_id,
+        )
+        prompt = list_pending_prompts(self.db, user_id=self.user_id)[0]
+        with self.assertRaises(ValueError):
+            dismiss_prompt(self.db, prompt["id"], user_id="someone-else")
+        dismissed = dismiss_prompt(self.db, prompt["id"], user_id=self.user_id)
+        self.assertIsNotNone(dismissed["dismissed_at"])
 
     def test_scan_skips_reviewed_title(self) -> None:
         self._seed_near_complete_movie()
@@ -113,23 +180,24 @@ class ReviewStoreTests(unittest.TestCase):
             title="Inception",
             media_type="movie",
             rating_key="movie-1",
+            user_id=self.user_id,
         )
-        queued = scan_for_rating_prompts(self.db)
+        queued = scan_for_rating_prompts(self.db, user_id=self.user_id)
         self.assertEqual(queued, 0)
-        self.assertEqual(list_pending_prompts(self.db), [])
+        self.assertEqual(list_pending_prompts(self.db, user_id=self.user_id), [])
 
     def test_dismiss_prompt_hides_pending_item(self) -> None:
         self._seed_near_complete_movie()
-        scan_for_rating_prompts(self.db)
-        prompt = list_pending_prompts(self.db)[0]
-        dismissed = dismiss_prompt(self.db, prompt["id"])
+        scan_for_rating_prompts(self.db, user_id=self.user_id)
+        prompt = list_pending_prompts(self.db, user_id=self.user_id)[0]
+        dismissed = dismiss_prompt(self.db, prompt["id"], user_id=self.user_id)
         self.assertIsNotNone(dismissed["dismissed_at"])
-        self.assertEqual(list_pending_prompts(self.db), [])
+        self.assertEqual(list_pending_prompts(self.db, user_id=self.user_id), [])
 
     def test_save_review_links_prompt(self) -> None:
         self._seed_near_complete_movie()
-        scan_for_rating_prompts(self.db)
-        prompt = list_pending_prompts(self.db)[0]
+        scan_for_rating_prompts(self.db, user_id=self.user_id)
+        prompt = list_pending_prompts(self.db, user_id=self.user_id)[0]
         save_review(
             self.db,
             stars=3,
@@ -138,17 +206,18 @@ class ReviewStoreTests(unittest.TestCase):
             rating_key="movie-1",
             prompt_id=prompt["id"],
             prompted_by="near_complete",
+            user_id=self.user_id,
         )
-        self.assertEqual(list_pending_prompts(self.db), [])
+        self.assertEqual(list_pending_prompts(self.db, user_id=self.user_id), [])
 
     def test_mark_prompts_surfaced_sets_prompted_at(self) -> None:
         self._seed_near_complete_movie()
-        scan_for_rating_prompts(self.db)
-        prompt = list_pending_prompts(self.db)[0]
+        scan_for_rating_prompts(self.db, user_id=self.user_id)
+        prompt = list_pending_prompts(self.db, user_id=self.user_id)[0]
         self.assertIsNone(prompt["prompted_at"])
         marked = mark_prompts_surfaced(self.db, [prompt["id"]])
         self.assertEqual(marked, 1)
-        updated = list_pending_prompts(self.db)[0]
+        updated = list_pending_prompts(self.db, user_id=self.user_id)[0]
         self.assertIsNotNone(updated["prompted_at"])
 
     def test_scan_uses_tautulli_when_local_progress_missing(self) -> None:
@@ -168,9 +237,9 @@ class ReviewStoreTests(unittest.TestCase):
                 "view_offset": 5_000_000,
                 "duration": 5_500_000,
             }
-            queued = scan_for_rating_prompts(self.db, settings)
+            queued = scan_for_rating_prompts(self.db, settings, user_id=self.user_id)
         self.assertEqual(queued, 1)
-        prompts = list_pending_prompts(self.db)
+        prompts = list_pending_prompts(self.db, user_id=self.user_id)
         self.assertEqual(prompts[0]["title"], "Arrival")
 
     def test_queue_rating_prompt_respects_reviewed_title(self) -> None:
@@ -180,6 +249,7 @@ class ReviewStoreTests(unittest.TestCase):
             title="Inception",
             media_type="movie",
             rating_key="movie-reviewed",
+            user_id=self.user_id,
         )
         queued = queue_rating_prompt(
             self.db,
@@ -187,6 +257,17 @@ class ReviewStoreTests(unittest.TestCase):
             media_type="movie",
             title="Inception",
             completion_pct=92.0,
+            user_id=self.user_id,
+        )
+        self.assertFalse(queued)
+
+    def test_queue_without_user_id_is_rejected(self) -> None:
+        queued = queue_rating_prompt(
+            self.db,
+            rating_key="movie-x",
+            media_type="movie",
+            title="Nope",
+            completion_pct=95.0,
         )
         self.assertFalse(queued)
 
@@ -205,6 +286,7 @@ class ReviewApiTests(unittest.TestCase):
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
         self.db = jobs.get_job_manager().db
+        self.user_id = BOOTSTRAP_OWNER_ID
 
     def tearDown(self) -> None:
         import curatorx.web.jobs as jobs
@@ -245,13 +327,14 @@ class ReviewApiTests(unittest.TestCase):
                 """,
                 (now,),
             )
-        scan_for_rating_prompts(self.db)
+        scan_for_rating_prompts(self.db, user_id=self.user_id)
 
         prompts = self.client.get("/api/reviews/prompts")
         self.assertEqual(prompts.status_code, 200)
         items = prompts.json()["items"]
         self.assertEqual(len(items), 1)
         self.assertIsNotNone(items[0]["prompted_at"])
+        self.assertEqual(items[0]["user_id"], self.user_id)
         prompt_id = items[0]["id"]
 
         dismissed = self.client.post(f"/api/reviews/prompts/{prompt_id}/dismiss")
@@ -260,6 +343,29 @@ class ReviewApiTests(unittest.TestCase):
 
         empty = self.client.get("/api/reviews/prompts")
         self.assertEqual(empty.json()["count"], 0)
+
+    def test_review_prompts_hide_other_users_queue(self) -> None:
+        other_id = "qa-member"
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (id, display_name, role, created_at)
+                VALUES (?, 'Member', 'member', ?)
+                """,
+                (other_id, time.time()),
+            )
+        queue_rating_prompt(
+            self.db,
+            rating_key="museum-secrets",
+            media_type="show",
+            title="Museum Secrets — S02E08",
+            completion_pct=89.0,
+            user_id=other_id,
+        )
+        # Bootstrap owner (API caller in single-user mode) must not see other user's nudge.
+        prompts = self.client.get("/api/reviews/prompts")
+        self.assertEqual(prompts.status_code, 200)
+        self.assertEqual(prompts.json()["count"], 0)
 
     def test_create_review_rejects_invalid_stars(self) -> None:
         resp = self.client.post(

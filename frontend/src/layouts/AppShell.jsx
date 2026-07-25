@@ -36,7 +36,7 @@ export default function AppShell({
   showPrimaryNav,
   inboxUnreadCount = 0,
 }) {
-  const { isOwner, role, isYouth, multiUserEnabled, authenticated } = useAuthGate({
+  const { authReady, isOwner, role, isYouth, multiUserEnabled, authenticated } = useAuthGate({
     redirect: requireAuth,
   });
   const location = useLocation();
@@ -52,6 +52,17 @@ export default function AppShell({
   useEffect(() => {
     applyUiTheme(uiTheme);
   }, [uiTheme]);
+
+  // useAuthGate failure-opens as owner until /auth/me settles. Never paint
+  // PrimaryTopbar / owner-only chrome with those defaults — members briefly
+  // saw Admin. Chat (App.jsx) already waits on authReady; match that here.
+  if (!authReady) {
+    return (
+      <div className="app-root app-loading" data-testid={testId || "app-shell-auth-loading"}>
+        <p className="login-lede">Loading…</p>
+      </div>
+    );
+  }
 
   const shell = resolveMemberShell({ role, isYouth, multiUserEnabled });
   const rootClass = shellRootClass(shell, className);
@@ -88,6 +99,7 @@ export default function AppShell({
             isYouth={isYouth}
             role={role}
             multiUserEnabled={multiUserEnabled}
+            authReady={authReady}
             navOpen={navOpen}
             onNavOpenChange={setNavOpen}
             inboxUnreadCount={inboxUnreadCount}

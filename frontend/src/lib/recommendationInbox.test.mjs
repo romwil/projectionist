@@ -5,8 +5,10 @@ import {
   dedupeNotifications,
   dedupeRecommendations,
   formatUnreadBadge,
+  inboxCardCopy,
   inboxHeadline,
   normalizeRecommendation,
+  recommendationMediaTitle,
 } from "./recommendationInbox.js";
 import { canWatchOnPlex } from "./titleLinks.js";
 
@@ -52,4 +54,32 @@ test("inboxHeadline and formatUnreadBadge cover multi-kind inbox chrome", () => 
   assert.equal(formatUnreadBadge(0), "");
   assert.equal(formatUnreadBadge(3), "3");
   assert.equal(formatUnreadBadge(120), "99+");
+});
+
+test("recommendationMediaTitle strips legacy precomposed notification titles", () => {
+  assert.equal(
+    recommendationMediaTitle({
+      title: "qa-member recommended Family Guy (1999)",
+      from_display_name: "qa-member",
+      year: 1999,
+    }),
+    "Family Guy",
+  );
+  assert.equal(
+    recommendationMediaTitle({
+      title: "Family Guy",
+      from_display_name: "qa-member",
+      year: 1999,
+    }),
+    "Family Guy",
+  );
+  assert.equal(
+    inboxCardCopy({
+      kind: "recommendation",
+      title: "qa-member recommended Family Guy (1999)",
+      from_display_name: "qa-member",
+      year: 1999,
+    }).leadText,
+    "qa-member recommended Family Guy (1999) for you",
+  );
 });

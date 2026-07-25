@@ -29,6 +29,9 @@ def row_to_title_card(row, *, reason: str = "", facet_matches: Optional[List[str
         in_library=True,
         in_radarr=bool(row["in_radarr"]),
         in_sonarr=bool(row["in_sonarr"]),
+        content_rating=(
+            str(row["content_rating"] or "") if "content_rating" in row.keys() else ""
+        ),
         recommendation_reason=reason,
         facet_matches=list(facet_matches or []),
         runtime_minutes=int(row["runtime_minutes"]) if "runtime_minutes" in row.keys() and row["runtime_minutes"] else None,

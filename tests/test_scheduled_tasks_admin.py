@@ -469,6 +469,30 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         self.assertEqual(batch.json()["progress_scope"], "neighbors_backlog")
         self.assertTrue(batch.json().get("autotune_enabled"))
 
+    def test_unified_history_endpoint_across_tasks(self) -> None:
+        self._write_settings(multi_user=False)
+        for name in ("health_metrics", "metadata_enrichment"):
+            with patch.object(
+                self.app_mod.app.state.idle_scheduler._definitions[name],
+                "run_fn",
+                _metrics_task if name == "health_metrics" else _noop_task,
+            ):
+                run = self.client.post(f"/api/admin/scheduled-tasks/{name}/run?wait=true")
+                self.assertEqual(run.status_code, 200, run.text)
+
+        unified = self.client.get("/api/admin/scheduled-tasks-history?limit=20")
+        self.assertEqual(unified.status_code, 200, unified.text)
+        body = unified.json()
+        self.assertGreaterEqual(body["count"], 2)
+        names = {row["name"] for row in body["runs"]}
+        self.assertIn("health_metrics", names)
+        self.assertIn("metadata_enrichment", names)
+        # Newest-first: first row finished at or after the second.
+        if len(body["runs"]) >= 2:
+            first = body["runs"][0].get("finished_at") or 0
+            second = body["runs"][1].get("finished_at") or 0
+            self.assertGreaterEqual(first, second)
+
 
 if __name__ == "__main__":
     unittest.main()

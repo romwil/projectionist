@@ -43,3 +43,6 @@ e2e/live-roles.spec.ts
 e2e/fixtures/auth-roles.ts
 config-qa/
 e2e/.auth/
+# Interactive UI QA run reports live on the host under
+# curatorx-qa-scripts/qa-runs/ — ignore if mirrored into this tree.
+qa-runs/

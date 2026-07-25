@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import {
   getEngagementSummary,
   postCourseProgress,
@@ -15,6 +15,7 @@ import {
   memberFacingCopyOk,
   personaPathways,
 } from "../lib/journeyAchievements.js";
+import { guestDeepLinkBlocked } from "../lib/memberShell.js";
 import { useAuthGate } from "../components/UserMenu";
 
 function JourneyCallout({ node, x, y, onClose }) {
@@ -91,7 +92,7 @@ function JourneyDetailDrawer({ node, onClose, onChat }) {
 }
 
 export default function MyJourneyPage() {
-  const { isYouth } = useAuthGate();
+  const { authReady, isYouth, role, multiUserEnabled } = useAuthGate();
   const [state, setState] = useState({ loading: true, data: null, error: "" });
   const [view, setView] = useState("list");
   const [filter, setFilter] = useState("all");
@@ -115,8 +116,9 @@ export default function MyJourneyPage() {
   }
 
   useEffect(() => {
+    if (!authReady || guestDeepLinkBlocked({ role, multiUserEnabled, authReady })) return;
     reload();
-  }, []);
+  }, [authReady, role, multiUserEnabled]);
 
   const nodes = useMemo(
     () => buildJourneyNodes(state.data, { isYouth }),
@@ -135,6 +137,18 @@ export default function MyJourneyPage() {
   const filtered = useMemo(() => filterJourneyNodes(nodes, filter), [nodes, filter]);
   const tree = useMemo(() => buildJourneyTree(nodes), [nodes]);
   const pathways = useMemo(() => personaPathways(nodes), [nodes]);
+
+  if (!authReady) {
+    return (
+      <div className="app-root app-loading" data-testid="my-journey-auth-loading">
+        <p className="login-lede">Loading…</p>
+      </div>
+    );
+  }
+
+  if (guestDeepLinkBlocked({ role, multiUserEnabled, authReady: true })) {
+    return <Navigate to={ROUTES.explore} replace />;
+  }
 
   async function advanceCourse(course) {
     setBusyCourse(course.id);

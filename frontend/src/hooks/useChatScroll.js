@@ -42,7 +42,9 @@ export default function useChatScroll({ messages, loading, sessionId }) {
     const el = scrollRef.current;
     if (!el) return;
 
-    const messageNodes = el.querySelectorAll("[data-message-role]");
+    const messageNodes = el.querySelectorAll(
+      "[data-message-role]:not([data-message-kind='review-prompt'])",
+    );
     const roles = Array.from(messageNodes, (node) => node.getAttribute("data-message-role"));
     const anchorIndex = resolveLatestTurnAnchorIndex(roles);
     const targetNode = anchorIndex >= 0 ? messageNodes[anchorIndex] : null;

@@ -36,6 +36,11 @@ import {
   formatLastSyncRelative,
   formatSyncJobDetails,
 } from "../lib/jobProgress.js";
+import {
+  canToggleSecretVisibility,
+  secretPlaceholder,
+  seerrSecretPlaceholder,
+} from "../lib/secretField.js";
 
 const ADMIN_SECTIONS = new Set([
   "overview",
@@ -125,13 +130,6 @@ function fieldLabel(field) {
   return FIELD_LABELS[field] || field.replace(/_/g, " ");
 }
 
-function seerrSecretPlaceholder(settings, fallback = "") {
-  if (settings?.seerr?.api_key_set) {
-    return "Configured (leave blank to keep)";
-  }
-  return fallback;
-}
-
 function settingsPayloadForTest(service, settings) {
   if (service !== "seerr") return settings;
   return {
@@ -139,16 +137,6 @@ function settingsPayloadForTest(service, settings) {
     seerr_url: settings.seerr?.url || "",
     seerr_api_key: settings.seerr?.api_key || "",
   };
-}
-
-function secretPlaceholder(settings, field, fallback = "") {
-  if (settings?.[`${field}_source`] === "env") {
-    return "Configured via environment (.env)";
-  }
-  if (settings?.[`${field}_set`]) {
-    return "Configured (leave blank to keep)";
-  }
-  return fallback;
 }
 
 function SecretInput({
@@ -161,27 +149,33 @@ function SecretInput({
   visible = false,
   onToggleVisible,
 }) {
+  // API never returns plaintext secrets — Show only reveals a draft typed here.
+  const canReveal = canToggleSecretVisibility(value);
+  const revealed = canReveal && visible;
   return (
     <div className="secret-field">
       <input
-        type={visible ? "text" : "password"}
+        type={revealed ? "text" : "password"}
         value={value ?? ""}
         disabled={disabled}
         placeholder={placeholder || secretPlaceholder(settings, field)}
         onChange={onChange}
         autoComplete="off"
+        data-testid={`secret-input-${field}`}
       />
-      <button
-        type="button"
-        className="secret-toggle"
-        data-testid={`secret-toggle-${field}`}
-        aria-label={visible ? "Hide secret" : "Show secret"}
-        aria-pressed={visible}
-        disabled={disabled}
-        onClick={onToggleVisible}
-      >
-        {visible ? "Hide" : "Show"}
-      </button>
+      {canReveal ? (
+        <button
+          type="button"
+          className="secret-toggle"
+          data-testid={`secret-toggle-${field}`}
+          aria-label={visible ? "Hide secret" : "Show secret"}
+          aria-pressed={visible}
+          disabled={disabled}
+          onClick={onToggleVisible}
+        >
+          {visible ? "Hide" : "Show"}
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -705,14 +699,13 @@ export default function ConfigPage() {
   function renderSeerrSecretInput(options = {}) {
     const field = "seerr.api_key";
     const value = settings?.seerr?.api_key ?? "";
-    const configured = Boolean(settings?.seerr?.api_key_set);
     return (
       <SecretInput
         field={field}
         settings={settings}
         value={value}
         disabled={options.disabled}
-        placeholder={configured ? "Configured (leave blank to keep)" : ""}
+        placeholder={seerrSecretPlaceholder(settings)}
         visible={Boolean(visibleSecrets[field])}
         onToggleVisible={() => toggleSecretVisibility(field)}
         onChange={(event) => updateSeerrSettings({ api_key: event.target.value })}
@@ -1469,7 +1462,11 @@ export default function ConfigPage() {
           {libraryStats ? (
             <p className="status status-secondary" data-testid="library-sync-stats">
               {libraryStats.movies} movies · {libraryStats.shows} shows
-              {libraryStats.last_sync ? ` · Last synced ${formatLastSync(libraryStats.last_sync)}` : " · Never synced"}
+              {libraryStats.last_sync
+                ? ` · Last synced ${formatLastSync(libraryStats.last_sync)}`
+                : syncingLibrary
+                  ? " · Syncing…"
+                  : " · Never synced"}
             </p>
           ) : (
             <p className="status status-secondary" data-testid="library-sync-stats">

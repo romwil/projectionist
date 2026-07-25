@@ -12,6 +12,7 @@ from curatorx.youth.rating_gate import (
     resolve_youth_max_rating,
     youth_gate_active,
 )
+from curatorx.youth.scrub import scrub_youth_chat_blocks, scrub_youth_history_messages
 
 __all__ = [
     "DEFAULT_YOUTH_MAX_RATING",
@@ -21,5 +22,7 @@ __all__ = [
     "normalize_content_rating",
     "rating_rank",
     "resolve_youth_max_rating",
+    "scrub_youth_chat_blocks",
+    "scrub_youth_history_messages",
     "youth_gate_active",
 ]

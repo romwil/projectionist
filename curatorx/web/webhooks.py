@@ -104,12 +104,33 @@ def handle_plex_webhook(db: Database, payload: Mapping[str, Any]) -> Dict[str, A
 
     title = title_from_plex_metadata(metadata)
     media_type = media_type_from_plex_metadata(metadata)
+
+    account = payload.get("Account") if isinstance(payload.get("Account"), Mapping) else {}
+    plex_account_id = account.get("id")
+    user_id: Optional[str] = None
+    if plex_account_id is not None:
+        row = db.get_user_by_plex_id(str(plex_account_id))
+        if row is not None:
+            user_id = str(row["id"])
+    if not user_id:
+        # Fail closed: never queue server-token / anonymous watches as personal nudges.
+        return {
+            "handled": True,
+            "queued": False,
+            "reason": "unattributed_account",
+            "event": event,
+            "rating_key": rating_key,
+            "title": title,
+            "completion_pct": completion_pct,
+        }
+
     queued = queue_rating_prompt(
         db,
         rating_key=rating_key,
         media_type=media_type,
         title=title,
         completion_pct=completion_pct,
+        user_id=user_id,
     )
     return {
         "handled": True,
@@ -118,6 +139,7 @@ def handle_plex_webhook(db: Database, payload: Mapping[str, Any]) -> Dict[str, A
         "rating_key": rating_key,
         "title": title,
         "completion_pct": completion_pct,
+        "user_id": user_id,
     }
 
 

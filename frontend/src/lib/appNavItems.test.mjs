@@ -7,6 +7,7 @@ import {
   YOUTH_NAV_ITEMS,
   buildAppNavItems,
 } from "./appNavItems.js";
+import { ADMIN_NAV } from "./adminNav.js";
 
 describe("buildAppNavItems", () => {
   it("keeps secondary destinations in the drawer (peers live in the toolbar)", () => {
@@ -23,12 +24,51 @@ describe("buildAppNavItems", () => {
     ]);
   });
 
-  it("does not duplicate Admin/Settings peers in the drawer", () => {
-    const items = buildAppNavItems({ isOwner: true });
+  it("does not dump Admin section links into the drawer outside /admin", () => {
+    const items = buildAppNavItems({ isOwner: true, pathname: "/chat" });
     const ids = items.map((item) => item.id);
     assert.equal(ids.includes("admin"), false);
+    assert.equal(ids.includes("heading-admin"), false);
+    assert.equal(ids.includes("admin-overview"), false);
     assert.equal(ids.includes("settings"), false);
     assert.equal(ids.includes("help"), true);
+  });
+
+  it("prepends Admin section links when owner is on /admin/*", () => {
+    const items = buildAppNavItems({
+      isOwner: true,
+      pathname: "/admin/overview",
+    });
+    const ids = items.map((item) => item.id);
+    assert.equal(ids[0], "heading-admin");
+    assert.equal(ids[1], "admin-overview");
+    assert.ok(ids.includes("admin-issues"));
+    assert.ok(ids.includes("heading-more"));
+    const moreIdx = ids.indexOf("heading-more");
+    assert.deepEqual(ids.slice(moreIdx + 1), [
+      "plot-lab",
+      "tags",
+      "watchlist",
+      "library",
+      "my-journey",
+      "help",
+      "privacy",
+      "about",
+    ]);
+    assert.equal(
+      items.filter((item) => item.kind === "admin").length,
+      ADMIN_NAV.length,
+    );
+  });
+
+  it("does not prepend Admin section for non-owners on /admin paths", () => {
+    const ids = buildAppNavItems({
+      isOwner: false,
+      role: "member",
+      pathname: "/admin/overview",
+    }).map((item) => item.id);
+    assert.equal(ids.includes("heading-admin"), false);
+    assert.equal(ids.includes("admin-overview"), false);
   });
 
   it("keeps core browse destinations stable", () => {

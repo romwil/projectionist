@@ -23,8 +23,13 @@ from curatorx.web.webhooks import (
 )
 
 
-def _movie_stop_payload(*, view_offset: int = 5_400_000, duration: int = 6_000_000) -> dict:
-    return {
+def _movie_stop_payload(
+    *,
+    view_offset: int = 5_400_000,
+    duration: int = 6_000_000,
+    plex_account_id: int | None = 4242,
+) -> dict:
+    payload = {
         "event": "media.stop",
         "user": True,
         "owner": True,
@@ -37,10 +42,13 @@ def _movie_stop_payload(*, view_offset: int = 5_400_000, duration: int = 6_000_0
             "duration": duration,
         },
     }
+    if plex_account_id is not None:
+        payload["Account"] = {"id": plex_account_id, "title": "will"}
+    return payload
 
 
-def _episode_scrobble_payload() -> dict:
-    return {
+def _episode_scrobble_payload(*, plex_account_id: int | None = 4242) -> dict:
+    payload = {
         "event": "media.scrobble",
         "Metadata": {
             "librarySectionType": "show",
@@ -52,6 +60,9 @@ def _episode_scrobble_payload() -> dict:
             "title": "In Perpetuity",
         },
     }
+    if plex_account_id is not None:
+        payload["Account"] = {"id": plex_account_id, "title": "will"}
+    return payload
 
 
 class PlexWebhookParserTests(unittest.TestCase):
@@ -69,6 +80,13 @@ class PlexWebhookHandlerTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         self.db = Database(Path(self._tmpdir.name) / "webhooks.db")
+        self.user = self.db.upsert_plex_user(
+            user_id="plex-4242",
+            display_name="Will",
+            email=None,
+            plex_user_id="4242",
+            role="owner",
+        )
 
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
@@ -77,22 +95,35 @@ class PlexWebhookHandlerTests(unittest.TestCase):
         result = handle_plex_webhook(self.db, _movie_stop_payload())
         self.assertTrue(result["handled"])
         self.assertTrue(result["queued"])
-        prompts = list_pending_prompts(self.db)
+        prompts = list_pending_prompts(self.db, user_id=self.user["id"])
         self.assertEqual(len(prompts), 1)
         self.assertEqual(prompts[0]["title"], "Inception")
         self.assertGreaterEqual(prompts[0]["completion_pct"], 85.0)
+
+    def test_stop_event_ignores_unattributed_account(self) -> None:
+        result = handle_plex_webhook(self.db, _movie_stop_payload(plex_account_id=None))
+        self.assertTrue(result["handled"])
+        self.assertFalse(result["queued"])
+        self.assertEqual(result["reason"], "unattributed_account")
+        self.assertEqual(list_pending_prompts(self.db, user_id=self.user["id"]), [])
+
+    def test_stop_event_ignores_unknown_plex_account(self) -> None:
+        result = handle_plex_webhook(self.db, _movie_stop_payload(plex_account_id=9999))
+        self.assertTrue(result["handled"])
+        self.assertFalse(result["queued"])
+        self.assertEqual(result["reason"], "unattributed_account")
 
     def test_stop_event_ignores_low_completion(self) -> None:
         result = handle_plex_webhook(self.db, _movie_stop_payload(view_offset=1_000_000, duration=6_000_000))
         self.assertFalse(result["handled"])
         self.assertEqual(result["reason"], "below_threshold")
-        self.assertEqual(list_pending_prompts(self.db), [])
+        self.assertEqual(list_pending_prompts(self.db, user_id=self.user["id"]), [])
 
     def test_scrobble_event_queues_without_view_offset(self) -> None:
         result = handle_plex_webhook(self.db, _episode_scrobble_payload())
         self.assertTrue(result["handled"])
         self.assertTrue(result["queued"])
-        prompts = list_pending_prompts(self.db)
+        prompts = list_pending_prompts(self.db, user_id=self.user["id"])
         self.assertEqual(prompts[0]["title"], "Severance — S01E03")
 
 
@@ -112,6 +143,14 @@ class PlexWebhookApiTests(unittest.TestCase):
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
         self._headers = {"X-CuratorX-Webhook-Secret": self._secret}
+        self.db = jobs.get_job_manager().db
+        self.db.upsert_plex_user(
+            user_id="plex-4242",
+            display_name="Will",
+            email=None,
+            plex_user_id="4242",
+            role="owner",
+        )
 
     def tearDown(self) -> None:
         import curatorx.web.jobs as jobs
@@ -181,6 +220,13 @@ class PlexWebhookApiTests(unittest.TestCase):
 
         importlib.reload(app_mod)
         client = TestClient(app_mod.app)
+        jobs.get_job_manager().db.upsert_plex_user(
+            user_id="plex-4242",
+            display_name="Will",
+            email=None,
+            plex_user_id="4242",
+            role="owner",
+        )
         response = client.post(
             "/api/webhooks/plex",
             json=_movie_stop_payload(),
