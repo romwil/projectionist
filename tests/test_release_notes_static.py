@@ -9,7 +9,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.app import FRONTEND_DIST, app
+from projectionist.web.app import FRONTEND_DIST, app
 
 
 class ReleaseNotesStaticTests(unittest.TestCase):
@@ -40,7 +40,7 @@ class ReleaseNotesStaticTests(unittest.TestCase):
             empty_root = Path(tmp)
             empty_dist = empty_root / "dist"
             empty_dist.mkdir()
-            with mock.patch("curatorx.web.app.FRONTEND_DIST", empty_dist):
+            with mock.patch("projectionist.web.app.FRONTEND_DIST", empty_dist):
                 client = TestClient(app)
                 response = client.get("/release-notes.json")
                 self.assertEqual(response.status_code, 404)
@@ -70,7 +70,7 @@ class ReleaseNotesStaticTests(unittest.TestCase):
             os.utime(dist_file, (now - 100, now - 100))
             os.utime(public_file, (now, now))
 
-            with mock.patch("curatorx.web.app.FRONTEND_DIST", dist):
+            with mock.patch("projectionist.web.app.FRONTEND_DIST", dist):
                 client = TestClient(app)
                 response = client.get("/release-notes.json")
                 self.assertEqual(response.status_code, 200)

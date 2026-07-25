@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from curatorx.config_store import (
+from projectionist.config_store import (
     FeatureFlags,
     Settings,
     resolve_guest_tour_enabled,

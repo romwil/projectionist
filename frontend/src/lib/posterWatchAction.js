@@ -1,7 +1,7 @@
 /**
  * Resolve the kebab (poster action grip) "mark watched / unwatched" affordance.
  *
- * The action is offered only for titles that are in the CuratorX library and
+ * The action is offered only for titles that are in the Projectionist library and
  * carry a Plex `rating_key` — the same identity gate the center Play control
  * uses — and only when the signed-in viewer is allowed to change household
  * watched state (guests are excluded while multi-user is on, mirroring the

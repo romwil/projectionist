@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import Database
-from curatorx.library.health import compute_library_health
+from projectionist.library.db import Database
+from projectionist.library.health import compute_library_health
 
 
 class LibraryHealthTests(unittest.TestCase):

@@ -17,7 +17,20 @@
     <script>
       (function () {
         try {
-          var stored = localStorage.getItem("curatorx.ui_theme") || "system";
+          var KEY = "projectionist.ui_theme";
+          var LEGACY_KEY = "curatorx.ui_theme";
+          var stored = localStorage.getItem(KEY);
+          if (stored == null || stored === "") {
+            stored = localStorage.getItem(LEGACY_KEY);
+            if (stored != null && stored !== "") {
+              try {
+                localStorage.setItem(KEY, stored);
+              } catch (migrateErr) {
+                /* ignore migrate write failures */
+              }
+            }
+          }
+          stored = stored || "system";
           if (stored !== "lights_up" && stored !== "lights_down" && stored !== "system") {
             stored = "system";
           }
@@ -38,7 +51,7 @@
         }
       })();
     </script>
-    <title>CuratorX</title>
+    <title>Projectionist</title>
   </head>
   <body>
     <div id="root"></div>

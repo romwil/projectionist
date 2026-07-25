@@ -1,6 +1,6 @@
 # Help
 
-CuratorX is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Inbox**, **My Journey**, **Plot Lab**, and — for owners — idle curation.
+Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Inbox**, **My Journey**, **Plot Lab**, and — for owners — idle curation.
 
 New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Plot Lab, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
 
@@ -64,7 +64,7 @@ Thumbs up / down on curator replies train future recommendations. Personal **rev
 
 ### Saving a curator reply to your Library
 
-When a recommendation set or explanation is worth returning to, open the **⋮ menu** below that curator response and choose **Save to library**. CuratorX creates a named, private library item, adds a short summary in your active persona's voice, and keeps it to authenticated household members only. Open saved items later from [Library](/library) — rows are searchable, grouped by day, and show which persona shaped the response.
+When a recommendation set or explanation is worth returning to, open the **⋮ menu** below that curator response and choose **Save to library**. Projectionist creates a named, private library item, adds a short summary in your active persona's voice, and keeps it to authenticated household members only. Open saved items later from [Library](/library) — rows are searchable, grouped by day, and show which persona shaped the response.
 
 Saved pages preserve the structured text, title cards, and reply chips. From the same ⋮ menu you can:
 
@@ -101,9 +101,9 @@ Tune the underlying weights under **Settings → Taste** — raise a cluster, lo
 
 ### Taste profile
 
-**Settings → Taste** shows the cluster tags CuratorX learned for you (genres, moods, eras). Drag a weight, lock it, or **Reset** an override to fall back to the household lens baseline.
+**Settings → Taste** shows the cluster tags Projectionist learned for you (genres, moods, eras). Drag a weight, lock it, or **Reset** an override to fall back to the household lens baseline.
 
-**TV & mid-series stops.** When you rate or abandon a show partway through, CuratorX weighs earlier seasons more heavily than later ones you never watched. Episode ratings (when Plex has them) also nudge taste — so a beloved Season 1 that you dropped in Season 3 does not keep forcing “more like late-series” neighbors.
+**TV & mid-series stops.** When you rate or abandon a show partway through, Projectionist weighs earlier seasons more heavily than later ones you never watched. Episode ratings (when Plex has them) also nudge taste — so a beloved Season 1 that you dropped in Season 3 does not keep forcing “more like late-series” neighbors.
 
 ### My Journey — achievements, pathways, and secrets
 
@@ -124,9 +124,9 @@ Youth-mode accounts see youth-safe achievements only. Member-facing copy never s
 
 **Ask to acquire a title.** In chat you can ask the Concierge to walk find → availability → Seerr request with explicit steps. Nothing is requested until you confirm.
 
-**Where can I watch this?** On title detail (and on chat recommendation posters) CuratorX shows a compact availability line: **In your library ✓**, **Requestable** (when Seerr is your request path), or **Not here yet**. It does not look up Netflix, Max, or other external streamers.
+**Where can I watch this?** On title detail (and on chat recommendation posters) Projectionist shows a compact availability line: **In your library ✓**, **Requestable** (when Seerr is your request path), or **Not here yet**. It does not look up Netflix, Max, or other external streamers.
 
-**Watchlist pins feel instant.** Adding or removing a pin updates your wall immediately; CuratorX reconciles with Plex Discover in the background when sync is enabled.
+**Watchlist pins feel instant.** Adding or removing a pin updates your wall immediately; Projectionist reconciles with Plex Discover in the background when sync is enabled.
 
 ### Inbox & notifications
 
@@ -154,13 +154,13 @@ The browse page uses the same controls as every other wall (sort, direction, typ
 
 ### Search beyond the collection
 
-Sometimes the thing you want isn't in the library yet. Whenever you've searched, look for **Search beyond your collection** — it's front and center when nothing in your library matched, and a quieter button below your results otherwise. Tap it and CuratorX looks up matching movies or shows from the wider film database, then shows them in a clearly separated **Beyond your collection** section.
+Sometimes the thing you want isn't in the library yet. Whenever you've searched, look for **Search beyond your collection** — it's front and center when nothing in your library matched, and a quieter button below your results otherwise. Tap it and Projectionist looks up matching movies or shows from the wider film database, then shows them in a clearly separated **Beyond your collection** section.
 
 > **You search:** "arrival"
 >
 > **Your library has nothing** — so **Search beyond your collection for "arrival"** sits right in the empty state. Tap it and *Arrival (2016)* and its neighbors appear under **Beyond your collection**, each with a poster, a link to full details, and — depending on who you are — a way to bring it in.
 
-What the button on each beyond result does depends on your role, and CuratorX never double-adds something you already have:
+What the button on each beyond result does depends on your role, and Projectionist never double-adds something you already have:
 
 - **Owners** get **Add to Radarr** (movies) or **Add to Sonarr** (shows), which queues the title for download.
 - **Members** get **Request in Seerr**, sending it to the household request queue for approval.
@@ -176,7 +176,7 @@ Anything already in your library (or already queued to download) is shown with a
 
 ### Plot Lab
 
-**[Plot Lab](/explore/plot-lab)** builds facet walls from the plot signals CuratorX has extracted. To get a wall:
+**[Plot Lab](/explore/plot-lab)** builds facet walls from the plot signals Projectionist has extracted. To get a wall:
 
 1. Open **Plot Lab** from the nav menu or Explore.
 2. Tap one or more **motif chips**. Multiple chips mean **intersection (AND)** — titles that carry *all* selected signals.
@@ -200,14 +200,14 @@ Poster walls default to the visual browse view; **List** view makes scanning met
 Three shelves, three different promises:
 
 - **Watchlist** — a personal "remember this" pin. It can merge local pins with Plex Discover sync. Removing a pin never deletes the title from your library.
-- **List** — a durable, named CuratorX shelf such as "70s paranoia" or "family guests," for grouping and revisiting.
+- **List** — a durable, named Projectionist shelf such as "70s paranoia" or "family guests," for grouping and revisiting.
 - **Playlist** — the same local storage with a different intent: an ordered viewing program such as "Friday double feature." It does not sync to Plex Playlists today.
 
 Use the grip's **Add to list or playlist** chooser to place a title in more than one shelf.
 
 **The ⋮ action grip** is repeated on posters, title-card overlays, and list rows on purpose — so "open details," Plex playback when available, watchlist pinning, list/playlist membership, household recommendations, **Recommend like this in chat**, discovery, and **Report issue** all live in one place whether you browse with mouse, keyboard, or touch. The centered **Play** control appears only when a card is a library title with a playable Plex rating key; external discovery cards never show a dead Play action.
 
-**Mark as watched — a guided one-tap.** For any title that lives in your Plex library, the grip offers **Mark as watched**. Say you just finished *Heat* on the TV downstairs but forgot to press play in Plex — open the ⋮ menu on its poster and choose **Mark as watched**. CuratorX records the view and tells Plex, so the poster's watched overlay turns on and the title stops showing up as "unwatched" everywhere it appears. Changed your mind, or marked the wrong one? The same spot now reads **Mark as unwatched** and reverses it. The action only appears on real library titles (the same rule as **Play**) — discovery cards for things you don't own never show it — and, like everything else, it's tied to *your* signed-in Plex context.
+**Mark as watched — a guided one-tap.** For any title that lives in your Plex library, the grip offers **Mark as watched**. Say you just finished *Heat* on the TV downstairs but forgot to press play in Plex — open the ⋮ menu on its poster and choose **Mark as watched**. Projectionist records the view and tells Plex, so the poster's watched overlay turns on and the title stops showing up as "unwatched" everywhere it appears. Changed your mind, or marked the wrong one? The same spot now reads **Mark as unwatched** and reverses it. The action only appears on real library titles (the same rule as **Play**) — discovery cards for things you don't own never show it — and, like everything else, it's tied to *your* signed-in Plex context.
 
 **Reporting a title problem — safely.** Anyone who can browse can submit a typed **Report issue** (wrong language, bad video/audio, wrong title, missing subtitles, duplicate, or other) with an optional note. The report captures the title identity and a snapshot of what you saw, then lands in the owner queue at **Admin → Issues**. Members and guests never invoke Radarr or Sonarr commands from a report — this separation protects your files and downloads from accidental changes. An owner decides whether to resolve it or run a supported, logged repair.
 
@@ -215,22 +215,22 @@ Use the grip's **Add to list or playlist** chooser to place a title in more than
 
 On a library title, the **Plot knowledge** panel shows which plot layers are present (overview, tagline, logline, and long synopsis when that source exists), motif/keyword/theme chips, and neighbor-cache count. Sparse panels mean idle enrichment is still catching up — the same honesty gauge described under [What knowledge coverage means](#what-knowledge-coverage-means).
 
-### What CuratorX remembers about you
+### What Projectionist remembers about you
 
 The curator keeps two kinds of memory:
 
 - **Shared knowledge** about titles, people, and companies it has researched, with sources cited. This isn't tied to any one account, so a second question about the same subject recalls the earlier cited answer instead of starting over.
 - **Your private memory** — preferences, stated goals, watch intentions, and follow-ups for *your* account only. It's surfaced back to you at the start of a conversation (including a "resume where we left off" nudge) and is never shared with, or applied to, another household member. Youth-mode accounts show a badge in **Profile**; only those accounts can be reviewed by the owner for moderation.
 
-**Your private memory is yours.** CuratorX can hand you a full copy or permanently delete everything it remembers for your account — private notes, chat transcripts, saved library pages, and preference facts. See the [Privacy](/privacy) page for exactly what that export and purge cover, and how to run them.
+**Your private memory is yours.** Projectionist can hand you a full copy or permanently delete everything it remembers for your account — private notes, chat transcripts, saved library pages, and preference facts. See the [Privacy](/privacy) page for exactly what that export and purge cover, and how to run them.
 
 ### Youth mode
 
-If your account has **Youth mode** on, CuratorX uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, **Inbox**, and **My Journey** (plus Search and Settings). The hamburger lists those same destinations under **Navigate**, plus **My list** under **More**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
+If your account has **Youth mode** on, Projectionist uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, **Inbox**, and **My Journey** (plus Search and Settings). The hamburger lists those same destinations under **Navigate**, plus **My list** under **More**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
 
 ### Guest tour
 
-When the owner enables **Take a Tour** (Admin household toggle, or env `CURATORX_GUEST_TOUR_ENABLED`), the login page offers a public tour at **/tour** — no hamburger chrome. Signed-in **guests** also get a tour shell. Open **What's great** for published collections your host shared, then browse or ask without destructive actions.
+When the owner enables **Take a Tour** (Admin household toggle, or env `PROJECTIONIST_GUEST_TOUR_ENABLED`), the login page offers a public tour at **/tour** — no hamburger chrome. Signed-in **guests** also get a tour shell. Open **What's great** for published collections your host shared, then browse or ask without destructive actions.
 
 ### Joining the household
 
@@ -290,14 +290,14 @@ Owned or already-queued titles are returned for context (so members see they exi
 
 ### Watched state & Plex sync
 
-When anyone in the household uses **Mark as watched / unwatched** from a poster's ⋮ grip (or the button on a title's detail page), CuratorX does two things: it updates the title's `view_count` / `last_viewed_at` in its own index, and it pushes the change to your Plex server. The Plex write uses the Plex "scrobble" endpoint (`/:/scrobble` to mark watched, `/:/unscrobble` to clear it) against the same server URL and token the connector already uses for sync and deep links — no new Plex credential is introduced.
+When anyone in the household uses **Mark as watched / unwatched** from a poster's ⋮ grip (or the button on a title's detail page), Projectionist does two things: it updates the title's `view_count` / `last_viewed_at` in its own index, and it pushes the change to your Plex server. The Plex write uses the Plex "scrobble" endpoint (`/:/scrobble` to mark watched, `/:/unscrobble` to clear it) against the same server URL and token the connector already uses for sync and deep links — no new Plex credential is introduced.
 
-Which Plex identity gets the write depends on how the member signed in: if they authenticated with **Sign in with Plex**, their own account token is used so the watched flag lands on *their* Plex profile. If no per-account token is available, CuratorX falls back to the server `plex_token`, which applies watched state to the admin/account that owns that token — effectively household-wide. Guests cannot change watched state while multi-user is on.
+Which Plex identity gets the write depends on how the member signed in: if they authenticated with **Sign in with Plex**, their own account token is used so the watched flag lands on *their* Plex profile. If no per-account token is available, Projectionist falls back to the server `plex_token`, which applies watched state to the admin/account that owns that token — effectively household-wide. Guests cannot change watched state while multi-user is on.
 
 If Plex is unreachable or not configured, the local index is still updated and the member sees an honest note (for example *"saved locally; Plex sync failed"*) rather than a silent failure.
 
 ```bash
-# The scrobble call CuratorX makes on your behalf (movie ratingKey 12345)
+# The scrobble call Projectionist makes on your behalf (movie ratingKey 12345)
 curl -s "http://localhost:32400/:/scrobble?identifier=com.plexapp.plugins.library&key=12345&X-Plex-Token=$PLEX_TOKEN"
 ```
 
@@ -339,7 +339,7 @@ Admin shows last-run outcome, durable run history, measured items/hour, owner-se
 
 Open **Admin → Issues** to triage reports by status. Read the member's note and title identity first, then either resolve/reject the report or run a repair **only when the target is clear**. An owner may opt in to automatic repair for explicitly trusted issue codes, but the default is off.
 
-The safety model is deliberately conservative: auto-repair is an owner policy over narrow, logged playbooks — not a rule that every report should redownload or remove something. Supported high-confidence cases may identify a title already managed by the corresponding *arr service, mark a known bad file where the connector supports it, and request a search. CuratorX does **not** guess a title, delete arbitrary files, correct a bad metadata match blindly, or guarantee subtitles merely because a search was requested. If identity is incomplete, the title isn't managed, or the connector can't act safely, the issue records a clear skip/failure reason. Review the repair log after each run.
+The safety model is deliberately conservative: auto-repair is an owner policy over narrow, logged playbooks — not a rule that every report should redownload or remove something. Supported high-confidence cases may identify a title already managed by the corresponding *arr service, mark a known bad file where the connector supports it, and request a search. Projectionist does **not** guess a title, delete arbitrary files, correct a bad metadata match blindly, or guarantee subtitles merely because a search was requested. If identity is incomplete, the title isn't managed, or the connector can't act safely, the issue records a clear skip/failure reason. Review the repair log after each run.
 
 ### Library-health hero & issue badge
 
@@ -357,7 +357,7 @@ curl -s "http://localhost:8788/api/media-issues?status=open" | python3 -m json.t
 
 Grooming is the housekeeping pass that finds **purge candidates** (stale, unwatched, or low-signal titles) so you can prune the library. From **Admin → Dashboard** you can rerun the grooming warm-up in one click (it runs the same scheduled tasks as the multi-task preset), then act on the refreshed candidates.
 
-Deleting purge candidates is destructive, so CuratorX records every bulk delete in a **grooming action log** before it runs. Each entry snapshots the exact CuratorX index rows removed, so you can reverse the last run:
+Deleting purge candidates is destructive, so Projectionist records every bulk delete in a **grooming action log** before it runs. Each entry snapshots the exact Projectionist index rows removed, so you can reverse the last run:
 
 ```bash
 # List recent destructive grooming actions (most recent first)
@@ -371,7 +371,7 @@ curl -s -X POST http://localhost:8788/api/admin/grooming/actions/ACTION_ID/undo
 
 Use the **Undo last grooming run** panel on the Dashboard for the same thing without a terminal.
 
-**How it works / honest limits.** Undo restores the CuratorX **index rows** (the metadata, knowledge, and neighbor edges the delete removed); regenerable derived data such as embeddings is rebuilt by the normal idle tasks, so it is not snapshotted. Undo does **not** touch Plex or your files — a purge only prunes CuratorX's own index, never the media on disk. Once an action is undone it is marked `undone_at` and can't be undone twice.
+**How it works / honest limits.** Undo restores the Projectionist **index rows** (the metadata, knowledge, and neighbor edges the delete removed); regenerable derived data such as embeddings is rebuilt by the normal idle tasks, so it is not snapshotted. Undo does **not** touch Plex or your files — a purge only prunes Projectionist's own index, never the media on disk. Once an action is undone it is marked `undone_at` and can't be undone twice.
 
 ### Collections & courses (publish a list to members)
 
@@ -397,7 +397,7 @@ curl -s http://localhost:8788/api/collections | python3 -m json.tool
 
 ### Weekly digest — "This week in your library"
 
-CuratorX assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
+Projectionist assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
 
 Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). Owners can push that newsletter early from **Admin → Mail → Weekly newsletter** (just me / selected members / everyone opted in), or send a self-only copy from **Settings → Notifications**. A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
 
@@ -456,7 +456,7 @@ Under **Admin → Household**, set **Youth max content rating** (default `PG-13`
 # Inspect current youth gate (owner session cookie)
 curl -s http://localhost:8788/api/settings | jq '.youth'
 
-# List pending CuratorX access requests (not Seerr)
+# List pending Projectionist access requests (not Seerr)
 curl -s http://localhost:8788/api/admin/access-requests?status=pending
 
 # Approve → creates a one-time /join invite (share the returned token/URL)
@@ -483,8 +483,8 @@ To restore pre-1.26 LAN-open auto-provision (any reachable Plex/SSO identity bec
 Because members can't see this half, here's the exact mechanism behind the member-facing "export or delete your memory" guidance. Each signed-in account can export or purge its own data via `/api/me/memory`:
 
 ```bash
-# Export everything CuratorX holds for the signed-in account (JSON)
-curl -s http://localhost:8788/api/me/memory > my-curatorx-export.json
+# Export everything Projectionist holds for the signed-in account (JSON)
+curl -s http://localhost:8788/api/me/memory > my-projectionist-export.json
 
 # Permanently delete the same set — private notes, chat threads + message
 # transcripts, saved library pages, and preference facts. Export first.
@@ -509,7 +509,7 @@ Wikipedia is the default long-synopsis source because it's free, needs no API ke
 ```
 
 - Default is already `wikipedia` when the setting is missing/unset.
-- To stop the trickle, set `long_synopsis_source` to `off` (or `CURATORX_LONG_SYNOPSIS_SOURCE=off`). Empty / `none` / `disabled` also disable it.
+- To stop the trickle, set `long_synopsis_source` to `off` (or `PROJECTIONIST_LONG_SYNOPSIS_SOURCE=off`). Empty / `none` / `disabled` also disable it.
 - For OMDb (or `auto` fallback), set `omdb_api_key` / `OMDB_API_KEY` and `long_synopsis_source` to `omdb` or `auto`.
 - Themes: `keyword_theme_tagging` needs no key. Plot Lab shows theme chips once facets exist.
 
@@ -523,12 +523,12 @@ Research it has done before is kept in a **persistent, source-cited knowledge st
 
 ### MCP (external tools)
 
-CuratorX can expose your **indexed library** to external tools over MCP, gated by which key is presented:
+Projectionist can expose your **indexed library** to external tools over MCP, gated by which key is presented:
 
 | Key | Typical env | Purpose |
 |-----|-------------|---------|
-| Privacy MCP key | `CURATORX_MCP_API_KEY` | Read-oriented library intelligence with a **public content** schema |
-| Full / in-stack MCP key | `CURATORX_MCP_FULL_API_KEY` | Deeper internal fields + confirm-gated *arr propose tools for trusted LAN automation |
+| Privacy MCP key | `PROJECTIONIST_MCP_API_KEY` | Read-oriented library intelligence with a **public content** schema |
+| Full / in-stack MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` | Deeper internal fields + confirm-gated *arr propose tools for trusted LAN automation |
 
 Generate/rotate both in **Admin → Advanced** (or set the env vars); the keys must differ. Privacy mode never exposes `X-Plex-Token` media URLs, `rating_key`, or secrets. Details and the exposure model: [MCP.md](MCP.md) and [Privacy](/privacy).
 

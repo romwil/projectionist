@@ -1,5 +1,5 @@
 /* Shared browse controls and the poster/list action grip use the existing
-   cinema surfaces so dense browsing still feels part of CuratorX. */
+   cinema surfaces so dense browsing still feels part of Projectionist. */
 .media-browse-controls { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-width: 0; padding: 10px 0; }
 .media-browse-controls-main, .media-browse-controls-actions { display: flex; gap: 8px; align-items: end; flex-wrap: wrap; min-width: 0; }
 .media-browse-controls-actions { justify-content: flex-end; }

@@ -7,14 +7,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.library.embeddings import build_item_embedding_text, embedding_model_label
-from curatorx.library.facets import library_facet_catalog, rebuild_library_facets
-from curatorx.library.neighbors import compute_neighbors_for_seed, surprise_score
-from curatorx.library.query import LibraryFilters, query_library
-from curatorx.library.sync import _apply_tmdb_enrichment
-from curatorx.scheduler.tasks import llm_logline_enrichment, plot_neighbors, summary_motifs
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.library.embeddings import build_item_embedding_text, embedding_model_label
+from projectionist.library.facets import library_facet_catalog, rebuild_library_facets
+from projectionist.library.neighbors import compute_neighbors_for_seed, surprise_score
+from projectionist.library.query import LibraryFilters, query_library
+from projectionist.library.sync import _apply_tmdb_enrichment
+from projectionist.scheduler.tasks import llm_logline_enrichment, plot_neighbors, summary_motifs
 
 
 class PlotTextMigrationTests(unittest.TestCase):
@@ -282,7 +282,7 @@ class LlmLoglineTaskTests(unittest.IsolatedAsyncioTestCase):
                 return_value={"choices": [{"message": {"content": "A hunter questions his humanity."}}]}
             )
             with patch(
-                "curatorx.agent.providers.get_chat_provider",
+                "projectionist.agent.providers.get_chat_provider",
                 return_value=fake_provider,
             ):
                 result = await llm_logline_enrichment.run(

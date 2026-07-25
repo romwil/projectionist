@@ -12,13 +12,13 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import FeatureFlags, Settings
-from curatorx.connectors.plex import PlexClient
-from curatorx.library.db import Database
-from curatorx.library.watch_state import set_library_item_watched, sync_watched_to_plex
-from curatorx.web.auth import SESSION_COOKIE_NAME, clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache, create_session_token
+from projectionist.config_store import FeatureFlags, Settings
+from projectionist.connectors.plex import PlexClient
+from projectionist.library.db import Database
+from projectionist.library.watch_state import set_library_item_watched, sync_watched_to_plex
+from projectionist.web.auth import SESSION_COOKIE_NAME, clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache, create_session_token
 
 
 class WatchStateStoreTests(unittest.TestCase):
@@ -81,7 +81,7 @@ class PlexScrobbleClientTests(unittest.TestCase):
         def fake_request_empty(url: str, *, method: str = "PUT", timeout: int = 30) -> None:
             captured.append({"url": url, "method": method, "timeout": str(timeout)})
 
-        with patch("curatorx.connectors.plex.request_empty", side_effect=fake_request_empty):
+        with patch("projectionist.connectors.plex.request_empty", side_effect=fake_request_empty):
             client.scrobble("12345")
             client.unscrobble("12345")
 
@@ -115,10 +115,10 @@ class WatchStateApiTests(unittest.TestCase):
             ),
             encoding="utf-8",
         )
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
@@ -140,7 +140,7 @@ class WatchStateApiTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -190,7 +190,7 @@ class WatchStateApiTests(unittest.TestCase):
     def test_api_member_can_mark_watched(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
             self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
@@ -239,7 +239,7 @@ class WatchStateApiTests(unittest.TestCase):
     def test_api_guest_forbidden_when_multi_user(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
             self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})

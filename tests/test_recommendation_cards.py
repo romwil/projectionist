@@ -2,8 +2,8 @@
 
 import unittest
 
-from curatorx.agent.curator import _cards_for_response
-from curatorx.models.schemas import TitleCard
+from projectionist.agent.curator import _cards_for_response
+from projectionist.models.schemas import TitleCard
 
 
 class RecommendationCardTests(unittest.TestCase):

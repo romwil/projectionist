@@ -7,10 +7,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.library.theme_map import themes_from_keywords
-from curatorx.scheduler.tasks import keyword_theme_tagging
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.library.theme_map import themes_from_keywords
+from projectionist.scheduler.tasks import keyword_theme_tagging
 
 
 class ThemeMapTests(unittest.TestCase):

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from curatorx.connectors.arr_errors import (
+from projectionist.connectors.arr_errors import (
     ArrTitleNotFoundError,
     format_arr_http_error,
     is_arr_not_found_error,

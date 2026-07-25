@@ -12,11 +12,11 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.connectors.plex import cached_plex_friendly_name, cached_plex_identity
-from curatorx.library.db import Database
-from curatorx.web.auth import clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.connectors.plex import cached_plex_friendly_name, cached_plex_identity
+from projectionist.library.db import Database
+from projectionist.web.auth import clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 
 class RecommendationsAndPrefsTests(unittest.TestCase):
@@ -30,22 +30,22 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
         clear_rate_limits()
         clear_pin_bindings()
         # Reset plex identity cache between tests
-        import curatorx.connectors.plex as plex_mod
+        import projectionist.connectors.plex as plex_mod
 
         plex_mod._cached_plex_identity = None
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -72,7 +72,7 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
             "email": email,
             "thumb": None,
         }
-        with patch("curatorx.web.auth.fetch_plex_account", return_value=profile):
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
             resp = self.client.post("/api/auth/plex", json={"auth_token": f"tok-{plex_id}"})
         self.assertEqual(resp.status_code, 200)
         return resp.json()["user"]
@@ -118,7 +118,7 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
             encoding="utf-8",
         )
         with patch(
-            "curatorx.web.app.cached_plex_friendly_name",
+            "projectionist.web.app.cached_plex_friendly_name",
             return_value="Automat818",
         ):
             resp = self.client.get("/api/library/stats")
@@ -139,7 +139,7 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
             "email": "member@example.com",
             "thumb": None,
         }
-        with patch("curatorx.web.auth.fetch_plex_account", return_value=profile):
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
             member_login = member_client.post("/api/auth/plex", json={"auth_token": "tok-2"})
         self.assertEqual(member_login.status_code, 200)
         member = member_login.json()["user"]
@@ -188,7 +188,7 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
             def server_identity(self):
                 return ("machine-1", "Automat818")
 
-        with patch("curatorx.connectors.plex.PlexClient", FakeClient):
+        with patch("projectionist.connectors.plex.PlexClient", FakeClient):
             name = cached_plex_friendly_name("http://plex", "tok")
             again = cached_plex_identity("http://plex", "tok")
         self.assertEqual(name, "Automat818")

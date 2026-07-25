@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   canToggleSecretVisibility,
+  isSecretConfigured,
   secretPlaceholder,
   seerrSecretPlaceholder,
 } from "./secretField.js";
@@ -36,15 +37,34 @@ describe("seerrSecretPlaceholder", () => {
   });
 });
 
+describe("isSecretConfigured", () => {
+  it("reads top-level _set flags", () => {
+    assert.equal(isSecretConfigured({ llm_api_key_set: true }, "llm_api_key"), true);
+    assert.equal(isSecretConfigured({ plex_token_set: false }, "plex_token"), false);
+    assert.equal(isSecretConfigured({}, "radarr_api_key"), false);
+  });
+
+  it("reads nested seerr.api_key_set", () => {
+    assert.equal(isSecretConfigured({ seerr: { api_key_set: true } }, "seerr.api_key"), true);
+    assert.equal(isSecretConfigured({ seerr: { api_key_set: false } }, "seerr.api_key"), false);
+  });
+});
+
 describe("canToggleSecretVisibility", () => {
-  it("hides Show when the API-redacted field is empty", () => {
+  it("hides Show when empty and not configured", () => {
     assert.equal(canToggleSecretVisibility(""), false);
     assert.equal(canToggleSecretVisibility(null), false);
     assert.equal(canToggleSecretVisibility(undefined), false);
+    assert.equal(canToggleSecretVisibility("", { configured: false }), false);
   });
 
-  it("allows Show only for a typed draft value", () => {
+  it("allows Show for a typed draft value", () => {
     assert.equal(canToggleSecretVisibility("sk-draft"), true);
     assert.equal(canToggleSecretVisibility("x"), true);
+  });
+
+  it("allows Show when a stored secret is configured (reveal fetch)", () => {
+    assert.equal(canToggleSecretVisibility("", { configured: true }), true);
+    assert.equal(canToggleSecretVisibility(null, { configured: true }), true);
   });
 });

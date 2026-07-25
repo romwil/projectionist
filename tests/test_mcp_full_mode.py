@@ -10,8 +10,8 @@ from pathlib import Path
 from unittest import skipUnless
 from unittest.mock import MagicMock, patch
 
-from curatorx.mcp.mode import resolve_http_mcp_auth, set_mcp_mode
-from curatorx.privacy import sanitize
+from projectionist.mcp.mode import resolve_http_mcp_auth, set_mcp_mode
+from projectionist.privacy import sanitize
 
 
 class FullModeAuthTests(unittest.TestCase):
@@ -72,7 +72,7 @@ class FullSchemaTests(unittest.TestCase):
 
 
 try:
-    from curatorx.mcp import server as mcp_server
+    from projectionist.mcp import server as mcp_server
 
     HAS_MCP = True
 except Exception:  # noqa: BLE001
@@ -93,7 +93,7 @@ class McpFullModeToolTests(unittest.TestCase):
         set_mcp_mode("privacy")
 
     def test_library_query_keeps_rating_key(self) -> None:
-        from curatorx.library.db import Database
+        from projectionist.library.db import Database
 
         db = Database(Path(self._tmpdir.name) / "test.db")
         db.upsert_library_item(
@@ -130,11 +130,11 @@ class McpFullModeToolTests(unittest.TestCase):
         with (
             patch.object(mcp_server, "_database", return_value=db),
             patch.object(mcp_server, "_settings", return_value=mock_settings),
-            patch("curatorx.config_store.radarr_add_configuration_error", return_value=None),
-            patch("curatorx.config_store.validate_arr_root_folder", return_value=None),
-            patch("curatorx.config_store.resolve_radarr_root_folder", return_value="/movies"),
-            patch("curatorx.connectors.radarr.RadarrClient") as client_cls,
-            patch("curatorx.agent.tools.check_radarr_already_exists", return_value=None),
+            patch("projectionist.config_store.radarr_add_configuration_error", return_value=None),
+            patch("projectionist.config_store.validate_arr_root_folder", return_value=None),
+            patch("projectionist.config_store.resolve_radarr_root_folder", return_value="/movies"),
+            patch("projectionist.connectors.radarr.RadarrClient") as client_cls,
+            patch("projectionist.agent.tools.check_radarr_already_exists", return_value=None),
         ):
             client_cls.return_value.root_folders.return_value = [{"path": "/movies"}]
             raw = mcp_server.propose_add_radarr(tmdb_id=578, title="Jaws")

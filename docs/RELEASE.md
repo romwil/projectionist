@@ -1,6 +1,6 @@
 # Release runbook
 
-Step-by-step maintainer / agent guide for shipping a CuratorX version. Follow this document whenever you bump a version, edit `CHANGELOG.md` for a release, cut a GitHub release, or push Docker images. Do not rediscover the process from chat history.
+Step-by-step maintainer / agent guide for shipping a Projectionist version. Follow this document whenever you bump a version, edit `CHANGELOG.md` for a release, cut a GitHub release, or push Docker images. Do not rediscover the process from chat history.
 
 **Audience:** developers and agents. Voice: direct and technical ([DOCS_STYLE.md](DOCS_STYLE.md) developer column).
 
@@ -28,19 +28,19 @@ Bump **all** of these to the same `X.Y.Z` (`tests/test_version.py` enforces ever
 
 | File | Field / what to set |
 |------|---------------------|
-| `curatorx/_version.py` | `__version__` (runtime / imports; source of truth for the test) |
+| `projectionist/_version.py` | `__version__` (runtime / imports; source of truth for the test) |
 | `package.json` | `"version"` |
 | `package-lock.json` | top-level `"version"` **and** `packages[""].version` |
 | `frontend/package.json` | `"version"` |
 | `frontend/package-lock.json` | top-level `"version"` **and** `packages[""].version` |
 | `pyproject.toml` | `[project].version` |
-| `templates/curatorx.xml` | HTML comment `CuratorX X.Y.Z`; leading `### X.Y.Z` under `<Changes>`; Description pin examples ``:`X.Y` / `:`X.Y.Z`` |
-| `unraid/curatorx.xml` | **Identical** to `templates/curatorx.xml` (CA still uses both paths) |
+| `templates/projectionist.xml` | HTML comment `Projectionist X.Y.Z`; leading `### X.Y.Z` under `<Changes>`; Description pin examples ``:`X.Y` / `:`X.Y.Z`` |
+| `unraid/projectionist.xml` | **Identical** to `templates/projectionist.xml` (CA still uses both paths) |
 | `README.md` | Version badge (`badge/version-X.Y.Z-…`) — keep in lockstep; not asserted by `test_version` |
 
-Repository image tag in the Unraid templates stays `romwil/curatorx:latest` (CA default). Pin examples and the Changes head track the current release.
+Canonical Unraid Repository tag: `romwil/projectionist:latest`. During the compatibility window, `scripts/docker-release.sh` also dual-tags identical digests to `romwil/curatorx:*`. Legacy `templates/curatorx.xml` / `unraid/curatorx.xml` stay as thin CA pointers (not version-lockstep).
 
-Docker image identity does **not** come from those files at build time — `scripts/docker-release.sh` passes `CURATORX_VERSION` into OCI labels and `/app/.build-info`.
+Docker image identity does **not** come from those files at build time — `scripts/docker-release.sh` passes `PROJECTIONIST_VERSION` (and `CURATORX_VERSION` alias) into OCI labels and `/app/.build-info`.
 
 ---
 
@@ -143,7 +143,7 @@ Recent example: [v1.19.4](https://github.com/romwil/curatorx/releases/tag/v1.19.
 
 ## Multi-arch Docker Hub
 
-Image: **`romwil/curatorx`**. Platforms: `linux/amd64,linux/arm64`.
+Canonical image: **`romwil/projectionist`**. Compat dual-tag (same digests): **`romwil/curatorx`**. Platforms: `linux/amd64,linux/arm64`.
 
 ```bash
 ./scripts/docker-release.sh X.Y.Z
@@ -152,7 +152,7 @@ Image: **`romwil/curatorx`**. Platforms: `linux/amd64,linux/arm64`.
 # ./scripts/docker-release.sh X.Y.Z --date-tag        # also :latest-YYYYMMDD
 ```
 
-Tags pushed: `:X.Y.Z`, `:X.Y`, `:latest` (and `:latest-YYYYMMDD` with `--date-tag`).
+Tags pushed on `romwil/projectionist`: `:X.Y.Z`, `:X.Y`, `:latest` (and `:latest-YYYYMMDD` with `--date-tag`). The script then retags identical manifests to `romwil/curatorx:*` for the compatibility window.
 
 The script sets `--provenance=false --sbom=false` so Unraid Dockerman sees Docker v2 **manifest lists** (not OCI attestation indexes). It prints Hub digests — paste into notes or keep for Unraid verify.
 
@@ -165,7 +165,7 @@ Full Unraid / Force Update caveats: [DOCKER.md](DOCKER.md).
 After a successful Docker Hub publish (`scripts/docker-release.sh`), **spin down the maintainer QA container** (`curatorx-qa` on `:8790`) unless an active Interactive UI QA / Playwright role suite / agent probe is in progress. Spin up again when the next test pass needs `:8790`.
 
 - **Do** stop only QA: `ssh automat 'docker stop curatorx-qa'` (keeps image + volume for a fast `docker start`).
-- **Do not** stop, rm, or recreate production `curatorx` / `:8788`.
+- **Do not** stop, rm, or recreate production `projectionist` / legacy `curatorx` / `:8788`.
 - Full config / volumes / spin-up / spin-down runbook (host-local, not in this git tree): `/Volumes/appdata/curatorx-qa-scripts/qa-runs/QA-LIFECYCLE.md` (WIP recreate: same folder’s `QA-REDEPLOY.md`).
 
 ---
@@ -174,18 +174,20 @@ After a successful Docker Hub publish (`scripts/docker-release.sh`), **spin down
 
 ```bash
 # Hub manifest list (expect docker.distribution.manifest.list.v2+json)
-docker buildx imagetools inspect romwil/curatorx:X.Y.Z | head -30
+docker buildx imagetools inspect romwil/projectionist:X.Y.Z | head -30
 
-# Digests for :X.Y.Z and :latest should match this ship
+# Digests for :X.Y.Z and :latest should match this ship (and match dual-tagged curatorx)
+docker buildx imagetools inspect romwil/projectionist:X.Y.Z --format '{{.Manifest.Digest}}'
+docker buildx imagetools inspect romwil/projectionist:latest --format '{{.Manifest.Digest}}'
 docker buildx imagetools inspect romwil/curatorx:X.Y.Z --format '{{.Manifest.Digest}}'
 docker buildx imagetools inspect romwil/curatorx:latest --format '{{.Manifest.Digest}}'
 
 # GitHub
 gh release view "vX.Y.Z"
 
-# Optional Unraid host (config preserved)
+# Optional Unraid host (config preserved; host path often still …/curatorx during compat)
 # cd /mnt/user/appdata/curatorx && ./rollout.sh X.Y.Z
-# docker exec curatorx cat /app/.build-info
+# docker exec projectionist cat /app/.build-info
 ```
 
 Confirm About / What’s New shows the new version after the container runs the new image (`/release-notes.json` includes `X.Y.Z`).
@@ -223,4 +225,4 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 - [ ] `gh release create` with Highlights
 - [ ] `./scripts/docker-release.sh X.Y.Z`
 - [ ] Post-release Hub / `gh` / optional Unraid verify
-- [ ] Spin down `curatorx-qa` (`:8790`) unless a QA/test campaign is still running — never touch prod `curatorx` / `:8788` (host runbook: `curatorx-qa-scripts/qa-runs/QA-LIFECYCLE.md`)
+- [ ] Spin down `curatorx-qa` (`:8790`) unless a QA/test campaign is still running — never touch prod `projectionist` / legacy `curatorx` / `:8788` (host runbook: `curatorx-qa-scripts/qa-runs/QA-LIFECYCLE.md`)

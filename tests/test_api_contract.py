@@ -18,16 +18,16 @@ class ApiContractTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
@@ -95,7 +95,7 @@ class ApiContractTests(unittest.TestCase):
     def test_chat_returns_json_error_on_llm_failure(self) -> None:
         from unittest.mock import AsyncMock, patch
 
-        with patch("curatorx.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(side_effect=RuntimeError("LLM provider unavailable"))
             agent_cls.return_value = agent
@@ -140,7 +140,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertFalse(resp.json()["ok"])
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         row = jobs.get_job_manager().db.get_service_integration("plex")
         self.assertIsNotNone(row)
@@ -177,7 +177,7 @@ class ApiContractTests(unittest.TestCase):
         from unittest.mock import AsyncMock, patch
 
         mock_chat = AsyncMock(return_value={"content": [{"type": "text", "text": "pong"}]})
-        with patch("curatorx.web.setup.get_chat_provider") as get_provider:
+        with patch("projectionist.web.setup.get_chat_provider") as get_provider:
             provider = AsyncMock()
             provider.chat = mock_chat
             get_provider.return_value = provider
@@ -193,7 +193,7 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(resp.status_code, 200)
             self.assertTrue(resp.json()["ok"])
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         row = jobs.get_job_manager().db.get_service_integration("llm")
         self.assertIsNotNone(row)
@@ -204,7 +204,7 @@ class ApiContractTests(unittest.TestCase):
         from unittest.mock import AsyncMock, patch
 
         mock_chat = AsyncMock(return_value={"content": [{"type": "text", "text": "pong"}]})
-        with patch("curatorx.web.setup.get_chat_provider") as get_provider:
+        with patch("projectionist.web.setup.get_chat_provider") as get_provider:
             provider = AsyncMock()
             provider.chat = mock_chat
             get_provider.return_value = provider
@@ -217,7 +217,7 @@ class ApiContractTests(unittest.TestCase):
                 },
             )
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         row = jobs.get_job_manager().db.get_service_integration("llm")
         self.assertEqual(int(row["certified"]), 1)
@@ -243,10 +243,10 @@ class ApiContractTests(unittest.TestCase):
 
     def test_settings_masks_secrets_with_source(self) -> None:
         os.environ["LLM_API_KEY"] = "env-secret"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         client = TestClient(app_mod.app)
@@ -261,10 +261,10 @@ class ApiContractTests(unittest.TestCase):
 
     def test_llm_test_uses_env_key_when_ui_empty(self) -> None:
         os.environ["LLM_API_KEY"] = "env-secret"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         client = TestClient(app_mod.app)
@@ -291,7 +291,7 @@ class ApiContractTests(unittest.TestCase):
         from unittest.mock import AsyncMock, patch
 
         mock_chat = AsyncMock(return_value={"content": [{"type": "text", "text": "pong"}]})
-        with patch("curatorx.web.setup.get_chat_provider") as get_provider:
+        with patch("projectionist.web.setup.get_chat_provider") as get_provider:
             provider = AsyncMock()
             provider.chat = mock_chat
             get_provider.return_value = provider
@@ -326,7 +326,7 @@ class ApiContractTests(unittest.TestCase):
         )
         self.assertEqual(put.status_code, 200)
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         self.assertEqual(db.get_config("llm_provider"), "openrouter")
@@ -381,7 +381,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(threads[0]["id"], session_id)
         self.assertEqual(threads[0]["thread_title"], "Neo-noir hunt")
 
-        with patch("curatorx.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(
                 return_value={
@@ -404,7 +404,7 @@ class ApiContractTests(unittest.TestCase):
             )
             self.assertEqual(chat.status_code, 200)
 
-            import curatorx.web.jobs as jobs
+            import projectionist.web.jobs as jobs
 
             db = jobs.get_job_manager().db
             db.save_chat_message(
@@ -441,7 +441,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(missing.status_code, 404)
 
     def test_library_query_and_aggregate_endpoints(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         db.upsert_library_item(
@@ -580,10 +580,10 @@ class ApiContractTests(unittest.TestCase):
             },
         )
         with patch(
-            "curatorx.web.app.RadarrClient.root_folders",
+            "projectionist.web.app.RadarrClient.root_folders",
             return_value=[{"path": "/media/movies"}],
         ), patch(
-            "curatorx.web.app.RadarrClient.movie_by_tmdb_id",
+            "projectionist.web.app.RadarrClient.movie_by_tmdb_id",
             return_value=None,
         ):
             propose = self.client.post(
@@ -594,7 +594,7 @@ class ApiContractTests(unittest.TestCase):
         token = propose.json()["confirmation_token"]
         self.assertTrue(token)
 
-        with patch("curatorx.agent.tools.RadarrClient.add_movie", return_value={"id": 42}) as add_movie:
+        with patch("projectionist.agent.tools.RadarrClient.add_movie", return_value={"id": 42}) as add_movie:
             confirm = self.client.post(
                 "/api/actions/confirm",
                 json={"token": token, "confirmed": True},
@@ -624,10 +624,10 @@ class ApiContractTests(unittest.TestCase):
             {"id": 9, "title": "The Matrix", "tmdb_id": 603},
         )()
         with patch(
-            "curatorx.web.app.RadarrClient.root_folders",
+            "projectionist.web.app.RadarrClient.root_folders",
             return_value=[{"path": "/media/movies"}],
         ), patch(
-            "curatorx.web.app.RadarrClient.movie_by_tmdb_id",
+            "projectionist.web.app.RadarrClient.movie_by_tmdb_id",
             return_value=existing,
         ):
             propose = self.client.post(
@@ -650,10 +650,10 @@ class ApiContractTests(unittest.TestCase):
             },
         )
         with patch(
-            "curatorx.web.app.RadarrClient.root_folders",
+            "projectionist.web.app.RadarrClient.root_folders",
             return_value=[{"path": "/media/movies"}],
         ), patch(
-            "curatorx.web.app.RadarrClient.movie_by_tmdb_id",
+            "projectionist.web.app.RadarrClient.movie_by_tmdb_id",
             return_value=None,
         ):
             propose = self.client.post(
@@ -662,10 +662,10 @@ class ApiContractTests(unittest.TestCase):
             )
         token = propose.json()["confirmation_token"]
 
-        from curatorx.connectors.arr_errors import ArrTitleExistsError
+        from projectionist.connectors.arr_errors import ArrTitleExistsError
 
         with patch(
-            "curatorx.agent.tools.RadarrClient.add_movie",
+            "projectionist.agent.tools.RadarrClient.add_movie",
             side_effect=ArrTitleExistsError(
                 "Radarr",
                 title="The Matrix",
@@ -691,8 +691,8 @@ class ApiContractTests(unittest.TestCase):
                 "radarr_api_key": "secret",
             },
         )
-        import curatorx.web.jobs as jobs
-        from curatorx.connectors.radarr import RadarrMovie
+        import projectionist.web.jobs as jobs
+        from projectionist.connectors.radarr import RadarrMovie
 
         token = "purge-token"
         db = jobs.get_job_manager().db
@@ -717,10 +717,10 @@ class ApiContractTests(unittest.TestCase):
             has_file=True,
         )
         with patch(
-            "curatorx.agent.tools.RadarrClient.movie_by_tmdb_id",
+            "projectionist.agent.tools.RadarrClient.movie_by_tmdb_id",
             return_value=movie,
         ), patch(
-            "curatorx.agent.tools.RadarrClient.delete_movie",
+            "projectionist.agent.tools.RadarrClient.delete_movie",
             side_effect=RuntimeError(
                 'HTTP 404 from http://radarr/api/v3/movie/99: '
                 '{"message":"Movie with ID 99 does not exist"}'
@@ -746,7 +746,7 @@ class ApiContractTests(unittest.TestCase):
             },
         )
         with patch(
-            "curatorx.web.app.RadarrClient.root_folders",
+            "projectionist.web.app.RadarrClient.root_folders",
             return_value=[{"path": "/movies"}, {"path": "/media/movies"}],
         ):
             propose = self.client.post(
@@ -765,10 +765,10 @@ class ApiContractTests(unittest.TestCase):
                 "radarr_root_folder": "/mnt/user/data/media/movies",
             },
         )
-        with patch("curatorx.web.setup.RadarrClient.system_status", return_value={"version": "5.0"}), patch(
-            "curatorx.web.setup.RadarrClient.movies", return_value=[]
+        with patch("projectionist.web.setup.RadarrClient.system_status", return_value={"version": "5.0"}), patch(
+            "projectionist.web.setup.RadarrClient.movies", return_value=[]
         ), patch(
-            "curatorx.web.setup.RadarrClient.root_folders",
+            "projectionist.web.setup.RadarrClient.root_folders",
             return_value=[{"path": "/movies"}],
         ):
             resp = self.client.post("/api/setup/test/radarr", json={})
@@ -801,7 +801,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(body["user"]["id"], "bootstrap-owner")
 
     def test_bootstrap_owner_seeded(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         row = db.get_user("bootstrap-owner")
@@ -809,7 +809,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(str(row["role"]), "owner")
 
     def test_message_feedback_helpful_records_preference(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         session_id = "feedback-session"
@@ -843,7 +843,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(items[0]["feedback"], "helpful")
 
     def test_message_feedback_rejects_user_messages(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         session_id = "feedback-user-session"
@@ -880,10 +880,10 @@ class ApiContractTests(unittest.TestCase):
             },
         )
         with patch(
-            "curatorx.web.app.RadarrClient.root_folders",
+            "projectionist.web.app.RadarrClient.root_folders",
             return_value=[{"path": "/media/movies"}],
         ), patch(
-            "curatorx.web.app.RadarrClient.movie_by_tmdb_id",
+            "projectionist.web.app.RadarrClient.movie_by_tmdb_id",
             return_value=None,
         ):
             propose = self.client.post(
@@ -940,7 +940,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/watchlist").json()["count"], 0)
 
     def test_engagement_streak(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         for index in range(3):
@@ -952,7 +952,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertTrue(body["streak_visible"])
 
     def test_message_feedback_clear_via_delete(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         session_id = "feedback-clear-session"
@@ -983,7 +983,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(listed.json()["items"], [])
 
     def test_message_feedback_clear_via_post_null(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         session_id = "feedback-null-session"
@@ -1013,7 +1013,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(listed.json()["items"], [])
 
     def test_library_health_endpoint(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         db.upsert_library_item(
@@ -1042,8 +1042,8 @@ class ApiContractTests(unittest.TestCase):
         self.assertGreaterEqual(body["total"], 2)
 
     def test_library_purge_candidates_endpoint(self) -> None:
-        import curatorx.web.jobs as jobs
-        from curatorx.scheduler.tasks.purge_candidates import write_purge_candidates_cache
+        import projectionist.web.jobs as jobs
+        from projectionist.scheduler.tasks.purge_candidates import write_purge_candidates_cache
 
         db = jobs.get_job_manager().db
         db.upsert_library_item(
@@ -1076,7 +1076,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertFalse(body.get("stale"))
 
     def test_training_corpus_export(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         db.add_preference("explicit", "loves neo-noir")

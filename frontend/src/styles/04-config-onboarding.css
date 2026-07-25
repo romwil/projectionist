@@ -1,5 +1,5 @@
-/* CuratorX brand wordmark + activity X */
-.curatorx-brand {
+/* Projectionist brand wordmark + lamp / aperture pulse */
+.projectionist-brand {
   display: grid;
   gap: 1px;
   min-width: 0;
@@ -8,38 +8,69 @@
   border-radius: var(--radius-sm);
 }
 
-.curatorx-brand:focus-visible {
+.projectionist-brand:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
-.curatorx-brand-x {
+.projectionist-brand-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28em;
+  min-width: 0;
+}
+
+.projectionist-brand-lamp {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-size: 0.85em;
+  line-height: 1;
   color: var(--text);
+  vertical-align: middle;
 }
 
-.curatorx-brand-x.running,
-.curatorx-brand-x.thinking {
+.projectionist-brand-lamp-svg {
+  display: block;
+}
+
+.projectionist-brand-lamp.running,
+.projectionist-brand-lamp.thinking {
   color: var(--accent);
-  animation: curatorx-x-pulse 1.6s ease-in-out infinite;
+  animation: projectionist-lamp-pulse 1.6s ease-in-out infinite;
 }
 
-.curatorx-brand-x.error {
+.projectionist-brand-lamp.error {
   color: var(--danger);
 }
 
-.curatorx-brand-x.idle {
+.projectionist-brand-lamp.idle {
   color: var(--text);
 }
 
-@keyframes curatorx-x-pulse {
+.projectionist-brand-lamp.idle .projectionist-brand-lamp-core {
+  opacity: 0.55;
+}
+
+.projectionist-brand-lamp.thinking .projectionist-brand-lamp-core,
+.projectionist-brand-lamp.running .projectionist-brand-lamp-core {
+  opacity: 1;
+}
+
+.projectionist-brand-lamp.error .projectionist-brand-lamp-core {
+  opacity: 1;
+}
+
+@keyframes projectionist-lamp-pulse {
   0%,
   100% {
     opacity: 1;
-    text-shadow: 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent);
+    filter: drop-shadow(0 0 0 color-mix(in srgb, var(--accent) 45%, transparent));
   }
   50% {
     opacity: 0.75;
-    text-shadow: 0 0 8px transparent;
+    filter: drop-shadow(0 0 6px transparent);
   }
 }
 

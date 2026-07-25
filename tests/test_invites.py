@@ -12,20 +12,20 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import FeatureFlags, Settings, invite_required_for_new_users
-from curatorx.invites import (
+from projectionist.config_store import FeatureFlags, Settings, invite_required_for_new_users
+from projectionist.invites import (
     create_household_invite,
     lookup_pending_invite,
     redeem_local_invite,
 )
-from curatorx.library.db import Database
-from curatorx.web.auth import (
+from projectionist.library.db import Database
+from projectionist.web.auth import (
     authenticate_plex_user,
     clear_pin_bindings,
     clear_oidc_states,
 )
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 
 class InviteRequiredHelperTests(unittest.TestCase):
@@ -49,7 +49,7 @@ class InviteRequiredHelperTests(unittest.TestCase):
 class InviteDbTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.db.create_local_user(
             user_id="owner-1",
             display_name="Owner",
@@ -119,10 +119,10 @@ class InviteApiTests(unittest.TestCase):
         clear_pin_bindings()
         clear_oidc_states()
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
@@ -150,7 +150,7 @@ class InviteApiTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -260,7 +260,7 @@ class InviteApiTests(unittest.TestCase):
         self._register_owner()
         self.client.cookies.clear()
         with mock.patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": "plex-999", "title": "Newbie", "email": "n@ex.com"},
         ):
             resp = self.client.post("/api/auth/plex", json={"auth_token": "fake-token"})
@@ -277,7 +277,7 @@ class InviteApiTests(unittest.TestCase):
         token = created.json()["token"]
         self.client.cookies.clear()
         with mock.patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": "plex-888", "title": "Invited", "email": "i@ex.com"},
         ):
             resp = self.client.post(
@@ -288,7 +288,7 @@ class InviteApiTests(unittest.TestCase):
         self.assertEqual(resp.json()["user"]["role"], "member")
         # Replay
         with mock.patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": "plex-777", "title": "Other", "email": "o@ex.com"},
         ):
             replay = self.client.post(
@@ -305,7 +305,7 @@ class InviteApiTests(unittest.TestCase):
         self._register_owner()
         self.client.cookies.clear()
         with mock.patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": "plex-open-1", "title": "OpenUser", "email": "o@ex.com"},
         ):
             resp = self.client.post("/api/auth/plex", json={"auth_token": "fake-token"})
@@ -316,7 +316,7 @@ class InviteApiTests(unittest.TestCase):
 class AuthenticatePlexUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
@@ -333,17 +333,17 @@ class AuthenticatePlexUnitTests(unittest.TestCase):
                 for u in self.db.list_users()
             )
         )
-        with mock.patch("curatorx.web.auth._settings", return_value=settings), mock.patch(
-            "curatorx.web.auth.fetch_plex_account",
+        with mock.patch("projectionist.web.auth._settings", return_value=settings), mock.patch(
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": "plex-owner", "title": "First", "email": None},
-        ), mock.patch("curatorx.web.auth._bridge_seerr_on_login", return_value=(None, None)), mock.patch(
-            "curatorx.web.avatars.find_local_avatar_file",
+        ), mock.patch("projectionist.web.auth._bridge_seerr_on_login", return_value=(None, None)), mock.patch(
+            "projectionist.web.avatars.find_local_avatar_file",
             return_value=None,
         ), mock.patch(
-            "curatorx.web.avatars.cache_remote_avatar",
+            "projectionist.web.avatars.cache_remote_avatar",
             return_value=None,
         ), mock.patch(
-            "curatorx.web.avatars.resolve_avatar_url",
+            "projectionist.web.avatars.resolve_avatar_url",
             return_value=None,
         ):
             user = authenticate_plex_user("tok", self.db)

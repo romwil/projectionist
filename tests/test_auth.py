@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.auth import clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.web.auth import clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 
 class AuthTests(unittest.TestCase):
@@ -27,16 +27,16 @@ class AuthTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -95,7 +95,7 @@ class AuthTests(unittest.TestCase):
             "email": "owner@example.com",
             "thumb": "https://plex.test/avatar.jpg",
         }
-        with patch("curatorx.web.auth.fetch_plex_account", return_value=profile):
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
             resp = self.client.post("/api/auth/plex", json={"auth_token": "plex-token-1"})
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
@@ -119,8 +119,8 @@ class AuthTests(unittest.TestCase):
             "expires_at": "2099-01-01T00:00:00Z",
         }
         profile = {"id": 4242, "title": "PIN User", "email": "pin@example.com"}
-        with patch("curatorx.web.auth.create_plex_pin", return_value=pin_create), patch(
-            "curatorx.web.auth.get_or_create_client_id",
+        with patch("projectionist.web.auth.create_plex_pin", return_value=pin_create), patch(
+            "projectionist.web.auth.get_or_create_client_id",
             return_value="client-xyz",
         ):
             start = self.client.post("/api/auth/plex/pin")
@@ -133,12 +133,12 @@ class AuthTests(unittest.TestCase):
 
         # Poll without the nonce cookie must fail.
         bare = TestClient(self.client.app)
-        with patch("curatorx.web.auth.fetch_plex_pin", return_value={"authToken": None}):
+        with patch("projectionist.web.auth.fetch_plex_pin", return_value={"authToken": None}):
             denied = bare.get("/api/auth/plex/pin/77")
         self.assertEqual(denied.status_code, 401)
 
-        with patch("curatorx.web.auth.fetch_plex_pin", return_value={"authToken": None}), patch(
-            "curatorx.web.auth.get_or_create_client_id",
+        with patch("projectionist.web.auth.fetch_plex_pin", return_value={"authToken": None}), patch(
+            "projectionist.web.auth.get_or_create_client_id",
             return_value="client-xyz",
         ):
             pending = self.client.get("/api/auth/plex/pin/77")
@@ -147,12 +147,12 @@ class AuthTests(unittest.TestCase):
         self.assertFalse(pending.json()["authenticated"])
 
         with patch(
-            "curatorx.web.auth.fetch_plex_pin",
+            "projectionist.web.auth.fetch_plex_pin",
             return_value={"authToken": "pin-auth-token"},
         ), patch(
-            "curatorx.web.auth.get_or_create_client_id",
+            "projectionist.web.auth.get_or_create_client_id",
             return_value="client-xyz",
-        ), patch("curatorx.web.auth.fetch_plex_account", return_value=profile):
+        ), patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
             done = self.client.get("/api/auth/plex/pin/77")
         self.assertEqual(done.status_code, 200)
         body = done.json()
@@ -173,11 +173,11 @@ class AuthTests(unittest.TestCase):
         self._enable_multi_user()
         owner_profile = {"id": 1, "title": "Owner", "email": "owner@example.com"}
         member_profile = {"id": 2, "title": "Member", "email": "member@example.com"}
-        with patch("curatorx.web.auth.fetch_plex_account", return_value=owner_profile):
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=owner_profile):
             self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
         self.client.post("/api/auth/logout")
 
-        with patch("curatorx.web.auth.fetch_plex_account", return_value=member_profile):
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=member_profile):
             resp = self.client.post("/api/auth/plex", json={"auth_token": "member-token"})
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["user"]["role"], "member")
@@ -186,8 +186,8 @@ class AuthTests(unittest.TestCase):
         self._enable_multi_user(seerr=True)
         profile = {"id": 99, "title": "Seerr User", "email": "seerr@example.com"}
         seerr_payload = {"id": 7, "permissions": 2}
-        with patch("curatorx.web.auth.fetch_plex_account", return_value=profile), patch(
-            "curatorx.web.auth.SeerrClient.link_plex_user",
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=profile), patch(
+            "projectionist.web.auth.SeerrClient.link_plex_user",
             return_value=seerr_payload,
         ):
             resp = self.client.post("/api/auth/plex", json={"auth_token": "plex-token"})
@@ -195,7 +195,7 @@ class AuthTests(unittest.TestCase):
         user = resp.json()["user"]
         self.assertEqual(user["seerr_user_id"], 7)
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         row = jobs.get_job_manager().db.get_user(user["id"])
         self.assertIsNotNone(row)
@@ -206,7 +206,7 @@ class AuthTests(unittest.TestCase):
     def test_logout_clears_session(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 5, "title": "Logout User"},
         ):
             login = self.client.post("/api/auth/plex", json={"auth_token": "token"})
@@ -222,7 +222,7 @@ class AuthTests(unittest.TestCase):
     def test_owner_can_list_and_update_users(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
             self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
@@ -233,7 +233,7 @@ class AuthTests(unittest.TestCase):
         self.assertTrue(any(item["role"] == "owner" for item in items))
 
         member_id = "plex-20"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs.get_job_manager().db.upsert_plex_user(
             user_id=member_id,
@@ -256,12 +256,12 @@ class AuthTests(unittest.TestCase):
     def test_owner_can_disable_and_remove_users(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 40, "title": "Owner"},
         ):
             self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         member_id = "plex-41"
         jobs.get_job_manager().db.upsert_plex_user(
@@ -287,7 +287,7 @@ class AuthTests(unittest.TestCase):
     def test_cannot_disable_or_remove_self_or_last_owner(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 50, "title": "Solo Owner"},
         ):
             login = self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
@@ -299,7 +299,7 @@ class AuthTests(unittest.TestCase):
         self_delete = self.client.delete(f"/api/users/{owner_id}")
         self.assertEqual(self_delete.status_code, 400)
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         other_owner = "plex-51"
         jobs.get_job_manager().db.upsert_plex_user(
@@ -317,12 +317,12 @@ class AuthTests(unittest.TestCase):
     def test_disabled_user_rejected_for_login_and_session(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 60, "title": "Owner"},
         ):
             self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         member_id = "plex-61"
         jobs.get_job_manager().db.upsert_plex_user(
@@ -335,7 +335,7 @@ class AuthTests(unittest.TestCase):
         jobs.get_job_manager().db.set_user_disabled(member_id, True)
 
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 61, "title": "Member"},
         ):
             denied = self.client.post("/api/auth/plex", json={"auth_token": "member-token"})
@@ -343,8 +343,8 @@ class AuthTests(unittest.TestCase):
         self.assertIn("disabled", denied.json()["detail"].lower())
 
         # Session cookie for a disabled account must not authenticate.
-        from curatorx.web.session_tokens import create_session_token
-        from curatorx.web.auth import SESSION_COOKIE_NAME
+        from projectionist.web.session_tokens import create_session_token
+        from projectionist.web.auth import SESSION_COOKIE_NAME
 
         self.client.cookies.set(SESSION_COOKIE_NAME, create_session_token(member_id))
         me = self.client.get("/api/auth/me")
@@ -353,26 +353,26 @@ class AuthTests(unittest.TestCase):
     def test_member_requests_filtered_by_seerr_user(self) -> None:
         self._enable_multi_user(seerr=True)
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 30, "title": "Owner"},
         ), patch(
-            "curatorx.web.auth.SeerrClient.link_plex_user",
+            "projectionist.web.auth.SeerrClient.link_plex_user",
             return_value={"id": 99, "permissions": 0},
         ):
             self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
         self.client.post("/api/auth/logout")
 
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 31, "title": "Member"},
         ), patch(
-            "curatorx.web.auth.SeerrClient.link_plex_user",
+            "projectionist.web.auth.SeerrClient.link_plex_user",
             return_value={"id": 55, "permissions": 0},
         ):
             self.client.post("/api/auth/plex", json={"auth_token": "member-token"})
 
         payload = {"results": [], "pageInfo": {"results": 0, "pages": 0, "page": 1, "pageSize": 20}}
-        with patch("curatorx.web.app.SeerrClient.list_requests", return_value=payload) as mock_list:
+        with patch("projectionist.web.app.SeerrClient.list_requests", return_value=payload) as mock_list:
             resp = self.client.get("/api/requests")
         self.assertEqual(resp.status_code, 200)
         mock_list.assert_called_once_with(take=20, skip=0, filter=None, requested_by=55)

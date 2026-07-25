@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
-# Explicit Hub re-resolve for CuratorX on Unraid / Dockerman hosts.
+# Explicit Hub re-resolve for Projectionist on Unraid / Dockerman hosts.
 #
 # Why this exists: Docker → Force Update calls Engine pull, then recreates the
 # container. When Engine reports the local tag as already current, the UI shows
 # TOTAL DATA PULLED: 0 B and recreates from the stale local
-# romwil/curatorx:latest mapping — even when Hub :latest has moved (buildx on
-# another machine shows the new digest). This script forces a CLI pull and
-# verifies RepoDigests moved; optional --rmi-retry deletes the local tag first.
+# romwil/projectionist:latest (or dual-tagged romwil/curatorx:latest) mapping —
+# even when Hub :latest has moved (buildx on another machine shows the new
+# digest). This script forces a CLI pull and verifies RepoDigests moved;
+# optional --rmi-retry deletes the local tag first.
 #
 # Does NOT wipe /config. Prefer ./rollout.sh in appdata for pull+recreate in one
 # step; use this when you want to keep Dockerman's container definition and only
 # refresh the image before Force Update / Apply in the UI.
+#
+# Host appdata path usually stays /mnt/user/appdata/curatorx during the
+# compatibility window even though the image/container name is Projectionist.
 #
 # Usage (on Unraid host):
 #   ./scripts/unraid-force-pull.sh              # pull :latest, print digests
@@ -36,8 +40,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-IMAGE="romwil/curatorx:${IMAGE_TAG}"
-CONTAINER_NAME="${CONTAINER_NAME:-curatorx}"
+# Canonical Hub name; dual-tagged romwil/curatorx:* shares digests during compat.
+# Override repo if needed: IMAGE_REPO=romwil/curatorx ./scripts/unraid-force-pull.sh
+IMAGE_REPO="${IMAGE_REPO:-romwil/projectionist}"
+IMAGE="${IMAGE_REPO}:${IMAGE_TAG}"
+# Default container name for new installs; override for legacy Dockerman names:
+#   CONTAINER_NAME=curatorx ./scripts/unraid-force-pull.sh
+CONTAINER_NAME="${CONTAINER_NAME:-projectionist}"
 
 log() { printf '%s\n' "$*"; }
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
@@ -57,7 +66,7 @@ image_id_of() {
 BEFORE_DIGEST="$(digest_of "$IMAGE")"
 BEFORE_ID="$(image_id_of "$IMAGE")"
 
-log "=== CuratorX force-pull ==="
+log "=== Projectionist force-pull ==="
 log "Image: $IMAGE"
 log "Before RepoDigest: ${BEFORE_DIGEST:-<none>}"
 log "Before Image ID:   ${BEFORE_ID:-<none>}"
@@ -98,13 +107,13 @@ if [[ -n "$BEFORE_DIGEST" && -n "$AFTER_DIGEST" && "$BEFORE_DIGEST" == "$AFTER_D
     log "If Hub should be newer, re-run with --rmi-retry, or:"
     log "  docker stop $CONTAINER_NAME && docker rm $CONTAINER_NAME"
     log "  docker rmi $IMAGE && docker pull $IMAGE"
-    log "Then start from Docker → User Templates → curatorx (or appdata ./rollout.sh)."
+    log "Then start from Docker → User Templates → projectionist (or appdata ./rollout.sh)."
   fi
 else
   log "Digest/ID moved (or first pull) — local tag now tracks Hub."
 fi
 
-if docker exec "$CONTAINER_NAME" cat /app/.build-info >/dev/null 2>&1; then
+if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1 && docker exec "$CONTAINER_NAME" cat /app/.build-info >/dev/null 2>&1; then
   log "Running container build-info (may still be old until recreate):"
   docker exec "$CONTAINER_NAME" cat /app/.build-info || true
 fi
@@ -115,11 +124,12 @@ if [[ "$RECREATE" -eq 1 ]]; then
     docker stop "$CONTAINER_NAME" >/dev/null || true
     docker rm "$CONTAINER_NAME" >/dev/null || true
   fi
-  log "Container removed. Start again from Docker → User Templates → curatorx"
+  log "Container removed. Start again from Docker → User Templates → projectionist"
   log "(or: cd /mnt/user/appdata/curatorx && ./rollout.sh ${IMAGE_TAG})"
+  log "  (host appdata path often still …/curatorx during compat; new installs may use …/projectionist)"
 else
   log ""
-  log "Next: Docker UI → curatorx → Force Update / Apply"
+  log "Next: Docker UI → projectionist (or legacy curatorx) → Force Update / Apply"
   log "  (recreates from the refreshed local tag; keeps Dockerman template)"
   log "Or: cd /mnt/user/appdata/curatorx && ./rollout.sh ${IMAGE_TAG}"
 fi

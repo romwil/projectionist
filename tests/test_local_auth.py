@@ -15,9 +15,9 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.auth import _hash_password, _verify_password, clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
+from projectionist.web.auth import _hash_password, _verify_password, clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
 
 
 class LocalAuthTests(unittest.TestCase):
@@ -32,16 +32,16 @@ class LocalAuthTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()

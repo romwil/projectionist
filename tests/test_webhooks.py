@@ -12,10 +12,10 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import Settings, save_settings
-from curatorx.library.db import Database
-from curatorx.reviews.store import list_pending_prompts
-from curatorx.web.webhooks import (
+from projectionist.config_store import Settings, save_settings
+from projectionist.library.db import Database
+from projectionist.reviews.store import list_pending_prompts
+from projectionist.web.webhooks import (
     completion_from_plex_metadata,
     handle_plex_webhook,
     media_type_from_plex_metadata,
@@ -135,10 +135,10 @@ class PlexWebhookApiTests(unittest.TestCase):
         os.environ["LLM_PROVIDER"] = "ollama"
         self._secret = "test-webhook-secret"
         save_settings(Path(self._tmpdir.name), Settings(webhook_secret=self._secret))
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
@@ -153,7 +153,7 @@ class PlexWebhookApiTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
@@ -183,10 +183,10 @@ class PlexWebhookApiTests(unittest.TestCase):
 
     def test_webhook_rejects_empty_secret_config(self) -> None:
         save_settings(Path(os.environ["DATA_DIR"]), Settings(webhook_secret=""))
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         client = TestClient(app_mod.app)
@@ -198,10 +198,10 @@ class PlexWebhookApiTests(unittest.TestCase):
             Path(os.environ["DATA_DIR"]),
             Settings(webhook_secret="super-secret"),
         )
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         client = TestClient(app_mod.app)
@@ -213,10 +213,10 @@ class PlexWebhookApiTests(unittest.TestCase):
             Path(os.environ["DATA_DIR"]),
             Settings(webhook_secret="super-secret"),
         )
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         client = TestClient(app_mod.app)

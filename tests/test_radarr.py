@@ -6,9 +6,9 @@ import json
 import unittest
 from unittest.mock import patch
 
-from curatorx.config_store import pick_arr_root_folder
-from curatorx.connectors.arr_errors import ArrTitleExistsError
-from curatorx.connectors.radarr import RadarrClient, RadarrMovie
+from projectionist.config_store import pick_arr_root_folder
+from projectionist.connectors.arr_errors import ArrTitleExistsError
+from projectionist.connectors.radarr import RadarrClient, RadarrMovie
 
 
 class PickArrRootFolderTests(unittest.TestCase):
@@ -57,7 +57,7 @@ class RadarrClientTests(unittest.TestCase):
 
         with patch.object(client, "lookup_tmdb", return_value=lookup), patch.object(
             client, "root_folders", return_value=[{"path": "/media/movies"}]
-        ), patch("curatorx.connectors.radarr.request_json", side_effect=fake_request_json):
+        ), patch("projectionist.connectors.radarr.request_json", side_effect=fake_request_json):
             result = client.add_movie(
                 123,
                 root_folder="/media/movies",
@@ -88,7 +88,7 @@ class RadarrClientTests(unittest.TestCase):
 
         with patch.object(client, "lookup_tmdb", return_value=lookup), patch.object(
             client, "root_folders", return_value=[{"path": "/movies"}]
-        ), patch("curatorx.connectors.radarr.request_json", side_effect=fake_request_json):
+        ), patch("projectionist.connectors.radarr.request_json", side_effect=fake_request_json):
             client.add_movie(
                 123,
                 root_folder="/mnt/user/data/media/movies",
@@ -134,7 +134,7 @@ class RadarrClientTests(unittest.TestCase):
 
         with patch.object(client, "lookup_tmdb", return_value=lookup), patch.object(
             client, "root_folders", return_value=[{"path": "/media/movies"}]
-        ), patch("curatorx.connectors.radarr.request_json", side_effect=fake_request_json):
+        ), patch("projectionist.connectors.radarr.request_json", side_effect=fake_request_json):
             client.add_movie(123, root_folder="/media/movies", quality_profile_id=1)
 
         self.assertEqual(captured["body"]["path"], "/media/movies/Test Movie (2020)")
@@ -146,7 +146,7 @@ class RadarrClientTests(unittest.TestCase):
             {"id": 10, "title": "Other", "tmdbId": 1, "monitored": True},
         ]
 
-        with patch("curatorx.connectors.radarr.request_json", return_value=payload):
+        with patch("projectionist.connectors.radarr.request_json", return_value=payload):
             found = client.movie_by_tmdb_id(35669)
 
         self.assertIsNotNone(found)
@@ -204,7 +204,7 @@ class RadarrClientTests(unittest.TestCase):
         with patch.object(client, "movie_by_tmdb_id", side_effect=[None, existing]), patch.object(
             client, "lookup_tmdb", return_value=lookup
         ), patch.object(client, "root_folders", return_value=[{"path": "/media/movies"}]), patch(
-            "curatorx.connectors.radarr.request_json", side_effect=fake_request_json
+            "projectionist.connectors.radarr.request_json", side_effect=fake_request_json
         ):
             with self.assertRaises(ArrTitleExistsError) as ctx:
                 client.add_movie(35669, root_folder="/media/movies", quality_profile_id=1)

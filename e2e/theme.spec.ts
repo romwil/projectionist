@@ -9,7 +9,7 @@ test.describe("Theme chrome", () => {
 
   test("theme toggle sets data-theme on document", async ({ page }) => {
     await page.addInitScript(() => {
-      localStorage.setItem("curatorx.ui_theme", "lights_up");
+      localStorage.setItem("projectionist.ui_theme", "lights_up");
     });
     await page.route("**/api/auth/me", async (route) => {
       if (route.request().method() === "PATCH") {

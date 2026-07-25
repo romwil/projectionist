@@ -124,7 +124,7 @@ export default function AdminLayout() {
           />
           <aside className="admin-rail" id="admin-nav" data-testid="admin-rail">
             <div className="admin-rail-brand">
-              <p className="eyebrow">CuratorX</p>
+              <p className="eyebrow">Projectionist</p>
               <h1 className="admin-rail-title">Admin</h1>
             </div>
             <nav className="admin-rail-nav" aria-label="Admin sections">

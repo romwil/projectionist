@@ -7,10 +7,10 @@ import unittest
 from pathlib import Path
 from typing import Any, Callable, Dict
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
-from curatorx.scheduler.tasks import data_retention
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.tasks import data_retention
 
 
 def _make_db(tmp: str) -> Database:

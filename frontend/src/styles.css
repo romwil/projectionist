@@ -1,4 +1,4 @@
-/* CuratorX styles — split into partials (see ./styles/). Import order
+/* Projectionist styles — split into partials (see ./styles/). Import order
    is the cascade order; Vite inlines these so the built CSS is identical
    to the former single styles.css. Edit the partials, not this file. */
 

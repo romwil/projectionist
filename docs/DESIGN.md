@@ -1,6 +1,6 @@
-# CuratorX — Design Document
+# Projectionist — Design Document
 
-Product principles, single-workspace UX, lens isolation, agent behavior, and API design for the current CuratorX release. Items marked **Future** are planned but not fully shipped.
+Product principles, single-workspace UX, lens isolation, agent behavior, and API design for the current Projectionist release. Items marked **Future** are planned but not fully shipped.
 
 ---
 
@@ -27,7 +27,7 @@ Product principles, single-workspace UX, lens isolation, agent behavior, and API
 
 Library browse endpoints accept an explicit sort direction while retaining each field's established default when no direction is provided. CSV exports reuse those filters but are capped and privacy-sanitized before rows are serialized, so a household member cannot turn a convenient download into a path or Plex-token disclosure.
 
-Reporting a bad title creates an issue-queue record. Members can report, but only owners can resolve or execute a repair. Safe repair playbooks identify an already-managed *arr title, optionally remove a known bad Radarr movie file, and enqueue the documented search command. When the title is not managed or its identity is incomplete, CuratorX records a skip reason rather than guessing an endpoint or deleting files.
+Reporting a bad title creates an issue-queue record. Members can report, but only owners can resolve or execute a repair. Safe repair playbooks identify an already-managed *arr title, optionally remove a known bad Radarr movie file, and enqueue the documented search command. When the title is not managed or its identity is incomplete, Projectionist records a skip reason rather than guessing an endpoint or deleting files.
 
 ### Shared browse interaction standard
 
@@ -68,12 +68,12 @@ Quiet oval controls must remain discoverable: selectors use a `selectable-oval` 
 
 ## Single workspace layout
 
-CuratorX serves one React application (`frontend/src/App.jsx`) with a shared **AppShell** chrome on authenticated browse/detail routes:
+Projectionist serves one React application (`frontend/src/App.jsx`) with a shared **AppShell** chrome on authenticated browse/detail routes:
 
 | Region | Contents |
 |--------|----------|
 | **Hamburger AppNav** | Navigation drawer (☰) on chat and AppShell pages. **Navigate** repeats the top bar's role-gated peers as labelled links (Search, Chat, Explore, Inbox, Admin for owners, My Journey, Settings) from the shared `primaryNav.js` model; **More** adds Plot Lab, Tags, **Watchlist** (opens the `/watchlist` explore page), Library, Help, Privacy, About. On `/admin/*` an owner also gets an **Admin** block of section links between the two. |
-| **Top bar** | CuratorX brand, curator name, agent pulse; **Plex server name** + movie/show counts; icon chrome for **Explore**, theme cycle, watchlist pins, Admin/Settings; optional streak chip; optional **UserMenu** when multi-user is on. No About link in the top bar. |
+| **Top bar** | Projectionist brand, curator name, agent pulse; **Plex server name** + movie/show counts; icon chrome for **Explore**, theme cycle, watchlist pins, Admin/Settings; optional streak chip; optional **UserMenu** when multi-user is on. No About link in the top bar. |
 | **Sidebar** | Conversation list + New thread + **Watchlist (N)** button (→ `/watchlist`) + **status dock** (bottom of rail) |
 | **Chat column** | Recommendations inbox (multi-user), welcome / On This Day / Library Glance / Quick Pick, thread with **AgentAvatar** + ambient context tag (⧉), title cards, composer with **PersonaSelector** + Surprise Me |
 | **Explore** | Hub at `/explore` with children (Tags, Plot Lab, section pages) — cinema browse, not a second “app mode” |

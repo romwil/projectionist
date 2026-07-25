@@ -1,4 +1,4 @@
-/** Owner bulk-delete helpers for CuratorX library index records (not Plex files). */
+/** Owner bulk-delete helpers for Projectionist library index records (not Plex files). */
 
 import { normalizeUserRole } from "./addActions.js";
 
@@ -51,7 +51,7 @@ export function formatLibraryDeleteSuccessMessage({ deleted = 0, title = "" } = 
   const count = Number(deleted) || 0;
   const label = String(title || "").trim() || "title";
   if (count > 0) {
-    return `Removed "${label}" from the CuratorX library index.`;
+    return `Removed "${label}" from the Projectionist library index.`;
   }
   return `No matching library record for "${label}".`;
 }

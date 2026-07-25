@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import Settings
-from curatorx.library.db import BOOTSTRAP_OWNER_ID, Database
-from curatorx.reviews.store import (
+from projectionist.config_store import Settings
+from projectionist.library.db import BOOTSTRAP_OWNER_ID, Database
+from projectionist.reviews.store import (
     dismiss_prompt,
     get_reviews,
     list_pending_prompts,
@@ -251,7 +251,7 @@ class ReviewStoreTests(unittest.TestCase):
                 (now,),
             )
         settings = Settings(tautulli_url="http://tautulli.local", tautulli_api_key="test-key")
-        with patch("curatorx.connectors.tautulli.TautulliClient") as mock_client_cls:
+        with patch("projectionist.connectors.tautulli.TautulliClient") as mock_client_cls:
             mock_client_cls.return_value.get_metadata.return_value = {
                 "view_offset": 5_000_000,
                 "duration": 5_500_000,
@@ -297,10 +297,10 @@ class ReviewApiTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
@@ -308,7 +308,7 @@ class ReviewApiTests(unittest.TestCase):
         self.user_id = BOOTSTRAP_OWNER_ID
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)

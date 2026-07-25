@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from curatorx.library.db import (
+from projectionist.library.db import (
     BOOTSTRAP_OWNER_ID,
     CURATOR_NAME_CONFIG_KEY,
     DEFAULT_LENS_ID,
@@ -13,7 +13,7 @@ from curatorx.library.db import (
     Database,
     run_with_db_lock_retry,
 )
-from curatorx.library.embeddings import semantic_search
+from projectionist.library.embeddings import semantic_search
 import sqlite3
 
 
@@ -105,7 +105,7 @@ class DatabaseTests(unittest.TestCase):
                 raise sqlite3.OperationalError("database is locked")
             return "ok"
 
-        with patch("curatorx.library.db.time.sleep"):
+        with patch("projectionist.library.db.time.sleep"):
             self.assertEqual(run_with_db_lock_retry(flaky, label="test"), "ok")
         self.assertEqual(calls["n"], 3)
 

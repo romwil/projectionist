@@ -1,6 +1,6 @@
 import { Link, useLocation } from "react-router-dom";
 import AppNav, { AppNavToggle } from "./AppNav";
-import CuratorXBrand from "./CuratorXBrand";
+import ProjectionistBrand from "./ProjectionistBrand";
 import InboxBadgeButton from "./InboxBadgeButton";
 import UserMenu from "./UserMenu";
 import { ROUTES } from "../lib/backNav.js";
@@ -88,7 +88,7 @@ export default function PrimaryTopbar({
             />
           ) : null}
           {leadingExtra}
-          <CuratorXBrand
+          <ProjectionistBrand
             pulse={brandPulse}
             chatError={chatError}
             homeTo={ROUTES.chat}

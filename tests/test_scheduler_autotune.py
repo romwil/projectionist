@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import Database
-from curatorx.scheduler.autotune import (
+from projectionist.library.db import Database
+from projectionist.scheduler.autotune import (
     BATCH_BOUNDS,
     evaluate_autotune,
     resolve_batch_size,

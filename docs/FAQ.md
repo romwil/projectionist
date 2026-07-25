@@ -1,8 +1,8 @@
-# CuratorX FAQ
+# Projectionist FAQ
 
 Common questions, answered with the concrete command or example you'd actually use. This is the canonical FAQ; [wiki/FAQ.md](wiki/FAQ.md) points here.
 
-## What is CuratorX?
+## What is Projectionist?
 
 A chat-first + Explore curator for self-hosted **Plex** libraries — and a real-world example of **agentic access** to local structured + unstructured data via a privacy-first MCP interface. It indexes what you own into SQLite (credits, dates, plot layers, neighbors), lets a BYO LLM query that index with surgical tool calls, recommends with explainable reasons, and only writes to Radarr/Sonarr after you confirm. Your Plex token and collection details never leave your hardware.
 
@@ -12,25 +12,25 @@ A chat-first + Explore curator for self-hosted **Plex** libraries — and a real
 
 | Tag | When |
 |-----|------|
-| `romwil/curatorx:latest` | Everyday Unraid / Compose (CA template default) |
-| `romwil/curatorx:<MAJOR.MINOR>` | Track a minor line (e.g. the current `1.13` line) |
-| `romwil/curatorx:<X.Y.Z>` | Pin an exact release (see [CHANGELOG.md](../CHANGELOG.md) for versions) |
+| `romwil/projectionist:latest` | Everyday Unraid / Compose (CA template default) |
+| `romwil/projectionist:<MAJOR.MINOR>` | Track a minor line (e.g. the current `1.13` line) |
+| `romwil/projectionist:<X.Y.Z>` | Pin an exact release (see [CHANGELOG.md](../CHANGELOG.md) for versions) |
 
 ```bash
-docker pull romwil/curatorx:latest        # everyday
-docker pull romwil/curatorx:1.13           # track the minor line
-docker pull romwil/curatorx:1.13.0         # pin an exact release
+docker pull romwil/projectionist:latest        # everyday
+docker pull romwil/projectionist:1.13           # track the minor line
+docker pull romwil/projectionist:1.13.0         # pin an exact release
 ```
 
 Images are multi-arch (**amd64 + arm64**), run as non-root `curatorx` (UID/GID 1000). See [wiki/Installation.md](wiki/Installation.md).
 
 ## Unraid Force Update pulled 0 B and I'm still on an old version
 
-Force Update calls Docker Engine pull, then recreates the container. **0 B** means Engine kept the existing local `romwil/curatorx:latest` mapping while Hub may already have a newer digest. Dockerfile labels / `.build-info` don't bypass that. Fix (config stays under `/mnt/user/appdata/curatorx/config`):
+Force Update calls Docker Engine pull, then recreates the container. **0 B** means Engine kept the existing local `romwil/projectionist:latest` mapping while Hub may already have a newer digest. Dockerfile labels / `.build-info` don't bypass that. Fix (config stays under `/mnt/user/appdata/curatorx/config`):
 
 ```bash
 cd /mnt/user/appdata/curatorx && ./rollout.sh latest
-# or: docker pull romwil/curatorx:latest   # then Force Update / Apply
+# or: docker pull romwil/projectionist:latest   # then Force Update / Apply
 # or: ./scripts/unraid-force-pull.sh latest --rmi-retry
 ```
 
@@ -49,13 +49,13 @@ Everything lives under `/config` (`DATA_DIR`) on the owner's disk:
 | File | Contents |
 |------|----------|
 | `settings.json` | Connections, feature flags, onboarding |
-| `curatorx.db` | Library index, chat, persona, checkpoints |
+| `projectionist.db` | Library index, chat, persona, checkpoints (opens legacy `curatorx.db` if the new file is absent) |
 | `jobs_state.json` | Durable sync job history |
 
 Back up the whole directory before major changes:
 
 ```bash
-tar czf curatorx-config-$(date +%F).tgz -C /mnt/user/appdata/curatorx config
+tar czf projectionist-config-$(date +%F).tgz -C /mnt/user/appdata/curatorx config
 ```
 
 ## Do I need an LLM API key?
@@ -127,15 +127,15 @@ After sync, the idle scheduler trickles metadata, embeddings, motifs, and neighb
 
 ## How is this different from Overseerr / Seerr?
 
-CuratorX is a **taste-aware curator** (RAG, persona, ratings, purge advice, confirmation-gated *arr, owner dashboard). Seerr is an optional request front-end for members — it complements CuratorX; it doesn't replace the owner chat loop.
+Projectionist is a **taste-aware curator** (RAG, persona, ratings, purge advice, confirmation-gated *arr, owner dashboard). Seerr is an optional request front-end for members — it complements Projectionist; it doesn't replace the owner chat loop.
 
-## Can I export or delete everything CuratorX knows about me?
+## Can I export or delete everything Projectionist knows about me?
 
 Yes. Every account can export a full copy of its own data or permanently purge it — **the same set either way**: your private notes, chat threads + message transcripts, saved library pages, and preference facts.
 
 ```bash
 # Export your account data (as the signed-in user)
-curl -s http://localhost:8788/api/me/memory > my-curatorx-export.json
+curl -s http://localhost:8788/api/me/memory > my-projectionist-export.json
 # Permanently delete the same set (export first — this is irreversible)
 curl -s -X DELETE http://localhost:8788/api/me/memory
 ```
@@ -150,31 +150,31 @@ In-app at **`/privacy`** (no login), and the same document in [PRIVACY.md](PRIVA
 
 | Env / Admin → Advanced | Mode |
 |------------------------|------|
-| `CURATORX_MCP_API_KEY` | **Privacy** — public content schema, read-only library tools |
-| `CURATORX_MCP_FULL_API_KEY` | **Full** — internal library fields + confirm-gated *arr propose tools |
+| `PROJECTIONIST_MCP_API_KEY` | **Privacy** — public content schema, read-only library tools |
+| `PROJECTIONIST_MCP_FULL_API_KEY` | **Full** — internal library fields + confirm-gated *arr propose tools |
 
-The two keys must differ. Either (or both) enables HTTP `/mcp`. Generate/rotate in **Admin → Advanced**, or set the env vars:
+The two keys must differ. Either (or both) enables HTTP `/mcp`. Generate/rotate in **Admin → Advanced**, or set the env vars. Prefer `PROJECTIONIST_*`; matching `CURATORX_*` names still work during the compatibility window.
 
 ```bash
-docker run -d --name curatorx -p 8788:8788 \
-  -v /path/to/curatorx/config:/config \
-  -e CURATORX_MCP_API_KEY="a-long-random-privacy-key" \
-  romwil/curatorx:latest
+docker run -d --name projectionist -p 8788:8788 \
+  -v /path/to/config:/config \
+  -e PROJECTIONIST_MCP_API_KEY="a-long-random-privacy-key" \
+  romwil/projectionist:latest
 ```
 
 See [MCP.md](MCP.md) and [.env.example](../.env.example).
 
 ## How does Plex watchlist sync work?
 
-Local watchlist pins can sync with Plex Discover when you enable sync in **Settings**. A refresh **pulls from Plex** then lists your local pins. CuratorX stores an **encrypted** copy of your Sign-in-with-Plex account token for that purpose only — never the server library token as a stand-in. Re-sign in if the token goes missing. Details: [PRIVACY.md](PRIVACY.md).
+Local watchlist pins can sync with Plex Discover when you enable sync in **Settings**. A refresh **pulls from Plex** then lists your local pins. Projectionist stores an **encrypted** copy of your Sign-in-with-Plex account token for that purpose only — never the server library token as a stand-in. Re-sign in if the token goes missing. Details: [PRIVACY.md](PRIVACY.md).
 
-## Can CuratorX publish named lists to Plex Lists?
+## Can Projectionist publish named lists to Plex Lists?
 
-**Not yet.** CuratorX supports **local** named curated lists (Settings → Lists, plus chat tools `list_lists` / `create_list` / `add_to_list` / `remove_from_list`). A 2026 spike found **no clear public/stable API** for Plex Discover personal Lists: official PMS docs cover Playlists/Collections, and Discover documents Watchlist add/remove only. Publish-to-Plex-Lists is deferred so we never fake a broken sync. Watchlist ↔ Discover sync remains separate and available.
+**Not yet.** Projectionist supports **local** named curated lists (Settings → Lists, plus chat tools `list_lists` / `create_list` / `add_to_list` / `remove_from_list`). A 2026 spike found **no clear public/stable API** for Plex Discover personal Lists: official PMS docs cover Playlists/Collections, and Discover documents Watchlist add/remove only. Publish-to-Plex-Lists is deferred so we never fake a broken sync. Watchlist ↔ Discover sync remains separate and available.
 
 ## What's the difference between a list, playlist, and watchlist?
 
-A **watchlist** is a personal reminder that can sync with Plex Discover. A CuratorX **list** is a durable named shelf ("70s paranoia"); a **playlist** uses the same local storage to signal a planned viewing sequence ("Friday double feature"). Adding or removing a collection membership never deletes a library title, and CuratorX doesn't publish local playlists to Plex today.
+A **watchlist** is a personal reminder that can sync with Plex Discover. A Projectionist **list** is a durable named shelf ("70s paranoia"); a **playlist** uses the same local storage to signal a planned viewing sequence ("Friday double feature"). Adding or removing a collection membership never deletes a library title, and Projectionist doesn't publish local playlists to Plex today.
 
 ## Can I export a filtered library view?
 
@@ -182,7 +182,7 @@ Yes, from the browse controls on library-query walls. Export uses the same filte
 
 ## What happens when I report bad video, audio, or metadata?
 
-The report is saved in an **owner queue** (`Admin → Issues`) with the title identity, problem type, and optional note. Members can report but **never** directly command Radarr/Sonarr or delete a file. An owner can reject, resolve, or run a supported, logged repair — which may safely skip if the title isn't managed, is ambiguous, or is unsupported. CuratorX won't blindly delete files, "fix" a metadata match, or promise a subtitle/download result.
+The report is saved in an **owner queue** (`Admin → Issues`) with the title identity, problem type, and optional note. Members can report but **never** directly command Radarr/Sonarr or delete a file. An owner can reject, resolve, or run a supported, logged repair — which may safely skip if the title isn't managed, is ambiguous, or is unsupported. Projectionist won't blindly delete files, "fix" a metadata match, or promise a subtitle/download result.
 
 ## Where should I look next?
 

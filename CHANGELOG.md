@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [1.27.0] — 2026-07-25
+
+CuratorX becomes Projectionist: a permanent product name, tagline, and top-bar wordmark, with the Python package and Docker image renamed while existing Unraid paths and `CURATORX_*` env vars keep working through a short compatibility window.
+
+### Highlights
+- **Meet Projectionist.** The product formerly known as CuratorX has a permanent name, tagline, and top-bar wordmark — cinema intelligence for your personal archive, with a small projector-lamp that pulses while the agent thinks.
+- **Same stack, clearer brand.** Chat, Explore, Help, and Privacy speak Projectionist; your household Persona (“Name your curator”) stays the friendly metaphor it always was.
+- **Upgrades stay calm.** Existing Unraid appdata under `/mnt/user/appdata/curatorx*`, theme preference, and `CURATORX_*` env vars keep working during the compatibility window while new installs can use `PROJECTIONIST_*` and `romwil/projectionist`.
+
+### Added
+- Canonical Python package `projectionist` (imports, entrypoints, Docker `WORKDIR`).
+- Canonical Docker Hub image `romwil/projectionist` (`:1.27.0`, `:1.27`, `:latest`) with identical digests dual-tagged to `romwil/curatorx:*` for the compatibility window.
+- Unraid CA template `templates/projectionist.xml` / `unraid/projectionist.xml` + Projectionist icons; legacy `curatorx.xml` templates are thin pointers.
+- `PROJECTIONIST_*` environment variables with dual-read fallback to matching `CURATORX_*` names (`projectionist.envcompat`).
+- Brand wordmark component with agent-thinking lamp pulse in the primary top bar.
+
+### Changed
+- Product copy across Help, Privacy, About, Onboarding, wiki, and in-app chrome now says Projectionist.
+- Release / Docker scripts, compose, Dockerfile, and CI paths target the `projectionist` package and image name.
+- Theme preference and session/config keys accept both branded and legacy names during the window.
+
+### Verification
+- Backend `pytest` **1323 passed**, 6 skipped (29 subtests) at **78.18%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **474 passed**. ESLint **0 errors** (94 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.27.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. Legacy `curatorx.xml` templates remain identical thin pointers. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.26.0] — 2026-07-24
 
 Invite-only household join arrives with shareable and emailed join links, and chat stays responsive under load: SQLite writes and long similarity scans no longer block the event loop, and every write lines up behind a single serializer. Youth picks honor the rating ceiling exactly, TV taste respects mid-series stops, agent-created Plex shelves clean themselves up, and similarity search can opt into an sqlite-vec ANN speed-up.

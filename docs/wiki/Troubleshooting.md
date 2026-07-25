@@ -17,7 +17,7 @@
 - After a **container restart**, an in-flight sync job is marked failed: *Interrupted by server restart — start sync again*. Start sync again; phase checkpoints resume unfinished work when still valid (≤72h)
 - Confirm Plex server URL / server token and movie/TV section mapping
 - Check TMDB key if enrichment fails mid-sync
-- Tail logs with `CURATORX_LOG_LEVEL=DEBUG`
+- Tail logs with `PROJECTIONIST_LOG_LEVEL=DEBUG`
 
 ## Status dock shows no progress
 

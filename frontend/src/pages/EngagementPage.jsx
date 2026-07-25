@@ -205,7 +205,7 @@ export default function EngagementPage() {
               <header className="explore-section-header">
                 <div>
                   <h2>Explainers</h2>
-                  <p className="explore-section-subtitle">Short notes on how CuratorX habits work.</p>
+                  <p className="explore-section-subtitle">Short notes on how Projectionist habits work.</p>
                 </div>
               </header>
               <ul className="engagement-card-list">

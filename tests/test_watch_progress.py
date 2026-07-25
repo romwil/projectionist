@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from curatorx.library.watch_progress import watch_progress_state
+from projectionist.library.watch_progress import watch_progress_state
 
 
 class WatchProgressStateTests(unittest.TestCase):

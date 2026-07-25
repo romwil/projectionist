@@ -12,12 +12,12 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import Settings
-from curatorx.digest import build_weekly_digest, current_week_start, snapshot_weekly_digest
-from curatorx.library.db import Database
-from curatorx.web.auth import SESSION_COOKIE_NAME, clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache, create_session_token
+from projectionist.config_store import Settings
+from projectionist.digest import build_weekly_digest, current_week_start, snapshot_weekly_digest
+from projectionist.library.db import Database
+from projectionist.web.auth import SESSION_COOKIE_NAME, clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache, create_session_token
 
 
 def _seed(db: Database, rating_key: str, title: str, media_type: str = "movie") -> None:
@@ -91,17 +91,17 @@ class WeeklyDigestApiTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -135,11 +135,11 @@ class WeeklyDigestApiTests(unittest.TestCase):
     def test_member_blocked(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 1, "title": "Owner"},
         ):
             self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs.get_job_manager().db.upsert_plex_user(
             user_id="plex-9", display_name="Member", email="m@example.com",

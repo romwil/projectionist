@@ -132,10 +132,10 @@ export default function PosterActionMenu({
   }
 
   async function deleteIndex() {
-    if (!window.confirm(`Remove "${item.title || "this title"}" from the CuratorX index? Plex files are not deleted.`)) return;
+    if (!window.confirm(`Remove "${item.title || "this title"}" from the Projectionist index? Plex files are not deleted.`)) return;
     try {
       await deleteLibraryItems([item.rating_key || item.plex_rating_key]);
-      flashStatus("Removed from the CuratorX index.");
+      flashStatus("Removed from the Projectionist index.");
     } catch (error) {
       flashStatus(error.message || "Could not remove title.");
     }

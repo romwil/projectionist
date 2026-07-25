@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   applyUiTheme,
   cycleUiTheme,
+  loadStoredUiTheme,
   normalizeUiFontSize,
   normalizeUiTheme,
   resolveEffectiveTheme,
@@ -78,5 +79,15 @@ test("applyUiTheme persists preference without document", () => {
   const result = applyUiTheme("lights_up", { storage, media: { matches: false } });
   assert.equal(result.preference, "lights_up");
   assert.equal(result.effective, "lights_up");
-  assert.equal(store.get("curatorx.ui_theme"), "lights_up");
+  assert.equal(store.get("projectionist.ui_theme"), "lights_up");
+});
+
+test("loadStoredUiTheme migrates legacy curatorx.ui_theme once", () => {
+  const store = new Map([["curatorx.ui_theme", "lights_down"]]);
+  const storage = {
+    getItem: (k) => (store.has(k) ? store.get(k) : null),
+    setItem: (k, v) => store.set(k, v),
+  };
+  assert.equal(loadStoredUiTheme(storage), "lights_down");
+  assert.equal(store.get("projectionist.ui_theme"), "lights_down");
 });

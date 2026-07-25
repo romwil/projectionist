@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, patch
 from fastapi import Request
 from fastapi.testclient import TestClient
 
-from curatorx.web.rate_limit import (
+from projectionist.web.rate_limit import (
     SlidingWindowRateLimiter,
     clear_rate_limits,
     client_ip,
@@ -123,17 +123,17 @@ class ChatRateLimitIntegrationTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
         clear_rate_limits()
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_rate_limits()
@@ -142,7 +142,7 @@ class ChatRateLimitIntegrationTests(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_chat_rate_limit_blocks_excess_requests(self) -> None:
-        with patch("curatorx.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(return_value={"reply": "ok", "blocks": []})
             agent_cls.return_value = agent
@@ -165,7 +165,7 @@ class ChatRateLimitIntegrationTests(unittest.TestCase):
             self.assertEqual(resp.status_code, 429)
 
     def test_chat_within_limit_succeeds(self) -> None:
-        with patch("curatorx.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(return_value={"reply": "ok", "blocks": []})
             agent_cls.return_value = agent
@@ -177,7 +177,7 @@ class ChatRateLimitIntegrationTests(unittest.TestCase):
             self.assertIn(resp.status_code, (200, 400))
 
     def test_rate_limit_returns_retry_after_header(self) -> None:
-        with patch("curatorx.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(return_value={"reply": "ok", "blocks": []})
             agent_cls.return_value = agent
@@ -205,13 +205,13 @@ class LocalAuthRateLimitXffTests(unittest.TestCase):
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-xff-rate-limit-session-secret"
         os.environ.pop("CURATORX_TRUST_PROXY_HEADERS", None)
-        from curatorx.web.session_tokens import clear_session_secret_cache
+        from projectionist.web.session_tokens import clear_session_secret_cache
 
         clear_session_secret_cache()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
@@ -233,11 +233,11 @@ class LocalAuthRateLimitXffTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_rate_limits()
-        from curatorx.web.session_tokens import clear_session_secret_cache
+        from projectionist.web.session_tokens import clear_session_secret_cache
 
         clear_session_secret_cache()
         os.environ.pop("CURATORX_TRUST_PROXY_HEADERS", None)

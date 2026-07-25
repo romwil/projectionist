@@ -1,0 +1,292 @@
+<?xml version="1.0"?>
+<!-- Unraid Community Applications template — Projectionist 1.27.0 -->
+<Container version="2">
+  <Name>projectionist</Name>
+  <Repository>romwil/projectionist:latest</Repository>
+  <Registry>https://hub.docker.com/r/romwil/projectionist</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/romwil/projectionist/issues</Support>
+  <Project>https://github.com/romwil/projectionist</Project>
+  <Readme>https://raw.githubusercontent.com/romwil/projectionist/main/docs/wiki/Unraid.md</Readme>
+  <Overview>Cinema intelligence for your personal archive. Chat-first companion for your Plex library with BYOP LLM, RAG over your collection, TMDB discovery, and confirmation-gated Radarr/Sonarr add/remove. Keep port 8788 on a trusted LAN — do not WAN-expose without an authenticated reverse proxy. Existing installs: keep config at /mnt/user/appdata/curatorx/config. New installs may use /mnt/user/appdata/projectionist/config. Updates: if Force Update shows 0 B pulled, SSH `docker pull romwil/projectionist:latest` or appdata `./rollout.sh` (see Unraid wiki).</Overview>
+  <Category>MediaServer:Other Tools:Utilities</Category>
+  <WebUI>http://[IP]:[PORT:8788]/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/romwil/projectionist/main/templates/projectionist.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/romwil/projectionist/main/unraid/projectionist-icon.png</Icon>
+  <ExtraParams>--add-host=host.docker.internal:host-gateway</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
+  <Changes>
+### 1.27.0
+- Meet Projectionist — permanent name, tagline, and projector-lamp wordmark
+- Python package + Docker image rename with CURATORX_* / romwil/curatorx compat
+- Existing Unraid appdata paths keep working during the compatibility window
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.26.0
+- Invite-only household join — approve/create a link, copy it or email it
+- Async event loop: streaming chat, webhooks, and search no longer stall on SQLite
+- Youth rating ceiling now matches exactly across chat, Surprise Me, and history
+- TV season-decay taste, self-cleaning [CuratorX] Plex shelves, optional sqlite-vec ANN
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.25.6
+- Scheduled Tasks detail actions + next-run sort + unified execution log
+- Youth rating ceiling hardened in chat / Surprise Me / history
+- Connections secrets no longer fake-Show stored keys
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.25.5
+- No Admin flash for members while auth loads
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.25.4
+- Multi-role QA sidecar + full Playwright role UI matrix (owner/member/youth/guest)
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.25.3
+- Mood chips trigger an instant Surprise Me pick; scroll lands on the new entry
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.25.2
+- Owner can push the weekly newsletter now (self / selected / all opt-ins)
+- Admin → Mail + Settings → Notifications controls; opt-in still respected
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.25.1
+- For you / chat-from-rail keeps library ids + why; posters match the rail
+- Kebab copy/save confirmation flashes as a clear toast
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.25.0
+- Peer top bar: Search, Chat, Explore, Inbox, Admin, My Journey, Settings
+- My Journey achievements tree; Take a Tour; centered rail loaders
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.24.0
+- Opt-in curator nudges, multi-session syllabus, mood pick, Seerr acquire path
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.22.1
+- Help/Privacy prose readable in Lights Up
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.22.0
+- Taste settings, weekly For you rail, chat-from-here, engagement substrate
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.21.1
+- Login leads with Sign in with Plex; token paste behind Advanced
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.21.0
+- Top-chrome inbox with unread badge; generalized notification kinds
+- Owner mail settings (SMTP + Resend), test send, template fields
+- Member notification prefs + weekly newsletter; owner monthly curation; arrivals
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.20.0
+- Availability line on title detail and chat: In library / Requestable / Not here yet (Seerr-aware)
+- Optimistic watchlist pin add/remove with background Plex Discover reconcile
+- Continue Watching Explore rail from Plex On Deck (resume + Play; not live sessions)
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.19.4
+- Chat poster strips use natural height with horizontal swipe when a turn finishes; temporary nested scroll only while streaming
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
+### 1.8.14
+- Explore Recently Added / Recent Releases now include poster/list, filters, sort direction, columns, and current-page CSV export
+- Feed toolbar popovers remain visible; list selection preserves pin and owner delete actions
+
+### 1.8.13
+- Shared browse controls, poster/list action grip, local list/playlist intent, and safe owner-reviewed media issue repair
+- CSV export is privacy-filtered; members report issues but never directly trigger *arr repair
+
+### 1.8.12
+- AppNav hamburger always reachable on chat, browse shells, Settings, Admin, and Privacy
+- Chat Help · Privacy · About footer removed (links live in AppNav); Privacy uses AppShell chrome
+
+### 1.8.11
+- Watched poster badges + Revisit These Explore rail; Unraid Force Update docs/scripts (`unraid-force-pull.sh`, vendored `unraid-rollout.sh`)
+- OCI labels: version / revision / created; release script prints Hub digests (+ optional `--date-tag`)
+- Honest CA update path when Force Update reports TOTAL DATA PULLED: 0 B
+
+### 1.8.5
+- Watchlist explore page (/watchlist) with bulk Remove/Delete and TitleDetailDrawer; Settings → Watchlist sync prefs only
+- Plex Discover watchlist sync paginates full list; title detail watched-state, reviews, trailer CSP, bulk delete
+- Settings card redesign; Admin Advanced panel cards; scheduled-task skip/summary messaging
+- CuratorX brand/activity X; sidebar toast placement; removed Tonight strip; Plot Lab filters/pagination
+
+### 1.8.4
+- AppShell chrome on Explore/Tags/Plot Lab/tag/person/section/title; AppNav Watchlist → chat pin panel
+- What’s New modal + About release notes; generate-release-notes.sh wired into docker-release
+- Guest Ask owner CTAs; owner empty Explore rails → /admin/tasks; Warm Explore preset
+- Title reviews/TV progress/collection; person filter/%; tags AND/sort; section sort/bulk pin; thread search; delete undo; Tonight strip
+- Serve SPA HTML for /explore/tags, /explore/plot-lab, and section drill-downs (full page loads)
+
+### 1.8.3
+- Explore section pages (Recently Added / Recent Releases) with All/Movies/TV + page sizes; Tags and Plot Lab routes; AppNav hamburger
+- Scheduled Tasks admin (/admin/tasks) with Run now and live monitor; avatar cache/upload; delete conversation in sidebar
+- Concurrent non-blocking card adds; Title Detail Add/Request; turnstyle Confirm/Expand count alignment; agent keyword-first library search
+
+### 1.8.2
+- Faster Title Detail (enrich flag, short external timeouts, rating-key index); Surprise Me loading/empty/error states
+- Explore/recommendations responsive layout; default persona on load; composer chrome (persona + mic/surprise/send)
+- Purge candidates scheduled cache + Refresh now; admin persona slider crash fix; chat media-strip scroll containment
+- Removed TV completion from admin dashboard
+
+### 1.8.1
+- Person and tag browse pages; clickable cast/crew/genre/motif chips from Title Detail and Explore
+- Windows-native e2e/dev PowerShell helpers and cross-platform e2e server launcher
+- Unraid appdata rollout.sh docs for pull/recreate without wiping config
+
+### 1.8.0
+- Dual theme (Lights Up / Lights Down), icon top-bar, Explore hub, Title Detail neighbors, agent avatar
+- Metadata enrichment + structured people/credits; layered plot embeddings; item_neighbors + title_relations
+- Explore feed APIs, motif/theme facets; agent tools find_similar_titles / list_relations / walk_relations / titles_by_person
+- Teaching-kit docs for sync-vs-idle trickle, honest provenance, and homelab SQLite constraints
+
+### 1.7.13
+- Fix Surprise Me blank screen (genres JSON string crash), Plex watchlist pull on refresh, TMDB ID crossed wires, stuck context labels, unclickable profile menu
+- Click movie/TV cards (chat + turnstyle) and watchlist items to open title detail with YouTube trailer modal
+- Watch on Plex when title is in library; Plex server name before library totals in top bar
+- Recommend titles to household users with unread inbox on home; per-user UI font size in Profile settings
+
+### 1.7.12
+- Fix Rating Coverage (was always 0%), Taste Profile ratings scale (now stars/5), per-thread context label, ConfigPage error handling
+- Purge Candidates: multi-select with checkboxes, Delete Selected and Dismiss Selected with confirmation dialog
+- TV Completion card expanded to 10 shows with larger progress bars and episode counts
+- Watchlist pins badge functional, chat width expanded to ~80%, user message warm background
+- Privacy/About links moved to footer, About removed from top nav
+
+### 1.7.11
+- Fix owner dashboard data retrieval: 6 frontend/backend field-name mismatches causing empty panels
+- Decade Distribution, Top Genres, Countries, Languages, Runtime Distribution, Purge Candidates, TV Completion, and Reviews panels now populate correctly
+
+### 1.7.10
+- Embed build timestamp in image file content (unique Hub layers); Force Update still needs Engine re-resolve — see Unraid wiki
+- Startup log shows build info for version verification
+
+### 1.7.9
+- Value-based test deep dive: 193 new logic-level tests, shared conftest.py infrastructure, coverage from 1.4% to 76%+
+
+### 1.7.8
+- Fix scroll chip, turnstyle buttons, agent tool data consistency; 33 new validation tests
+
+### 1.7.7
+- OCI version label via build arg so each release has a distinct Hub manifest
+
+### 1.7.6
+- Fix wrong titles in Turnstyle viewport; fix streaming monologue leak
+
+### 1.7.5
+- Fix persona selector not showing on upgraded installs
+
+### 1.7.4
+- Wire persona selector into chat composer; complete all 7 personality sliders; sanitize remaining error responses
+
+### 1.7.3
+- Fix container startup on existing installs with root-owned config
+
+### 1.7.2
+- Fix scheduler heartbeat deadline bug; zero test failures
+
+### 1.7.1
+- Scheduler circuit breaker: quarantines tasks after 3 consecutive failures (1h cooldown, admin reset endpoint)
+- Data retention pruning for telemetry/anniversaries with automatic VACUUM
+- Trickle ingestion caps semantic embedding work per scheduler cycle (MAX_ITEMS_PER_CYCLE=50)
+- Agent/scheduler boundary and SQLite concurrency model documented
+- 38 new tests, 0 regressions
+
+### 1.7.0
+- Non-root Docker container (security S13) — runs as UID/GID 1000
+- True token-by-token SSE streaming for OpenAI + Anthropic LLM providers
+- Local-password authentication (PBKDF2-HMAC-SHA256, owner-only registration)
+- OIDC authentication for homelab IdPs (Authelia, Authentik, Keycloak)
+- Multi-method login page (Plex + local + OIDC, dynamically configured)
+- Telemetry ingestion module with admin API endpoints
+- 48 new tests, 0 regressions
+
+### 1.6.0
+- Owner Dashboard: library composition charts, health gauges, storage intelligence, taste timeline
+- Background idle task scheduler with 6 OOTB tasks (embeddings, taste refresh, health, anniversaries, recs, gaps)
+- Chat delight: On This Day, Library at a Glance, Night Owl runtime picks, Double Feature, Surprise Me
+- Genre filter bugfix: comma-separated genres now OR instead of AND
+
+### 1.5.0
+- Per-conversation persona selection with 5 built-in + custom personas
+- 7 personality sliders (4 new: depth, obscurity, verbosity, formality)
+- Composer persona dropdown with create/edit and Show Advanced toggle
+- Login page cleanup and privacy link fixes
+- Test coverage: 64 new tests, coverage tooling, CI pipeline updated
+
+### 1.4.0
+- Security headers (CSP, X-Frame-Options, XSSTO) on all responses
+- Error response sanitization — no internal details leak to clients
+- Rate limiting on chat endpoints (30 req/min)
+- System config endpoint gated behind owner auth
+- Roadmap: purged ML clustering; added semantic plot embeddings
+- MCP design philosophy documentation
+
+### 1.3.0 — Initial CA template
+- Image line: `romwil/projectionist:1.5` (pin `:1.4.0` if you need an exact build)
+- Config volume `/config` for settings.json + SQLite
+- Dual MCP keys: privacy (`PROJECTIONIST_MCP_API_KEY`) and full (`PROJECTIONIST_MCP_FULL_API_KEY`); or generate in Admin → Advanced
+- Optional seed envs for Plex / *arr / TMDB / LLM; session + webhook secrets for multi-user and Plex webhooks
+  </Changes>
+  <Description>
+Projectionist is cinema intelligence for your personal archive — chat with a companion that knows your Plex library. Connect Plex, Radarr, Sonarr, TMDB, and your preferred LLM provider (cloud API or Ollama).
+
+**Updating (important)**
+- Repository default: `romwil/projectionist:latest` (pin `:1.27` / `:1.27.0` if preferred). During the compatibility window the same digests are also published as `romwil/curatorx:*`.
+- If **Force Update** reports **TOTAL DATA PULLED: 0 B** and the app stays on an old version, Docker kept a stale local tag. SSH: `docker pull romwil/projectionist:latest` then Force Update / Apply, or `cd /mnt/user/appdata/curatorx && ./rollout.sh latest`. Do not wipe `/config`.
+- Full notes: https://github.com/romwil/projectionist/blob/main/docs/wiki/Unraid.md
+
+**Config path**
+- Existing installs: keep `/mnt/user/appdata/curatorx/config` (default below) — do not move appdata.
+- New installs may use `/mnt/user/appdata/projectionist/config`.
+
+**Security**
+- Bind to a trusted LAN or put Projectionist behind an authenticated reverse proxy.
+- Do **not** port-forward bare `:8788` to the internet.
+- Optional multi-user: set `PROJECTIONIST_SESSION_SECRET` (or accept the auto-generated secret under Config). Legacy `CURATORX_SESSION_SECRET` still works during the compatibility window.
+- Plex webhooks require `PROJECTIONIST_WEBHOOK_SECRET` (legacy `CURATORX_WEBHOOK_SECRET` / `X-CuratorX-Webhook-Secret` still accepted).
+- Optional MCP at `/mcp`: set privacy and/or full API keys (they must differ), or generate them in **Admin → Advanced**.
+
+**First run**
+1. Open the Web UI at port **8788**.
+2. Complete setup in **Settings** / **Admin** (Plex server URL + token, TMDB, LLM; optionally Radarr/Sonarr).
+3. Map movie and TV libraries, then run **Sync library**.
+4. Start chatting with the curator.
+
+**Optional:** Tautulli for watch stats and purge suggestions; Fanart.tv for richer poster art. For Ollama on the Unraid host, set `LLM_PROVIDER=ollama` and `LLM_BASE_URL=http://host.docker.internal:11434/v1` (Extra Parameters already add `host.docker.internal`).
+
+**Support:** [GitHub Issues](https://github.com/romwil/projectionist/issues) · [Unraid wiki](https://github.com/romwil/projectionist/blob/main/docs/wiki/Unraid.md)
+  </Description>
+  <Config Name="Web UI port" Target="8788" Default="8788" Mode="tcp" Description="Projectionist web interface (LAN only recommended)" Type="Port" Display="always" Required="true" Mask="false">8788</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/curatorx/config" Mode="rw" Description="settings.json, SQLite database, and auto-generated session secret" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/curatorx/config</Config>
+  <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Container timezone for preferred library sync hour (e.g. America/New_York)" Type="Variable" Display="advanced" Required="false" Mask="false">UTC</Config>
+  <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex server URL (e.g. http://192.168.1.10:32400)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex Media Server token for library access (not household Sign in with Plex)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="RADARR_URL" Target="RADARR_URL" Default="" Mode="" Description="Optional seed: Radarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="RADARR_API_KEY" Target="RADARR_API_KEY" Default="" Mode="" Description="Optional seed: Radarr API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="SONARR_URL" Target="SONARR_URL" Default="" Mode="" Description="Optional seed: Sonarr URL" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="SONARR_API_KEY" Target="SONARR_API_KEY" Default="" Mode="" Description="Optional seed: Sonarr API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="TMDB_API_KEY" Target="TMDB_API_KEY" Default="" Mode="" Description="Optional seed: TMDB API key (metadata + discovery)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="FANART_API_KEY" Target="FANART_API_KEY" Default="" Mode="" Description="Optional seed: Fanart.tv API key for richer poster art" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="TAUTULLI_URL" Target="TAUTULLI_URL" Default="" Mode="" Description="Optional seed: Tautulli URL for watch stats / purge suggestions" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="TAUTULLI_API_KEY" Target="TAUTULLI_API_KEY" Default="" Mode="" Description="Optional seed: Tautulli API key" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="LLM_PROVIDER" Target="LLM_PROVIDER" Default="openai_compatible" Mode="" Description="LLM provider: openai_compatible, anthropic, ollama (or other presets in Settings)" Type="Variable" Display="advanced" Required="false" Mask="false">openai_compatible</Config>
+  <Config Name="LLM_BASE_URL" Target="LLM_BASE_URL" Default="" Mode="" Description="Optional seed: LLM base URL (e.g. http://host.docker.internal:11434/v1 for Ollama)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="LLM_API_KEY" Target="LLM_API_KEY" Default="" Mode="" Description="Optional seed: LLM API key (not required for Ollama)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="LLM_MODEL" Target="LLM_MODEL" Default="gpt-4o-mini" Mode="" Description="Optional seed: chat model name" Type="Variable" Display="advanced" Required="false" Mask="false">gpt-4o-mini</Config>
+  <Config Name="PROJECTIONIST_SESSION_SECRET" Target="PROJECTIONIST_SESSION_SECRET" Default="" Mode="" Description="Optional: strong secret for multi-user session cookies (auto-generated under Config if unset)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="PROJECTIONIST_WEBHOOK_SECRET" Target="PROJECTIONIST_WEBHOOK_SECRET" Default="" Mode="" Description="Secret for Plex webhook auth header X-Projectionist-Webhook-Secret (required if using webhooks)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="PROJECTIONIST_MCP_API_KEY" Target="PROJECTIONIST_MCP_API_KEY" Default="" Mode="" Description="Privacy MCP key for HTTP /mcp — public schema, read-only. Leave empty to generate in Admin → Advanced." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+  <Config Name="PROJECTIONIST_MCP_FULL_API_KEY" Target="PROJECTIONIST_MCP_FULL_API_KEY" Default="" Mode="" Description="Full MCP key for trusted in-stack /mcp (internal fields + confirm-gated *arr). Must differ from the privacy key. Or generate in Admin → Advanced." Type="Variable" Display="advanced" Required="false" Mask="true"/>
+</Container>

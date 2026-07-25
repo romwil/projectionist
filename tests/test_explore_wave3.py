@@ -14,10 +14,10 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.agent.tools import ToolRegistry
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
-from curatorx.library.feeds import (
+from projectionist.agent.tools import ToolRegistry
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.library.feeds import (
     feed_continue_watching,
     feed_director_spotlight,
     feed_genre_spotlight,
@@ -28,9 +28,9 @@ from curatorx.library.feeds import (
     feed_seasonal_spotlight,
     neighbors_payload,
 )
-from curatorx.library.query import LibraryFilters, query_library
-from curatorx.library.relations import refresh_title_relations
-from curatorx.scheduler.tasks import llm_theme_tagging, title_relations_refresh
+from projectionist.library.query import LibraryFilters, query_library
+from projectionist.library.relations import refresh_title_relations
+from projectionist.scheduler.tasks import llm_theme_tagging, title_relations_refresh
 
 
 class TitleRelationsMigrationTests(unittest.TestCase):
@@ -311,7 +311,7 @@ class FeedHelperTests(unittest.TestCase):
             self.assertEqual(payload["items"][0]["play_rating_key"], "cw-movie")
 
     def test_continue_watching_prefers_plex_on_deck(self) -> None:
-        from curatorx.connectors.plex import PlexOnDeckItem
+        from projectionist.connectors.plex import PlexOnDeckItem
 
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
@@ -525,7 +525,7 @@ class RelationsTests(unittest.IsolatedAsyncioTestCase):
             db.replace_facets_of_type("theme", [(item_id, "theme", "neo-noir")])
             filtered = query_library(db, LibraryFilters(themes=["neo-noir"]))
             self.assertEqual(filtered["returned"], 1)
-            from curatorx.library.facets import rebuild_library_facets
+            from projectionist.library.facets import rebuild_library_facets
 
             rebuild_library_facets(db)
             filtered_after = query_library(db, LibraryFilters(themes=["neo-noir"]))
@@ -578,18 +578,18 @@ class ExploreFeedApiTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)

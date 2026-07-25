@@ -26,9 +26,9 @@ from conftest import (
     make_tool_registry,
     seed_library,
 )
-from curatorx.agent.tools import ToolRegistry
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
+from projectionist.agent.tools import ToolRegistry
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
 
 
 # ===========================================================================
@@ -55,7 +55,7 @@ class TestSearchLibrary(unittest.IsolatedAsyncioTestCase):
                 )
         return db
 
-    @patch("curatorx.library.query.embed_text")
+    @patch("projectionist.library.query.embed_text")
     async def test_fts_query_finds_exact_title_match(self, mock_embed):
         """FTS query matching title keywords returns the correct item."""
         mock_embed.side_effect = Exception("Should not use embeddings for FTS")
@@ -74,7 +74,7 @@ class TestSearchLibrary(unittest.IsolatedAsyncioTestCase):
             titles = {item["title"] for item in result["items"]}
             self.assertEqual(titles, {"The Matrix", "Matrix Reloaded"})
 
-    @patch("curatorx.library.query.embed_text")
+    @patch("projectionist.library.query.embed_text")
     async def test_fts_with_media_type_filter(self, mock_embed):
         """FTS query combined with media_type filter narrows results."""
         mock_embed.side_effect = Exception("Should not use embeddings for FTS")
@@ -91,7 +91,7 @@ class TestSearchLibrary(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 1)
             self.assertEqual(result["items"][0]["title"], "Dark Knight")
 
-    @patch("curatorx.library.query.embed_text")
+    @patch("projectionist.library.query.embed_text")
     async def test_fts_no_matches_returns_empty(self, mock_embed):
         """FTS query with no matching terms returns empty result."""
         mock_embed.side_effect = Exception("Should not use embeddings for FTS")
@@ -107,7 +107,7 @@ class TestSearchLibrary(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 0)
             self.assertEqual(result["items"], [])
 
-    @patch("curatorx.library.query.embed_text")
+    @patch("projectionist.library.query.embed_text")
     async def test_fts_with_genre_filter_composition(self, mock_embed):
         """FTS combined with genre filter returns intersection."""
         mock_embed.side_effect = Exception("Should not use embeddings for FTS")
@@ -125,7 +125,7 @@ class TestSearchLibrary(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 1)
             self.assertEqual(result["items"][0]["title"], "Space Wars")
 
-    @patch("curatorx.library.query.embed_text")
+    @patch("projectionist.library.query.embed_text")
     async def test_fts_search_in_summary(self, mock_embed):
         """FTS searches summary field as well as title."""
         mock_embed.side_effect = Exception("Should not use embeddings for FTS")
@@ -362,7 +362,7 @@ class TestQueryLibrary(unittest.IsolatedAsyncioTestCase):
 class TestRecommendHiddenGems(unittest.IsolatedAsyncioTestCase):
     """Test recommend_hidden_gems: rating filter, owned exclusion, queue exclusion."""
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_excludes_owned_titles(self, mock_tmdb_cls):
         """Items already in library are excluded from recommendations."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -385,7 +385,7 @@ class TestRecommendHiddenGems(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 1)
             self.assertEqual(result["items"][0]["title"], "Not Owned Film")
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_filters_below_7_rating(self, mock_tmdb_cls):
         """Items with vote_average < 7.0 are excluded."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -408,7 +408,7 @@ class TestRecommendHiddenGems(unittest.IsolatedAsyncioTestCase):
             titles = {item["title"] for item in result["items"]}
             self.assertEqual(titles, {"High Rated", "Exactly 7"})
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_excludes_items_in_radarr_queue(self, mock_tmdb_cls):
         """Items already queued in Radarr are excluded."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -429,7 +429,7 @@ class TestRecommendHiddenGems(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 1)
             self.assertEqual(result["items"][0]["title"], "Not Queued Film")
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_no_tmdb_key_returns_error(self, mock_tmdb_cls):
         """Missing TMDB key returns error."""
         import tempfile
@@ -441,7 +441,7 @@ class TestRecommendHiddenGems(unittest.IsolatedAsyncioTestCase):
             self.assertIn("error", result)
             self.assertIn("TMDB", result["error"])
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_null_vote_average_treated_as_zero(self, mock_tmdb_cls):
         """Items with null/missing vote_average are treated as 0 (excluded)."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -461,7 +461,7 @@ class TestRecommendHiddenGems(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 1)
             self.assertEqual(result["items"][0]["title"], "Good Rating")
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_empty_tmdb_results(self, mock_tmdb_cls):
         """Empty TMDB results return empty items list."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -478,7 +478,7 @@ class TestRecommendHiddenGems(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 0)
             self.assertEqual(result["items"], [])
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_max_10_results(self, mock_tmdb_cls):
         """At most 10 recommendations are returned."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -744,10 +744,10 @@ class TestWhatToWatchTonight(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 0)
             self.assertEqual(result["items"], [])
 
-    @patch("curatorx.agent.tools.search_library")
+    @patch("projectionist.agent.tools.search_library")
     async def test_mood_path_calls_search_library(self, mock_search):
         """When mood is provided, search_library is used instead of direct DB query."""
-        from curatorx.models.schemas import TitleCard
+        from projectionist.models.schemas import TitleCard
 
         mock_card = TitleCard(
             media_type="movie",

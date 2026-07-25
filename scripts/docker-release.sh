@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Multi-arch Docker Hub release for CuratorX.
+# Multi-arch Docker Hub release for Projectionist.
+#
+# Canonical image: romwil/projectionist
+# Compat dual-tag (same digests): romwil/curatorx  — during ~2-release window
 #
 # ALWAYS push Docker v2 schema 2 manifest lists (not OCI indexes with
 # attestations). Unraid Dockerman's update checker fails on OCI indexes
@@ -48,7 +51,8 @@ if [[ -z "$ALSO_LINE" ]]; then
   ALSO_LINE="$(echo "$VERSION" | awk -F. '{print $1"."$2}')"
 fi
 
-IMAGE="romwil/curatorx"
+IMAGE="romwil/projectionist"
+COMPAT_IMAGE="romwil/curatorx"
 PLATFORMS="linux/amd64,linux/arm64"
 BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 VCS_REF="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
@@ -70,11 +74,13 @@ echo "Generating release notes from CHANGELOG.md (require ## [${VERSION}])"
 echo "Building ${IMAGE}:${VERSION} (+ :${ALSO_LINE} :latest) for ${PLATFORMS}"
 echo "Build identity: version=${VERSION} created=${BUILD_DATE} revision=${VCS_REF}"
 echo "Flags: --provenance=false --sbom=false (Unraid-compatible Docker v2 manifests)"
+echo "Compat dual-tag after push: ${COMPAT_IMAGE}:{${VERSION},${ALSO_LINE},latest}"
 
 docker buildx build \
   --platform "${PLATFORMS}" \
   --provenance=false \
   --sbom=false \
+  --build-arg "PROJECTIONIST_VERSION=${VERSION}" \
   --build-arg "CURATORX_VERSION=${VERSION}" \
   --build-arg "BUILD_DATE=${BUILD_DATE}" \
   --build-arg "VCS_REF=${VCS_REF}" \
@@ -82,27 +88,49 @@ docker buildx build \
   --push \
   .
 
+# Retag identical digests onto the legacy Hub name (compat window).
+COMPAT_TAGS=(
+  -t "${COMPAT_IMAGE}:${VERSION}"
+  -t "${COMPAT_IMAGE}:${ALSO_LINE}"
+  -t "${COMPAT_IMAGE}:latest"
+)
+if [[ "$DATE_TAG" -eq 1 ]]; then
+  COMPAT_TAGS+=(-t "${COMPAT_IMAGE}:latest-${DATE_STAMP}")
+fi
+
+echo ""
+echo "Dual-tagging identical manifests → ${COMPAT_IMAGE}:* (compat)"
+docker buildx imagetools create \
+  "${COMPAT_TAGS[@]}" \
+  "${IMAGE}:${VERSION}"
+
 echo ""
 echo "=== Hub inspect (expect MediaType: docker.distribution.manifest.list.v2+json) ==="
 docker buildx imagetools inspect "${IMAGE}:${VERSION}" | head -30
 
 echo ""
 echo "=== Digests (paste into release notes / Unraid verify) ==="
-echo "Tag ${IMAGE}:${VERSION}:"
-docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{.Manifest.Digest}}' 2>/dev/null \
-  || docker buildx imagetools inspect "${IMAGE}:${VERSION}" | awk '/^Digest:/{print $2; exit}'
-echo "Tag ${IMAGE}:latest:"
-docker buildx imagetools inspect "${IMAGE}:latest" --format '{{.Manifest.Digest}}' 2>/dev/null \
-  || docker buildx imagetools inspect "${IMAGE}:latest" | awk '/^Digest:/{print $2; exit}'
+for ref in \
+  "${IMAGE}:${VERSION}" \
+  "${IMAGE}:latest" \
+  "${COMPAT_IMAGE}:${VERSION}" \
+  "${COMPAT_IMAGE}:latest"
+do
+  echo "Tag ${ref}:"
+  docker buildx imagetools inspect "${ref}" --format '{{.Manifest.Digest}}' 2>/dev/null \
+    || docker buildx imagetools inspect "${ref}" | awk '/^Digest:/{print $2; exit}'
+done
 if [[ "$DATE_TAG" -eq 1 ]]; then
-  echo "Tag ${IMAGE}:latest-${DATE_STAMP}:"
-  docker buildx imagetools inspect "${IMAGE}:latest-${DATE_STAMP}" --format '{{.Manifest.Digest}}' 2>/dev/null \
-    || docker buildx imagetools inspect "${IMAGE}:latest-${DATE_STAMP}" | awk '/^Digest:/{print $2; exit}'
+  for ref in "${IMAGE}:latest-${DATE_STAMP}" "${COMPAT_IMAGE}:latest-${DATE_STAMP}"; do
+    echo "Tag ${ref}:"
+    docker buildx imagetools inspect "${ref}" --format '{{.Manifest.Digest}}' 2>/dev/null \
+      || docker buildx imagetools inspect "${ref}" | awk '/^Digest:/{print $2; exit}'
+  done
 fi
 
 echo ""
 echo "Unraid owners: Force Update can report TOTAL DATA PULLED: 0 B when the local"
-echo "  ${IMAGE}:latest tag is stale. Supported path:"
+echo "  ${IMAGE}:latest (or ${COMPAT_IMAGE}:latest) tag is stale. Supported path:"
 echo "  docker pull ${IMAGE}:latest"
 echo "  # or: cd /mnt/user/appdata/curatorx && ./rollout.sh latest"
 echo "  # or: ./scripts/unraid-force-pull.sh   (from a checkout / copied into appdata)"

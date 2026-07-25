@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import (
+from projectionist.library.db import (
     BOOTSTRAP_OWNER_ID,
     BUILTIN_PERSONA_IDS,
     BUILTIN_PERSONA_SEEDS,

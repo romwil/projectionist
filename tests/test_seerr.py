@@ -12,17 +12,17 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.agent.tools import ToolRegistry
-from curatorx.config_store import (
+from projectionist.agent.tools import ToolRegistry
+from projectionist.config_store import (
     FeatureFlags,
     SeerrSettings,
     Settings,
     seerr_configuration_error,
     uses_seerr_request_path,
 )
-from curatorx.connectors.seerr import SeerrClient
-from curatorx.library.db import DEFAULT_LENS_ID, Database
-from curatorx.web import setup as setup_mod
+from projectionist.connectors.seerr import SeerrClient
+from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.web import setup as setup_mod
 
 
 class SeerrClientTests(unittest.TestCase):
@@ -37,7 +37,7 @@ class SeerrClientTests(unittest.TestCase):
             captured["body"] = body
             return {"id": 42, "status": 2}
 
-        with patch("curatorx.connectors.seerr.request_json", side_effect=fake_request_json):
+        with patch("projectionist.connectors.seerr.request_json", side_effect=fake_request_json):
             result = client.create_request("show", 123, tvdb_id=456, seasons=[1, 2])
 
         self.assertEqual(captured["method"], "POST")
@@ -58,7 +58,7 @@ class SeerrClientTests(unittest.TestCase):
             captured["method"] = method
             return {"results": [], "pageInfo": {"results": 0, "pages": 0, "page": 1, "pageSize": 5}}
 
-        with patch("curatorx.connectors.seerr.request_json", side_effect=fake_request_json):
+        with patch("projectionist.connectors.seerr.request_json", side_effect=fake_request_json):
             client.list_requests(take=5, skip=10, filter="pending", media_type="show")
 
         self.assertEqual(captured["method"], "GET")
@@ -69,7 +69,7 @@ class SeerrClientTests(unittest.TestCase):
 
     def test_get_user_requires_dict_response(self) -> None:
         client = SeerrClient("http://seerr.test", "secret-key")
-        with patch("curatorx.connectors.seerr.request_json", return_value=[]):
+        with patch("projectionist.connectors.seerr.request_json", return_value=[]):
             with self.assertRaises(RuntimeError):
                 client.get_user()
 
@@ -109,8 +109,8 @@ class SeerrSetupTests(unittest.TestCase):
         self.assertIn("required", result["message"])
 
     def test_test_seerr_success_message(self) -> None:
-        with patch("curatorx.web.setup.SeerrClient.get_user", return_value={"displayName": "Admin", "id": 1}), patch(
-            "curatorx.web.setup.SeerrClient.list_requests",
+        with patch("projectionist.web.setup.SeerrClient.get_user", return_value={"displayName": "Admin", "id": 1}), patch(
+            "projectionist.web.setup.SeerrClient.list_requests",
             return_value={"pageInfo": {"results": 3}},
         ):
             result = setup_mod.test_seerr("http://seerr.test", "secret")
@@ -125,16 +125,16 @@ class SeerrApiTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
@@ -151,8 +151,8 @@ class SeerrApiTests(unittest.TestCase):
         )
 
     def test_setup_test_seerr_records_certification(self) -> None:
-        with patch("curatorx.web.setup.SeerrClient.get_user", return_value={"email": "owner@example.com", "id": 9}), patch(
-            "curatorx.web.setup.SeerrClient.list_requests",
+        with patch("projectionist.web.setup.SeerrClient.get_user", return_value={"email": "owner@example.com", "id": 9}), patch(
+            "projectionist.web.setup.SeerrClient.list_requests",
             return_value={"pageInfo": {"results": 0}},
         ):
             resp = self.client.post(
@@ -177,7 +177,7 @@ class SeerrApiTests(unittest.TestCase):
             "results": [{"id": 1, "status": 2}],
             "pageInfo": {"results": 1, "pages": 1, "page": 1, "pageSize": 20},
         }
-        with patch("curatorx.web.app.SeerrClient.list_requests", return_value=payload) as mock_list:
+        with patch("projectionist.web.app.SeerrClient.list_requests", return_value=payload) as mock_list:
             resp = self.client.get("/api/requests?take=10&filter=pending")
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json(), payload)
@@ -233,7 +233,7 @@ class SeerrAgentToolTests(unittest.IsolatedAsyncioTestCase):
             )
             registry = ToolRegistry(db, settings, DEFAULT_LENS_ID)
             with patch(
-                "curatorx.agent.tools.SeerrClient.create_request",
+                "projectionist.agent.tools.SeerrClient.create_request",
             ) as create_request:
                 result = await registry.execute(
                     "request_via_seerr",

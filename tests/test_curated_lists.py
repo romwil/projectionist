@@ -8,10 +8,10 @@ import unittest
 from pathlib import Path
 from unittest import IsolatedAsyncioTestCase
 
-from curatorx.agent.tools import ToolRegistry
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
-from curatorx.lists import PLEX_LISTS_PUBLISH_SUPPORTED
+from projectionist.agent.tools import ToolRegistry
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.lists import PLEX_LISTS_PUBLISH_SUPPORTED
 
 
 class CuratedListsDbTests(unittest.TestCase):

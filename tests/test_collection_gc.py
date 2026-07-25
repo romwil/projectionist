@@ -8,13 +8,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from curatorx.config_store import FeatureFlags, Settings
-from curatorx.connectors.plex_collections import (
+from projectionist.config_store import FeatureFlags, Settings
+from projectionist.connectors.plex_collections import (
     apply_ephemeral_title_prefix,
     is_ephemeral_collection_title,
 )
-from curatorx.library.db import EPHEMERAL_COLLECTION_PREFIX, Database
-from curatorx.scheduler.tasks.collection_gc import prune_expired_ephemeral_collections
+from projectionist.library.db import EPHEMERAL_COLLECTION_PREFIX, Database
+from projectionist.scheduler.tasks.collection_gc import prune_expired_ephemeral_collections
 
 
 class EphemeralTitleHelpersTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class EphemeralTitleHelpersTests(unittest.TestCase):
 class CollectionGcTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
@@ -78,7 +78,7 @@ class CollectionGcTests(unittest.TestCase):
             ),
         )
         with mock.patch(
-            "curatorx.connectors.plex_collections.delete_collection"
+            "projectionist.connectors.plex_collections.delete_collection"
         ) as delete_mock:
             result = prune_expired_ephemeral_collections(self.db, settings)
         self.assertTrue(result.get("dry_run"))
@@ -118,8 +118,8 @@ class CollectionGcTests(unittest.TestCase):
                 ephemeral_collection_gc_dry_run=False,
             ),
         )
-        with mock.patch("curatorx.connectors.plex.PlexClient"), mock.patch(
-            "curatorx.connectors.plex_collections.delete_collection"
+        with mock.patch("projectionist.connectors.plex.PlexClient"), mock.patch(
+            "projectionist.connectors.plex_collections.delete_collection"
         ) as delete_mock:
             result = prune_expired_ephemeral_collections(self.db, settings)
         self.assertEqual(result.get("deleted"), 1)

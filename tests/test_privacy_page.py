@@ -6,7 +6,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.app import app
+from projectionist.web.app import app
 
 
 class PrivacyPageTests(unittest.TestCase):

@@ -1193,7 +1193,7 @@ export async function deletePurgeCandidates(ratingKeys) {
   });
 }
 
-/** Owner-only: remove CuratorX library index rows by rating_key (not Plex files). */
+/** Owner-only: remove Projectionist library index rows by rating_key (not Plex files). */
 export async function deleteLibraryItems(ratingKeys) {
   return api("/library/items/delete", {
     method: "POST",
@@ -1201,7 +1201,7 @@ export async function deleteLibraryItems(ratingKeys) {
   });
 }
 
-/** Mark an in-library title watched/unwatched (updates CuratorX + Plex when configured). */
+/** Mark an in-library title watched/unwatched (updates Projectionist + Plex when configured). */
 export async function setLibraryItemWatched(ratingKey, watched = true) {
   return api("/library/items/watched", {
     method: "POST",
@@ -1240,6 +1240,14 @@ export async function saveSettings(payload) {
   return api("/settings", {
     method: "PUT",
     body: JSON.stringify(payload),
+  });
+}
+
+/** Owner-only: fetch one stored connection secret for in-place Show. Never log the value. */
+export async function revealSettingsSecret(field) {
+  return api("/settings/secrets/reveal", {
+    method: "POST",
+    body: JSON.stringify({ field }),
   });
 }
 

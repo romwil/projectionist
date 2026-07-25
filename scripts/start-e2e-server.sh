@@ -10,6 +10,7 @@ DATA_DIR="${E2E_DATA_DIR:-$(mktemp -d -t curatorx-e2e-XXXXXX)}"
 
 export DATA_DIR
 export PORT
+export PROJECTIONIST_SKIP_DOTENV=1
 export CURATORX_SKIP_DOTENV=1
 
 if [[ ! -d "$ROOT/frontend/dist" ]]; then
@@ -27,4 +28,4 @@ else
 fi
 
 echo "Starting CuratorX E2E server on :$PORT (DATA_DIR=$DATA_DIR)"
-exec "$PYTHON" -m curatorx.web
+exec "$PYTHON" -m projectionist.web

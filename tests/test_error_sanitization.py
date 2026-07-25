@@ -18,17 +18,17 @@ class ErrorSanitizationTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         for key in ("CURATORX_SKIP_DOTENV", "LLM_PROVIDER", "DATA_DIR"):
@@ -41,14 +41,14 @@ class ErrorSanitizationTests(unittest.TestCase):
 
     def test_safe_error_detail_generic_exception(self) -> None:
         msg = self.app_mod._safe_error_detail(
-            RuntimeError("/var/lib/curatorx/db.sqlite3: locked"),
+            RuntimeError("/var/lib/projectionist/db.sqlite3: locked"),
             "Chat request failed",
         )
         self.assertEqual(msg, "Chat request failed")
         self.assertNotIn("/var/lib", msg)
 
     def test_safe_error_detail_llm_provider_error(self) -> None:
-        from curatorx.agent.providers import LLMProviderError
+        from projectionist.agent.providers import LLMProviderError
 
         msg = self.app_mod._safe_error_detail(
             LLMProviderError("API key sk-proj-abc123 is invalid"),
@@ -88,7 +88,7 @@ class ErrorSanitizationTests(unittest.TestCase):
         self.assertEqual(msg, "An error occurred while processing your request")
 
     def test_safe_error_detail_logs_full_error(self) -> None:
-        with self.assertLogs("curatorx.web.app", level=logging.ERROR) as cm:
+        with self.assertLogs("projectionist.web.app", level=logging.ERROR) as cm:
             self.app_mod._safe_error_detail(
                 RuntimeError("secret-internal-detail-42"),
                 "Chat request failed",
@@ -101,11 +101,11 @@ class ErrorSanitizationTests(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_chat_500_does_not_leak_traceback(self) -> None:
-        with patch("curatorx.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(
                 side_effect=RuntimeError(
-                    "Traceback: File /app/curatorx/agent/curator.py line 42"
+                    "Traceback: File /app/projectionist/agent/curator.py line 42"
                 )
             )
             agent_cls.return_value = agent
@@ -118,9 +118,9 @@ class ErrorSanitizationTests(unittest.TestCase):
         self.assertEqual(detail, "Chat request failed")
 
     def test_chat_502_llm_error_does_not_leak_api_key(self) -> None:
-        from curatorx.agent.providers import LLMProviderError
+        from projectionist.agent.providers import LLMProviderError
 
-        with patch("curatorx.web.app.CuratorAgent") as agent_cls:
+        with patch("projectionist.web.app.CuratorAgent") as agent_cls:
             agent = AsyncMock()
             agent.run = AsyncMock(
                 side_effect=LLMProviderError(
@@ -146,7 +146,7 @@ class ErrorSanitizationTests(unittest.TestCase):
             },
         )
         with patch(
-            "curatorx.web.app.SeerrClient.list_requests",
+            "projectionist.web.app.SeerrClient.list_requests",
             side_effect=RuntimeError(
                 "Connection refused: http://internal-seerr.local:5055/api/v1"
             ),
@@ -159,7 +159,7 @@ class ErrorSanitizationTests(unittest.TestCase):
         self.assertNotIn("supersecret", detail)
 
     def test_confirm_action_does_not_leak_arr_details(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         db.save_pending_action(
@@ -168,7 +168,7 @@ class ErrorSanitizationTests(unittest.TestCase):
             {"action": "add_radarr", "tmdb_id": 123, "title": "Test"},
         )
         with patch(
-            "curatorx.web.app.execute_confirmed_action",
+            "projectionist.web.app.execute_confirmed_action",
             new_callable=AsyncMock,
             side_effect=RuntimeError(
                 "HTTP 500 from http://192.168.1.5:7878/api/v3: internal server error"

@@ -10,8 +10,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from curatorx.library.db import Database
-from curatorx.persona import (
+from projectionist.library.db import Database
+from projectionist.persona import (
     CURATOR_NAME_PLACEHOLDER,
     build_assembled_persona_prompt,
     build_behavioral_prompt_from_sliders,
@@ -24,7 +24,7 @@ from curatorx.persona import (
     slider_band,
     substitute_curator_name,
 )
-from curatorx.persona.presets import PERSONA_PRESETS, welcome_greeting_for
+from projectionist.persona.presets import PERSONA_PRESETS, welcome_greeting_for
 
 
 class PersonaPromptTests(unittest.TestCase):
@@ -228,16 +228,16 @@ class PersonaApiTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)

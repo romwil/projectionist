@@ -138,7 +138,7 @@ export default function SettingsLayout() {
       ) : null}
       <aside className="settings-rail" id="settings-nav" data-testid="settings-rail">
         <div className="settings-rail-brand">
-          <p className="eyebrow">CuratorX</p>
+          <p className="eyebrow">Projectionist</p>
           <h1 className="settings-rail-title">Settings</h1>
         </div>
         <nav className="settings-rail-nav" aria-label="Settings sections">

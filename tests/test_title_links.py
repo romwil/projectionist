@@ -7,10 +7,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from curatorx.connectors.plex import plex_watch_url
-from curatorx.connectors.tmdb import TMDBClient
-from curatorx.library.db import Database
-from curatorx.library.titles import get_title_detail
+from projectionist.connectors.plex import plex_watch_url
+from projectionist.connectors.tmdb import TMDBClient
+from projectionist.library.db import Database
+from projectionist.library.titles import get_title_detail
 
 
 class PlexWatchUrlTests(unittest.TestCase):
@@ -81,8 +81,8 @@ class UsContentRatingTests(unittest.TestCase):
 
 
 class TitleDetailTrailerTests(unittest.TestCase):
-    @patch("curatorx.library.titles.cached_machine_identifier", return_value="machine-xyz")
-    @patch("curatorx.library.titles.TMDBClient")
+    @patch("projectionist.library.titles.cached_machine_identifier", return_value="machine-xyz")
+    @patch("projectionist.library.titles.TMDBClient")
     def test_detail_includes_trailer_and_plex_url(self, mock_tmdb_cls, _mock_machine) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {
@@ -132,8 +132,8 @@ class TitleDetailTrailerTests(unittest.TestCase):
             self.assertIn("machine-xyz", detail.plex_watch_url)
             self.assertIn("rk-1", detail.plex_watch_url)
 
-    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
-    @patch("curatorx.library.titles.TMDBClient")
+    @patch("projectionist.library.titles.cached_machine_identifier", return_value="")
+    @patch("projectionist.library.titles.TMDBClient")
     def test_detail_keeps_plex_content_rating_without_enrichment(
         self, mock_tmdb_cls, _mock_machine
     ) -> None:
@@ -174,9 +174,9 @@ class TitleDetailTrailerTests(unittest.TestCase):
 
 
 class TitleDetailHotPathTests(unittest.TestCase):
-    @patch("curatorx.preferences.purge._build_candidates")
-    @patch("curatorx.library.titles.cached_machine_identifier", return_value="machine-xyz")
-    @patch("curatorx.library.titles.TMDBClient")
+    @patch("projectionist.preferences.purge._build_candidates")
+    @patch("projectionist.library.titles.cached_machine_identifier", return_value="machine-xyz")
+    @patch("projectionist.library.titles.TMDBClient")
     def test_enrich_false_skips_external_calls(
         self, mock_tmdb_cls, mock_machine, mock_purge_build
     ) -> None:
@@ -211,10 +211,10 @@ class TitleDetailHotPathTests(unittest.TestCase):
         mock_purge_build.assert_not_called()
         mock_machine.assert_called_once()
 
-    @patch("curatorx.preferences.purge._build_candidates")
-    @patch("curatorx.library.titles.FanartClient")
-    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
-    @patch("curatorx.library.titles.TMDBClient")
+    @patch("projectionist.preferences.purge._build_candidates")
+    @patch("projectionist.library.titles.FanartClient")
+    @patch("projectionist.library.titles.cached_machine_identifier", return_value="")
+    @patch("projectionist.library.titles.TMDBClient")
     def test_enrich_true_never_calls_purge_scoring(
         self, mock_tmdb_cls, _mock_machine, _mock_fanart, mock_purge_build
     ) -> None:

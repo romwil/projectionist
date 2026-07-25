@@ -12,19 +12,19 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import Settings, YouthSettings
-from curatorx.library.db import Database
-from curatorx.library.query import LibraryFilters, filters_from_mapping, query_library
-from curatorx.youth.rating_gate import (
+from projectionist.config_store import Settings, YouthSettings
+from projectionist.library.db import Database
+from projectionist.library.query import LibraryFilters, filters_from_mapping, query_library
+from projectionist.youth.rating_gate import (
     content_rating_allowed,
     filter_items_for_youth,
     normalize_content_rating,
 )
-from curatorx.youth.apply import apply_youth_gate_to_filters
-from curatorx.access_requests import approve_access_request, notify_owners_of_access_request
-from curatorx.web.auth import clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.youth.apply import apply_youth_gate_to_filters
+from projectionist.access_requests import approve_access_request, notify_owners_of_access_request
+from projectionist.web.auth import clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 
 class RatingGateUnitTests(unittest.TestCase):
@@ -53,7 +53,7 @@ class RatingGateUnitTests(unittest.TestCase):
 class RatingGateDbTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         for key, title, rating in (
             ("rk-g", "Good Family", "G"),
             ("rk-r", "Rough Cut", "R"),
@@ -133,7 +133,7 @@ class YouthAgentToolCardTests(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.settings = Settings(youth=YouthSettings(max_content_rating="PG-13"))
         for key, title, rating in (
             ("rk-pg", "Robot Friends", "PG"),
@@ -157,7 +157,7 @@ class YouthAgentToolCardTests(unittest.IsolatedAsyncioTestCase):
         self._tmpdir.cleanup()
 
     def _registry(self, *, is_youth: bool):
-        from curatorx.agent.tools import ToolRegistry
+        from projectionist.agent.tools import ToolRegistry
 
         return ToolRegistry(self.db, self.settings, "default", is_youth=is_youth)
 
@@ -217,7 +217,7 @@ class YouthExternalAndScrubTests(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.settings = Settings(
             youth=YouthSettings(max_content_rating="PG-13"),
             tmdb_api_key="test-key",
@@ -227,11 +227,11 @@ class YouthExternalAndScrubTests(unittest.IsolatedAsyncioTestCase):
         self._tmpdir.cleanup()
 
     def _registry(self, *, is_youth: bool):
-        from curatorx.agent.tools import ToolRegistry
+        from projectionist.agent.tools import ToolRegistry
 
         return ToolRegistry(self.db, self.settings, "default", is_youth=is_youth)
 
-    @mock.patch("curatorx.library.external_search.TMDBClient")
+    @mock.patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_omits_unrated_for_youth(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_movie_page.return_value = {
@@ -266,7 +266,7 @@ class YouthExternalAndScrubTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(adult_payload["items"]), 1)
         self.assertEqual(adult_payload["items"][0]["title"], "Adult Thriller")
 
-    @mock.patch("curatorx.agent.tools.TMDBClient")
+    @mock.patch("projectionist.agent.tools.TMDBClient")
     async def test_recommend_hidden_gems_omits_unrated_for_youth(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.discover_movies.return_value = [
@@ -288,7 +288,7 @@ class YouthExternalAndScrubTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Hidden Adult Gem", youth.youth_blocked_titles)
 
     def test_scrub_drops_smuggled_card_and_redacts_blocked_title(self) -> None:
-        from curatorx.youth.scrub import scrub_youth_chat_blocks
+        from projectionist.youth.scrub import scrub_youth_chat_blocks
 
         blocks = [
             {
@@ -327,7 +327,7 @@ class YouthExternalAndScrubTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any(b.get("type") == "action_prompt" for b in scrubbed))
 
     def test_history_scrub_drops_r_and_empty_rating_cards_for_youth_only(self) -> None:
-        from curatorx.youth.scrub import scrub_youth_history_messages
+        from projectionist.youth.scrub import scrub_youth_history_messages
 
         messages = [
             {
@@ -387,7 +387,7 @@ class YouthExternalAndScrubTests(unittest.IsolatedAsyncioTestCase):
         )
 
     def test_youth_guardrails_forbid_naming_over_ceiling(self) -> None:
-        from curatorx.youth.guardrails import YOUTH_CHAT_GUARDRAILS
+        from projectionist.youth.guardrails import YOUTH_CHAT_GUARDRAILS
 
         lowered = YOUTH_CHAT_GUARDRAILS.lower()
         self.assertIn("never name", lowered)
@@ -407,10 +407,10 @@ class YouthChatHistoryReadTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
@@ -434,7 +434,7 @@ class YouthChatHistoryReadTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -490,7 +490,7 @@ class YouthChatHistoryReadTests(unittest.TestCase):
         )
 
     def test_youth_history_load_filters_over_ceiling_and_empty_rating(self) -> None:
-        from curatorx.web.session_tokens import SESSION_COOKIE_NAME
+        from projectionist.web.session_tokens import SESSION_COOKIE_NAME
 
         self._register("owner", "password123")
         owner_cookie = self.client.cookies.get(SESSION_COOKIE_NAME)
@@ -546,15 +546,15 @@ class AccessRequestTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.db.create_local_user(
             user_id="owner-1",
             display_name="Owner",
@@ -564,7 +564,7 @@ class AccessRequestTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()

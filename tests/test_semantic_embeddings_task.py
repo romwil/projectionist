@@ -12,9 +12,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.scheduler.tasks import semantic_embeddings
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.scheduler.tasks import semantic_embeddings
 
 
 def _make_db(tmp: str, n_items: int) -> Database:
@@ -46,7 +46,7 @@ class TrickleIngestionTests(unittest.IsolatedAsyncioTestCase):
 
             with patch.object(semantic_embeddings, "MAX_ITEMS_PER_CYCLE", 20), \
                  patch(
-                     "curatorx.scheduler.tasks.semantic_embeddings.embed_texts",
+                     "projectionist.scheduler.tasks.semantic_embeddings.embed_texts",
                      new=AsyncMock(side_effect=_fake_embed),
                  ):
                 result = await semantic_embeddings.run(
@@ -63,7 +63,7 @@ class TrickleIngestionTests(unittest.IsolatedAsyncioTestCase):
             db = _make_db(tmp, 5)
 
             with patch(
-                "curatorx.scheduler.tasks.semantic_embeddings.embed_texts",
+                "projectionist.scheduler.tasks.semantic_embeddings.embed_texts",
                 new=AsyncMock(side_effect=_fake_embed),
             ):
                 result = await semantic_embeddings.run(
@@ -87,7 +87,7 @@ class TrickleIngestionTests(unittest.IsolatedAsyncioTestCase):
 
             with patch.object(semantic_embeddings, "BATCH_SIZE", 5), \
                  patch(
-                     "curatorx.scheduler.tasks.semantic_embeddings.embed_texts",
+                     "projectionist.scheduler.tasks.semantic_embeddings.embed_texts",
                      new=AsyncMock(side_effect=_fake_embed),
                  ):
                 result = await semantic_embeddings.run(
@@ -104,7 +104,7 @@ class TrickleIngestionTests(unittest.IsolatedAsyncioTestCase):
 
             with patch.object(semantic_embeddings, "MAX_ITEMS_PER_CYCLE", 20), \
                  patch(
-                     "curatorx.scheduler.tasks.semantic_embeddings.embed_texts",
+                     "projectionist.scheduler.tasks.semantic_embeddings.embed_texts",
                      new=AsyncMock(side_effect=_fake_embed),
                  ):
                 r1 = await semantic_embeddings.run(
@@ -144,7 +144,7 @@ class TrickleIngestionTests(unittest.IsolatedAsyncioTestCase):
             )
 
             with patch(
-                "curatorx.scheduler.tasks.semantic_embeddings.embed_texts",
+                "projectionist.scheduler.tasks.semantic_embeddings.embed_texts",
                 new=AsyncMock(side_effect=_fake_embed),
             ):
                 result = await semantic_embeddings.run(
@@ -168,7 +168,7 @@ class TrickleIngestionTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(semantic_embeddings, "BATCH_SIZE", 5), \
                  patch.object(semantic_embeddings, "MAX_ITEMS_PER_CYCLE", 100), \
                  patch(
-                     "curatorx.scheduler.tasks.semantic_embeddings.embed_texts",
+                     "projectionist.scheduler.tasks.semantic_embeddings.embed_texts",
                      new=AsyncMock(side_effect=tracking_embed),
                  ):
                 await semantic_embeddings.run(

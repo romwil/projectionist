@@ -7,9 +7,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.agent.tools import ToolRegistry, build_system_prompt
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
+from projectionist.agent.tools import ToolRegistry, build_system_prompt
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
 
 
 def _seed_entity(db: Database, *, entity_type: str = "person", name: str = "Akira Kurosawa") -> str:
@@ -30,7 +30,7 @@ def _seed_entity(db: Database, *, entity_type: str = "person", name: str = "Akir
 class RepositoryMemoryDbTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self.tmp.name) / "curatorx.db")
+        self.db = Database(Path(self.tmp.name) / "projectionist.db")
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -92,7 +92,7 @@ class RepositoryMemoryDbTests(unittest.TestCase):
 class RepositoryMemoryToolTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self.tmp.name) / "curatorx.db")
+        self.db = Database(Path(self.tmp.name) / "projectionist.db")
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -155,7 +155,7 @@ class RepositoryMemoryToolTests(unittest.IsolatedAsyncioTestCase):
 class MemoryInjectionTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self.tmp.name) / "curatorx.db")
+        self.db = Database(Path(self.tmp.name) / "projectionist.db")
         for user_id, name in (("adult-a", "A"), ("adult-b", "B")):
             self.db.create_local_user(user_id=user_id, display_name=name, password_hash="x", role="member")
 

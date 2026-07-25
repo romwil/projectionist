@@ -12,7 +12,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from curatorx.web.session_tokens import (
+from projectionist.web.session_tokens import (
     clear_session_secret_cache,
     create_session_token,
     parse_session_token,
@@ -121,7 +121,7 @@ class ConstantTimeComparisonTests(SessionTokenTestCase):
     def test_uses_hmac_compare_digest(self) -> None:
         """parse_session_token must call hmac.compare_digest for signature check."""
         token = create_session_token("timing-user")
-        with patch("curatorx.web.session_tokens.hmac.compare_digest", wraps=hmac.compare_digest) as mock_cmp:
+        with patch("projectionist.web.session_tokens.hmac.compare_digest", wraps=hmac.compare_digest) as mock_cmp:
             parse_session_token(token)
             mock_cmp.assert_called_once()
 

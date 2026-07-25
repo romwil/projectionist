@@ -7,8 +7,8 @@ import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
-from curatorx.library.db import Database
-from curatorx.web.app import _persona_voiced_library_summary
+from projectionist.library.db import Database
+from projectionist.web.app import _persona_voiced_library_summary
 
 
 class SavedLibraryTests(unittest.TestCase):
@@ -52,7 +52,7 @@ class SavedLibraryTests(unittest.TestCase):
 
     def test_summary_falls_back_when_llm_is_unavailable(self) -> None:
         content = {"blocks": [{"type": "text", "content": "Watch Stalker for its meditative science-fiction atmosphere."}]}
-        with patch("curatorx.web.app.get_chat_provider", side_effect=RuntimeError("offline")):
+        with patch("projectionist.web.app.get_chat_provider", side_effect=RuntimeError("offline")):
             summary = asyncio.run(_persona_voiced_library_summary(content, persona={"name": "Jefferson"}))
         self.assertEqual(summary, "Watch Stalker for its meditative science-fiction atmosphere.")
 

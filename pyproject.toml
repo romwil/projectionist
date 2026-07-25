@@ -3,8 +3,8 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "curatorx"
-version = "1.26.0"
+name = "projectionist"
+version = "1.27.0"
 description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -51,23 +51,26 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/romwil/curatorx"
-Repository = "https://github.com/romwil/curatorx"
-Issues = "https://github.com/romwil/curatorx/issues"
+Homepage = "https://github.com/romwil/projectionist"
+Repository = "https://github.com/romwil/projectionist"
+Issues = "https://github.com/romwil/projectionist/issues"
 
 [project.scripts]
-curatorx-web = "curatorx.web.__main__:main"
-curatorx-mcp = "curatorx.mcp.server:main"
+projectionist-web = "projectionist.web.__main__:main"
+projectionist-mcp = "projectionist.mcp.server:main"
+# Compat shims (~2 releases): old console script names → new modules.
+curatorx-web = "projectionist.web.__main__:main"
+curatorx-mcp = "projectionist.mcp.server:main"
 
 [tool.pytest.ini_options]
-addopts = "--cov=curatorx --cov-report=term-missing --cov-fail-under=74"
+addopts = "--cov=projectionist --cov-report=term-missing --cov-fail-under=74"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["curatorx*"]
+include = ["projectionist*"]
 
 [tool.setuptools.package-data]
-"curatorx.web" = ["static/**/*"]
+"projectionist.web" = ["static/**/*"]
 
 # ---------------------------------------------------------------------------
 # Lint / format toolchain (config-only baseline).
@@ -91,7 +94,7 @@ extend-exclude = [
     "frontend",
     "e2e",
     "stitch_curatorx_design_system",
-    "curatorx.egg-info",
+    "projectionist.egg-info",
 ]
 
 [tool.ruff.format]
@@ -118,21 +121,21 @@ ignore = ["E501", "I001"]
 "scripts/**" = ["F401", "E402"]
 # Pre-existing violations in shipped modules, captured as a baseline. Remove an
 # entry (and clean the file) rather than editing source during this config pass.
-"curatorx/agent/tools/**" = ["F401", "F541"]
-"curatorx/config_store.py" = ["F402"]
-"curatorx/connectors/fanart.py" = ["F401"]
-"curatorx/connectors/tautulli.py" = ["F401"]
-"curatorx/library/relations.py" = ["F401"]
-"curatorx/scheduler/engine.py" = ["F401"]
-"curatorx/scheduler/run_log.py" = ["F401"]
-"curatorx/scheduler/tasks/anniversary_scanner.py" = ["F401"]
-"curatorx/scheduler/tasks/gap_analysis.py" = ["F401"]
-"curatorx/web/__main__.py" = ["F401"]
-"curatorx/web/app.py" = ["F401", "E402", "F821"]
-"curatorx/web/setup.py" = ["F401"]
+"projectionist/agent/tools/**" = ["F401", "F541"]
+"projectionist/config_store.py" = ["F402"]
+"projectionist/connectors/fanart.py" = ["F401"]
+"projectionist/connectors/tautulli.py" = ["F401"]
+"projectionist/library/relations.py" = ["F401"]
+"projectionist/scheduler/engine.py" = ["F401"]
+"projectionist/scheduler/run_log.py" = ["F401"]
+"projectionist/scheduler/tasks/anniversary_scanner.py" = ["F401"]
+"projectionist/scheduler/tasks/gap_analysis.py" = ["F401"]
+"projectionist/web/__main__.py" = ["F401"]
+"projectionist/web/app.py" = ["F401", "E402", "F821"]
+"projectionist/web/setup.py" = ["F401"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["curatorx"]
+known-first-party = ["projectionist"]
 
 [tool.mypy]
 # Lenient transitional baseline — NOT strict. `files` scopes mypy to the
@@ -146,17 +149,17 @@ follow_imports = "silent"
 warn_unused_ignores = false
 warn_return_any = false
 files = [
-    "curatorx/_version.py",
-    "curatorx/logging_config.py",
-    "curatorx/config_store.py",
-    "curatorx/connectors",
-    "curatorx/lists",
-    "curatorx/memory",
-    "curatorx/models",
-    "curatorx/persona",
-    "curatorx/privacy",
-    "curatorx/reviews",
-    "curatorx/telemetry",
+    "projectionist/_version.py",
+    "projectionist/logging_config.py",
+    "projectionist/config_store.py",
+    "projectionist/connectors",
+    "projectionist/lists",
+    "projectionist/memory",
+    "projectionist/models",
+    "projectionist/persona",
+    "projectionist/privacy",
+    "projectionist/reviews",
+    "projectionist/telemetry",
 ]
 
 # numpy ships py.typed stubs that use 3.12+ `type` statement syntax, which the

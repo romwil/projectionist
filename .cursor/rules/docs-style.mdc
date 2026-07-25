@@ -1,5 +1,5 @@
 ---
-description: Hold all user-facing docs and copy to the CuratorX documentation standard (docs/DOCS_STYLE.md)
+description: Hold all user-facing docs and copy to the Projectionist documentation standard (docs/DOCS_STYLE.md)
 globs: docs/**/*.md,*.md,CHANGELOG.md,frontend/src/**/*.jsx,frontend/src/**/*.js
 alwaysApply: false
 ---

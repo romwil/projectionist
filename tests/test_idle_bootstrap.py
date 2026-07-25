@@ -8,15 +8,15 @@ import unittest
 from pathlib import Path
 from typing import Any, Callable, Dict, List
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.scheduler.bootstrap import (
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.scheduler.bootstrap import (
     BOOTSTRAP_COMPLETED_KEY,
     is_bootstrap_completed,
     run_idle_bootstrap,
     select_bootstrap_tasks,
 )
-from curatorx.scheduler.engine import IdleScheduler, TaskDefinition, TaskState
+from projectionist.scheduler.engine import IdleScheduler, TaskDefinition, TaskState
 
 
 def _make_db(tmp: str) -> Database:

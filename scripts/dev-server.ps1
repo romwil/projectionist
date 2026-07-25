@@ -29,4 +29,4 @@ if (-not (Test-Path $python)) {
 $env:DATA_DIR = $DataDir
 $env:PORT = "$Port"
 Write-Host "CuratorX at http://127.0.0.1:$Port (DATA_DIR=$DataDir)"
-& $python -m curatorx.web
+& $python -m projectionist.web

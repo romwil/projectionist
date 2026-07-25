@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import unittest
 
-from curatorx.web.job_progress import (
+from projectionist.web.job_progress import (
     format_count_message,
     format_job_progress,
     friendly_job_error,
@@ -12,7 +12,7 @@ from curatorx.web.job_progress import (
     phase_label,
     weighted_sync_percent,
 )
-from curatorx.web.jobs import JobProgress
+from projectionist.web.jobs import JobProgress
 
 
 class JobProgressFormattingTests(unittest.TestCase):

@@ -15,18 +15,18 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
-from curatorx.scheduler.run_log import TaskRunLogStore, emit_task_event
-from curatorx.scheduler.run_outcome import (
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.run_log import TaskRunLogStore, emit_task_event
+from projectionist.scheduler.run_outcome import (
     build_run_summary,
     extract_outcome_detail,
     format_run_outcome_message,
 )
-from curatorx.scheduler.tasks import llm_theme_tagging
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
+from projectionist.scheduler.tasks import llm_theme_tagging
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
 
 
 async def _noop_task(
@@ -305,10 +305,10 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         os.environ["CURATORX_SESSION_SECRET"] = "test-scheduled-tasks-secret"
         clear_session_secret_cache()
         clear_rate_limits()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
@@ -318,7 +318,7 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         self.client = self._client_cm
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         try:
             self._client_cm.__exit__(None, None, None)

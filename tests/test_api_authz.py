@@ -12,8 +12,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import (
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import (
     DEV_SESSION_SECRET,
     clear_session_secret_cache,
     ensure_session_secret,
@@ -29,17 +29,17 @@ class ApiAuthzTests(unittest.TestCase):
         os.environ["CURATORX_SESSION_SECRET"] = "test-api-authz-session-secret-value"
         clear_session_secret_cache()
         clear_rate_limits()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -76,7 +76,7 @@ class ApiAuthzTests(unittest.TestCase):
 
     def _login_as(self, plex_id: int, title: str) -> None:
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": plex_id, "title": title, "email": f"{title}@example.com"},
         ):
             resp = self.client.post("/api/auth/plex", json={"auth_token": f"token-{plex_id}"})
@@ -130,7 +130,7 @@ class ApiAuthzTests(unittest.TestCase):
 
     def test_library_csv_export_requires_auth_and_uses_requested_columns(self) -> None:
         self._enable_multi_user_via_api()
-        from curatorx.web.jobs import get_job_manager
+        from projectionist.web.jobs import get_job_manager
 
         get_job_manager().db.upsert_library_item(
             {"rating_key": "csv-1", "media_type": "movie", "title": "CSV Title", "year": 2024}
@@ -209,7 +209,7 @@ class ApiAuthzTests(unittest.TestCase):
     def test_system_config_blocked_for_guest(self) -> None:
         self._enable_multi_user_via_api()
         self._login_as(1, "Owner")
-        from curatorx.web.jobs import get_job_manager
+        from projectionist.web.jobs import get_job_manager
 
         get_job_manager().db.update_user_role(
             self._get_user_id(3, "Guest"), "guest"
@@ -221,7 +221,7 @@ class ApiAuthzTests(unittest.TestCase):
 
     def _get_user_id(self, plex_id: int, title: str) -> str:
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={
                 "id": plex_id,
                 "title": title,
@@ -237,7 +237,7 @@ class ApiAuthzTests(unittest.TestCase):
     def test_secure_cookie_with_forwarded_proto(self) -> None:
         self._enable_multi_user_via_api()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 9, "title": "Secure User"},
         ):
             resp = self.client.post(

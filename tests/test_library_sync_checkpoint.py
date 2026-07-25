@@ -9,10 +9,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from curatorx.config_store import Settings
-from curatorx.connectors.plex import PlexClient, PlexLibraryItem
-from curatorx.library.db import Database
-from curatorx.library.sync import (
+from projectionist.config_store import Settings
+from projectionist.connectors.plex import PlexClient, PlexLibraryItem
+from projectionist.library.db import Database
+from projectionist.library.sync import (
     SYNC_CHECKPOINT_KEY,
     SYNC_CHECKPOINT_MAX_AGE_SECONDS,
     _clear_sync_checkpoint,
@@ -150,22 +150,22 @@ class SyncCheckpointResumeTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(PlexClient, "movie_items", side_effect=movie_items), patch.object(
                 PlexClient, "show_items", side_effect=show_items
             ), patch(
-                "curatorx.library.sync._row_from_plex_item",
+                "projectionist.library.sync._row_from_plex_item",
                 side_effect=track_enrich,
             ), patch(
-                "curatorx.library.sync.rebuild_library_facets",
+                "projectionist.library.sync.rebuild_library_facets",
                 return_value=0,
             ) as facets_mock, patch(
-                "curatorx.library.sync.rebuild_library_fts",
+                "projectionist.library.sync.rebuild_library_fts",
                 return_value=0,
             ) as fts_mock, patch(
-                "curatorx.library.sync.rebuild_embeddings",
+                "projectionist.library.sync.rebuild_embeddings",
                 new=AsyncMock(return_value=3),
             ) as embed_mock, patch(
-                "curatorx.library.sync.sync_tv_episodes",
+                "projectionist.library.sync.sync_tv_episodes",
                 side_effect=track_episodes,
             ), patch(
-                "curatorx.library.sync.scan_for_rating_prompts",
+                "projectionist.library.sync.scan_for_rating_prompts",
                 return_value=0,
             ):
                 result = await sync_library(db, settings, progress=on_progress)
@@ -222,16 +222,16 @@ class SyncCheckpointResumeTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(PlexClient, "movie_items", side_effect=movie_items), patch.object(
                 PlexClient, "show_items", return_value=[]
             ), patch(
-                "curatorx.library.sync._row_from_plex_item",
+                "projectionist.library.sync._row_from_plex_item",
                 side_effect=instant_row,
             ), patch(
-                "curatorx.library.sync.rebuild_embeddings",
+                "projectionist.library.sync.rebuild_embeddings",
                 new=AsyncMock(return_value=1),
             ), patch(
-                "curatorx.library.sync.sync_tv_episodes",
+                "projectionist.library.sync.sync_tv_episodes",
                 return_value={"shows_synced": 0, "episodes_synced": 0},
             ), patch(
-                "curatorx.library.sync.scan_for_rating_prompts",
+                "projectionist.library.sync.scan_for_rating_prompts",
                 return_value=0,
             ):
                 result = await sync_library(db, settings)
@@ -261,13 +261,13 @@ class SyncCheckpointResumeTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(PlexClient, "movie_items", side_effect=movie_items), patch.object(
                 PlexClient, "show_items", side_effect=show_items
             ), patch(
-                "curatorx.library.sync.rebuild_embeddings",
+                "projectionist.library.sync.rebuild_embeddings",
                 new=AsyncMock(return_value=0),
             ), patch(
-                "curatorx.library.sync.sync_tv_episodes",
+                "projectionist.library.sync.sync_tv_episodes",
                 return_value={"shows_synced": 0, "episodes_synced": 0},
             ), patch(
-                "curatorx.library.sync.scan_for_rating_prompts",
+                "projectionist.library.sync.scan_for_rating_prompts",
                 return_value=0,
             ):
                 result = await sync_library(db, settings)
@@ -309,16 +309,16 @@ class SyncCheckpointResumeTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(PlexClient, "movie_items", side_effect=movie_items), patch.object(
                 PlexClient, "show_items", side_effect=show_items
             ), patch(
-                "curatorx.library.sync._row_from_plex_item",
+                "projectionist.library.sync._row_from_plex_item",
                 side_effect=instant_row,
             ), patch(
-                "curatorx.library.sync.rebuild_embeddings",
+                "projectionist.library.sync.rebuild_embeddings",
                 new=AsyncMock(return_value=1),
             ), patch(
-                "curatorx.library.sync.sync_tv_episodes",
+                "projectionist.library.sync.sync_tv_episodes",
                 return_value={"shows_synced": 0, "episodes_synced": 0},
             ), patch(
-                "curatorx.library.sync.scan_for_rating_prompts",
+                "projectionist.library.sync.scan_for_rating_prompts",
                 return_value=0,
             ):
                 result = await sync_library(db, settings)

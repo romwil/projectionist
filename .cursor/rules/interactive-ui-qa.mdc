@@ -6,7 +6,7 @@ alwaysApply: false
 # Interactive UI QA
 
 If the user asks for **browser QA**, **UI QA**, **role QA**, **absolute baseline**,
-**full characterization**, or **delta / regression retest** against CuratorX:
+**full characterization**, or **delta / regression retest** against Projectionist:
 
 1. Read and follow [`.cursor/skills/interactive-ui-qa/SKILL.md`](../skills/interactive-ui-qa/SKILL.md).
 2. Execute **only** authored IDs in

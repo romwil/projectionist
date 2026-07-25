@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import List, Optional
 from unittest.mock import patch
 
-from curatorx.connectors.plex import PlexEpisode, PlexLibraryItem, PlexSeason
-from curatorx.library.db import Database
-from curatorx.library.episodes import query_episodes, summarize_tv_progress, sync_tv_episodes
+from projectionist.connectors.plex import PlexEpisode, PlexLibraryItem, PlexSeason
+from projectionist.library.db import Database
+from projectionist.library.episodes import query_episodes, summarize_tv_progress, sync_tv_episodes
 
 
 @dataclass
@@ -280,7 +280,7 @@ class LibraryEpisodeTests(unittest.TestCase):
                 episodes_by_season={},
             )
 
-            with self.assertLogs("curatorx.library.episodes", level="INFO") as logs:
+            with self.assertLogs("projectionist.library.episodes", level="INFO") as logs:
                 sync_tv_episodes(db, plex)
 
             self.assertTrue(
@@ -310,7 +310,7 @@ class LibraryEpisodeTests(unittest.TestCase):
                 episodes_by_season={},
             )
 
-            with self.assertLogs("curatorx.library.episodes", level="INFO") as logs:
+            with self.assertLogs("projectionist.library.episodes", level="INFO") as logs:
                 stats = sync_tv_episodes(db, plex)
 
             self.assertEqual(stats["unmatchable_shows"], 1)
@@ -352,7 +352,7 @@ class LibraryEpisodeTests(unittest.TestCase):
                 },
             )
 
-            with self.assertLogs("curatorx.library.episodes", level="INFO") as logs:
+            with self.assertLogs("projectionist.library.episodes", level="INFO") as logs:
                 stats = sync_tv_episodes(db, plex)
 
             self.assertEqual(stats["skipped_empty_seasons"], 1)
@@ -450,7 +450,7 @@ class LibraryEpisodeTests(unittest.TestCase):
                 episodes_by_season={},
             )
 
-            with patch.object(logging.getLogger("curatorx.library.episodes"), "warning") as warning:
+            with patch.object(logging.getLogger("projectionist.library.episodes"), "warning") as warning:
                 stats = sync_tv_episodes(db, plex)
 
             self.assertEqual(stats["unmatchable_shows"], 3)

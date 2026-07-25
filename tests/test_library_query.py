@@ -8,9 +8,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import Database
-from curatorx.library.facets import library_facet_catalog
-from curatorx.library.query import (
+from projectionist.library.db import Database
+from projectionist.library.facets import library_facet_catalog
+from projectionist.library.query import (
     LibraryFilters,
     aggregate_library,
     compute_library_overview,
@@ -220,7 +220,7 @@ class LibraryQueryTests(unittest.TestCase):
                     "directors": ["Nolan"],
                 }
             )
-            from curatorx.library.facets import rebuild_library_facets
+            from projectionist.library.facets import rebuild_library_facets
 
             rebuild_library_facets(db)
             result = aggregate_library(db, "director")
@@ -603,7 +603,7 @@ class LibraryQueryTests(unittest.TestCase):
     def test_query_keywords_and_semantics(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
-            from curatorx.library.facets import rebuild_library_facets
+            from projectionist.library.facets import rebuild_library_facets
 
             db.upsert_library_item(
                 {

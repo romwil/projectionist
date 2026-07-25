@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import Database
-from curatorx.scheduler.tasks.summary_motifs import (
+from projectionist.library.db import Database
+from projectionist.scheduler.tasks.summary_motifs import (
     extract_motif_rows,
     keyword_stems,
     normalize_token,

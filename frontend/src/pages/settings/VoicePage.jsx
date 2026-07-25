@@ -59,7 +59,7 @@ export default function VoicePage() {
 
       <SettingsPanel testId="settings-voice-privacy">
         <p className="field-help settings-voice-privacy">
-          Audio may be processed by your browser or OS speech service. CuratorX stores transcripts as chat
+          Audio may be processed by your browser or OS speech service. Projectionist stores transcripts as chat
           text, not raw audio.
         </p>
       </SettingsPanel>

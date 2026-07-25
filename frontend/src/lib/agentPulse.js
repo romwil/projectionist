@@ -22,6 +22,6 @@ export function agentPulseTitle(pulse, chatError = "") {
   return "Agent idle";
 }
 
-export function curatorxBrandAriaLabel(pulse, chatError = "") {
-  return `CuratorX home — ${agentPulseTitle(pulse, chatError)}`;
+export function projectionistBrandAriaLabel(pulse, chatError = "") {
+  return `Projectionist home — ${agentPulseTitle(pulse, chatError)}`;
 }

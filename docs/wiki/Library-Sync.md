@@ -1,6 +1,6 @@
 # Library Sync
 
-Library sync indexes your Plex movie and TV libraries into CuratorX’s SQLite database (`curatorx.db`), enriches metadata (TMDB), builds search facets/FTS, upserts structured credits, and prepares embeddings for recommendations.
+Library sync indexes your Plex movie and TV libraries into Projectionist’s SQLite database (`projectionist.db`), enriches metadata (TMDB), builds search facets/FTS, upserts structured credits, and prepares embeddings for recommendations.
 
 ## Sync vs idle trickle
 
@@ -11,7 +11,7 @@ Library sync indexes your Plex movie and TV libraries into CuratorX’s SQLite d
 
 Sync stays interactive; heavy similarity graphs and embedding backfills trickle in the background so Unraid/NAS CPUs stay usable. Empty Explore neighbor rails mean the idle cache has not finished — run sync, then leave the container idle (or wait for the next scheduler cycle).
 
-**Provenance:** CuratorX never invents `release_date` / `first_air_date` from `year` alone. Recent Releases and calendar On This Day stay empty (with an explanatory note) until real ISO dates are enriched.
+**Provenance:** Projectionist never invents `release_date` / `first_air_date` from `year` alone. Recent Releases and calendar On This Day stay empty (with an explanatory note) until real ISO dates are enriched.
 
 ## How to start a sync
 
@@ -61,7 +61,7 @@ Job state is written to `/config/jobs_state.json` (under `DATA_DIR`).
 - First sync on a large library can take a while (network + TMDB enrichment). Metadata enrichment and TV episode fetches run with a bounded thread pool (`library_enrich_workers`, default 6; SQLite writes stay serial). Unchanged shows (matching Plex `leafCount` / `viewedLeafCount`) skip episode re-fetch on later syncs.
 - After the first full sync, leave the app idle so embeddings → neighbors → relations trickle; Explore “More Like This” and Plot Lab fill in as those tasks complete
 - Keep `/config` on persistent storage so the index, checkpoints, and job history are not lost
-- Use `CURATORX_LOG_LEVEL=DEBUG` to trace sync phases in container logs
+- Use `PROJECTIONIST_LOG_LEVEL=DEBUG` to trace sync phases in container logs
 - Inspect idle tasks under Admin → scheduled tasks (quarantine reset if a task fails repeatedly)
 
 See also: [Troubleshooting](Troubleshooting.md) · [../WEB_UI.md](../WEB_UI.md) · [../ARCHITECTURE.md](../ARCHITECTURE.md#metadata-trickle-sync-vs-idle)

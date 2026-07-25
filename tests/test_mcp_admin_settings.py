@@ -10,8 +10,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import Settings, save_settings
-from curatorx.mcp.mode import resolve_http_mcp_auth
+from projectionist.config_store import Settings, save_settings
+from projectionist.mcp.mode import resolve_http_mcp_auth
 
 
 class McpAdminSettingsTests(unittest.TestCase):
@@ -21,17 +21,17 @@ class McpAdminSettingsTests(unittest.TestCase):
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ.pop("CURATORX_MCP_API_KEY", None)
         os.environ.pop("CURATORX_MCP_FULL_API_KEY", None)
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
@@ -122,14 +122,14 @@ class McpAdminSettingsTests(unittest.TestCase):
 
     def test_clear_env_key_rejected(self) -> None:
         os.environ["CURATORX_MCP_API_KEY"] = "from-env-xxxx"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         importlib.reload(self.app_mod)
         client = TestClient(self.app_mod.app)
         resp = client.post("/api/settings/mcp-keys/clear", json={"which": "privacy"})
         self.assertEqual(resp.status_code, 400)
-        self.assertIn("CURATORX_MCP_API_KEY", resp.json()["detail"])
+        self.assertIn("PROJECTIONIST_MCP_API_KEY", resp.json()["detail"])
 
 
 if __name__ == "__main__":

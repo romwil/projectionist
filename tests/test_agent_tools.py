@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from curatorx.agent.tools import (
+from projectionist.agent.tools import (
     PLEX_COLLECTION_TOOL_NAMES,
     SEERR_TOOL_NAMES,
     TOOL_DEFINITIONS,
@@ -17,11 +17,11 @@ from curatorx.agent.tools import (
     build_system_prompt,
     build_tool_definitions,
 )
-from curatorx.config_store import FeatureFlags, Settings
-from curatorx.connectors.arr_errors import ArrTitleNotFoundError
-from curatorx.connectors.radarr import RadarrMovie
-from curatorx.library.db import DEFAULT_LENS_ID, Database
-from curatorx.models.schemas import TitleCard
+from projectionist.config_store import FeatureFlags, Settings
+from projectionist.connectors.arr_errors import ArrTitleNotFoundError
+from projectionist.connectors.radarr import RadarrMovie
+from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.models.schemas import TitleCard
 
 
 class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
@@ -29,7 +29,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID, user_id="user-1")
-            with patch("curatorx.memory.UserMemoryService.remember", return_value={}):
+            with patch("projectionist.memory.UserMemoryService.remember", return_value={}):
                 result = await registry.execute(
                     "remember_about_user",
                     {"kind": "preference", "text": "loves stop-motion"},
@@ -173,9 +173,9 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 DEFAULT_LENS_ID,
             )
             with patch(
-                "curatorx.reviews.plex_sync.lookup_plex_user_rating_stars",
+                "projectionist.reviews.plex_sync.lookup_plex_user_rating_stars",
                 return_value=5,
-            ), patch("curatorx.connectors.plex.PlexClient.set_user_rating"):
+            ), patch("projectionist.connectors.plex.PlexClient.set_user_rating"):
                 result = await registry.execute(
                     "save_user_review",
                     {
@@ -202,9 +202,9 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 DEFAULT_LENS_ID,
             )
             with patch(
-                "curatorx.reviews.plex_sync.lookup_plex_user_rating_stars",
+                "projectionist.reviews.plex_sync.lookup_plex_user_rating_stars",
                 return_value=5,
-            ), patch("curatorx.connectors.plex.PlexClient.set_user_rating") as mock_rate:
+            ), patch("projectionist.connectors.plex.PlexClient.set_user_rating") as mock_rate:
                 result = await registry.execute(
                     "save_user_review",
                     {
@@ -280,7 +280,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                     "view_count": 0,
                 }
             )
-            from curatorx.library.facets import rebuild_library_facets
+            from projectionist.library.facets import rebuild_library_facets
 
             rebuild_library_facets(db)
             registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
@@ -304,7 +304,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                     "directors": ["Christopher Nolan"],
                 }
             )
-            from curatorx.library.facets import rebuild_library_facets
+            from projectionist.library.facets import rebuild_library_facets
 
             rebuild_library_facets(db)
             registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
@@ -466,7 +466,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(owned_item["rating_key"], "rk-1")
         self.assertNotIn("tmdb_id", owned_item)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_find_collection_gaps_items_include_tmdb_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.genre_list_movies.return_value = []
@@ -489,7 +489,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["items"][0]["tmdb_id"], 603)
             self.assertEqual(payload["items"][0]["title"], "The Matrix")
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_find_collection_gaps_excludes_owned_tmdb_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.genre_list_movies.return_value = []
@@ -529,7 +529,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(registry.cards), 1)
             self.assertEqual(registry.cards[0].tmdb_id, 604)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_find_collection_gaps_excludes_queued_tmdb_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.genre_list_movies.return_value = []
@@ -619,7 +619,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(registry.cards), 1)
             self.assertEqual(registry.cards[0].tmdb_id, 2)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_recommend_hidden_gems_excludes_owned_tmdb_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.discover_movies.return_value = [
@@ -657,7 +657,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(registry.cards), 1)
             self.assertEqual(registry.cards[0].tmdb_id, 27205)
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_omits_owned_from_cards_but_reports_in_library(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_movie_page.return_value = {
@@ -704,7 +704,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(registry.cards), 1)
             self.assertEqual(registry.cards[0].tmdb_id, 604)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_explore_genre_include_missing_only_attaches_gap_cards(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.genre_list_movies.return_value = [{"id": 878, "name": "Science Fiction"}]
@@ -780,7 +780,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
         ranked = _rank_tmdb_search_results(results, year=None)
         self.assertEqual(len(ranked), 2)
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_movie_returns_structured_matches(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_movie_page.return_value = {
@@ -827,7 +827,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(registry.cards[0].recommendation_reason, "")
             self.assertNotIn("recommendation_reason", payload["items"][0])
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_year_does_not_expand_ambiguous_title(self, mock_tmdb_cls) -> None:
         """Mandy + year=2018 must pin Cosmatos 2018, not every same-name hit."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -881,7 +881,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(registry.cards[0].year, 2018)
             self.assertIn("Cosmic neon", registry.cards[0].recommendation_reason)
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_by_tmdb_id_pins_exact_work(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {
@@ -914,7 +914,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(registry.cards[0].title, "Mandy")
             self.assertEqual(registry.cards[0].year, 2018)
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_title_only_may_return_multiple_same_name(self, mock_tmdb_cls) -> None:
         """Without year/tmdb_id, disambiguation candidates are still allowed."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -941,7 +941,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(registry.cards), 3)
             self.assertEqual({c.tmdb_id for c in registry.cards}, {460885, 111, 222})
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_accepts_curator_reason(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_movie_page.return_value = {
@@ -980,7 +980,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 "Mind-bending sci-fi that fits your unwatched cyberpunk streak",
             )
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     async def test_set_recommendation_reasons_updates_cards(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_movie_page.return_value = {
@@ -1016,7 +1016,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["updated"], 1)
             self.assertEqual(registry.cards[0].recommendation_reason, "British Quatermass energy")
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_show_enriches_tvdb_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.search_tv_page.return_value = {
@@ -1048,7 +1048,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["items"][0]["tvdb_id"], 79126)
             self.assertEqual(payload["items"][0]["title"], "The Wire")
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_search_tmdb_requires_api_key(self, mock_tmdb_cls) -> None:
         del mock_tmdb_cls
         with tempfile.TemporaryDirectory() as tmp:
@@ -1061,7 +1061,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             payload = json.loads(result)
             self.assertIn("error", payload)
 
-    @patch("curatorx.library.titles.TMDBClient")
+    @patch("projectionist.library.titles.TMDBClient")
     async def test_get_title_detail_tool_returns_tmdb_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {
@@ -1081,7 +1081,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["title"], "The Matrix")
             self.assertNotIn("error", payload)
 
-    @patch("curatorx.library.titles.TMDBClient")
+    @patch("projectionist.library.titles.TMDBClient")
     async def test_get_title_detail_tool_reports_missing_metadata(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.side_effect = RuntimeError("HTTP 404")
@@ -1130,7 +1130,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 has_file=True,
             )
             with patch(
-                "curatorx.agent.tools.RadarrClient.movie_by_tmdb_id",
+                "projectionist.agent.tools.RadarrClient.movie_by_tmdb_id",
                 return_value=movie,
             ):
                 result = await registry.execute(
@@ -1159,7 +1159,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 DEFAULT_LENS_ID,
             )
             with patch(
-                "curatorx.agent.tools.RadarrClient.movie_by_tmdb_id",
+                "projectionist.agent.tools.RadarrClient.movie_by_tmdb_id",
                 return_value=None,
             ):
                 result = await registry.execute(
@@ -1172,7 +1172,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(registry.pending_tokens, [])
 
     async def test_execute_confirmed_remove_arr_uses_friendly_not_found_error(self) -> None:
-        from curatorx.agent.tools import execute_confirmed_action
+        from projectionist.agent.tools import execute_confirmed_action
 
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
@@ -1199,10 +1199,10 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                 has_file=True,
             )
             with patch(
-                "curatorx.agent.tools.RadarrClient.movie_by_tmdb_id",
+                "projectionist.agent.tools.RadarrClient.movie_by_tmdb_id",
                 return_value=movie,
             ), patch(
-                "curatorx.agent.tools.RadarrClient.delete_movie",
+                "projectionist.agent.tools.RadarrClient.delete_movie",
                 side_effect=RuntimeError(
                     'HTTP 404 from http://radarr/api/v3/movie/99: '
                     '{"message":"Movie with ID 99 does not exist"}'
@@ -1212,7 +1212,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
                     await execute_confirmed_action(db, settings, token)
 
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_find_collection_gaps_unresolved_keywords(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.genre_list_movies.return_value = []
@@ -1231,7 +1231,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(payload.get("keywords_unresolved"))
             mock_tmdb.discover_movies.assert_not_called()
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_rejects_mismatched_pinned_id(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {

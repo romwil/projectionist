@@ -26,10 +26,10 @@ from pathlib import Path
 from typing import Any, Dict, Mapping
 from unittest import mock
 
-from curatorx.connectors.arr_errors import arr_exists_error_code
-from curatorx.connectors.radarr import RadarrClient
-from curatorx.connectors.sonarr import SonarrClient
-from curatorx.connectors.tmdb import TMDBClient
+from projectionist.connectors.arr_errors import arr_exists_error_code
+from projectionist.connectors.radarr import RadarrClient
+from projectionist.connectors.sonarr import SonarrClient
+from projectionist.connectors.tmdb import TMDBClient
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "contracts"
 _RECORD = os.environ.get("CURATORX_CONTRACT_RECORD", "").strip().lower() in {
@@ -67,7 +67,7 @@ class RadarrContractTests(unittest.TestCase):
         self.assertIsInstance(movie["tmdbId"], int)
 
         with mock.patch(
-            "curatorx.connectors.radarr.request_json",
+            "projectionist.connectors.radarr.request_json",
             return_value=items,
         ):
             client = RadarrClient("http://radarr.test", "key")
@@ -91,7 +91,7 @@ class SonarrContractTests(unittest.TestCase):
         _assert_keys(series, {"title", "tvdbId", "year"}, label="sonarr lookup item")
 
         with mock.patch(
-            "curatorx.connectors.sonarr.request_json",
+            "projectionist.connectors.sonarr.request_json",
             return_value=items,
         ):
             client = SonarrClient("http://sonarr.test", "key")
@@ -119,7 +119,7 @@ class TmdbContractTests(unittest.TestCase):
         _assert_keys(hit, {"id", "title", "overview"}, label="tmdb search result")
 
         with mock.patch(
-            "curatorx.connectors.tmdb.request_json",
+            "projectionist.connectors.tmdb.request_json",
             return_value=page,
         ):
             client = TMDBClient("fake-key")
@@ -135,7 +135,7 @@ class TmdbContractTests(unittest.TestCase):
             label="tmdb movie details",
         )
         with mock.patch(
-            "curatorx.connectors.tmdb.request_json",
+            "projectionist.connectors.tmdb.request_json",
             return_value=details,
         ):
             client = TMDBClient("fake-key")

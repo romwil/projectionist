@@ -11,7 +11,7 @@ import {
 const DEFAULT_METHODS = ["plex", "oidc", "local"];
 
 /**
- * Owner inbox for CuratorX-owned request-access queue + invite links (Admin → Access).
+ * Owner inbox for Projectionist-owned request-access queue + invite links (Admin → Access).
  */
 export default function AccessRequestsPage() {
   const [items, setItems] = useState([]);

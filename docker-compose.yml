@@ -1,8 +1,8 @@
 services:
-  curatorx:
+  projectionist:
     build: .
-    image: curatorx:latest
-    container_name: curatorx
+    image: projectionist:latest
+    container_name: projectionist
     restart: unless-stopped
     env_file:
       - .env
@@ -28,7 +28,7 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
-      CURATORX_LOG_LEVEL: ${CURATORX_LOG_LEVEL:-${LOG_LEVEL:-INFO}}
+      PROJECTIONIST_LOG_LEVEL: ${PROJECTIONIST_LOG_LEVEL:-${CURATORX_LOG_LEVEL:-${LOG_LEVEL:-INFO}}}
       LOG_FORMAT: ${LOG_FORMAT:-text}
     volumes:
       - ${CONFIG_PATH:-./config}:/config

@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import Database
-from curatorx.library.query import (
+from projectionist.library.db import Database
+from projectionist.library.query import (
     attach_motif_why,
     build_motif_why,
     filters_from_mapping,

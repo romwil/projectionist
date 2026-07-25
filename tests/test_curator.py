@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
-from curatorx.agent.curator import (
+from projectionist.agent.curator import (
     CuratorAgent,
     _cards_for_response,
     _displayable_cards,
@@ -16,11 +16,11 @@ from curatorx.agent.curator import (
     _extract_tool_calls,
     _suggested_reply_block,
 )
-from curatorx.agent.tools import ToolRegistry
-from curatorx.agent.providers import _normalize_anthropic_response
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
-from curatorx.models.schemas import TitleCard
+from projectionist.agent.tools import ToolRegistry
+from projectionist.agent.providers import _normalize_anthropic_response
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.models.schemas import TitleCard
 
 
 class CuratorResponseParsingTests(unittest.TestCase):

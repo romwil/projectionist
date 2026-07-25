@@ -171,7 +171,7 @@ export default function JoinPage() {
     <div className="login-page" data-testid="join-page">
       <div className="login-card">
         <p className="eyebrow">Household invite</p>
-        <h1>Join CuratorX</h1>
+        <h1>Join Projectionist</h1>
         {loading ? <p className="status status-secondary">Checking invite…</p> : null}
         {error ? <InlineAlert type="error" message={error} testId="join-error" /> : null}
         {!loading && invite ? (

@@ -2,8 +2,8 @@
 
 import unittest
 
-from curatorx.config_store import Settings
-from curatorx.web.setup import merge_secret_fields, resolve_test_payload
+from projectionist.config_store import Settings
+from projectionist.web.setup import merge_secret_fields, resolve_test_payload
 
 
 class SetupTests(unittest.TestCase):

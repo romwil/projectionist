@@ -11,13 +11,13 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.library.db import Database
-from curatorx.library.titles import get_title_detail
+from projectionist.library.db import Database
+from projectionist.library.titles import get_title_detail
 
 
 class TitleDetailCreditsTests(unittest.TestCase):
-    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
-    @patch("curatorx.library.titles.TMDBClient")
+    @patch("projectionist.library.titles.cached_machine_identifier", return_value="")
+    @patch("projectionist.library.titles.TMDBClient")
     def test_prefers_db_credits_when_in_library(self, mock_tmdb_cls, _machine) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {
@@ -85,8 +85,8 @@ class TitleDetailCreditsTests(unittest.TestCase):
             self.assertEqual(detail.directors, ["Ridley Scott"])
             self.assertEqual(detail.keywords, ["dystopia"])
 
-    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
-    @patch("curatorx.library.titles.TMDBClient")
+    @patch("projectionist.library.titles.cached_machine_identifier", return_value="")
+    @patch("projectionist.library.titles.TMDBClient")
     def test_show_detail_includes_episode_progress(self, mock_tmdb_cls, _machine) -> None:
         mock_tmdb_cls.return_value.tv_details.return_value = {}
         mock_tmdb_cls.youtube_trailer_key.return_value = ""
@@ -112,8 +112,8 @@ class TitleDetailCreditsTests(unittest.TestCase):
             self.assertEqual(detail.total_episode_count, 60)
             self.assertEqual(detail.unwatched_episode_count, 12)
 
-    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
-    @patch("curatorx.library.titles.TMDBClient")
+    @patch("projectionist.library.titles.cached_machine_identifier", return_value="")
+    @patch("projectionist.library.titles.TMDBClient")
     def test_tv_fills_cast_keywords_and_credits(self, mock_tmdb_cls, _machine) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.tv_details.return_value = {
@@ -158,25 +158,25 @@ class PersonApiTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
         self._tmpdir.cleanup()
 
-    @patch("curatorx.web.app.TMDBClient")
+    @patch("projectionist.web.app.TMDBClient")
     def test_person_api_merges_tmdb_and_library(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.person_details.return_value = {
@@ -198,7 +198,7 @@ class PersonApiTests(unittest.TestCase):
             },
         }
         mock_tmdb.profile_url.return_value = "https://image.tmdb.org/t/p/w342/pitt.jpg"
-        from curatorx.connectors.tmdb import TMDBClient as RealTMDBClient
+        from projectionist.connectors.tmdb import TMDBClient as RealTMDBClient
 
         mock_tmdb_cls.filmography_total_from_combined_credits = staticmethod(
             RealTMDBClient.filmography_total_from_combined_credits

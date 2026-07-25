@@ -6,7 +6,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
-from curatorx.connectors.plex import PlexClient
+from projectionist.connectors.plex import PlexClient
 
 
 class PlexEpisodeParsingTests(unittest.TestCase):

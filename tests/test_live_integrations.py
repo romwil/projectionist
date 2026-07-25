@@ -27,9 +27,9 @@ import os
 import unittest
 from pathlib import Path
 
-from curatorx.config_store import load_dotenv_file, load_merged_settings
+from projectionist.config_store import load_dotenv_file, load_merged_settings
 # Alias so pytest does not collect setup helpers as tests (names start with test_).
-from curatorx.web.setup import (
+from projectionist.web.setup import (
     test_plex as check_plex,
     test_radarr as check_radarr,
     test_seerr as check_seerr,

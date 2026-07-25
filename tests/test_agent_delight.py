@@ -7,9 +7,9 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
-from curatorx.agent.tools import ToolRegistry, build_system_prompt
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
+from projectionist.agent.tools import ToolRegistry, build_system_prompt
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
 
 from conftest import seed_library as _seed_library
 
@@ -254,7 +254,7 @@ class TestNightOwlPrompt(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             fake_now = datetime(2024, 1, 15, 23, 30, 0)
-            with patch("curatorx.agent.tools._dt") as mock_dt:
+            with patch("projectionist.agent.tools._dt") as mock_dt:
                 mock_dt.now.return_value = fake_now
                 prompt = build_system_prompt(db, persona_id="night-owl-host")
                 self.assertIn("late night mode", prompt)

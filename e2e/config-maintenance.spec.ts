@@ -37,21 +37,39 @@ test.describe("Admin maintenance dashboard", () => {
     await expect(page.getByTestId("certified-badge-llm")).toBeVisible();
   });
 
-  test("secret show/hide only appears for a typed draft (API never returns keys)", async ({ page }) => {
+  test("secret show/hide works for typed drafts and stored reveals", async ({ page }) => {
     await page.goto("/admin/connections");
     const secretInput = page.getByTestId("secret-input-llm_api_key");
     const toggle = page.getByTestId("secret-toggle-llm_api_key");
 
     await expect(secretInput).toBeVisible();
     await expect(secretInput).toHaveAttribute("type", "password");
-    // Stored secrets are redacted — Show would be a false affordance on an empty field.
-    await expect(toggle).toHaveCount(0);
 
-    await secretInput.fill("sk-draft-for-reveal");
-    await expect(toggle).toBeVisible();
+    // When no draft and key is unset, Show stays hidden.
+    // If a prior run left llm_api_key_set, Show may already be present — either path is fine.
+    const initiallyVisible = await toggle.count();
+    if (initiallyVisible === 0) {
+      await secretInput.fill("sk-draft-for-reveal");
+      await expect(toggle).toBeVisible();
+      await toggle.click();
+      await expect(secretInput).toHaveAttribute("type", "text");
+      await expect(secretInput).toHaveValue("sk-draft-for-reveal");
+      await toggle.click();
+      await expect(secretInput).toHaveAttribute("type", "password");
+      return;
+    }
+
+    // Configured (empty) field: Show fetches via /api/settings/secrets/reveal.
+    await page.route("**/api/settings/secrets/reveal", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ field: "llm_api_key", value: "sk-stored-reveal" }),
+      });
+    });
     await toggle.click();
     await expect(secretInput).toHaveAttribute("type", "text");
-    await expect(secretInput).toHaveValue("sk-draft-for-reveal");
+    await expect(secretInput).toHaveValue("sk-stored-reveal");
     await toggle.click();
     await expect(secretInput).toHaveAttribute("type", "password");
   });

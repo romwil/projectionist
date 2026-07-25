@@ -51,12 +51,13 @@ const env = {
   ...process.env,
   DATA_DIR,
   PORT,
+  PROJECTIONIST_SKIP_DOTENV: "1",
   CURATORX_SKIP_DOTENV: "1",
 };
 
 console.log(`Starting CuratorX E2E server on :${PORT} (DATA_DIR=${DATA_DIR})`);
 
-const child = spawn(python, ["-m", "curatorx.web"], {
+const child = spawn(python, ["-m", "projectionist.web"], {
   cwd: ROOT,
   env,
   stdio: "inherit",

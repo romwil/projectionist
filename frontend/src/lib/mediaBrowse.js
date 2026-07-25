@@ -35,7 +35,7 @@ export const MEDIA_BROWSE_PAGE_SIZES = [48, 100, 500, "all"];
 
 /**
  * Ceiling for an "All" request. Mirrors the CSV export cap in
- * curatorx/web/app.py so "All" never asks the reader for an unbounded payload.
+ * projectionist/web/app.py so "All" never asks the reader for an unbounded payload.
  */
 export const MEDIA_BROWSE_ALL_CAP = 5000;
 

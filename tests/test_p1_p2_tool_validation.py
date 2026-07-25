@@ -14,9 +14,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 from unittest.mock import MagicMock, patch
 
-from curatorx.agent.tools import ToolRegistry, _card_to_tool_item
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
+from projectionist.agent.tools import ToolRegistry, _card_to_tool_item
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
 
 
 # ---------------------------------------------------------------------------
@@ -663,7 +663,7 @@ class TestCritiqueWatchlistValues(unittest.IsolatedAsyncioTestCase):
 class TestUpcomingPremieresValues(unittest.IsolatedAsyncioTestCase):
     """Verify date range boundaries for upcoming premieres."""
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_premiere_within_window_included(self, mock_tmdb_cls):
         """Shows with next episode within days_ahead window should be returned."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -695,7 +695,7 @@ class TestUpcomingPremieresValues(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["items"][0]["season_number"], 2)
             self.assertEqual(result["items"][0]["episode_number"], 3)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_premiere_outside_window_excluded(self, mock_tmdb_cls):
         """Shows with next episode beyond days_ahead should be excluded."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -722,7 +722,7 @@ class TestUpcomingPremieresValues(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(result["count"], 0)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_premiere_exactly_at_cutoff_included(self, mock_tmdb_cls):
         """Premiere exactly at cutoff day should be included (<=)."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -749,7 +749,7 @@ class TestUpcomingPremieresValues(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(result["count"], 1)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_past_premiere_excluded(self, mock_tmdb_cls):
         """Episodes that aired yesterday should be excluded."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -776,7 +776,7 @@ class TestUpcomingPremieresValues(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(result["count"], 0)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_today_premiere_included(self, mock_tmdb_cls):
         """Episodes airing today should be included (>= today)."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -803,7 +803,7 @@ class TestUpcomingPremieresValues(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["count"], 1)
             self.assertEqual(result["items"][0]["tmdb_id"], 1005)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_movies_excluded(self, mock_tmdb_cls):
         """Only shows (not movies) should be checked for premieres."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -821,7 +821,7 @@ class TestUpcomingPremieresValues(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["count"], 0)
             mock_tmdb.tv_details.assert_not_called()
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_no_tmdb_key_returns_error(self, mock_tmdb_cls):
         """Missing TMDB key -> error."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -831,7 +831,7 @@ class TestUpcomingPremieresValues(unittest.IsolatedAsyncioTestCase):
 
             self.assertIn("error", result)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_sorted_by_air_date(self, mock_tmdb_cls):
         """Multiple premieres should be sorted by air_date ascending."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -861,7 +861,7 @@ class TestUpcomingPremieresValues(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["items"][0]["title"], "Sooner Show")
             self.assertEqual(result["items"][1]["title"], "Later Show")
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_show_without_tmdb_id_skipped(self, mock_tmdb_cls):
         """Shows without tmdb_id should be silently skipped."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -1083,7 +1083,7 @@ class TestGetUserReviewsValues(unittest.IsolatedAsyncioTestCase):
 class TestListPlexCollectionsValues(unittest.IsolatedAsyncioTestCase):
     """Verify list_plex_collections behaviour."""
 
-    @patch("curatorx.agent.tools.plex_collections_configuration_error")
+    @patch("projectionist.agent.tools.plex_collections_configuration_error")
     async def test_no_plex_configured_returns_error(self, mock_config_err):
         """If Plex is not configured, return error."""
         mock_config_err.return_value = "Plex is not configured."
@@ -1095,7 +1095,7 @@ class TestListPlexCollectionsValues(unittest.IsolatedAsyncioTestCase):
             self.assertIn("error", result)
             self.assertIn("Plex", result["error"])
 
-    @patch("curatorx.agent.tools.plex_collections_configuration_error")
+    @patch("projectionist.agent.tools.plex_collections_configuration_error")
     async def test_no_section_configured_returns_error(self, mock_config_err):
         """If section mapping is missing, return error."""
         mock_config_err.return_value = None
@@ -1370,7 +1370,7 @@ class TestAnniversariesExpandedValues(unittest.IsolatedAsyncioTestCase):
 class TestRecommendHiddenGemsValues(unittest.IsolatedAsyncioTestCase):
     """Verify hidden gems excludes owned items and low-rated TMDB results."""
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_excludes_owned_titles(self, mock_tmdb_cls):
         """TMDB results already in library should be filtered out."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -1394,7 +1394,7 @@ class TestRecommendHiddenGemsValues(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("Owned Film", titles)
             self.assertIn("Not Owned Film", titles)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_excludes_low_rated(self, mock_tmdb_cls):
         """TMDB results with vote_average < 7.0 should be filtered out."""
         mock_tmdb = mock_tmdb_cls.return_value

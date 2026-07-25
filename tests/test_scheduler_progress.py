@@ -6,9 +6,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import Database
-from curatorx.scheduler.progress import estimate_progress, progress_for_definition
-from curatorx.scheduler.engine import TaskDefinition
+from projectionist.library.db import Database
+from projectionist.scheduler.progress import estimate_progress, progress_for_definition
+from projectionist.scheduler.engine import TaskDefinition
 
 
 class ProgressEstimateTests(unittest.TestCase):

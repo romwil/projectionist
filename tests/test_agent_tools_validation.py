@@ -12,9 +12,9 @@ from datetime import date
 from pathlib import Path
 from unittest.mock import patch
 
-from curatorx.agent.tools import ToolRegistry, _card_to_tool_item
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
+from projectionist.agent.tools import ToolRegistry, _card_to_tool_item
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
 
 from conftest import seed_library as _seed_library
 
@@ -27,7 +27,7 @@ from conftest import seed_library as _seed_library
 class TestFindCollectionGapsValues(unittest.IsolatedAsyncioTestCase):
     """Verify gap detection returns exactly the expected missing titles."""
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_gaps_returns_only_missing_from_filmography(self, mock_tmdb_cls):
         """Seed 3 of 5 Spielberg films -> gap tool should return only the 2 missing."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -61,7 +61,7 @@ class TestFindCollectionGapsValues(unittest.IsolatedAsyncioTestCase):
             returned_titles = {item["title"] for item in result["items"]}
             self.assertEqual(returned_titles, {"Saving Private Ryan", "Jaws"})
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_gaps_returns_empty_when_all_owned(self, mock_tmdb_cls):
         """Complete filmography -> gap tool should return empty."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -84,7 +84,7 @@ class TestFindCollectionGapsValues(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 0)
             self.assertEqual(result["items"], [])
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_gaps_genre_filter_resolves_correctly(self, mock_tmdb_cls):
         """Genre filter should resolve names to IDs and pass them to discover."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -115,7 +115,7 @@ class TestFindCollectionGapsValues(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["total_matched"], 1)
             self.assertEqual(result["items"][0]["title"], "Alien")
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_gaps_keyword_resolution_searches_tmdb(self, mock_tmdb_cls):
         """Keywords should be resolved from text to IDs via TMDB keyword search."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -139,7 +139,7 @@ class TestFindCollectionGapsValues(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(call_kwargs.get("with_keywords"), "9715")
             self.assertEqual(result["total_matched"], 1)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_gaps_numeric_keyword_passed_directly(self, mock_tmdb_cls):
         """Numeric keywords should be passed directly without searching."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -159,7 +159,7 @@ class TestFindCollectionGapsValues(unittest.IsolatedAsyncioTestCase):
             call_kwargs = mock_tmdb.discover_movies.call_args[1]
             self.assertEqual(call_kwargs.get("with_keywords"), "9715")
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_gaps_excludes_items_in_radarr(self, mock_tmdb_cls):
         """Items already in Radarr should be excluded from gap results."""
         mock_tmdb = mock_tmdb_cls.return_value
@@ -655,7 +655,7 @@ class TestEdgeCases(unittest.IsolatedAsyncioTestCase):
             result = json.loads(await registry.execute("quick_pick_roulette", {}))
             self.assertIn("error", result)
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_gaps_no_tmdb_key_returns_error(self, mock_tmdb_cls):
         """Missing TMDB key should return helpful error, not crash."""
         with tempfile.TemporaryDirectory() as tmp:
@@ -665,7 +665,7 @@ class TestEdgeCases(unittest.IsolatedAsyncioTestCase):
             self.assertIn("error", result)
             self.assertIn("TMDB", result["error"])
 
-    @patch("curatorx.agent.tools.TMDBClient")
+    @patch("projectionist.agent.tools.TMDBClient")
     async def test_gaps_unrecognized_genre_gets_silently_dropped(self, mock_tmdb_cls):
         """Unknown genre names should not cause error but discover still runs."""
         mock_tmdb = mock_tmdb_cls.return_value

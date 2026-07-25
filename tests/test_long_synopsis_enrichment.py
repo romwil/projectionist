@@ -9,9 +9,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from curatorx.config_store import Settings, load_merged_settings, save_settings
-from curatorx.library.db import Database
-from curatorx.scheduler.tasks import long_synopsis_enrichment
+from projectionist.config_store import Settings, load_merged_settings, save_settings
+from projectionist.library.db import Database
+from projectionist.scheduler.tasks import long_synopsis_enrichment
 
 
 class LongSynopsisDefaultTests(unittest.TestCase):
@@ -94,7 +94,7 @@ class LongSynopsisEnrichTests(unittest.TestCase):
             settings = Settings(long_synopsis_source="wikipedia")
 
             with patch(
-                "curatorx.scheduler.tasks.long_synopsis_enrichment.fetch_extract",
+                "projectionist.scheduler.tasks.long_synopsis_enrichment.fetch_extract",
                 return_value="A longer Wikipedia extract about the film.",
             ):
                 result = asyncio.run(
@@ -124,7 +124,7 @@ class LongSynopsisEnrichTests(unittest.TestCase):
                 }
             )
             with patch(
-                "curatorx.scheduler.tasks.long_synopsis_enrichment.fetch_extract",
+                "projectionist.scheduler.tasks.long_synopsis_enrichment.fetch_extract",
                 return_value="Wikipedia default extract.",
             ):
                 result = asyncio.run(
@@ -151,7 +151,7 @@ class LongSynopsisEnrichTests(unittest.TestCase):
             db.set_long_synopsis(item_id, "Existing long text.", "wikipedia")
             settings = Settings(long_synopsis_source="wikipedia")
             with patch(
-                "curatorx.scheduler.tasks.long_synopsis_enrichment.fetch_extract",
+                "projectionist.scheduler.tasks.long_synopsis_enrichment.fetch_extract",
                 return_value="Should not replace.",
             ):
                 result = asyncio.run(

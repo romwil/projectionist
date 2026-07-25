@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { getUserMemory, listUsers } from "../api/client";
 
 /**
- * Owner Youth moderation dashboard. Reviews the private memory notes CuratorX
+ * Owner Youth moderation dashboard. Reviews the private memory notes Projectionist
  * keeps for a Youth-flagged account. The server (`GET /api/users/{id}/memory`)
  * is fail-closed: it only returns notes for accounts explicitly in Youth mode,
  * so non-youth accounts cannot be reviewed here by design.
@@ -57,7 +57,7 @@ export default function YouthReviewPage() {
       </header>
 
       <p className="youth-review-guard" data-testid="youth-review-guard">
-        Review is limited to accounts flagged as <strong>Youth</strong>. CuratorX keeps
+        Review is limited to accounts flagged as <strong>Youth</strong>. Projectionist keeps
         younger members&rsquo; long-term memory fail-closed — you can read what the curator
         remembers for a Youth account here, but adult members&rsquo; private memory is never
         exposed. Set an account to Youth mode from <strong>Household</strong>.

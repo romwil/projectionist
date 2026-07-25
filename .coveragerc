@@ -1,7 +1,7 @@
 [run]
-source = curatorx
+source = projectionist
 omit =
-    curatorx/web/static/*
+    projectionist/web/static/*
     */test*
 
 [report]

@@ -7,16 +7,16 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.preferences.tv_taste import (
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.preferences.tv_taste import (
     episode_sentiment,
     is_abandoned_mid_series,
     season_decay,
     show_taste_multiplier,
     summarize_episode_curve,
 )
-from curatorx.scheduler.tasks import taste_refresh
+from projectionist.scheduler.tasks import taste_refresh
 
 
 def _ep(season: int, *, views: int = 0, stars: float | None = None) -> dict:
@@ -80,7 +80,7 @@ class TvTasteUnitTests(unittest.TestCase):
 class TasteRefreshTvIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
