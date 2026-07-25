@@ -17,9 +17,6 @@ from typing import (
     Optional,
 )
 
-from ._shared import (
-    run_with_db_lock_retry,
-)
 
 
 class GroomingDigestMixin:
@@ -58,7 +55,7 @@ class GroomingDigestMixin:
                 )
                 return int(cursor.rowcount)
 
-        return run_with_db_lock_retry(_write, label="delete_library_items")
+        return self.run_write(_write, label="delete_library_items")
 
     def snapshot_library_items_by_rating_keys(
         self, rating_keys: List[str]
@@ -142,7 +139,7 @@ class GroomingDigestMixin:
                     )
             return restored
 
-        return run_with_db_lock_retry(_write, label="restore_library_items")
+        return self.run_write(_write, label="restore_library_items")
 
     def record_grooming_action(
         self,
@@ -315,7 +312,7 @@ class GroomingDigestMixin:
                 )
                 return len(keys)
 
-        return run_with_db_lock_retry(_write, label="dismiss_purge_candidates")
+        return self.run_write(_write, label="dismiss_purge_candidates")
 
     def dismissed_purge_keys(self) -> set:
         """Return set of rating_keys that have been dismissed from purge."""

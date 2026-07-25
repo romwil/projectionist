@@ -81,6 +81,36 @@ class RatingGateDbTests(unittest.TestCase):
         self.assertNotIn("Rough Cut", titles)
         self.assertNotIn("Mystery Box", titles)
 
+    def test_youth_sql_ceiling_r_rejects_unrated_variants(self) -> None:
+        """LIKE '%R%' over-matched Unrated/NR; exact token bind must not."""
+        for key, title, rating in (
+            ("rk-unrated", "Mystery Unrated", "Unrated"),
+            ("rk-not-rated", "Mystery Not Rated", "Not Rated"),
+            ("rk-nr", "Mystery NR", "NR"),
+            ("rk-pg13", "Teen Flick", "PG-13"),
+            ("rk-r-ok", "Adult Drama", "R"),
+        ):
+            self.db.upsert_library_item(
+                {
+                    "rating_key": key,
+                    "media_type": "movie",
+                    "title": title,
+                    "year": 2002,
+                    "content_rating": rating,
+                    "view_count": 0,
+                }
+            )
+        filters = LibraryFilters(youth_max_content_rating="R", limit=50)
+        result = query_library(self.db, filters)
+        titles = {item["title"] for item in result["items"]}
+        self.assertIn("Good Family", titles)
+        self.assertIn("Teen Flick", titles)
+        self.assertIn("Adult Drama", titles)
+        self.assertNotIn("Mystery Unrated", titles)
+        self.assertNotIn("Mystery Not Rated", titles)
+        self.assertNotIn("Mystery NR", titles)
+        self.assertNotIn("Mystery Box", titles)
+
     def test_apply_youth_gate_to_filters(self) -> None:
         class User:
             is_youth = True
@@ -557,7 +587,7 @@ class AccessRequestTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["display_name"], "Casey")
 
-    def test_approve_creates_local_member_when_enabled(self) -> None:
+    def test_approve_creates_invite_when_enabled(self) -> None:
         row = self.db.create_access_request(display_name="Riley", email="r@example.com")
         settings = Settings()
         settings.auth.local_login_enabled = True
@@ -568,8 +598,10 @@ class AccessRequestTests(unittest.TestCase):
             owner_id="owner-1",
         )
         self.assertEqual(result["request"]["status"], "approved")
-        self.assertIsNotNone(result["temporary_password"])
-        self.assertEqual(result["user"]["role"], "member")
+        self.assertIsNotNone(result["token"])
+        self.assertTrue(str(result["join_path"]).startswith("/join?token="))
+        self.assertEqual(result["invite"]["role"], "member")
+        self.assertEqual(result["invite"]["status"], "pending")
 
     def test_notify_owners_creates_access_request_kind(self) -> None:
         row = self.db.create_access_request(display_name="Sam")

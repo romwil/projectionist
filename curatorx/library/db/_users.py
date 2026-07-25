@@ -620,6 +620,11 @@ class UsersAuthMixin:
 
     @contextmanager
     def connect(self) -> Generator[sqlite3.Connection, None, None]:
+        """Short-lived WAL connection for readers (and for work already on the writer).
+
+        Concurrent reads stay on the caller thread. Mutating hot paths should use
+        ``run_write`` so commits are owned by the dedicated write serializer.
+        """
         conn = self._open_connection()
         try:
             yield conn

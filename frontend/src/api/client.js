@@ -208,18 +208,23 @@ export async function generateWeeklyNewsletter(payload = {}) {
   });
 }
 
-export async function startPlexPinLogin() {
-  return api("/auth/plex/pin", { method: "POST" });
+export async function startPlexPinLogin({ inviteToken } = {}) {
+  const search = new URLSearchParams();
+  if (inviteToken) search.set("invite_token", inviteToken);
+  return api(`/auth/plex/pin${search.toString() ? `?${search}` : ""}`, { method: "POST" });
 }
 
 export async function pollPlexPinLogin(pinId) {
   return api(`/auth/plex/pin/${encodeURIComponent(pinId)}`);
 }
 
-export async function loginWithPlex(authToken) {
+export async function loginWithPlex(authToken, { inviteToken } = {}) {
   return api("/auth/plex", {
     method: "POST",
-    body: JSON.stringify({ auth_token: authToken }),
+    body: JSON.stringify({
+      auth_token: authToken,
+      ...(inviteToken ? { invite_token: inviteToken } : {}),
+    }),
   });
 }
 
@@ -237,8 +242,10 @@ export async function loginWithLocal(username, password) {
   });
 }
 
-export async function startOidcLogin() {
-  return api("/auth/oidc/authorize");
+export async function startOidcLogin({ inviteToken } = {}) {
+  const search = new URLSearchParams();
+  if (inviteToken) search.set("invite_token", inviteToken);
+  return api(`/auth/oidc/authorize${search.toString() ? `?${search}` : ""}`);
 }
 
 export async function logout() {
@@ -573,15 +580,47 @@ export async function listAccessRequests({ status } = {}) {
   return api(`/admin/access-requests${search.toString() ? `?${search}` : ""}`);
 }
 
-export async function approveAccessRequest(requestId) {
+export async function approveAccessRequest(requestId, payload = {}) {
   return api(`/admin/access-requests/${encodeURIComponent(requestId)}/approve`, {
     method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 
 export async function denyAccessRequest(requestId) {
   return api(`/admin/access-requests/${encodeURIComponent(requestId)}/deny`, {
     method: "POST",
+  });
+}
+
+export async function listInvites({ status } = {}) {
+  const search = new URLSearchParams();
+  if (status) search.set("status", status);
+  return api(`/admin/invites${search.toString() ? `?${search}` : ""}`);
+}
+
+export async function createInvite(payload = {}) {
+  return api("/admin/invites", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function revokeInvite(inviteId) {
+  return api(`/admin/invites/${encodeURIComponent(inviteId)}/revoke`, {
+    method: "POST",
+  });
+}
+
+export async function validateInvite(token) {
+  const search = new URLSearchParams({ token });
+  return api(`/invites/validate?${search}`);
+}
+
+export async function redeemInviteLocal({ token, username, password }) {
+  return api("/invites/redeem/local", {
+    method: "POST",
+    body: JSON.stringify({ token, username, password }),
   });
 }
 

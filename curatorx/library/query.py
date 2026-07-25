@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 
 from curatorx.config_store import Settings
 from curatorx.library.db import ACTIVE_CONTEXT_CONFIG_KEY, DEFAULT_CONTEXT_HASH, Database
+from curatorx.library.db_io import run_db
 from curatorx.library.embeddings import (
     embed_text,
     semantic_embedding_search_available,
@@ -546,19 +547,12 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
             params.append(f"%{rating.lower()}%")
         clauses.append(f"({' OR '.join(rating_clauses)})")
     if filters.youth_max_content_rating:
-        from curatorx.youth.rating_gate import allowed_rating_labels
+        from curatorx.youth.rating_gate import youth_content_rating_sql
 
-        # Fail-closed: empty/null content_rating never matches.
-        clauses.append("content_rating IS NOT NULL AND trim(content_rating) != ''")
-        labels = allowed_rating_labels(filters.youth_max_content_rating)
-        if labels:
-            like_clauses = []
-            for label in labels:
-                like_clauses.append("lower(content_rating) LIKE ?")
-                params.append(f"%{label.lower()}%")
-            clauses.append(f"({' OR '.join(like_clauses)})")
-        else:
-            clauses.append("1 = 0")
+        # Exact token bind — matches Python content_rating_allowed (fail-closed).
+        sql_frag, rating_params = youth_content_rating_sql(filters.youth_max_content_rating)
+        clauses.append(sql_frag)
+        params.extend(rating_params)
     if filters.runtime_min is not None:
         clauses.append("runtime_minutes >= ?")
         params.append(filters.runtime_min)
@@ -692,19 +686,24 @@ async def query_library_async(
                 ),
             }
         vector = await embed_text(filters.semantic_query, settings)
-        with db.connect() as conn:
-            candidate_rows = conn.execute(
-                f"SELECT id FROM library_items WHERE {where_sql}",
-                params,
-            ).fetchall()
-        candidate_ids = {int(r["id"]) for r in candidate_rows}
-        hits = semantic_search(
-            db,
-            vector,
-            limit=max(limit * 4, 100),
-            media_type=filters.media_type,
-            candidate_ids=candidate_ids,
-        )
+
+        def _semantic_hits():
+            # Sync sqlite + pure-Python cosine — keep off the asyncio loop.
+            with db.connect() as conn:
+                candidate_rows = conn.execute(
+                    f"SELECT id FROM library_items WHERE {where_sql}",
+                    params,
+                ).fetchall()
+            candidate_ids = {int(r["id"]) for r in candidate_rows}
+            return semantic_search(
+                db,
+                vector,
+                limit=max(limit * 4, 100),
+                media_type=filters.media_type,
+                candidate_ids=candidate_ids,
+            )
+
+        hits = await run_db(_semantic_hits)
         semantic_ids = [item_id for item_id, _score in hits]
         if not semantic_ids:
             return {

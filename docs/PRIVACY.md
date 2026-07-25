@@ -37,7 +37,7 @@ When you use **Sign in with Plex**, CuratorX asks Plex who you are and stores a 
 - Role (`owner` or `member`)
 - Optional Seerr link (user id / permissions) when the owner has Seerr enabled and linking succeeds
 
-There is no email invite flow. You appear after a successful Plex sign-in.
+There is no open self-serve signup for new identities when invite-only is on (the default with multi-user). The owner sends a one-time **/join** link from **Admin → Access**, or you request access on the login page and wait for approval.
 
 ### What is yours alone (multi-user on)
 

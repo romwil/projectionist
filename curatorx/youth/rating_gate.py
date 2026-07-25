@@ -122,6 +122,29 @@ def allowed_rating_labels(max_rating: str) -> List[str]:
     return unique
 
 
+def youth_content_rating_sql(
+    max_rating: str,
+    *,
+    column: str = "content_rating",
+) -> tuple[str, List[str]]:
+    """Fail-closed SQL fragment aligned with ``content_rating_allowed``.
+
+    Binds exact canonical tokens (case-insensitive, trimmed) — never ``LIKE
+    '%label%'`` — so a ceiling of R cannot over-match ``Unrated`` / ``Not Rated``
+    / ``NR``, and G cannot over-match PG via substring. NULL, blank, and
+    unrecognized / international ratings are excluded (fail-closed).
+    """
+    labels = allowed_rating_labels(max_rating)
+    if not labels:
+        return "1 = 0", []
+    placeholders = ", ".join("?" for _ in labels)
+    sql = (
+        f"{column} IS NOT NULL AND trim({column}) != '' "
+        f"AND lower(trim({column})) IN ({placeholders})"
+    )
+    return sql, [label.lower() for label in labels]
+
+
 def resolve_youth_max_rating(settings: Any) -> str:
     """Owner-configured max, falling back to PG-13."""
     youth = getattr(settings, "youth", None)

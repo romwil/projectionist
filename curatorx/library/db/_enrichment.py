@@ -19,9 +19,6 @@ from typing import (
     Tuple,
 )
 
-from ._shared import (
-    run_with_db_lock_retry,
-)
 
 
 class EnrichmentMixin:
@@ -71,7 +68,7 @@ class EnrichmentMixin:
                     normalized,
                 )
 
-        run_with_db_lock_retry(_write, label="set_embeddings")
+        self.run_write(_write, label="set_embeddings")
 
     def set_neighbors(
         self,
@@ -101,7 +98,7 @@ class EnrichmentMixin:
                         rows,
                     )
 
-        run_with_db_lock_retry(_write, label="set_neighbors")
+        self.run_write(_write, label="set_neighbors")
 
     def get_neighbors(
         self,
@@ -194,7 +191,7 @@ class EnrichmentMixin:
                     total += len(normalized)
             return total
 
-        return run_with_db_lock_retry(_write, label="replace_relations_of_types")
+        return self.run_write(_write, label="replace_relations_of_types")
 
     def list_title_relations(
         self,
@@ -347,7 +344,7 @@ class EnrichmentMixin:
                     (cleaned, time.time(), int(item_id)),
                 )
 
-        run_with_db_lock_retry(_write, label="set_llm_logline")
+        self.run_write(_write, label="set_llm_logline")
 
     _LONG_SYNOPSIS_WHERE = """
         (long_synopsis IS NULL OR long_synopsis = '')
@@ -417,5 +414,5 @@ class EnrichmentMixin:
                     (cleaned, provenance, time.time(), int(item_id)),
                 )
 
-        run_with_db_lock_retry(_write, label="set_long_synopsis")
+        self.run_write(_write, label="set_long_synopsis")
 

@@ -70,6 +70,8 @@ export default function PrimaryTopbar({
           isOwner={isOwner}
           isYouth={isYouth}
           role={role}
+          multiUserEnabled={multiUserEnabled}
+          authReady={authReady}
           adminBadges={adminBadges}
         />
       ) : null}

@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import logging
-import secrets
 from typing import Any, Dict, List, Optional
 
 from curatorx.config_store import Settings
+from curatorx.invites import create_household_invite
 from curatorx.library.db import Database
 from curatorx.notifications.service import deliver_notification
-from curatorx.web.auth import _hash_password
 
 logger = logging.getLogger(__name__)
 
@@ -59,12 +58,16 @@ def approve_access_request(
     *,
     request_id: str,
     owner_id: str,
+    role: str = "member",
+    is_youth: bool = False,
+    allowed_methods: Optional[List[str]] = None,
+    expires_in_seconds: Optional[int] = None,
+    base_url: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Approve a pending request.
+    """Approve a pending request by creating a household invite.
 
-    When local login is enabled, create a member account with a one-time password.
-    Otherwise mark approved and tell the owner to invite them to sign in with Plex/SSO
-    (first successful auth becomes a member).
+    Returns a one-time join token/URL for the owner to copy (and emails it when
+    Mail is configured and the request included an address).
     """
     row = db.get_access_request(request_id)
     if row is None:
@@ -72,42 +75,36 @@ def approve_access_request(
     if row["status"] != "pending":
         raise ValueError("Access request is already resolved")
 
-    display_name = str(row["display_name"])
-    email = row.get("email")
-    temp_password: Optional[str] = None
-    user: Optional[Dict[str, Any]] = None
-    user_id: Optional[str] = None
-
-    if settings.auth.local_login_enabled:
-        user_id = f"invite-{secrets.token_hex(10)}"
-        temp_password = secrets.token_urlsafe(10)
-        user = db.create_local_user(
-            user_id=user_id,
-            display_name=display_name,
-            password_hash=_hash_password(temp_password),
-            role="member",
-            email=email,
-        )
-        if email:
-            try:
-                db.update_user_profile(user_id, notification_email=email)
-            except Exception:  # noqa: BLE001
-                logger.debug("Could not set notification email on invite user", exc_info=True)
+    invite_payload = create_household_invite(
+        db,
+        settings,
+        owner_id=owner_id,
+        role=role,
+        is_youth=is_youth,
+        allowed_methods=allowed_methods,
+        email=row.get("email"),
+        access_request_id=request_id,
+        expires_in_seconds=expires_in_seconds or (7 * 24 * 3600),
+        base_url=base_url,
+        send_email=True,
+    )
 
     resolved = db.resolve_access_request(
         request_id,
         status="approved",
         resolved_by=owner_id,
-        created_user_id=user_id,
+        created_user_id=None,
     )
     return {
         "request": resolved,
-        "user": user,
-        "temporary_password": temp_password,
+        "invite": invite_payload["invite"],
+        "token": invite_payload["token"],
+        "join_path": invite_payload["join_path"],
+        "join_url": invite_payload["join_url"],
+        "emailed": invite_payload["emailed"],
         "sign_in_hint": (
-            "Share the temporary password so they can sign in with local login."
-            if temp_password
-            else "Ask them to sign in with Plex or SSO — new household sign-ins become members."
+            "Copy the join link and share it with them. "
+            "They finish joining at /join — the link works once."
         ),
     }
 

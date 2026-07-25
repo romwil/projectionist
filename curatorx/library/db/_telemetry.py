@@ -34,15 +34,19 @@ class TelemetryConfigMixin:
         associated_context_hash: Optional[str] = None,
     ) -> None:
         """Insert a single event into the telemetry stream table."""
-        with self.connect() as conn:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO system_telemetry_stream
-                    (id, event_class, payload_json, media_node_id, associated_context_hash)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (event_id, event_class, payload_json, media_node_id, associated_context_hash),
-            )
+
+        def _write() -> None:
+            with self.connect() as conn:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO system_telemetry_stream
+                        (id, event_class, payload_json, media_node_id, associated_context_hash)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    (event_id, event_class, payload_json, media_node_id, associated_context_hash),
+                )
+
+        self.run_write(_write, label="insert_telemetry_event")
 
     def telemetry_summary(self, *, hours: int = 24) -> Dict[str, Any]:
         """Return event counts grouped by event_class within the last *hours*."""

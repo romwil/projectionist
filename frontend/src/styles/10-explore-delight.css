@@ -47,6 +47,12 @@
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
+  /* Navigate + Admin + More can exceed the viewport for an owner on /admin. */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
 }
 .app-nav-heading-item {
   list-style: none;

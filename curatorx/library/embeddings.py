@@ -85,6 +85,11 @@ async def embed_texts(texts: Sequence[str], settings: Settings) -> List[List[flo
         return [_hash_embed(text) for text in texts]
 
 
+# Pure-Python cosine over this many candidates should leave the asyncio loop
+# (see ``run_db`` / ``query_library_async`` / neighbor refresh).
+COSINE_OFFLOAD_THRESHOLD = 64
+
+
 def cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     if not a or not b or len(a) != len(b):
         return 0.0
@@ -264,13 +269,32 @@ def semantic_search(
     media_type: Optional[str] = None,
     candidate_ids: Optional[set[int]] = None,
 ) -> List[Tuple[int, float]]:
+    """Exact cosine ranking; optional sqlite-vec ANN prefilters candidates first."""
+    embeddings = db.get_embeddings()
+    effective_ids = candidate_ids
+    if effective_ids is None:
+        try:
+            from curatorx.library.vec_index import ann_candidate_ids
+
+            # Over-fetch ANN hits, then exact-rescore / media-type filter.
+            prefilter = ann_candidate_ids(
+                db,
+                query_vector,
+                limit=max(int(limit) * 10, 100),
+                embeddings=embeddings,
+            )
+            if prefilter is not None:
+                effective_ids = set(prefilter)
+        except Exception:
+            effective_ids = candidate_ids
+
     scores: List[Tuple[int, float]] = []
     items: Dict[int, Any] = {}
     if media_type:
         for row in db.all_library_items():
             items[int(row["id"])] = row
-    for item_id, vector in db.get_embeddings():
-        if candidate_ids is not None and item_id not in candidate_ids:
+    for item_id, vector in embeddings:
+        if effective_ids is not None and item_id not in effective_ids:
             continue
         if media_type:
             row = items.get(item_id)

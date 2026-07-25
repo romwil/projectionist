@@ -17,6 +17,7 @@ from curatorx.agent.tools import (
 )
 from curatorx.config_store import Settings, uses_seerr_request_path
 from curatorx.library.db import DEFAULT_LENS_ID, Database
+from curatorx.library.db_io import run_db
 from curatorx.models.schemas import TitleCard
 from curatorx.privacy.schema import sanitize
 
@@ -468,9 +469,13 @@ async def stream_agent(
         is_youth=is_youth,
     )
     resolved_lens = agent.lens_id
-    db.ensure_chat_session(session_id, resolved_lens, user_id=user_id, persona_id=persona_id)
-    if persona_id:
-        db.set_thread_persona(session_id, persona_id)
+
+    def _prepare_session() -> None:
+        db.ensure_chat_session(session_id, resolved_lens, user_id=user_id, persona_id=persona_id)
+        if persona_id:
+            db.set_thread_persona(session_id, persona_id)
+
+    await run_db(_prepare_session)
 
     registry = agent._registry()
 
@@ -483,9 +488,14 @@ async def stream_agent(
             yield event
         return
 
-    # --- Build conversation history ---
-    history = db.chat_history(session_id, limit=20, lens_id=resolved_lens)
-    thread_persona_id = db.get_thread_persona_id(session_id)
+    # --- Build conversation history (sync sqlite off the event loop) ---
+    def _load_history() -> tuple:
+        return (
+            db.chat_history(session_id, limit=20, lens_id=resolved_lens),
+            db.get_thread_persona_id(session_id),
+        )
+
+    history, thread_persona_id = await run_db(_load_history)
     messages: List[Dict[str, Any]] = [
         {
             "role": "system",
@@ -595,6 +605,7 @@ async def stream_agent(
 
                 brief_args = args if isinstance(args, dict) else {"value": args}
                 yield json.dumps({"type": "tool_start", "name": name, "args": brief_args}) + "\n"
+                # Tool handlers that hit sqlite/cosine already offload via run_db.
                 result = await registry.execute(str(name), args)
                 tool_content = (
                     wrap_untrusted_data(result) if str(name) in UNTRUSTED_MEMORY_TOOLS else result
@@ -635,19 +646,16 @@ async def stream_agent(
 
     user_msg_id = uuid.uuid4().hex
     assistant_id = uuid.uuid4().hex
-    db.save_chat_message(
-        session_id, user_msg_id, "user",
-        [{"type": "text", "content": user_message}],
-        lens_id=resolved_lens,
+    await run_db(
+        _persist_stream_turn,
+        db,
+        session_id,
+        user_message,
+        user_msg_id,
+        assistant_id,
+        blocks,
+        resolved_lens,
     )
-    db.maybe_auto_title_thread(session_id, user_message)
-    db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=resolved_lens)
-
-    try:
-        ctx = db.get_active_derived_context()
-        db.update_thread_context_label(session_id, str(ctx["inferred_label"] or "General Exploration"))
-    except Exception:
-        logger.debug("Failed to update thread derived-context label", exc_info=True)
 
     yield json.dumps({
         "type": "done",
@@ -660,6 +668,34 @@ async def stream_agent(
         "pending_tokens": registry.pending_tokens,
         "lens_id": resolved_lens,
     }) + "\n"
+
+
+def _persist_stream_turn(
+    db: Database,
+    session_id: str,
+    user_message: str,
+    user_msg_id: str,
+    assistant_id: str,
+    blocks: List[Dict[str, Any]],
+    lens_id: str,
+) -> None:
+    """Persist a streamed chat turn (runs in a worker thread via ``run_db``)."""
+    db.save_chat_message(
+        session_id,
+        user_msg_id,
+        "user",
+        [{"type": "text", "content": user_message}],
+        lens_id=lens_id,
+    )
+    db.maybe_auto_title_thread(session_id, user_message)
+    db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=lens_id)
+    try:
+        ctx = db.get_active_derived_context()
+        db.update_thread_context_label(
+            session_id, str(ctx["inferred_label"] or "General Exploration")
+        )
+    except Exception:
+        logger.debug("Failed to update thread derived-context label", exc_info=True)
 
 
 async def _emit_buffered(
@@ -693,19 +729,16 @@ async def _emit_buffered(
 
     user_msg_id = uuid.uuid4().hex
     assistant_id = uuid.uuid4().hex
-    db.save_chat_message(
-        session_id, user_msg_id, "user",
-        [{"type": "text", "content": user_message}],
-        lens_id=lens_id,
+    await run_db(
+        _persist_stream_turn,
+        db,
+        session_id,
+        user_message,
+        user_msg_id,
+        assistant_id,
+        blocks,
+        lens_id,
     )
-    db.maybe_auto_title_thread(session_id, user_message)
-    db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=lens_id)
-
-    try:
-        ctx = db.get_active_derived_context()
-        db.update_thread_context_label(session_id, str(ctx["inferred_label"] or "General Exploration"))
-    except Exception:
-        logger.debug("Failed to update thread derived-context label", exc_info=True)
 
     yield json.dumps({
         "type": "done",

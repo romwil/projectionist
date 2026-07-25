@@ -309,6 +309,10 @@ async def lifespan(_app: FastAPI):
     yield
     idle_scheduler.stop()
     get_sync_scheduler().stop()
+    try:
+        manager.db.close()
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup: database write serializer shutdown failed")
     logger.info("CuratorX shutdown complete")
 
 
@@ -451,6 +455,8 @@ class FeatureFlagsPayload(BaseModel):
     seerr_enabled: bool = False
     plex_collections_enabled: bool = False
     guest_tour_enabled: bool = False
+    invite_only: bool = True
+    open_auto_provision: bool = False
 
 
 class AuthSettingsPayload(BaseModel):
@@ -477,6 +483,30 @@ class LocalLoginPayload(BaseModel):
 
 class PlexLoginPayload(BaseModel):
     auth_token: str = Field(min_length=1)
+    invite_token: Optional[str] = None
+
+
+class InviteCreatePayload(BaseModel):
+    role: str = Field(default="member")
+    is_youth: bool = False
+    allowed_methods: Optional[List[str]] = None
+    email: Optional[str] = Field(default=None, max_length=320)
+    expected_plex_user_id: Optional[str] = None
+    expected_oidc_sub: Optional[str] = None
+    expires_in_seconds: Optional[int] = Field(default=None, ge=3600, le=30 * 24 * 3600)
+
+
+class InviteRedeemLocalPayload(BaseModel):
+    token: str = Field(min_length=8)
+    username: str = Field(min_length=2, max_length=120)
+    password: str = Field(min_length=8, max_length=200)
+
+
+class AccessRequestApprovePayload(BaseModel):
+    role: str = Field(default="member")
+    is_youth: bool = False
+    allowed_methods: Optional[List[str]] = None
+    expires_in_seconds: Optional[int] = Field(default=None, ge=3600, le=30 * 24 * 3600)
 
 
 class UserUpdatePayload(BaseModel):
@@ -815,6 +845,10 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "seerr_enabled": settings.features.seerr_enabled,
             "plex_collections_enabled": settings.features.plex_collections_enabled,
             "guest_tour_enabled": resolve_guest_tour_enabled(settings),
+            "invite_only": bool(getattr(settings.features, "invite_only", True)),
+            "open_auto_provision": bool(
+                getattr(settings.features, "open_auto_provision", False)
+            ),
         },
         "auth": {
             "mode": settings.auth.mode,
@@ -1193,9 +1227,13 @@ async def upload_my_avatar(
 
 
 @app.post("/api/auth/plex/pin")
-def auth_plex_pin_start(request: Request, response: Response) -> Dict[str, Any]:
+def auth_plex_pin_start(
+    request: Request,
+    response: Response,
+    invite_token: Optional[str] = None,
+) -> Dict[str, Any]:
     """Start Overseerr-style Plex PIN login; client opens auth_url and polls."""
-    return start_plex_pin_login(request, response)
+    return start_plex_pin_login(request, response, invite_token=invite_token)
 
 
 @app.get("/api/auth/plex/pin/{pin_id}")
@@ -1213,7 +1251,11 @@ def auth_plex_pin_poll(pin_id: int, request: Request, response: Response) -> Dic
 def auth_plex(payload: PlexLoginPayload, request: Request, response: Response) -> Dict[str, Any]:
     """Advanced fallback: sign in with a raw Plex auth token."""
     enforce_rate_limit(request, bucket="auth_plex_token", limit=10, window_seconds=60)
-    user = authenticate_plex_user(payload.auth_token, _db())
+    user = authenticate_plex_user(
+        payload.auth_token,
+        _db(),
+        invite_token=payload.invite_token,
+    )
     set_session_cookie(response, user.id, request)
     return {"user": user.to_dict(), "authenticated": True}
 
@@ -1261,9 +1303,12 @@ def auth_local_login(
 
 
 @app.get("/api/auth/oidc/authorize")
-def auth_oidc_authorize(request: Request) -> Dict[str, Any]:
+def auth_oidc_authorize(
+    request: Request,
+    invite_token: Optional[str] = None,
+) -> Dict[str, Any]:
     """Start OIDC login — returns the provider authorization URL."""
-    return start_oidc_authorize(request)
+    return start_oidc_authorize(request, invite_token=invite_token)
 
 
 @app.get("/api/auth/oidc/callback")
@@ -1315,6 +1360,45 @@ def create_access_request_endpoint(
     return {"request": {"id": row["id"], "status": row["status"], "created_at": row["created_at"]}}
 
 
+@app.get("/api/invites/validate")
+def validate_invite_endpoint(token: str, request: Request) -> Dict[str, Any]:
+    """Public: validate a join token before redeem UI offers sign-in methods."""
+    enforce_rate_limit(request, bucket="invite_validate", limit=30, window_seconds=60)
+    from curatorx.invites import lookup_pending_invite, public_invite_view
+
+    try:
+        invite = lookup_pending_invite(_db(), token)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return {"invite": public_invite_view(invite), "valid": True}
+
+
+@app.post("/api/invites/redeem/local")
+def redeem_invite_local_endpoint(
+    payload: InviteRedeemLocalPayload,
+    request: Request,
+    response: Response,
+) -> Dict[str, Any]:
+    """Public: redeem invite by creating a local-password account."""
+    enforce_rate_limit(request, bucket="invite_redeem_local", limit=10, window_seconds=60)
+    from curatorx.invites import redeem_local_invite
+    from curatorx.web.auth import _ensure_local_login_enabled
+
+    _ensure_local_login_enabled()
+    try:
+        result = redeem_local_invite(
+            _db(),
+            _settings(),
+            raw_token=payload.token,
+            username=payload.username,
+            password=payload.password,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    set_session_cookie(response, str(result["user"]["id"]), request)
+    return {"authenticated": True, **result}
+
+
 @app.get("/api/admin/access-requests")
 def list_access_requests_endpoint(
     status: Optional[str] = None,
@@ -1334,16 +1418,25 @@ def list_access_requests_endpoint(
 @app.post("/api/admin/access-requests/{request_id}/approve")
 def approve_access_request_endpoint(
     request_id: str,
+    request: Request,
+    payload: Optional[AccessRequestApprovePayload] = None,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
     from curatorx.access_requests import approve_access_request
 
+    body = payload or AccessRequestApprovePayload()
+    base_url = str(request.base_url).rstrip("/")
     try:
         return approve_access_request(
             _db(),
             _settings(),
             request_id=request_id,
             owner_id=str(user.id),
+            role=body.role,
+            is_youth=body.is_youth,
+            allowed_methods=body.allowed_methods,
+            expires_in_seconds=body.expires_in_seconds,
+            base_url=base_url,
         )
     except ValueError as error:
         raise HTTPException(
@@ -1366,6 +1459,72 @@ def deny_access_request_endpoint(
             status_code=400,
             detail=_safe_error_detail(error, "Could not deny request"),
         ) from error
+
+
+@app.get("/api/admin/invites")
+def list_invites_endpoint(
+    status: Optional[str] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    del user
+    from curatorx.invites import public_invite_view
+
+    try:
+        items = _db().list_invites(status=status, limit=100)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Invalid status filter"),
+        ) from error
+    return {"items": [public_invite_view(i) for i in items], "count": len(items)}
+
+
+@app.post("/api/admin/invites")
+def create_invite_endpoint(
+    payload: InviteCreatePayload,
+    request: Request,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    from curatorx.invites import create_household_invite
+
+    base_url = str(request.base_url).rstrip("/")
+    try:
+        return create_household_invite(
+            _db(),
+            _settings(),
+            owner_id=str(user.id),
+            role=payload.role,
+            is_youth=payload.is_youth,
+            allowed_methods=payload.allowed_methods,
+            email=payload.email,
+            expected_plex_user_id=payload.expected_plex_user_id,
+            expected_oidc_sub=payload.expected_oidc_sub,
+            expires_in_seconds=payload.expires_in_seconds or (7 * 24 * 3600),
+            base_url=base_url,
+            send_email=True,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Could not create invite"),
+        ) from error
+
+
+@app.post("/api/admin/invites/{invite_id}/revoke")
+def revoke_invite_endpoint(
+    invite_id: str,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    from curatorx.invites import public_invite_view
+
+    try:
+        invite = _db().revoke_invite(invite_id, revoked_by=str(user.id))
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Could not revoke invite"),
+        ) from error
+    return {"invite": public_invite_view(invite)}
 
 
 @app.get("/api/users")
@@ -2483,19 +2642,12 @@ def library_quick_pick_endpoint(
 
     # Youth: fail-closed content-rating gate (same SQL shape as library query).
     if bool(getattr(user, "is_youth", False)):
-        from curatorx.youth.rating_gate import allowed_rating_labels, resolve_youth_max_rating
+        from curatorx.youth.rating_gate import resolve_youth_max_rating, youth_content_rating_sql
 
         max_rating = resolve_youth_max_rating(settings)
-        where_clauses.append("content_rating IS NOT NULL AND trim(content_rating) != ''")
-        labels = allowed_rating_labels(max_rating)
-        if labels:
-            like_clauses = []
-            for label in labels:
-                like_clauses.append("lower(content_rating) LIKE ?")
-                params.append(f"%{label.lower()}%")
-            where_clauses.append(f"({' OR '.join(like_clauses)})")
-        else:
-            where_clauses.append("1 = 0")
+        sql_frag, rating_params = youth_content_rating_sql(max_rating)
+        where_clauses.append(sql_frag)
+        params.extend(rating_params)
 
     where_sql = " AND ".join(where_clauses)
     with db.connect() as conn:
@@ -5271,7 +5423,7 @@ def list_review_prompts(
     db = _db()
     scoped = user.id
     items = list_pending_prompts(db, user_id=scoped, limit=limit)
-    mark_prompts_surfaced(db, [str(item["id"]) for item in items])
+    mark_prompts_surfaced(db, [str(item["id"]) for item in items], user_id=scoped)
     items = list_pending_prompts(db, user_id=scoped, limit=limit)
     return {
         "items": [RatingPrompt(**item) for item in items],
@@ -5300,7 +5452,7 @@ def list_titles_for_rating(
         if item.get("reason") == "near_complete" and not str(item.get("id", "")).startswith("viewed-")
     ]
     if near_complete_ids:
-        mark_prompts_surfaced(_db(), near_complete_ids)
+        mark_prompts_surfaced(_db(), near_complete_ids, user_id=user.id)
     return {"items": items, "count": len(items)}
 
 

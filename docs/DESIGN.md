@@ -72,7 +72,7 @@ CuratorX serves one React application (`frontend/src/App.jsx`) with a shared **A
 
 | Region | Contents |
 |--------|----------|
-| **Hamburger AppNav** | Primary navigation drawer (☰) on chat and AppShell pages: Chat, Explore, Plot Lab, Tags, **Watchlist** (opens the `/watchlist` explore page), Settings, Admin (owners), About. |
+| **Hamburger AppNav** | Navigation drawer (☰) on chat and AppShell pages. **Navigate** repeats the top bar's role-gated peers as labelled links (Search, Chat, Explore, Inbox, Admin for owners, My Journey, Settings) from the shared `primaryNav.js` model; **More** adds Plot Lab, Tags, **Watchlist** (opens the `/watchlist` explore page), Library, Help, Privacy, About. On `/admin/*` an owner also gets an **Admin** block of section links between the two. |
 | **Top bar** | CuratorX brand, curator name, agent pulse; **Plex server name** + movie/show counts; icon chrome for **Explore**, theme cycle, watchlist pins, Admin/Settings; optional streak chip; optional **UserMenu** when multi-user is on. No About link in the top bar. |
 | **Sidebar** | Conversation list + New thread + **Watchlist (N)** button (→ `/watchlist`) + **status dock** (bottom of rail) |
 | **Chat column** | Recommendations inbox (multi-user), welcome / On This Day / Library Glance / Quick Pick, thread with **AgentAvatar** + ambient context tag (⧉), title cards, composer with **PersonaSelector** + Surprise Me |

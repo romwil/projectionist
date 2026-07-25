@@ -59,7 +59,7 @@ class SavedLibraryAuthzTests(unittest.TestCase):
         resp = self.client.put(
             "/api/settings",
             json={
-                "features": {"multi_user_enabled": True, "seerr_enabled": False},
+                "features": {"multi_user_enabled": True, "open_auto_provision": True, "seerr_enabled": False},
                 "auth": {"mode": "plex", "plex_login_enabled": True},
             },
         )

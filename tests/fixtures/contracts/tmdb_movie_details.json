@@ -1,0 +1,25 @@
+{
+  "service": "tmdb",
+  "operation": "movie_details",
+  "description": "TMDB /movie/{id} with append_to_response credits/keywords shape (subset)",
+  "response": {
+    "id": 603,
+    "title": "The Matrix",
+    "original_title": "The Matrix",
+    "overview": "A computer hacker learns about the true nature of reality.",
+    "release_date": "1999-03-30",
+    "runtime": 136,
+    "poster_path": "/f89U3ADr1oiB1s9GkdPOEpXUk5H.jpg",
+    "backdrop_path": "/fNG7i7RqMErkcqhohV2aJunMFtO.jpg",
+    "vote_average": 8.2,
+    "imdb_id": "tt0133093",
+    "genres": [{ "id": 28, "name": "Action" }, { "id": 878, "name": "Science Fiction" }],
+    "credits": {
+      "cast": [{ "id": 6384, "name": "Keanu Reeves", "character": "Neo", "order": 0 }],
+      "crew": [{ "id": 9339, "name": "Lana Wachowski", "job": "Director", "department": "Directing" }]
+    },
+    "keywords": { "keywords": [{ "id": 83, "name": "saving the world" }] },
+    "external_ids": { "imdb_id": "tt0133093", "wikidata_id": "Q83495" },
+    "videos": { "results": [] }
+  }
+}

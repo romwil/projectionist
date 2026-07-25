@@ -46,7 +46,14 @@ from curatorx.web.session_tokens import (
 )
 
 _API_AUTH_ALLOWLIST_EXACT = frozenset(
-    {"/api/health", "/api/features", "/api/access-requests", "/api/guest/tour"}
+    {
+        "/api/health",
+        "/api/features",
+        "/api/access-requests",
+        "/api/guest/tour",
+        "/api/invites/validate",
+        "/api/invites/redeem/local",
+    }
 )
 _API_AUTH_ALLOWLIST_PREFIXES = ("/api/auth/", "/api/webhooks/", "/mcp")
 PLEX_PIN_NONCE_COOKIE = "plex_pin_nonce"
@@ -348,15 +355,25 @@ def _purge_expired_pin_bindings() -> None:
             _pin_bindings.pop(key, None)
 
 
-def _bind_pin_nonce(pin_id: int, response: Response, request: Request) -> None:
+def _bind_pin_nonce(
+    pin_id: int,
+    response: Response,
+    request: Request,
+    *,
+    invite_token: Optional[str] = None,
+) -> None:
     _purge_expired_pin_bindings()
     nonce = secrets.token_urlsafe(32)
+    binding: Dict[str, Any] = {
+        "pin_id": int(pin_id),
+        "expires_at": time.time() + PLEX_PIN_NONCE_TTL_SECONDS,
+        "consumed": False,
+    }
+    cleaned_invite = str(invite_token or "").strip()
+    if cleaned_invite:
+        binding["invite_token"] = cleaned_invite
     with _pin_bindings_lock:
-        _pin_bindings[nonce] = {
-            "pin_id": int(pin_id),
-            "expires_at": time.time() + PLEX_PIN_NONCE_TTL_SECONDS,
-            "consumed": False,
-        }
+        _pin_bindings[nonce] = binding
     response.set_cookie(
         key=PLEX_PIN_NONCE_COOKIE,
         value=nonce,
@@ -368,7 +385,8 @@ def _bind_pin_nonce(pin_id: int, response: Response, request: Request) -> None:
     )
 
 
-def _require_pin_nonce(pin_id: int, request: Request, *, consume: bool = False) -> None:
+def _require_pin_nonce(pin_id: int, request: Request, *, consume: bool = False) -> Optional[str]:
+    """Validate PIN nonce; return optional invite_token stored on the binding."""
     nonce = (request.cookies.get(PLEX_PIN_NONCE_COOKIE) or "").strip()
     if not nonce:
         raise HTTPException(status_code=401, detail="Plex PIN session cookie missing")
@@ -381,8 +399,10 @@ def _require_pin_nonce(pin_id: int, request: Request, *, consume: bool = False) 
             raise HTTPException(status_code=403, detail="Plex PIN does not match login session")
         if binding.get("consumed"):
             raise HTTPException(status_code=409, detail="Plex PIN already consumed")
+        invite_token = str(binding.get("invite_token") or "").strip() or None
         if consume:
             binding["consumed"] = True
+    return invite_token
 
 
 def clear_pin_nonce_cookie(response: Response, request: Optional[Request] = None) -> None:
@@ -399,7 +419,12 @@ def clear_pin_bindings() -> None:
         _pin_bindings.clear()
 
 
-def start_plex_pin_login(request: Request, response: Response) -> dict[str, object]:
+def start_plex_pin_login(
+    request: Request,
+    response: Response,
+    *,
+    invite_token: Optional[str] = None,
+) -> dict[str, object]:
     """Create a plex.tv PIN and auth URL for Overseerr-style sign-in."""
     enforce_rate_limit(request, bucket="auth_plex_pin_start", limit=10, window_seconds=60)
     _ensure_plex_login_enabled()
@@ -407,7 +432,7 @@ def start_plex_pin_login(request: Request, response: Response) -> dict[str, obje
         pin = create_plex_pin(get_or_create_client_id(_data_dir()))
     except Exception as error:  # noqa: BLE001
         raise HTTPException(status_code=502, detail=f"Could not start Plex login: {error}") from error
-    _bind_pin_nonce(int(pin["id"]), response, request)
+    _bind_pin_nonce(int(pin["id"]), response, request, invite_token=invite_token)
     return {
         "id": pin["id"],
         "code": pin["code"],
@@ -421,7 +446,7 @@ def poll_plex_pin_login(pin_id: int, request: Request, db: Database) -> Optional
     """Poll plex.tv PIN once. Returns CurrentUser when authorized, else None."""
     enforce_rate_limit(request, bucket="auth_plex_pin_poll", limit=60, window_seconds=60)
     _ensure_plex_login_enabled()
-    _require_pin_nonce(pin_id, request, consume=False)
+    invite_token = _require_pin_nonce(pin_id, request, consume=False)
     client_id = get_or_create_client_id(_data_dir())
     try:
         pin = fetch_plex_pin(int(pin_id), client_id)
@@ -431,11 +456,27 @@ def poll_plex_pin_login(pin_id: int, request: Request, db: Database) -> Optional
     auth_token = pin.get("authToken") or pin.get("auth_token")
     if not auth_token:
         return None
-    _require_pin_nonce(pin_id, request, consume=True)
-    return authenticate_plex_user(str(auth_token), db)
+    invite_token = _require_pin_nonce(pin_id, request, consume=True)
+    return authenticate_plex_user(str(auth_token), db, invite_token=invite_token)
 
 
-def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
+def _has_real_owner(db: Database) -> bool:
+    """True when a non-bootstrap owner exists (Plex / local / OIDC household owner)."""
+    for user in db.list_users(limit=200):
+        if user.get("role") != "owner":
+            continue
+        if str(user.get("id") or "") == BOOTSTRAP_OWNER_ID:
+            continue
+        return True
+    return False
+
+
+def authenticate_plex_user(
+    auth_token: str,
+    db: Database,
+    *,
+    invite_token: Optional[str] = None,
+) -> CurrentUser:
     settings = _ensure_plex_login_enabled()
 
     cleaned = str(auth_token or "").strip()
@@ -449,6 +490,7 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
 
     plex_user_id, display_name, email, avatar_url = _plex_profile_fields(profile)
     existing = db.get_user_by_plex_id(plex_user_id)
+    invite_for_new = None
     if existing is not None:
         if _user_is_disabled(existing):
             raise HTTPException(status_code=403, detail="This account has been disabled")
@@ -456,7 +498,30 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
         role = str(existing["role"])
     else:
         user_id = f"plex-{plex_user_id}"
-        role = "owner" if db.count_users_with_plex_id() == 0 else "member"
+        # First real household owner bootstraps regardless of invite-only
+        # (bootstrap-owner alone does not count).
+        if not _has_real_owner(db):
+            role = "owner"
+            invite_for_new = None
+        else:
+            from curatorx.invites import assert_identity_not_denied, require_invite_or_open
+
+            try:
+                assert_identity_not_denied(db, email=email, plex_user_id=plex_user_id)
+            except ValueError as error:
+                raise HTTPException(status_code=403, detail=str(error)) from error
+
+            try:
+                invite_for_new = require_invite_or_open(
+                    settings, db, raw_token=invite_token, method="plex"
+                )
+            except ValueError as error:
+                raise HTTPException(status_code=403, detail=str(error)) from error
+
+            if invite_for_new is not None:
+                role = str(invite_for_new["role"])
+            else:
+                role = "member"
 
     seerr_user_id: Optional[int] = None
     seerr_permissions: Optional[int] = None
@@ -488,16 +553,37 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
         if cached:
             stored_avatar = cached
 
-    user_row = db.upsert_plex_user(
-        user_id=user_id,
-        display_name=display_name,
-        email=email,
-        plex_user_id=plex_user_id,
-        role=role,
-        avatar_url=stored_avatar,
-        seerr_user_id=seerr_user_id,
-        seerr_permissions=seerr_permissions,
-    )
+    if existing is None and invite_for_new is not None and role != "owner":
+        from curatorx.invites import provision_from_invite
+
+        try:
+            provisioned = provision_from_invite(
+                db,
+                settings,
+                invite=invite_for_new,
+                method="plex",
+                user_id=user_id,
+                display_name=display_name,
+                email=email,
+                plex_user_id=plex_user_id,
+                avatar_url=stored_avatar,
+                seerr_user_id=seerr_user_id,
+                seerr_permissions=seerr_permissions,
+            )
+            user_row = provisioned["user"]
+        except ValueError as error:
+            raise HTTPException(status_code=403, detail=str(error)) from error
+    else:
+        user_row = db.upsert_plex_user(
+            user_id=user_id,
+            display_name=display_name,
+            email=email,
+            plex_user_id=plex_user_id,
+            role=role,
+            avatar_url=stored_avatar,
+            seerr_user_id=seerr_user_id,
+            seerr_permissions=seerr_permissions,
+        )
     try:
         from curatorx.watchlist.crypto import encrypt_plex_token
         from curatorx.watchlist.plex_sync import maybe_pull_on_login
@@ -515,6 +601,7 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
         plex_user_id=user_row.get("plex_user_id"),
         seerr_user_id=user_row.get("seerr_user_id"),
         avatar_url=resolved_avatar,
+        is_youth=bool(user_row.get("is_youth", False)),
     )
 
 
@@ -730,7 +817,11 @@ def clear_oidc_states() -> None:
         _oidc_states.clear()
 
 
-def start_oidc_authorize(request: Request) -> dict[str, str]:
+def start_oidc_authorize(
+    request: Request,
+    *,
+    invite_token: Optional[str] = None,
+) -> dict[str, str]:
     """Build the OIDC authorization redirect URL with a CSRF state parameter."""
     enforce_rate_limit(request, bucket="auth_oidc_start", limit=10, window_seconds=60)
     settings = _ensure_oidc_enabled()
@@ -750,12 +841,16 @@ def start_oidc_authorize(request: Request) -> dict[str, str]:
 
     state = secrets.token_urlsafe(32)
     _purge_expired_oidc_states()
+    state_payload: Dict[str, Any] = {
+        "expires_at": time.time() + OIDC_STATE_TTL_SECONDS,
+        "token_endpoint": disc.get("token_endpoint", ""),
+        "userinfo_endpoint": disc.get("userinfo_endpoint", ""),
+    }
+    cleaned_invite = str(invite_token or "").strip()
+    if cleaned_invite:
+        state_payload["invite_token"] = cleaned_invite
     with _oidc_state_lock:
-        _oidc_states[state] = {
-            "expires_at": time.time() + OIDC_STATE_TTL_SECONDS,
-            "token_endpoint": disc.get("token_endpoint", ""),
-            "userinfo_endpoint": disc.get("userinfo_endpoint", ""),
-        }
+        _oidc_states[state] = state_payload
 
     redirect_uri = settings.auth.oidc_redirect_uri or ""
     params = (
@@ -788,6 +883,7 @@ def handle_oidc_callback(
 
     token_endpoint = state_data.get("token_endpoint", "")
     userinfo_endpoint = state_data.get("userinfo_endpoint", "")
+    invite_token = str(state_data.get("invite_token") or "").strip() or None
 
     if not token_endpoint:
         raise HTTPException(status_code=502, detail="OIDC token endpoint unknown")
@@ -839,15 +935,62 @@ def handle_oidc_callback(
         or sub
     ).strip()
     email = userinfo.get("email")
+    email_str = str(email) if email else None
 
     existing = db.get_user_by_oidc_sub(sub)
-    if existing is not None and _user_is_disabled(existing):
-        raise HTTPException(status_code=403, detail="This account has been disabled")
+    if existing is not None:
+        if _user_is_disabled(existing):
+            raise HTTPException(status_code=403, detail="This account has been disabled")
+        return row_to_current_user(existing)
+
+    from curatorx.invites import (
+        assert_identity_not_denied,
+        provision_from_invite,
+        require_invite_or_open,
+    )
+
+    if db.count_users_with_role("owner") == 0 or not _has_real_owner(db):
+        user_row = db.upsert_oidc_user(
+            oidc_sub=sub,
+            display_name=display_name,
+            email=email_str,
+            role="owner",
+        )
+        return row_to_current_user_from_dict(user_row)
+
+    try:
+        assert_identity_not_denied(db, email=email_str, oidc_sub=sub)
+    except ValueError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+    try:
+        invite_for_new = require_invite_or_open(
+            settings, db, raw_token=invite_token, method="oidc"
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=403, detail=str(error)) from error
+
+    if invite_for_new is not None:
+        try:
+            provisioned = provision_from_invite(
+                db,
+                settings,
+                invite=invite_for_new,
+                method="oidc",
+                user_id=f"oidc-{sub}",
+                display_name=display_name,
+                email=email_str,
+                oidc_sub=sub,
+            )
+            return row_to_current_user_from_dict(provisioned["user"])
+        except ValueError as error:
+            raise HTTPException(status_code=403, detail=str(error)) from error
 
     user_row = db.upsert_oidc_user(
         oidc_sub=sub,
         display_name=display_name,
-        email=str(email) if email else None,
+        email=email_str,
+        role="member",
     )
     return row_to_current_user_from_dict(user_row)
 

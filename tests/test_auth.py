@@ -51,7 +51,7 @@ class AuthTests(unittest.TestCase):
         """Enable multi-user by writing settings to disk (owner PUT also works)."""
         path = Path(self._tmpdir.name) / "settings.json"
         payload = {
-            "features": {"multi_user_enabled": True, "seerr_enabled": seerr},
+            "features": {"multi_user_enabled": True, "open_auto_provision": True, "seerr_enabled": seerr},
             "auth": {"mode": "plex", "plex_login_enabled": True},
             "llm_provider": "ollama",
         }

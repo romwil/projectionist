@@ -21,9 +21,6 @@ from typing import (
     Tuple,
 )
 
-from ._shared import (
-    run_with_db_lock_retry,
-)
 
 
 class LibraryLookupMixin:
@@ -310,7 +307,7 @@ class LibraryLookupMixin:
                     )
             return len(rows)
 
-        return run_with_db_lock_retry(_write, label="replace_library_facets")
+        return self.run_write(_write, label="replace_library_facets")
 
     def clear_library_fts(self) -> None:
         with self.connect() as conn:
@@ -352,7 +349,7 @@ class LibraryLookupMixin:
                     )
             return len(rows)
 
-        return run_with_db_lock_retry(_write, label="replace_library_fts")
+        return self.run_write(_write, label="replace_library_fts")
 
     _UPSERT_LIBRARY_EPISODE_SQL = """
                 INSERT INTO library_episodes (
@@ -419,7 +416,7 @@ class LibraryLookupMixin:
                 )
             return len(episodes)
 
-        return run_with_db_lock_retry(_write, label="upsert_library_episodes")
+        return self.run_write(_write, label="upsert_library_episodes")
 
     def replace_library_episodes_for_show(
         self,
@@ -442,7 +439,7 @@ class LibraryLookupMixin:
                 self._update_show_episode_rollups_on_conn(conn, show_item_id)
             return len(episodes)
 
-        return run_with_db_lock_retry(_write, label="replace_library_episodes_for_show")
+        return self.run_write(_write, label="replace_library_episodes_for_show")
 
     def show_episode_view_counts(self, show_item_id: int) -> Tuple[int, int]:
         """Return (total_episodes, viewed_episodes) for incremental sync checks."""

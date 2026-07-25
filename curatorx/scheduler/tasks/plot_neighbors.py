@@ -1,16 +1,14 @@
 """Idle trickle: cache plot neighbors + surprise scores from embeddings.
 
-For each seed item (batch N/cycle), compute pure-Python cosine against all
-stored embeddings, keep top-K, and store ``surprise_score`` = high cosine with
-low genre/keyword/credits Jaccard overlap.
+For each seed item (batch N/cycle), score candidates with exact cosine (+
+surprise). When optional sqlite-vec is available it ANN-prefilters candidates
+first; otherwise the full embedding set is scanned. Top-K rows land in
+``item_neighbors`` — the durable read cache for Explore / Plot Lab /
+``find_similar_titles``.
 
 Catch-up mode prefers titles that already have embeddings but still lack
 ``item_neighbors`` rows, then falls back to rotating through the full embedding
 set so every title eventually refreshes.
-
-Architecture note: sqlite-vec (or similar ANN) can later prefilter candidates;
-this task and ``item_neighbors`` stay the durable read cache for Explore /
-Plot Lab / ``find_similar_titles``.
 
 Default interval: 12 hours (auto-tune may shorten while backlog is large).
 """
@@ -22,6 +20,7 @@ from typing import Any, Callable, Dict, List
 
 from curatorx.config_store import Settings
 from curatorx.library.db import Database
+from curatorx.library.db_io import run_db
 from curatorx.library.neighbors import DEFAULT_TOP_K, refresh_neighbors_for_items
 from curatorx.scheduler.autotune import resolve_batch_size
 from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
@@ -91,7 +90,10 @@ async def run(
     if not unique_seeds:
         return {"status": "completed", "processed": 0, "seeds": 0, "missing_before": len(missing)}
 
-    processed = refresh_neighbors_for_items(db, unique_seeds, top_k=DEFAULT_TOP_K)
+    # Cosine/Jaccard over the full embedding set is CPU-heavy — leave the loop.
+    processed = await run_db(
+        refresh_neighbors_for_items, db, unique_seeds, top_k=DEFAULT_TOP_K
+    )
     last_seed = unique_seeds[-1]
     db.set_config(CURSOR_KEY, str(last_seed))
 

@@ -1,0 +1,7 @@
+{
+  "service": "sonarr",
+  "operation": "add_error_exists",
+  "description": "Sonarr HTTP body when series already exists",
+  "http_status": 400,
+  "response_body": "[{\"propertyName\":\"\",\"errorMessage\":\"This series has already been added\",\"errorCode\":\"SeriesExistsValidator\",\"isWarning\":false}]"
+}

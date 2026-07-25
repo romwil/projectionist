@@ -18,10 +18,6 @@ from typing import (
     Sequence,
 )
 
-from ._shared import (
-    run_with_db_lock_retry,
-)
-
 
 class LibraryItemsMixin:
     def _library_item_params(self, item: Mapping[str, Any], now: float) -> tuple:
@@ -189,7 +185,7 @@ class LibraryItemsMixin:
                     self._upsert_credits_for_item_on_conn(conn, item_id, structured)
                 return item_id
 
-        return run_with_db_lock_retry(_write, label="upsert_library_item")
+        return self.run_write(_write, label="upsert_library_item")
 
     def upsert_library_items(self, items: Sequence[Mapping[str, Any]]) -> List[int]:
         """Upsert many library rows in a single transaction (one commit).
@@ -213,7 +209,7 @@ class LibraryItemsMixin:
                         self._upsert_credits_for_item_on_conn(conn, item_id, structured)
             return ids
 
-        return run_with_db_lock_retry(_write, label="upsert_library_items")
+        return self.run_write(_write, label="upsert_library_items")
 
     def upsert_person(
         self,
@@ -233,7 +229,7 @@ class LibraryItemsMixin:
                     profile_url=profile_url,
                 )
 
-        return run_with_db_lock_retry(_write, label="upsert_person")
+        return self.run_write(_write, label="upsert_person")
 
     def _upsert_person_on_conn(
         self,
@@ -274,7 +270,7 @@ class LibraryItemsMixin:
             with self.connect() as conn:
                 return self._upsert_credits_for_item_on_conn(conn, item_id, credits)
 
-        return run_with_db_lock_retry(_write, label="upsert_credits_for_item")
+        return self.run_write(_write, label="upsert_credits_for_item")
 
     def _upsert_credits_for_item_on_conn(
         self,

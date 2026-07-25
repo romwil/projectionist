@@ -10,7 +10,9 @@ CuratorX is a **single-owner** app by default — no login screen. With `feature
 ```json
 {
   "features": {
-    "multi_user_enabled": true
+    "multi_user_enabled": true,
+    "invite_only": true,
+    "open_auto_provision": false
   },
   "auth": {
     "mode": "plex",
@@ -23,12 +25,18 @@ CuratorX is a **single-owner** app by default — no login screen. With `feature
 
 CuratorX refuses to enable multi-user while the public development session secret is in use. You can enable more than one login method; the login page shows whatever `GET /api/features` reports in `auth_methods`.
 
+### Invites (default)
+
+When multi-user is on, **new** Plex/OIDC identities need a valid invite (`features.invite_only`, default on). Owners create or approve invites under **Admin → Access**; guests redeem at `/join?token=…`. Existing users always sign in without an invite.
+
+To restore pre-1.26 LAN-open auto-provision, set `features.open_auto_provision` to `true` (or turn `invite_only` off).
+
 ### Auth methods
 
 | Method | Flags | Notes |
 |--------|-------|-------|
-| **Plex PIN** | `plex_login_enabled` | Overseerr-style plex.tv link flow; first linked account becomes owner |
-| **Local password** | `local_login_enabled` | Owner registration with PBKDF2-HMAC-SHA256 |
+| **Plex PIN** | `plex_login_enabled` | Overseerr-style plex.tv link flow; first *real* owner (beyond synthetic `bootstrap-owner`) becomes owner without an invite |
+| **Local password** | `local_login_enabled` | Owner registration with PBKDF2-HMAC-SHA256; also available on `/join` redeem |
 | **OIDC** | `oidc_enabled` + issuer / client id / secret / redirect | Authelia, Authentik, Keycloak, etc. |
 
 ## Partitioning matrix
@@ -51,9 +59,9 @@ CuratorX refuses to enable multi-user while the public development session secre
 ## Auth behavior
 
 - Visitors must sign in (configured methods) before the SPA loads
-- Middleware requires a session for almost all `/api/*` (allowlist: health, features, `/api/auth/*`, webhooks)
-- Plex PIN create/poll are bound with an HttpOnly `plex_pin_nonce` cookie and rate-limited
-- OIDC uses a state parameter (CSRF) on the authorize flow
+- Middleware requires a session for almost all `/api/*` (allowlist: health, features, access-requests, invites validate/redeem, `/api/auth/*`, webhooks)
+- Plex PIN create/poll are bound with an HttpOnly `plex_pin_nonce` cookie and rate-limited; join flows may attach an invite token to the PIN binding
+- OIDC uses a state parameter (CSRF) on the authorize flow (invite token may ride along)
 - Webhooks require a configured secret (`CURATORX_WEBHOOK_SECRET` / `webhook_secret`)
 - Cookie `Secure` is set when `X-Forwarded-Proto: https`
 

@@ -56,7 +56,7 @@ class ApiAuthzTests(unittest.TestCase):
     def _write_multi_user_settings(self, *, seerr: bool = False) -> None:
         path = Path(self._tmpdir.name) / "settings.json"
         payload = {
-            "features": {"multi_user_enabled": True, "seerr_enabled": seerr},
+            "features": {"multi_user_enabled": True, "open_auto_provision": True, "seerr_enabled": seerr},
             "auth": {"mode": "plex", "plex_login_enabled": True},
             "llm_provider": "ollama",
         }
@@ -68,7 +68,7 @@ class ApiAuthzTests(unittest.TestCase):
         resp = self.client.put(
             "/api/settings",
             json={
-                "features": {"multi_user_enabled": True, "seerr_enabled": False},
+                "features": {"multi_user_enabled": True, "open_auto_provision": True, "seerr_enabled": False},
                 "auth": {"mode": "plex", "plex_login_enabled": True},
             },
         )
@@ -86,7 +86,7 @@ class ApiAuthzTests(unittest.TestCase):
         self._enable_multi_user_via_api()
         self.client.cookies.clear()
 
-        settings = self.client.put("/api/settings", json={"features": {"multi_user_enabled": True}})
+        settings = self.client.put("/api/settings", json={"features": {"multi_user_enabled": True, "open_auto_provision": True}})
         self.assertEqual(settings.status_code, 401)
 
         chat = self.client.post("/api/chat", json={"message": "hi", "session_id": "s1"})
@@ -106,7 +106,7 @@ class ApiAuthzTests(unittest.TestCase):
 
         denied = self.client.put(
             "/api/settings",
-            json={"features": {"multi_user_enabled": True}},
+            json={"features": {"multi_user_enabled": True, "open_auto_provision": True}},
         )
         self.assertEqual(denied.status_code, 403)
 
@@ -114,7 +114,7 @@ class ApiAuthzTests(unittest.TestCase):
         self._login_as(1, "Owner")
         allowed = self.client.put(
             "/api/settings",
-            json={"features": {"multi_user_enabled": True}},
+            json={"features": {"multi_user_enabled": True, "open_auto_provision": True}},
         )
         self.assertEqual(allowed.status_code, 200, allowed.text)
         self.assertTrue(allowed.json()["features"]["multi_user_enabled"])
@@ -169,7 +169,7 @@ class ApiAuthzTests(unittest.TestCase):
         resp = self.client.put(
             "/api/settings",
             json={
-                "features": {"multi_user_enabled": True},
+                "features": {"multi_user_enabled": True, "open_auto_provision": True},
                 "auth": {"mode": "plex", "plex_login_enabled": True},
             },
         )

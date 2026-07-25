@@ -347,7 +347,8 @@ export default function LoginPage() {
           {plexEnabled || oidcEnabled || localEnabled ? methodDivider : null}
           <h2 className="login-request-title">Request access</h2>
           <p className="login-help">
-            Visiting? Ask the household owner to invite you — no Seerr account required.
+            Visiting? Ask the household owner for a join link, or request access below — no Seerr
+            account required.
           </p>
           <form
             onSubmit={async (event) => {

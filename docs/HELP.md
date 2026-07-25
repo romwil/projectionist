@@ -2,7 +2,7 @@
 
 CuratorX is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Inbox**, **My Journey**, **Plot Lab**, and — for owners — idle curation.
 
-New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
+New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Plot Lab, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
 
 Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [Privacy](/privacy)
 
@@ -102,6 +102,8 @@ Tune the underlying weights under **Settings → Taste** — raise a cluster, lo
 ### Taste profile
 
 **Settings → Taste** shows the cluster tags CuratorX learned for you (genres, moods, eras). Drag a weight, lock it, or **Reset** an override to fall back to the household lens baseline.
+
+**TV & mid-series stops.** When you rate or abandon a show partway through, CuratorX weighs earlier seasons more heavily than later ones you never watched. Episode ratings (when Plex has them) also nudge taste — so a beloved Season 1 that you dropped in Season 3 does not keep forcing “more like late-series” neighbors.
 
 ### My Journey — achievements, pathways, and secrets
 
@@ -224,11 +226,17 @@ The curator keeps two kinds of memory:
 
 ### Youth mode
 
-If your account has **Youth mode** on, CuratorX uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, **Inbox**, and **My Journey** (plus Search and Settings). The hamburger holds secondary destinations like **My list**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
+If your account has **Youth mode** on, CuratorX uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, **Inbox**, and **My Journey** (plus Search and Settings). The hamburger lists those same destinations under **Navigate**, plus **My list** under **More**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
 
 ### Guest tour
 
-When the owner enables **Take a Tour** (Admin household toggle, or env `CURATORX_GUEST_TOUR_ENABLED`), the login page offers a public tour at **/tour** — no hamburger chrome. Signed-in **guests** also get a tour shell. Open **What's great** for published collections your host shared, then browse or ask without destructive actions. Visitors who are not signed in yet can **Request access** on the login page — that queue is owned by CuratorX (not Seerr); the owner approves from **Admin → Access requests**.
+When the owner enables **Take a Tour** (Admin household toggle, or env `CURATORX_GUEST_TOUR_ENABLED`), the login page offers a public tour at **/tour** — no hamburger chrome. Signed-in **guests** also get a tour shell. Open **What's great** for published collections your host shared, then browse or ask without destructive actions.
+
+### Joining the household
+
+Households are **invite-only by default**. The owner creates a one-time **join link** under **Admin → Access** (or approves your **Request access** form on the login page, which creates the same kind of invite). Open the link at **/join** and finish with Plex, SSO, or a local password — whichever the invite allows. The link works once.
+
+If you don't have a link yet, use **Request access** on `/login`. The owner sees it in their inbox and in **Admin → Access**.
 
 ---
 
@@ -451,11 +459,24 @@ curl -s http://localhost:8788/api/settings | jq '.youth'
 # List pending CuratorX access requests (not Seerr)
 curl -s http://localhost:8788/api/admin/access-requests?status=pending
 
-# Approve → creates a local member + one-time password when local login is on
-curl -s -X POST http://localhost:8788/api/admin/access-requests/REQUEST_ID/approve
+# Approve → creates a one-time /join invite (share the returned token/URL)
+curl -s -X POST http://localhost:8788/api/admin/access-requests/REQUEST_ID/approve \
+  -H 'Content-Type: application/json' \
+  -d '{"role":"member","is_youth":false,"allowed_methods":["plex","local"]}'
+
+# Or create an invite directly
+curl -s -X POST http://localhost:8788/api/admin/invites \
+  -H 'Content-Type: application/json' \
+  -d '{"role":"member","allowed_methods":["plex","oidc","local"]}'
 ```
 
-Visitors submit **Request access** on `/login` (`POST /api/access-requests`). Approvals also notify you via the inbox (`access-request` kind) and email when mail is configured. Seerr stays for post-member *media* requests only. Manage the queue in **Admin → Access requests**.
+### Invites & access requests
+
+Household join is **invite-only by default** when multi-user is on. Create invites (or approve requests) under **Admin → Access** — choose role, Youth mode, and allowed sign-in methods, then copy the `/join?token=…` link (email is sent when Mail is configured and an address is present). Revoke unused invites from the same page.
+
+Visitors can still submit **Request access** on `/login` (`POST /api/access-requests`). Approvals notify you via the inbox (`access-request` kind) and email when mail is configured. Denying a request soft-blocks that email (and any known identity) from redeeming later invites. Seerr stays for post-member *media* requests only.
+
+To restore pre-1.26 LAN-open auto-provision (any reachable Plex/SSO identity becomes a member), enable **Open auto-provision** under Admin household settings (`features.open_auto_provision`), or turn off **Require invite** (`features.invite_only`).
 
 ### Memory & privacy controls (owner)
 

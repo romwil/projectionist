@@ -1,0 +1,19 @@
+{
+  "service": "radarr",
+  "operation": "lookup",
+  "description": "Radarr movie lookup by term — recorded response shape",
+  "response": [
+    {
+      "title": "The Matrix",
+      "originalTitle": "The Matrix",
+      "year": 1999,
+      "tmdbId": 603,
+      "imdbId": "tt0133093",
+      "overview": "A computer hacker learns about the true nature of reality.",
+      "runtime": 136,
+      "images": [],
+      "remotePoster": "https://image.tmdb.org/t/p/original/poster.jpg",
+      "ratings": { "imdb": { "value": 8.7 } }
+    }
+  ]
+}

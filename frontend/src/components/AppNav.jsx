@@ -2,6 +2,7 @@ import { createPortal } from "react-dom";
 import { Link, useLocation } from "react-router-dom";
 import { buildAppNavItems } from "../lib/appNavItems.js";
 import { ROUTES, watchlistBrowseHref } from "../lib/backNav.js";
+import { isPrimaryNavActive } from "../lib/primaryNav.js";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
 
 export default function AppNav({
@@ -11,6 +12,8 @@ export default function AppNav({
   showSettings = true,
   isYouth = false,
   role = "owner",
+  multiUserEnabled = true,
+  authReady = true,
   adminBadges = null,
 }) {
   const location = useLocation();
@@ -30,6 +33,8 @@ export default function AppNav({
     isYouth,
     role,
     pathname: location.pathname,
+    multiUserEnabled,
+    authReady,
   });
   const badgeValue = adminBadges || {};
 
@@ -59,7 +64,7 @@ export default function AppNav({
         aria-label="Primary"
       >
         <div className="app-nav-header">
-          <p className="eyebrow">Navigate</p>
+          <p className="eyebrow">Menu</p>
           <button
             type="button"
             className="ghost app-nav-close"
@@ -96,8 +101,8 @@ export default function AppNav({
               );
             }
             const active =
-              item.id === "chat" || item.to === ROUTES.chat
-                ? location.pathname === ROUTES.chat || location.pathname === "/"
+              item.kind === "primary" || item.id === "chat" || item.to === ROUTES.chat
+                ? isPrimaryNavActive(item, location.pathname)
                 : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
             const count = badgeCount(item);
             return (

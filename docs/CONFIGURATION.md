@@ -97,6 +97,11 @@ Default values (also in `config/settings.example.json`):
 | Flag | Default | What it does when enabled |
 |------|---------|---------------------------|
 | `features.multi_user_enabled` | `false` | Login + session cookie; API middleware + per-user chat/actions when on — see [SECURITY.md](SECURITY.md) |
+| `features.invite_only` | `true` | When multi-user is on, new Plex/OIDC users must redeem a `/join` invite (existing users unchanged) |
+| `features.open_auto_provision` | `false` | Opt-in LAN-open: auto-provision new sign-ins as members (overrides invite-only) |
+| `features.plex_collections_enabled` | `false` | Let the curator propose Plex collection create/add (confirm-gated) |
+| `features.ephemeral_collection_gc_enabled` | `true` | Idle prune of expired `[CuratorX]` movie-night / agent collections |
+| `features.ephemeral_collection_gc_dry_run` | `false` | Log what `collection_gc` would delete without calling Plex DELETE |
 | `features.seerr_enabled` | `false` | Activates Seerr connector for household discovery and requests |
 | `auth.mode` | `disabled` | Set to `plex`, `oidc`, or `local` when multi-user is on |
 | `seerr.link_on_login` | `true` | After Plex login, bridge identity to Seerr |
@@ -238,6 +243,8 @@ CuratorX can mirror your **personal 1–5 star reviews** back to Plex so they ap
 
 **Collections (curator tools):** The agent can propose creating Plex collections or adding owned titles to an existing collection when `features.plex_collections_enabled` is `true`. These writes require the same confirmation tokens as Radarr/Sonarr adds — nothing is sent to Plex until you confirm in chat. Turn this on in Configuration → **Plex library mapping** → **Allow curator to manage Plex collections**.
 
+Agent / movie-night collections are tagged with a `[CuratorX]` title prefix and recorded with a TTL (`ephemeral_collection_ttl_hours`, default 168). Idle task `collection_gc` deletes only those tracked rows when expired — never owner-named evergreen collections without the marker. Owner toggles: `features.ephemeral_collection_gc_enabled` (default true) and `features.ephemeral_collection_gc_dry_run` (log-only).
+
 ---
 
 ## Plex webhooks (near-completion rating prompts)
@@ -292,9 +299,11 @@ When `webhook_secret` is non-empty, every `POST /api/webhooks/plex` must include
 
 Prompts are skipped when you already saved a review, or if you dismissed the same title within the last 30 days.
 
+**Personal watch nudges need a mapped Plex identity.** CuratorX only queues “You’re X% through…” prompts when the webhook `Account.id` matches a CuratorX user with that Plex id linked (Admin → Access / household users). Unmapped or server-token watches are ignored on purpose so one person’s progress never becomes another account’s nudge.
+
 ### Troubleshooting
 
-- **No prompt after finishing** — Confirm the webhook URL is saved in Plex and CuratorX logs show `Plex webhook` entries. Try a full stop (not just back-button) past 85%.
+- **No prompt after finishing** — Confirm the webhook URL is saved in Plex and CuratorX logs show `Plex webhook` entries. Try a full stop (not just back-button) past 85%. If logs show `unattributed_account`, link that Plex user under Admin → Access so personal nudges can bind.
 - **Connection refused** — Use the LAN IP CuratorX listens on, not `localhost`, unless Plex runs on the same host.
 - **Prompt only after sync** — Webhook not reaching CuratorX; fix URL/firewall. Sync-based detection still works via `viewOffset` during library sync.
 - **Duplicate prompts** — One row per `(user_id, rating_key)` in `rating_prompt_queue`; re-watching updates completion but won't spam if you already reviewed.

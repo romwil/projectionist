@@ -1,9 +1,9 @@
 """Plot-neighbor scoring over stored embeddings.
 
-v1 uses pure-Python cosine against all library embeddings.  Homelab libraries
-are typically thousands of titles — fine for idle trickle.  Future optional
-sqlite-vec ANN can prefilter candidate ids before the same surprise scoring;
-``item_neighbors`` remains the read cache either way.
+Exact cosine (+ surprise) scores candidates; optional sqlite-vec ANN can
+prefilter candidate ids before that scoring when the extension is available.
+``item_neighbors`` remains the UI/agent read cache either way. Default images
+without sqlite-vec keep the full exact scan.
 """
 
 from __future__ import annotations
@@ -12,9 +12,15 @@ import json
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Set, Tuple
 
 from curatorx.library.db import Database
-from curatorx.library.embeddings import cosine_similarity
+from curatorx.library.embeddings import COSINE_OFFLOAD_THRESHOLD, cosine_similarity
+from curatorx.library.vec_index import ann_candidate_ids, vec_available
 
 DEFAULT_TOP_K = 25
+# How many ANN hits to exact-rescore per seed (top_k × multiplier, capped).
+ANN_CANDIDATE_MULTIPLIER = 8
+ANN_CANDIDATE_CAP = 400
+# Re-export threshold so callers (and tests) can decide when to ``run_db``.
+NEIGHBOR_COSINE_OFFLOAD_THRESHOLD = COSINE_OFFLOAD_THRESHOLD
 
 
 def _parse_tag_set(raw: Any) -> Set[str]:
@@ -117,16 +123,36 @@ def refresh_neighbors_for_items(
         return 0
     emb_map = {item_id: vector for item_id, vector in embeddings}
     token_map = build_item_token_map(db, emb_map.keys())
-    candidates = [
+    all_candidates = [
         (item_id, vector, token_map.get(item_id, set()))
         for item_id, vector in embeddings
     ]
+    use_ann = vec_available()
+    ann_limit = max(int(top_k) * ANN_CANDIDATE_MULTIPLIER, 64)
+    ann_limit = min(ann_limit, ANN_CANDIDATE_CAP)
+    # Rebuild shadow index once per batch when ANN is available.
+    if use_ann:
+        from curatorx.library.vec_index import ensure_vec_index
+
+        use_ann = ensure_vec_index(db, embeddings)
+
     processed = 0
     for seed_id in seed_ids:
         seed_id = int(seed_id)
         seed_vector = emb_map.get(seed_id)
         if seed_vector is None:
             continue
+        candidates = all_candidates
+        if use_ann:
+            prefilter = ann_candidate_ids(
+                db,
+                seed_vector,
+                limit=ann_limit,
+                exclude_ids={seed_id},
+            )
+            if prefilter is not None:
+                wanted = set(prefilter)
+                candidates = [row for row in all_candidates if row[0] in wanted]
         neighbors = compute_neighbors_for_seed(
             seed_id,
             seed_vector,

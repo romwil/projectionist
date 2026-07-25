@@ -215,10 +215,29 @@ class ReviewStoreTests(unittest.TestCase):
         scan_for_rating_prompts(self.db, user_id=self.user_id)
         prompt = list_pending_prompts(self.db, user_id=self.user_id)[0]
         self.assertIsNone(prompt["prompted_at"])
-        marked = mark_prompts_surfaced(self.db, [prompt["id"]])
+        marked = mark_prompts_surfaced(self.db, [prompt["id"]], user_id=self.user_id)
         self.assertEqual(marked, 1)
         updated = list_pending_prompts(self.db, user_id=self.user_id)[0]
         self.assertIsNotNone(updated["prompted_at"])
+
+    def test_mark_prompts_surfaced_rejects_cross_user(self) -> None:
+        self._seed_near_complete_movie()
+        scan_for_rating_prompts(self.db, user_id=self.user_id)
+        prompt = list_pending_prompts(self.db, user_id=self.user_id)[0]
+        other_id = "other-user"
+        with self.db.connect() as conn:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO users (id, display_name, email, role, created_at)
+                VALUES (?, 'Other', NULL, 'member', ?)
+                """,
+                (other_id, __import__("time").time()),
+            )
+        marked = mark_prompts_surfaced(self.db, [prompt["id"]], user_id=other_id)
+        self.assertEqual(marked, 0)
+        still = list_pending_prompts(self.db, user_id=self.user_id)[0]
+        self.assertIsNone(still["prompted_at"])
+
 
     def test_scan_uses_tautulli_when_local_progress_missing(self) -> None:
         now = time.time()

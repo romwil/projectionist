@@ -282,16 +282,23 @@ On top of busy_timeout, the `run_with_db_lock_retry` utility adds application-le
 
 With WAL, `PRAGMA synchronous=NORMAL` avoids an fsync on every commit while still guaranteeing durability against application crashes. Data loss is only possible on an OS crash or power failure *during* a commit — an acceptable tradeoff for a homelab media curator running on Unraid/NAS hardware where fsync can be especially slow over network-attached storage.
 
-### Why not a single-writer queue?
+### Write serializer model
 
-A common architectural pattern for SQLite is to funnel all writes through an in-memory asyncio.Queue with a dedicated worker. CuratorX intentionally avoids this because:
+Under a loaded household (chat SSE + Plex webhook enqueue + telemetry threads + scheduler batch upserts), WAL + busy_timeout alone can still surface as lock warnings and stalled streams. CuratorX therefore runs a **dedicated write serializer** inside `Database`:
 
-1. **The scheduler already runs tasks sequentially** — only one task executes at a time, eliminating writer contention among background jobs.
-2. **Telemetry writes are tiny single-row inserts** — they hold the write lock for microseconds and the busy_timeout absorbs any overlap.
-3. **Request-handler writes are infrequent** — most chat turns are read-heavy (RAG search, history lookup); writes are limited to saving the assistant's reply and occasional preference updates.
-4. **A queue adds complexity** — error propagation, backpressure, shutdown ordering, and testing overhead that isn't justified at homelab scale.
+- **One background writer thread** owns mutating work submitted via `Database.run_write(fn)`. A dedicated thread is simpler than an asyncio task because most ambient writers are already sync callables (telemetry daemon threads, lock-retry upserts).
+- **Readers keep short-lived WAL connections** on the caller thread via `connect()` — concurrent reads must not regress.
+- **Ambient writers enqueue**: telemetry inserts, scheduler batch upserts (`run_with_db_lock_retry` paths), webhook rating-prompt enqueue, and chat message persist. Nested `run_write` on the writer thread is re-entrant.
+- **Backpressure**: bounded queue (default 128); `put` blocks when full so producers slow down instead of unbounded memory growth.
+- **Shutdown ordering**: FastAPI lifespan stops the idle/sync schedulers, then `Database.close()` drains the write queue and joins the writer thread.
+- **Error propagation**: exceptions inside submitted callables are re-raised on the waiting caller thread.
+- **Observability**: `Database.write_queue_stats()` exposes queue depth, last/max/avg wait seconds; slow waits also log at INFO.
 
-If write contention ever becomes measurable (observable via the `SQLite locked` warning logs), the migration path is straightforward: add an asyncio.Queue in `Database` and route writes through it. The current `connect()` context manager makes this a single-point refactor.
+WAL mode, `busy_timeout=30000`, and `run_with_db_lock_retry` remain the lower layers. The serializer sits above them for ambient contention; MySQL/Postgres migration stays out of scope for the homelab single-file model.
+
+### Event-loop offload (SSE / hot paths)
+
+Chat SSE (`GET /api/chat/stream` → `stream_agent`) must not run blocking `sqlite3` or long pure-Python cosine scans on the asyncio loop. Hot paths use `await run_db(fn, …)` (`asyncio.to_thread` in `curatorx/library/db_io.py`): history load + assistant persist, mid-stream library search queries, Plex webhook enqueue, and semantic/neighbor cosine work. This is **not** a thread-per-request model for the whole app — only sync I/O and CPU bursts leave the loop. `run_with_db_lock_retry`'s blocking `time.sleep` stays correct because those retries run on the writer thread (or a `run_db` worker), never on the loop.
 
 ### Trickle ingestion for embeddings
 
@@ -402,6 +409,8 @@ Homelab SQLite cannot afford full pairwise cosine on every “more like this” 
 2. Idle task writes top neighbors to `item_neighbors` (`score`, `surprise_score`).
 3. Optional graph mirror in `title_relations` (`collection`, `neighbor`, `shared_crew`, optional `llm_theme`).
 4. UI/API/agent tools SELECT from those tables.
+
+**Optional ANN prefilter:** when the [`sqlite-vec`](https://github.com/asg017/sqlite-vec) package loads successfully, `plot_neighbors` / `semantic_search` build a shadow `vec_embeddings` virtual table and KNN-prefilter candidates before the same exact cosine + surprise scoring. Default images omit the package so Unraid installs keep working; set `CURATORX_SQLITE_VEC=0` to force the exact path even if the package is present. Install with `pip install 'curatorx[vec]'` (or `pip install sqlite-vec`) inside a custom image when you want ANN.
 
 Empty neighbor/relation responses are **honest** — they mean the idle cache has not been built yet, not that the library has no similar titles.
 
@@ -582,7 +591,9 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 | Non-root Docker | **Implemented** — `curatorx` UID/GID 1000 + entrypoint chown |
 | Agent blueprints | Schema present; richer scheduler wiring **Future** |
 | Plex Lists publish | **Future** (pending stable Plex Discover API) |
-| sqlite-vec ANN prefilter | **Future** — `item_neighbors` remains the read cache either way |
+| sqlite-vec ANN prefilter | **Implemented (optional)** — when `sqlite-vec` is installed (`pip install curatorx[vec]` or `CURATORX_SQLITE_VEC` not `0`), neighbor rebuild / semantic search ANN-prefilter candidates then exact-rescore; without the extension the pure-Python cosine path remains. `item_neighbors` stays the UI/agent read cache either way |
+| TV season-decay taste | **Implemented** — `taste_refresh` folds `library_episodes` view/star curves with season decay so mid-series abandonment does not keep forcing later-season neighbors |
+| Ephemeral Plex collection GC | **Implemented** — agent/movie-night shelves get a `[CuratorX]` prefix + TTL row; idle `collection_gc` prunes expired markers only (never evergreen collections without the marker); Admin dry-run toggle |
 
 ---
 
