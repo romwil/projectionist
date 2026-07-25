@@ -30,6 +30,9 @@ GitHub release, or pushing Docker images, **read and follow**
 - Publish images only via `./scripts/docker-release.sh X.Y.Z` → `romwil/curatorx`
   (`:X.Y.Z`, `:X.Y`, `:latest`). Never invent alternate registries or skip the script’s
   Unraid-compatible manifest flags.
+- After a successful Hub publish, **spin down maintainer QA** (`curatorx-qa` on `:8790`)
+  unless an active QA/test campaign is in progress. Never stop prod `curatorx` / `:8788`.
+  Runbook: `/Volumes/appdata/curatorx-qa-scripts/qa-runs/QA-LIFECYCLE.md`.
 
 Checklist, exact test commands (pytest cov ≥74, frontend unit/lint/build), `gh release`
 notes shape, and failure modes: **docs/RELEASE.md**.

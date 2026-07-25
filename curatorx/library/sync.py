@@ -863,7 +863,14 @@ async def sync_library(
     _emit(progress, "finishing", 0, 1, "Building recommendations…")
     embedded = await rebuild_embeddings(db, settings, progress=progress)
     refresh_library_overview_cache(db)
-    rating_prompts = scan_for_rating_prompts(db, settings)
+    # Household PLEX_TOKEN progress is not personal. Only attribute scans in
+    # single-user mode (bootstrap owner). Multi-user relies on webhook Account.
+    scan_user_id = None
+    if not settings.features.multi_user_enabled:
+        from curatorx.library.db import BOOTSTRAP_OWNER_ID
+
+        scan_user_id = BOOTSTRAP_OWNER_ID
+    rating_prompts = scan_for_rating_prompts(db, settings, user_id=scan_user_id)
     _emit(progress, "finishing", 1, 1, "Wrapping up…")
     clock.finish(extra=f"embeddings={embedded} rating_prompts={rating_prompts}")
 

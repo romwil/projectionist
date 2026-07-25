@@ -4,6 +4,7 @@ import {
   dedupeNotifications,
   inboxHeadline,
   normalizeRecommendation,
+  recommendationMediaTitle,
 } from "../lib/recommendationInbox.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
@@ -36,11 +37,12 @@ function cardLead(rec) {
       </>
     );
   }
+  const mediaTitle = recommendationMediaTitle(rec);
   return (
     <>
       <strong>{fromName}</strong> recommended{" "}
       <em>
-        {rec.title}
+        {mediaTitle}
         {yearBit}
       </em>{" "}
       for you
@@ -82,6 +84,7 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
           const note = rec.message || rec.body;
           const kind = String(rec.kind || "recommendation");
           const showPoster = Boolean(rec.poster_url) || kind === "recommendation" || kind === "arrival";
+          const mediaTitle = kind === "recommendation" ? recommendationMediaTitle(rec) : rec.title;
           return (
             <article
               key={rec.id}
@@ -95,7 +98,7 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
                   {rec.poster_url ? (
                     <img src={rec.poster_url} alt="" loading="lazy" />
                   ) : (
-                    <div className="poster-fallback">{(rec.title || "?").slice(0, 1)}</div>
+                    <div className="poster-fallback">{(mediaTitle || "?").slice(0, 1)}</div>
                   )}
                   {kind === "recommendation" || kind === "arrival" ? (
                     <PosterOverlayControls item={recommendation} testPrefix="recommendation" />

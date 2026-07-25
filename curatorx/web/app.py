@@ -2138,6 +2138,20 @@ def get_all_scheduled_task_logs(
     return scheduler.get_task_run_log(None, after_seq=after_seq, limit=limit)
 
 
+@app.get("/api/admin/scheduled-tasks-history")
+def get_all_scheduled_task_history(
+    limit: int = 100,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Return newest-first durable run history across all scheduled tasks."""
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    capped = max(1, min(int(limit or 100), 500))
+    return scheduler.get_all_task_history(limit=capped)
+
+
 @app.post("/api/admin/scheduled-tasks/{name}/reset")
 def reset_scheduled_task_quarantine(
     name: str,
@@ -2437,8 +2451,8 @@ def library_quick_pick_endpoint(
 
     ``mood`` is a one-shot bias for this pick only — it does not write taste profile.
     """
-    del user
     db = _db()
+    settings = _settings()
 
     mood_genre_map = {
         "cozy": "drama,romance,family,comedy",
@@ -2467,13 +2481,29 @@ def library_quick_pick_endpoint(
             where_clauses.append(f"({genre_or})")
             params.extend(f"%{g.lower()}%" for g in genre_parts)
 
+    # Youth: fail-closed content-rating gate (same SQL shape as library query).
+    if bool(getattr(user, "is_youth", False)):
+        from curatorx.youth.rating_gate import allowed_rating_labels, resolve_youth_max_rating
+
+        max_rating = resolve_youth_max_rating(settings)
+        where_clauses.append("content_rating IS NOT NULL AND trim(content_rating) != ''")
+        labels = allowed_rating_labels(max_rating)
+        if labels:
+            like_clauses = []
+            for label in labels:
+                like_clauses.append("lower(content_rating) LIKE ?")
+                params.append(f"%{label.lower()}%")
+            where_clauses.append(f"({' OR '.join(like_clauses)})")
+        else:
+            where_clauses.append("1 = 0")
+
     where_sql = " AND ".join(where_clauses)
     with db.connect() as conn:
         row = conn.execute(
             f"""
             SELECT id, rating_key, media_type, title, year, genres, poster_url,
                    backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
-                   runtime_minutes, summary
+                   runtime_minutes, summary, content_rating
             FROM library_items
             WHERE {where_sql}
             ORDER BY RANDOM()
@@ -2512,6 +2542,7 @@ def library_quick_pick_endpoint(
     # TitleCard expects overview + in_library (DB column is summary).
     item["overview"] = str(item.get("summary") or "")
     item["in_library"] = True
+    item["content_rating"] = str(item.get("content_rating") or "")
 
     return {"item": item, "why": reason, "mood": mood_label}
 
@@ -3275,6 +3306,11 @@ def get_chat_thread_messages(
     if not thread:
         raise HTTPException(status_code=404, detail="Thread not found")
     messages = db.chat_history(session_id, limit=limit)
+    # Re-gate persisted title_cards for Youth (pre-fix threads often lack
+    # content_rating and would otherwise leak over-ceiling posters on reopen).
+    from curatorx.youth.scrub import scrub_youth_history_messages
+
+    messages = scrub_youth_history_messages(messages, user=user, settings=_settings())
     return {"session_id": session_id, "messages": messages, "thread": thread}
 
 
@@ -4889,14 +4925,15 @@ def create_recommendations(
         )
         from_name = user.preferred_name or user.display_name or "Someone"
         title_bit = payload.title.strip()
-        year_bit = f" ({payload.year})" if payload.year else ""
+        # Store the media title only — inbox cardLead composes "{name} recommended {title}".
+        # Precomposed titles previously double-wrapped in the UI.
         try:
             deliver_notification(
                 db,
                 settings,
                 user_id=rid,
                 kind="recommendation",
-                title=f"{from_name} recommended {title_bit}{year_bit}",
+                title=title_bit,
                 body=(payload.message or "").strip() or None,
                 media_type=payload.media_type,
                 tmdb_id=payload.tmdb_id,
@@ -5227,11 +5264,15 @@ def propose_plex_collection_items(
 
 
 @app.get("/api/reviews/prompts")
-def list_review_prompts(limit: int = 10) -> Dict[str, Any]:
+def list_review_prompts(
+    limit: int = 10,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
     db = _db()
-    items = list_pending_prompts(db, limit=limit)
+    scoped = user.id
+    items = list_pending_prompts(db, user_id=scoped, limit=limit)
     mark_prompts_surfaced(db, [str(item["id"]) for item in items])
-    items = list_pending_prompts(db, limit=limit)
+    items = list_pending_prompts(db, user_id=scoped, limit=limit)
     return {
         "items": [RatingPrompt(**item) for item in items],
         "count": len(items),
@@ -5239,9 +5280,20 @@ def list_review_prompts(limit: int = 10) -> Dict[str, Any]:
 
 
 @app.get("/api/reviews/to-rate")
-def list_titles_for_rating(limit: int = 10) -> Dict[str, Any]:
-    """Last ~N viewed/near-complete titles without a personal review (batch rate UI)."""
-    items = list_titles_to_rate(_db(), limit=limit)
+def list_titles_for_rating(
+    limit: int = 10,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Last ~N near-complete titles without a personal review (batch rate UI)."""
+    settings = _settings()
+    # Household library view counts are only safe when multi-user is off.
+    include_household = not settings.features.multi_user_enabled
+    items = list_titles_to_rate(
+        _db(),
+        user_id=user.id,
+        limit=limit,
+        include_household_viewed=include_household,
+    )
     near_complete_ids = [
         str(item["id"])
         for item in items
@@ -5253,9 +5305,12 @@ def list_titles_for_rating(limit: int = 10) -> Dict[str, Any]:
 
 
 @app.post("/api/reviews/prompts/{prompt_id}/dismiss", response_model=RatingPrompt)
-def dismiss_review_prompt(prompt_id: str) -> RatingPrompt:
+def dismiss_review_prompt(
+    prompt_id: str,
+    user=Depends(get_current_user_dep),
+) -> RatingPrompt:
     try:
-        saved = dismiss_prompt(_db(), prompt_id)
+        saved = dismiss_prompt(_db(), prompt_id, user_id=user.id)
     except ValueError as error:
         raise HTTPException(
             status_code=404,

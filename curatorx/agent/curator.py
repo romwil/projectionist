@@ -177,6 +177,21 @@ def _sanitize_chat_blocks(blocks: List[Dict[str, Any]], registry: ToolRegistry) 
     return sanitize(blocks, audience="member", settings=registry.settings)
 
 
+def _finalize_chat_blocks(blocks: List[Dict[str, Any]], registry: ToolRegistry) -> List[Dict[str, Any]]:
+    """Youth scrub (cards + known blocked titles) then privacy sanitize."""
+    # Require an explicit True — MagicMock attributes are truthy and must not
+    # trip the Youth scrub in unit tests that stub the registry.
+    if getattr(registry, "is_youth", False) is True:
+        from curatorx.youth.scrub import scrub_youth_chat_blocks
+
+        blocks = scrub_youth_chat_blocks(
+            blocks,
+            settings=registry.settings,
+            blocked_titles=getattr(registry, "youth_blocked_titles", ()) or (),
+        )
+    return _sanitize_chat_blocks(blocks, registry)
+
+
 class CuratorAgent:
     def __init__(
         self,
@@ -247,7 +262,7 @@ class CuratorAgent:
             _append_review_prompt_blocks(blocks, registry)
             _append_review_conflict_blocks(blocks, registry)
             _append_suggested_reply_block(blocks, registry)
-            blocks = _sanitize_chat_blocks(blocks, registry)
+            blocks = _finalize_chat_blocks(blocks, registry)
             user_id = uuid.uuid4().hex
             assistant_id = uuid.uuid4().hex
             self.db.save_chat_message(
@@ -393,7 +408,7 @@ class CuratorAgent:
         _append_review_prompt_blocks(blocks, registry)
         _append_review_conflict_blocks(blocks, registry)
         _append_suggested_reply_block(blocks, registry)
-        blocks = _sanitize_chat_blocks(blocks, registry)
+        blocks = _finalize_chat_blocks(blocks, registry)
 
         user_id = uuid.uuid4().hex
         assistant_id = uuid.uuid4().hex
@@ -616,7 +631,7 @@ async def stream_agent(
     _append_review_prompt_blocks(blocks, registry)
     _append_review_conflict_blocks(blocks, registry)
     _append_suggested_reply_block(blocks, registry)
-    blocks = _sanitize_chat_blocks(blocks, registry)
+    blocks = _finalize_chat_blocks(blocks, registry)
 
     user_msg_id = uuid.uuid4().hex
     assistant_id = uuid.uuid4().hex
@@ -674,7 +689,7 @@ async def _emit_buffered(
     _append_review_prompt_blocks(blocks, registry)
     _append_review_conflict_blocks(blocks, registry)
     _append_suggested_reply_block(blocks, registry)
-    blocks = _sanitize_chat_blocks(blocks, registry)
+    blocks = _finalize_chat_blocks(blocks, registry)
 
     user_msg_id = uuid.uuid4().hex
     assistant_id = uuid.uuid4().hex

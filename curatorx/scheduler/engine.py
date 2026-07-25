@@ -61,6 +61,7 @@ from curatorx.scheduler.run_history import (
     append_task_run,
     ensure_run_history_table,
     extract_items_processed,
+    list_all_task_runs,
     list_task_runs,
 )
 from curatorx.scheduler.run_log import TaskRunLogStore
@@ -444,6 +445,35 @@ class IdleScheduler:
             return {"error": f"Task '{name}' not found"}
         runs = list_task_runs(self._db, name, limit=limit)
         return {"name": name, "runs": runs, "count": len(runs)}
+
+    def get_all_task_history(self, *, limit: int = 100) -> Dict[str, Any]:
+        """Return newest-first durable runs across all tasks."""
+        runs = list_all_task_runs(self._db, limit=limit)
+        current = None
+        if self._running_task and self._running_started_at is not None:
+            current = {
+                "id": f"running:{self._running_task}",
+                "name": self._running_task,
+                "started_at": self._running_started_at,
+                "finished_at": None,
+                "duration_ms": int(max(0, (time.time() - self._running_started_at) * 1000)),
+                "status": "running",
+                "trigger": "schedule",
+                "outcome_reason": None,
+                "metrics": {},
+                "items_processed": None,
+                "error": None,
+            }
+            live = self._run_log.current_run(self._running_task) or {}
+            if live.get("trigger"):
+                current["trigger"] = live.get("trigger")
+            if live.get("run_id"):
+                current["id"] = f"running:{live.get('run_id')}"
+        return {
+            "runs": runs,
+            "count": len(runs),
+            "current_run": current,
+        }
 
     def get_task_rate(
         self,

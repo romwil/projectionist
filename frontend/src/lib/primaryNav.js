@@ -72,13 +72,20 @@ export const PRIMARY_NAV_ITEMS = [
  * Guest: Search, Chat, Explore only.
  * Youth / member: no Admin.
  * Owner: full set.
+ *
+ * When `authReady` is false (useAuthGate still settling; defaults isOwner=true),
+ * return no peers — never failure-open Admin for members.
  */
 export function primaryNavVisibleIds({
   role = "owner",
   isOwner = false,
   isYouth = false,
   multiUserEnabled = true,
+  authReady = true,
 } = {}) {
+  if (!authReady) {
+    return [];
+  }
   const normalized = String(role || "owner").toLowerCase();
   if (normalized === "guest") {
     return ["search", "chat", "explore"];
@@ -102,9 +109,10 @@ export function buildPrimaryNavItems({
   isOwner = false,
   isYouth = false,
   multiUserEnabled = true,
+  authReady = true,
 } = {}) {
   const visible = new Set(
-    primaryNavVisibleIds({ role, isOwner, isYouth, multiUserEnabled }),
+    primaryNavVisibleIds({ role, isOwner, isYouth, multiUserEnabled, authReady }),
   );
   return PRIMARY_NAV_ITEMS.filter((item) => visible.has(item.id)).map((item) => {
     let label = item.label;

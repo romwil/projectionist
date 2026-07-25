@@ -62,20 +62,34 @@ def _row_to_prompt(row: Mapping[str, Any]) -> Dict[str, Any]:
         "prompted_at": float(row["prompted_at"]) if row["prompted_at"] is not None else None,
         "dismissed_at": float(row["dismissed_at"]) if row["dismissed_at"] is not None else None,
         "review_id": str(row["review_id"]) if row["review_id"] is not None else None,
+        "user_id": str(row["user_id"]) if row["user_id"] is not None else None,
     }
 
 
-def _can_queue_prompt(conn, rating_key: str, *, now: float) -> bool:
+def _can_queue_prompt(conn, rating_key: str, *, user_id: str, now: float) -> bool:
+    """Return True when this user may receive a near-complete nudge for rating_key."""
+    cleaned_user = str(user_id or "").strip()
+    if not cleaned_user:
+        return False
+
     review = conn.execute(
-        "SELECT 1 FROM user_title_reviews WHERE rating_key = ?",
-        (rating_key,),
+        """
+        SELECT 1 FROM user_title_reviews
+        WHERE rating_key = ?
+          AND (user_id = ? OR user_id IS NULL)
+        LIMIT 1
+        """,
+        (rating_key, cleaned_user),
     ).fetchone()
     if review is not None:
         return False
 
     existing = conn.execute(
-        "SELECT dismissed_at FROM rating_prompt_queue WHERE rating_key = ?",
-        (rating_key,),
+        """
+        SELECT dismissed_at FROM rating_prompt_queue
+        WHERE rating_key = ? AND user_id = ?
+        """,
+        (rating_key, cleaned_user),
     ).fetchone()
     if existing is not None and existing["dismissed_at"] is not None:
         dismissed_at = float(existing["dismissed_at"])
@@ -91,15 +105,16 @@ def _upsert_prompt(
     media_type: str,
     title: str,
     completion_pct: float,
+    user_id: str,
     now: float,
 ) -> None:
     prompt_id = uuid.uuid4().hex
     conn.execute(
         """
         INSERT INTO rating_prompt_queue (
-            id, rating_key, media_type, title, completion_pct, detected_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(rating_key) DO UPDATE SET
+            id, rating_key, media_type, title, completion_pct, detected_at, user_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, rating_key) DO UPDATE SET
             media_type=excluded.media_type,
             title=excluded.title,
             completion_pct=excluded.completion_pct,
@@ -107,7 +122,7 @@ def _upsert_prompt(
             dismissed_at=NULL,
             review_id=NULL
         """,
-        (prompt_id, rating_key, media_type, title, completion_pct, now),
+        (prompt_id, rating_key, media_type, title, completion_pct, now, user_id),
     )
 
 
@@ -133,11 +148,19 @@ def queue_rating_prompt(
     media_type: str,
     title: str,
     completion_pct: float,
+    user_id: Optional[str] = None,
 ) -> bool:
-    """Insert or refresh a near-completion rating prompt. Returns True if queued."""
+    """Insert or refresh a near-completion rating prompt for one user.
+
+    Returns True if queued. Requires ``user_id`` — household/server-token progress
+    must never be surfaced as “you’re X% through” to other accounts.
+    """
+    cleaned_user = str(user_id or "").strip()
+    if not cleaned_user:
+        return False
     now = time.time()
     with db.connect() as conn:
-        if not _can_queue_prompt(conn, rating_key, now=now):
+        if not _can_queue_prompt(conn, rating_key, user_id=cleaned_user, now=now):
             return False
         _upsert_prompt(
             conn,
@@ -145,6 +168,7 @@ def queue_rating_prompt(
             media_type=media_type,
             title=title,
             completion_pct=completion_pct,
+            user_id=cleaned_user,
             now=now,
         )
     return True
@@ -171,8 +195,22 @@ def mark_prompts_surfaced(db: Database, prompt_ids: List[str]) -> int:
     return int(cursor.rowcount)
 
 
-def scan_for_rating_prompts(db: Database, settings: Optional[Settings] = None) -> int:
-    """Detect near-complete watches and enqueue rating prompts."""
+def scan_for_rating_prompts(
+    db: Database,
+    settings: Optional[Settings] = None,
+    *,
+    user_id: Optional[str] = None,
+) -> int:
+    """Detect near-complete watches and enqueue rating prompts for one user.
+
+    Household library progress (server ``PLEX_TOKEN``) is not attributable to a
+    person. Callers must pass ``user_id`` (e.g. bootstrap owner in single-user
+    mode). Multi-user installs should rely on webhook-attributed watches instead.
+    """
+    cleaned_user = str(user_id or "").strip()
+    if not cleaned_user:
+        return 0
+
     now = time.time()
     queued = 0
     queued_keys: set[str] = set()
@@ -196,7 +234,7 @@ def scan_for_rating_prompts(db: Database, settings: Optional[Settings] = None) -
         nonlocal queued
         if rating_key in queued_keys:
             return False
-        if not _can_queue_prompt(conn, rating_key, now=now):
+        if not _can_queue_prompt(conn, rating_key, user_id=cleaned_user, now=now):
             return False
         _upsert_prompt(
             conn,
@@ -204,6 +242,7 @@ def scan_for_rating_prompts(db: Database, settings: Optional[Settings] = None) -
             media_type=media_type,
             title=title,
             completion_pct=completion_pct,
+            user_id=cleaned_user,
             now=now,
         )
         queued_keys.add(rating_key)
@@ -436,22 +475,32 @@ def save_review(
             )
 
         if prompt_id:
-            conn.execute(
-                """
-                UPDATE rating_prompt_queue
-                SET review_id = ?, prompted_at = ?, dismissed_at = NULL
-                WHERE id = ?
-                """,
-                (review_id, now, prompt_id),
-            )
-        elif rating_key:
+            if user_id:
+                conn.execute(
+                    """
+                    UPDATE rating_prompt_queue
+                    SET review_id = ?, prompted_at = ?, dismissed_at = NULL
+                    WHERE id = ? AND user_id = ?
+                    """,
+                    (review_id, now, prompt_id, user_id),
+                )
+            else:
+                conn.execute(
+                    """
+                    UPDATE rating_prompt_queue
+                    SET review_id = ?, prompted_at = ?, dismissed_at = NULL
+                    WHERE id = ?
+                    """,
+                    (review_id, now, prompt_id),
+                )
+        elif rating_key and user_id:
             conn.execute(
                 """
                 UPDATE rating_prompt_queue
                 SET review_id = ?, prompted_at = ?
-                WHERE rating_key = ? AND dismissed_at IS NULL
+                WHERE rating_key = ? AND user_id = ? AND dismissed_at IS NULL
                 """,
-                (review_id, now, rating_key),
+                (review_id, now, rating_key, user_id),
             )
 
         row = conn.execute(
@@ -532,28 +581,54 @@ def get_reviews(
     return [_row_to_review(row) for row in rows]
 
 
-def list_pending_prompts(db: Database, *, limit: int = 10) -> List[Dict[str, Any]]:
+def list_pending_prompts(
+    db: Database,
+    *,
+    user_id: Optional[str] = None,
+    limit: int = 10,
+) -> List[Dict[str, Any]]:
+    """List near-complete rating prompts for one user only.
+
+    Fail closed: without ``user_id``, return no prompts. Never return
+    household-global / unscoped rows as personal “you’re X% through” nudges.
+    """
+    cleaned_user = str(user_id or "").strip()
+    if not cleaned_user:
+        return []
     with db.connect() as conn:
         rows = conn.execute(
             """
             SELECT * FROM rating_prompt_queue
-            WHERE dismissed_at IS NULL
+            WHERE user_id = ?
+              AND dismissed_at IS NULL
               AND review_id IS NULL
             ORDER BY completion_pct DESC, detected_at DESC
             LIMIT ?
             """,
-            (max(1, min(limit, 50)),),
+            (cleaned_user, max(1, min(limit, 50))),
         ).fetchall()
     return [_row_to_prompt(row) for row in rows]
 
 
-def list_titles_to_rate(db: Database, *, limit: int = 10) -> List[Dict[str, Any]]:
-    """Return near-complete prompts plus recently viewed unrated library titles."""
+def list_titles_to_rate(
+    db: Database,
+    *,
+    user_id: Optional[str] = None,
+    limit: int = 10,
+    include_household_viewed: bool = False,
+) -> List[Dict[str, Any]]:
+    """Return near-complete prompts for this user.
+
+    Household ``library_items`` view counts are only included when
+    ``include_household_viewed`` is True (single-user / explicitly opted in).
+    Multi-user callers must leave that False so server-token watches are not
+    presented as personal to-rate suggestions.
+    """
     capped = max(1, min(int(limit or 10), 50))
     suggestions: List[Dict[str, Any]] = []
     seen_keys: set[str] = set()
 
-    for prompt in list_pending_prompts(db, limit=capped):
+    for prompt in list_pending_prompts(db, user_id=user_id, limit=capped):
         rating_key = str(prompt["rating_key"])
         seen_keys.add(rating_key)
         suggestions.append(
@@ -568,7 +643,7 @@ def list_titles_to_rate(db: Database, *, limit: int = 10) -> List[Dict[str, Any]
             }
         )
 
-    if len(suggestions) >= capped:
+    if len(suggestions) >= capped or not include_household_viewed:
         return suggestions[:capped]
 
     with db.connect() as conn:
@@ -610,14 +685,22 @@ def list_titles_to_rate(db: Database, *, limit: int = 10) -> List[Dict[str, Any]
     return suggestions[:capped]
 
 
-def dismiss_prompt(db: Database, prompt_id: str) -> Dict[str, Any]:
+def dismiss_prompt(
+    db: Database,
+    prompt_id: str,
+    *,
+    user_id: Optional[str] = None,
+) -> Dict[str, Any]:
     now = time.time()
+    cleaned_user = str(user_id or "").strip() or None
     with db.connect() as conn:
         row = conn.execute(
             "SELECT * FROM rating_prompt_queue WHERE id = ?",
             (prompt_id,),
         ).fetchone()
         if row is None:
+            raise ValueError("Prompt not found")
+        if cleaned_user is not None and str(row["user_id"] or "") != cleaned_user:
             raise ValueError("Prompt not found")
         conn.execute(
             "UPDATE rating_prompt_queue SET dismissed_at = ? WHERE id = ?",

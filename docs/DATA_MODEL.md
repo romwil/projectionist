@@ -483,12 +483,14 @@ Personal 1–5 star ratings and optional free-text notes for titles you have wat
 
 #### `rating_prompt_queue`
 
-Proactive near-completion prompts (≥85% watched) surfaced in chat after library sync.
+Proactive near-completion prompts (≥85% watched) surfaced in chat for the
+**watcher who earned them** — never household-global server-token progress.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | TEXT PK | Prompt UUID |
-| `rating_key` | TEXT UNIQUE | Plex item or episode key |
+| `user_id` | TEXT NOT NULL | CuratorX user who owns this nudge |
+| `rating_key` | TEXT | Plex item or episode key |
 | `media_type` | TEXT | `movie` or `show` |
 | `title` | TEXT | Prompt headline |
 | `completion_pct` | REAL | Detected watch progress |
@@ -496,6 +498,9 @@ Proactive near-completion prompts (≥85% watched) surfaced in chat after librar
 | `prompted_at` | REAL | When the prompt was shown in chat |
 | `dismissed_at` | REAL | Skip — 30-day cooldown before re-prompt |
 | `review_id` | TEXT | Linked `user_title_reviews.id` after save |
+
+Unique on `(user_id, rating_key)`. Multi-user installs enqueue via Plex webhook
+`Account.id` → user mapping; library sync only attributes scans in single-user mode.
 
 ---
 

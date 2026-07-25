@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { bulkActionProgressView, shouldShowBulkActionProgress } from "../lib/bulkActionProgress.js";
+import { createId } from "../lib/id.js";
 
 const BulkActionProgressContext = createContext(null);
 
@@ -18,7 +19,8 @@ export function BulkActionProgressProvider({ children }) {
   const start = useCallback(({ label, total, asynchronous = false }) => {
     if (!shouldShowBulkActionProgress({ total, asynchronous })) return null;
     clearTimeout(clearTimerRef.current);
-    const id = crypto.randomUUID();
+    // createId works on HTTP LAN; crypto.randomUUID is missing/throws off HTTPS.
+    const id = createId();
     setProgress({ id, label, current: 0, total, state: "running" });
     return id;
   }, []);

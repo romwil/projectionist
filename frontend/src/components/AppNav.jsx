@@ -11,6 +11,7 @@ export default function AppNav({
   showSettings = true,
   isYouth = false,
   role = "owner",
+  adminBadges = null,
 }) {
   const location = useLocation();
   const { rootRef: panelRef } = useAnchoredPopover({
@@ -23,10 +24,23 @@ export default function AppNav({
 
   if (!open) return null;
 
-  const items = buildAppNavItems({ isOwner, showSettings, isYouth, role });
+  const items = buildAppNavItems({
+    isOwner,
+    showSettings,
+    isYouth,
+    role,
+    pathname: location.pathname,
+  });
+  const badgeValue = adminBadges || {};
 
   function handleWatchlistClick() {
     onClose?.();
+  }
+
+  function badgeCount(item) {
+    if (!item?.badge) return null;
+    const count = badgeValue[item.badge];
+    return typeof count === "number" && count > 0 ? count : null;
   }
 
   return createPortal(
@@ -58,6 +72,15 @@ export default function AppNav({
         </div>
         <ul className="app-nav-list">
           {items.map((item) => {
+            if (item.kind === "heading") {
+              return (
+                <li key={item.id} className="app-nav-heading-item" role="presentation">
+                  <p className="app-nav-heading eyebrow" data-testid={item.testId || `app-nav-${item.id}`}>
+                    {item.label}
+                  </p>
+                </li>
+              );
+            }
             if (item.kind === "watchlist") {
               return (
                 <li key={item.id}>
@@ -76,15 +99,25 @@ export default function AppNav({
               item.id === "chat" || item.to === ROUTES.chat
                 ? location.pathname === ROUTES.chat || location.pathname === "/"
                 : location.pathname === item.to || location.pathname.startsWith(`${item.to}/`);
+            const count = badgeCount(item);
             return (
               <li key={item.id}>
                 <Link
                   to={item.to}
-                  className={`app-nav-link${active ? " is-active" : ""}`}
+                  className={`app-nav-link${active ? " is-active" : ""}${count != null ? " app-nav-link-badged" : ""}`}
                   data-testid={item.testId}
                   onClick={onClose}
                 >
-                  {item.label}
+                  <span>{item.label}</span>
+                  {count != null ? (
+                    <span
+                      className="app-nav-badge"
+                      data-testid={`${item.testId}-badge`}
+                      aria-label={`${count} open`}
+                    >
+                      {count > 99 ? "99+" : count}
+                    </span>
+                  ) : null}
                 </Link>
               </li>
             );

@@ -6,6 +6,12 @@
 		},
 		{
 			"path": "../../../../Volumes/appdata/curatorx"
+		},
+		{
+			"path": "../../../../Volumes/appdata/curatorx-qa"
+		},
+		{
+			"path": "../../../../Volumes/appdata/curatorx-qa-scripts"
 		}
 	],
 	"settings": {}

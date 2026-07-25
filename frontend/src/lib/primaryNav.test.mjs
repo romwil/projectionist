@@ -28,6 +28,40 @@ describe("primaryNav", () => {
     assert.deepEqual(ids, ["search", "chat", "explore", "inbox", "my-journey", "settings"]);
   });
 
+  it("never includes Admin while auth is unresolved even if isOwner defaults true", () => {
+    const unresolved = primaryNavVisibleIds({
+      role: "owner",
+      isOwner: true,
+      multiUserEnabled: true,
+      authReady: false,
+    });
+    assert.deepEqual(unresolved, []);
+    assert.equal(unresolved.includes("admin"), false);
+
+    const memberAfterReady = primaryNavVisibleIds({
+      role: "member",
+      isOwner: false,
+      multiUserEnabled: true,
+      authReady: true,
+    });
+    assert.equal(memberAfterReady.includes("admin"), false);
+    assert.deepEqual(memberAfterReady, [
+      "search",
+      "chat",
+      "explore",
+      "inbox",
+      "my-journey",
+      "settings",
+    ]);
+
+    const itemsUnresolved = buildPrimaryNavItems({
+      role: "owner",
+      isOwner: true,
+      authReady: false,
+    });
+    assert.equal(itemsUnresolved.some((item) => item.id === "admin"), false);
+  });
+
   it("youth sees Ask/Browse labels and My Journey, never Admin", () => {
     const items = buildPrimaryNavItems({
       role: "member",

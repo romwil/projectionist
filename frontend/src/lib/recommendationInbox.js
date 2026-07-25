@@ -58,6 +58,36 @@ export function normalizeRecommendation(item) {
   };
 }
 
+/**
+ * Media title for recommendation cards.
+ * Legacy inbox rows stored a precomposed "{name} recommended {title} ({year})"
+ * sentence in `title`; strip that so cardLead does not double-compose.
+ */
+export function recommendationMediaTitle(item) {
+  const raw = String(item?.title || "").trim();
+  if (!raw) return "";
+  const fromName = String(item?.from_display_name || "").trim();
+  let media = raw;
+  if (fromName) {
+    const prefix = `${fromName} recommended `;
+    if (raw.toLowerCase().startsWith(prefix.toLowerCase())) {
+      media = raw.slice(prefix.length).trim();
+    }
+  }
+  if (media === raw) {
+    const match = raw.match(/\brecommended\s+(.+)$/i);
+    if (match) media = match[1].trim();
+  }
+  const year = item?.year;
+  if (year != null && year !== "") {
+    const yearSuffix = ` (${year})`;
+    if (media.endsWith(yearSuffix)) {
+      media = media.slice(0, -yearSuffix.length).trim();
+    }
+  }
+  return media || raw;
+}
+
 export function inboxHeadline(items = []) {
   const list = Array.isArray(items) ? items : [];
   if (!list.length) return "Inbox";
@@ -76,7 +106,7 @@ export function inboxCardCopy(item) {
   const kind = String(item?.kind || "recommendation");
   const fromName = item?.from_display_name || "Someone";
   const yearBit = item?.year ? ` (${item.year})` : "";
-  const title = item?.title || "a title";
+  const title = kind === "recommendation" ? recommendationMediaTitle(item) || "a title" : item?.title || "a title";
   if (kind === "arrival") {
     return { eyebrow: "Arrival", lead: title, note: item?.body || item?.message || null };
   }

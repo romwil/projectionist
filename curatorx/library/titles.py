@@ -195,7 +195,7 @@ def _apply_tmdb_movie_meta(detail: TitleDetail, meta: Mapping[str, Any], tmdb: T
     if not detail.original_language:
         detail.original_language = str(meta.get("original_language") or "")
     if not detail.content_rating:
-        detail.content_rating = TMDBClient.us_content_rating(meta)
+        detail.content_rating = str(TMDBClient.us_content_rating(meta) or "")
     if not detail.countries:
         countries = meta.get("production_countries") or []
         if isinstance(countries, list):
@@ -231,7 +231,7 @@ def _apply_tmdb_tv_meta(detail: TitleDetail, meta: Mapping[str, Any], tmdb: TMDB
     if not detail.original_language:
         detail.original_language = str(meta.get("original_language") or "")
     if not detail.content_rating:
-        detail.content_rating = TMDBClient.us_content_rating(meta)
+        detail.content_rating = str(TMDBClient.us_content_rating(meta) or "")
     if not detail.status:
         detail.status = str(meta.get("status") or "")
     if not detail.countries:

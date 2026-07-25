@@ -288,6 +288,9 @@ export default function ChatThread({
             data-testid={`chat-message-${message.role}`}
             data-message-id={message.id}
             data-message-role={message.role}
+            data-message-kind={
+              String(message.id || "").startsWith("review-prompt-") ? "review-prompt" : "chat"
+            }
           >
             {isAssistant ? (
               <div className="message-agent-meta">

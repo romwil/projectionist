@@ -49,6 +49,7 @@ class SchemaMigrationsMixin:
             self._migrate_multi_user_columns(conn)
             self._migrate_phase4_tables(conn)
             self._migrate_multi_user_columns(conn)  # reviews/prefs tables exist after phase4
+            self._migrate_rating_prompt_user_scope(conn)
             self._migrate_embeddings_content_hash(conn)
             self._migrate_curated_lists(conn)
             self._migrate_grooming_action_log(conn)
@@ -721,8 +722,12 @@ class SchemaMigrationsMixin:
                 prompted_at REAL,
                 dismissed_at REAL,
                 review_id TEXT,
-                UNIQUE(rating_key)
+                user_id TEXT NOT NULL,
+                UNIQUE(user_id, rating_key)
             );
+            -- Index creation deferred to _migrate_rating_prompt_user_scope: legacy
+            -- DBs already have this table without user_id, so CREATE TABLE IF NOT
+            -- EXISTS is a no-op and indexing user_id here would fail startup.
 
             CREATE TABLE IF NOT EXISTS arr_queued_titles (
                 id TEXT PRIMARY KEY,
@@ -741,6 +746,54 @@ class SchemaMigrationsMixin:
                 COALESCE(tmdb_id, -1),
                 COALESCE(tvdb_id, -1)
             );
+            """
+        )
+
+    def _migrate_rating_prompt_user_scope(self, conn: sqlite3.Connection) -> None:
+        """Scope rating nudges to a CuratorX user — never household-global progress.
+
+        Legacy ``UNIQUE(rating_key)`` queues from the server ``PLEX_TOKEN`` were shown
+        to every signed-in account as “you’re X% through…”. Rebuild with
+        ``UNIQUE(user_id, rating_key)`` and discard unscoped rows.
+        """
+        cols = self._table_columns(conn, "rating_prompt_queue")
+        if not cols:
+            return
+        if "user_id" in cols:
+            conn.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_rating_prompt_user_key
+                ON rating_prompt_queue(user_id, rating_key)
+                """
+            )
+            conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_rating_prompt_user
+                ON rating_prompt_queue(user_id, dismissed_at, completion_pct)
+                """
+            )
+            return
+
+        conn.executescript(
+            """
+            DROP TABLE IF EXISTS rating_prompt_queue_v2;
+            CREATE TABLE rating_prompt_queue_v2 (
+                id TEXT PRIMARY KEY,
+                rating_key TEXT NOT NULL,
+                media_type TEXT NOT NULL,
+                title TEXT NOT NULL,
+                completion_pct REAL NOT NULL,
+                detected_at REAL NOT NULL,
+                prompted_at REAL,
+                dismissed_at REAL,
+                review_id TEXT,
+                user_id TEXT NOT NULL,
+                UNIQUE(user_id, rating_key)
+            );
+            DROP TABLE rating_prompt_queue;
+            ALTER TABLE rating_prompt_queue_v2 RENAME TO rating_prompt_queue;
+            CREATE INDEX IF NOT EXISTS idx_rating_prompt_user
+                ON rating_prompt_queue(user_id, dismissed_at, completion_pct);
             """
         )
 

@@ -5,6 +5,7 @@ import {
   estimateThroughputEta,
   formatDurationMs,
   formatEtaDuration,
+  formatExecutionLogLine,
   formatHistoryRunLine,
   formatInterval,
   formatLastOutcomeLine,
@@ -14,11 +15,14 @@ import {
   formatRunSummaryLine,
   formatTaskLastRun,
   formatTaskLastRunDetail,
+  formatTaskNextRun,
   formatThroughputEstimate,
   isTaskRunning,
+  mergeExecutionLogRuns,
   resolveLastOutcome,
   resolveRunMetrics,
   resolveWarmExploreTasks,
+  sortTasksByNextRun,
   summarizeLastStatus,
   taskDisplayName,
   taskRowTone,
@@ -198,5 +202,52 @@ describe("scheduledTasks helpers", () => {
       }),
       /Succeeded/,
     );
+  });
+
+  it("sorts tasks by soonest next run, disabled last", () => {
+    const now = 1_700_000_000;
+    const sorted = sortTasksByNextRun(
+      [
+        { name: "later", enabled: true, next_run_at: now + 7200 },
+        { name: "disabled", enabled: false, next_run_at: now + 60 },
+        { name: "soon", enabled: true, next_run_at: now + 300 },
+        { name: "running", enabled: true, next_run_at: now + 9999, running: true },
+        { name: "due", enabled: true, next_run_at: now - 10, overdue: true },
+      ],
+      now,
+    );
+    assert.deepEqual(
+      sorted.map((t) => t.name),
+      ["running", "due", "soon", "later", "disabled"],
+    );
+    assert.equal(formatTaskNextRun({ enabled: false }, now), "—");
+    assert.equal(
+      formatTaskNextRun({ enabled: true, running: true }, now),
+      "Running now",
+    );
+    assert.equal(
+      formatTaskNextRun({ enabled: true, next_run_at: now - 1, overdue: true }, now),
+      "Due now",
+    );
+  });
+
+  it("formats and merges unified execution log rows", () => {
+    assert.match(
+      formatExecutionLogLine({
+        name: "health_metrics",
+        status: "completed",
+        started_at: 1_700_000_000,
+        finished_at: 1_700_000_010,
+        duration_ms: 10000,
+        summary_line: "ok",
+      }),
+      /Health metrics · Succeeded/,
+    );
+    const merged = mergeExecutionLogRuns(
+      [{ id: 1, name: "a", status: "completed" }],
+      { id: "running:x", name: "b", status: "running", started_at: 1 },
+    );
+    assert.equal(merged[0].status, "running");
+    assert.equal(merged[1].id, 1);
   });
 });

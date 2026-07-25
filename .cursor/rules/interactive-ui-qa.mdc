@@ -1,0 +1,19 @@
+---
+description: When the user asks for browser/UI/role QA, absolute baseline, or delta regression, follow the interactive-ui-qa skill (authored checklists only; QA :8790 never prod :8788).
+alwaysApply: false
+---
+
+# Interactive UI QA
+
+If the user asks for **browser QA**, **UI QA**, **role QA**, **absolute baseline**,
+**full characterization**, or **delta / regression retest** against CuratorX:
+
+1. Read and follow [`.cursor/skills/interactive-ui-qa/SKILL.md`](../skills/interactive-ui-qa/SKILL.md).
+2. Execute **only** authored IDs in
+   [`.cursor/skills/interactive-ui-qa/reference.md`](../skills/interactive-ui-qa/reference.md).
+3. Target maintainer QA **`http://10.10.1.202:8790`** +
+   `/Volumes/appdata/curatorx-qa-scripts/.env.qa` — **never** production **`:8788`**.
+4. Write artifacts under `/Volumes/appdata/curatorx-qa-scripts/qa-runs/`.
+5. Verdict **FAIL** if any `blocker` / `major` remains open.
+
+Do not invent pathways. New UI → update `reference.md`.

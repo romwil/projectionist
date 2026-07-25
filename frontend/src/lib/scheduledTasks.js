@@ -345,3 +345,87 @@ export function formatLogLine(event) {
   }
   return base;
 }
+
+/**
+ * Sort key for "what's next": running / due-now first, then soonest next_run_at,
+ * then later upcoming. Disabled tasks (no next run) sort last.
+ */
+export function resolveNextRunAt(task, now = Date.now() / 1000) {
+  if (!task || task.enabled === false) return null;
+  if (isTaskRunning(task)) return Number(now);
+  const next = Number(task.next_run_at);
+  if (Number.isFinite(next)) return next;
+  // Never run (or missing next) while enabled → due immediately.
+  return Number(now);
+}
+
+/** Ascending by next fire time; disabled last. Stable by name. */
+export function compareTasksByNextRun(a, b, now = Date.now() / 1000) {
+  const aEnabled = a?.enabled !== false;
+  const bEnabled = b?.enabled !== false;
+  if (aEnabled !== bEnabled) return aEnabled ? -1 : 1;
+
+  const aRunning = isTaskRunning(a);
+  const bRunning = isTaskRunning(b);
+  if (aRunning !== bRunning) return aRunning ? -1 : 1;
+
+  const aNext = resolveNextRunAt(a, now);
+  const bNext = resolveNextRunAt(b, now);
+  const aKey = aNext == null ? Number.POSITIVE_INFINITY : aNext;
+  const bKey = bNext == null ? Number.POSITIVE_INFINITY : bNext;
+  if (aKey !== bKey) return aKey - bKey;
+
+  const aName = String(a?.name || "");
+  const bName = String(b?.name || "");
+  return aName.localeCompare(bName);
+}
+
+export function sortTasksByNextRun(items, now = Date.now() / 1000) {
+  const list = Array.isArray(items) ? [...items] : [];
+  list.sort((a, b) => compareTasksByNextRun(a, b, now));
+  return list;
+}
+
+/** Owner-facing next-run label for list rows. */
+export function formatTaskNextRun(task, now = Date.now() / 1000) {
+  if (!task) return "—";
+  if (!task.enabled) return "—";
+  if (isTaskRunning(task)) return "Running now";
+  const next = Number(task.next_run_at);
+  if (Number.isFinite(next)) {
+    if (next <= now || task.overdue) return "Due now";
+    return formatEpoch(next);
+  }
+  if (task.overdue || task.last_run_at == null) return "Due now";
+  return "—";
+}
+
+/** Compact unified execution-log row (cross-task history). */
+export function formatExecutionLogLine(run) {
+  if (!run) return "";
+  const name = taskDisplayName(run.name);
+  const status = String(run.status || "") === "running"
+    ? "Running"
+    : summarizeLastStatus(run.status);
+  const started = formatEpoch(run.started_at);
+  const finished =
+    run.finished_at != null && run.finished_at !== ""
+      ? formatEpoch(run.finished_at)
+      : "—";
+  const duration = formatDurationMs(run.duration_ms);
+  const summary =
+    formatRunSummaryLine(run) ||
+    formatOutcomeReason(run) ||
+    (run.error ? String(run.error).trim() : "");
+  const base = `${name} · ${status} · ${started} → ${finished} · ${duration}`;
+  return summary ? `${base} — ${summary}` : base;
+}
+
+/** Merge in-flight current_run ahead of durable history (newest first). */
+export function mergeExecutionLogRuns(historyRuns, currentRun) {
+  const runs = Array.isArray(historyRuns) ? [...historyRuns] : [];
+  if (!currentRun || !currentRun.name) return runs;
+  const currentId = String(currentRun.id || `running:${currentRun.name}`);
+  const filtered = runs.filter((run) => String(run?.id) !== currentId);
+  return [{ ...currentRun, id: currentId, status: currentRun.status || "running" }, ...filtered];
+}

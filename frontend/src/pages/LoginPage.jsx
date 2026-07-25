@@ -178,12 +178,15 @@ export default function LoginPage() {
   }
 
   const methods = resolveAuthMethods(features?.auth_methods);
+  const featuresLoading = features == null && !error;
   const plexEnabled = methods.includes("plex");
-  const localEnabled = methods.includes("local");
+  const localEnabled = methods.includes("local") || featuresLoading;
   const oidcEnabled = methods.includes("oidc");
   const oidcProviderName = features?.auth?.oidc_provider_name || "SSO";
   const noMethods = features != null && methods.length === 0;
-  const lede = loginLede(methods);
+  const lede = featuresLoading
+    ? "Loading sign-in options…"
+    : loginLede(methods);
   const advanced = plexAdvancedCopy({ open: showTokenInput });
 
   const methodDivider = (
@@ -313,7 +316,7 @@ export default function LoginPage() {
                   onChange={(e) => setLocalUsername(e.target.value)}
                   placeholder="Username"
                   autoComplete="username"
-                  disabled={loading || waitingForPlex}
+                  disabled={loading || waitingForPlex || featuresLoading}
                 />
               </label>
               <label className="login-field">
@@ -325,16 +328,16 @@ export default function LoginPage() {
                   onChange={(e) => setLocalPassword(e.target.value)}
                   placeholder="Password"
                   autoComplete="current-password"
-                  disabled={loading || waitingForPlex}
+                  disabled={loading || waitingForPlex || featuresLoading}
                 />
               </label>
               <button
                 type="submit"
                 className="login-primary"
                 data-testid="local-login-submit"
-                disabled={loading || waitingForPlex}
+                disabled={loading || waitingForPlex || featuresLoading}
               >
-                {loading ? "Signing in…" : "Sign in"}
+                {featuresLoading ? "Loading…" : loading ? "Signing in…" : "Sign in"}
               </button>
             </form>
           </div>

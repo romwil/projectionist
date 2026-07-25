@@ -232,7 +232,6 @@
     padding-right: max(var(--space-3), env(safe-area-inset-right));
   }
 
-  .admin-drawer-toggle,
   .settings-drawer-toggle {
     display: inline-flex;
     align-items: center;
@@ -247,7 +246,11 @@
     grid-row: 2;
   }
 
-  .admin-rail,
+  /* Admin section nav lives in the hamburger on narrow viewports. */
+  .admin-rail {
+    display: none;
+  }
+
   .settings-rail {
     position: fixed;
     inset: 0 auto 0 0;
@@ -260,12 +263,10 @@
     grid-row: unset;
   }
 
-  .admin-drawer-open .admin-rail,
   .settings-drawer-open .settings-rail {
     transform: translateX(0);
   }
 
-  .admin-drawer-backdrop,
   .settings-drawer-backdrop {
     display: block;
     position: fixed;
@@ -316,7 +317,6 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .admin-rail,
   .settings-rail {
     transition: none;
   }

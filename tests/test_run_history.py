@@ -16,6 +16,7 @@ from curatorx.scheduler.run_history import (
     aggregate_task_rate,
     append_task_run,
     extract_items_processed,
+    list_all_task_runs,
     list_task_runs,
     prune_scheduled_task_runs,
 )
@@ -85,6 +86,20 @@ class RunHistoryPersistenceTests(unittest.TestCase):
 
             runs = list_task_runs(db, "metadata_enrichment", limit=10)
             self.assertGreaterEqual(len(runs), 3)
+
+            append_task_run(
+                db,
+                name="health_metrics",
+                started_at=now - 50,
+                finished_at=now - 40,
+                duration_ms=200,
+                status="completed",
+                trigger="manual",
+                items_processed=1,
+            )
+            all_runs = list_all_task_runs(db, limit=20)
+            self.assertGreaterEqual(len(all_runs), 4)
+            self.assertEqual(all_runs[0]["name"], "health_metrics")
 
             rate = aggregate_task_rate(
                 db,

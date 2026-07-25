@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  getAllScheduledTaskHistory,
   getScheduledTaskHistory,
   getScheduledTaskLog,
   listScheduledTasks,
@@ -14,6 +15,7 @@ import {
   estimateThroughputEta,
   formatDurationMs,
   formatEpoch,
+  formatExecutionLogLine,
   formatHistoryRunLine,
   formatInterval,
   formatLastOutcomeLine,
@@ -22,9 +24,12 @@ import {
   formatThroughputEstimate,
   formatTaskLastRun,
   formatTaskLastRunDetail,
+  formatTaskNextRun,
   isTaskRunning,
+  mergeExecutionLogRuns,
   resolveLastOutcome,
   resolveWarmExploreTasks,
+  sortTasksByNextRun,
   summarizeLastStatus,
   taskDisplayName,
   taskRowTone,
@@ -56,13 +61,27 @@ export default function ScheduledTasksPage() {
   const [customHours, setCustomHours] = useState("");
   const [draftBatch, setDraftBatch] = useState(null);
   const [historyRuns, setHistoryRuns] = useState([]);
+  const [executionRuns, setExecutionRuns] = useState([]);
+  const [executionCurrent, setExecutionCurrent] = useState(null);
+  const [executionLogOpen, setExecutionLogOpen] = useState(false);
+  const [nowTick, setNowTick] = useState(() => Date.now() / 1000);
   const logEndRef = useRef(null);
   const latestSeqRef = useRef(0);
   const warmExploreNames = useMemo(() => resolveWarmExploreTasks(items), [items]);
 
+  const sortedItems = useMemo(
+    () => sortTasksByNextRun(items, nowTick),
+    [items, nowTick],
+  );
+
   const selected = useMemo(
     () => items.find((item) => item.name === selectedName) || null,
     [items, selectedName],
+  );
+
+  const unifiedExecutionRuns = useMemo(
+    () => mergeExecutionLogRuns(executionRuns, executionCurrent),
+    [executionRuns, executionCurrent],
   );
 
   useEffect(() => {
@@ -129,21 +148,34 @@ export default function ScheduledTasksPage() {
   const refreshList = useCallback(async () => {
     try {
       const data = await listScheduledTasks();
-      setItems(data.items || []);
+      const nextItems = data.items || [];
+      setItems(nextItems);
       setIdle(Boolean(data.idle));
       setRunning(data.running || null);
+      setNowTick(Date.now() / 1000);
       setError("");
       setSelectedName((current) => {
-        if (current && (data.items || []).some((item) => item.name === current)) {
+        if (current && nextItems.some((item) => item.name === current)) {
           return current;
         }
-        const firstRunning = (data.items || []).find((item) => item.running);
-        return firstRunning?.name || (data.items || [])[0]?.name || null;
+        const ordered = sortTasksByNextRun(nextItems);
+        const firstRunning = ordered.find((item) => item.running);
+        return firstRunning?.name || ordered[0]?.name || null;
       });
     } catch (err) {
       setError(err.message || "Failed to load scheduled tasks");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const refreshExecutionLog = useCallback(async () => {
+    try {
+      const data = await getAllScheduledTaskHistory({ limit: 80 });
+      setExecutionRuns(data.runs || []);
+      setExecutionCurrent(data.current_run || null);
+    } catch (err) {
+      setActionError(err.message || "Failed to load execution log");
     }
   }, []);
 
@@ -187,7 +219,8 @@ export default function ScheduledTasksPage() {
 
   useEffect(() => {
     refreshList();
-  }, [refreshList]);
+    refreshExecutionLog();
+  }, [refreshList, refreshExecutionLog]);
 
   useEffect(() => {
     latestSeqRef.current = 0;
@@ -257,14 +290,15 @@ export default function ScheduledTasksPage() {
   }, [events, optimisticStart, currentRun, selectedName]);
 
   useEffect(() => {
-    const active = Boolean(running) || Boolean(currentRun);
+    const active = Boolean(running) || Boolean(currentRun) || Boolean(executionCurrent);
     const delay = active ? POLL_ACTIVE_MS : POLL_IDLE_MS;
     const timer = setInterval(() => {
       refreshList();
       refreshLog();
+      refreshExecutionLog();
     }, delay);
     return () => clearInterval(timer);
-  }, [running, currentRun, refreshList, refreshLog]);
+  }, [running, currentRun, executionCurrent, refreshList, refreshLog, refreshExecutionLog]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -277,6 +311,7 @@ export default function ScheduledTasksPage() {
       await fn();
       await refreshList();
       await refreshLog({ reset: false });
+      await refreshExecutionLog();
       if (name === selectedName) {
         try {
           const data = await getScheduledTaskHistory(name, { limit: 12 });
@@ -461,6 +496,9 @@ export default function ScheduledTasksPage() {
         <div className="scheduled-tasks-layout">
           <section className="dash-panel scheduled-tasks-list-panel">
             <h3 className="dash-panel-title">All tasks</h3>
+            <p className="scheduled-task-meta scheduled-tasks-sort-hint">
+              Ordered by next run (soonest first). Disabled tasks sort last.
+            </p>
             <div className="user-management-table-wrap">
               <table className="user-management-table" data-testid="scheduled-tasks-table">
                 <thead>
@@ -468,13 +506,14 @@ export default function ScheduledTasksPage() {
                     <th>Task</th>
                     <th>Cadence</th>
                     <th>Status</th>
+                    <th>Next run</th>
                     <th>Last run</th>
                     <th>Duration</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((task) => {
+                  {sortedItems.map((task) => {
                     const tone = taskRowTone(task);
                     const selectedRow = task.name === selectedName;
                     const busy = busyNames.has(task.name);
@@ -500,6 +539,9 @@ export default function ScheduledTasksPage() {
                                   ? summarizeLastStatus(task.last_status)
                                   : "Disabled"}
                           </span>
+                        </td>
+                        <td data-testid={`task-next-run-${task.name}`}>
+                          {formatTaskNextRun(task, nowTick)}
                         </td>
                         <td data-testid={`task-last-run-${task.name}`}>
                           <div>{formatTaskLastRun(task)}</div>
@@ -574,6 +616,13 @@ export default function ScheduledTasksPage() {
                         )
                       : "Select a task to monitor output"}
                 </p>
+                {selected ? (
+                  <p className="scheduled-task-meta" data-testid="task-detail-schedule">
+                    Next {formatTaskNextRun(selected, nowTick)}
+                    {" · "}
+                    Last {formatTaskLastRun(selected)}
+                  </p>
+                ) : null}
                 {selected?.description ? (
                   <p
                     className="scheduled-task-description"
@@ -594,15 +643,43 @@ export default function ScheduledTasksPage() {
                   </p>
                 ) : null}
               </div>
-              <button
-                type="button"
-                className="ghost"
-                disabled={!selectedName}
-                data-testid="task-log-refresh"
-                onClick={() => refreshLog({ reset: true })}
-              >
-                Refresh log
-              </button>
+              <div className="scheduled-tasks-detail-actions">
+                {selected ? (
+                  <>
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={
+                        busyNames.has(selected.name) ||
+                        isTaskRunning(selected) ||
+                        Boolean(running)
+                      }
+                      data-testid="task-detail-run-now"
+                      onClick={() => handleRun(selected.name)}
+                    >
+                      Run now
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={busyNames.has(selected.name)}
+                      data-testid="task-detail-toggle-enabled"
+                      onClick={() => handleToggleEnabled(selected)}
+                    >
+                      {selected.enabled ? "Disable" : "Enable"}
+                    </button>
+                  </>
+                ) : null}
+                <button
+                  type="button"
+                  className="ghost"
+                  disabled={!selectedName}
+                  data-testid="task-log-refresh"
+                  onClick={() => refreshLog({ reset: true })}
+                >
+                  Refresh log
+                </button>
+              </div>
             </div>
 
             {selected ? (
@@ -800,6 +877,67 @@ export default function ScheduledTasksPage() {
           </section>
         </div>
       )}
+
+      {!loading ? (
+        <section
+          className={`dash-panel scheduled-tasks-execution-log${
+            executionLogOpen ? " is-open" : ""
+          }`}
+          data-testid="scheduled-tasks-execution-log"
+        >
+          <button
+            type="button"
+            className="scheduled-tasks-execution-log-toggle"
+            data-testid="execution-log-toggle"
+            aria-expanded={executionLogOpen}
+            onClick={() => setExecutionLogOpen((open) => !open)}
+          >
+            <span className="scheduled-tasks-execution-log-title">
+              Execution log
+            </span>
+            <span className="scheduled-task-meta">
+              {unifiedExecutionRuns.length
+                ? `${unifiedExecutionRuns.length} recent run${
+                    unifiedExecutionRuns.length === 1 ? "" : "s"
+                  }`
+                : "No runs yet"}
+              {" · "}
+              {executionLogOpen ? "Collapse" : "Expand"}
+            </span>
+          </button>
+          {executionLogOpen ? (
+            <div
+              className="scheduled-tasks-execution-log-body"
+              data-testid="execution-log-body"
+            >
+              {unifiedExecutionRuns.length ? (
+                <ul className="scheduled-tasks-execution-log-list">
+                  {unifiedExecutionRuns.map((run) => (
+                    <li
+                      key={String(run.id)}
+                      className={`scheduled-tasks-execution-log-row status-${
+                        String(run.status || "").startsWith("error")
+                          ? "error"
+                          : run.status || "unknown"
+                      }`}
+                      data-testid={`execution-log-row-${run.id}`}
+                    >
+                      <span className="scheduled-tasks-execution-log-line">
+                        {formatExecutionLogLine(run)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="dash-empty">
+                  No durable run history yet. After a schedule or Run now completes, entries
+                  appear here across all tasks.
+                </p>
+              )}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
     </div>
   );
 }

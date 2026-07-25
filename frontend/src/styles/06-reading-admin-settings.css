@@ -146,6 +146,11 @@
   backdrop-filter: blur(8px);
 }
 
+.admin-shell > .app-topbar {
+  grid-column: 1 / -1;
+  grid-row: 1;
+}
+
 .admin-shell > .admin-rail,
 .settings-shell > .settings-rail {
   grid-column: 1;
@@ -288,9 +293,7 @@
   letter-spacing: -0.02em;
 }
 
-.admin-drawer-toggle,
 .settings-drawer-toggle,
-.admin-drawer-backdrop,
 .settings-drawer-backdrop {
   display: none;
 }

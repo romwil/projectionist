@@ -1446,6 +1446,7 @@ export default function App() {
         isYouth={isYouth}
         role={userRole}
         multiUserEnabled={multiUserEnabled}
+        authReady={authReady}
         navOpen={appNavOpen}
         onNavOpenChange={setAppNavOpen}
         brandPulse={agentPulse}
