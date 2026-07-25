@@ -6,7 +6,7 @@ import BackLink from "../components/BackLink";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 
-const GITHUB_DOCS_BASE = "https://github.com/romwil/curatorx/tree/main/docs";
+const GITHUB_DOCS_BASE = "https://github.com/romwil/projectionist/tree/main/docs";
 
 /** In-app routes that should use React Router navigation. */
 const IN_APP_ROUTES = new Set(["/privacy", "/about", "/help", "/settings", "/login", "/admin"]);
@@ -118,7 +118,7 @@ export default function PrivacyPage() {
       testId="privacy-page"
       requireAuth={false}
       title="Privacy"
-      eyebrow="How CuratorX handles your data"
+      eyebrow="How Projectionist handles your data"
       actions={<BackLink fallbackTo={ROUTES.chat} testId="privacy-back" label="Back to chat" />}
     >
       <main className="explore-main privacy-main">

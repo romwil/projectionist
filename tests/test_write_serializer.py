@@ -7,13 +7,13 @@ import unittest
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
-from curatorx.library.db import Database
+from projectionist.library.db import Database
 
 
 class WriteSerializerTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
         self.db.close()

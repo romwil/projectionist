@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from curatorx.library.db import Database
+from projectionist.library.db import Database
 
 
 class McpLibraryTests(unittest.TestCase):
@@ -18,7 +18,7 @@ class McpLibraryTests(unittest.TestCase):
         except ImportError:
             self.skipTest("mcp package not installed")
 
-        from curatorx.mcp import server as mcp_server
+        from projectionist.mcp import server as mcp_server
 
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "test.db"
@@ -46,7 +46,7 @@ class McpLibraryTests(unittest.TestCase):
         except ImportError:
             self.skipTest("mcp package not installed")
 
-        from curatorx.mcp import server as mcp_server
+        from projectionist.mcp import server as mcp_server
 
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

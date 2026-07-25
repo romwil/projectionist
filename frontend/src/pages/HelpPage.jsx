@@ -9,7 +9,7 @@ import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import { slugify, targetIdFromHash } from "../lib/helpAnchors.js";
 
-const GITHUB_DOCS_BASE = "https://github.com/romwil/curatorx/tree/main/docs";
+const GITHUB_DOCS_BASE = "https://github.com/romwil/projectionist/tree/main/docs";
 
 /** In-app routes that should use React Router navigation. */
 const IN_APP_ROUTES = new Set([

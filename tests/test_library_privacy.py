@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.auth import clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.web.auth import clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 
 class LibraryAudienceApiTests(unittest.TestCase):
@@ -41,10 +41,10 @@ class LibraryAudienceApiTests(unittest.TestCase):
             encoding="utf-8",
         )
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         # Ensure DATA_DIR picked up after env mutation (reload can race with module const).
@@ -54,7 +54,7 @@ class LibraryAudienceApiTests(unittest.TestCase):
         self._app_mod = app_mod
 
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
             login = self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
@@ -104,7 +104,7 @@ class LibraryAudienceApiTests(unittest.TestCase):
         # Sign in as the member (Plex id 20).
         self.client.post("/api/auth/logout")
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 20, "title": "Member", "email": "member@example.com"},
         ):
             login = self.client.post("/api/auth/plex", json={"auth_token": "member-token"})

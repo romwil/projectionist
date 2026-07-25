@@ -1,4 +1,4 @@
-"""Tests for Plex token encryption/decryption (curatorx/watchlist/crypto.py)."""
+"""Tests for Plex token encryption/decryption (projectionist/watchlist/crypto.py)."""
 
 from __future__ import annotations
 
@@ -12,16 +12,16 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 # Load crypto module directly to avoid triggering watchlist/__init__.py
 # which pulls in numpy via the library.embeddings import chain.
 _spec = importlib.util.spec_from_file_location(
-    "curatorx.watchlist.crypto",
-    Path(__file__).resolve().parent.parent / "curatorx" / "watchlist" / "crypto.py",
+    "projectionist.watchlist.crypto",
+    Path(__file__).resolve().parent.parent / "projectionist" / "watchlist" / "crypto.py",
 )
 _crypto_mod = importlib.util.module_from_spec(_spec)
-sys.modules.setdefault("curatorx.watchlist.crypto", _crypto_mod)
+sys.modules.setdefault("projectionist.watchlist.crypto", _crypto_mod)
 _spec.loader.exec_module(_crypto_mod)
 
 decrypt_plex_token = _crypto_mod.decrypt_plex_token

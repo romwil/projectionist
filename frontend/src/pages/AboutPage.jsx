@@ -7,8 +7,8 @@ import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import { fetchReleaseNotes, normalizeReleaseNotes } from "../lib/releaseNotes.js";
 
-const GITHUB_URL = "https://github.com/romwil/curatorx";
-const DOCKER_HUB_URL = "https://hub.docker.com/r/romwil/curatorx";
+const GITHUB_URL = "https://github.com/romwil/projectionist";
+const DOCKER_HUB_URL = "https://hub.docker.com/r/romwil/projectionist";
 const DOCS_URL = `${GITHUB_URL}/tree/main/docs`;
 
 export default function AboutPage() {
@@ -61,11 +61,11 @@ export default function AboutPage() {
             <h2 id="about-intro-heading">The story</h2>
           </div>
           <p className="about-lede">
-            A private cinema companion for your Plex and *arr stack — opinions in chat, taste in the
-            library, credentials that stay home.
+            Cinema intelligence for your personal archive — opinions in chat, taste in the library,
+            credentials that stay home.
           </p>
           <p>
-            CuratorX grew out of living with a big personal library and wanting a curator who knew it —
+            Projectionist grew out of living with a big personal library and wanting a curator who knew it —
             not another remote catalog that forgets where your files live. It indexes what you already
             own, learns from how you rate and refuse titles, and talks like the friend you want in the
             aisle.
@@ -131,7 +131,7 @@ export default function AboutPage() {
             </li>
             <li>
               <a href={DOCKER_HUB_URL} target="_blank" rel="noreferrer">
-                Docker Hub · romwil/curatorx
+                Docker Hub · romwil/projectionist
               </a>
             </li>
             <li>

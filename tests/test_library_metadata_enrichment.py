@@ -8,15 +8,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from curatorx.config_store import Settings
-from curatorx.connectors.plex import PlexLibraryItem
-from curatorx.library.db import Database
-from curatorx.library.sync import (
+from projectionist.config_store import Settings
+from projectionist.connectors.plex import PlexLibraryItem
+from projectionist.library.db import Database
+from projectionist.library.sync import (
     _apply_tmdb_enrichment,
     _row_from_plex_item,
     _structured_credits_from_tmdb,
 )
-from curatorx.scheduler.tasks import metadata_enrichment
+from projectionist.scheduler.tasks import metadata_enrichment
 
 
 MOVIE_TMDB_DETAILS = {
@@ -434,10 +434,10 @@ class MetadataTrickleTaskTests(unittest.IsolatedAsyncioTestCase):
             fake_tmdb.poster_url.side_effect = lambda path, size="w500": f"https://img/{size}{path}"
 
             with patch(
-                "curatorx.scheduler.tasks.metadata_enrichment.TMDBClient",
+                "projectionist.scheduler.tasks.metadata_enrichment.TMDBClient",
                 return_value=fake_tmdb,
             ), patch(
-                "curatorx.scheduler.tasks.metadata_enrichment.asyncio.sleep",
+                "projectionist.scheduler.tasks.metadata_enrichment.asyncio.sleep",
                 new=AsyncMock(),
             ):
                 result = await metadata_enrichment.run(db, settings, should_stop=lambda: False)
@@ -463,8 +463,8 @@ class MetadataTrickleTaskTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["status"], "skipped")
 
     def test_task_registered(self) -> None:
-        from curatorx.scheduler.engine import IdleScheduler
-        from curatorx.scheduler.tasks import register_all
+        from projectionist.scheduler.engine import IdleScheduler
+        from projectionist.scheduler.tasks import register_all
 
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.scheduler.tasks.purge_candidates import (
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.scheduler.tasks.purge_candidates import (
     CACHE_KEY,
     drop_cached_purge_keys,
     read_cached_purge_candidates,
@@ -70,7 +70,7 @@ class PurgeCandidatesCacheTests(unittest.TestCase):
         self.assertEqual(updated["items"][0]["rating_key"], "keep")
         self.assertEqual(updated["generated_at"], 50.0)
 
-    @patch("curatorx.scheduler.tasks.purge_candidates.suggest_purge_candidates_rich")
+    @patch("projectionist.scheduler.tasks.purge_candidates.suggest_purge_candidates_rich")
     def test_recompute_writes_cache(self, mock_rich) -> None:
         mock_rich.return_value = [{"title": "Computed", "rating_key": "rk-9"}]
         payload = recompute_purge_candidates(self.db, self.settings, limit=5)
@@ -88,10 +88,10 @@ class PurgeCandidatesApiCacheTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
@@ -99,7 +99,7 @@ class PurgeCandidatesApiCacheTests(unittest.TestCase):
         self.db = jobs.get_job_manager().db
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
@@ -129,7 +129,7 @@ class PurgeCandidatesApiCacheTests(unittest.TestCase):
         self.assertFalse(body["stale"])
         self.assertTrue(body["cached"])
 
-    @patch("curatorx.web.app.recompute_purge_candidates")
+    @patch("projectionist.web.app.recompute_purge_candidates")
     def test_refresh_endpoint_recomputes(self, mock_recompute) -> None:
         mock_recompute.return_value = {
             "items": [{"title": "Fresh", "rating_key": "fresh-1"}],

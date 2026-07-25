@@ -9,9 +9,9 @@ from pathlib import Path
 from typing import Any, Callable, Dict
 from unittest.mock import patch
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.scheduler.tasks.anniversary_scanner import run as anniversary_run, _months_ago
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.scheduler.tasks.anniversary_scanner import run as anniversary_run, _months_ago
 
 
 def _make_db(tmp: str) -> Database:

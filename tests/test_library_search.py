@@ -7,10 +7,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.library.facets import rebuild_library_facets
-from curatorx.library.search import looks_like_facet_tag_query, search_library
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.library.facets import rebuild_library_facets
+from projectionist.library.search import looks_like_facet_tag_query, search_library
 
 
 class LibrarySearchTests(unittest.IsolatedAsyncioTestCase):
@@ -52,7 +52,7 @@ class LibrarySearchTests(unittest.IsolatedAsyncioTestCase):
             db = Database(Path(tmp) / "test.db")
             self._seed(db)
             with patch(
-                "curatorx.library.search.query_library_async",
+                "projectionist.library.search.query_library_async",
                 new_callable=AsyncMock,
             ) as mock_semantic:
                 cards = await search_library(
@@ -83,7 +83,7 @@ class LibrarySearchTests(unittest.IsolatedAsyncioTestCase):
                 }
 
             with patch(
-                "curatorx.library.search.query_library_async",
+                "projectionist.library.search.query_library_async",
                 new=AsyncMock(side_effect=fake_semantic),
             ):
                 cards = await search_library(

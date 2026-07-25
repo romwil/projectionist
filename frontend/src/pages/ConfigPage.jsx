@@ -24,6 +24,7 @@ import {
   putPersona,
   putSystemConfig,
   resolveModelForProvider,
+  revealSettingsSecret,
   rotateMcpKey,
   saveSettings,
   syncUserSeerr,
@@ -38,6 +39,7 @@ import {
 } from "../lib/jobProgress.js";
 import {
   canToggleSecretVisibility,
+  isSecretConfigured,
   secretPlaceholder,
   seerrSecretPlaceholder,
 } from "../lib/secretField.js";
@@ -112,7 +114,7 @@ const FIELD_PLACEHOLDERS = {
 
 const FIELD_HELP = {
   plex_token:
-    "Lets CuratorX read your Plex libraries (sync, collections, ratings). This is a server token for the Media Server — not the same as household Sign in with Plex on the login page.",
+    "Lets Projectionist read your Plex libraries (sync, collections, ratings). This is a server token for the Media Server — not the same as household Sign in with Plex on the login page.",
   tmdb_api_key: "Powers posters, details, and discovery for titles not yet in your library.",
   tvdb_api_key: "Optional TV metadata research. A TVDB v4 API key/subscription is required.",
   fanart_api_key: "Optional richer backdrop art. Leave blank if you only need TMDB.",
@@ -147,17 +149,19 @@ function SecretInput({
   disabled = false,
   placeholder = "",
   visible = false,
+  revealing = false,
   onToggleVisible,
 }) {
-  // API never returns plaintext secrets — Show only reveals a draft typed here.
-  const canReveal = canToggleSecretVisibility(value);
-  const revealed = canReveal && visible;
+  // Drafts reveal client-side; stored secrets load via owner-only reveal endpoint.
+  const configured = isSecretConfigured(settings, field);
+  const canReveal = canToggleSecretVisibility(value, { configured });
+  const revealed = canReveal && visible && String(value ?? "").length > 0;
   return (
     <div className="secret-field">
       <input
         type={revealed ? "text" : "password"}
         value={value ?? ""}
-        disabled={disabled}
+        disabled={disabled || revealing}
         placeholder={placeholder || secretPlaceholder(settings, field)}
         onChange={onChange}
         autoComplete="off"
@@ -170,10 +174,10 @@ function SecretInput({
           data-testid={`secret-toggle-${field}`}
           aria-label={visible ? "Hide secret" : "Show secret"}
           aria-pressed={visible}
-          disabled={disabled}
+          disabled={disabled || revealing}
           onClick={onToggleVisible}
         >
-          {visible ? "Hide" : "Show"}
+          {revealing ? "…" : visible ? "Hide" : "Show"}
         </button>
       ) : null}
     </div>
@@ -347,6 +351,7 @@ export default function ConfigPage() {
   const [savingPersona, setSavingPersona] = useState(false);
   const [plexCollapsed, setPlexCollapsed] = useState(false);
   const [visibleSecrets, setVisibleSecrets] = useState({});
+  const [revealingSecret, setRevealingSecret] = useState(null);
   const [libraryStats, setLibraryStats] = useState(null);
   const [libraryHealth, setLibraryHealth] = useState(null);
   const [exportingCorpus, setExportingCorpus] = useState(false);
@@ -707,14 +712,57 @@ export default function ConfigPage() {
         disabled={options.disabled}
         placeholder={seerrSecretPlaceholder(settings)}
         visible={Boolean(visibleSecrets[field])}
+        revealing={revealingSecret === field}
         onToggleVisible={() => toggleSecretVisibility(field)}
         onChange={(event) => updateSeerrSettings({ api_key: event.target.value })}
       />
     );
   }
 
-  function toggleSecretVisibility(field) {
-    setVisibleSecrets((prev) => ({ ...prev, [field]: !prev[field] }));
+  async function toggleSecretVisibility(field) {
+    const currentlyVisible = Boolean(visibleSecrets[field]);
+    if (currentlyVisible) {
+      setVisibleSecrets((prev) => ({ ...prev, [field]: false }));
+      return;
+    }
+
+    const currentValue =
+      field === "seerr.api_key" ? settings?.seerr?.api_key ?? "" : settings?.[field] ?? "";
+    if (String(currentValue).length > 0) {
+      setVisibleSecrets((prev) => ({ ...prev, [field]: true }));
+      return;
+    }
+
+    if (!isSecretConfigured(settings, field)) {
+      return;
+    }
+
+    setRevealingSecret(field);
+    try {
+      const result = await revealSettingsSecret(field);
+      const secret = String(result?.value ?? "");
+      if (!secret) {
+        throw new Error("Secret is not configured");
+      }
+      if (field === "seerr.api_key") {
+        updateSeerrSettings({ api_key: secret });
+      } else {
+        updateSettings({ [field]: secret });
+      }
+      setVisibleSecrets((prev) => ({ ...prev, [field]: true }));
+    } catch (error) {
+      const alertArea =
+        field === "seerr.api_key"
+          ? "seerr"
+          : field === "plex_token"
+            ? "plex"
+            : field.endsWith("_api_key")
+              ? field.replace(/_api_key$/, "")
+              : "llm";
+      setActionFeedback(alertArea, "error", error.message || "Could not reveal secret");
+    } finally {
+      setRevealingSecret(null);
+    }
   }
 
   function renderSecretInput(field, options = {}) {
@@ -726,6 +774,7 @@ export default function ConfigPage() {
         disabled={options.disabled}
         placeholder={options.placeholder}
         visible={Boolean(visibleSecrets[field])}
+        revealing={revealingSecret === field}
         onToggleVisible={() => toggleSecretVisibility(field)}
         onChange={(event) => updateSettings({ [field]: event.target.value })}
       />
@@ -848,7 +897,7 @@ export default function ConfigPage() {
         "plex-sections",
         "success",
         enabled
-          ? "Ephemeral collection cleanup is on — expired [CuratorX] movie-night shelves will be pruned."
+          ? "Ephemeral collection cleanup is on — expired [Projectionist] movie-night shelves will be pruned."
           : "Ephemeral collection cleanup is off — expired agent shelves stay on Plex until you delete them.",
       );
     } catch (error) {
@@ -995,7 +1044,7 @@ export default function ConfigPage() {
     try {
       await persistSettings({ onboarding_complete: true });
       setShowWizard(false);
-      const message = "Setup complete. Welcome to CuratorX.";
+      const message = "Setup complete. Welcome to Projectionist.";
       setFooterAlert({ type: "success", message });
       setStatus(message);
       navigate("/");
@@ -1127,7 +1176,7 @@ export default function ConfigPage() {
         <section className="wizard-panel wizard-card">
           <h2>Step 2 — Connect your stack</h2>
           <p className="wizard-note">
-            Point CuratorX at your language model, Plex server, Radarr, and Sonarr. Hit Verify on each
+            Point Projectionist at your language model, Plex server, Radarr, and Sonarr. Hit Verify on each
             card so we know they respond before you pick libraries.
           </p>
 
@@ -1293,7 +1342,7 @@ export default function ConfigPage() {
       <section className="wizard-panel wizard-card">
         <h2>Step 3 — Choose your libraries</h2>
         <p className="wizard-note">
-          Plex is connected. Select which movie and TV libraries CuratorX should index. You can change
+          Plex is connected. Select which movie and TV libraries Projectionist should index. You can change
           these later under Settings.
         </p>
         <div className="wizard-actions">
@@ -1397,7 +1446,7 @@ export default function ConfigPage() {
       const blob = await response.blob();
       const disposition = response.headers.get("Content-Disposition") || "";
       const match = disposition.match(/filename="([^"]+)"/);
-      const filename = match?.[1] || "curatorx-training-corpus.json";
+      const filename = match?.[1] || "projectionist-training-corpus.json";
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
@@ -1437,7 +1486,7 @@ export default function ConfigPage() {
         <section className="config-section" data-testid="library-sync-card">
           <h2>Library sync</h2>
           <p>
-            Refresh CuratorX from your Plex libraries. The first sync can take a few minutes while titles
+            Refresh Projectionist from your Plex libraries. The first sync can take a few minutes while titles
             are indexed and enriched.
           </p>
           <div className="config-actions">
@@ -1789,7 +1838,7 @@ export default function ConfigPage() {
           <section className="config-section" data-testid="multi-user-settings">
             <h2>Household login (optional)</h2>
             <p className="wizard-note">
-              When enabled, people open CuratorX via <strong>Sign in with Plex</strong> (plex.tv PIN / link
+              When enabled, people open Projectionist via <strong>Sign in with Plex</strong> (plex.tv PIN / link
               on the login page). The first account becomes owner; later accounts join via an invite link
               from <strong>Admin → Access</strong> (invite-only by default). This is separate from the Plex{" "}
               <em>server</em> token above used for library sync.
@@ -2221,7 +2270,7 @@ export default function ConfigPage() {
         {showSection("libraries") ? (
         <section className="config-section" data-testid="plex-library-mapping">
           <h2>Plex libraries</h2>
-          <p className="wizard-note">Choose which movie and TV libraries CuratorX indexes. Update these if you rename or add libraries in Plex.</p>
+          <p className="wizard-note">Choose which movie and TV libraries Projectionist indexes. Update these if you rename or add libraries in Plex.</p>
           <div className="wizard-actions">
             <CertifiedBadge certified={certifications.plex?.certified} testing={testing === "plex"} serviceId="plex" />
             {!sections.length ? (
@@ -2273,7 +2322,7 @@ export default function ConfigPage() {
             <span>Copy star ratings to Plex when you review a title</span>
           </label>
           <p className="wizard-note">
-            A 1–5 star review in CuratorX becomes the matching Plex rating (2, 4, 6, 8, or 10).
+            A 1–5 star review in Projectionist becomes the matching Plex rating (2, 4, 6, 8, or 10).
           </p>
           <label className="config-toggle" data-testid="plex-collections-enabled">
             <input
@@ -2285,7 +2334,7 @@ export default function ConfigPage() {
           </label>
           <p className="wizard-note">
             The curator can suggest creating a collection or adding titles you already own — you always confirm first.
-            Agent / movie-night shelves are tagged with a <code>[CuratorX]</code> prefix and expire after the TTL below.
+            Agent / movie-night shelves are tagged with a <code>[Projectionist]</code> prefix and expire after the TTL below.
           </p>
           <label className="config-toggle" data-testid="ephemeral-collection-gc-toggle">
             <input
@@ -2294,7 +2343,7 @@ export default function ConfigPage() {
               onChange={(event) => handleEphemeralCollectionGcToggle(event.target.checked)}
               disabled={!settings?.features?.plex_collections_enabled}
             />
-            <span>Auto-clean expired CuratorX movie-night collections</span>
+            <span>Auto-clean expired Projectionist movie-night collections</span>
           </label>
           <label className="config-toggle" data-testid="ephemeral-collection-gc-dry-run-toggle">
             <input
@@ -2362,7 +2411,7 @@ export default function ConfigPage() {
 
         {appVersion && showSection("overview") ? (
           <p className="status status-secondary" data-testid="app-version">
-            CuratorX {appVersion}
+            Projectionist {appVersion}
           </p>
         ) : null}
       </>
@@ -2451,7 +2500,7 @@ export default function ConfigPage() {
 
       {showWizard && appVersion ? (
         <p className="status status-secondary" data-testid="app-version">
-          CuratorX {appVersion}
+          Projectionist {appVersion}
         </p>
       ) : null}
 

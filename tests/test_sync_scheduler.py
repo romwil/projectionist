@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from curatorx.config_store import Settings
-from curatorx.web.sync_schedule import should_run_scheduled_library_sync
+from projectionist.config_store import Settings
+from projectionist.web.sync_schedule import should_run_scheduled_library_sync
 
 
 def _local(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:

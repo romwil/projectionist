@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import Database
+from projectionist.library.db import Database
 
 
 class MediaIssueDbTests(unittest.TestCase):

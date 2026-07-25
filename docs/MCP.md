@@ -1,6 +1,6 @@
-# CuratorX MCP
+# Projectionist MCP
 
-CuratorX exposes a Model Context Protocol server over your indexed Plex library, with **two trust planes** selected by which API key you present.
+Projectionist exposes a Model Context Protocol server over your indexed Plex library, with **two trust planes** selected by which API key you present.
 
 Repository memory is shared, sanitized media knowledge and may be added to the
 read-only MCP surface. Private user memory, account exports, and user-memory
@@ -12,7 +12,7 @@ A personal Plex library is a uniquely well-structured local dataset: thousands o
 
 > "The LLM gets to act like a natural language surgeon on a highly optimized, predictable local dataset. It's incredibly fast, it's cheap, and it keeps your Plex token and personal collection server info locked down."
 
-CuratorX demonstrates this pattern as a **production-quality, privacy-first MCP interface** over local structured + unstructured data:
+Projectionist demonstrates this pattern as a **production-quality, privacy-first MCP interface** over local structured + unstructured data:
 
 - **Fast** — tool calls hit a pre-built SQLite index and NumPy vectors; sub-second responses even on modest homelab hardware.
 - **Cheap** — the LLM receives only the minimal context slice for each turn, keeping token costs low.
@@ -23,7 +23,7 @@ CuratorX demonstrates this pattern as a **production-quality, privacy-first MCP 
 ## Install
 
 ```bash
-pip install "curatorx[mcp]"
+pip install "projectionist[mcp]"
 # or in the Docker image: already included
 ```
 
@@ -31,8 +31,8 @@ pip install "curatorx[mcp]"
 
 | Mode | How selected | Response schema | Tool surface |
 |------|--------------|-----------------|--------------|
-| **privacy** (default for sharing) | HTTP: `CURATORX_MCP_API_KEY`. Stdio: `CURATORX_MCP_MODE=privacy` (or unset). | Public content — titles/metadata; **no** `rating_key`, file sizes, raw watch timestamps, `in_radarr`/`in_sonarr`, or tokenized Plex thumbs. Optional `watch_state` enum. | Read-only library tools |
-| **full** (trusted in-stack) | HTTP: `CURATORX_MCP_FULL_API_KEY`. Stdio: `CURATORX_MCP_MODE=full` **and** distinct full key in env. | Internal fields allowed (`rating_key`, view counts, *arr flags, file size) but **never** live `X-Plex-Token` in URLs. | Read tools **plus** confirm-gated `propose_add_radarr` / `propose_add_sonarr` / `propose_remove_arr` / `confirm_pending_action` |
+| **privacy** (default for sharing) | HTTP: `PROJECTIONIST_MCP_API_KEY`. Stdio: `PROJECTIONIST_MCP_MODE=privacy` (or unset). | Public content — titles/metadata; **no** `rating_key`, file sizes, raw watch timestamps, `in_radarr`/`in_sonarr`, or tokenized Plex thumbs. Optional `watch_state` enum. | Read-only library tools |
+| **full** (trusted in-stack) | HTTP: `PROJECTIONIST_MCP_FULL_API_KEY`. Stdio: `PROJECTIONIST_MCP_MODE=full` **and** distinct full key in env. | Internal fields allowed (`rating_key`, view counts, *arr flags, file size) but **never** live `X-Plex-Token` in URLs. | Read tools **plus** confirm-gated `propose_add_radarr` / `propose_add_sonarr` / `propose_remove_arr` / `confirm_pending_action` |
 
 **Rules**
 
@@ -53,16 +53,18 @@ Plex/Fanart thumbs (including any URL containing `X-Plex-Token`) are cleared rat
 
 Owners can **generate / regenerate** privacy and full MCP keys, see a last-4 hint (never the full secret on list GETs), and copy a newly generated key once. Keys persist to `settings.json` (file overrides empty-or-absent env after rotate). Unraid templates also expose both env vars.
 
+Prefer `PROJECTIONIST_*`. Matching `CURATORX_*` keys still work during the compatibility window when the new name is unset.
+
 | Env / setting | Mode |
 |---------------|------|
-| `CURATORX_MCP_API_KEY` / `mcp_api_key` | Privacy |
-| `CURATORX_MCP_FULL_API_KEY` / `mcp_full_api_key` | Full (must differ) |
+| `PROJECTIONIST_MCP_API_KEY` / `mcp_api_key` | Privacy |
+| `PROJECTIONIST_MCP_FULL_API_KEY` / `mcp_full_api_key` | Full (must differ) |
 
 ## Stdio (Cursor / Claude Desktop)
 
 ```bash
-DATA_DIR=/path/to/config curatorx-mcp
-# equivalent: python -m curatorx.mcp
+DATA_DIR=/path/to/config projectionist-mcp
+# equivalent: python -m projectionist.mcp
 ```
 
 Privacy (default):
@@ -70,11 +72,11 @@ Privacy (default):
 ```json
 {
   "mcpServers": {
-    "curatorx": {
-      "command": "curatorx-mcp",
+    "projectionist": {
+      "command": "projectionist-mcp",
       "env": {
         "DATA_DIR": "/mnt/user/appdata/curatorx/config",
-        "CURATORX_MCP_MODE": "privacy"
+        "PROJECTIONIST_MCP_MODE": "privacy"
       }
     }
   }
@@ -86,12 +88,12 @@ Full (trusted LAN automation only):
 ```json
 {
   "mcpServers": {
-    "curatorx-full": {
-      "command": "curatorx-mcp",
+    "projectionist-full": {
+      "command": "projectionist-mcp",
       "env": {
         "DATA_DIR": "/mnt/user/appdata/curatorx/config",
-        "CURATORX_MCP_MODE": "full",
-        "CURATORX_MCP_FULL_API_KEY": "generate-a-long-random-secret"
+        "PROJECTIONIST_MCP_MODE": "full",
+        "PROJECTIONIST_MCP_FULL_API_KEY": "generate-a-long-random-secret"
       }
     }
   }
@@ -102,15 +104,15 @@ Repo sample: [`mcp.json`](../mcp.json).
 
 ## HTTP transport
 
-Mounts at `/mcp` when at least one of `CURATORX_MCP_API_KEY` / `CURATORX_MCP_FULL_API_KEY` is set.
+Mounts at `/mcp` when at least one of `PROJECTIONIST_MCP_API_KEY` / `PROJECTIONIST_MCP_FULL_API_KEY` is set.
 
 ```bash
 # Privacy mode
-curl -H "X-CuratorX-MCP-Key: $CURATORX_MCP_API_KEY" \
+curl -H "X-Projectionist-MCP-Key: $PROJECTIONIST_MCP_API_KEY" \
   http://127.0.0.1:8788/mcp
 
 # Full mode
-curl -H "X-CuratorX-MCP-Key: $CURATORX_MCP_FULL_API_KEY" \
+curl -H "X-Projectionist-MCP-Key: $PROJECTIONIST_MCP_FULL_API_KEY" \
   http://127.0.0.1:8788/mcp
 ```
 

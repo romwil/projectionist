@@ -1,10 +1,10 @@
 # Multi-User
 
-CuratorX is a **single-owner** app by default — no login screen. With `features.multi_user_enabled`, it becomes a household identity + API trust boundary.
+Projectionist is a **single-owner** app by default — no login screen. With `features.multi_user_enabled`, it becomes a household identity + API trust boundary.
 
 ## Enabling household mode
 
-1. Prefer setting `CURATORX_SESSION_SECRET` (or let CuratorX auto-generate `session_secret` under Config).
+1. Prefer setting `PROJECTIONIST_SESSION_SECRET` (or let Projectionist auto-generate `session_secret` under Config).
 2. In Configuration (or `settings.json`):
 
 ```json
@@ -23,7 +23,7 @@ CuratorX is a **single-owner** app by default — no login screen. With `feature
 }
 ```
 
-CuratorX refuses to enable multi-user while the public development session secret is in use. You can enable more than one login method; the login page shows whatever `GET /api/features` reports in `auth_methods`.
+Projectionist refuses to enable multi-user while the public development session secret is in use. You can enable more than one login method; the login page shows whatever `GET /api/features` reports in `auth_methods`.
 
 ### Invites (default)
 
@@ -62,7 +62,7 @@ To restore pre-1.26 LAN-open auto-provision, set `features.open_auto_provision` 
 - Middleware requires a session for almost all `/api/*` (allowlist: health, features, access-requests, invites validate/redeem, `/api/auth/*`, webhooks)
 - Plex PIN create/poll are bound with an HttpOnly `plex_pin_nonce` cookie and rate-limited; join flows may attach an invite token to the PIN binding
 - OIDC uses a state parameter (CSRF) on the authorize flow (invite token may ride along)
-- Webhooks require a configured secret (`CURATORX_WEBHOOK_SECRET` / `webhook_secret`)
+- Webhooks require a configured secret (`PROJECTIONIST_WEBHOOK_SECRET` / `webhook_secret`)
 - Cookie `Secure` is set when `X-Forwarded-Proto: https`
 
 See [../SECURITY.md](../SECURITY.md), [../CONFIGURATION.md](../CONFIGURATION.md), and [Seerr](Seerr.md).

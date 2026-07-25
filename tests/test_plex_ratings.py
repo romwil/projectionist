@@ -12,19 +12,19 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import FeatureFlags, Settings, save_settings
-from curatorx.connectors.http import optional_int
-from curatorx.connectors.plex import PlexClient, PlexEpisode, PlexLibraryItem, plex_rating_to_stars, stars_to_plex_rating
-from curatorx.library.db import Database
-from curatorx.library.episodes import _upsert_episodes_for_show
-from curatorx.library.sync import _row_from_plex_item
-from curatorx.reviews.plex_sync import (
+from projectionist.config_store import FeatureFlags, Settings, save_settings
+from projectionist.connectors.http import optional_int
+from projectionist.connectors.plex import PlexClient, PlexEpisode, PlexLibraryItem, plex_rating_to_stars, stars_to_plex_rating
+from projectionist.library.db import Database
+from projectionist.library.episodes import _upsert_episodes_for_show
+from projectionist.library.sync import _row_from_plex_item
+from projectionist.reviews.plex_sync import (
     cache_plex_user_rating_stars,
     get_stored_plex_user_rating_stars,
     lookup_plex_user_rating_stars,
     sync_review_rating_to_plex,
 )
-from curatorx.reviews.store import save_review
+from projectionist.reviews.store import save_review
 
 
 class OptionalIntTests(unittest.TestCase):
@@ -66,7 +66,7 @@ class PlexClientRatingTests(unittest.TestCase):
             captured["url"] = url
             captured["method"] = method
 
-        with patch("curatorx.connectors.plex.request_empty", side_effect=fake_request_empty):
+        with patch("projectionist.connectors.plex.request_empty", side_effect=fake_request_empty):
             client.set_user_rating("12345", 4)
 
         self.assertEqual(captured["method"], "PUT")
@@ -209,7 +209,7 @@ class PlexReviewSyncTests(unittest.TestCase):
             rating_key="555",
         )
         with patch(
-            "curatorx.reviews.plex_sync.lookup_plex_user_rating_stars",
+            "projectionist.reviews.plex_sync.lookup_plex_user_rating_stars",
             return_value=5,
         ), patch.object(PlexClient, "set_user_rating") as mock_rate:
             result = sync_review_rating_to_plex(self.db, self.settings, saved)
@@ -226,7 +226,7 @@ class PlexReviewSyncTests(unittest.TestCase):
             rating_key="555",
         )
         with patch(
-            "curatorx.reviews.plex_sync.lookup_plex_user_rating_stars",
+            "projectionist.reviews.plex_sync.lookup_plex_user_rating_stars",
             return_value=5,
         ), patch.object(PlexClient, "set_user_rating") as mock_rate:
             result = sync_review_rating_to_plex(
@@ -255,7 +255,7 @@ class PlexReviewSyncTests(unittest.TestCase):
             rating_key="888",
         )
         with patch(
-            "curatorx.reviews.plex_sync.lookup_plex_user_rating_stars",
+            "projectionist.reviews.plex_sync.lookup_plex_user_rating_stars",
             return_value=5,
         ), patch.object(PlexClient, "set_user_rating"):
             sync_review_rating_to_plex(
@@ -325,16 +325,16 @@ class PlexReviewApiSyncTests(unittest.TestCase):
                 sync_reviews_to_plex=True,
             ),
         )
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
@@ -359,7 +359,7 @@ class PlexReviewApiSyncTests(unittest.TestCase):
 
     def test_post_review_returns_conflict_when_plex_rating_differs(self) -> None:
         with patch(
-            "curatorx.reviews.plex_sync.lookup_plex_user_rating_stars",
+            "projectionist.reviews.plex_sync.lookup_plex_user_rating_stars",
             return_value=5,
         ), patch.object(PlexClient, "set_user_rating") as mock_rate:
             response = self.client.post(
@@ -396,7 +396,7 @@ class PlexCollectionConfirmationTests(unittest.TestCase):
     def test_create_collection_returns_confirmation_token(self) -> None:
         import asyncio
 
-        from curatorx.agent.tools import ToolRegistry
+        from projectionist.agent.tools import ToolRegistry
 
         registry = ToolRegistry(self.db, self.settings, lens_id="general")
         raw = asyncio.run(
@@ -412,7 +412,7 @@ class PlexCollectionConfirmationTests(unittest.TestCase):
     def test_create_collection_blocked_when_disabled(self) -> None:
         import asyncio
 
-        from curatorx.agent.tools import ToolRegistry
+        from projectionist.agent.tools import ToolRegistry
 
         disabled = Settings(
             plex_url="http://plex.test:32400",
@@ -434,7 +434,7 @@ class PlexCollectionConfirmationTests(unittest.TestCase):
         import asyncio
         from dataclasses import dataclass
 
-        from curatorx.agent.tools import ToolRegistry
+        from projectionist.agent.tools import ToolRegistry
 
         @dataclass
         class FakeCollection:
@@ -445,8 +445,8 @@ class PlexCollectionConfirmationTests(unittest.TestCase):
 
         registry = ToolRegistry(self.db, self.settings, lens_id="general")
         fake = [FakeCollection("900", "Favorites", "1", "movie")]
-        with patch("curatorx.connectors.plex.PlexClient"), patch(
-            "curatorx.connectors.plex_collections.list_collections",
+        with patch("projectionist.connectors.plex.PlexClient"), patch(
+            "projectionist.connectors.plex_collections.list_collections",
             return_value=fake,
         ):
             raw = asyncio.run(

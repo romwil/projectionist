@@ -1,6 +1,22 @@
-# CuratorX — Docker / Unraid
+# Projectionist — Docker / Unraid
 
-Deploy CuratorX as a single container with a persistent `/config` volume for `settings.json` and `curatorx.db`. Everyday tag: **`romwil/curatorx:latest`** (CA default). Pin a minor line (e.g. **`:1.11`**) or an exact build (**`:X.Y.Z`**, see [CHANGELOG.md](../CHANGELOG.md)) when you need a fixed target.
+Deploy Projectionist as a single container with a persistent `/config` volume for `settings.json` and `projectionist.db` (or legacy `curatorx.db`). Everyday tag: **`romwil/projectionist:latest`**. During the compatibility window the same digests are also published as **`romwil/curatorx:*`**. Pin a minor line (e.g. **`:1.11`**) or an exact build (**`:X.Y.Z`**, see [CHANGELOG.md](../CHANGELOG.md)) when you need a fixed target.
+
+### Python build-context hygiene
+
+Dockerfile `COPY . .` / `COPY projectionist` must not pull host `*.egg-info`, `build/`, or `dist/` into the image. Keep these excludes in `.dockerignore`:
+
+```
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
+__pycache__/
+*.pyc
+```
+
+After a local package rename, also purge the venv editable install before trusting imports — see [TESTING.md](TESTING.md#after-renaming-the-python-package-curatorx--projectionist).
 
 ---
 
@@ -97,13 +113,13 @@ Set `CURATORX_LOG_LEVEL=DEBUG` in `.env` for verbose sync and agent tool tracing
 
 ## Unraid
 
-Install from the Community Applications template (`templates/curatorx.xml` or `unraid/curatorx.xml`) or add manually:
+Install from the Community Applications template (`templates/projectionist.xml` or `unraid/projectionist.xml`; legacy `curatorx.xml` is a compatibility pointer) or add manually:
 
 | Setting | Value |
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/curatorx/config` → `/config` |
-| **Image** | `romwil/curatorx:latest` (or a `:X.Y` line / `:X.Y.Z` pin) — multi-arch amd64+arm64 |
+| **Image** | `romwil/projectionist:latest` (or a `:X.Y` line / `:X.Y.Z` pin) — multi-arch amd64+arm64; dual-tagged `romwil/curatorx:*` during compat |
 
 Optional advanced env (or generate in **Admin → Advanced**): `CURATORX_MCP_API_KEY` (privacy) and `CURATORX_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
@@ -148,7 +164,7 @@ cd /mnt/user/appdata/curatorx
 
 ### Unraid "Force Update" pulls 0 B / stays on an old version
 
-**Root cause (Dockerman on Unraid 7.x):** Force Update **does** call Docker Engine pull (`POST /images/create?fromImage=…`), then stop/rm/recreate. **TOTAL DATA PULLED: 0 B** means Engine reported the local tag as already current (or transferred no layer bytes), so Dockerman recreates from the existing local `romwil/curatorx:latest` → digest mapping. Hub can already point at a newer digest (confirmed with `docker buildx imagetools inspect` on another machine) while this host’s tag still maps to the previous content.
+**Root cause (Dockerman on Unraid 7.x):** Force Update **does** call Docker Engine pull (`POST /images/create?fromImage=…`), then stop/rm/recreate. **TOTAL DATA PULLED: 0 B** means Engine reported the local tag as already current (or transferred no layer bytes), so Dockerman recreates from the existing local `romwil/projectionist:latest` (or dual-tagged `romwil/curatorx:latest`) → digest mapping. Hub can already point at a newer digest (confirmed with `docker buildx imagetools inspect` on another machine) while this host’s tag still maps to the previous content.
 
 This is **not** fixed by OCI labels or `/app/.build-info` alone — those make each Hub release unique; they do not force Engine to re-resolve a floating tag. There is **no Community Applications XML attribute** that forces a stronger pull than Force Update already performs. Maintainers still publish with `--provenance=false --sbom=false` so Dockerman sees Docker v2 **manifest lists** (OCI attestation indexes historically showed as “not available”).
 
@@ -159,7 +175,8 @@ This is **not** fixed by OCI labels or `/app/.build-info` alone — those make e
 cd /mnt/user/appdata/curatorx && ./rollout.sh latest
 
 # Or image refresh only, then Docker UI → Force Update / Apply:
-docker pull romwil/curatorx:latest
+docker pull romwil/projectionist:latest
+# dual-tag alias during compat: docker pull romwil/curatorx:latest
 # or: ./scripts/unraid-force-pull.sh latest
 ```
 
@@ -168,21 +185,22 @@ docker pull romwil/curatorx:latest
 ```bash
 ./scripts/unraid-force-pull.sh latest --rmi-retry
 # equivalent manual:
-docker stop curatorx && docker rm curatorx
-docker rmi romwil/curatorx:latest
-docker pull romwil/curatorx:latest
-# Docker → Add Container → User Templates → curatorx
+docker stop projectionist && docker rm projectionist
+# legacy container name during compat: curatorx
+docker rmi romwil/projectionist:latest
+docker pull romwil/projectionist:latest
+# Docker → Add Container → User Templates → projectionist
 ```
 
-**Pin a release** when you want to avoid floating `:latest`: set Repository to `romwil/curatorx:X.Y.Z` (an exact version) or `:X.Y` (a minor line) in the template, then pull that tag. Line tags (e.g. `:1.11`) still float within the minor line.
+**Pin a release** when you want to avoid floating `:latest`: set Repository to `romwil/projectionist:X.Y.Z` (an exact version) or `:X.Y` (a minor line) in the template, then pull that tag. Line tags (e.g. `:1.11`) still float within the minor line.
 
 **Verify the running build:**
 
 ```bash
-docker images romwil/curatorx --digests
-docker exec curatorx cat /app/.build-info
-docker logs curatorx 2>&1 | grep -m1 'CuratorX startup'
-docker buildx imagetools inspect romwil/curatorx:latest | head -5
+docker images romwil/projectionist --digests
+docker exec projectionist cat /app/.build-info
+docker logs projectionist 2>&1 | grep -m1 'Projectionist startup'
+docker buildx imagetools inspect romwil/projectionist:latest | head -5
 ```
 
 **CA submission note:** Force Update works when Engine re-resolves correctly (same as other Hub apps). Document the SSH/`rollout.sh` path for the 0 B case — do not claim Dockerfile cache-busting “fixes Force Update.”
@@ -213,7 +231,7 @@ Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use
 
 **Release checklist (notes):** ensure `CHANGELOG.md` has a `## [X.Y.Z] — YYYY-MM-DD` heading for the release version. The release script runs `scripts/generate-release-notes.sh --require-version <semver>` **before** `docker buildx` and fails if that heading is missing. Output is `frontend/public/release-notes.json` (served as `/release-notes.json` for What’s New / About).
 
-The script builds with `--provenance=false --sbom=false`, passes `CURATORX_VERSION` / `BUILD_DATE` / `VCS_REF` into OCI labels + `/app/.build-info`, pushes `:VERSION`, `:X.Y`, and `:latest`, then prints Hub digests for verification.
+The script builds with `--provenance=false --sbom=false`, passes `PROJECTIONIST_VERSION` (plus `CURATORX_VERSION` alias) / `BUILD_DATE` / `VCS_REF` into OCI labels + `/app/.build-info`, pushes `romwil/projectionist:{VERSION,X.Y,latest}`, dual-tags identical digests to `romwil/curatorx:*` during the compatibility window, then prints Hub digests for verification.
 
 ---
 

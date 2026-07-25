@@ -1,6 +1,6 @@
-# Documentation style — the CuratorX standard
+# Documentation style — the Projectionist standard
 
-CuratorX treats documentation as a **first-class deliverable**, on the same footing as the code and the "explain the why" education commitment that already runs through the product. A feature is not done when it works; it is done when a real person can understand it, use it, and trust it without reading the source.
+Projectionist treats documentation as a **first-class deliverable**, on the same footing as the code and the "explain the why" education commitment that already runs through the product. A feature is not done when it works; it is done when a real person can understand it, use it, and trust it without reading the source.
 
 This page is the durable standard every user-facing doc is held to. It is also written to its own rubric, so it doubles as a worked example: read it once as a guide, and again as a template.
 
@@ -30,7 +30,7 @@ Concretely, every doc in scope meets the following.
 
 ## Audience & voice matrix
 
-CuratorX documentation serves three audiences. Pick the audience per document (or per section), and match the voice and the evidence type.
+Projectionist documentation serves three audiences. Pick the audience per document (or per section), and match the voice and the evidence type.
 
 | Audience | Where they read | Voice | Evidence they need | Never show them |
 |----------|-----------------|-------|--------------------|-----------------|

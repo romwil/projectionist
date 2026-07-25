@@ -9,10 +9,10 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from curatorx.config_store import Settings
-from curatorx.connectors.plex import PlexClient, PlexLibraryItem
-from curatorx.library.db import Database
-from curatorx.library.sync import (
+from projectionist.config_store import Settings
+from projectionist.connectors.plex import PlexClient, PlexLibraryItem
+from projectionist.library.db import Database
+from projectionist.library.sync import (
     DEFAULT_LIBRARY_ENRICH_WORKERS,
     DEFAULT_LIBRARY_UPSERT_BATCH_SIZE,
     _enrich_plex_item,
@@ -53,7 +53,7 @@ class EnrichPlexItemTests(unittest.TestCase):
         def boom(*_args, **_kwargs):
             raise RuntimeError("tmdb down")
 
-        with patch("curatorx.library.sync._row_from_plex_item", side_effect=boom):
+        with patch("projectionist.library.sync._row_from_plex_item", side_effect=boom):
             outcome = _enrich_plex_item(item, PlexClient("http://plex", "t"), None, None, set(), set())
         self.assertEqual(outcome.status, "error")
         self.assertIsInstance(outcome.error, RuntimeError)
@@ -108,16 +108,16 @@ class ParallelEnrichSyncTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(PlexClient, "movie_items", return_value=items), patch.object(
                 PlexClient, "show_items", return_value=[]
             ), patch(
-                "curatorx.library.sync._row_from_plex_item",
+                "projectionist.library.sync._row_from_plex_item",
                 side_effect=slow_row,
             ), patch(
-                "curatorx.library.sync.rebuild_embeddings",
+                "projectionist.library.sync.rebuild_embeddings",
                 new=AsyncMock(return_value=0),
             ), patch(
-                "curatorx.library.sync.sync_tv_episodes",
+                "projectionist.library.sync.sync_tv_episodes",
                 return_value={"shows_synced": 0, "episodes_synced": 0},
             ), patch(
-                "curatorx.library.sync.scan_for_rating_prompts",
+                "projectionist.library.sync.scan_for_rating_prompts",
                 return_value=0,
             ):
                 result = await sync_library(db, settings, progress=on_progress)
@@ -163,16 +163,16 @@ class ParallelEnrichSyncTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(PlexClient, "movie_items", return_value=items), patch.object(
                 PlexClient, "show_items", return_value=[]
             ), patch(
-                "curatorx.library.sync._row_from_plex_item",
+                "projectionist.library.sync._row_from_plex_item",
                 side_effect=instant_row,
             ), patch(
-                "curatorx.library.sync.rebuild_embeddings",
+                "projectionist.library.sync.rebuild_embeddings",
                 new=AsyncMock(return_value=0),
             ), patch(
-                "curatorx.library.sync.sync_tv_episodes",
+                "projectionist.library.sync.sync_tv_episodes",
                 return_value={"shows_synced": 0, "episodes_synced": 0},
             ), patch(
-                "curatorx.library.sync.scan_for_rating_prompts",
+                "projectionist.library.sync.scan_for_rating_prompts",
                 return_value=0,
             ):
                 result = await sync_library(db, settings)
@@ -212,16 +212,16 @@ class ParallelEnrichSyncTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(PlexClient, "movie_items", return_value=items), patch.object(
                 PlexClient, "show_items", return_value=[]
             ), patch(
-                "curatorx.library.sync._row_from_plex_item",
+                "projectionist.library.sync._row_from_plex_item",
                 side_effect=maybe_fail,
             ), patch(
-                "curatorx.library.sync.rebuild_embeddings",
+                "projectionist.library.sync.rebuild_embeddings",
                 new=AsyncMock(return_value=0),
             ), patch(
-                "curatorx.library.sync.sync_tv_episodes",
+                "projectionist.library.sync.sync_tv_episodes",
                 return_value={"shows_synced": 0, "episodes_synced": 0},
             ), patch(
-                "curatorx.library.sync.scan_for_rating_prompts",
+                "projectionist.library.sync.scan_for_rating_prompts",
                 return_value=0,
             ):
                 result = await sync_library(db, settings)

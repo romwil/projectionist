@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.avatars import (
+from projectionist.web.avatars import (
     detect_avatar_extension,
     find_local_avatar_file,
     local_avatar_api_path,
@@ -20,8 +20,8 @@ from curatorx.web.avatars import (
     safe_user_id,
     save_avatar_bytes,
 )
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 
 # Minimal valid PNG (1x1)
@@ -79,10 +79,10 @@ class AvatarUploadApiTests(unittest.TestCase):
         os.environ["CURATORX_SESSION_SECRET"] = "test-avatar-session-secret-value"
         clear_session_secret_cache()
         clear_rate_limits()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
@@ -103,15 +103,15 @@ class AvatarUploadApiTests(unittest.TestCase):
             "email": "avatar@example.com",
             "thumb": "https://plex.test/broken.jpg",
         }
-        with patch("curatorx.web.auth.fetch_plex_account", return_value=profile), patch(
-            "curatorx.web.avatars.cache_remote_avatar",
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=profile), patch(
+            "projectionist.web.avatars.cache_remote_avatar",
             return_value=None,
         ):
             login = self.client.post("/api/auth/plex", json={"auth_token": "tok"})
         self.assertEqual(login.status_code, 200)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()

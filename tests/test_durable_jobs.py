@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.jobs import (
+from projectionist.web.jobs import (
     INTERRUPTED_BY_RESTART,
     JOBS_STATE_FILENAME,
     Job,
@@ -97,7 +97,7 @@ class DurableJobsTests(unittest.TestCase):
 
         with patch.object(manager, "_run_sync"):
             # Avoid starting a real thread work; patch Thread to no-op start
-            with patch("curatorx.web.jobs.threading.Thread") as thread_cls:
+            with patch("projectionist.web.jobs.threading.Thread") as thread_cls:
                 thread_cls.return_value.start = MagicMock()
                 job = manager.start_sync(settings)
 
@@ -131,13 +131,13 @@ class DurableJobsTests(unittest.TestCase):
 
     def test_init_does_not_call_facet_index(self) -> None:
         """Regression: facet rebuild must not block JobManager / FastAPI startup."""
-        import curatorx.web.jobs as jobs_mod
+        import projectionist.web.jobs as jobs_mod
 
         self.assertFalse(
             hasattr(jobs_mod, "ensure_library_facet_index"),
             "JobManager must not import ensure_library_facet_index (blocks startup)",
         )
-        with patch("curatorx.library.facets.ensure_library_facet_index") as ensure_facets:
+        with patch("projectionist.library.facets.ensure_library_facet_index") as ensure_facets:
             manager = JobManager(self.data_dir)
         self.assertIsNotNone(manager.db)
         ensure_facets.assert_not_called()
@@ -202,7 +202,7 @@ class StartupLifespanTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         reset_job_manager_for_tests()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._scheduler = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
@@ -217,8 +217,8 @@ class StartupLifespanTests(unittest.TestCase):
             release.wait(timeout=30)
             return 0
 
-        import curatorx.web.app as app_mod
-        import curatorx.web.jobs as jobs_mod
+        import projectionist.web.app as app_mod
+        import projectionist.web.jobs as jobs_mod
 
         jobs_mod._manager = None
         jobs_mod._scheduler = None

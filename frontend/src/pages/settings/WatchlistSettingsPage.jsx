@@ -118,7 +118,7 @@ export default function WatchlistSettingsPage() {
 
       <SettingsPanel
         title="Plex Discover sync"
-        lead="Uses your Sign-in-with-Plex account token to pull Discover watchlist items into CuratorX and optionally push local pins back."
+        lead="Uses your Sign-in-with-Plex account token to pull Discover watchlist items into Projectionist and optionally push local pins back."
         testId="watchlist-sync-panel"
         footer={
           <>

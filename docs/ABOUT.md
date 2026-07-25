@@ -1,10 +1,12 @@
-# About CuratorX
+# About Projectionist
 
-CuratorX is a self-hosted, cinema-dark chat curator for your Plex library. It indexes what you own, talks with a BYO LLM, and only writes to Radarr/Sonarr/Seerr after you confirm.
+**Cinema intelligence for your personal archive.**
 
-## Why CuratorX?
+Projectionist is an open-source, self-hosted cinema intelligence engine and agentic companion for personal media libraries — local-first, zero-telemetry, with vector mapping, multi-signal taste modeling, MCP access, and hardened multi-tenant roles (Owner / Member / Youth / Guest). It indexes what you own, talks with a BYO LLM, and only writes to Radarr/Sonarr/Seerr after you confirm.
 
-CuratorX serves as a **real-world, production-quality example of an MCP (Model Context Protocol) interface** against structured and unstructured local data. It demonstrates a privacy-first pattern: the LLM operates over a highly optimized local SQLite index of your Plex library — your server token, watch history, and collection details never leave your hardware.
+## Why Projectionist?
+
+Projectionist serves as a **real-world, production-quality example of an MCP (Model Context Protocol) interface** against structured and unstructured local data. It demonstrates a privacy-first pattern: the LLM operates over a highly optimized local SQLite index of your Plex library — your server token, watch history, and collection details never leave your hardware.
 
 > "The LLM gets to act like a natural language surgeon on a highly optimized, predictable local dataset. It's incredibly fast, it's cheap, and it keeps your Plex token and personal collection server info locked down."
 

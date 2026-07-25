@@ -1,23 +1,28 @@
 import { expect, test } from "@playwright/test";
 
 /**
- * Optional hybrid e2e against a real running CuratorX stack (no API mocks).
+ * Optional hybrid e2e against a real running Projectionist stack (no API mocks).
  *
- * Skipped unless CURATORX_E2E_LIVE=1. Typical usage:
+ * Skipped unless CURATORX_E2E_LIVE=1 (legacy) or PROJECTIONIST_E2E_LIVE=1. Typical usage:
  *
  *   docker compose up -d
- *   CURATORX_E2E_LIVE=1 E2E_MOCK_APIS=0 E2E_BASE_URL=http://127.0.0.1:8788 npm run test:e2e:live-stack
+ *   PROJECTIONIST_E2E_LIVE=1 E2E_MOCK_APIS=0 E2E_BASE_URL=http://127.0.0.1:8788 npm run test:e2e:live-stack
  *
  * Or point E2E_BASE_URL at an existing host. Playwright will not start the
  * temp e2e server when reuseExistingServer is allowed and the URL is up.
  */
 const liveEnabled = ["1", "true", "yes"].includes(
-  String(process.env.CURATORX_E2E_LIVE || "").trim().toLowerCase(),
+  String(process.env.PROJECTIONIST_E2E_LIVE || process.env.CURATORX_E2E_LIVE || "")
+    .trim()
+    .toLowerCase(),
 );
 
 test.describe("Live stack e2e (opt-in)", () => {
   test.beforeEach(() => {
-    test.skip(!liveEnabled, "Set CURATORX_E2E_LIVE=1 to hit a real CuratorX server");
+    test.skip(
+      !liveEnabled,
+      "Set PROJECTIONIST_E2E_LIVE=1 (or CURATORX_E2E_LIVE=1) to hit a real Projectionist server",
+    );
   });
 
   test("health endpoint is reachable", async ({ request }) => {

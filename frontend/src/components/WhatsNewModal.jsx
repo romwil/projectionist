@@ -35,7 +35,7 @@ export default function WhatsNewModal({ open, version, release, onDismiss, onRea
             <ReleaseNotesPanel releases={[release]} preferHighlights testId="whats-new-notes" />
           ) : (
             <p className="status status-secondary" data-testid="whats-new-fallback">
-              CuratorX {version} is ready. Open About for the full release history.
+              Projectionist {version} is ready. Open About for the full release history.
             </p>
           )}
         </div>

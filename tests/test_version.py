@@ -1,6 +1,6 @@
 """Version lockstep smoke test.
 
-Asserts every release-managed version field matches ``curatorx.__version__``.
+Asserts every release-managed version field matches ``projectionist.__version__``.
 See docs/RELEASE.md (Version parity).
 """
 
@@ -11,12 +11,12 @@ import re
 import unittest
 from pathlib import Path
 
-from curatorx import __version__
+from projectionist import __version__
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 _UNRAID_XML_PATHS = (
-    "templates/curatorx.xml",
-    "unraid/curatorx.xml",
+    "templates/projectionist.xml",
+    "unraid/projectionist.xml",
 )
 
 
@@ -87,7 +87,7 @@ class VersionTests(unittest.TestCase):
             text = (_REPO_ROOT / xml_rel).read_text(encoding="utf-8")
             xml_texts.append(text)
             with self.subTest(source=f"{xml_rel}:comment"):
-                self.assertIn(f"CuratorX {expected}", text)
+                self.assertIn(f"Projectionist {expected}", text)
             with self.subTest(source=f"{xml_rel}:changes-head"):
                 match = re.search(r"<Changes>\s*###\s*([0-9]+\.[0-9]+\.[0-9]+)", text)
                 self.assertIsNotNone(match, f"{xml_rel}: missing ### X.Y.Z under <Changes>")
@@ -100,8 +100,22 @@ class VersionTests(unittest.TestCase):
             self.assertEqual(
                 xml_texts[0],
                 xml_texts[1],
+                "templates/projectionist.xml and unraid/projectionist.xml must stay identical",
+            )
+
+        legacy_texts = [
+            (_REPO_ROOT / rel).read_text(encoding="utf-8")
+            for rel in ("templates/curatorx.xml", "unraid/curatorx.xml")
+        ]
+        with self.subTest(source="legacy-curatorx-xml-identical"):
+            self.assertEqual(
+                legacy_texts[0],
+                legacy_texts[1],
                 "templates/curatorx.xml and unraid/curatorx.xml must stay identical",
             )
+        with self.subTest(source="legacy-curatorx-xml-pointer"):
+            self.assertIn("renamed to Projectionist", legacy_texts[0])
+            self.assertIn("templates/projectionist.xml", legacy_texts[0])
 
 
 if __name__ == "__main__":

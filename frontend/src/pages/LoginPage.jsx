@@ -198,7 +198,7 @@ export default function LoginPage() {
   return (
     <div className="login-page" data-testid="login-page">
       <div className="login-card">
-        <p className="eyebrow">CuratorX</p>
+        <p className="eyebrow">Projectionist</p>
         <h1>Sign in</h1>
         <p className="login-lede">{lede}</p>
 

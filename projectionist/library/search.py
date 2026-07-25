@@ -1,0 +1,209 @@
+"""Library search helpers."""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import List, Optional
+
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.library.db_io import run_db
+from projectionist.library.embeddings import semantic_embedding_search_available
+from projectionist.library.query import filters_from_mapping, query_library, query_library_async
+from projectionist.models.schemas import TitleCard
+
+
+def row_to_title_card(row, *, reason: str = "", facet_matches: Optional[List[str]] = None) -> TitleCard:
+    genres = json.loads(row["genres"]) if row["genres"] else []
+    return TitleCard(
+        media_type=row["media_type"],
+        title=row["title"],
+        year=row["year"],
+        tmdb_id=row["tmdb_id"],
+        tvdb_id=row["tvdb_id"],
+        rating_key=row["rating_key"],
+        poster_url=row["poster_url"] or "",
+        backdrop_url=row["backdrop_url"] or "",
+        overview=row["summary"] or "",
+        genres=genres,
+        in_library=True,
+        in_radarr=bool(row["in_radarr"]),
+        in_sonarr=bool(row["in_sonarr"]),
+        content_rating=(
+            str(row["content_rating"] or "") if "content_rating" in row.keys() else ""
+        ),
+        recommendation_reason=reason,
+        facet_matches=list(facet_matches or []),
+        runtime_minutes=int(row["runtime_minutes"]) if "runtime_minutes" in row.keys() and row["runtime_minutes"] else None,
+        view_count=int(row["view_count"] or 0) if "view_count" in row.keys() else 0,
+        view_offset_ms=(
+            int(row["view_offset_ms"])
+            if "view_offset_ms" in row.keys() and row["view_offset_ms"] is not None
+            else None
+        ),
+        duration_ms=(
+            int(row["duration_ms"])
+            if "duration_ms" in row.keys() and row["duration_ms"] is not None
+            else None
+        ),
+        total_episode_count=int(row["total_episode_count"])
+        if "total_episode_count" in row.keys() and row["total_episode_count"]
+        else None,
+        unwatched_episode_count=int(row["unwatched_episode_count"])
+        if "unwatched_episode_count" in row.keys() and row["unwatched_episode_count"] is not None
+        else None,
+    )
+
+
+def _cards_from_query_result(
+    db: Database,
+    result: dict,
+    *,
+    reason: str,
+    facet_matches: Optional[List[str]] = None,
+    limit: int,
+) -> List[TitleCard]:
+    cards: List[TitleCard] = []
+    for item in result.get("items", []):
+        row = db.library_item_by_id(int(item["id"])) if item.get("id") else None
+        if row is None:
+            continue
+        cards.append(row_to_title_card(row, reason=reason, facet_matches=facet_matches))
+        if len(cards) >= limit:
+            break
+    return cards
+
+
+def looks_like_facet_tag_query(query: str) -> bool:
+    """Heuristic: short multi-word / genre-like phrases often map to keyword facets."""
+    cleaned = " ".join(str(query or "").strip().split())
+    if not cleaned:
+        return False
+    # Avoid treating long plot sentences as tags.
+    if len(cleaned) > 48 or cleaned.count(" ") > 4:
+        return False
+    return True
+
+
+def _title_candidates(query: str) -> List[str]:
+    """Extract conservative title-like candidates from conversational lookup text."""
+    tokens = re.findall(r"[\w']+", str(query or "").casefold())
+    ignored = {
+        "a", "about", "any", "can", "could", "do", "for", "get", "how", "i",
+        "is", "it", "know", "me", "more", "of", "on", "please", "search",
+        "tell", "the", "this", "what", "with", "you",
+    }
+    meaningful = [token for token in tokens if token not in ignored and not re.fullmatch(r"\d{4}", token)]
+    if not meaningful or meaningful == tokens:
+        return []
+    return [" ".join(meaningful), *meaningful]
+
+
+async def search_library(
+    db: Database,
+    settings: Settings,
+    query: str,
+    *,
+    media_type: Optional[str] = None,
+    limit: int = 12,
+) -> List[TitleCard]:
+    """Search the library, preferring keyword/facet and text matches over semantic noise.
+
+    Tag-style queries (e.g. \"found footage\") should hit ``library_facets`` first.
+    Semantic search runs only when keyword and title/summary matches are empty.
+    """
+    cleaned = " ".join(str(query or "").strip().split())
+    if not cleaned:
+        return []
+
+    capped = min(max(1, int(limit or 12)), 48)
+
+    # 1) Exact-ish keyword / facet match — highest precision for tag asks.
+    if looks_like_facet_tag_query(cleaned):
+        keyword_result = await run_db(
+            query_library,
+            db,
+            filters_from_mapping(
+                {
+                    "keywords": [cleaned],
+                    "media_type": media_type,
+                    "limit": capped,
+                    "sort": "title",
+                }
+            ),
+        )
+        if keyword_result.get("total_matched", 0) > 0:
+            return _cards_from_query_result(
+                db,
+                keyword_result,
+                reason="Library match (keyword)",
+                facet_matches=[f"Keyword: {cleaned}"],
+                limit=capped,
+            )
+
+    # 2) Title / summary substring match.
+    text_result = await run_db(
+        query_library,
+        db,
+        filters_from_mapping(
+            {
+                "query": cleaned,
+                "media_type": media_type,
+                "limit": capped,
+                "sort": "title",
+            }
+        ),
+    )
+    if text_result.get("total_matched", 0) > 0:
+        return _cards_from_query_result(
+            db,
+            text_result,
+            reason="Library match (text)",
+            limit=capped,
+        )
+
+    # 2b) Conversational title lookup. The chat preflight passes the user's
+    # whole sentence; retry only cleaned, deterministic candidates so a title
+    # such as “Simpsley” is not lost behind “how about … 2026?”.
+    for candidate in _title_candidates(cleaned):
+        candidate_result = await run_db(
+            query_library,
+            db,
+            filters_from_mapping(
+                {
+                    "query": candidate,
+                    "media_type": media_type,
+                    "limit": capped,
+                    "sort": "title",
+                }
+            ),
+        )
+        if candidate_result.get("total_matched", 0) > 0:
+            return _cards_from_query_result(
+                db,
+                candidate_result,
+                reason="Library match (title extracted from conversation)",
+                limit=capped,
+            )
+
+    # 3) Semantic fallback only when structured matches came up empty. An
+    # Anthropic chat endpoint is not an embeddings endpoint, so it needs an
+    # explicitly configured OpenAI-compatible embedding URL.
+    if not semantic_embedding_search_available(settings):
+        return []
+    filters = filters_from_mapping(
+        {
+            "semantic_query": cleaned,
+            "media_type": media_type,
+            "limit": capped,
+        }
+    )
+    result = await query_library_async(db, filters, settings)
+    mode = result.get("search_mode", "semantic")
+    return _cards_from_query_result(
+        db,
+        result,
+        reason=f"Library match ({mode})",
+        limit=capped,
+    )

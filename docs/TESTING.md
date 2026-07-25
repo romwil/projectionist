@@ -82,6 +82,22 @@ From the repo root with Python dependencies installed (`pip install -e ".[web]"`
 bash scripts/run-e2e.sh
 ```
 
+### After renaming the Python package (CuratorX → Projectionist)
+
+Editable installs and Docker `COPY . .` can ghost-resolve the old package name. After any `curatorx/` → `projectionist/` tree rename (or when imports mysteriously still resolve `curatorx`), purge and reinstall:
+
+```bash
+pip uninstall -y curatorx projectionist 2>/dev/null || true
+rm -rf curatorx.egg-info projectionist.egg-info build dist .eggs
+find . -type d -name '__pycache__' -not -path './node_modules/*' -not -path './.git/*' -exec rm -rf {} + 2>/dev/null || true
+find . -type f -name '*.pyc' -not -path './node_modules/*' -delete 2>/dev/null || true
+pip install -e ".[web,dev]"
+python -c "import projectionist; print(projectionist.__file__)"
+python -c "import curatorx" 2>/dev/null && echo "WARNING: Stale curatorx import still resolving!" || echo "Clean: curatorx package isolated."
+```
+
+`.dockerignore` must exclude `*.egg-info/`, `*.egg`, `build/`, `dist/`, `.eggs/`, `__pycache__/`, and `*.pyc` so host build artifacts never leak into image layers. See also [DOCKER.md](DOCKER.md).
+
 On **Windows (PowerShell)** without WSL:
 
 ```powershell

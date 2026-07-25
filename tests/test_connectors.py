@@ -2,8 +2,8 @@
 
 import unittest
 
-from curatorx.connectors.http import merge_plex_provider_ids, parse_plex_guid
-from curatorx.connectors.tvdb import TVDBClient
+from projectionist.connectors.http import merge_plex_provider_ids, parse_plex_guid
+from projectionist.connectors.tvdb import TVDBClient
 
 
 class HttpHelperTests(unittest.TestCase):
@@ -21,7 +21,7 @@ class HttpHelperTests(unittest.TestCase):
         self.assertEqual(parse_plex_guid("tvdb://series/81189")["tvdb_id"], "81189")
 
     def test_merge_plex_provider_ids_from_guid_children(self) -> None:
-        from curatorx.connectors.http import merge_plex_provider_ids
+        from projectionist.connectors.http import merge_plex_provider_ids
 
         ids = merge_plex_provider_ids(
             "plex://movie/5d7768374de0ee001fccc04a",

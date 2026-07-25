@@ -8,14 +8,14 @@ from pathlib import Path
 
 from unittest.mock import MagicMock, patch
 
-from curatorx.library.db import Database
-from curatorx.library.query import (
+from projectionist.library.db import Database
+from projectionist.library.query import (
     build_motif_why,
     compute_knowledge_coverage,
     filters_from_mapping,
     query_library,
 )
-from curatorx.library.titles import get_title_detail
+from projectionist.library.titles import get_title_detail
 
 
 class PlotMultiSignalTests(unittest.TestCase):
@@ -211,7 +211,7 @@ class PlotMultiSignalTests(unittest.TestCase):
                 "with_synopsis_pct" not in coverage or isinstance(coverage["with_synopsis_pct"], float)
             )
 
-    @patch("curatorx.library.titles.cached_machine_identifier", return_value="")
+    @patch("projectionist.library.titles.cached_machine_identifier", return_value="")
     def test_title_detail_includes_plot_knowledge(self, _machine) -> None:
         settings = MagicMock()
         settings.tmdb_api_key = ""

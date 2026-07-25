@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from curatorx.connectors.plex_account import (
+from projectionist.connectors.plex_account import (
     build_plex_auth_url,
     create_plex_pin,
     fetch_plex_pin,
@@ -39,7 +39,7 @@ class PlexPinHelperTests(unittest.TestCase):
             "expiresAt": "2099-01-01T00:00:00Z",
             "authToken": None,
         }
-        with patch("curatorx.connectors.plex_account.request_json", return_value=payload) as mocked:
+        with patch("projectionist.connectors.plex_account.request_json", return_value=payload) as mocked:
             pin = create_plex_pin("client-abc")
         self.assertEqual(pin["id"], 99)
         self.assertEqual(pin["code"], "ZZZZ")
@@ -54,7 +54,7 @@ class PlexPinHelperTests(unittest.TestCase):
 
     def test_fetch_plex_pin(self) -> None:
         payload = {"id": 99, "code": "ZZZZ", "authToken": "tok-1"}
-        with patch("curatorx.connectors.plex_account.request_json", return_value=payload) as mocked:
+        with patch("projectionist.connectors.plex_account.request_json", return_value=payload) as mocked:
             pin = fetch_plex_pin(99, "client-abc")
         self.assertEqual(pin["authToken"], "tok-1")
         mocked.assert_called_once()

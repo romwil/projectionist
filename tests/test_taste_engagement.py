@@ -10,19 +10,19 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from curatorx.library.db import DEFAULT_LENS_ID, Database
-from curatorx.taste import build_weekly_rail_for_user, deliver_member_weekly_rails, feed_for_you_weekly
-from curatorx.engagement import engagement_summary, sync_review_challenges
-from curatorx.config_store import Settings
-from curatorx.web.auth import clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.taste import build_weekly_rail_for_user, deliver_member_weekly_rails, feed_for_you_weekly
+from projectionist.engagement import engagement_summary, sync_review_challenges
+from projectionist.config_store import Settings
+from projectionist.web.auth import clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 
 class TasteEngagementDbTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.user_id = "bootstrap-owner"
 
     def tearDown(self) -> None:
@@ -106,18 +106,18 @@ class TasteEngagementApiTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         self._tmpdir.cleanup()

@@ -14,8 +14,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List
 
-from curatorx.library.db import DEFAULT_CONTEXT_HASH, DEFAULT_LENS_ID, Database
-from curatorx.library.embeddings import cosine_similarity, semantic_search
+from projectionist.library.db import DEFAULT_CONTEXT_HASH, DEFAULT_LENS_ID, Database
+from projectionist.library.embeddings import cosine_similarity, semantic_search
 
 
 def _make_db() -> tuple:

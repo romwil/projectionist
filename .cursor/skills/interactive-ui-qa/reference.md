@@ -477,7 +477,7 @@ No account. Feature flag `guest_tour_enabled` / `CURATORX_GUEST_TOUR_ENABLED`.
 
 The curator "persona" is a **single household-level voice** the owner configures at
 **Admin → Persona** (`frontend/src/components/PersonaSection.jsx`, backend
-`curatorx/persona/presets.py`, `/api/persona/presets`, `/api/persona/preview`).
+`projectionist/persona/presets.py`, `/api/persona/presets`, `/api/persona/preview`).
 There are **exactly five built-in presets** with deterministic, code-defined UI copy:
 
 | Preset id | Name | Tagline | Review dialogue band |
@@ -496,7 +496,7 @@ welcome starters, composer placeholder, tagline, accent hue, typing phrases. Per
 
 - **roles:** `owner`
 - **tags:** `persona`, `settings`, `admin`
-- **source:** `frontend/src/components/PersonaSection.jsx`, `curatorx/persona/presets.py`
+- **source:** `frontend/src/components/PersonaSection.jsx`, `projectionist/persona/presets.py`
 - **steps:** Open Admin → Persona (`persona-section`). Inspect `persona-preset-grid`.
 - **pass:** Exactly five preset cards present with matching testids: `persona-preset-classic-curator`, `persona-preset-blunt-archivist`, `persona-preset-enthusiastic-scout`, `persona-preset-academic-critic`, `persona-preset-night-owl-host`. Each shows its authored name + tagline. No invented presets.
 
@@ -512,7 +512,7 @@ welcome starters, composer placeholder, tagline, accent hue, typing phrases. Per
 
 - **roles:** `owner`, `member`
 - **tags:** `persona`, `chat`
-- **source:** `curatorx/persona/presets.py` (`welcome_greeting`, `welcome_starters`), `frontend/src/components/WelcomePanel.jsx`, `/api/persona/preview`
+- **source:** `projectionist/persona/presets.py` (`welcome_greeting`, `welcome_starters`), `frontend/src/components/WelcomePanel.jsx`, `/api/persona/preview`
 - **steps:** With a known active preset, open `/chat` (fresh session/welcome panel). Read the welcome greeting, the starter chips, and the composer placeholder.
 - **pass:** Copy matches the active preset's authored strings (e.g. `classic-curator` greets "…your film-buff curator. What should we queue tonight?" and offers "Suggest something unwatched from my library" / "…cozy Sunday double feature?"; `blunt-archivist` offers "Show my biggest unwatched gaps" / "What should I purge from my library?"). Preset-to-preset copy is observably different. Assert copy strings, not model-generated replies.
 
@@ -520,7 +520,7 @@ welcome starters, composer placeholder, tagline, accent hue, typing phrases. Per
 
 - **roles:** `owner`
 - **tags:** `persona`, `settings`
-- **source:** `/api/persona/preview`, `/api/persona/presets`, `curatorx/persona/presets.py:persona_ui_for`
+- **source:** `/api/persona/preview`, `/api/persona/presets`, `projectionist/persona/presets.py:persona_ui_for`
 - **steps:** (API-level, deterministic) GET `/api/persona/presets`; GET `/api/persona/preview?persona_preset_id=night-owl-host`.
 - **pass:** presets list has 5 entries with `id`/`name`/`tagline`; preview returns `persona_ui` with `welcome_greeting`, `welcome_starters`, `composer_placeholders`, `accent_hue`, `preset_name`, `preset_tagline` for the requested preset (Night Owl Host: "What are we watching tonight?"). Use to assert per-persona structure when browser copy is ambiguous.
 
@@ -528,7 +528,7 @@ welcome starters, composer placeholder, tagline, accent hue, typing phrases. Per
 
 - **roles:** `member`, `youth`
 - **tags:** `persona`, `gating`
-- **source:** `curatorx/persona/presets.py`, `frontend/src/lib/primaryNav.js`, `curatorx/web/auth.py`
+- **source:** `projectionist/persona/presets.py`, `frontend/src/lib/primaryNav.js`, `projectionist/web/auth.py`
 - **steps:** Confirm the persona picker is **not** reachable by member/youth (Admin-gated). Navigate to `/admin/persona`.
 - **pass:** Non-owner cannot open the persona editor (redirected per `nav.admin-redirect`). Persona/tone does not grant Admin peer, delete, or over-ceiling content — negative boundary. No `persona-preset-grid` for non-owners.
 
@@ -536,7 +536,7 @@ welcome starters, composer placeholder, tagline, accent hue, typing phrases. Per
 
 - **roles:** `youth`
 - **tags:** `persona`, `chat`, `gating`
-- **source:** `curatorx/youth/guardrails.py` (`YOUTH_CHAT_GUARDRAILS`), `frontend/src/lib/youthPersona.js` (`preferYouthFriendlyPersona`)
+- **source:** `projectionist/youth/guardrails.py` (`YOUTH_CHAT_GUARDRAILS`), `frontend/src/lib/youthPersona.js` (`preferYouthFriendlyPersona`)
 - **steps:** As youth, ask the curator for a mature/over-ceiling title (e.g. an R-rated film) in chat.
 - **pass:** Response redirects to age-appropriate library picks and never surfaces an over-ceiling recommendation card (result cards still pass the rating gate — see `youth.filter.chat-cards`). Assert card/tool boundary + absence of blocked cards, not exact wording.
 
@@ -551,7 +551,7 @@ and role/youth gates. Prefer member↔owner pairs so both ends verify.
 
 - **roles:** `member`, `owner`
 - **tags:** `recommend`, `inbox`, `notifications`
-- **source:** `curatorx/web/app.py:create_recommendations`, `frontend/src/components/RecommendationsInbox.jsx`
+- **source:** `projectionist/web/app.py:create_recommendations`, `frontend/src/components/RecommendationsInbox.jsx`
 - **steps:** As sender (e.g. owner), send a recommendation to the other role via `recommend-send` (see `recommend.send-to-peer`). Sign in as the **recipient**; open `/inbox`.
 - **pass:** A recommendation card appears whose lead reads **"{sender} recommended {title}"** — composed once, not double-wrapped (regression guard for the inbox-title-composition fix; title must not repeat). `recommendation-open-*`/`recommendation-dismiss-*` work.
 
@@ -567,7 +567,7 @@ and role/youth gates. Prefer member↔owner pairs so both ends verify.
 
 - **roles:** `guest`, `youth`
 - **tags:** `recommend`, `gating`
-- **source:** `frontend/src/components/PosterActionMenu.jsx`, `curatorx/web/app.py:create_recommendations`
+- **source:** `frontend/src/components/PosterActionMenu.jsx`, `projectionist/web/app.py:create_recommendations`
 - **steps:** As guest (no inbox peer) and as youth, inspect poster ⋮ menu / title detail for a Recommend action.
 - **pass:** Guest has no Inbox/Recommend surface (per `nav.peers-guest`). Recommend requires `multi_user_enabled`; where absent for the role, `recommend-title-button` / menu item is not offered. Document actual behavior; must not error.
 
@@ -575,7 +575,7 @@ and role/youth gates. Prefer member↔owner pairs so both ends verify.
 
 - **roles:** `owner`, `member`
 - **tags:** `recommend`, `inbox`, `youth`, `gating`
-- **source:** `curatorx/youth/apply.py`, `curatorx/web/app.py`, `frontend/src/components/RecommendationsInbox.jsx`
+- **source:** `projectionist/youth/apply.py`, `projectionist/web/app.py`, `frontend/src/components/RecommendationsInbox.jsx`
 - **steps:** As owner/member, open the Recommend modal for an **over-ceiling** title (e.g. R-rated). If `qa-youth` appears in `recommend-peer-list`, send it, then sign in as youth and open `/inbox`.
 - **pass:** The youth inbox/title surfaces must **not** render an openable over-ceiling title (fail-closed: the title detail deep link 404s for youth — `youth.filter.title-deeplink`). Record whether youth is even offered as a peer. Negative assertion: prohibited content never becomes viewable via a shared recommendation.
 
@@ -703,8 +703,8 @@ QA library is fully synced — assert real posters/results, not just empty state
 
 ## Youth fail-closed content filtering (extensive)
 
-Policy (code source of truth): `curatorx/youth/rating_gate.py`, `curatorx/youth/apply.py`,
-`curatorx/youth/guardrails.py`; applied in `curatorx/web/app.py` at library/browse/feed
+Policy (code source of truth): `projectionist/youth/rating_gate.py`, `projectionist/youth/apply.py`,
+`projectionist/youth/guardrails.py`; applied in `projectionist/web/app.py` at library/browse/feed
 endpoints (`_apply_youth_filters`, `_sanitize_library_payload`), title detail
 (`title_allowed_for_user` → **HTTP 404**), and engagement aggregates
 (`engagement_summary(..., youth_safe_only=True)`). QA ceiling: **PG-13**
@@ -722,7 +722,7 @@ after direct URL navigation.
 
 - **roles:** `youth`, `owner`
 - **tags:** `youth`, `settings`, `gating`
-- **source:** `curatorx/web/app.py` (`/api/features` youth block), `seed-qa-roles.sh`
+- **source:** `projectionist/web/app.py` (`/api/features` youth block), `seed-qa-roles.sh`
 - **steps:** As youth, confirm Settings → Profile shows Youth mode (`youth-mode-badge`, per `settings.role-youth`). As owner, confirm Admin → Youth reflects the configured ceiling.
 - **pass:** Youth gate active for the account; owner-configured ceiling = PG-13. Establishes the policy under test.
 
@@ -730,7 +730,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `library`, `explore`
-- **source:** `curatorx/web/app.py:_apply_youth_filters`, `LibraryBrowsePage.jsx`
+- **source:** `projectionist/web/app.py:_apply_youth_filters`, `LibraryBrowsePage.jsx`
 - **steps:** As youth, open Browse Movies. Scan every visible poster's content-rating chip (`title-content-rating-chip`) across at least the first page; page through if feasible.
 - **pass:** Every visible movie is rated ≤ PG-13 (`G`/`PG`/`PG-13`). No `R`/`NC-17`/`X`/unrated movie appears. Count should be lower than the owner/member view of the same browse.
 
@@ -738,7 +738,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `library`, `explore`
-- **source:** `curatorx/web/app.py:_apply_youth_filters`, `LibraryBrowsePage.jsx`
+- **source:** `projectionist/web/app.py:_apply_youth_filters`, `LibraryBrowsePage.jsx`
 - **steps:** As youth, open Browse TV. Scan visible TV content-rating chips.
 - **pass:** Only `TV-Y`/`TV-Y7`/`TV-G`/`TV-PG` (and film-scale ≤ PG-13). **`TV-14`, `TV-MA` and unrated shows are absent** (TV-14 rank 35 > 30 is blocked).
 
@@ -746,7 +746,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `library`, `gating`
-- **source:** `curatorx/youth/rating_gate.py`
+- **source:** `projectionist/youth/rating_gate.py`
 - **steps:** Cross-check a specific R/TV-MA title that owner/member can see (note its title as owner first). As youth, browse/search for it.
 - **pass:** The over-ceiling title never appears in youth browse/search/rails. Direct comparison against an adult role confirms it is filtered, not merely paginated away.
 
@@ -754,7 +754,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `library`, `gating`
-- **source:** `curatorx/youth/rating_gate.py:content_rating_allowed` (None ⇒ False)
+- **source:** `projectionist/youth/rating_gate.py:content_rating_allowed` (None ⇒ False)
 - **steps:** Identify an unrated/`NR`/missing-rating title visible to an adult role. As youth, browse/search for it.
 - **pass:** Unrated/missing-rating titles are hidden for youth (fail-closed). No poster with a blank/absent rating chip appears.
 
@@ -762,7 +762,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `gating`
-- **source:** `curatorx/web/app.py:title_detail` (`title_allowed_for_user` → 404)
+- **source:** `projectionist/web/app.py:title_detail` (`title_allowed_for_user` → 404)
 - **steps:** Obtain an over-ceiling (or unrated) title's detail URL from an adult role (e.g. `/title/movie/{tmdb}`). As youth, navigate directly to that URL.
 - **pass:** Youth gets a not-available/404 state (`title-detail-page` error), **not** the title hero. Prohibited content never renders — including no transient flash of the hero before the guard resolves.
 
@@ -770,7 +770,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `search`
-- **source:** `curatorx/web/app.py:_apply_youth_filters`, `SearchPage.jsx`
+- **source:** `projectionist/web/app.py:_apply_youth_filters`, `SearchPage.jsx`
 - **steps:** As youth, search a known adult title fragment (e.g. part of an R-rated film's name) via `explore-search-input`.
 - **pass:** Results contain only ≤ PG-13 matches (or `library-browse-empty`); the over-ceiling match is absent even though it exists in the library.
 
@@ -778,7 +778,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `explore`
-- **source:** `curatorx/web/app.py:_sanitize_library_payload` (`filter_payload_for_youth`), `ExplorePage.jsx`
+- **source:** `projectionist/web/app.py:_sanitize_library_payload` (`filter_payload_for_youth`), `ExplorePage.jsx`
 - **steps:** As youth, scan every Explore rail / For-you rail / hub card for ratings chips.
 - **pass:** All rail cards are ≤ PG-13. No over-ceiling or unrated poster in any rail, including the personalized For-you rail.
 
@@ -786,7 +786,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `chat`
-- **source:** `curatorx/youth/guardrails.py`, agent tool result cards (`curatorx/agent`)
+- **source:** `projectionist/youth/guardrails.py`, agent tool result cards (`projectionist/agent`)
 - **steps:** As youth, ask the curator for recommendations (broadly, then push toward mature genres like horror/R). Inspect the result poster cards.
 - **pass:** Every recommendation card is ≤ PG-13; the curator declines/redirects mature asks. Assert card rating gate + absence of blocked cards (not exact prose).
 
@@ -794,7 +794,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `library`
-- **source:** `curatorx/web/app.py` person/library-for-person payloads (`_apply_youth_filters`)
+- **source:** `projectionist/web/app.py` person/library-for-person payloads (`_apply_youth_filters`)
 - **steps:** As youth, open a person/actor or tag/genre facet page that (for adults) includes over-ceiling titles.
 - **pass:** Person/facet title lists show only ≤ PG-13 titles; over-ceiling credits are filtered. If no such surface reachable for youth, note N/A.
 
@@ -802,7 +802,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `journey`
-- **source:** `curatorx/web/app.py` (`engagement_summary(..., youth_safe_only=True)`)
+- **source:** `projectionist/web/app.py` (`engagement_summary(..., youth_safe_only=True)`)
 - **steps:** As youth, open any surface exposing engagement/coverage aggregates (Explore engagement hub / My Journey stats) if available.
 - **pass:** Aggregates/exports are computed youth-safe (no over-ceiling titles feeding counts/examples). If the surface is not exposed to youth, note N/A.
 
@@ -826,7 +826,7 @@ after direct URL navigation.
 
 - **roles:** `youth`
 - **tags:** `youth`, `gating`, `scroll`
-- **source:** `curatorx/youth/apply.py` (server-side filtering), `AppShell.jsx`
+- **source:** `projectionist/youth/apply.py` (server-side filtering), `AppShell.jsx`
 - **steps:** Hard-reload youth Explore, Browse, and a search result (network throttling helps). Watch during load/hydration and after direct URL navigation.
 - **pass:** No over-ceiling/unrated poster appears even momentarily. Because filtering is server-side (payload never contains blocked items), hydration cannot leak them. Screenshot any transient leak as a blocker.
 

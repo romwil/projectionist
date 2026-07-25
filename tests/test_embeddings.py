@@ -7,16 +7,16 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.library.embeddings import (
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.library.embeddings import (
     embed_texts,
     embedding_model_label,
     rebuild_embeddings,
     remote_embedding_provider_available,
 )
-from curatorx.library.query import filters_from_mapping, query_library_async
-from curatorx.models.recommendation import sanitize_recommendation_reason
+from projectionist.library.query import filters_from_mapping, query_library_async
+from projectionist.models.recommendation import sanitize_recommendation_reason
 
 
 class RecommendationReasonTests(unittest.TestCase):
@@ -41,7 +41,7 @@ class RebuildEmbeddingsTests(unittest.IsolatedAsyncioTestCase):
             llm_base_url="https://api.anthropic.com",
         )
 
-        with patch("curatorx.agent.providers.get_embedding_provider") as get_provider:
+        with patch("projectionist.agent.providers.get_embedding_provider") as get_provider:
             vectors = await embed_texts(["A pilgrimage through grief."], settings)
 
         self.assertFalse(remote_embedding_provider_available(settings))
@@ -98,7 +98,7 @@ class RebuildEmbeddingsTests(unittest.IsolatedAsyncioTestCase):
                 events.append((phase, current, total, message))
 
             with patch(
-                "curatorx.library.embeddings.embed_texts",
+                "projectionist.library.embeddings.embed_texts",
                 new=AsyncMock(side_effect=lambda texts, settings: [[0.1] * 8 for _ in texts]),
             ):
                 count = await rebuild_embeddings(
@@ -150,7 +150,7 @@ class RebuildEmbeddingsTests(unittest.IsolatedAsyncioTestCase):
                 return [[0.1] * 8 for _ in texts]
 
             with patch(
-                "curatorx.library.embeddings.embed_texts",
+                "projectionist.library.embeddings.embed_texts",
                 new=AsyncMock(side_effect=tracking_embed),
             ):
                 first = await rebuild_embeddings(db, Settings(), batch_size=2)

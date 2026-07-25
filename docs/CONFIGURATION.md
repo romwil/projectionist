@@ -2,6 +2,10 @@
 
 Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` in Docker, `./config` locally). Environment variables override file values when set.
 
+### Projectionist env prefix (compat window)
+
+Canonical branded variables use the `PROJECTIONIST_*` prefix. Matching `CURATORX_*` names are still read for ~2 releases when the new key is unset; the runtime logs a deprecation warning when a legacy key supplies the value. Prefer `PROJECTIONIST_*` on new installs and when you next edit Compose / Unraid templates.
+
 ---
 
 ## Required
@@ -35,7 +39,7 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 |---------|---------|-------------|
 | Fanart.tv key | `FANART_API_KEY` | Rich poster/backdrop art |
 | TVDB key | `TVDB_API_KEY` | TV metadata parity (client present; sync wiring partial) |
-| Long synopsis source | `CURATORX_LONG_SYNOPSIS_SOURCE` | Idle long plots. Default **`wikipedia`** (free, no key, deeper plot without LLM). Prefer **`off`** to disable (also empty/`none`/`disabled`). Or `omdb` / `auto`. Never overwrites Plex/TMDB. |
+| Long synopsis source | `PROJECTIONIST_LONG_SYNOPSIS_SOURCE` (alias `CURATORX_LONG_SYNOPSIS_SOURCE`) | Idle long plots. Default **`wikipedia`** (free, no key, deeper plot without LLM). Prefer **`off`** to disable (also empty/`none`/`disabled`). Or `omdb` / `auto`. Never overwrites Plex/TMDB. |
 | OMDb API key | `OMDB_API_KEY` | Required only when synopsis source is `omdb` (or `auto` fallback). Free OMDb key. |
 
 | Tautulli URL / key | `TAUTULLI_URL`, `TAUTULLI_API_KEY` | Watch stats for purge scoring |
@@ -47,12 +51,12 @@ Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` 
 | TV page size | `tv_page_size` in settings | Plex TV fetch batch size (50–2000, default 500) |
 | Library enrich workers | `library_enrich_workers` in settings | Parallel workers for TMDB/Fanart enrichment **and** TV episode Plex fetches during library sync (1–16, default 6). SQLite upserts stay serial. |
 | Sync reviews to Plex | `sync_reviews_to_plex` in settings | When `true`, saving a 1–5 star review writes the matching Plex user rating (2/4/6/8/10) via `PUT /:/rate` |
-| Log level | `CURATORX_LOG_LEVEL` or `LOG_LEVEL` | `ERROR`, `WARNING`, `INFO` (default), or `DEBUG` |
-| Log format | `LOG_FORMAT` or `CURATORX_LOG_FORMAT` | `text` (default) or `json` |
-| Privacy MCP key | `CURATORX_MCP_API_KEY` | Enables HTTP `/mcp` in **privacy** mode (public schema, read-only). Or generate in **Admin → Advanced**. |
-| Full MCP key | `CURATORX_MCP_FULL_API_KEY` | Enables `/mcp` in **full** mode (internal fields + confirm-gated *arr proposes). Must differ from the privacy key. |
-| Session secret | `CURATORX_SESSION_SECRET` | Multi-user session cookies (auto-generated under `DATA_DIR` if unset) |
-| Webhook secret | `CURATORX_WEBHOOK_SECRET` | Required for Plex webhook auth (`X-CuratorX-Webhook-Secret`) |
+| Log level | `PROJECTIONIST_LOG_LEVEL` (alias `CURATORX_LOG_LEVEL`) or `LOG_LEVEL` | `ERROR`, `WARNING`, `INFO` (default), or `DEBUG` |
+| Log format | `LOG_FORMAT` or `PROJECTIONIST_LOG_FORMAT` (alias `CURATORX_LOG_FORMAT`) | `text` (default) or `json` |
+| Privacy MCP key | `PROJECTIONIST_MCP_API_KEY` (alias `CURATORX_MCP_API_KEY`) | Enables HTTP `/mcp` in **privacy** mode (public schema, read-only). Or generate in **Admin → Advanced**. |
+| Full MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` (alias `CURATORX_MCP_FULL_API_KEY`) | Enables `/mcp` in **full** mode (internal fields + confirm-gated *arr proposes). Must differ from the privacy key. |
+| Session secret | `PROJECTIONIST_SESSION_SECRET` (alias `CURATORX_SESSION_SECRET`) | Multi-user session cookies (auto-generated under `DATA_DIR` if unset) |
+| Webhook secret | `PROJECTIONIST_WEBHOOK_SECRET` (alias `CURATORX_WEBHOOK_SECRET`) | Required for Plex webhook auth (`X-Projectionist-Webhook-Secret` or legacy `X-CuratorX-Webhook-Secret`) |
 
 MCP details: [MCP.md](MCP.md). Privacy disclosure: [PRIVACY.md](PRIVACY.md) and in-app `/privacy`.
 
@@ -275,7 +279,7 @@ If your CuratorX instance is reachable from outside your trusted LAN, set a shar
 
 | Setting | Env var | Header |
 |---------|---------|--------|
-| `webhook_secret` | `CURATORX_WEBHOOK_SECRET` | `X-CuratorX-Webhook-Secret` |
+| `webhook_secret` | `PROJECTIONIST_WEBHOOK_SECRET` (alias `CURATORX_WEBHOOK_SECRET`) | `X-Projectionist-Webhook-Secret` (or legacy `X-CuratorX-Webhook-Secret`) |
 
 When `webhook_secret` is non-empty, every `POST /api/webhooks/plex` must include the header with the same value. Requests without a matching header receive **401 Unauthorized**. When the secret is empty (default), webhooks work as before with no header required.
 

@@ -10,7 +10,7 @@ from pathlib import Path
 from unittest import skipUnless
 
 try:
-    from curatorx.mcp import server as mcp_server
+    from projectionist.mcp import server as mcp_server
 
     HAS_MCP = True
 except Exception:  # noqa: BLE001
@@ -29,9 +29,9 @@ class McpExpandTests(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def test_what_to_watch_and_purge_tools(self) -> None:
-        path = Path(self._tmpdir.name) / "curatorx.db"
+        path = Path(self._tmpdir.name) / "projectionist.db"
         # Ensure DB exists via Database ctor used by mcp helpers
-        from curatorx.library.db import Database
+        from projectionist.library.db import Database
 
         Database(path).ensure_seed_data()
         out = json.loads(mcp_server.what_to_watch_tonight(limit=5))

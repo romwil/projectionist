@@ -130,7 +130,7 @@ export default function TasteSettingsPage() {
   return (
     <div className="settings-stack" data-testid="settings-taste">
       <SettingsPageHeader title="Taste">
-        Tune how strongly CuratorX leans on each cluster. Lock a weight so the weekly refresh cannot
+        Tune how strongly Projectionist leans on each cluster. Lock a weight so the weekly refresh cannot
         drift it.
       </SettingsPageHeader>
 

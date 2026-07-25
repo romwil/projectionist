@@ -126,7 +126,7 @@ describe("owner title-detail delete gating", () => {
   it("formats success notice and reads it from location state", () => {
     assert.equal(
       formatLibraryDeleteSuccessMessage({ deleted: 1, title: "Dune" }),
-      'Removed "Dune" from the CuratorX library index.',
+      'Removed "Dune" from the Projectionist library index.',
     );
     assert.equal(
       formatLibraryDeleteSuccessMessage({ deleted: 0, title: "Dune" }),

@@ -1,9 +1,14 @@
 .git
 .github
 .venv
-__pycache__
+__pycache__/
 *.pyc
 *.pyo
+*.egg-info/
+*.egg
+build/
+dist/
+.eggs/
 .pytest_cache
 .mypy_cache
 .ruff_cache

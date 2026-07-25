@@ -16,16 +16,20 @@ FROM python:3.12-slim
 
 # Build-time identity (passed by scripts/docker-release.sh). These must land in
 # LABEL + a file layer so every release has a unique image config digest.
-ARG CURATORX_VERSION=dev
+# PROJECTIONIST_VERSION is canonical; CURATORX_VERSION remains an alias for one release.
+ARG PROJECTIONIST_VERSION=dev
+ARG CURATORX_VERSION=
 ARG BUILD_DATE=unknown
 ARG VCS_REF=unknown
+# Resolve version: prefer PROJECTIONIST_VERSION when non-default, else CURATORX_VERSION alias.
+ARG RESOLVED_VERSION=${PROJECTIONIST_VERSION}
 
-LABEL org.opencontainers.image.title="CuratorX" \
-      org.opencontainers.image.description="Chat-first Plex collection curator for self-hosted homelabs" \
-      org.opencontainers.image.version="${CURATORX_VERSION}" \
+LABEL org.opencontainers.image.title="Projectionist" \
+      org.opencontainers.image.description="Cinema intelligence for your personal archive" \
+      org.opencontainers.image.version="${PROJECTIONIST_VERSION}" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
-      org.opencontainers.image.source="https://github.com/romwil/curatorx" \
+      org.opencontainers.image.source="https://github.com/romwil/projectionist" \
       org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
@@ -35,21 +39,25 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md LICENSE ./
-COPY curatorx ./curatorx
+COPY projectionist ./projectionist
 COPY --from=frontend /frontend/dist ./frontend/dist
 
 # File-level cache bust: guarantees layer content differs every release even when
 # only labels would change. Does NOT make Unraid Force Update pull by itself —
 # Dockerman still depends on Docker Engine re-resolving the tag (see docs/DOCKER.md).
-RUN echo "${CURATORX_VERSION} built ${BUILD_DATE} rev ${VCS_REF}" > /app/.build-info
+# Prefer PROJECTIONIST_VERSION; fall back to CURATORX_VERSION when the new arg is unset/dev
+# and the legacy alias was passed (compat for one release of docker-release.sh).
+RUN VERSION="${PROJECTIONIST_VERSION}"; \
+    if [ "$VERSION" = "dev" ] && [ -n "$CURATORX_VERSION" ]; then VERSION="$CURATORX_VERSION"; fi; \
+    echo "${VERSION} built ${BUILD_DATE} rev ${VCS_REF}" > /app/.build-info
 
 RUN pip install --no-cache-dir ".[web,mcp]"
 
 # Non-root user (security finding S13). UID/GID 1000 — entrypoint script
 # auto-chowns /config and drops to this user via gosu.
-RUN addgroup --system --gid 1000 curatorx \
-    && adduser --system --uid 1000 --ingroup curatorx curatorx \
-    && mkdir -p /config && chown curatorx:curatorx /config
+RUN addgroup --system --gid 1000 projectionist \
+    && adduser --system --uid 1000 --ingroup projectionist projectionist \
+    && mkdir -p /config && chown projectionist:projectionist /config
 
 ENV DATA_DIR=/config
 ENV PORT=8788
@@ -65,4 +73,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
     CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/api/health')" || exit 1
 
 ENTRYPOINT ["/docker-entrypoint.sh"]
-CMD ["python", "-m", "curatorx.web"]
+CMD ["python", "-m", "projectionist.web"]

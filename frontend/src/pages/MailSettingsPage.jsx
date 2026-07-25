@@ -26,14 +26,14 @@ export default function MailSettingsPage() {
     enabled: false,
     provider: "off",
     from_email: "",
-    from_name: "CuratorX",
+    from_name: "Projectionist",
     smtp_host: "",
     smtp_port: 587,
     smtp_username: "",
     smtp_password: "",
     smtp_use_tls: true,
     resend_api_key: "",
-    subject_prefix: "[CuratorX]",
+    subject_prefix: "[Projectionist]",
     footer_text: "",
     logo_url: "",
     smtp_password_set: false,
@@ -94,7 +94,7 @@ export default function MailSettingsPage() {
           enabled: Boolean(mail.enabled),
           provider: mail.provider || "off",
           from_email: mail.from_email || "",
-          from_name: mail.from_name || "CuratorX",
+          from_name: mail.from_name || "Projectionist",
           smtp_host: mail.smtp_host || "",
           smtp_port: Number(mail.smtp_port) || 587,
           smtp_username: mail.smtp_username || "",
@@ -170,7 +170,7 @@ export default function MailSettingsPage() {
   return (
     <div className="settings-stack" data-testid="admin-mail">
       <SettingsPageHeader title="Mail">
-        Configure SMTP or Resend so CuratorX can email recommendations, arrivals, and digests.
+        Configure SMTP or Resend so Projectionist can email recommendations, arrivals, and digests.
         Secrets are stored like other settings (owner-only, file mode 0600).
       </SettingsPageHeader>
 

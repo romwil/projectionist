@@ -6,7 +6,7 @@ import {
 } from "../lib/bulkLibraryDelete.js";
 
 /**
- * Hard-confirm dialog for removing CuratorX library index records by rating_key.
+ * Hard-confirm dialog for removing Projectionist library index records by rating_key.
  * Does not delete Plex media files.
  */
 export default function BulkLibraryDeleteDialog({
@@ -45,7 +45,7 @@ export default function BulkLibraryDeleteDialog({
         <header className="bulk-delete-modal-header">
           <div>
             <p className="eyebrow">Owner action</p>
-            <h2 id="bulk-library-delete-title">Delete from CuratorX library</h2>
+            <h2 id="bulk-library-delete-title">Delete from Projectionist library</h2>
           </div>
           <button
             type="button"
@@ -59,7 +59,7 @@ export default function BulkLibraryDeleteDialog({
         </header>
 
         <p className="bulk-delete-modal-warning">
-          This removes {preview.total} title{preview.total === 1 ? "" : "s"} from the CuratorX
+          This removes {preview.total} title{preview.total === 1 ? "" : "s"} from the Projectionist
           library index. It does <strong>not</strong> delete files from Plex. Titles still in Plex
           can reappear on the next library sync.
         </p>

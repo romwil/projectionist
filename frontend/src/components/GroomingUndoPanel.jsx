@@ -15,7 +15,7 @@ import {
  * One-click grooming rerun + safe undo of the last destructive grooming run.
  *
  * "Rerun grooming" recomputes purge candidates (a non-destructive grooming pass).
- * Undo restores the CuratorX index rows a purge delete removed; it does not touch
+ * Undo restores the Projectionist index rows a purge delete removed; it does not touch
  * Plex files (the delete never did) and embeddings backfill on the next enrichment.
  */
 export default function GroomingUndoPanel({ onChanged }) {
@@ -94,7 +94,7 @@ export default function GroomingUndoPanel({ onChanged }) {
       </div>
 
       <p className="scheduled-task-meta">
-        Undo restores the CuratorX index rows a purge delete removed. Plex media files
+        Undo restores the Projectionist index rows a purge delete removed. Plex media files
         are never touched, and plot embeddings backfill on the next enrichment cycle.
       </p>
 

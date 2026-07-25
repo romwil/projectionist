@@ -1,25 +1,25 @@
 # Installation
 
-CuratorX runs as a **single container**. Persist `/config` for `settings.json`, `curatorx.db`, and `jobs_state.json`. The image runs as non-root user `curatorx` (UID/GID 1000); the entrypoint auto-fixes `/config` ownership on upgrade.
+Projectionist runs as a **single container**. Persist `/config` for `settings.json`, `projectionist.db`, and `jobs_state.json`. The image runs as non-root user `curatorx` (UID/GID 1000); the entrypoint auto-fixes `/config` ownership on upgrade.
 
 ## Docker Hub (fastest)
 
 Multi-arch images (**linux/amd64** + **linux/arm64**):
 
 ```bash
-docker pull romwil/curatorx:latest
+docker pull romwil/projectionist:latest
 
-docker run -d --name curatorx --restart unless-stopped \
+docker run -d --name projectionist --restart unless-stopped \
   -p 8788:8788 \
-  -v /path/to/curatorx/config:/config \
-  romwil/curatorx:latest
+  -v /path/to/projectionist/config:/config \
+  romwil/projectionist:latest
 ```
 
 | Tag | Meaning |
 |-----|---------|
-| `romwil/curatorx:latest` | Newest stable (CA template default) |
-| `romwil/curatorx:X.Y` | Minor line (e.g. `:1.12`) — floats within the line |
-| `romwil/curatorx:X.Y.Z` | Exact release (e.g. `:1.12.0`) |
+| `romwil/projectionist:latest` | Newest stable (CA template default) |
+| `romwil/projectionist:X.Y` | Minor line (e.g. `:1.12`) — floats within the line |
+| `romwil/projectionist:X.Y.Z` | Exact release (e.g. `:1.12.0`) |
 
 Open **http://\<host\>:8788**.
 
@@ -33,7 +33,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-Compose builds from the local `Dockerfile` by default. To run the published image instead, set the image to `romwil/curatorx:latest` in `docker-compose.yml`.
+Compose builds from the local `Dockerfile` by default. To run the published image instead, set the image to `romwil/projectionist:latest` in `docker-compose.yml`.
 
 ## Local (dev)
 
@@ -42,7 +42,7 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[web]"
 cd frontend && npm install && npm run build && cd ..
-DATA_DIR=./config python -m curatorx.web
+DATA_DIR=./config python -m projectionist.web
 ```
 
 ## After install

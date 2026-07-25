@@ -18,21 +18,21 @@ from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Mapping, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from curatorx.agent.curator import (
+from projectionist.agent.curator import (
     CuratorAgent,
     _cards_for_response,
     _extract_text,
     _extract_tool_calls,
     stream_agent,
 )
-from curatorx.agent.providers import (
+from projectionist.agent.providers import (
     AnthropicProvider,
     LLMProviderError,
     OpenAICompatibleProvider,
 )
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
-from curatorx.models.schemas import TitleCard
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.models.schemas import TitleCard
 
 
 def _make_db(tmp: Path) -> Database:
@@ -86,7 +86,7 @@ class TokenEventFormatTests(unittest.IsolatedAsyncioTestCase):
             provider.stream = fake_stream
             provider.chat = AsyncMock()
 
-            with patch("curatorx.agent.curator.get_chat_provider", return_value=provider):
+            with patch("projectionist.agent.curator.get_chat_provider", return_value=provider):
                 chunks: List[str] = []
                 async for chunk in stream_agent(
                     db, settings, "sess-tok", "hi",
@@ -118,7 +118,7 @@ class TokenEventFormatTests(unittest.IsolatedAsyncioTestCase):
             provider.stream = fake_stream
             provider.chat = AsyncMock()
 
-            with patch("curatorx.agent.curator.get_chat_provider", return_value=provider):
+            with patch("projectionist.agent.curator.get_chat_provider", return_value=provider):
                 chunks = [c async for c in stream_agent(
                     db, settings, "sess-fmt", "hello",
                     lens_id=DEFAULT_LENS_ID,
@@ -182,7 +182,7 @@ class ToolCallEventFormatTests(unittest.IsolatedAsyncioTestCase):
             mock_registry.execute = AsyncMock(return_value='[{"title":"Chinatown"}]')
 
             with (
-                patch("curatorx.agent.curator.get_chat_provider", return_value=provider),
+                patch("projectionist.agent.curator.get_chat_provider", return_value=provider),
                 patch.object(CuratorAgent, "_registry", return_value=mock_registry),
             ):
                 chunks = [c async for c in stream_agent(
@@ -228,7 +228,7 @@ class GracefulFallbackTests(unittest.IsolatedAsyncioTestCase):
             provider.stream = failing_stream
             provider.chat = AsyncMock(return_value=buffered_response)
 
-            with patch("curatorx.agent.curator.get_chat_provider", return_value=provider):
+            with patch("projectionist.agent.curator.get_chat_provider", return_value=provider):
                 chunks = [c async for c in stream_agent(
                     db, settings, "sess-fb", "fallback test",
                     lens_id=DEFAULT_LENS_ID,
@@ -267,8 +267,8 @@ class GracefulFallbackTests(unittest.IsolatedAsyncioTestCase):
             )
 
             with (
-                patch("curatorx.agent.curator.get_chat_provider", return_value=provider),
-                patch("curatorx.agent.curator._extract_text", return_value=None),
+                patch("projectionist.agent.curator.get_chat_provider", return_value=provider),
+                patch("projectionist.agent.curator._extract_text", return_value=None),
             ):
                 chunks = [
                     c
@@ -306,7 +306,7 @@ class CompleteMessageAssemblyTests(unittest.IsolatedAsyncioTestCase):
             provider.stream = fake_stream
             provider.chat = AsyncMock()
 
-            with patch("curatorx.agent.curator.get_chat_provider", return_value=provider):
+            with patch("projectionist.agent.curator.get_chat_provider", return_value=provider):
                 chunks = [c async for c in stream_agent(
                     db, settings, "sess-asm", "what is the answer?",
                     lens_id=DEFAULT_LENS_ID,
@@ -337,7 +337,7 @@ class CompleteMessageAssemblyTests(unittest.IsolatedAsyncioTestCase):
             provider.stream = fake_stream
             provider.chat = AsyncMock()
 
-            with patch("curatorx.agent.curator.get_chat_provider", return_value=provider):
+            with patch("projectionist.agent.curator.get_chat_provider", return_value=provider):
                 chunks = [c async for c in stream_agent(
                     db, settings, "sess-pt", "test",
                     lens_id=DEFAULT_LENS_ID,
@@ -422,7 +422,7 @@ class MultiRoundProsePreservationTests(unittest.IsolatedAsyncioTestCase):
             mock_registry.execute = AsyncMock(return_value='[{"title":"Chinatown"}]')
 
             with (
-                patch("curatorx.agent.curator.get_chat_provider", return_value=provider),
+                patch("projectionist.agent.curator.get_chat_provider", return_value=provider),
                 patch.object(CuratorAgent, "_registry", return_value=mock_registry),
             ):
                 chunks = [c async for c in stream_agent(

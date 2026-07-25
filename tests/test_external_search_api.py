@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.auth import clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.web.auth import clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 
 def _movie_page():
@@ -56,10 +56,10 @@ class ExternalSearchApiTests(unittest.TestCase):
         self._settings_path = Path(self._tmpdir.name) / "settings.json"
         self._write_settings(tmdb=True)
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         app_mod.DATA_DIR = Path(self._tmpdir.name)
@@ -119,7 +119,7 @@ class ExternalSearchApiTests(unittest.TestCase):
 
     def _login(self, plex_id: int, title: str) -> None:
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": plex_id, "title": title, "email": f"{title}@example.com"},
         ):
             resp = self.client.post("/api/auth/plex", json={"auth_token": f"token-{plex_id}"})
@@ -132,7 +132,7 @@ class ExternalSearchApiTests(unittest.TestCase):
         mock_tmdb.backdrop_url.return_value = ""
         return mock_tmdb
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     def test_success_returns_titlecard_items(self, mock_cls) -> None:
         self._mock_tmdb(mock_cls)
         resp = self.client.get("/api/search/external", params={"q": "the matrix", "media_type": "movie"})
@@ -147,7 +147,7 @@ class ExternalSearchApiTests(unittest.TestCase):
             self.assertIn("already_queued", item)
             self.assertIn("in_library", item)
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     def test_dedupe_flags_owned_title_in_library(self, mock_cls) -> None:
         self._mock_tmdb(mock_cls)
         resp = self.client.get("/api/search/external", params={"q": "the matrix"})
@@ -169,7 +169,7 @@ class ExternalSearchApiTests(unittest.TestCase):
         resp = self.client.get("/api/search/external", params={"q": "   "})
         self.assertEqual(resp.status_code, 400)
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     def test_member_gets_public_schema(self, mock_cls) -> None:
         self._mock_tmdb(mock_cls)
         self.client.post("/api/auth/logout")
@@ -187,7 +187,7 @@ class ExternalSearchApiTests(unittest.TestCase):
             self.assertIn("in_library", item)
             self.assertIn("already_queued", item)
 
-    @patch("curatorx.library.external_search.TMDBClient")
+    @patch("projectionist.library.external_search.TMDBClient")
     def test_guest_can_search_beyond_collection(self, mock_cls) -> None:
         self._mock_tmdb(mock_cls)
         self.client.post("/api/auth/logout")

@@ -7,9 +7,9 @@ import unittest
 from pathlib import Path
 from typing import Any, Callable, Dict
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.scheduler.engine import (
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.scheduler.engine import (
     DEFAULT_QUARANTINE_COOLDOWN_SECONDS,
     QUARANTINE_THRESHOLD,
     IdleScheduler,

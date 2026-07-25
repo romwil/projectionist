@@ -97,7 +97,7 @@ export default function NotificationsSettingsPage() {
   return (
     <div className="settings-stack" data-testid="settings-notifications">
       <SettingsPageHeader title="Notifications">
-        Choose where CuratorX reaches you — the in-app inbox, optional email, and the weekly newsletter.
+        Choose where Projectionist reaches you — the in-app inbox, optional email, and the weekly newsletter.
       </SettingsPageHeader>
 
       <form onSubmit={handleSave}>
@@ -122,7 +122,7 @@ export default function NotificationsSettingsPage() {
             checked={inboxOn}
             onChange={setInboxOn}
             label="In-app inbox"
-            help="Show recommendations, arrivals, digests, and nudges in CuratorX."
+            help="Show recommendations, arrivals, digests, and nudges in Projectionist."
             testId="notifications-inbox-toggle"
           />
           <SettingsToggle

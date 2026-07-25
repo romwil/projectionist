@@ -9,10 +9,10 @@ import unittest
 from pathlib import Path
 from typing import Any, Callable, Dict
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
-from curatorx.scheduler.run_history import (
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.run_history import (
     aggregate_task_rate,
     append_task_run,
     extract_items_processed,

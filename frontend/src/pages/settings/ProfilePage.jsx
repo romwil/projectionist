@@ -124,7 +124,7 @@ export default function ProfilePage() {
   return (
     <div className="settings-stack" data-testid="settings-profile">
       <SettingsPageHeader title="Profile" testId="settings-profile-header">
-        How you appear to CuratorX. Preferred name is what the curator calls you in chat.
+        How you appear to Projectionist. Preferred name is what the curator calls you in chat.
       </SettingsPageHeader>
 
       <SettingsPanel title="Identity" testId="settings-profile-identity">
@@ -218,7 +218,7 @@ export default function ProfilePage() {
 
         <SettingsPanel
           title="Text size"
-          lead="Scales UI text across CuratorX. Default is medium."
+          lead="Scales UI text across Projectionist. Default is medium."
           testId="font-size-fieldset"
         >
           <div className="settings-font-size-options" role="radiogroup" aria-label="Text size">

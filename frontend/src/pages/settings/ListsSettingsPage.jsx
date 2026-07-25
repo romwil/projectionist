@@ -221,7 +221,7 @@ export default function ListsSettingsPage() {
       <header className="settings-section-header">
         <h2>Lists</h2>
         <p>
-          Named shelves on CuratorX. Lists stay local for now — Plex Discover personal Lists have no
+          Named shelves on Projectionist. Lists stay local for now — Plex Discover personal Lists have no
           public publish API yet.
         </p>
       </header>

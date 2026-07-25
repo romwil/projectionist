@@ -1,5 +1,5 @@
 /**
- * Shared primary destinations and role gating for CuratorX chrome.
+ * Shared primary destinations and role gating for Projectionist chrome.
  *
  * This is the single source of truth for peer destinations: `PrimaryTopbar`
  * renders `buildPrimaryNavItems` as icons and the AppNav drawer renders

@@ -1,6 +1,6 @@
 # FAQ
 
-The CuratorX FAQ is maintained in one place to avoid drift:
+The Projectionist FAQ is maintained in one place to avoid drift:
 
 **➡️ [docs/FAQ.md](../FAQ.md)**
 

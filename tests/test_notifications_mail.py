@@ -12,18 +12,18 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import MailSettings, Settings
-from curatorx.library.db import Database
-from curatorx.mail.transport import MailSendResult, mail_configured
-from curatorx.notifications.arrivals import notify_arrivals
-from curatorx.notifications.newsletters import (
+from projectionist.config_store import MailSettings, Settings
+from projectionist.library.db import Database
+from projectionist.mail.transport import MailSendResult, mail_configured
+from projectionist.notifications.arrivals import notify_arrivals
+from projectionist.notifications.newsletters import (
     build_member_newsletter,
     deliver_weekly_newsletters,
 )
-from curatorx.notifications.service import deliver_notification
-from curatorx.web.auth import clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache
+from projectionist.notifications.service import deliver_notification
+from projectionist.web.auth import clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache
 
 
 class MailTransportTests(unittest.TestCase):
@@ -64,18 +64,18 @@ class NotificationPlatformTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -109,7 +109,7 @@ class NotificationPlatformTests(unittest.TestCase):
             "email": email,
             "thumb": None,
         }
-        with patch("curatorx.web.auth.fetch_plex_account", return_value=profile):
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
             resp = self.client.post("/api/auth/plex", json={"auth_token": f"tok-{plex_id}"})
         self.assertEqual(resp.status_code, 200)
         return resp.json()["user"]
@@ -196,7 +196,7 @@ class NotificationPlatformTests(unittest.TestCase):
         self.assertTrue(mail.get("resend_api_key_set"))
         self.assertEqual(mail.get("resend_api_key"), "")
 
-        import curatorx.mail as mail_mod
+        import projectionist.mail as mail_mod
 
         with patch.object(
             mail_mod,
@@ -354,7 +354,7 @@ class NotificationPlatformTests(unittest.TestCase):
             )
         settings = Settings()
         with patch(
-            "curatorx.notifications.arrivals.feed_recently_added",
+            "projectionist.notifications.arrivals.feed_recently_added",
             return_value={
                 "items": [
                     {

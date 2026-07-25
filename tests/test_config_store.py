@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.config_store import (
+from projectionist.config_store import (
     Settings,
     load_dotenv_file,
     load_merged_settings,
@@ -314,7 +314,7 @@ class ConfigStoreTests(unittest.TestCase):
         self.assertFalse(settings.seerr.require_linked_user_for_requests)
 
     def test_feature_flags_round_trip(self) -> None:
-        from curatorx.config_store import AuthSettings, FeatureFlags, SeerrSettings
+        from projectionist.config_store import AuthSettings, FeatureFlags, SeerrSettings
 
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = Path(tmp)

@@ -1,50 +1,74 @@
-# CuratorX
+# Projectionist
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fcuratorx-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/curatorx)
-[![Version](https://img.shields.io/badge/version-1.26.0-green.svg)](CHANGELOG.md)
+[![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fprojectionist-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/projectionist)
+[![Version](https://img.shields.io/badge/version-1.27.0-green.svg)](CHANGELOG.md)
 
-**Agentic access to your structured + unstructured local media data — chat curator, Explore hub, and privacy-first MCP for self-hosted Plex.**
+**Cinema intelligence for your personal archive.**
 
-CuratorX sits between Plex and your *arr stack: talk about taste, browse Explore rails, find gaps and purge candidates, rate what you watched, and add titles to Radarr or Sonarr only after you confirm. Bring your own LLM (cloud or local). Built for Unraid and Docker.
+Projectionist is an open-source, self-hosted cinema intelligence engine and agentic companion for personal media libraries — local-first, zero-telemetry, with vector mapping, multi-signal taste modeling, MCP access, and hardened multi-tenant roles (Owner / Member / Youth / Guest).
 
-**Privacy:** CuratorX is self-hosted — see [PRIVACY.md](docs/PRIVACY.md) (also the in-app **`/privacy`** page) for what is stored, what household members vs owners see, and what MCP / the LLM receive. Operators: [SECURITY.md](docs/SECURITY.md).
-
-> Ordinary recommenders blend everything you’ve ever watched. CuratorX keeps taste contexts separate so a comfort binge doesn’t reshape your discovery lane.
+It sits between Plex and your *arr stack: talk about taste, browse Explore rails, find gaps and purge candidates, rate what you watched, and add titles to Radarr or Sonarr only after you confirm. Bring your own LLM (cloud or local). Built for Unraid and Docker.
 
 ---
 
-## Design philosophy
+## Overview
 
-CuratorX is a **real-world, production-quality example of agentic access** to structured and unstructured local data. Structured rows (credits, release dates, facets, relations) and unstructured plot text (Plex summaries, TMDB overviews, optional LLM loglines) live in one SQLite index. The LLM never bulk-exports your collection — it issues targeted tool calls; Explore and Title Detail read the same materialized caches.
+Ordinary recommenders blend everything you’ve ever watched into one noisy profile. Projectionist keeps taste contexts separate so a comfort binge doesn’t reshape your discovery lane — and the LLM never bulk-exports your collection. It issues targeted tool calls against a highly optimized local SQLite index of structured credits/facets and layered plot text. Your Plex token and personal collection stay on your hardware.
 
-> “The LLM gets to act like a natural language surgeon on a highly optimized, predictable local dataset. It’s incredibly fast, it’s cheap, and it keeps your Plex token and personal collection server info locked down.”
-
-Teaching principles: **sync vs idle trickle** (keep interactive sync fast; enrich in the background), **materialize similarity** (`item_neighbors` / `title_relations` instead of per-click O(n²)), **honest provenance** (never invent release dates from year alone), and **homelab SQLite constraints** (WAL, busy timeout, capped idle writers). Dual MCP API keys (privacy / full) let you share read-only library access externally while keeping *arr mutations behind a separate trust boundary. See [MCP.md](docs/MCP.md) and [ARCHITECTURE.md](docs/ARCHITECTURE.md).
+> The LLM gets to act like a natural language surgeon on a highly optimized, predictable local dataset. It’s incredibly fast, it’s cheap, and it keeps your Plex token and personal collection server info locked down.
 
 ---
 
-## Who it’s for
+## Architecture
 
-Homelab folks who already run **Plex** (and usually Radarr/Sonarr), want conversational curation over *their* library — not a Netflix top-10 — and prefer one clear UI over another request queue.
+```
+                 ┌─────────────────────────────┐
+                 │     Projectionist UI / MCP  │
+                 │   (Owner · Member · Youth)  │
+                 └──────────────┬──────────────┘
+                                │
+              ┌─────────────────┼─────────────────┐
+              ▼                 ▼                 ▼
+        ┌──────────┐     ┌────────────┐    ┌────────────┐
+        │  Chat /  │     │  Explore / │    │ Dual-key   │
+        │  Agent   │     │  Plot Lab  │    │ MCP tools  │
+        └────┬─────┘     └─────┬──────┘    └─────┬──────┘
+             │                 │                 │
+             └─────────────────┼─────────────────┘
+                               ▼
+                    ┌────────────────────┐
+                    │  Local SQLite index │
+                    │  + optional vec ANN │
+                    └─────────┬──────────┘
+                              │
+            ┌─────────────────┼─────────────────┐
+            ▼                 ▼                 ▼
+       ┌─────────┐      ┌──────────┐      ┌──────────┐
+       │  Plex   │      │ Radarr / │      │ BYO LLM  │
+       │ library │      │ Sonarr   │      │ endpoint │
+       └─────────┘      └──────────┘      └──────────┘
+```
+
+Teaching principles: **sync vs idle trickle**, **materialize similarity**, **honest provenance**, and **homelab SQLite constraints**. Dual MCP keys (privacy / full) let you share read-only library access externally while keeping *arr mutations behind a separate trust boundary. See [MCP.md](docs/MCP.md) and [ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ---
 
-## Highlights
+## Key capabilities
 
 - **Chat + Explore** — cinema workspace with Lights Up / Lights Down themes; `/explore` browse hub; title detail with trailer, Watch on Plex, and **More Like This** neighbors
 - **Library-grounded curator** — RAG + facet query over structured credits/motifs and layered plot text; explainable “why this?”; agent tools for similar titles, relations, and people
 - **Confirm before you grab** — Radarr / Sonarr (and optional Seerr) writes need an explicit confirm in chat or the status dock
 - **Ratings, watchlists & household recommends** — 1–5★ reviews (optional Plex sync), Plex Discover watchlist pull, peer recommendations inbox
 - **Owner dashboard** — library composition charts, health gauges, multi-select purge, taste timeline
-- **Sync that survives restarts** — durable jobs with live phase / count / %; idle trickle for metadata, embeddings, neighbors, and title relations (circuit breaker)
+- **Sync that survives restarts** — durable jobs with live phase / count / %; idle trickle for metadata, embeddings, neighbors, and title relations
 - **Privacy-first MCP** — dual trust-plane keys over the same local index
 - **Household optional** — **Sign in with Plex** (PIN), optional local password and/or OIDC; roles when multi-user is on
 - **BYOP LLM** — OpenAI, Anthropic, Ollama, or any OpenAI-compatible endpoint; true SSE token streaming
-- **Unraid-ready** — `romwil/curatorx:latest`, single `/config` volume, non-root container, Community Applications template
+- **Unraid-ready** — `romwil/projectionist:latest`, single `/config` volume, non-root container
 
-CuratorX complements disk tools like [Reclaimspace](https://github.com/romwil/reclaimspace): Reclaimspace quarantines duplicate files; CuratorX helps you decide *what* deserves the space.
+Projectionist complements disk tools like [Reclaimspace](https://github.com/romwil/reclaimspace): Reclaimspace quarantines duplicate files; Projectionist helps you decide *what* deserves the space.
 
 ---
 
@@ -53,20 +77,37 @@ CuratorX complements disk tools like [Reclaimspace](https://github.com/romwil/re
 ### Docker Hub (recommended)
 
 ```bash
-docker pull romwil/curatorx:latest
-docker run -d --name curatorx \
+docker pull romwil/projectionist:latest
+docker run -d --name projectionist \
   -p 8788:8788 \
-  -v /path/to/curatorx/config:/config \
-  romwil/curatorx:latest
+  -v /path/to/projectionist/config:/config \
+  romwil/projectionist:latest
 ```
 
 Open **http://localhost:8788** and complete the setup wizard (Name → Connections → Libraries).
 
+During the compatibility window, the same image digests are also published as `romwil/curatorx:*`.
+
 ### Docker Compose
 
+```yaml
+services:
+  projectionist:
+    image: romwil/projectionist:latest
+    ports:
+      - "8788:8788"
+    volumes:
+      - ./config:/config
+    environment:
+      - PROJECTIONIST_SESSION_SECRET=change-me
+    restart: unless-stopped
+```
+
+Or from a clone:
+
 ```bash
-git clone https://github.com/romwil/curatorx.git
-cd curatorx
+git clone https://github.com/romwil/projectionist.git
+cd projectionist
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -78,8 +119,9 @@ python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[web]"
 cd frontend && npm install && npm run build && cd ..
-DATA_DIR=./config python -m curatorx.web
+DATA_DIR=./config python -m projectionist.web
 ```
+
 ### Windows (PowerShell)
 
 WSL/bash is not required. One-shot setup: `.\scripts\setup-dev.ps1`. Or from the repo root:
@@ -90,7 +132,7 @@ python -m venv .venv
 python -m pip install -e ".[web]"
 cd frontend; npm install; npm run build; cd ..
 $env:DATA_DIR = ".\config"
-python -m curatorx.web
+python -m projectionist.web
 ```
 
 Or: `.\scripts\dev-server.ps1` (builds the frontend if needed; default **http://127.0.0.1:8788**).
@@ -102,8 +144,8 @@ winget install -e --id Python.Python.3.12 --scope user --accept-package-agreemen
 Remove-Item -Recurse -Force .venv -ErrorAction SilentlyContinue
 .\scripts\setup-dev.ps1
 ```
-**E2E (mocked Playwright, port 8799):** `.\scripts\run-e2e.ps1` or `npm run test:e2e`. Playwright starts the app via `node scripts/start-e2e-server.mjs` (not bash). Avoid using **8788** for e2e if that port is an SSH tunnel to production.
 
+**E2E (mocked Playwright, port 8799):** `.\scripts\run-e2e.ps1` or `npm run test:e2e`. Playwright starts the app via `node scripts/start-e2e-server.mjs` (not bash). Avoid using **8788** for e2e if that port is an SSH tunnel to production.
 
 ---
 
@@ -113,17 +155,20 @@ Published multi-arch images (**amd64 + arm64**):
 
 | Tag | Use |
 |-----|-----|
-| [`romwil/curatorx:latest`](https://hub.docker.com/r/romwil/curatorx) | Everyday Unraid / Compose (CA template default) |
-| [`romwil/curatorx:<MAJOR.MINOR>`](https://hub.docker.com/r/romwil/curatorx) | Track a minor line (e.g. the current `1.11` line) |
-| [`romwil/curatorx:<X.Y.Z>`](https://hub.docker.com/r/romwil/curatorx) | Pin an exact release (see [CHANGELOG.md](CHANGELOG.md)) |
+| [`romwil/projectionist:latest`](https://hub.docker.com/r/romwil/projectionist) | Everyday Unraid / Compose (CA template default) |
+| [`romwil/projectionist:<MAJOR.MINOR>`](https://hub.docker.com/r/romwil/projectionist) | Track a minor line |
+| [`romwil/projectionist:<X.Y.Z>`](https://hub.docker.com/r/romwil/projectionist) | Pin an exact release (see [CHANGELOG.md](CHANGELOG.md)) |
 
-**Unraid:** install from Community Applications using the template (`templates/curatorx.xml` / `unraid/curatorx.xml`; CA icons at `unraid/curatorx-icon.png` / `unraid/curatorx-icon-512.png`), or add the container manually:
+**Unraid:** install from Community Applications using the Projectionist template (or add the container manually):
 
 | Setting | Value |
 |---------|-------|
-| Repository | `romwil/curatorx:latest` |
+| Repository | `romwil/projectionist:latest` |
 | Port | `8788` |
-| Config path | `/mnt/user/appdata/curatorx/config` → `/config` |
+| Config path (existing installs) | `/mnt/user/appdata/curatorx/config` → `/config` |
+| Config path (new installs) | `/mnt/user/appdata/projectionist/config` → `/config` is fine |
+
+Existing Unraid installs should keep `/mnt/user/appdata/curatorx*` — those host paths are stable. New installs may use `…/projectionist`.
 
 Full steps: [Wiki → Unraid](docs/wiki/Unraid.md) · [Docker guide](docs/DOCKER.md)
 
@@ -135,7 +180,26 @@ Settings live in `{DATA_DIR}/settings.json` (Docker: `/config/settings.json`). E
 
 **Config is for connecting services:** Plex server URL + **server token** (library sync), movie/TV libraries, TMDB, your LLM, and optionally Radarr/Sonarr. That server token is not the household login path.
 
-See [CONFIGURATION.md](docs/CONFIGURATION.md) and [Wiki → Configuration](docs/wiki/Configuration.md).
+### Environment variables (branded prefix)
+
+Prefer `PROJECTIONIST_*`. During the compatibility window (~2 releases), matching `CURATORX_*` values are still read when the new key is absent.
+
+| Variable | Purpose |
+|----------|---------|
+| `PROJECTIONIST_SESSION_SECRET` | Session signing secret |
+| `PROJECTIONIST_WEBHOOK_SECRET` | Shared secret for inbound webhooks |
+| `PROJECTIONIST_MCP_*` | MCP mode / API keys (see [MCP.md](docs/MCP.md)) |
+| `PROJECTIONIST_GUEST_TOUR_ENABLED` | Guest tour gate |
+| `PROJECTIONIST_LOG_LEVEL` | Logging verbosity |
+| `DATA_DIR` | Config + SQLite directory (unchanged; not brand-prefixed) |
+
+See [CONFIGURATION.md](docs/CONFIGURATION.md) and [Wiki → Configuration](docs/wiki/Configuration.md) for the full matrix.
+
+---
+
+## Privacy & zero telemetry
+
+Projectionist is self-hosted and **zero-telemetry by design** — no phone-home analytics, no cloud account required for the product itself. See [PRIVACY.md](docs/PRIVACY.md) (also the in-app **`/privacy`** page) for what is stored, what household members vs owners see, and what MCP / the LLM receive. Operators: [SECURITY.md](docs/SECURITY.md).
 
 ---
 
@@ -174,7 +238,7 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | [Configuration](docs/CONFIGURATION.md) | Env vars and settings |
 | [Docker / Unraid](docs/DOCKER.md) | Container deployment |
 | [Release runbook](docs/RELEASE.md) | Version bump, CHANGELOG, GitHub release, multi-arch Docker Hub |
-| [Delight wishlist](docs/DELIGHT-WISHLIST.md) | Persona backlog + the phased delight roadmap (Phases 1–2 shipped; 3–5 planned) |
+| [Delight wishlist](docs/DELIGHT-WISHLIST.md) | Persona backlog + the phased delight roadmap |
 | [Documentation style](docs/DOCS_STYLE.md) | The durable docs standard (warm + E-E-A-T, worked examples, runnable snippets) |
 | [Testing (e2e / CA)](docs/TESTING.md) | Playwright and CA release checklist |
 | [Value-based testing](TESTING.md) | How to write logic-level backend tests |
@@ -186,7 +250,7 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 
 ```bash
 # Backend
-.venv/bin/python -m unittest discover -s tests -v
+.venv/bin/python -m pytest
 
 # Frontend unit
 cd frontend && npm run test:unit
@@ -201,14 +265,14 @@ CA-focused suites and live optional gates: [TESTING.md](docs/TESTING.md).
 
 ## Contributing
 
-1. Fork [romwil/curatorx](https://github.com/romwil/curatorx)
+1. Fork [romwil/projectionist](https://github.com/romwil/projectionist)
 2. Create a feature branch: `git checkout -b feat/your-idea`
 3. Install: `pip install -e ".[web]"` and `cd frontend && npm install`
 4. Run the unit suites above, then open a PR with a clear description and test plan
 
 **Docs gate:** user-facing changes update the relevant guide **and** add a benefit-led CHANGELOG `### Highlights` entry, meeting [docs/DOCS_STYLE.md](docs/DOCS_STYLE.md). Documentation is a first-class deliverable, checked in every PR.
 
-Open [issues](https://github.com/romwil/curatorx/issues) for ideas and bugs.
+Open [issues](https://github.com/romwil/projectionist/issues) for ideas and bugs.
 
 ---
 

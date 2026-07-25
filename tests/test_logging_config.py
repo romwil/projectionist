@@ -6,7 +6,7 @@ import os
 import unittest
 from unittest.mock import patch
 
-from curatorx.logging_config import (
+from projectionist.logging_config import (
     _RedactionFilter,
     configure_logging,
     resolve_log_format,
@@ -57,7 +57,7 @@ class LoggingConfigTests(unittest.TestCase):
         buffer = io.StringIO()
         handler = logging.StreamHandler(buffer)
         handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
-        test_logger = logging.getLogger("curatorx.tests.logging")
+        test_logger = logging.getLogger("projectionist.tests.logging")
         test_logger.handlers.clear()
         test_logger.addHandler(handler)
         test_logger.setLevel(logging.INFO)
@@ -77,7 +77,7 @@ class LoggingConfigTests(unittest.TestCase):
             logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s")
         )
         handler.addFilter(_RedactionFilter())
-        test_logger = logging.getLogger("curatorx.tests.redaction.text")
+        test_logger = logging.getLogger("projectionist.tests.redaction.text")
         test_logger.handlers.clear()
         test_logger.addHandler(handler)
         test_logger.setLevel(logging.INFO)
@@ -97,7 +97,7 @@ class LoggingConfigTests(unittest.TestCase):
         handler = logging.StreamHandler(buffer)
         handler.setFormatter(logging.Formatter("%(message)s"))
         handler.addFilter(_RedactionFilter())
-        test_logger = logging.getLogger("curatorx.tests.redaction.args")
+        test_logger = logging.getLogger("projectionist.tests.redaction.args")
         test_logger.handlers.clear()
         test_logger.addHandler(handler)
         test_logger.setLevel(logging.INFO)

@@ -6,14 +6,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import Database
-from curatorx.memory import MemoryAccessError, UserMemoryService
+from projectionist.library.db import Database
+from projectionist.memory import MemoryAccessError, UserMemoryService
 
 
 class UserMemoryTests(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self.tmp.name) / "curatorx.db")
+        self.db = Database(Path(self.tmp.name) / "projectionist.db")
         for user_id, name, role in (("owner", "Owner", "owner"), ("adult-a", "A", "member"), ("adult-b", "B", "member"), ("youth", "Youth", "member")):
             self.db.create_local_user(user_id=user_id, display_name=name, password_hash="x", role=role)
         self.service = UserMemoryService(self.db)

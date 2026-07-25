@@ -706,6 +706,25 @@ export async function mockCuratorApis(page: Page) {
       }),
     });
   });
+
+  await page.route("**/api/settings/secrets/reveal", async (route: Route) => {
+    if (route.request().method() !== "POST") {
+      await route.continue();
+      return;
+    }
+    let body: { field?: string } = {};
+    try {
+      body = (route.request().postDataJSON() as { field?: string }) ?? {};
+    } catch {
+      body = {};
+    }
+    const field = String(body.field || "");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ field, value: `mock-revealed-${field}` }),
+    });
+  });
 }
 
 export async function mockChatFailure(page: Page, detail = "LLM provider unavailable") {

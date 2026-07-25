@@ -320,7 +320,7 @@ export default function LibraryBrowsePage() {
       setSelected(new Set());
       setDeleteOpen(false);
       const summary = deletedCount
-        ? `Removed ${deletedCount} title${deletedCount === 1 ? "" : "s"} from the CuratorX library index.`
+        ? `Removed ${deletedCount} title${deletedCount === 1 ? "" : "s"} from the Projectionist library index.`
         : `No matching library records for ${titles.length} selected title${titles.length === 1 ? "" : "s"}.`;
       setActionStatus(summary);
       update(progressId, ratingKeys.length);

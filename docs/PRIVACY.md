@@ -1,8 +1,8 @@
 # Privacy & data use
 
-This page explains what CuratorX stores, who can see it, and what leaves your machine. It's written for the people who use the app — not only for operators reading the [security assessment](SECURITY.md).
+This page explains what Projectionist stores, who can see it, and what leaves your machine. It's written for the people who use the app — not only for operators reading the [security assessment](SECURITY.md).
 
-CuratorX is a **self-hosted** app. The server owner chooses where it runs, which LLM provider to use, and whether to enable household login or MCP. **There is no CuratorX cloud account that receives your library by default.**
+Projectionist is a **self-hosted** app. The server owner chooses where it runs, which LLM provider to use, and whether to enable household login or MCP. **There is no Projectionist cloud account that receives your library by default.**
 
 The short version:
 
@@ -29,7 +29,7 @@ Default install is **single-owner with no login**: anyone on the trusted network
 
 ### What you share when you sign in
 
-When you use **Sign in with Plex**, CuratorX asks Plex who you are and stores a household user profile:
+When you use **Sign in with Plex**, Projectionist asks Plex who you are and stores a household user profile:
 
 - Plex display name
 - Optional email and avatar URL (if Plex provides them)
@@ -60,7 +60,7 @@ Your private memory stays tied to your account. **An owner cannot read an adult 
 
 #### What export and purge cover
 
-CuratorX can hand you a full **export** of your account data, or permanently **purge** it. The two operate on **exactly the same set** — verified in `curatorx/library/db.py` (`export_user_memory` mirrors `purge_user_memory_and_chats`), so a copy taken before a purge is complete and nothing is left orphaned.
+Projectionist can hand you a full **export** of your account data, or permanently **purge** it. The two operate on **exactly the same set** — verified in `projectionist/library/db.py` (`export_user_memory` mirrors `purge_user_memory_and_chats`), so a copy taken before a purge is complete and nothing is left orphaned.
 
 | Data | In the export? | Removed by purge? | Where it lives |
 |------|:--------------:|:-----------------:|----------------|
@@ -75,11 +75,11 @@ The export is a single JSON (or Markdown) document containing your notes, your c
 
 Curator research about titles, people, and production companies is **shared repository knowledge** drawn from configured official media APIs. It's kept separate from account memory, and the idle refresh task never reads private notes or chats — so purging your account never erases (and never leaks) that shared media knowledge.
 
-> **How to run it:** each account can export or purge its own data through the CuratorX API (`GET /api/me/memory` returns the export; `DELETE /api/me/memory` purges the same set). If your build doesn't surface a button for this yet, ask your server owner, who can run it for your account. Owners: the exact commands are in the owner half of [Help](/help).
+> **How to run it:** each account can export or purge its own data through the Projectionist API (`GET /api/me/memory` returns the export; `DELETE /api/me/memory` purges the same set). If your build doesn't surface a button for this yet, ask your server owner, who can run it for your account. Owners: the exact commands are in the owner half of [Help](/help).
 
 ### What is shared household
 
-Everyone on the same CuratorX instance shares:
+Everyone on the same Projectionist instance shares:
 
 - The indexed library catalog (titles, metadata, facets, embeddings)
 - Sync jobs and library health
@@ -100,25 +100,25 @@ It should **not** receive Plex server tokens, live `X-Plex-Token` media URLs, we
 If you enable voice input:
 
 - The **browser / OS speech service** may process microphone audio (some browsers use a cloud speech-to-text service).
-- CuratorX does **not** upload raw audio to its own servers and does **not** store raw audio on disk.
+- Projectionist does **not** upload raw audio to its own servers and does **not** store raw audio on disk.
 - Transcripts become normal chat text and then follow the usual chat → LLM path.
 - Optional "speak replies" uses the browser's `speechSynthesis` for assistant text.
 
 ### Preferred name
 
-You can set a **preferred conversation name** on your profile. CuratorX stores it on your user record and uses it when addressing you. Fallback: Plex display name, then a neutral greeting.
+You can set a **preferred conversation name** on your profile. Projectionist stores it on your user record and uses it when addressing you. Fallback: Plex display name, then a neutral greeting.
 
 ### Watchlist and Plex account token
 
 Local watchlist pins are yours. When watchlist ↔ Plex Discover sync is enabled:
 
-- CuratorX may store an **encrypted** copy of your Plex account token from Sign in with Plex (`plex_token_enc`) solely to pull/push your Discover watchlist (and related account features such as Seerr linking).
+- Projectionist may store an **encrypted** copy of your Plex account token from Sign in with Plex (`plex_token_enc`) solely to pull/push your Discover watchlist (and related account features such as Seerr linking).
 - That token is **not** returned by API responses, MCP tools, or the UI.
 - If the token is missing, sync asks you to re-sign in — it does not fall back to exposing the server library token as "your" account token.
 
 ### Curated lists
 
-Named lists you create in CuratorX (for example "Friday picks") are stored locally and owned by your user. Visibility may be private, household, or link-based inside CuratorX. Publishing to **Plex Lists** (when supported) uses your encrypted account token; CuratorX will not pretend a Plex publish succeeded if the API is unavailable.
+Named lists you create in Projectionist (for example "Friday picks") are stored locally and owned by your user. Visibility may be private, household, or link-based inside Projectionist. Publishing to **Plex Lists** (when supported) uses your encrypted account token; Projectionist will not pretend a Plex publish succeeded if the API is unavailable.
 
 ### What other members cannot see
 
@@ -148,18 +148,18 @@ Stored under the app data directory (typically `/config` → `settings.json` and
 
 ### MCP keys
 
-CuratorX supports two trust planes (selected by which secret is presented — never by a client "mode" flag alone):
+Projectionist supports two trust planes (selected by which secret is presented — never by a client "mode" flag alone):
 
 | Key | Typical env | Purpose |
 |-----|-------------|---------|
-| Privacy MCP key | `CURATORX_MCP_API_KEY` | Read-oriented library intelligence with a **public content** schema |
-| Full / in-stack MCP key | `CURATORX_MCP_FULL_API_KEY` | Deeper internal library fields + confirm-gated *arr propose tools for trusted automation on your LAN |
+| Privacy MCP key | `PROJECTIONIST_MCP_API_KEY` | Read-oriented library intelligence with a **public content** schema |
+| Full / in-stack MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` | Deeper internal library fields + confirm-gated *arr propose tools for trusted automation on your LAN |
 
 Details and exposure: [MCP](#mcp). Rotate keys in **Admin → Advanced** (last-4 hint on status; full value shown once after regenerate). Do not reuse the same string for both keys.
 
 ### Images (TMDB posters)
 
-For privacy-safe and member-facing library JSON, CuratorX prefers **TMDB CDN** poster/backdrop URLs (`image.tmdb.org`). Those URLs carry no Plex token and no LAN hostname. Plex thumbnail URLs that embed `X-Plex-Token` must not leave via privacy MCP or member public schemas.
+For privacy-safe and member-facing library JSON, Projectionist prefers **TMDB CDN** poster/backdrop URLs (`image.tmdb.org`). Those URLs carry no Plex token and no LAN hostname. Plex thumbnail URLs that embed `X-Plex-Token` must not leave via privacy MCP or member public schemas.
 
 ### Webhooks, logging, backups
 
@@ -169,7 +169,7 @@ For privacy-safe and member-facing library JSON, CuratorX prefers **TMDB CDN** p
 
 ### Network expectations
 
-Do **not** expose bare port `8788` to the public internet. Keep CuratorX on a trusted LAN or behind an authenticated reverse proxy. See [SECURITY.md](SECURITY.md) for the operator threat model and finding checklist.
+Do **not** expose bare port `8788` to the public internet. Keep Projectionist on a trusted LAN or behind an authenticated reverse proxy. See [SECURITY.md](SECURITY.md) for the operator threat model and finding checklist.
 
 ---
 
@@ -230,22 +230,22 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 
 ### Voice path (members)
 
-| Step | Who processes it | Stored by CuratorX |
+| Step | Who processes it | Stored by Projectionist |
 |------|------------------|--------------------|
 | Microphone audio | Browser / OS speech service | No raw audio |
-| Transcript text | CuratorX chat + LLM\* | As chat messages |
+| Transcript text | Projectionist chat + LLM\* | As chat messages |
 | Spoken replies | Browser `speechSynthesis` | Not stored as audio |
 
 ---
 
 ## We do not
 
-- Sell your household data or train a CuratorX-hosted foundation model on your chats
-- Require a CuratorX cloud account for core library curation
+- Sell your household data or train a Projectionist-hosted foundation model on your chats
+- Require a Projectionist cloud account for core library curation
 - Expose live `X-Plex-Token` media URLs through privacy MCP or member public library JSON
 - Let privacy MCP (or a mode flag) escalate into full / write-capable MCP
 - Hand MCP clients your Plex server token, LLM key, or `settings.json`
-- Store raw microphone audio on the CuratorX data volume (voice transcripts only)
+- Store raw microphone audio on the Projectionist data volume (voice transcripts only)
 - Email household invites or scrape contacts from Plex beyond the signed-in profile fields above
 - Pretend Plex Lists publish succeeded when the Discover API path is unavailable
 - Leave anything behind after a purge — an account purge removes every store listed under **What export and purge cover**
@@ -257,7 +257,7 @@ Legend: **Y** = may see / receive · **—** = not exposed by design · **P** = 
 - Keep **multi-user off** for a single trusted operator on a private network
 - Turn **multi-user on** so chats, watchlists, and ratings partition per Plex identity
 - **Export or purge** your account data at any time — same set either way (see **What export and purge cover**)
-- **Do not enable** full MCP (or leave `CURATORX_MCP_FULL_API_KEY` unset) if you only want the privacy schema
+- **Do not enable** full MCP (or leave `PROJECTIONIST_MCP_FULL_API_KEY` unset) if you only want the privacy schema
 - **Rotate** MCP keys if a client or paste leaked
 - Choose an **LLM provider** you trust (including fully local Ollama)
 - Leave the household by asking the owner to disable or remove your user (when user management is available)

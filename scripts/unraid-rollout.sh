@@ -1,21 +1,24 @@
 #!/usr/bin/env bash
-# CuratorX Unraid rollout: pull + recreate via plain Docker CLI
+# Projectionist Unraid rollout: pull + recreate via plain Docker CLI
 # (stock Unraid has neither Compose v2 nor docker-compose).
 # Prefer `docker compose` / `docker-compose` when available; otherwise
 # fall back to `docker pull` + `docker run`.
 # Does NOT wipe ./config (settings.json, SQLite, secrets).
 #
-# Canonical copy lives in the repo as scripts/unraid-rollout.sh — keep
-# /mnt/user/appdata/curatorx/rollout.sh in sync after upgrades:
+# Canonical copy lives in the repo as scripts/unraid-rollout.sh — keep the
+# host copy in sync after upgrades. During the rebrand compatibility window
+# most installs still live under /mnt/user/appdata/curatorx (keep that path):
 #   cp scripts/unraid-rollout.sh /mnt/user/appdata/curatorx/rollout.sh
+# New installs may use /mnt/user/appdata/projectionist instead.
 #
 # For image-only refresh (keep Dockerman template, then Force Update):
 #   ./scripts/unraid-force-pull.sh
 #
 # Usage (on Unraid host):
-#   cd /mnt/user/appdata/curatorx
-#   ./rollout.sh           # romwil/curatorx:latest
-#   ./rollout.sh 1.8.11    # pin a release tag
+#   cd /mnt/user/appdata/curatorx    # existing installs (compat)
+#   # or: cd /mnt/user/appdata/projectionist
+#   ./rollout.sh                     # romwil/projectionist:latest
+#   ./rollout.sh 1.8.11              # pin a release tag
 #
 # First migration from an Unraid dockerman-managed container: this script
 # removes a same-named container (stop/rm only; never docker volume rm /
@@ -36,11 +39,15 @@ fi
 
 IMAGE_TAG="${1:-${IMAGE_TAG:-latest}}"
 HOST_PORT="${HOST_PORT:-8788}"
-CONTAINER_NAME="curatorx"
-IMAGE="romwil/curatorx:${IMAGE_TAG}"
+# New installs / recreate prefer container name projectionist. Override if your
+# Dockerman container is still named curatorx: CONTAINER_NAME=curatorx ./rollout.sh
+CONTAINER_NAME="${CONTAINER_NAME:-projectionist}"
+IMAGE="romwil/projectionist:${IMAGE_TAG}"
 CONFIG_DIR="$SCRIPT_DIR/config"
 HEALTH_URL="http://127.0.0.1:${HOST_PORT}/api/health"
-STARTUP_PATTERN='CuratorX startup'
+STARTUP_PATTERN='Projectionist startup'
+# Accept legacy log line during image transition
+STARTUP_PATTERN_LEGACY='CuratorX startup'
 WAIT_SECS="${ROLLOUT_WAIT_SECS:-90}"
 
 log() { printf '%s\n' "$*"; }
@@ -77,6 +84,9 @@ ENV_KEYS=(
   TMDB_API_KEY FANART_API_KEY
   TAUTULLI_URL TAUTULLI_API_KEY
   LLM_PROVIDER LLM_BASE_URL LLM_API_KEY LLM_MODEL
+  PROJECTIONIST_SESSION_SECRET PROJECTIONIST_WEBHOOK_SECRET
+  PROJECTIONIST_MCP_API_KEY PROJECTIONIST_MCP_FULL_API_KEY
+  PROJECTIONIST_LOG_LEVEL
   CURATORX_SESSION_SECRET CURATORX_WEBHOOK_SECRET
   CURATORX_MCP_API_KEY CURATORX_MCP_FULL_API_KEY
   CURATORX_LOG_LEVEL
@@ -123,8 +133,8 @@ run_compose() {
   export IMAGE_TAG
   [[ -f "$SCRIPT_DIR/docker-compose.yml" ]] || die "docker-compose.yml missing in $SCRIPT_DIR"
 
-  # If a container named curatorx exists but was not created by this compose
-  # project, remove it first (container only — bind-mounted ./config untouched).
+  # If a container exists but was not created by this compose project, remove
+  # it first (container only — bind-mounted ./config untouched).
   if docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
     local project working_dir expected
     project="$(docker inspect -f '{{index .Config.Labels "com.docker.compose.project"}}' "$CONTAINER_NAME" 2>/dev/null || true)"
@@ -141,9 +151,9 @@ run_compose() {
 
   log "Using ${COMPOSE[*]}."
   log "Pulling image…"
-  "${COMPOSE[@]}" pull curatorx
+  "${COMPOSE[@]}" pull projectionist
   log "Recreating container (force-recreate; config untouched)…"
-  "${COMPOSE[@]}" up -d --force-recreate --remove-orphans curatorx
+  "${COMPOSE[@]}" up -d --force-recreate --remove-orphans projectionist
 }
 
 wait_for_startup_log() {
@@ -152,8 +162,8 @@ wait_for_startup_log() {
   while (( SECONDS < deadline )); do
     if docker inspect -f '{{.State.Running}}' "$CONTAINER_NAME" 2>/dev/null | grep -qx true; then
       logs="$(docker logs --tail 80 "$CONTAINER_NAME" 2>&1 || true)"
-      if printf '%s\n' "$logs" | grep -q "$STARTUP_PATTERN"; then
-        printf '%s\n' "$logs" | grep -E "$STARTUP_PATTERN|build" | tail -5
+      if printf '%s\n' "$logs" | grep -qE "${STARTUP_PATTERN}|${STARTUP_PATTERN_LEGACY}"; then
+        printf '%s\n' "$logs" | grep -E "${STARTUP_PATTERN}|${STARTUP_PATTERN_LEGACY}|build" | tail -5
         return 0
       fi
     else
@@ -169,7 +179,7 @@ wait_for_startup_log() {
     sleep 2
   done
   docker logs --tail 80 "$CONTAINER_NAME" 2>&1 || true
-  die "timed out after ${WAIT_SECS}s waiting for startup log matching /$STARTUP_PATTERN/"
+  die "timed out after ${WAIT_SECS}s waiting for startup log matching /${STARTUP_PATTERN}/"
 }
 
 smoke_health() {
@@ -201,11 +211,11 @@ smoke_health() {
   die "health check failed: $HEALTH_URL"
 }
 
-log "=== CuratorX rollout ==="
+log "=== Projectionist rollout ==="
 log "Dir:   $SCRIPT_DIR"
 log "Image: $IMAGE"
 log "Port:  ${HOST_PORT} → 8788"
-log "Config bind: $CONFIG_DIR → /config (preserved)"
+log "Config bind: $CONFIG_DIR → /config (preserved; host appdata path often still …/curatorx during compat)"
 
 if ((${#COMPOSE[@]})); then
   run_compose

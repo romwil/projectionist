@@ -10,14 +10,14 @@ from pathlib import Path
 from unittest import skipUnless
 from unittest.mock import patch
 
-from curatorx.mcp.mode import (
+from projectionist.mcp.mode import (
     full_mode_allowed,
     resolve_http_mcp_auth,
     resolve_stdio_mcp_mode,
     set_mcp_mode,
 )
-from curatorx.privacy import sanitize
-from curatorx.privacy.schema import derive_watch_state, public_image_urls
+from projectionist.privacy import sanitize
+from projectionist.privacy.schema import derive_watch_state, public_image_urls
 
 
 class PrivacySchemaTests(unittest.TestCase):
@@ -164,7 +164,7 @@ class McpHttpKeyModeTests(unittest.TestCase):
 
 
 try:
-    from curatorx.mcp import server as mcp_server
+    from projectionist.mcp import server as mcp_server
 
     HAS_MCP = True
 except Exception:  # noqa: BLE001
@@ -185,7 +185,7 @@ class McpPrivacyToolTests(unittest.TestCase):
         set_mcp_mode("privacy")
 
     def test_library_query_strips_rating_key(self) -> None:
-        from curatorx.library.db import Database
+        from projectionist.library.db import Database
 
         db = Database(Path(self._tmpdir.name) / "test.db")
         db.upsert_library_item(

@@ -9,19 +9,19 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import FeatureFlags, Settings
-from curatorx.library.db import Database
-from curatorx.watchlist.crypto import decrypt_plex_token, encrypt_plex_token
-from curatorx.watchlist.curate import critique_watchlist, curate_watchlist, enrich_watchlist_pins
-from curatorx.watchlist.plex_discover import discover_rating_key_from_guid
-from curatorx.watchlist.plex_sync import get_watchlist_sync_status, sync_watchlist_with_plex
+from projectionist.config_store import FeatureFlags, Settings
+from projectionist.library.db import Database
+from projectionist.watchlist.crypto import decrypt_plex_token, encrypt_plex_token
+from projectionist.watchlist.curate import critique_watchlist, curate_watchlist, enrich_watchlist_pins
+from projectionist.watchlist.plex_discover import discover_rating_key_from_guid
+from projectionist.watchlist.plex_sync import get_watchlist_sync_status, sync_watchlist_with_plex
 
 
 class WatchlistCryptoTests(unittest.TestCase):
     def test_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             with patch.dict("os.environ", {"DATA_DIR": tmp, "CURATORX_SESSION_SECRET": "unit-test-secret"}):
-                from curatorx.web.session_tokens import clear_session_secret_cache
+                from projectionist.web.session_tokens import clear_session_secret_cache
 
                 clear_session_secret_cache()
                 blob = encrypt_plex_token("plex-auth-token")
@@ -39,7 +39,7 @@ class WatchlistDiscoverHelpersTests(unittest.TestCase):
 
     def test_fetch_watchlist_paginates_full_list(self) -> None:
         """A large Discover watchlist force-paginates; we must page through all."""
-        from curatorx.watchlist import plex_discover
+        from projectionist.watchlist import plex_discover
 
         total = 230
         page_size = 100
@@ -71,7 +71,7 @@ class WatchlistDiscoverHelpersTests(unittest.TestCase):
             }
 
         with patch(
-            "curatorx.watchlist.plex_discover.request_json",
+            "projectionist.watchlist.plex_discover.request_json",
             side_effect=fake_request_json,
         ):
             items = plex_discover.fetch_watchlist(
@@ -83,7 +83,7 @@ class WatchlistDiscoverHelpersTests(unittest.TestCase):
         self.assertEqual(items[-1]["tmdb_id"], 1000 + total - 1)
 
     def test_fetch_watchlist_enriches_missing_provider_ids(self) -> None:
-        from curatorx.watchlist import plex_discover
+        from projectionist.watchlist import plex_discover
 
         def fake_request_json(url, *, headers=None, timeout=30):
             if "/library/metadata/" in url:
@@ -118,7 +118,7 @@ class WatchlistDiscoverHelpersTests(unittest.TestCase):
             }
 
         with patch(
-            "curatorx.watchlist.plex_discover.request_json",
+            "projectionist.watchlist.plex_discover.request_json",
             side_effect=fake_request_json,
         ):
             items = plex_discover.fetch_watchlist("token", enrich_missing_ids=True)
@@ -153,7 +153,7 @@ class WatchlistSyncUnitTests(unittest.TestCase):
                 role="owner",
             )
             with patch.dict("os.environ", {"DATA_DIR": tmp, "CURATORX_SESSION_SECRET": "unit-test-secret"}):
-                from curatorx.web.session_tokens import clear_session_secret_cache
+                from projectionist.web.session_tokens import clear_session_secret_cache
 
                 clear_session_secret_cache()
                 try:
@@ -168,7 +168,7 @@ class WatchlistSyncUnitTests(unittest.TestCase):
                         }
                     ]
                     with patch(
-                        "curatorx.watchlist.plex_discover.fetch_watchlist",
+                        "projectionist.watchlist.plex_discover.fetch_watchlist",
                         return_value=remote,
                     ):
                         result = sync_watchlist_with_plex(
@@ -197,7 +197,7 @@ class WatchlistSyncUnitTests(unittest.TestCase):
                 role="owner",
             )
             with patch.dict("os.environ", {"DATA_DIR": tmp, "CURATORX_SESSION_SECRET": "unit-test-secret"}):
-                from curatorx.web.session_tokens import clear_session_secret_cache
+                from projectionist.web.session_tokens import clear_session_secret_cache
 
                 clear_session_secret_cache()
                 try:
@@ -210,7 +210,7 @@ class WatchlistSyncUnitTests(unittest.TestCase):
                     ]
                     settings = Settings(features=FeatureFlags(multi_user_enabled=True))
                     with patch(
-                        "curatorx.watchlist.plex_discover.fetch_watchlist",
+                        "projectionist.watchlist.plex_discover.fetch_watchlist",
                         return_value=remote,
                     ):
                         first = sync_watchlist_with_plex(
@@ -262,9 +262,9 @@ class WatchlistApiTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["CURATORX_SESSION_SECRET"] = "unit-test-secret"
-        from curatorx.web.session_tokens import clear_session_secret_cache
-        import curatorx.web.jobs as jobs
-        import curatorx.web.app as app_mod
+        from projectionist.web.session_tokens import clear_session_secret_cache
+        import projectionist.web.jobs as jobs
+        import projectionist.web.app as app_mod
 
         clear_session_secret_cache()
         jobs._manager = None
@@ -273,8 +273,8 @@ class WatchlistApiTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         import os
-        from curatorx.web.session_tokens import clear_session_secret_cache
-        import curatorx.web.jobs as jobs
+        from projectionist.web.session_tokens import clear_session_secret_cache
+        import projectionist.web.jobs as jobs
 
         clear_session_secret_cache()
         jobs._manager = None
@@ -301,7 +301,7 @@ class WatchlistApiTests(unittest.TestCase):
 
 class PurgeCardKindTests(unittest.TestCase):
     def test_purge_cards_mark_card_kind(self) -> None:
-        from curatorx.preferences.purge import suggest_purge_candidates
+        from projectionist.preferences.purge import suggest_purge_candidates
 
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "lib.db")

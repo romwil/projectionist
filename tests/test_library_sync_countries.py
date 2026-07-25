@@ -5,8 +5,8 @@ from __future__ import annotations
 import unittest
 from unittest.mock import MagicMock
 
-from curatorx.connectors.plex import PlexLibraryItem
-from curatorx.library.sync import _apply_tmdb_enrichment, _countries_from_tmdb, _row_from_plex_item
+from projectionist.connectors.plex import PlexLibraryItem
+from projectionist.library.sync import _apply_tmdb_enrichment, _countries_from_tmdb, _row_from_plex_item
 
 
 class LibrarySyncCountryTests(unittest.TestCase):

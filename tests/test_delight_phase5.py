@@ -12,25 +12,25 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from curatorx.acquire import build_acquire_path
-from curatorx.config_store import FeatureFlags, SeerrSettings, Settings
-from curatorx.library.db import BOOTSTRAP_OWNER_ID, Database
-from curatorx.library.feeds import feed_seasonal_spotlight
-from curatorx.memory import UserMemoryService
-from curatorx.notifications.nudges import (
+from projectionist.acquire import build_acquire_path
+from projectionist.config_store import FeatureFlags, SeerrSettings, Settings
+from projectionist.library.db import BOOTSTRAP_OWNER_ID, Database
+from projectionist.library.feeds import feed_seasonal_spotlight
+from projectionist.memory import UserMemoryService
+from projectionist.notifications.nudges import (
     build_nudge_copy,
     deliver_enthusiast_nudges,
     pick_nudge_title,
     recently_watched_context,
 )
-from curatorx.notifications.service import user_wants_channel
-from curatorx.syllabus import build_syllabus_for_course, syllabus_chat_prompt
+from projectionist.notifications.service import user_wants_channel
+from projectionist.syllabus import build_syllabus_for_course, syllabus_chat_prompt
 
 
 class NudgeUnitTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.db.ensure_bootstrap_owner()
         self.db.upsert_library_item(
             {
@@ -91,7 +91,7 @@ class NudgeUnitTests(unittest.TestCase):
 class SyllabusTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.db.ensure_bootstrap_owner()
         list_id = uuid.uuid4().hex
         self.db.create_curated_list(
@@ -141,7 +141,7 @@ class SyllabusTests(unittest.TestCase):
 class AcquirePathTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.db.ensure_bootstrap_owner()
 
     def tearDown(self) -> None:
@@ -198,7 +198,7 @@ class AcquirePathTests(unittest.TestCase):
 class SeasonalAnniversaryTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.db.upsert_library_item(
             {
                 "rating_key": "rk-ann",
@@ -249,10 +249,10 @@ class MoodQuickPickApiTests(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
@@ -270,7 +270,7 @@ class MoodQuickPickApiTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
@@ -289,7 +289,7 @@ class MoodQuickPickApiTests(unittest.TestCase):
 class CallbackMemoryTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        self.db = Database(Path(self._tmpdir.name) / "curatorx.db")
+        self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.db.ensure_bootstrap_owner()
         self.memory = UserMemoryService(self.db)
 

@@ -16,9 +16,9 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.auth import clear_oidc_states, clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
+from projectionist.web.auth import clear_oidc_states, clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
 
 
 def _mock_discovery():
@@ -59,16 +59,16 @@ class OIDCAuthTests(unittest.TestCase):
         clear_rate_limits()
         clear_pin_bindings()
         clear_oidc_states()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -104,7 +104,7 @@ class OIDCAuthTests(unittest.TestCase):
         resp = self.client.get("/api/auth/oidc/authorize")
         self.assertEqual(resp.status_code, 400)
 
-    @patch("curatorx.web.auth.httpx")
+    @patch("projectionist.web.auth.httpx")
     def test_authorize_returns_redirect_url(self, mock_httpx) -> None:
         self._enable_oidc()
         mock_resp = MagicMock()
@@ -127,7 +127,7 @@ class OIDCAuthTests(unittest.TestCase):
         resp = self.client.get("/api/auth/oidc/callback?code=testcode&state=bogus")
         self.assertEqual(resp.status_code, 401)
 
-    @patch("curatorx.web.auth.httpx")
+    @patch("projectionist.web.auth.httpx")
     def test_callback_creates_user_and_sets_cookie(self, mock_httpx) -> None:
         self._enable_oidc()
 
@@ -151,7 +151,7 @@ class OIDCAuthTests(unittest.TestCase):
         self.assertEqual(body["user"]["display_name"], "Jane Doe")
         self.assertIn(SESSION_COOKIE_NAME, cb_resp.cookies)
 
-    @patch("curatorx.web.auth.httpx")
+    @patch("projectionist.web.auth.httpx")
     def test_callback_state_consumed_once(self, mock_httpx) -> None:
         """CSRF protection: state tokens are single-use."""
         self._enable_oidc()
@@ -170,12 +170,12 @@ class OIDCAuthTests(unittest.TestCase):
         second = self.client.get(f"/api/auth/oidc/callback?code=testcode&state={state}")
         self.assertEqual(second.status_code, 401)
 
-    @patch("curatorx.web.auth.httpx")
+    @patch("projectionist.web.auth.httpx")
     def test_oidc_user_auto_created_as_member(self, mock_httpx) -> None:
         """OIDC login auto-creates members when a real household owner already exists."""
         self._enable_oidc()
         # Bootstrap owner alone does not count — seed a real owner first.
-        from curatorx.web.jobs import get_job_manager
+        from projectionist.web.jobs import get_job_manager
 
         db = get_job_manager().db
         db.upsert_plex_user(

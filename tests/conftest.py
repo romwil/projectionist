@@ -10,9 +10,9 @@ from typing import Any, Dict, List, Mapping, Optional
 
 import pytest
 
-from curatorx.agent.tools import ToolRegistry
-from curatorx.config_store import Settings
-from curatorx.library.db import DEFAULT_LENS_ID, Database
+from projectionist.agent.tools import ToolRegistry
+from projectionist.config_store import Settings
+from projectionist.library.db import DEFAULT_LENS_ID, Database
 
 
 # ---------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 ---
 name: interactive-ui-qa
 description: >-
-  Run authored Interactive UI QA against CuratorX maintainer QA (:8790) in full
+  Run authored Interactive UI QA against Projectionist maintainer QA (:8790) in full
   (absolute baseline) or delta (open bugs + tagged subset) mode. Use when the
   user asks for browser QA, UI QA, role QA, absolute baseline, or delta
   regression — never exploratory pathway discovery; never prod :8788.
@@ -9,7 +9,7 @@ description: >-
 
 # Interactive UI QA
 
-Two-mode, checklist-only browser QA for CuratorX. Replicates characterization
+Two-mode, checklist-only browser QA for Projectionist. Replicates characterization
 (full) + change-focused regression (delta). **Execute authored checklist IDs
 only** — see [reference.md](reference.md).
 

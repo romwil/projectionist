@@ -230,7 +230,7 @@ export default function AdvancedSettings({
           <h2>MCP (Model Context Protocol)</h2>
           <p className="config-panel-lead">
             Dual-mode HTTP endpoint at <code>/mcp</code>. Send{" "}
-            <code>X-CuratorX-MCP-Key</code> or Bearer auth. Keys must differ. Regenerating writes{" "}
+            <code>X-Projectionist-MCP-Key</code> or Bearer auth. Keys must differ. Regenerating writes{" "}
             <code>settings.json</code>. See{" "}
             <Link to="/privacy">Privacy</Link> for exposure details.
           </p>

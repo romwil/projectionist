@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "curatorx": {
-      "command": "curatorx-mcp",
+    "projectionist": {
+      "command": "projectionist-mcp",
       "env": {
         "DATA_DIR": "/config",
-        "CURATORX_SKIP_DOTENV": "0"
+        "PROJECTIONIST_SKIP_DOTENV": "0"
       }
     }
   }

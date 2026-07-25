@@ -1,10 +1,10 @@
-# CuratorX wiki
+# Projectionist wiki
 
-In-repo documentation for operators deploying CuratorX on Docker or Unraid.
+In-repo documentation for operators deploying Projectionist on Docker or Unraid.
 
-## What CuratorX is
+## What Projectionist is
 
-An **agentic curator** for self-hosted Plex — chat, Explore browse, and a **privacy-first MCP interface** over local structured + unstructured data. CuratorX indexes your library into SQLite (credits, dates, facets, layered plot text, materialized neighbors/relations) and exposes surgical tool calls to a BYO LLM. Your Plex token, watch history, and collection details never leave your hardware.
+An **agentic curator** for self-hosted Plex — chat, Explore browse, and a **privacy-first MCP interface** over local structured + unstructured data. Projectionist indexes your library into SQLite (credits, dates, facets, layered plot text, materialized neighbors/relations) and exposes surgical tool calls to a BYO LLM. Your Plex token, watch history, and collection details never leave your hardware.
 
 Features: library-grounded recommendations, Explore feeds, title detail with neighbors, confirm-gated Radarr/Sonarr adds, ratings and watchlists, Lights Up/Down themes, owner dashboard, optional household auth (Plex PIN, local password, OIDC), dual-key MCP transport, and a single `/config` Docker volume. See [MCP.md](../MCP.md) and [ARCHITECTURE.md](../ARCHITECTURE.md).
 
@@ -12,7 +12,7 @@ Features: library-grounded recommendations, Explore feeds, title detail with nei
 
 | Page | Topic |
 |------|-------|
-| [Home](Home.md) | What CuratorX is and how to navigate docs |
+| [Home](Home.md) | What Projectionist is and how to navigate docs |
 | [Installation](Installation.md) | Docker Hub, Compose, local build |
 | [Unraid](Unraid.md) | Community Applications / template install |
 | [Configuration](Configuration.md) | Settings, env vars, feature flags |
@@ -21,7 +21,7 @@ Features: library-grounded recommendations, Explore feeds, title detail with nei
 | [Seerr](Seerr.md) | Optional Seerr requests for members |
 | [Troubleshooting](Troubleshooting.md) | Common failures and fixes |
 | [FAQ](FAQ.md) | Short answers (mirrors [`../FAQ.md`](../FAQ.md)) |
-| [Privacy](../PRIVACY.md) | What data CuratorX stores and who can see it (also `/privacy` in the UI) |
+| [Privacy](../PRIVACY.md) | What data Projectionist stores and who can see it (also `/privacy` in the UI) |
 | [Security](../SECURITY.md) | Threat model + living findings checklist (pen-test brief) |
 | [Penetration tests](../security/pentests/README.md) | Repeatable Protocol v1.0 + engagement archives |
 

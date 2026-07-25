@@ -8,9 +8,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from curatorx.library.db import Database
-from curatorx.library.facets import library_facet_catalog, rebuild_library_facets, rebuild_library_fts
-from curatorx.library.query import LibraryFilters, query_library
+from projectionist.library.db import Database
+from projectionist.library.facets import library_facet_catalog, rebuild_library_facets, rebuild_library_fts
+from projectionist.library.query import LibraryFilters, query_library
 
 
 class LibraryFacetTests(unittest.TestCase):
@@ -80,7 +80,7 @@ class LibraryFacetTests(unittest.TestCase):
                     "original_language": "fr",
                 }
             )
-            from curatorx.library.facets import ensure_library_facet_index
+            from projectionist.library.facets import ensure_library_facet_index
 
             rebuilt = ensure_library_facet_index(db)
             self.assertGreater(rebuilt, 0)

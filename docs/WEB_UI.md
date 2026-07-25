@@ -1,16 +1,16 @@
-# CuratorX — Web UI
+# Projectionist — Web UI
 
-The CuratorX frontend is a Vite + React SPA served from the same origin as the FastAPI backend (`/` and `/api/*`).
+The Projectionist frontend is a Vite + React SPA served from the same origin as the FastAPI backend (`/` and `/api/*`).
 
-This guide describes what you see after opening CuratorX in a browser — whether you run it with Docker on Unraid, `docker compose`, or a local dev server.
+This guide describes what you see after opening Projectionist in a browser — whether you run it with Docker on Unraid, `docker compose`, or a local dev server.
 
 ---
 
 ## First visit (self-hosted)
 
-1. **Open the app** — In your browser, go to the host and port where CuratorX is running (for example `http://your-unraid-ip:8788` or the URL in your compose file).
+1. **Open the app** — In your browser, go to the host and port where Projectionist is running (for example `http://your-unraid-ip:8788` or the URL in your compose file).
 2. **Setup banner** — If Plex, TMDB, or your LLM provider are not configured yet, a banner appears under the top bar: *Finish setup in Settings…* Click **Config** in the top bar to open the wizard.
-3. **Top bar** — **CuratorX** (display brand), your curator name, a small **agent pulse** (chat idle / thinking / error), quiet **Plex server name · movie/show counts**, optional streak / watchlist pins chips, **Admin** (owners) / **Settings**, and an optional avatar menu when multi-user is on. **Help** and **About** live in the hamburger AppNav, footer, and user menu (not as top-bar icons).
+3. **Top bar** — **Projectionist** (display brand), your curator name, a small **agent pulse** (chat idle / thinking / error), quiet **Plex server name · movie/show counts**, optional streak / watchlist pins chips, **Admin** (owners) / **Settings**, and an optional avatar menu when multi-user is on. **Help** and **About** live in the hamburger AppNav, footer, and user menu (not as top-bar icons).
 4. **Conversation sidebar** — On the left, past chats and **New**. Collapse with `«` / `»` on smaller screens. The **watchlist panel** and **status dock** (sync jobs, confirmations) live at the bottom of this sidebar.
 5. **Main chat** — Wide reading column (~80%): recommendations inbox (multi-user), messages, title cards, ambient context tag, composer with persona selector.
 6. **Status dock** — In the sidebar bottom: background jobs (library sync, idle scheduler), and single-title Radarr/Sonarr confirms. Drop a title card onto the dock while dragging to queue an add — the drop hint appears only during drag.
@@ -24,7 +24,7 @@ There is **one workspace layout**. Visual language is **cinema dark** (near-blac
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ CuratorX   curator · Server · 142 movies · 38 shows  Settings│  ← top bar
+│ Projectionist   curator · Server · 142 movies · 38 shows  Settings│  ← top bar
 ├──────────────┬──────────────────────────────────────────────┤
 │ Conversations│  chat + title cards                          │
 │  [ New ]     │                                              │
@@ -39,7 +39,7 @@ There is **one workspace layout**. Visual language is **cinema dark** (near-blac
 
 | Area | What it does |
 |------|----------------|
-| **Top bar** | Brand-first CuratorX + curator name, chat pulse, Plex server + library counts, pins / streak chips, Admin / Settings, optional UserMenu |
+| **Top bar** | Brand-first Projectionist + curator name, chat pulse, Plex server + library counts, pins / streak chips, Admin / Settings, optional UserMenu |
 | **Sidebar** | Thread list + watchlist panel + pinned status dock |
 | **Chat workspace** | Wide thread, scroll region, composer with PersonaSelector |
 | **Status dock** | Running jobs, add progress, drag-to-queue (sidebar bottom) |
@@ -50,7 +50,7 @@ There is **one workspace layout**. Visual language is **cinema dark** (near-blac
 
 ### Single workspace (default)
 
-With `features.multi_user_enabled` left at `false` (the default), CuratorX runs as one household workspace: no login screen, one implicit **owner** account in the database, and all chat threads share the same taste profile. Multi-user login and per-member Seerr requests appear only after you opt in via feature flags.
+With `features.multi_user_enabled` left at `false` (the default), Projectionist runs as one household workspace: no login screen, one implicit **owner** account in the database, and all chat threads share the same taste profile. Multi-user login and per-member Seerr requests appear only after you opt in via feature flags.
 
 ---
 
@@ -128,7 +128,7 @@ On `/config` load, the UI fetches certification status and sequentially tests an
 
 ### Persona presets (for novices)
 
-CuratorX ships five **persona presets** — ready-made curator personalities. Switch them **per conversation** from the composer PersonaSelector, or manage defaults under **Admin → Persona**. Each preset sets tone sliders (seven dimensions), greeting copy, composer hints, review prompts, and a subtle UI accent. You can still rename your curator and fine-tune sliders afterward.
+Projectionist ships five **persona presets** — ready-made curator personalities. Switch them **per conversation** from the composer PersonaSelector, or manage defaults under **Admin → Persona**. Each preset sets tone sliders (seven dimensions), greeting copy, composer hints, review prompts, and a subtle UI accent. You can still rename your curator and fine-tune sliders afterward.
 
 | Preset | Vibe | Good if you want… |
 |--------|------|-------------------|
@@ -164,11 +164,11 @@ After the curator answers, you may see **👍** and **👎** under that reply.
 - **👍 Helpful** — the suggestion or explanation matched what you wanted.
 - **👎 Not helpful** — the reply missed the mark.
 
-Tap the same button again to clear your choice for that message. Reactions are saved per conversation and help CuratorX learn your taste over time. They appear only on curator (assistant) messages, not on your own prompts.
+Tap the same button again to clear your choice for that message. Reactions are saved per conversation and help Projectionist learn your taste over time. They appear only on curator (assistant) messages, not on your own prompts.
 
 ### Personal title reviews
 
-CuratorX keeps a **personal review log** for titles you have watched — separate from helpful/not-helpful reactions on curator replies.
+Projectionist keeps a **personal review log** for titles you have watched — separate from helpful/not-helpful reactions on curator replies.
 
 - After a **library sync** or **Plex webhook** (playback stop/scrobble), near-complete watches (≥85% through a movie or episode) may appear as an inline **rating card** at the bottom of the chat.
 - Cards use your **persona preset** opener (`review_prompt_templates`) — warm film-buff, blunt archivist, etc.
@@ -177,13 +177,13 @@ CuratorX keeps a **personal review log** for titles you have watched — separat
 - The curator can run a **multi-turn review dialogue** via the `start_review_dialogue` agent tool — one persona-voiced question per turn before saving.
 - Title cards show **your stars** (gold badge on the poster and “Your rating” in the card body) when you have already reviewed that title.
 
-When a rating card appears in chat, CuratorX records `prompted_at` on the queue row (so the system knows you were shown the prompt, even if you skip without saving).
+When a rating card appears in chat, Projectionist records `prompted_at` on the queue row (so the system knows you were shown the prompt, even if you skip without saving).
 
 Reviews are stored in SQLite (`user_title_reviews`) and feed taste training via preference signals.
 
 **Optional Plex sync:** In Configuration → Plex library mapping, enable **Sync personal reviews to Plex star ratings**. When on, each saved review pushes your stars to Plex (1★→2, 2★→4, … 5★→10 on Plex’s 0–10 scale). Your review is always saved locally even if Plex is unreachable.
 
-**Plex rating conflicts:** If Plex already has a different star rating when you save (from a rating card, `/rate`, or the curator's `save_user_review` tool), an inline **keep / replace** banner appears in chat: **Keep Plex rating** leaves Plex unchanged; **Replace on Plex** overwrites Plex with your CuratorX stars. The same banner appears on proactive rating cards when the REST API returns a 409 conflict.
+**Plex rating conflicts:** If Plex already has a different star rating when you save (from a rating card, `/rate`, or the curator's `save_user_review` tool), an inline **keep / replace** banner appears in chat: **Keep Plex rating** leaves Plex unchanged; **Replace on Plex** overwrites Plex with your Projectionist stars. The same banner appears on proactive rating cards when the REST API returns a 409 conflict.
 
 The curator can also propose **Plex collection** create/add actions; those require confirmation like Radarr/Sonarr adds.
 
@@ -265,7 +265,7 @@ When `features.multi_user_enabled` is `true` in settings:
 
 1. The app loads `GET /api/features` and `GET /api/auth/me`.
 2. If features show multi-user mode and `/api/auth/me` returns **401**, the browser redirects to **`/login`**. API middleware also requires a session for almost all `/api/*` (see [SECURITY.md](SECURITY.md)).
-3. Sign in with a configured method (**Plex PIN**, **local password**, and/or **OIDC**). For Plex, CuratorX starts an Overseerr-style plex.tv PIN flow. Approve in the Plex window; CuratorX polls until authorized and stores a signed **HttpOnly** session cookie. Token paste is an advanced fallback only.
+3. Sign in with a configured method (**Plex PIN**, **local password**, and/or **OIDC**). For Plex, Projectionist starts an Overseerr-style plex.tv PIN flow. Approve in the Plex window; Projectionist polls until authorized and stores a signed **HttpOnly** session cookie. Token paste is an advanced fallback only.
 4. After login, the main chat UI loads. The top bar shows an avatar menu with display name, role, **Help**, and **Sign out**. Help / Privacy / About remain in the footer.
 5. **Owners** manage household users and the dashboard under **Admin**. **Members** use **Settings** for personal prefs (including font size); Seerr request buttons appear instead of Radarr/Sonarr adds when Seerr is enabled.
 
@@ -275,7 +275,7 @@ When multi-user is **off** (default), there is no login screen and the bootstrap
 
 ## Security
 
-Single-owner installs have no built-in authentication — run on a trusted LAN or behind an authenticated reverse proxy. When multi-user is enabled, Plex PIN login and signed session cookies gate the SPA **and** most `/api/*` routes (see [SECURITY.md](SECURITY.md)). Always set `CURATORX_SESSION_SECRET` to a long random string (never leave the public dev default). Destructive *arr operations use confirmation tokens (10-minute TTL) scoped to the acting user.
+Single-owner installs have no built-in authentication — run on a trusted LAN or behind an authenticated reverse proxy. When multi-user is enabled, Plex PIN login and signed session cookies gate the SPA **and** most `/api/*` routes (see [SECURITY.md](SECURITY.md)). Always set `PROJECTIONIST_SESSION_SECRET` to a long random string (never leave the public dev default). Destructive *arr operations use confirmation tokens (10-minute TTL) scoped to the acting user.
 
 ---
 
@@ -287,7 +287,7 @@ Library-oriented walls share **MediaBrowseControls**: sort and direction, type/w
 
 Explore opens with a **hero search bar** that queries titles and plot summaries (the library `query` parameter) and navigates to the unified browse view `/explore/browse?q=…`. **Browse Movies** / **Browse TV** cards and the Recently Added / Recent Releases *Movies·TV* links open the same view scoped by `media_type` — the full library, not a recency feed.
 
-`/explore/browse` (**LibraryBrowsePage**) is backed by `/api/library/query` with real server-side pagination (`total_matched` / `has_more` / `offset`). It reuses the shared MediaBrowseControls stack plus a **page-size selector**: 48, 100, 500, or **All**. Fixed sizes keep Previous/Next offset paging; **All** issues one request capped at 5,000 rows — mirroring the CSV export ceiling in `curatorx/web/app.py` so a large library never triggers an unbounded payload — and shows a *"Showing first N of M"* notice whenever the match count exceeds the cap. Year/genre filter options are populated from `/api/library/aggregate`. Selection supports pin-to-watchlist for everyone and owner-only removal from the CuratorX index.
+`/explore/browse` (**LibraryBrowsePage**) is backed by `/api/library/query` with real server-side pagination (`total_matched` / `has_more` / `offset`). It reuses the shared MediaBrowseControls stack plus a **page-size selector**: 48, 100, 500, or **All**. Fixed sizes keep Previous/Next offset paging; **All** issues one request capped at 5,000 rows — mirroring the CSV export ceiling in `projectionist/web/app.py` so a large library never triggers an unbounded payload — and shows a *"Showing first N of M"* notice whenever the match count exceeds the cap. Year/genre filter options are populated from `/api/library/aggregate`. Selection supports pin-to-watchlist for everyone and owner-only removal from the Projectionist index.
 
 The **⋮ poster action grip** appears on LibraryMediaCard posters, list rows, and compact TitleCard overlays. It centralizes detail, Plex playback, watchlist pinning, list/playlist membership, discovery, reporting, and owner-only tools. A repeated control location matters for keyboard and touch users, and prevents each wall from inventing a subtly different action model.
 

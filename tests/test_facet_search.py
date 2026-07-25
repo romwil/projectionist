@@ -6,8 +6,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from curatorx.library.db import Database
-from curatorx.library.facets import library_facet_catalog, rebuild_library_facets
+from projectionist.library.db import Database
+from projectionist.library.facets import library_facet_catalog, rebuild_library_facets
 
 
 class FacetSearchTests(unittest.TestCase):

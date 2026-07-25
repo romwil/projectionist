@@ -84,7 +84,7 @@ export default function ListsPage() {
   }
 
   return <AppShell className="app-root lists-page" testId="lists-page" variant="browse" leading={<BackLink fallbackTo={ROUTES.explore} />}>
-    <section className="explore-section-hero"><p className="person-eyebrow">{listId ? state.list?.list_kind || "List" : "Collections"}</p><h1>{listId ? state.list?.name || "List" : "Lists & playlists"}</h1><p className="explore-section-subtitle">Lists are intentional CuratorX shelves. Watchlist pins answer “keep this in mind”; playlists answer “play these together.”</p></section>
+    <section className="explore-section-hero"><p className="person-eyebrow">{listId ? state.list?.list_kind || "List" : "Collections"}</p><h1>{listId ? state.list?.name || "List" : "Lists & playlists"}</h1><p className="explore-section-subtitle">Lists are intentional Projectionist shelves. Watchlist pins answer “keep this in mind”; playlists answer “play these together.”</p></section>
     {state.loading ? <p className="status status-secondary">Loading…</p> : null}
     {state.error ? <p className="error">{state.error}</p> : null}
     {!listId && !state.loading ? <div className="curated-list-grid">{state.lists.map((list) => <Link key={list.id} to={`/lists/${list.id}`} className="review-prompt-card"><strong>{list.name}</strong><span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span></Link>)}</div> : null}

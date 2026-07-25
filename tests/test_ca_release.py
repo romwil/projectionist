@@ -13,15 +13,15 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.config_store import Settings
-from curatorx.connectors.http import optional_int
-from curatorx.connectors.plex import PlexClient, PlexLibraryItem
-from curatorx.library.db import Database
-from curatorx.library.sync import _row_from_plex_item, sync_library
-from curatorx.reviews.plex_sync import sync_review_rating_to_plex
-from curatorx.reviews.store import save_review
-from curatorx.web.job_progress import format_job_progress, friendly_job_error
-from curatorx.web.webhooks import handle_plex_webhook
+from projectionist.config_store import Settings
+from projectionist.connectors.http import optional_int
+from projectionist.connectors.plex import PlexClient, PlexLibraryItem
+from projectionist.library.db import Database
+from projectionist.library.sync import _row_from_plex_item, sync_library
+from projectionist.reviews.plex_sync import sync_review_rating_to_plex
+from projectionist.reviews.store import save_review
+from projectionist.web.job_progress import format_job_progress, friendly_job_error
+from projectionist.web.webhooks import handle_plex_webhook
 
 
 class JobProgressContractTests(unittest.TestCase):
@@ -93,13 +93,13 @@ class EmptyLibrarySyncTests(unittest.IsolatedAsyncioTestCase):
             with patch.object(PlexClient, "movie_items", return_value=[]), patch.object(
                 PlexClient, "show_items", return_value=[]
             ), patch(
-                "curatorx.library.sync.rebuild_embeddings",
+                "projectionist.library.sync.rebuild_embeddings",
                 new=AsyncMock(return_value=0),
             ), patch(
-                "curatorx.library.sync.sync_tv_episodes",
+                "projectionist.library.sync.sync_tv_episodes",
                 return_value={"shows_synced": 0, "episodes_synced": 0},
             ), patch(
-                "curatorx.library.sync.scan_for_rating_prompts",
+                "projectionist.library.sync.scan_for_rating_prompts",
                 return_value=0,
             ):
                 result = await sync_library(db, settings)
@@ -150,7 +150,7 @@ class PlexSyncReasonTests(unittest.TestCase):
             rating_key="rk-2",
         )
         with patch(
-            "curatorx.reviews.plex_sync.lookup_plex_user_rating_stars",
+            "projectionist.reviews.plex_sync.lookup_plex_user_rating_stars",
             return_value=None,
         ), patch.object(PlexClient, "set_user_rating", side_effect=RuntimeError("plex down")):
             result = sync_review_rating_to_plex(
@@ -168,17 +168,17 @@ class CaApiFixture(unittest.TestCase):
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
         self.app_mod = app_mod
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
@@ -224,7 +224,7 @@ class LibraryApiContractTests(CaApiFixture):
 
     def test_library_sync_start_queues_job(self) -> None:
         with patch(
-            "curatorx.web.jobs.sync_library",
+            "projectionist.web.jobs.sync_library",
             new=AsyncMock(return_value={"items_synced": 0, "embeddings": 0}),
         ):
             resp = self.client.post("/api/library/sync")
@@ -275,7 +275,7 @@ class FeatureFlagSafetyTests(CaApiFixture):
 
 class MessageFeedbackEdgeTests(CaApiFixture):
     def _seed_assistant(self, session_id: str, message_id: str) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         db = jobs.get_job_manager().db
         db.create_chat_thread(session_id, thread_title="Feedback")
@@ -287,7 +287,7 @@ class MessageFeedbackEdgeTests(CaApiFixture):
         )
 
     def test_not_helpful_records_negative_preference(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         session_id = "fb-not-helpful"
         message_id = "asst-not-helpful"
@@ -347,7 +347,7 @@ class WebhookEdgeTests(unittest.TestCase):
 
 class ArrConfirmFriendlyErrorTests(CaApiFixture):
     def test_confirm_remove_returns_friendly_not_found(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         self.client.put(
             "/api/settings",
@@ -374,10 +374,10 @@ class ArrConfirmFriendlyErrorTests(CaApiFixture):
         movie.title = "Rust"
         movie.tmdb_id = 5156
         with patch(
-            "curatorx.agent.tools.RadarrClient.movie_by_tmdb_id",
+            "projectionist.agent.tools.RadarrClient.movie_by_tmdb_id",
             return_value=movie,
         ), patch(
-            "curatorx.agent.tools.RadarrClient.delete_movie",
+            "projectionist.agent.tools.RadarrClient.delete_movie",
             side_effect=RuntimeError(
                 'HTTP 404 from http://radarr/api/v3/movie/99: '
                 '{"message":"Movie with ID 99 does not exist"}'

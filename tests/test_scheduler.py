@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Any, Callable, Dict
 from unittest.mock import AsyncMock, patch
 
-from curatorx.config_store import Settings
-from curatorx.library.db import Database
-from curatorx.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.config_store import Settings
+from projectionist.library.db import Database
+from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
 
 
 def _make_db(tmp: str) -> Database:

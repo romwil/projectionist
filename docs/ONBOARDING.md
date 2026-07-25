@@ -1,36 +1,36 @@
-# CuratorX — Onboarding
+# Projectionist — Onboarding
 
-Goal: get from a fresh container to a curator that knows your library. This is the task-first path an owner actually follows after deploying CuratorX (Docker, Unraid, or local dev). Default URL: **http://localhost:8788**.
+Goal: get from a fresh container to a curator that knows your library. This is the task-first path an owner actually follows after deploying Projectionist (Docker, Unraid, or local dev). Default URL: **http://localhost:8788**.
 
 The whole flow is four moves: **run it → connect your services → pick your libraries → sync and let it learn.** Everything below shows the shortest path first, then explains why.
 
 ---
 
-## 1. Run CuratorX
+## 1. Run Projectionist
 
 Pick whichever matches how you host. All three land on the same setup wizard.
 
 ### Docker (single command)
 
 ```bash
-docker run -d --name curatorx \
+docker run -d --name projectionist \
   -p 8788:8788 \
-  -v /path/to/curatorx/config:/config \
-  romwil/curatorx:latest
+  -v /path/to/config:/config \
+  romwil/projectionist:latest
 ```
 
 ### Docker Compose (env-seeded)
 
 ```bash
-git clone https://github.com/romwil/curatorx.git
-cd curatorx
+git clone https://github.com/romwil/projectionist.git
+cd projectionist
 cp .env.example .env      # optional: pre-fill keys so Verify passes without typing them in the UI
 docker compose up -d
 ```
 
 ### Unraid
 
-Install from **Community Applications** (search "CuratorX"), or add the container with repository `romwil/curatorx:latest`, port `8788`, and config path `/mnt/user/appdata/curatorx/config → /config`. Full steps: [Wiki → Unraid](wiki/Unraid.md).
+Install from **Community Applications** (search "Projectionist"), or add the container with repository `romwil/projectionist:latest`, port `8788`, and config path `/mnt/user/appdata/curatorx/config → /config` (existing installs keep that host path; new installs may use `…/projectionist/config`). Full steps: [Wiki → Unraid](wiki/Unraid.md).
 
 Open **http://localhost:8788** (or your host's IP). A first-time setup wizard appears automatically.
 
@@ -67,10 +67,10 @@ Prefer to seed it from the environment? In Compose:
 ```yaml
 # docker-compose.yml (excerpt)
 services:
-  curatorx:
-    image: romwil/curatorx:latest
+  projectionist:
+    image: romwil/projectionist:latest
     ports: ["8788:8788"]
-    volumes: ["/mnt/user/appdata/curatorx/config:/config"]
+    volumes: ["/mnt/user/appdata/curatorx/config:/config"]  # or …/projectionist/config for new installs
     environment:
       PLEX_URL: "http://your-plex-host:32400"
       PLEX_TOKEN: "YOUR_PLEX_SERVER_TOKEN"
@@ -143,7 +143,7 @@ curl -s http://localhost:8788/api/library/stats | python3 -m json.tool   # movie
 
 Sync indexes identity and whatever Plex/TMDB return immediately. **Plot Lab motifs**, **embeddings**, and **neighbor graphs** fill in afterward via the **idle scheduler**, while the household isn't chatting.
 
-1. Leave CuratorX running (overnight after a first full sync is ideal).
+1. Leave Projectionist running (overnight after a first full sync is ideal).
 2. Open **Admin → Scheduled Tasks** (`/admin/tasks`) and confirm `metadata_enrichment`, `semantic_embeddings`, `summary_motifs`, and `plot_neighbors` are enabled.
 3. Try **Plot Lab** (`/explore/plot-lab`) once motifs appear — empty chips just mean the motif task hasn't finished a pass yet.
 

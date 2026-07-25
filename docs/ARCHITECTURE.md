@@ -1,14 +1,14 @@
-# CuratorX — Platform Architecture
+# Projectionist — Platform Architecture
 
-CuratorX is an **intent-aware curation companion** for Plex libraries. It combines a single-workspace chat UI, a tool-using LLM agent, RAG over your indexed library, **curation lens isolation**, **dynamic persona tuning**, personal **reviews** with optional Plex rating sync, **Plex webhooks** for near-completion rating prompts, and confirmation-gated Radarr/Sonarr actions.
+Projectionist is an **intent-aware curation companion** for Plex libraries. It combines a single-workspace chat UI, a tool-using LLM agent, RAG over your indexed library, **curation lens isolation**, **dynamic persona tuning**, personal **reviews** with optional Plex rating sync, **Plex webhooks** for near-completion rating prompts, and confirmation-gated Radarr/Sonarr actions.
 
-It is a **separate product** from [Reclaimspace](https://github.com/romwil/reclaimspace): Reclaimspace reclaims disk space by quarantining duplicate Plex files; CuratorX helps you discover, add, watch, and purge titles based on taste and usage within explicit cognitive boundaries.
+It is a **separate product** from [Reclaimspace](https://github.com/romwil/reclaimspace): Reclaimspace reclaims disk space by quarantining duplicate Plex files; Projectionist helps you discover, add, watch, and purge titles based on taste and usage within explicit cognitive boundaries.
 
 ---
 
 ## Vision and goals
 
-| Goal | How CuratorX addresses it |
+| Goal | How Projectionist addresses it |
 |------|---------------------------|
 | **Intent-aware curation** | Lenses sandbox taste; persona sliders shape agent behavior |
 | **Anti-monolith taste** | `lens_id` on chat, telemetry, and taste profiles prevents context contamination |
@@ -22,11 +22,11 @@ Non-goals: cloud SaaS, automatic file deletion without confirmation, generic str
 
 ### Design thesis — MCP over local data
 
-CuratorX is a production-quality example of a **Model Context Protocol interface** against structured and unstructured local data. The LLM never sees raw credentials or bulk exports; it issues targeted tool calls against a pre-indexed SQLite store that returns exactly the slice needed for each conversational turn.
+Projectionist is a production-quality example of a **Model Context Protocol interface** against structured and unstructured local data. The LLM never sees raw credentials or bulk exports; it issues targeted tool calls against a pre-indexed SQLite store that returns exactly the slice needed for each conversational turn.
 
 > "The LLM gets to act like a natural language surgeon on a highly optimized, predictable local dataset. It's incredibly fast, it's cheap, and it keeps your Plex token and personal collection server info locked down."
 
-This pattern — privacy-first MCP bridging a conversational AI to a rich personal dataset — generalizes beyond media curation. CuratorX demonstrates the approach end-to-end: dual trust-plane keys, confirm-gated mutations, and field-level redaction per mode. See [MCP.md](MCP.md) for the protocol surface.
+This pattern — privacy-first MCP bridging a conversational AI to a rich personal dataset — generalizes beyond media curation. Projectionist demonstrates the approach end-to-end: dual trust-plane keys, confirm-gated mutations, and field-level redaction per mode. See [MCP.md](MCP.md) for the protocol surface.
 
 ---
 
@@ -77,7 +77,7 @@ flowchart TB
         User[Home user / curator]
     end
 
-    subgraph curatorx [CuratorX]
+    subgraph curatorx [Projectionist]
         UI[Vite React SPA]
         Chat[Chat workspace]
         API[FastAPI backend]
@@ -85,7 +85,7 @@ flowchart TB
         Reviews[Reviews + Plex sync]
         Webhooks[Plex webhooks]
         Jobs[Job manager + sync scheduler]
-        DB[(SQLite curatorx.db)]
+        DB[(SQLite projectionist.db)]
         Settings[settings.json]
     end
 
@@ -262,7 +262,7 @@ Two-phase: propose token → user confirm → execute. TTL 600 seconds.
 
 ## SQLite concurrency model
 
-CuratorX runs as a single process with multiple concurrent writers: the FastAPI request handlers (asyncio tasks on the main thread), the idle scheduler (asyncio background task), and telemetry ingestion (daemon threads). SQLite's default journal mode (`DELETE`) only allows one reader *or* one writer at a time, which would cause `database is locked` errors under concurrent access. Three mechanisms work together to prevent this.
+Projectionist runs as a single process with multiple concurrent writers: the FastAPI request handlers (asyncio tasks on the main thread), the idle scheduler (asyncio background task), and telemetry ingestion (daemon threads). SQLite's default journal mode (`DELETE`) only allows one reader *or* one writer at a time, which would cause `database is locked` errors under concurrent access. Three mechanisms work together to prevent this.
 
 ### WAL mode (write-ahead logging)
 
@@ -284,7 +284,7 @@ With WAL, `PRAGMA synchronous=NORMAL` avoids an fsync on every commit while stil
 
 ### Write serializer model
 
-Under a loaded household (chat SSE + Plex webhook enqueue + telemetry threads + scheduler batch upserts), WAL + busy_timeout alone can still surface as lock warnings and stalled streams. CuratorX therefore runs a **dedicated write serializer** inside `Database`:
+Under a loaded household (chat SSE + Plex webhook enqueue + telemetry threads + scheduler batch upserts), WAL + busy_timeout alone can still surface as lock warnings and stalled streams. Projectionist therefore runs a **dedicated write serializer** inside `Database`:
 
 - **One background writer thread** owns mutating work submitted via `Database.run_write(fn)`. A dedicated thread is simpler than an asyncio task because most ambient writers are already sync callables (telemetry daemon threads, lock-retry upserts).
 - **Readers keep short-lived WAL connections** on the caller thread via `connect()` — concurrent reads must not regress.
@@ -298,7 +298,7 @@ WAL mode, `busy_timeout=30000`, and `run_with_db_lock_retry` remain the lower la
 
 ### Event-loop offload (SSE / hot paths)
 
-Chat SSE (`GET /api/chat/stream` → `stream_agent`) must not run blocking `sqlite3` or long pure-Python cosine scans on the asyncio loop. Hot paths use `await run_db(fn, …)` (`asyncio.to_thread` in `curatorx/library/db_io.py`): history load + assistant persist, mid-stream library search queries, Plex webhook enqueue, and semantic/neighbor cosine work. This is **not** a thread-per-request model for the whole app — only sync I/O and CPU bursts leave the loop. `run_with_db_lock_retry`'s blocking `time.sleep` stays correct because those retries run on the writer thread (or a `run_db` worker), never on the loop.
+Chat SSE (`GET /api/chat/stream` → `stream_agent`) must not run blocking `sqlite3` or long pure-Python cosine scans on the asyncio loop. Hot paths use `await run_db(fn, …)` (`asyncio.to_thread` in `projectionist/library/db_io.py`): history load + assistant persist, mid-stream library search queries, Plex webhook enqueue, and semantic/neighbor cosine work. This is **not** a thread-per-request model for the whole app — only sync I/O and CPU bursts leave the loop. `run_with_db_lock_retry`'s blocking `time.sleep` stays correct because those retries run on the writer thread (or a `run_db` worker), never on the loop.
 
 ### Trickle ingestion for embeddings
 
@@ -344,7 +344,7 @@ See [DOCKER.md](DOCKER.md) for Mac Colima, Unraid, and Compose details.
 
 ## Agent tools vs. background scheduler
 
-CuratorX has two execution paths that operate on the same data. Understanding the boundary prevents duplication and clarifies where new functionality belongs.
+Projectionist has two execution paths that operate on the same data. Understanding the boundary prevents duplication and clarifies where new functionality belongs.
 
 ```
 User Chat ──► CuratorAgent ──► Tools ──► DB ◄── Scheduler Tasks ◄── IdleScheduler
@@ -353,13 +353,13 @@ User Chat ──► CuratorAgent ──► Tools ──► DB ◄── Schedule
 
 ### Agent tools — synchronous, user-triggered
 
-Defined in `curatorx/agent/tools.py`. Executed within a single chat turn when the user asks a question or requests an action. Tools call into `db.py` and external APIs (TMDB, Radarr, Sonarr, Plex). Results flow back to the LLM for response generation.
+Defined in `projectionist/agent/tools.py`. Executed within a single chat turn when the user asks a question or requests an action. Tools call into `db.py` and external APIs (TMDB, Radarr, Sonarr, Plex). Results flow back to the LLM for response generation.
 
 **Characteristics:** latency-sensitive (<2 seconds), scoped to one user query, read-heavy with occasional confirmed writes.
 
 ### Background scheduler — asynchronous, system-triggered
 
-Defined in `curatorx/scheduler/engine.py` with individual tasks in `curatorx/scheduler/tasks/`. The `IdleScheduler` runs during idle periods (no chat activity for N minutes) and executes maintenance and enrichment tasks sequentially to avoid SQLite write contention.
+Defined in `projectionist/scheduler/engine.py` with individual tasks in `projectionist/scheduler/tasks/`. The `IdleScheduler` runs during idle periods (no chat activity for N minutes) and executes maintenance and enrichment tasks sequentially to avoid SQLite write contention.
 
 **Characteristics:** batch-oriented, minutes-long, produces data that agent tools later consume. Each task receives a `should_stop` callback for cooperative interruption when chat activity resumes.
 
@@ -410,7 +410,7 @@ Homelab SQLite cannot afford full pairwise cosine on every “more like this” 
 3. Optional graph mirror in `title_relations` (`collection`, `neighbor`, `shared_crew`, optional `llm_theme`).
 4. UI/API/agent tools SELECT from those tables.
 
-**Optional ANN prefilter:** when the [`sqlite-vec`](https://github.com/asg017/sqlite-vec) package loads successfully, `plot_neighbors` / `semantic_search` build a shadow `vec_embeddings` virtual table and KNN-prefilter candidates before the same exact cosine + surprise scoring. Default images omit the package so Unraid installs keep working; set `CURATORX_SQLITE_VEC=0` to force the exact path even if the package is present. Install with `pip install 'curatorx[vec]'` (or `pip install sqlite-vec`) inside a custom image when you want ANN.
+**Optional ANN prefilter:** when the [`sqlite-vec`](https://github.com/asg017/sqlite-vec) package loads successfully, `plot_neighbors` / `semantic_search` build a shadow `vec_embeddings` virtual table and KNN-prefilter candidates before the same exact cosine + surprise scoring. Default images omit the package so Unraid installs keep working; set `PROJECTIONIST_SQLITE_VEC=0` to force the exact path even if the package is present. Install with `pip install 'projectionist[vec]'` (or `pip install sqlite-vec`) inside a custom image when you want ANN.
 
 Empty neighbor/relation responses are **honest** — they mean the idle cache has not been built yet, not that the library has no similar titles.
 
@@ -506,7 +506,7 @@ Phase B is implemented: Admin Scheduled Tasks show durable recent runs, measured
 
 ## Curator memory subsystem
 
-CuratorX persists knowledge across sessions in **two distinct scopes** so the curator behaves as if it remembers rather than starting cold each turn. The dual-scope model is installed by `_migrate_curator_memory` in `db.py`; per-scope tables are in [DATA_MODEL.md](DATA_MODEL.md#curator-memory).
+Projectionist persists knowledge across sessions in **two distinct scopes** so the curator behaves as if it remembers rather than starting cold each turn. The dual-scope model is installed by `_migrate_curator_memory` in `db.py`; per-scope tables are in [DATA_MODEL.md](DATA_MODEL.md#curator-memory).
 
 | Scope | Store | Trust | Written by | Read by |
 |-------|-------|-------|-----------|---------|
@@ -553,12 +553,12 @@ save_repo_insight  → memory_insights (+ citations {source, ref, note})
 | Roles | Owner-only: settings, setup tests, library sync mutate, persona/lens writes. Guests cannot request media / *arr writes |
 | Partitioning | Chat, pending actions, watchlist, reviews, preferences scoped by `user_id` when multi-user is on (shared library remains household-wide) |
 | Feature gates | `GET /api/features` exposes enabled flags; auth UI, Seerr, and Plex collection tools stay hidden until opted in |
-| Webhooks | Require non-empty `webhook_secret` / `CURATORX_WEBHOOK_SECRET` + matching `X-CuratorX-Webhook-Secret` |
+| Webhooks | Require non-empty `webhook_secret` / `PROJECTIONIST_WEBHOOK_SECRET` + matching `X-Projectionist-Webhook-Secret` |
 | Destructive actions | Confirmation tokens for all *arr / Seerr writes; tokens bound to user when multi-user is on |
-| Session secret | Auto-persisted under DATA_DIR; `CURATORX_SESSION_SECRET` preferred; public default refused for multi-user |
+| Session secret | Auto-persisted under DATA_DIR; `PROJECTIONIST_SESSION_SECRET` preferred; public default refused for multi-user |
 | Secrets | Masked on API read; env overrides file |
 | Lens isolation | Chat and taste scoped by `lens_id`; no cross-lens history leakage in API |
-| MCP | Optional stdio + HTTP `/mcp`; dual keys (`CURATORX_MCP_API_KEY` privacy / `CURATORX_MCP_FULL_API_KEY` full) |
+| MCP | Optional stdio + HTTP `/mcp`; dual keys (`PROJECTIONIST_MCP_API_KEY` privacy / `PROJECTIONIST_MCP_FULL_API_KEY` full) |
 
 See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for the full partitioning matrix.
 
@@ -591,9 +591,9 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 | Non-root Docker | **Implemented** — `curatorx` UID/GID 1000 + entrypoint chown |
 | Agent blueprints | Schema present; richer scheduler wiring **Future** |
 | Plex Lists publish | **Future** (pending stable Plex Discover API) |
-| sqlite-vec ANN prefilter | **Implemented (optional)** — when `sqlite-vec` is installed (`pip install curatorx[vec]` or `CURATORX_SQLITE_VEC` not `0`), neighbor rebuild / semantic search ANN-prefilter candidates then exact-rescore; without the extension the pure-Python cosine path remains. `item_neighbors` stays the UI/agent read cache either way |
+| sqlite-vec ANN prefilter | **Implemented (optional)** — when `sqlite-vec` is installed (`pip install projectionist[vec]` or `PROJECTIONIST_SQLITE_VEC` not `0`), neighbor rebuild / semantic search ANN-prefilter candidates then exact-rescore; without the extension the pure-Python cosine path remains. `item_neighbors` stays the UI/agent read cache either way |
 | TV season-decay taste | **Implemented** — `taste_refresh` folds `library_episodes` view/star curves with season decay so mid-series abandonment does not keep forcing later-season neighbors |
-| Ephemeral Plex collection GC | **Implemented** — agent/movie-night shelves get a `[CuratorX]` prefix + TTL row; idle `collection_gc` prunes expired markers only (never evergreen collections without the marker); Admin dry-run toggle |
+| Ephemeral Plex collection GC | **Implemented** — agent/movie-night shelves get a `[Projectionist]` prefix + TTL row; idle `collection_gc` prunes expired markers only (never evergreen collections without the marker); Admin dry-run toggle |
 
 ---
 

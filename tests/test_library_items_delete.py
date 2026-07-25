@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from curatorx.web.auth import SESSION_COOKIE_NAME, clear_pin_bindings
-from curatorx.web.rate_limit import clear_rate_limits
-from curatorx.web.session_tokens import clear_session_secret_cache, create_session_token
+from projectionist.web.auth import SESSION_COOKIE_NAME, clear_pin_bindings
+from projectionist.web.rate_limit import clear_rate_limits
+from projectionist.web.session_tokens import clear_session_secret_cache, create_session_token
 
 
 class LibraryItemsDeleteApiTests(unittest.TestCase):
@@ -27,17 +27,17 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        import curatorx.web.app as app_mod
+        import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
         self.client = TestClient(app_mod.app)
 
     def tearDown(self) -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs._manager = None
         clear_session_secret_cache()
@@ -62,7 +62,7 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
         )
 
     def _seed_item(self, rating_key: str = "rk-delete-1", title: str = "Delete Me") -> None:
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         jobs.get_job_manager().db.upsert_library_item(
             {
@@ -88,7 +88,7 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.json()["deleted"], 1)
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         remaining = jobs.get_job_manager().db.search_keyword("Delete Me")
         self.assertEqual(len(remaining), 0)
@@ -102,12 +102,12 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
     def test_member_cannot_delete_library_items(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 10, "title": "Owner"},
         ):
             self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})
 
-        import curatorx.web.jobs as jobs
+        import projectionist.web.jobs as jobs
 
         member_id = "plex-99"
         jobs.get_job_manager().db.upsert_plex_user(
@@ -131,7 +131,7 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
     def test_owner_session_can_delete_when_multi_user_enabled(self) -> None:
         self._enable_multi_user()
         with patch(
-            "curatorx.web.auth.fetch_plex_account",
+            "projectionist.web.auth.fetch_plex_account",
             return_value={"id": 11, "title": "Owner"},
         ):
             login = self.client.post("/api/auth/plex", json={"auth_token": "owner-token"})

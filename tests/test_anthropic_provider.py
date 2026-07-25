@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 
-from curatorx.agent.providers import (
+from projectionist.agent.providers import (
     AnthropicProvider,
     LLMProviderError,
     _convert_messages_for_anthropic,
@@ -44,7 +44,7 @@ class AnthropicProviderTests(unittest.IsolatedAsyncioTestCase):
         mock_client.__aexit__.return_value = None
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("curatorx.agent.providers.httpx.AsyncClient", return_value=mock_client):
+        with patch("projectionist.agent.providers.httpx.AsyncClient", return_value=mock_client):
             await provider.chat([{"role": "user", "content": "ping"}])
 
         body = mock_client.post.await_args.kwargs["json"]
@@ -70,7 +70,7 @@ class AnthropicProviderTests(unittest.IsolatedAsyncioTestCase):
         mock_client.__aexit__.return_value = None
         mock_client.post = AsyncMock(return_value=mock_response)
 
-        with patch("curatorx.agent.providers.httpx.AsyncClient", return_value=mock_client):
+        with patch("projectionist.agent.providers.httpx.AsyncClient", return_value=mock_client):
             with self.assertRaises(LLMProviderError) as ctx:
                 await provider.chat([{"role": "user", "content": "ping"}])
 
@@ -168,7 +168,7 @@ class AnthropicProviderTests(unittest.IsolatedAsyncioTestCase):
             {"role": "tool", "tool_call_id": "call_xyz", "content": "3 results"},
         ]
 
-        with patch("curatorx.agent.providers.httpx.AsyncClient", return_value=mock_client):
+        with patch("projectionist.agent.providers.httpx.AsyncClient", return_value=mock_client):
             result = await provider.chat(messages)
 
         body = mock_client.post.await_args.kwargs["json"]

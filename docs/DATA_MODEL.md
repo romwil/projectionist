@@ -1,6 +1,6 @@
-# CuratorX — Data Model
+# Projectionist — Data Model
 
-Reference for persistent storage: SQLite tables, settings fields, and Pydantic schemas. Schema definitions live in `curatorx/library/db.py` and `curatorx/models/schemas.py`.
+Reference for persistent storage: SQLite tables, settings fields, and Pydantic schemas. Schema definitions live in `projectionist/library/db.py` and `projectionist/models/schemas.py`.
 
 ---
 
@@ -8,7 +8,7 @@ Reference for persistent storage: SQLite tables, settings fields, and Pydantic s
 
 | Path | Format | Contents |
 |------|--------|----------|
-| `{DATA_DIR}/curatorx.db` | SQLite 3 | Library, embeddings, chat (lens-scoped), persona, lenses, preferences |
+| `{DATA_DIR}/projectionist.db` | SQLite 3 | Library, embeddings, chat (lens-scoped), persona, lenses, preferences |
 | `{DATA_DIR}/settings.json` | JSON | Connection settings and secrets |
 | `{DATA_DIR}/jobs_state.json` | JSON | Durable background job history (library sync) |
 
@@ -57,7 +57,7 @@ Canonical Plex index enriched during sync and idle `metadata_enrichment`.
 
 #### Provenance rules (dates & plot text)
 
-CuratorX treats missing metadata as a first-class state. Feeds and agent tools must not invent facts:
+Projectionist treats missing metadata as a first-class state. Feeds and agent tools must not invent facts:
 
 | Field | Source of truth | Must not |
 |-------|-----------------|----------|
@@ -207,7 +207,7 @@ Unique per `(user_id, media_type, tmdb_id, tvdb_id)`.
 
 #### `curated_lists`
 
-Per-user named shelves (local CuratorX lists). Plex Lists publish is deferred — see FAQ.
+Per-user named shelves (local Projectionist lists). Plex Lists publish is deferred — see FAQ.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -242,7 +242,7 @@ Household accounts (schema present; login enforced only when `features.multi_use
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `id` | TEXT PK | CuratorX user id (`bootstrap-owner` for single-user installs) |
+| `id` | TEXT PK | Projectionist user id (`bootstrap-owner` for single-user installs) |
 | `display_name` | TEXT | Shown in UI |
 | `email` | TEXT | Optional |
 | `role` | TEXT | `owner`, `member`, or `guest` |
@@ -489,7 +489,7 @@ Proactive near-completion prompts (≥85% watched) surfaced in chat for the
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | TEXT PK | Prompt UUID |
-| `user_id` | TEXT NOT NULL | CuratorX user who owns this nudge |
+| `user_id` | TEXT NOT NULL | Projectionist user who owns this nudge |
 | `rating_key` | TEXT | Plex item or episode key |
 | `media_type` | TEXT | `movie` or `show` |
 | `title` | TEXT | Prompt headline |
@@ -506,7 +506,7 @@ Unique on `(user_id, rating_key)`. Multi-user installs enqueue via Plex webhook
 
 ## Settings model
 
-Python dataclass `Settings` in `curatorx/config_store.py`, persisted as `settings.json`. Environment variables override file values.
+Python dataclass `Settings` in `projectionist/config_store.py`, persisted as `settings.json`. Environment variables override file values.
 
 See [CONFIGURATION.md](CONFIGURATION.md) for the full field list. Secret fields are masked on `GET /api/settings` with `{field}_set` booleans.
 
@@ -516,7 +516,7 @@ Persona sliders and curator name are **not** in `settings.json` — they live in
 
 ## Pydantic schemas
 
-Defined in `curatorx/models/schemas.py`.
+Defined in `projectionist/models/schemas.py`.
 
 ### Lens and persona
 
