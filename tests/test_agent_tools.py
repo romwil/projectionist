@@ -81,6 +81,45 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             payload = json.loads(result)
             self.assertEqual(payload["unwatched_count"], 1)
 
+    async def test_search_library_returns_matching_cards(self) -> None:
+        """Regression for C1: _tool_search_library must return a JSON body with the
+        matched cards, not None. A text-title match needs no LLM/embeddings."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "42",
+                    "media_type": "movie",
+                    "title": "Blade Runner",
+                    "year": 1982,
+                    "genres": ["Sci-Fi"],
+                    "view_count": 0,
+                }
+            )
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            result = await registry.execute("search_library", {"query": "Blade Runner"})
+
+            # The core regression: a real JSON string, never None.
+            self.assertIsInstance(result, str)
+            payload = json.loads(result)
+            self.assertEqual(payload["total_matched"], 1)
+            self.assertEqual(payload["returned"], 1)
+            self.assertFalse(payload["has_more"])
+            self.assertEqual([item["title"] for item in payload["items"]], ["Blade Runner"])
+            # Cards must also be captured on the registry for chat rendering.
+            self.assertEqual([card.title for card in registry.cards], ["Blade Runner"])
+
+    async def test_search_library_empty_query_returns_empty_payload(self) -> None:
+        """Boundary: an empty query yields an empty item list, still valid JSON."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            result = await registry.execute("search_library", {"query": ""})
+            payload = json.loads(result)
+            self.assertEqual(payload["total_matched"], 0)
+            self.assertEqual(payload["items"], [])
+            self.assertEqual(list(registry.cards), [])
+
     def test_tool_definitions_include_library_query_tools(self) -> None:
         names = {tool["function"]["name"] for tool in TOOL_DEFINITIONS}
         for expected in (
