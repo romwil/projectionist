@@ -1,0 +1,192 @@
+"""Env-seeded owner + first-owner race close (review finding H2)."""
+
+from __future__ import annotations
+
+import importlib
+import json
+import os
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+
+from curatorx.library.db import BOOTSTRAP_OWNER_ID, Database
+from curatorx.web import auth
+from curatorx.web.session_tokens import clear_session_secret_cache
+
+
+class OwnerSeedingTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self._tmp.name) / "test.db")
+        self.db.ensure_bootstrap_owner()
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _clear_owner_env(self, env: dict) -> None:
+        for key in (auth.OWNER_USERNAME_ENV, auth.OWNER_PASSWORD_ENV):
+            env.pop(key, None)
+
+    def test_bootstrap_owner_is_not_a_real_owner(self) -> None:
+        self.assertFalse(auth.has_real_owner(self.db))
+
+    def test_seed_noop_without_password(self) -> None:
+        with patch.dict(os.environ, {}, clear=False) as env:
+            self._clear_owner_env(env)
+            self.assertIsNone(auth.seed_env_owner(self.db))
+        self.assertFalse(auth.has_real_owner(self.db))
+
+    def test_seed_creates_local_owner(self) -> None:
+        with patch.dict(
+            os.environ,
+            {auth.OWNER_PASSWORD_ENV: "correct horse battery", auth.OWNER_USERNAME_ENV: "boss"},
+            clear=False,
+        ):
+            user_id = auth.seed_env_owner(self.db)
+        self.assertIsNotNone(user_id)
+        self.assertTrue(auth.has_real_owner(self.db))
+        row = self.db.get_user_by_display_name("boss")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["role"], "owner")
+        self.assertTrue(auth._verify_password("correct horse battery", str(row["password_hash"])))
+
+    def test_seed_defaults_username_to_owner(self) -> None:
+        with patch.dict(os.environ, {auth.OWNER_PASSWORD_ENV: "supersecretpw"}, clear=False) as env:
+            env.pop(auth.OWNER_USERNAME_ENV, None)
+            auth.seed_env_owner(self.db)
+        self.assertIsNotNone(self.db.get_user_by_display_name(auth.DEFAULT_OWNER_USERNAME))
+
+    def test_seed_rejects_short_password(self) -> None:
+        with patch.dict(os.environ, {auth.OWNER_PASSWORD_ENV: "short"}, clear=False):
+            self.assertIsNone(auth.seed_env_owner(self.db))
+        self.assertFalse(auth.has_real_owner(self.db))
+
+    def test_seed_is_idempotent(self) -> None:
+        with patch.dict(os.environ, {auth.OWNER_PASSWORD_ENV: "supersecretpw"}, clear=False):
+            first = auth.seed_env_owner(self.db)
+            second = auth.seed_env_owner(self.db)
+        self.assertEqual(first, second)
+        owners = [u for u in self.db.list_users(limit=100) if u.get("role") == "owner" and u.get("id") != BOOTSTRAP_OWNER_ID]
+        self.assertEqual(len(owners), 1)
+
+    def test_rotating_password_updates_owner(self) -> None:
+        with patch.dict(os.environ, {auth.OWNER_PASSWORD_ENV: "originalpassword"}, clear=False):
+            user_id = auth.seed_env_owner(self.db)
+        with patch.dict(os.environ, {auth.OWNER_PASSWORD_ENV: "rotatedpassword"}, clear=False):
+            again = auth.seed_env_owner(self.db)
+        self.assertEqual(user_id, again)
+        row = self.db.get_user(user_id)
+        self.assertTrue(auth._verify_password("rotatedpassword", str(row["password_hash"])))
+        self.assertFalse(auth._verify_password("originalpassword", str(row["password_hash"])))
+
+    def test_seed_does_not_clobber_different_owner(self) -> None:
+        # A plex owner already claimed ownership.
+        self.db.upsert_plex_user(
+            user_id="plex-1",
+            display_name="Existing",
+            email=None,
+            plex_user_id="1",
+            role="owner",
+            avatar_url=None,
+            seerr_user_id=None,
+            seerr_permissions=None,
+        )
+        with patch.dict(os.environ, {auth.OWNER_PASSWORD_ENV: "supersecretpw"}, clear=False):
+            self.assertIsNone(auth.seed_env_owner(self.db))
+        self.assertIsNone(self.db.get_user_by_display_name(auth.DEFAULT_OWNER_USERNAME))
+
+
+class NewUserRoleTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.db = Database(Path(self._tmp.name) / "test.db")
+        self.db.ensure_bootstrap_owner()
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def test_first_real_user_claims_owner_legacy(self) -> None:
+        self.assertEqual(auth.resolve_new_user_role(self.db), "owner")
+
+    def test_subsequent_users_are_members_after_seed(self) -> None:
+        with patch.dict(os.environ, {auth.OWNER_PASSWORD_ENV: "supersecretpw"}, clear=False):
+            auth.seed_env_owner(self.db)
+        # With an owner seeded, a first Plex/OIDC/local login can no longer grab owner.
+        self.assertEqual(auth.resolve_new_user_role(self.db), "member")
+
+
+class OwnerSeedingIntegrationTests(unittest.TestCase):
+    """End-to-end: enabling multi-user seeds the env owner, the owner signs in
+    with local password, and a later Plex login is only a member (H2)."""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self._env = patch.dict(
+            os.environ,
+            {
+                "DATA_DIR": self._tmp.name,
+                "CURATORX_SKIP_DOTENV": "1",
+                "LLM_PROVIDER": "ollama",
+                "CURATORX_SESSION_SECRET": "integration-owner-seed-secret-value",
+                auth.OWNER_USERNAME_ENV: "boss",
+                auth.OWNER_PASSWORD_ENV: "seededownerpw",
+            },
+            clear=False,
+        )
+        self._env.start()
+        clear_session_secret_cache()
+        import curatorx.web.jobs as jobs
+
+        jobs._manager = None
+        import curatorx.web.app as app_mod
+
+        importlib.reload(app_mod)
+        self.app_mod = app_mod
+        self.client = TestClient(app_mod.app)
+
+    def tearDown(self) -> None:
+        import curatorx.web.jobs as jobs
+
+        jobs._manager = None
+        clear_session_secret_cache()
+        self.client.close()
+        self._env.stop()
+        self._tmp.cleanup()
+
+    def _enable_multi_user(self) -> None:
+        resp = self.client.put(
+            "/api/settings",
+            json={
+                "features": {"multi_user_enabled": True, "seerr_enabled": False},
+                "auth": {"mode": "plex", "plex_login_enabled": True},
+            },
+        )
+        self.assertEqual(resp.status_code, 200, resp.text)
+
+    def test_enable_multi_user_seeds_owner_and_closes_race(self) -> None:
+        self._enable_multi_user()
+
+        # The env owner can sign in with local password even though only Plex
+        # login was toggled on — the injected credential implies local login.
+        login = self.client.post(
+            "/api/auth/local/login", json={"username": "boss", "password": "seededownerpw"}
+        )
+        self.assertEqual(login.status_code, 200, login.text)
+        self.assertEqual(login.json()["user"]["role"], "owner")
+        self.client.post("/api/auth/logout")
+
+        # A different account logging in afterwards cannot claim owner.
+        with patch(
+            "curatorx.web.auth.fetch_plex_account",
+            return_value={"id": 99, "title": "Neighbor", "email": "n@example.com"},
+        ):
+            plex = self.client.post("/api/auth/plex", json={"auth_token": "neighbor-token"})
+        self.assertEqual(plex.status_code, 200, plex.text)
+        self.assertEqual(plex.json()["user"]["role"], "member")
+
+
+if __name__ == "__main__":
+    unittest.main()

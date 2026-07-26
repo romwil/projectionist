@@ -28,6 +28,12 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      # First-owner setup for multi-user (H2): seeds the owner account so the
+      # first login cannot be raced on a shared LAN. Local login for this owner
+      # works even if the local-login flag is off.
+      CURATORX_OWNER_USERNAME: ${CURATORX_OWNER_USERNAME:-}
+      CURATORX_OWNER_PASSWORD: ${CURATORX_OWNER_PASSWORD:-}
+      CURATORX_SESSION_SECRET: ${CURATORX_SESSION_SECRET:-}
       CURATORX_LOG_LEVEL: ${CURATORX_LOG_LEVEL:-${LOG_LEVEL:-INFO}}
       LOG_FORMAT: ${LOG_FORMAT:-text}
     volumes:

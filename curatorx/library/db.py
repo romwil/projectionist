@@ -1375,6 +1375,21 @@ class Database:
         assert row is not None
         return self._row_to_user(row)
 
+    def update_user_password(self, user_id: str, password_hash: str) -> Dict[str, Any]:
+        """Reset a local user's password hash (used to keep an env-seeded owner
+        credential authoritative)."""
+        with self.connect() as conn:
+            existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
+            if existing is None:
+                raise ValueError("User not found")
+            conn.execute(
+                "UPDATE users SET password_hash = ? WHERE id = ?",
+                (password_hash, user_id),
+            )
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        assert row is not None
+        return self._row_to_user(row)
+
     def set_user_disabled(self, user_id: str, disabled: bool) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()

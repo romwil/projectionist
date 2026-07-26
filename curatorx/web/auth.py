@@ -148,6 +148,120 @@ def bootstrap_owner(db: Optional[Database] = None) -> CurrentUser:
     return CurrentUser(id=BOOTSTRAP_OWNER_ID, display_name="Owner", role="owner")
 
 
+# --- First-owner setup (review finding H2) ------------------------------------------
+#
+# When multi-user auth is enabled there is a window where the *first* account to
+# log in claims the owner role. On a shared LAN a neighbor could race it. Rather
+# than a claim code (which risks locking the operator out), CuratorX lets the
+# owner credential be injected into the container via environment variables —
+# a natural fit for an Unraid CA template field. When set, the owner account is
+# seeded up front, so ownership is never up for grabs and the operator always
+# holds the credential (no lockout). When unset, the legacy trusted-LAN behavior
+# is preserved (first login claims owner).
+
+OWNER_USERNAME_ENV = "CURATORX_OWNER_USERNAME"
+OWNER_PASSWORD_ENV = "CURATORX_OWNER_PASSWORD"
+DEFAULT_OWNER_USERNAME = "owner"
+MIN_OWNER_PASSWORD_LENGTH = 8
+
+
+def resolve_owner_credentials() -> tuple[str, str]:
+    """Return (username, password) for the env-injected owner.
+
+    ``password`` is empty when ``CURATORX_OWNER_PASSWORD`` is not set. The
+    password is never persisted in plaintext — only its salted hash lands in the
+    users table when the owner is seeded.
+    """
+    username = str(os.environ.get(OWNER_USERNAME_ENV) or "").strip() or DEFAULT_OWNER_USERNAME
+    password = str(os.environ.get(OWNER_PASSWORD_ENV) or "")
+    return username, password
+
+
+def env_owner_password_configured() -> bool:
+    return bool(str(os.environ.get(OWNER_PASSWORD_ENV) or "").strip())
+
+
+def has_real_owner(db: Database) -> bool:
+    """True when a non-bootstrap account already holds the owner role.
+
+    The bootstrap owner is a placeholder that exists before any real login, so
+    it must not count as a claimed owner.
+    """
+    try:
+        users = db.list_users(limit=500)
+    except Exception:  # pragma: no cover - defensive
+        return False
+    return any(
+        str(u.get("role")) == "owner" and str(u.get("id")) != BOOTSTRAP_OWNER_ID
+        for u in users
+    )
+
+
+def resolve_new_user_role(db: Database) -> str:
+    """Role for a brand-new account.
+
+    ``member`` when a real owner already exists (e.g. an env-seeded owner, which
+    closes the first-login race); otherwise ``owner`` (legacy trusted-LAN
+    behavior where the first login claims ownership). This is owner-existence
+    based, so seeding a local owner also prevents a first Plex/OIDC login from
+    silently grabbing ownership.
+    """
+    return "member" if has_real_owner(db) else "owner"
+
+
+def seed_env_owner(db: Database) -> Optional[str]:
+    """Ensure the env-injected owner account exists; return its user id or None.
+
+    Idempotent and safe to call on every startup and whenever multi-user is
+    enabled. Keeps the injected credential authoritative for the owner account
+    (so rotating ``CURATORX_OWNER_PASSWORD`` and restarting resets the password —
+    a recovery path that avoids lockout). Never clobbers a different existing
+    owner.
+    """
+    username, password = resolve_owner_credentials()
+    if not password:
+        return None
+    if len(password) < MIN_OWNER_PASSWORD_LENGTH:
+        logger.warning(
+            "%s is set but shorter than %d characters; refusing to seed a weak owner.",
+            OWNER_PASSWORD_ENV,
+            MIN_OWNER_PASSWORD_LENGTH,
+        )
+        return None
+
+    existing = db.get_user_by_display_name(username)
+    if existing is not None:
+        user_id = str(existing["id"])
+        changed = False
+        if str(existing["role"]) != "owner":
+            db.update_user_role(user_id, "owner")
+            changed = True
+        if not _verify_password(password, str(existing["password_hash"] or "")):
+            db.update_user_password(user_id, _hash_password(password))
+            changed = True
+        if changed:
+            logger.info("Owner account '%s' updated from %s.", username, OWNER_PASSWORD_ENV)
+        return user_id
+
+    if has_real_owner(db):
+        logger.warning(
+            "%s is set but a different owner already exists; skipping seed of '%s'.",
+            OWNER_PASSWORD_ENV,
+            username,
+        )
+        return None
+
+    user_id = f"local-{secrets.token_hex(12)}"
+    db.create_local_user(
+        user_id=user_id,
+        display_name=username,
+        password_hash=_hash_password(password),
+        role="owner",
+    )
+    logger.info("Seeded owner account '%s' from %s.", username, OWNER_PASSWORD_ENV)
+    return user_id
+
+
 def _cookie_should_be_secure(request: Optional[Request]) -> bool:
     if request is None:
         return False
@@ -424,7 +538,7 @@ def authenticate_plex_user(auth_token: str, db: Database) -> CurrentUser:
         role = str(existing["role"])
     else:
         user_id = f"plex-{plex_user_id}"
-        role = "owner" if db.count_users_with_plex_id() == 0 else "member"
+        role = resolve_new_user_role(db)
 
     seerr_user_id: Optional[int] = None
     seerr_permissions: Optional[int] = None
@@ -557,15 +671,12 @@ def _ensure_local_login_enabled() -> Settings:
     settings = _settings()
     if not settings.features.multi_user_enabled:
         raise HTTPException(status_code=400, detail="Multi-user auth is not enabled")
-    if not settings.auth.local_login_enabled:
+    # An env-injected owner credential implies local login for that account, so
+    # a bare Unraid CA setup (owner password only) works without also toggling
+    # the local-login flag.
+    if not settings.auth.local_login_enabled and not env_owner_password_configured():
         raise HTTPException(status_code=400, detail="Local password login is not enabled")
     return settings
-
-
-def _count_local_users(db: Database) -> int:
-    """Count users created via local-password auth (excludes bootstrap owner)."""
-    users = db.list_users(limit=200)
-    return sum(1 for u in users if u.get("auth_method") == "local")
 
 
 def register_local_user(
@@ -578,9 +689,11 @@ def register_local_user(
     """Create a local-password account.
 
     Rules:
-      - If no local-auth users exist yet → first user becomes ``owner``
-        (bootstrap — no session required).
-      - Otherwise the caller must be an ``owner``.
+      - While ownership is unclaimed (no real owner yet) anyone may register a
+        bootstrap account with no session. Whether it becomes ``owner`` follows
+        the owner-existence gate (legacy first-user-is-owner, unless an owner has
+        already been seeded — e.g. via ``CURATORX_OWNER_PASSWORD``).
+      - Once a real owner exists, only that owner can create further accounts.
     """
     _ensure_local_login_enabled()
 
@@ -594,12 +707,11 @@ def register_local_user(
     if existing is not None:
         raise HTTPException(status_code=409, detail="Username already taken")
 
-    is_first_local = _count_local_users(db) == 0
-    if not is_first_local:
+    if has_real_owner(db):
         if requesting_user is None or requesting_user.role != "owner":
             raise HTTPException(status_code=403, detail="Only the owner can create local accounts")
 
-    role = "owner" if is_first_local else "member"
+    role = resolve_new_user_role(db)
     user_id = f"local-{secrets.token_hex(12)}"
     password_hash = _hash_password(password)
 
@@ -812,6 +924,9 @@ def handle_oidc_callback(
     if existing is not None and _user_is_disabled(existing):
         raise HTTPException(status_code=403, detail="This account has been disabled")
 
+    # OIDC accounts are always created as members; ownership is claimed via the
+    # env-seeded owner (CURATORX_OWNER_PASSWORD) or the legacy first Plex/local
+    # login. This keeps SSO identities from silently auto-claiming owner.
     user_row = db.upsert_oidc_user(
         oidc_sub=sub,
         display_name=display_name,

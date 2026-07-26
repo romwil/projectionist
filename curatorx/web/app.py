@@ -272,6 +272,16 @@ async def lifespan(_app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("Startup: seed data failed (continuing)")
 
+    # Seed the env-injected owner (CURATORX_OWNER_PASSWORD) so the first-login
+    # ownership race is closed for multi-user deployments (review finding H2).
+    try:
+        if _settings().features.multi_user_enabled:
+            from curatorx.web.auth import seed_env_owner
+
+            seed_env_owner(manager.db)
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup: owner seeding failed (continuing)")
+
     def _warm_library_facets() -> None:
         try:
             logger.info("Startup: background library facet index check…")
@@ -1068,10 +1078,10 @@ def auth_local_register(
     """Create a local-password account.  Owner-only unless bootstrapping."""
     enforce_rate_limit(request, bucket="auth_local_register", limit=5, window_seconds=60)
     db = _db()
-    from curatorx.web.auth import _count_local_users
+    from curatorx.web.auth import has_real_owner
 
     requesting_user = None
-    if _count_local_users(db) > 0:
+    if has_real_owner(db):
         requesting_user = get_current_user_dep(request)
 
     user = register_local_user(
@@ -1271,6 +1281,15 @@ def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) 
     invalidate_certifications_on_settings_change(_db(), before, settings, payload.model_dump())
     save_settings(DATA_DIR, settings)
     sync_settings_to_db(_db(), settings)
+    # Seed the env-injected owner the moment multi-user is turned on, so there is
+    # no window for a LAN neighbor to race the first login (review finding H2).
+    if settings.features.multi_user_enabled:
+        try:
+            from curatorx.web.auth import seed_env_owner
+
+            seed_env_owner(_db())
+        except Exception:  # noqa: BLE001
+            logger.exception("Owner seeding after settings update failed (continuing)")
     return _mask_settings(settings)
 
 
