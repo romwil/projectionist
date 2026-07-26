@@ -568,6 +568,9 @@ class SettingsPayload(BaseModel):
 
 class McpKeyWhichPayload(BaseModel):
     which: Literal["privacy", "full"]
+    # Active-curation scope for a newly issued full key (H3). Only meaningful
+    # when which == "full"; None leaves the current scope unchanged.
+    confirm_scope: Optional[bool] = None
 
 
 class PlexCollectionProposePayload(BaseModel):
@@ -1291,9 +1294,13 @@ def rotate_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner
     other_value = str(getattr(existing, other_field) or "").strip()
     if other_value and new_key == other_value:
         raise HTTPException(status_code=500, detail="Generated MCP key collided; retry rotate.")
-    updated = Settings.from_mapping({**asdict(existing), field: new_key})
+    overrides: Dict[str, Any] = {field: new_key}
+    # The active-curation scope is bound to full-key issuance (H3).
+    if payload.which == "full" and payload.confirm_scope is not None:
+        overrides["mcp_full_confirm_enabled"] = bool(payload.confirm_scope)
+    updated = Settings.from_mapping({**asdict(existing), **overrides})
     _validate_distinct_mcp_keys(updated)
-    invalidate_certifications_on_settings_change(_db(), before, updated, {field: new_key})
+    invalidate_certifications_on_settings_change(_db(), before, updated, overrides)
     save_settings(DATA_DIR, updated)
     sync_settings_to_db(_db(), updated)
     return {
@@ -1324,8 +1331,12 @@ def clear_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner"
     settings_path = DATA_DIR / "settings.json"
     before = Settings.load(settings_path) if settings_path.exists() else Settings()
     existing = _settings()
-    updated = Settings.from_mapping({**asdict(existing), field: ""})
-    invalidate_certifications_on_settings_change(_db(), before, updated, {field: ""})
+    overrides: Dict[str, Any] = {field: ""}
+    # Clearing the full key also drops its active-curation scope (H3).
+    if payload.which == "full":
+        overrides["mcp_full_confirm_enabled"] = False
+    updated = Settings.from_mapping({**asdict(existing), **overrides})
+    invalidate_certifications_on_settings_change(_db(), before, updated, overrides)
     save_settings(DATA_DIR, updated)
     sync_settings_to_db(_db(), updated)
     return {"which": payload.which, "field": field, "settings": _mask_settings(updated)}

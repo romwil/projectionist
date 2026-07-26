@@ -67,6 +67,27 @@ def full_mode_allowed() -> bool:
     return True
 
 
+_TRUTHY = frozenset({"1", "true", "yes", "on"})
+
+
+def full_confirm_scope_enabled() -> bool:
+    """True when the full key is scoped for active curation (self-confirm).
+
+    Resolved from the ``mcp_full_confirm_enabled`` setting (chosen at key
+    creation) or the ``CURATORX_MCP_FULL_CONFIRM`` env for stdio / Unraid CA.
+    """
+    from curatorx.config_store import load_merged_settings
+
+    if bool(getattr(load_merged_settings(_data_dir()), "mcp_full_confirm_enabled", False)):
+        return True
+    return str(os.environ.get("CURATORX_MCP_FULL_CONFIRM") or "").strip().lower() in _TRUTHY
+
+
+def full_confirm_allowed() -> bool:
+    """True only when full mode is available *and* granted the confirm scope."""
+    return full_mode_allowed() and full_confirm_scope_enabled()
+
+
 def resolve_http_mcp_auth(provided: str) -> Tuple[Optional[McpMode], Optional[str], int]:
     """Map a presented key to a mode.
 

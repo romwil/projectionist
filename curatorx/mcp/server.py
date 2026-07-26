@@ -26,6 +26,7 @@ from curatorx.library.query import (
 from curatorx.library.titles import get_title_detail
 from curatorx.mcp.mode import (
     audience_for_mode,
+    full_confirm_scope_enabled,
     get_mcp_mode,
     resolve_stdio_mcp_mode,
     set_mcp_mode,
@@ -40,8 +41,9 @@ mcp = FastMCP(
         "Use library_query for paginated owned-title browse with rich filters; "
         "library_aggregate for counts; library_facet_catalog for top directors/actors; "
         "library_tv_episodes and library_tv_progress for TV episode-level queries. "
-        "Full MCP mode can propose confirm-gated *arr changes, but a human must "
-        "confirm them on the authenticated CuratorX web plane — MCP cannot self-confirm."
+        "Full MCP mode can propose confirm-gated *arr changes; confirming them over "
+        "MCP requires a key scoped for active curation, otherwise a human confirms "
+        "on the authenticated CuratorX web plane."
     ),
 )
 
@@ -473,7 +475,7 @@ def propose_add_radarr(tmdb_id: int, title: str = "") -> str:
             "pending_token": token,
             "confirmation_token": token,
             "summary": f"Add to Radarr: {title or tmdb_id}",
-            "message": "A human must confirm this in the CuratorX web UI status dock (or POST /api/actions/confirm). MCP cannot self-confirm.",
+            "message": "Confirm with confirm_pending_action if this key is scoped for active curation; otherwise a human confirms it in the CuratorX web UI status dock (or POST /api/actions/confirm).",
         }
     )
 
@@ -516,7 +518,7 @@ def propose_add_sonarr(tvdb_id: int, title: str = "") -> str:
             "pending_token": token,
             "confirmation_token": token,
             "summary": f"Add to Sonarr: {title or tvdb_id}",
-            "message": "A human must confirm this in the CuratorX web UI status dock (or POST /api/actions/confirm). MCP cannot self-confirm.",
+            "message": "Confirm with confirm_pending_action if this key is scoped for active curation; otherwise a human confirms it in the CuratorX web UI status dock (or POST /api/actions/confirm).",
         }
     )
 
@@ -567,21 +569,21 @@ def propose_remove_arr(
             "confirmation_token": token,
             "summary": f"Remove from *arr: {payload['title']}",
             "arr_id": resolved["arr_id"],
-            "message": "A human must confirm this in the CuratorX web UI status dock (or POST /api/actions/confirm). MCP cannot self-confirm.",
+            "message": "Confirm with confirm_pending_action if this key is scoped for active curation; otherwise a human confirms it in the CuratorX web UI status dock (or POST /api/actions/confirm).",
         }
     )
 
 
 @mcp.tool()
 def confirm_pending_action(token: str, confirmed: bool = True) -> str:
-    """Full mode: cancel a pending *arr propose token.
+    """Full mode: confirm or cancel a pending *arr propose token.
 
-    Confirming fleet mutations is intentionally NOT possible over MCP. Allowing
-    it would let the same client/model that proposed an action self-confirm it,
-    defeating the human-in-the-loop guarantee (review finding H3). A human must
-    confirm the pending action from the authenticated CuratorX web UI (status
-    dock) or ``POST /api/actions/confirm``. Cancelling here is still allowed and
-    leaves nothing to execute.
+    Confirming (executing) a fleet mutation requires the full key to carry the
+    active-curation scope, chosen at key creation (``mcp_full_confirm_enabled``
+    setting, or ``CURATORX_MCP_FULL_CONFIRM`` for stdio/CA). A key without that
+    scope may propose and cancel, but cannot self-confirm — a human confirms it
+    on the authenticated web plane instead (review finding H3). Cancelling is
+    always allowed and leaves nothing to execute.
     """
     denied = _require_full_mode()
     if denied:
@@ -594,19 +596,33 @@ def confirm_pending_action(token: str, confirmed: bool = True) -> str:
             return _emit({"error": str(error)})
         return _emit({"cancelled": True, "found": popped is not None})
 
-    return _emit(
-        {
-            "error": "MCP cannot confirm fleet mutations.",
-            "requires_human_confirmation": True,
-            "pending_token": token,
-            "message": (
-                "For safety, confirmation must come from a human on the "
-                "authenticated web plane. Confirm this token in the CuratorX web "
-                "UI status dock, or POST /api/actions/confirm as an authenticated "
-                "owner. MCP clients may propose and cancel, but never self-confirm."
-            ),
-        }
-    )
+    if not full_confirm_scope_enabled():
+        return _emit(
+            {
+                "error": "This MCP key is not scoped for active curation.",
+                "requires_human_confirmation": True,
+                "pending_token": token,
+                "message": (
+                    "This full key can propose and cancel but not self-confirm. "
+                    "Confirm this token in the CuratorX web UI status dock or via "
+                    "POST /api/actions/confirm as an authenticated owner, or issue "
+                    "a full key with the active-curation scope "
+                    "(mcp_full_confirm_enabled / CURATORX_MCP_FULL_CONFIRM)."
+                ),
+            }
+        )
+
+    async def _run() -> dict[str, Any]:
+        from curatorx.agent.tools import execute_confirmed_action
+
+        db = _database()
+        result = await execute_confirmed_action(db, _settings(), token, user_id=None)
+        return {"ok": True, **result}
+
+    try:
+        return _emit(asyncio.run(_run()))
+    except Exception as error:  # noqa: BLE001
+        return _emit({"error": str(error)})
 
 
 def main() -> None:

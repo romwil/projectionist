@@ -178,9 +178,9 @@ class McpFullModeToolTests(unittest.TestCase):
         payload = json.loads(mcp_server.propose_remove_arr(media_type="movie", title="X"))
         self.assertIn("error", payload)
 
-    def test_confirm_pending_action_cannot_self_confirm(self) -> None:
-        """H3: MCP must not execute a pending fleet mutation; the token survives
-        so a human can still confirm it on the authenticated web plane."""
+    def test_confirm_without_scope_cannot_self_confirm(self) -> None:
+        """H3: a full key WITHOUT the active-curation scope must not execute a
+        pending fleet mutation; the token survives for a human to confirm."""
         from curatorx.library.db import Database
 
         db = Database(Path(self._tmpdir.name) / "test.db")
@@ -188,16 +188,45 @@ class McpFullModeToolTests(unittest.TestCase):
         db.save_pending_action(
             token, "add_radarr", {"action": "add_radarr", "tmdb_id": 578, "title": "Jaws"}, user_id=None
         )
-        with patch.object(mcp_server, "_database", return_value=db):
-            payload = json.loads(mcp_server.confirm_pending_action(token, confirmed=True))
+        # Ensure the confirm scope is OFF for this case.
+        with patch.dict(os.environ, {}, clear=False) as env:
+            env.pop("CURATORX_MCP_FULL_CONFIRM", None)
+            with patch.object(mcp_server, "_database", return_value=db):
+                payload = json.loads(mcp_server.confirm_pending_action(token, confirmed=True))
 
         self.assertIn("error", payload)
         self.assertTrue(payload.get("requires_human_confirmation"))
         self.assertEqual(payload.get("pending_token"), token)
-        # Critical: the action was NOT consumed/executed — a human can still confirm.
+        # The action was NOT consumed/executed — a human can still confirm.
         surviving = db.pop_pending_action(token, user_id="plex-owner")
         self.assertIsNotNone(surviving)
         self.assertEqual(surviving["action"], "add_radarr")
+
+    def test_confirm_with_scope_executes(self) -> None:
+        """A full key scoped for active curation (CURATORX_MCP_FULL_CONFIRM) may
+        confirm/execute its own proposal."""
+        from unittest.mock import AsyncMock
+
+        from curatorx.library.db import Database
+
+        db = Database(Path(self._tmpdir.name) / "test.db")
+        token = "tok-scoped"
+        db.save_pending_action(token, "add_radarr", {"action": "add_radarr"}, user_id=None)
+
+        with patch.dict(os.environ, {"CURATORX_MCP_FULL_CONFIRM": "1"}, clear=False):
+            with (
+                patch.object(mcp_server, "_database", return_value=db),
+                patch(
+                    "curatorx.agent.tools.execute_confirmed_action",
+                    new=AsyncMock(return_value={"action": "add_radarr"}),
+                ) as exec_mock,
+            ):
+                payload = json.loads(mcp_server.confirm_pending_action(token, confirmed=True))
+
+        self.assertTrue(payload.get("ok"))
+        self.assertEqual(payload.get("action"), "add_radarr")
+        exec_mock.assert_awaited_once()
+        self.assertEqual(exec_mock.await_args.args[2], token)
 
     def test_confirm_pending_action_can_cancel(self) -> None:
         """Cancelling over MCP is safe and consumes the token."""
