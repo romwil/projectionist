@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 from contextvars import ContextVar
@@ -13,6 +14,13 @@ from curatorx.privacy.schema import Audience
 McpMode = Literal["privacy", "full"]
 
 logger = logging.getLogger(__name__)
+
+
+def _secret_eq(a: str, b: str) -> bool:
+    """Constant-time equality for API-key comparison (review finding M11)."""
+    if not a or not b:
+        return False
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 _mcp_mode: ContextVar[McpMode] = ContextVar("curatorx_mcp_mode", default="privacy")
 
@@ -54,7 +62,7 @@ def full_mode_allowed() -> bool:
     privacy = privacy_api_key()
     if not full:
         return False
-    if privacy and full == privacy:
+    if privacy and _secret_eq(full, privacy):
         return False
     return True
 
@@ -75,22 +83,22 @@ def resolve_http_mcp_auth(provided: str) -> Tuple[Optional[McpMode], Optional[st
         return None, "Invalid MCP API key", 401
 
     # Prefer exact full-key match first when both configured and distinct.
-    if full and provided == full:
+    if full and _secret_eq(provided, full):
         if full_mode_allowed():
             return "full", None, 200
         # Keys collide / misconfigured — fall through to privacy if it matches.
-        if privacy and provided == privacy:
+        if privacy and _secret_eq(provided, privacy):
             return "privacy", None, 200
         return None, (
             "Full MCP mode refused: CURATORX_MCP_FULL_API_KEY must differ "
             "from CURATORX_MCP_API_KEY."
         ), 503
 
-    if privacy and provided == privacy:
+    if privacy and _secret_eq(provided, privacy):
         return "privacy", None, 200
 
     # Only full key configured.
-    if full and not privacy and provided == full:
+    if full and not privacy and _secret_eq(provided, full):
         if not full_mode_allowed():
             return None, "Full MCP mode misconfigured", 503
         return "full", None, 200
