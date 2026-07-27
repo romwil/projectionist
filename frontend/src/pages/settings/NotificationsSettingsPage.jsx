@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import { generateWeeklyNewsletter, getAuthMe, patchAuthMe } from "../../api/client";
+import {
+  generateWeeklyNewsletter,
+  getAuthMe,
+  getFeatures,
+  patchAuthMe,
+} from "../../api/client";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
 import SettingsToggle from "../../components/settings/SettingsToggle";
@@ -8,13 +13,42 @@ import {
   newsletterResultMessage,
 } from "../../lib/weeklyNewsletter.js";
 
+function ChannelRequirementBadge({ requiresOwner, available, ownerConfigured }) {
+  if (requiresOwner) {
+    return (
+      <span
+        className={`settings-channel-badge ${available ? "is-ready" : "is-owner-required"}`}
+        data-testid="channel-badge-owner-required"
+      >
+        {available ? "Owner configured" : "Needs owner setup"}
+      </span>
+    );
+  }
+  if (ownerConfigured) {
+    return (
+      <span className="settings-channel-badge is-ready" data-testid="channel-badge-self-serve">
+        Self-serve · household URLs on
+      </span>
+    );
+  }
+  return (
+    <span className="settings-channel-badge is-self-serve" data-testid="channel-badge-self-serve">
+      Self-serve
+    </span>
+  );
+}
+
 export default function NotificationsSettingsPage() {
   const [notificationEmail, setNotificationEmail] = useState("");
   const [inboxOn, setInboxOn] = useState(true);
   const [emailOn, setEmailOn] = useState(false);
+  const [appriseOn, setAppriseOn] = useState(false);
+  const [appriseUrls, setAppriseUrls] = useState("");
   const [newsletterOn, setNewsletterOn] = useState(false);
   const [nudgeOn, setNudgeOn] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
+  const [channels, setChannels] = useState([]);
+  const [mailConfigured, setMailConfigured] = useState(false);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [ready, setReady] = useState(false);
@@ -22,19 +56,28 @@ export default function NotificationsSettingsPage() {
   const [selfStatus, setSelfStatus] = useState(null);
 
   useEffect(() => {
-    getAuthMe()
-      .then((payload) => {
+    Promise.all([getAuthMe(), getFeatures().catch(() => null)])
+      .then(([payload, features]) => {
         const user = payload?.user || {};
         setNotificationEmail(user.notification_email || user.email || "");
         setInboxOn(user.notify_channel_inbox !== false);
         setEmailOn(Boolean(user.notify_channel_email));
+        setAppriseOn(Boolean(user.notify_channel_apprise));
+        setAppriseUrls(user.apprise_urls || "");
         setNewsletterOn(Boolean(user.newsletter_opt_in));
         setNudgeOn(Boolean(user.nudge_opt_in));
         setIsOwner(user.role === "owner");
+        const offerings = features?.notifications?.channels;
+        setChannels(Array.isArray(offerings) ? offerings : []);
+        setMailConfigured(Boolean(features?.notifications?.mail_configured));
         setReady(true);
       })
       .catch(() => setReady(true));
   }, []);
+
+  function channelMeta(id) {
+    return channels.find((entry) => entry.id === id) || null;
+  }
 
   async function handleSave(event) {
     event.preventDefault();
@@ -45,6 +88,8 @@ export default function NotificationsSettingsPage() {
         notification_email: notificationEmail.trim() || null,
         notify_channel_inbox: inboxOn,
         notify_channel_email: emailOn,
+        notify_channel_apprise: appriseOn,
+        apprise_urls: appriseUrls.trim() || null,
         newsletter_opt_in: newsletterOn,
         nudge_opt_in: nudgeOn,
       });
@@ -52,6 +97,8 @@ export default function NotificationsSettingsPage() {
       setNotificationEmail(user.notification_email || user.email || "");
       setInboxOn(user.notify_channel_inbox !== false);
       setEmailOn(Boolean(user.notify_channel_email));
+      setAppriseOn(Boolean(user.notify_channel_apprise));
+      setAppriseUrls(user.apprise_urls || "");
       setNewsletterOn(Boolean(user.newsletter_opt_in));
       setNudgeOn(Boolean(user.nudge_opt_in));
       setStatus({ type: "success", message: "Notification preferences saved." });
@@ -94,10 +141,17 @@ export default function NotificationsSettingsPage() {
     );
   }
 
+  const emailMeta = channelMeta("email");
+  const appriseMeta = channelMeta("apprise");
+  const emailAvailable = emailMeta ? Boolean(emailMeta.available) : mailConfigured;
+  const appriseAvailable = appriseMeta ? Boolean(appriseMeta.available) : true;
+
   return (
     <div className="settings-stack" data-testid="settings-notifications">
       <SettingsPageHeader title="Notifications">
-        Choose where Projectionist reaches you — the in-app inbox, optional email, and the weekly newsletter.
+        Choose where Projectionist reaches you — inbox, email, Apprise destinations, and the weekly
+        newsletter. Badges mark channels that need owner/server setup versus ones you can configure
+        yourself.
       </SettingsPageHeader>
 
       <form onSubmit={handleSave}>
@@ -117,22 +171,75 @@ export default function NotificationsSettingsPage() {
             </span>
           </label>
 
-          <SettingsToggle
-            id="notify-inbox"
-            checked={inboxOn}
-            onChange={setInboxOn}
-            label="In-app inbox"
-            help="Show recommendations, arrivals, digests, and nudges in Projectionist."
-            testId="notifications-inbox-toggle"
-          />
-          <SettingsToggle
-            id="notify-email"
-            checked={emailOn}
-            onChange={setEmailOn}
-            label="Email alerts"
-            help="Also send matching alerts by email when the owner has mail configured."
-            testId="notifications-email-toggle"
-          />
+          <div className="settings-channel-row">
+            <SettingsToggle
+              id="notify-inbox"
+              checked={inboxOn}
+              onChange={setInboxOn}
+              label="In-app inbox"
+              help="Show recommendations, arrivals, digests, and nudges in Projectionist."
+              testId="notifications-inbox-toggle"
+            />
+            <ChannelRequirementBadge requiresOwner={false} available />
+          </div>
+
+          <div className="settings-channel-row">
+            <SettingsToggle
+              id="notify-email"
+              checked={emailOn}
+              onChange={setEmailOn}
+              disabled={!emailAvailable && !emailOn}
+              label="Email alerts"
+              help={
+                emailAvailable
+                  ? "Also send matching alerts by email when Admin → Mail is configured."
+                  : "Email needs the owner to configure Admin → Mail (SMTP or Resend) first."
+              }
+              testId="notifications-email-toggle"
+            />
+            <ChannelRequirementBadge requiresOwner available={emailAvailable} />
+          </div>
+
+          <div className="settings-channel-row">
+            <SettingsToggle
+              id="notify-apprise"
+              checked={appriseOn}
+              onChange={setAppriseOn}
+              disabled={!appriseAvailable && !appriseOn}
+              label="Apprise alerts"
+              help={
+                appriseAvailable
+                  ? "Send matching alerts to your Apprise URLs (Discord, Telegram, push, and more). Optional household URLs come from the owner."
+                  : "Apprise package is not installed on this server yet — ask the owner to reinstall with web extras."
+              }
+              testId="notifications-apprise-toggle"
+            />
+            <ChannelRequirementBadge
+              requiresOwner={false}
+              available={appriseAvailable}
+              ownerConfigured={Boolean(appriseMeta?.owner_configured)}
+            />
+          </div>
+
+          <label className="settings-field">
+            <span>Your Apprise URLs (self-serve)</span>
+            <textarea
+              rows={4}
+              value={appriseUrls}
+              onChange={(e) => setAppriseUrls(e.target.value)}
+              placeholder={"discord://webhook_id/webhook_token\ntgram://bot_token/chat_id"}
+              data-testid="notifications-apprise-urls"
+              spellCheck={false}
+            />
+            <span className="settings-field-hint">
+              One URL per line. These are yours alone — no owner setup required. See{" "}
+              <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noreferrer">
+                Apprise notification types
+              </a>
+              . Household-wide destinations (if any) are configured under Admin → Mail.
+            </span>
+          </label>
+
           <SettingsToggle
             id="notify-newsletter"
             checked={newsletterOn}
@@ -146,7 +253,7 @@ export default function NotificationsSettingsPage() {
             checked={nudgeOn}
             onChange={setNudgeOn}
             label="Curator nudges"
-            help="Opt in to occasional “you have to see this” nudges (inbox + email if enabled). Never live session alerts."
+            help="Opt in to occasional “you have to see this” nudges (inbox + email/Apprise if enabled). Never live session alerts."
             testId="notifications-nudge-toggle"
           />
         </SettingsPanel>

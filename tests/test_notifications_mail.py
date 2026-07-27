@@ -12,15 +12,20 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
-from projectionist.config_store import MailSettings, Settings
+from projectionist.config_store import AppriseSettings, MailSettings, Settings
 from projectionist.library.db import Database
 from projectionist.mail.transport import MailSendResult, mail_configured
+from projectionist.notifications.apprise_transport import (
+    AppriseSendResult,
+    apprise_install_configured,
+    split_apprise_urls,
+)
 from projectionist.notifications.arrivals import notify_arrivals
 from projectionist.notifications.newsletters import (
     build_member_newsletter,
     deliver_weekly_newsletters,
 )
-from projectionist.notifications.service import deliver_notification
+from projectionist.notifications.service import deliver_notification, notification_channel_offerings
 from projectionist.web.auth import clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
@@ -52,6 +57,31 @@ class MailTransportTests(unittest.TestCase):
                 )
             )
         )
+
+
+class AppriseTransportTests(unittest.TestCase):
+    def test_split_and_install_configured(self) -> None:
+        self.assertEqual(
+            split_apprise_urls("discord://a/b\n# comment\ntgram://bot/chat"),
+            ["discord://a/b", "tgram://bot/chat"],
+        )
+        self.assertFalse(apprise_install_configured(AppriseSettings()))
+        self.assertFalse(
+            apprise_install_configured(AppriseSettings(enabled=True, urls=""))
+        )
+        self.assertTrue(
+            apprise_install_configured(
+                AppriseSettings(enabled=True, urls="json://localhost/notify")
+            )
+        )
+
+    def test_channel_offerings_flag_owner_required_email(self) -> None:
+        offerings = {row["id"]: row for row in notification_channel_offerings(Settings())}
+        self.assertFalse(offerings["inbox"]["requires_owner"])
+        self.assertTrue(offerings["email"]["requires_owner"])
+        self.assertFalse(offerings["email"]["available"])
+        self.assertFalse(offerings["apprise"]["requires_owner"])
+        self.assertIn("owner_configured", offerings["apprise"])
 
 
 class NotificationPlatformTests(unittest.TestCase):
@@ -123,6 +153,8 @@ class NotificationPlatformTests(unittest.TestCase):
                 "notification_email": "alerts@example.com",
                 "notify_channel_email": True,
                 "newsletter_opt_in": True,
+                "notify_channel_apprise": True,
+                "apprise_urls": "json://localhost/me",
             },
         )
         self.assertEqual(patched.status_code, 200)
@@ -130,6 +162,65 @@ class NotificationPlatformTests(unittest.TestCase):
         self.assertEqual(user["notification_email"], "alerts@example.com")
         self.assertTrue(user["notify_channel_email"])
         self.assertTrue(user["newsletter_opt_in"])
+        self.assertTrue(user["notify_channel_apprise"])
+        self.assertEqual(user["apprise_urls"], "json://localhost/me")
+
+    def test_apprise_settings_mask_and_delivery(self) -> None:
+        self._enable_multi_user()
+        path = Path(self._tmpdir.name) / "settings.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        payload["apprise"] = {
+            "enabled": True,
+            "urls": "json://localhost/household",
+            "config": "",
+            "tag": "",
+        }
+        path.write_text(json.dumps(payload), encoding="utf-8")
+        owner = self._login(plex_id=40, title="Owner", email="owner40@example.com")
+        settings_resp = self.client.get("/api/settings")
+        self.assertEqual(settings_resp.status_code, 200)
+        apprise = settings_resp.json()["apprise"]
+        self.assertTrue(apprise.get("urls_set"))
+        self.assertEqual(apprise.get("urls"), "")
+        self.assertTrue(apprise.get("configured"))
+
+        features = self.client.get("/api/features")
+        self.assertEqual(features.status_code, 200)
+        channels = {row["id"]: row for row in features.json()["notifications"]["channels"]}
+        self.assertTrue(channels["apprise"]["owner_configured"])
+
+        self.db.update_user_profile(
+            owner["id"],
+            notify_channel_apprise=True,
+            notify_channel_inbox=True,
+            apprise_urls="json://localhost/personal",
+        )
+        settings = Settings.load(path)
+        with patch(
+            "projectionist.notifications.service.send_apprise",
+            return_value=AppriseSendResult(ok=True, notified=2),
+        ) as mock_send:
+            result = deliver_notification(
+                self.db,
+                settings,
+                user_id=owner["id"],
+                kind="arrival",
+                title="Apprise arrival",
+                body="Body",
+            )
+        self.assertTrue(result["apprised"])
+        mock_send.assert_called_once()
+        kwargs = mock_send.call_args.kwargs
+        self.assertIn("json://localhost/personal", kwargs["urls"])
+        self.assertIn("json://localhost/household", kwargs["urls"])
+
+        with patch(
+            "projectionist.notifications.apprise_transport.send_apprise",
+            return_value=AppriseSendResult(ok=True, notified=1),
+        ):
+            test_resp = self.client.post("/api/admin/apprise/test", json={})
+        self.assertEqual(test_resp.status_code, 200, test_resp.text)
+        self.assertTrue(test_resp.json()["ok"])
 
     def test_inbox_kinds_and_unread_badge(self) -> None:
         self._enable_multi_user()

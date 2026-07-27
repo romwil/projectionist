@@ -93,6 +93,8 @@ class CurrentUser:
     notify_channel_email: bool = False
     newsletter_opt_in: bool = False
     nudge_opt_in: bool = False
+    notify_channel_apprise: bool = False
+    apprise_urls: Optional[str] = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -112,6 +114,8 @@ class CurrentUser:
             "notify_channel_email": self.notify_channel_email,
             "newsletter_opt_in": self.newsletter_opt_in,
             "nudge_opt_in": self.nudge_opt_in,
+            "notify_channel_apprise": self.notify_channel_apprise,
+            "apprise_urls": self.apprise_urls,
         }
 
 
@@ -154,6 +158,12 @@ def row_to_current_user(row) -> CurrentUser:
     nudge_opt_in = False
     if "nudge_opt_in" in keys and row["nudge_opt_in"] is not None:
         nudge_opt_in = bool(int(row["nudge_opt_in"]))
+    notify_channel_apprise = False
+    if "notify_channel_apprise" in keys and row["notify_channel_apprise"] is not None:
+        notify_channel_apprise = bool(int(row["notify_channel_apprise"]))
+    apprise_urls = None
+    if "apprise_urls" in keys and row["apprise_urls"] is not None:
+        apprise_urls = str(row["apprise_urls"]).strip() or None
     user_id = str(row["id"])
     return CurrentUser(
         id=user_id,
@@ -172,6 +182,8 @@ def row_to_current_user(row) -> CurrentUser:
         notify_channel_email=notify_channel_email,
         newsletter_opt_in=newsletter_opt_in,
         nudge_opt_in=nudge_opt_in,
+        notify_channel_apprise=notify_channel_apprise,
+        apprise_urls=apprise_urls,
     )
 
 

@@ -468,6 +468,34 @@
   margin-top: 0.2em;
 }
 
+.settings-channel-row {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.settings-channel-badge {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: var(--text-xs, 0.75rem);
+  letter-spacing: 0.01em;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.12));
+  color: var(--text-muted, #9aa3b2);
+  background: transparent;
+}
+
+.settings-channel-badge.is-owner-required {
+  color: var(--warning-text, #c9842a);
+  border-color: color-mix(in srgb, var(--warning-text, #c9842a) 45%, transparent);
+}
+
+.settings-channel-badge.is-ready,
+.settings-channel-badge.is-self-serve {
+  color: var(--text-secondary, #b7c0ce);
+}
+
 .settings-inline-link {
   color: var(--accent);
   font-size: var(--text-sm);

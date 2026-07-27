@@ -1,36 +1,12 @@
 import { createId } from "../lib/id.js";
+import { formatApiError, parseApiErrorBody } from "../lib/apiError.js";
+
+export { formatApiError, parseApiErrorBody };
 
 const API = "/api";
 const SESSION_KEY = "curatorx_session";
 const ACTIVE_LENS_KEY = "curatorx_active_lens";
 const CHAT_TIMEOUT_MS = 120_000;
-
-function parseApiErrorBody(text, statusText) {
-  if (!text) return statusText || "Request failed";
-  try {
-    const data = JSON.parse(text);
-    if (typeof data.detail === "string") return data.detail;
-    if (Array.isArray(data.detail)) {
-      return data.detail
-        .map((entry) => entry?.msg || entry?.message || String(entry))
-        .join("; ");
-    }
-    if (data.error) return String(data.error);
-    if (data.message) return String(data.message);
-  } catch {
-    // Plain-text or HTML error body
-  }
-  const trimmed = text.trim();
-  return trimmed || statusText || "Request failed";
-}
-
-export function formatApiError(error) {
-  if (!error) return "Request failed";
-  if (error.name === "AbortError") {
-    return "Request timed out. Check your LLM provider or try again.";
-  }
-  return error.message || "Request failed";
-}
 
 export async function api(path, options = {}) {
   const response = await fetch(`${API}${path}`, {
@@ -40,7 +16,7 @@ export async function api(path, options = {}) {
   });
   if (!response.ok) {
     const text = await response.text();
-    const error = new Error(parseApiErrorBody(text, response.statusText));
+    const error = new Error(parseApiErrorBody(text, response.statusText, response.status));
     error.status = response.status;
     throw error;
   }
@@ -119,7 +95,7 @@ export async function getAuthMe() {
   }
   if (!response.ok) {
     const text = await response.text();
-    throw new Error(parseApiErrorBody(text, response.statusText));
+    throw new Error(parseApiErrorBody(text, response.statusText, response.status));
   }
   return response.json();
 }
@@ -142,7 +118,7 @@ export async function uploadAuthAvatar(file) {
   });
   if (!response.ok) {
     const text = await response.text();
-    const error = new Error(parseApiErrorBody(text, response.statusText));
+    const error = new Error(parseApiErrorBody(text, response.statusText, response.status));
     error.status = response.status;
     throw error;
   }
@@ -195,6 +171,13 @@ export async function markNotificationsSeen(payload) {
 
 export async function testMailSend(payload = {}) {
   return api("/admin/mail/test", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function testAppriseSend(payload = {}) {
+  return api("/admin/apprise/test", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -353,7 +336,7 @@ export async function saveReview(payload) {
     throw conflict;
   }
   if (!response.ok) {
-    throw new Error(parseApiErrorBody(text, response.statusText));
+    throw new Error(parseApiErrorBody(text, response.statusText, response.status));
   }
   return data;
 }
@@ -815,7 +798,7 @@ export async function sendChatStream(message, { sessionId: sid, personaId, onTok
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(parseApiErrorBody(text, response.statusText));
+    throw new Error(parseApiErrorBody(text, response.statusText, response.status));
   }
 
   const reader = response.body.getReader();

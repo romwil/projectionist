@@ -34,8 +34,8 @@ Resize from a larger master if needed: `sips -z 256 256 source.png --out unraid/
 |-------|-------|
 | Repository | `romwil/projectionist:latest` (or a `:X.Y` line / `:X.Y.Z` pin, e.g. `:1.12` / `:1.12.0`) |
 | Host port | `8788` (or map freely) |
-| Config (existing installs) | `/mnt/user/appdata/curatorx/config` → `/config` — keep this path; do not move appdata |
-| Config (new installs) | `/mnt/user/appdata/projectionist/config` → `/config` is also fine |
+| Config (new / migrated) | `/mnt/user/appdata/projectionist/config` → `/config` |
+| Config (legacy, never migrated) | `/mnt/user/appdata/curatorx/config` → `/config` — keep that path if you never moved |
 | TZ (advanced) | e.g. `America/New_York` — needed so preferred `library_sync_hour` matches wall clock |
 
 4. Apply / Start, then open the WebUI link.
@@ -69,10 +69,10 @@ If `host.docker.internal` is unavailable, use the host’s bridge IP (often `172
 Back up the entire appdata folder:
 
 ```
-/mnt/user/appdata/curatorx/config/
+/mnt/user/appdata/projectionist/config/
 ```
 
-That includes `settings.json`, `projectionist.db`, and `jobs_state.json`.
+That includes `settings.json`, `projectionist.db`, and `jobs_state.json`. (Legacy installs that never migrated may still use `/mnt/user/appdata/curatorx/config/`.)
 
 ## Updating
 
@@ -80,16 +80,16 @@ That includes `settings.json`, `projectionist.db`, and `jobs_state.json`.
 
 ```bash
 # Preferred one-shot (pull + recreate; config preserved):
-cd /mnt/user/appdata/curatorx && ./rollout.sh latest
+cd /mnt/user/appdata/projectionist && ./rollout.sh latest
 
 # Or refresh the image, then Force Update / Apply in the Docker UI:
 docker pull romwil/projectionist:latest
-# optional helper from the repo (or copied into appdata):
-# ./scripts/unraid-force-pull.sh latest
-# ./scripts/unraid-force-pull.sh latest --rmi-retry   # if pull still no-ops
+# optional helper from appdata (or the repo):
+# ./unraid-force-pull.sh latest
+# ./unraid-force-pull.sh latest --rmi-retry   # if pull still no-ops
 ```
 
-Keep `rollout.sh` in sync with the repo: `scripts/unraid-rollout.sh`. Confirm: `docker exec curatorx cat /app/.build-info` and the `Projectionist startup (version …)` log line. Full root-cause: [../DOCKER.md](../DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
+Keep the appdata kit in sync with the repo: `scripts/unraid-rollout.sh` → `rollout.sh`, `docker-compose.unraid.yml` → `docker-compose.yml`, `scripts/unraid.env.example` → `.env.example`, `scripts/unraid-force-pull.sh`. Confirm: `docker exec projectionist cat /app/.build-info` and the `Projectionist startup (version …)` log line. Full root-cause: [../DOCKER.md](../DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
 
 An interrupted sync job is marked failed; start sync again — phase checkpoints resume unfinished work when still valid (≤72h).
 

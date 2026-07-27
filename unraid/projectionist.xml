@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — Projectionist 1.27.2 -->
+<!-- Unraid Community Applications template — Projectionist 1.27.3 -->
 <Container version="2">
   <Name>projectionist</Name>
   <Repository>romwil/projectionist:latest</Repository>
@@ -11,7 +11,7 @@
   <Support>https://github.com/romwil/projectionist/issues</Support>
   <Project>https://github.com/romwil/projectionist</Project>
   <Readme>https://raw.githubusercontent.com/romwil/projectionist/main/docs/wiki/Unraid.md</Readme>
-  <Overview>Cinema intelligence for your personal archive. Chat-first companion for your Plex library with BYOP LLM, RAG over your collection, TMDB discovery, and confirmation-gated Radarr/Sonarr add/remove. Keep port 8788 on a trusted LAN — do not WAN-expose without an authenticated reverse proxy. Existing installs: keep config at /mnt/user/appdata/curatorx/config. New installs may use /mnt/user/appdata/projectionist/config. Updates: if Force Update shows 0 B pulled, SSH `docker pull romwil/projectionist:latest` or appdata `./rollout.sh` (see Unraid wiki).</Overview>
+  <Overview>Cinema intelligence for your personal archive. Chat-first companion for your Plex library with BYOP LLM, RAG over your collection, TMDB discovery, and confirmation-gated Radarr/Sonarr add/remove. Keep port 8788 on a trusted LAN — do not WAN-expose without an authenticated reverse proxy. Config: /mnt/user/appdata/projectionist/config (legacy …/curatorx/config OK if never migrated). Updates: if Force Update shows 0 B pulled, SSH `docker pull romwil/projectionist:latest` or appdata `./rollout.sh` (see Unraid wiki).</Overview>
   <Category>MediaServer:Other Tools:Utilities</Category>
   <WebUI>http://[IP]:[PORT:8788]/</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/romwil/projectionist/main/templates/projectionist.xml</TemplateURL>
@@ -21,6 +21,11 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.27.3
+- Unraid host kit: projectionist appdata paths, compose + env example, rollout helpers
+- Apprise notification fan-out (Discord/Telegram/etc.) + clearer API error messages
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
 ### 1.27.2
 - Scheduled Tasks: compact icon actions, Next run / Heaviest load sort, Optimize rates
 - Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
@@ -253,13 +258,13 @@
 Projectionist is cinema intelligence for your personal archive — chat with a companion that knows your Plex library. Connect Plex, Radarr, Sonarr, TMDB, and your preferred LLM provider (cloud API or Ollama).
 
 **Updating (important)**
-- Repository default: `romwil/projectionist:latest` (pin `:1.27` / `:1.27.2` if preferred). During the compatibility window the same digests are also published as `romwil/curatorx:*`.
-- If **Force Update** reports **TOTAL DATA PULLED: 0 B** and the app stays on an old version, Docker kept a stale local tag. SSH: `docker pull romwil/projectionist:latest` then Force Update / Apply, or `cd /mnt/user/appdata/curatorx && ./rollout.sh latest`. Do not wipe `/config`.
+- Repository default: `romwil/projectionist:latest` (pin `:1.27` / `:1.27.3` if preferred). During the compatibility window the same digests are also published as `romwil/curatorx:*`.
+- If **Force Update** reports **TOTAL DATA PULLED: 0 B** and the app stays on an old version, Docker kept a stale local tag. SSH: `docker pull romwil/projectionist:latest` then Force Update / Apply, or `cd /mnt/user/appdata/projectionist && ./rollout.sh latest`. Do not wipe `/config`.
 - Full notes: https://github.com/romwil/projectionist/blob/main/docs/wiki/Unraid.md
 
 **Config path**
-- Existing installs: keep `/mnt/user/appdata/curatorx/config` (default below) — do not move appdata.
-- New installs may use `/mnt/user/appdata/projectionist/config`.
+- Preferred: `/mnt/user/appdata/projectionist/config` (default below).
+- Legacy installs that never migrated may keep `/mnt/user/appdata/curatorx/config`.
 
 **Security**
 - Bind to a trusted LAN or put Projectionist behind an authenticated reverse proxy.
@@ -279,7 +284,7 @@ Projectionist is cinema intelligence for your personal archive — chat with a c
 **Support:** [GitHub Issues](https://github.com/romwil/projectionist/issues) · [Unraid wiki](https://github.com/romwil/projectionist/blob/main/docs/wiki/Unraid.md)
   </Description>
   <Config Name="Web UI port" Target="8788" Default="8788" Mode="tcp" Description="Projectionist web interface (LAN only recommended)" Type="Port" Display="always" Required="true" Mask="false">8788</Config>
-  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/curatorx/config" Mode="rw" Description="settings.json, SQLite database, and auto-generated session secret" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/curatorx/config</Config>
+  <Config Name="Config" Target="/config" Default="/mnt/user/appdata/projectionist/config" Mode="rw" Description="settings.json, SQLite database, and auto-generated session secret" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/projectionist/config</Config>
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Container timezone for preferred library sync hour (e.g. America/New_York)" Type="Variable" Display="advanced" Required="false" Mask="false">UTC</Config>
   <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex server URL (e.g. http://192.168.1.10:32400)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex Media Server token for library access (not household Sign in with Plex)" Type="Variable" Display="advanced" Required="false" Mask="true"/>
