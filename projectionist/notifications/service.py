@@ -225,8 +225,8 @@ def notification_channel_offerings(settings: Settings) -> List[Dict[str, Any]]:
             "available": apprise_available(),
             "owner_configured": install_apprise,
             "help": (
-                "Paste your own Apprise URLs anytime. Optional household destinations "
-                "need owner configuration under Admin → Mail."
+                "Add your own Apprise destinations anytime (builder or paste). "
+                "Optional household destinations need owner configuration under Admin → Mail."
             ),
         },
     ]

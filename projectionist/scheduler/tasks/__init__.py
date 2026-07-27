@@ -23,7 +23,6 @@ def register_all(scheduler: IdleScheduler) -> None:
         health_metrics,
         keyword_theme_tagging,
         llm_logline_enrichment,
-        llm_theme_tagging,
         long_synopsis_enrichment,
         metadata_enrichment,
         plot_neighbors,
@@ -57,7 +56,6 @@ def register_all(scheduler: IdleScheduler) -> None:
     long_synopsis_enrichment.register(scheduler)
     title_relations_refresh.register(scheduler)
     keyword_theme_tagging.register(scheduler)
-    llm_theme_tagging.register(scheduler)
     purge_candidates.register(scheduler)
     weekly_digest.register(scheduler)
     member_newsletter.register(scheduler)

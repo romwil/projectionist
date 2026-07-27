@@ -30,7 +30,7 @@ from projectionist.library.feeds import (
 )
 from projectionist.library.query import LibraryFilters, query_library
 from projectionist.library.relations import refresh_title_relations
-from projectionist.scheduler.tasks import llm_theme_tagging, title_relations_refresh
+from projectionist.scheduler.tasks import title_relations_refresh
 
 
 class TitleRelationsMigrationTests(unittest.TestCase):
@@ -503,12 +503,6 @@ class RelationsTests(unittest.IsolatedAsyncioTestCase):
             counts = refresh_title_relations(db)
             self.assertGreaterEqual(counts["collection"], 2)
 
-    async def test_llm_theme_stub_skips_without_key(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Database(Path(tmp) / "test.db")
-            result = await llm_theme_tagging.run(db, Settings(), should_stop=lambda: False)
-            self.assertEqual(result["status"], "skipped")
-            self.assertEqual(result["reason"], "no_llm_api_key")
 
     def test_theme_facets_queryable_and_preserved(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

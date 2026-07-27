@@ -18,6 +18,18 @@ from projectionist.library.db import DEFAULT_CONTEXT_HASH, DEFAULT_LENS_ID, Data
 from projectionist.library.embeddings import cosine_similarity, semantic_search
 
 
+def _ensure_user(db, user_id: str, display_name: str | None = None) -> None:
+    """Create a local user row so FK-enforced user_id columns accept the id."""
+    if db.get_user(user_id):
+        return
+    db.create_local_user(
+        user_id=user_id,
+        display_name=display_name or user_id,
+        password_hash="x",
+        role="member",
+    )
+
+
 def _make_db() -> tuple:
     """Create a temporary directory and Database. Returns (tmpdir, db)."""
     tmp = tempfile.mkdtemp()
@@ -238,6 +250,8 @@ class TestChatThreads(unittest.TestCase):
     def test_get_chat_thread_user_id_filtering(self):
         """Thread created by user_id='alice' should not be visible to 'bob'."""
         _, db = _make_db()
+        _ensure_user(db, "alice")
+        _ensure_user(db, "bob")
         db.create_chat_thread("t-alice", thread_title="Alice's Thread", user_id="alice")
 
         self.assertIsNotNone(db.get_chat_thread("t-alice", user_id="alice"))
@@ -288,6 +302,8 @@ class TestChatThreads(unittest.TestCase):
     def test_list_chat_threads_user_id_filter(self):
         """User ID filter should only return threads for that user."""
         _, db = _make_db()
+        _ensure_user(db, "alice")
+        _ensure_user(db, "bob")
         db.create_chat_thread("t-a", thread_title="Alice's", user_id="alice")
         db.create_chat_thread("t-b", thread_title="Bob's", user_id="bob")
         db.create_chat_thread("t-n", thread_title="No Owner")
@@ -367,6 +383,8 @@ class TestPreferenceFacts(unittest.TestCase):
     def test_user_id_filter_includes_null_user(self):
         """user_id filter should include facts with NULL user_id."""
         _, db = _make_db()
+        _ensure_user(db, "alice")
+        _ensure_user(db, "bob")
         db.add_preference("genre_like", "Global pref")
         db.add_preference("genre_like", "Alice pref", user_id="alice")
         db.add_preference("genre_like", "Bob pref", user_id="bob")
@@ -380,6 +398,8 @@ class TestPreferenceFacts(unittest.TestCase):
     def test_no_user_id_returns_all(self):
         """Without user_id filter, all facts are returned."""
         _, db = _make_db()
+        _ensure_user(db, "alice")
+        _ensure_user(db, "bob")
         db.add_preference("a", "Global")
         db.add_preference("b", "Alice specific", user_id="alice")
 
@@ -995,6 +1015,8 @@ class TestMessageFeedback(unittest.TestCase):
     def test_upsert_updates_on_conflict(self):
         """Re-upserting same message_id+user_id should update feedback_type."""
         _, db = _make_db()
+        _ensure_user(db, "alice")
+        _ensure_user(db, "bob")
         sid = "fb-sess2"
         db.ensure_chat_session(sid)
         db.save_chat_message(sid, "msg-2", "assistant", [{"type": "text", "content": "hi"}])
@@ -1204,6 +1226,8 @@ class TestDeleteChatThread(unittest.TestCase):
 
     def test_delete_with_wrong_user_id_fails(self):
         _, db = _make_db()
+        _ensure_user(db, "alice")
+        _ensure_user(db, "bob")
         db.create_chat_thread("del-user", user_id="alice")
         self.assertFalse(db.delete_chat_thread("del-user", user_id="bob"))
         self.assertIsNotNone(db.get_chat_thread("del-user"))

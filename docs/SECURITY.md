@@ -67,7 +67,7 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 | **S8** | High | Empty webhook secret accepted any Plex webhook POST. | Spoof webhook events to queue sync/side effects. | **Mitigated** | Empty webhook secret → 503; header required when configured. |
 | **S9** | Medium | Session cookie lacked `Secure` behind HTTPS proxies. | Weaker cookie story on HTTPS / CSRF edge cases. | **Mitigated** | `Secure` cookie when `X-Forwarded-Proto=https`. |
 | **S10** | Medium | Seerr path could skip confirmation. | Tool args submit Seerr requests immediately. | **Mitigated** | Seerr tool path always returns a confirmation token. |
-| **S11** | Medium | Settings JSON stores API keys in plaintext under `/config`. | Read volume / backup / host filesystem → fleet credentials. | **Mitigated** | `settings.json` is now written `0600` (owner-only) on every save, matching the session-secret file; the values are still plaintext at rest, so protect volume mounts and backups and rotate on exposure (see [Rotating secrets & keys](#rotating-secrets--keys)). |
+| **S11** | Medium | Settings JSON stores API keys in plaintext under `/config`. | Read volume / backup / host filesystem → fleet credentials. | **Mitigated** | File mode `0600` on every save. **H4 Hybrid:** UI-persisted secrets are encrypted at rest (`PROJECTIONIST_SECRETS_KEY` or material derived from the session secret); env-supplied secrets still win and are not written back as plaintext. Back up the secrets key with `/config` (see [Rotating secrets & keys](#rotating-secrets--keys) and [DOCKER.md](DOCKER.md) backups). |
 | **S12** | Low | Docs understated multi-user API enforcement. | Operators misread network-peer risk. | **Mitigated** | Docs + middleware aligned for multi-user. |
 | **S13** | Low | Final Docker image runs as root (no `USER`). | Container breakout has root inside the image. | **Mitigated** | Entrypoint script auto-chowns `/config` to `curatorx` (UID/GID 1000) and drops privileges via `gosu`. Compatible with existing root-owned volumes and Kubernetes `runAsUser`. |
 | **S14** | High | Rate limiter trusted `X-Forwarded-For` on direct LAN binds. | Rotate spoofed IPs to bypass auth throttles / PIN brute force. | **Mitigated** | Ignore forwarded headers unless `PROJECTIONIST_TRUST_PROXY_HEADERS=1`; set that only behind a trusted reverse proxy. |
@@ -94,7 +94,9 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
 ## Rotating secrets & keys
 
-Every credential Projectionist holds lives in one of two places: your **`settings.json`** under the config volume (`{DATA_DIR}`, `/config` in the default Docker image) or an **environment variable**. As of the current release, `settings.json` is written **`0600`** (owner read/write only) on every save, so a second local account can't read it — but the values are still **plaintext at rest**, so treat the volume and its backups as secret material and rotate promptly whenever a key may have been exposed (a leaked backup, a shared screenshot, an offboarded operator, or just a periodic hygiene pass).
+WAL-safe database backup steps live in [DOCKER.md](DOCKER.md).
+
+Every credential Projectionist holds lives in one of two places: your **`settings.json`** under the config volume (`{DATA_DIR}`, `/config` in the default Docker image) or an **environment variable**. `settings.json` is written **`0600`** (owner read/write only) on every save. UI-saved secrets are **encrypted at rest** when a secrets key is available (`PROJECTIONIST_SECRETS_KEY`, or a key derived from the session secret). **Environment variables still win** when set and are not written back into `settings.json` as plaintext. Treat the volume, its backups, and the secrets key as secret material; rotate promptly whenever a key may have been exposed.
 
 **How it works:** Projectionist never rotates a live credential for you — that's an owner action, because the real secret lives at the *provider* (TMDB, your LLM vendor, Radarr/Sonarr, Plex). Rotation is always two steps: **issue a new secret at the source, then update Projectionist to match.** Updating only one side breaks the integration.
 
@@ -106,19 +108,23 @@ Every credential Projectionist holds lives in one of two places: your **`setting
 
 ### Update in the UI (recommended)
 
-Sign in as the **owner**, open **Settings**, paste the new value into the matching field (LLM API key, Plex token, Radarr/Sonarr/TMDB keys, webhook secret…), and **Save**. Saving rewrites `settings.json` and re-applies `0600` automatically.
+Sign in as the **owner**, open **Settings**, paste the new value into the matching field (LLM API key, Plex token, Radarr/Sonarr/TMDB keys, webhook secret…), and **Save**. Saving rewrites `settings.json` (encrypted fields) and re-applies `0600` automatically.
 
 ### Update by editing the file (headless / scripted)
 
 ```bash
-# Owner-only edit of the secrets file, then restart to load it.
+# Prefer env for long-lived ops secrets when possible.
 # {DATA_DIR} is /config in the default image.
 sudo nano /config/settings.json          # set "tmdb_api_key": "YOUR_NEW_TMDB_KEY"
-docker compose restart curatorx          # reload settings on boot
+docker compose restart projectionist     # reload settings on boot
 
 # Confirm the file is owner-only (expect: 600)
-stat -c '%a %U' /config/settings.json    # → 600 curatorx
+stat -c '%a %U' /config/settings.json    # → 600 projectionist (or curatorx on older images)
 ```
+
+### Backups and the secrets key
+
+WAL-safe DB backup steps live in [DOCKER.md](DOCKER.md) (`sqlite3 .backup` or stop-then-copy). If you set **`PROJECTIONIST_SECRETS_KEY`**, store it alongside `/config` backups — without that key, encrypted fields in `settings.json` cannot be recovered. When the key is unset, Projectionist derives encryption material from the session secret (keep session secret + `/config` together).
 
 If your platform doesn't support POSIX permissions (some network mounts), the `0600` step is skipped gracefully — in that case, lean harder on volume-level access controls.
 
@@ -130,11 +136,12 @@ If your platform doesn't support POSIX permissions (some network mounts), the `0
 | **Plex token** | `plex_token` | Signing out other sessions / re-linking Plex to force a fresh token | Settings → save |
 | ***arr keys** | `radarr_api_key`, `sonarr_api_key` | Regenerating the API key in Radarr/Sonarr **Settings → General** | Settings → save |
 | **Metadata keys** | `tmdb_api_key`, `tvdb_api_key`, `omdb_api_key`, `fanart_api_key` | Regenerating the key in each provider's developer dashboard | Settings → save |
-| **Webhook secret** | `webhook_secret` | Choosing a new random value (`openssl rand -hex 24`) | Settings → save, then update the Plex webhook URL to match |
+| **Webhook secret** | `webhook_secret` / `PROJECTIONIST_WEBHOOK_SECRET` | Choosing a new random value (`openssl rand -hex 24`) | Settings → save or env, then update the Plex webhook URL to match |
 | **MCP keys** | `PROJECTIONIST_MCP_API_KEY`, `PROJECTIONIST_MCP_FULL_API_KEY` (env) | Choosing new random values (privacy and full keys **must differ**) | Update the env vars / Compose and restart |
+| **Secrets key** | `PROJECTIONIST_SECRETS_KEY` (env) | Generating a long random value (`openssl rand -base64 48`) | Set env and restart — **note:** rotating without re-saving settings leaves old ciphertext undecryptable |
 | **Session secret** | `PROJECTIONIST_SESSION_SECRET` (env) or `session_secret` file | Generating a long random value (`openssl rand -base64 48`) | Set the env var (or delete the file to auto-regenerate) and restart — **note:** rotating this invalidates every signed-in session |
 
-**Honest limits.** Rotating a key here does **not** retroactively scrub it from old container logs, shell history, or prior backups — clean those separately. And because secrets are plaintext at rest, rotation is your containment tool, not a substitute for protecting the `/config` volume in the first place.
+**Honest limits.** Rotating a key here does **not** retroactively scrub it from old container logs, shell history, or prior backups — clean those separately. Encryption-at-rest reduces casual disk reads; it is not a substitute for protecting the `/config` volume and the secrets key.
 
 ## Penetration-test protocol
 

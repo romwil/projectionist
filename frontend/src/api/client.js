@@ -183,6 +183,14 @@ export async function testAppriseSend(payload = {}) {
   });
 }
 
+/** Member self-serve: test a single Apprise destination URL. */
+export async function testMyAppriseSend(payload = {}) {
+  return api("/auth/me/apprise/test", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 /** Owner-only: fan out the weekly newsletter now (self / selected / all opt-ins). */
 export async function generateWeeklyNewsletter(payload = {}) {
   return api("/admin/weekly-newsletter/generate", {

@@ -264,23 +264,32 @@ class TelemetryConfigMixin:
         service_name: str,
         *,
         base_url: str = "",
+        credential_marker: str = "",
         api_token_encrypted: str = "",
         connection_status: str = "unverified",
         last_tested_at: Optional[str] = None,
         certified: Optional[int] = None,
     ) -> None:
+        """Upsert a service integration row.
+
+        ``credential_marker`` is the honest name (presence marker only — not ciphertext).
+        ``api_token_encrypted`` remains accepted as a deprecated alias.
+        """
+        marker = str(credential_marker or api_token_encrypted or "").strip()
         tested_at = last_tested_at or time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime())
         certified_value = 0 if certified is None else int(bool(certified))
         with self.connect() as conn:
+            cols = self._table_columns(conn, "service_integrations")
+            col = "credential_marker" if "credential_marker" in cols else "api_token_encrypted"
             conn.execute(
-                """
+                f"""
                 INSERT INTO service_integrations (
-                    service_name, base_url, api_token_encrypted, connection_status,
+                    service_name, base_url, {col}, connection_status,
                     last_tested_at, certified
                 ) VALUES (?, ?, ?, ?, ?, ?)
                 ON CONFLICT(service_name) DO UPDATE SET
                     base_url=excluded.base_url,
-                    api_token_encrypted=excluded.api_token_encrypted,
+                    {col}=excluded.{col},
                     connection_status=excluded.connection_status,
                     last_tested_at=excluded.last_tested_at,
                     certified=excluded.certified
@@ -288,7 +297,7 @@ class TelemetryConfigMixin:
                 (
                     service_name,
                     base_url,
-                    api_token_encrypted,
+                    marker,
                     connection_status,
                     tested_at,
                     certified_value,

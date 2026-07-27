@@ -24,7 +24,6 @@ from ._shared import (
     DEFAULT_CONTEXT_HASH,
     DEFAULT_LENS_ID,
     DEFAULT_PERSONA_ID,
-    SCHEMA,
     T,
     run_with_db_lock_retry,
 )
@@ -69,42 +68,10 @@ class SchemaMigrationsMixin:
             serializer.shutdown()
 
     def _init_schema(self) -> None:
+        from .migrations import run_migrations
+
         with self.connect() as conn:
-            conn.executescript(SCHEMA)
-            self._migrate_chat_lens_columns(conn)
-            self._migrate_chat_thread_columns(conn)
-            self._migrate_service_integrations_certified(conn)
-            self._migrate_context_tables(conn)
-            self._migrate_persona_columns(conn)
-            self._migrate_library_intelligence(conn)
-            self._migrate_library_indexes(conn)
-            self._migrate_phase0_tables(conn)
-            self._migrate_multi_user_columns(conn)
-            self._migrate_phase4_tables(conn)
-            self._migrate_multi_user_columns(conn)  # reviews/prefs tables exist after phase4
-            self._migrate_rating_prompt_user_scope(conn)
-            self._migrate_embeddings_content_hash(conn)
-            self._migrate_curated_lists(conn)
-            self._migrate_grooming_action_log(conn)
-            self._migrate_weekly_digests(conn)
-            self._migrate_media_issues(conn)
-            self._migrate_persona_templates(conn)
-            self._migrate_recommendations(conn)
-            self._migrate_notifications(conn)
-            self._migrate_taste_engagement(conn)
-            self._migrate_access_requests(conn)
-            self._migrate_invites(conn)
-            self._migrate_saved_library(conn)
-            self._migrate_library_metadata_enrichment(conn)
-            self._migrate_people_credits(conn)
-            self._migrate_plot_text_columns(conn)
-            self._migrate_long_synopsis_columns(conn)
-            self._migrate_embeddings_model(conn)
-            self._migrate_item_neighbors(conn)
-            self._migrate_title_relations(conn)
-            self._migrate_curator_memory(conn)
-            self._migrate_ephemeral_plex_collections(conn)
-            self._seed_defaults(conn)
+            run_migrations(self, conn)
 
     def _table_columns(self, conn: sqlite3.Connection, table: str) -> set[str]:
         rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
@@ -871,16 +838,31 @@ class SchemaMigrationsMixin:
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY (associated_context_hash) REFERENCES derived_contexts(context_hash)
             );
-
-            CREATE VIEW IF NOT EXISTS integration_profiles AS
+            """
+        )
+        # integration_profiles view — prefer credential_marker (honest name); fall back
+        # to legacy api_token_encrypted until migration 35 renames the column.
+        cols = self._table_columns(conn, "service_integrations")
+        marker_col = (
+            "credential_marker"
+            if "credential_marker" in cols
+            else "api_token_encrypted"
+        )
+        conn.execute("DROP VIEW IF EXISTS integration_profiles")
+        conn.execute(
+            f"""
+            CREATE VIEW integration_profiles AS
             SELECT
                 service_name AS service_id,
                 base_url AS endpoint_url,
-                api_token_encrypted AS credential_encrypted,
+                {marker_col} AS credential_encrypted,
                 connection_status AS verification_state,
                 last_tested_at AS synchronized_at
-            FROM service_integrations;
-
+            FROM service_integrations
+            """
+        )
+        conn.executescript(
+            """
             CREATE TABLE IF NOT EXISTS watchlist_pins (
                 id TEXT PRIMARY KEY,
                 user_id TEXT,

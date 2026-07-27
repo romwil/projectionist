@@ -15,6 +15,8 @@ class SavedLibraryTests(unittest.TestCase):
     def test_saved_page_is_private_and_searchable(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
+            db.create_local_user(user_id="user-a", display_name="A", password_hash="x")
+            db.create_local_user(user_id="user-b", display_name="B", password_hash="x")
             saved = db.create_saved_library_page(
                 page_id="save-1",
                 user_id="user-a",

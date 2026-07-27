@@ -261,16 +261,42 @@ Starting with v1.7.3, the container uses an **entrypoint script** that automatic
 
 | Path | Contents |
 |------|----------|
-| `/config/settings.json` | Connection settings, LLM config, onboarding flags |
-| `/config/curatorx.db` | Library index, embeddings, chat (with `lens_id`), persona, lenses |
+| `/config/settings.json` | Connection settings, LLM config, onboarding flags (file mode `0600`; UI secrets encrypted at rest when a secrets key is available) |
+| `/config/projectionist.db` | Library index, embeddings, chat, persona (legacy `curatorx.db` still used if present) |
 | `/config/jobs_state.json` | Durable background job history (library sync) |
 
 SQLite uses **WAL** + `busy_timeout=30s` + `synchronous=NORMAL` so the UI can read while library sync writes (especially on Unraid appdata). NORMAL is a durability tradeoff vs FULL: less fsync cost under concurrent load; a crash mid-commit could lose the last transaction.
 
-Back up the entire `/config` directory before major changes.
+### Backing up `/config` (WAL-safe)
+
+Copying files while the container is running can capture a torn SQLite database: WAL mode keeps recent commits in `*-wal` / `*-shm` sidecars, so a naive `cp` of only `*.db` may miss or corrupt data.
+
+**Preferred — online consistent snapshot** (container can stay up):
+
+```bash
+# From the host, with the config directory mounted (Unraid example):
+CONFIG=/mnt/user/appdata/projectionist/config
+mkdir -p "$CONFIG/backups"
+# Prefer projectionist.db; fall back to legacy curatorx.db.
+DB="$CONFIG/projectionist.db"
+[ -f "$DB" ] || DB="$CONFIG/curatorx.db"
+sqlite3 "$DB" ".backup '$CONFIG/backups/projectionist-$(date +%Y%m%d).db'"
+cp -a "$CONFIG/settings.json" "$CONFIG/backups/settings-$(date +%Y%m%d).json"
+# If you set PROJECTIONIST_SECRETS_KEY, back that env/secret up with the volume —
+# ciphertext in settings.json is useless without the key.
+```
+
+**Alternative — stop then copy** the whole directory:
+
+```bash
+docker stop projectionist
+cp -a /mnt/user/appdata/projectionist/config /mnt/user/backups/projectionist-$(date +%Y%m%d)
+docker start projectionist
+```
+
+Do **not** rely on copying only the `.db` file while the container is writing. See also [SECURITY.md](SECURITY.md) (rotating secrets and protecting backups).
 
 ---
-
 ## Resources
 
 - **LLM via Ollama** — allocate RAM on the host for your chosen model.

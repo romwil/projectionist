@@ -1,5 +1,4 @@
 # Letter to the Maintainer — Architecture & Code Review
-
 **Date:** 2026-07-26  
 **Subject:** Deep-dive review for self-hosted Docker / Unraid fitness  
 **Scope:** Full codebase (backend, frontend, Docker/ops, security, data model, tests)  
@@ -23,40 +22,48 @@ Ported onto Projectionist `main` (post-rebrand v1.27.x) after cloud-agent PRs #1
 | H3 MCP self-confirm | Done | Per-key active-curation scope (`mcp_full_confirm_enabled` / `PROJECTIONIST_MCP_FULL_CONFIRM`) |
 | M11 constant-time key compare | Done | `hmac.compare_digest` in `projectionist/mcp/mode.py` |
 | H1 (partial) | In progress | `library/db.py` → package; `agent/tools.py` → package; `styles.css` → `frontend/src/styles/*` (v1.17). `web/app.py`, `App.jsx`, `ConfigPage.jsx` still large |
+| H6 Docker smoke | Done | `.github/workflows/ci.yml` `docker-smoke` builds image + curls `/api/health` |
+| H7 conditional chown | Done | `scripts/docker-entrypoint.sh` skips chown when `/config` already UID/GID 1000; docs/CA note UID 1000 |
 | M8 (partial) | In progress | CSS split done; AuthProvider / god-component extraction still open |
 | M9 (partial) | In progress | Backend coverage fail-under raised to **74%** in CI/`pyproject.toml` |
+| M11 constant-time key compare | Done | `hmac.compare_digest` in `projectionist/mcp/mode.py` |
 
 Design deltas vs original letter:
 
 - **H2** uses an env-injected owner credential (Unraid CA field, no lockout) rather than a claim code.
 - **H3** scopes active curation at key creation rather than mandating a human in the loop for every confirm.
+- **H4 Hybrid (C):** encrypt UI-persisted secrets in `settings.json` (watchlist crypto pattern); env still wins and is not written back as plaintext; boot migrates plaintext → ciphertext; rename/retire `api_token_encrypted` misnomer; document secrets-key backup with `/config`.
+- **H5 Multi-user gates (B):** single-owner keeps immediate personal writes; multi-user requires acting-user scope plus opt-in / confirm for agent mutations of watchlist, lists, reviews, and memory (*arr / Seerr / collections stay confirm-gated).
+- **M1 Audit then enable FKs (A):** orphan audit + cleanup as a numbered migration, then `PRAGMA foreign_keys=ON` in `_open_connection` — paired with **M2**.
+- **M4 Hybrid privacy MCP (C):** affinity-heavy tools → full mode only; privacy key keeps sanitized catalog/search; document remaining progress filters honestly.
+- **M7 Prune + one story (C):** delete dead stubs (`agent_blueprints`, non-shipping `llm_theme_tagging`); mark lists / Plex Lists as Future; public docs/UI tell one **ambient / chat-first** story (lenses = internal/advanced only).
 
 ### Still open — path to letter grade A
 
 | ID | Severity | Effort | Status | Primary files / notes |
 |----|----------|--------|--------|------------------------|
-| H6 | High | M | **Kicking off** | `.github/workflows/ci.yml` — PR job: `docker build` + tmp `/config` + `curl /api/health` |
-| H7 | High | S | **Kicking off** | `scripts/docker-entrypoint.sh`, `docs/DOCKER.md` — conditional chown; document UID 1000 |
+| H6 | High | M | **Done** | `.github/workflows/ci.yml` `docker-smoke` builds image + curls `/api/health` |
+| H7 | High | S | **Done** | Conditional chown in `scripts/docker-entrypoint.sh`; UID 1000 documented; no PUID/PGID |
 | H1 | High | L | Open (partial) | Finish router/tool/repo splits; carve `web/app.py`, `App.jsx`, `ConfigPage.jsx` |
-| H4 | High | L | Needs decision | Secrets at rest (`settings.json`); `api_token_encrypted` is a marker only |
-| H5 | High | M | Needs decision | Gate watchlist/lists/reviews/memory writes under multi-user / prompt-injection |
+| H4 | High | L | **Done** (Hybrid C) | Encrypt UI secrets; env wins; migrate plaintext; `credential_marker` rename |
+| H5 | High | M | **Done** (Multi-user gates B) | Gate personal agent writes when multi-user is on |
 | H8 | High | L | Open | Embeddings as JSON TEXT; `get_embeddings()` O(n); prefilter before marketing 10k+ |
-| M1 | Medium | M | Needs decision | Enable `PRAGMA foreign_keys` after orphan audit (`_open_connection`) |
-| M2 | Medium | L | Open | `schema_version` + ordered migration module |
+| M1 | Medium | M | **Done** (Audit then enable A) | Orphan cleanup migration → `PRAGMA foreign_keys=ON` (with M2) |
+| M2 | Medium | L | **Done** | `schema_version` + ordered migration module |
 | M3 | Medium | S | Open | Jittered retry for idempotent connector GETs |
-| M4 | Medium | M | Needs decision | Privacy-mode watch-biased tools → full-only or document intentional |
+| M4 | Medium | M | **Done** (Hybrid C) | Affinity tools → full-only; catalog stays on privacy |
 | M5 | Medium | M | Open | Protocol v1.1 prompt red-team (TC-PROMPT-01 deferred) |
 | M6 | Medium | M | Open | Persist quarantine; absolute wall-clock task deadline |
-| M7 | Medium | M | Needs decision | Delete or finish stubs; collapse lens vs ambient narrative |
+| M7 | Medium | M | **Done** (Prune + one story C) | Deleted stubs; ambient/chat-first narrative |
 | M8 | Medium | M | Open (partial) | AuthProvider; finish god-component extraction |
 | M9 | Medium | M | Open (partial) | Household authz e2e; continue raising coverage culture |
-| M10 | Medium | S | Open | WAL-safe backup docs (+ optional Admin snapshot download) |
-| M12 | Medium | S | Open / in flight | Compose ↔ Unraid rollout env parity (parallel Unraid kit may close this) |
+| M10 | Medium | S | **Done** | WAL-safe backup docs in DOCKER.md / SECURITY.md (Admin snapshot deferred) |
+| M12 | Medium | S | **Done** | Compose ↔ Unraid rollout env parity |
 | L1–L6 | Low | S–M | Backlog | A11y Modal, naming, cycles, version drift, CSP, session TTL |
 
 ### What “A or better” means here
 
-Close the remaining **High** ops/trust items (**H6**, **H7**), decide **H4**/**H5**, keep modularizing (**H1**), and clear the integrity/ops Mediums that operators feel (**M1**/**M2**/**M10**/**M12**). Full god-file elimination and embedding scale (**H8**) can trail if sequenced honestly.
+**Docker/Unraid ops → A** after H6/H7 (done) plus M10/M12. Overall letter **A** still needs Trains 1–4: trust (**H4**/**H5**), integrity (**M1**/**M2**), backup/parity (**M10**/**M12**), and privacy/product honesty (**M4**/**M7**). Keep modularizing (**H1**); full god-file elimination and embedding scale (**H8**) can trail if sequenced honestly.
 
 ---
 
@@ -148,28 +155,28 @@ C1 was a pure paste/indent regression with an obvious regression test — correc
 | H1 | Maintainability | Backend god modules + frontend god components dominate regression risk. | Split along existing domain lines (routers / tool packages / repositories / chat hooks). No framework change. | Partial (db/tools/styles split) |
 | H2 | Security / Multi-user | First login/registration claimed `owner` with no invite lock. Neighbor on LAN could race ownership when multi-user was first enabled. | Require owner invite code / settings-seeded owner / claim window locked to setup wizard. | **Done** (env-seeded owner) |
 | H3 | Security / MCP | Full MCP exposed `propose_*` and `confirm_pending_action`; same client/model could self-confirm. Pending pops with `user_id=None` matched any token. | Confirm only via authenticated web UI/API, or require a separate human confirm channel for MCP. | **Done** (key-scoped confirm) |
-| H4 | Security / Secrets | S11 still Open: Plex/*arr/LLM/MCP keys in plaintext `settings.json`. `api_token_encrypted` is a misnomer (marker only). | Encrypt-at-rest with key from env/session secret, or stop persisting secrets already supplied via env. | Open — needs decision |
-| H5 | Agent safety | Watchlist / lists / reviews / memory write without confirmation. Fine for single trusted owner; risky under prompt injection or multi-user. | Gate auto-writes behind role + optional “agent may mutate” setting; keep *arr path as the gold standard. | Open — needs decision |
-| H6 | CI / Ops | CI never builds or smoke-tests the Docker image. Release notes file is a hard Dockerfile fail; entrypoint/HEALTHCHECK/static mount untested in PR. | PR job: generate notes → `docker build` → run with tmp `/config` → `curl /api/health`. | **In progress** |
-| H7 | Ops | Entrypoint `chown -R /config` on every root start; large DBs delay Unraid recreate/Force Update. Fixed UID 1000 (no PUID/PGID). | Conditional chown; document UID clearly in CA template (or optional PUID/PGID). | **In progress** |
+| H4 | Security / Secrets | S11 still Open: Plex/*arr/LLM/MCP keys in plaintext `settings.json`. `api_token_encrypted` is a misnomer (marker only). | **Hybrid (C):** encrypt UI secrets; env wins; migrate plaintext; fix misnomer; document secrets-key backup. | **Done** |
+| H5 | Agent safety | Watchlist / lists / reviews / memory write without confirmation. Fine for single trusted owner; risky under prompt injection or multi-user. | **Multi-user gates (B):** single-owner auto-write; multi-user opt-in / confirm for personal mutations. | **Done** |
+| H6 | CI / Ops | CI never builds or smoke-tests the Docker image. Release notes file is a hard Dockerfile fail; entrypoint/HEALTHCHECK/static mount untested in PR. | PR job: generate notes → `docker build` → run with tmp `/config` → `curl /api/health`. | **Done** |
+| H7 | Ops | Entrypoint `chown -R /config` on every root start; large DBs delay Unraid recreate/Force Update. Fixed UID 1000 (no PUID/PGID). | Conditional chown; document UID clearly in CA template (or optional PUID/PGID). | **Done** |
 | H8 | Data / Scale | Embeddings stored as JSON TEXT; `get_embeddings()` loads all vectors; semantic search is O(n) pure Python. Fine to ~few thousand titles; painful at 10k+ with fat dims. | Binary blob storage + candidate prefilter; keep `item_neighbors` as read cache; sqlite-vec remains a good Future. | Open |
 
 ### Medium
 
 | ID | Category | Finding | Recommendation | Status |
 |----|----------|---------|----------------|--------|
-| M1 | Data integrity | `PRAGMA foreign_keys` never enabled — FK clauses in schema are inert. | Enable after orphan audit; add to `_open_connection`. | Open — needs decision |
-| M2 | Schema ops | Migrations are an ad-hoc `_migrate_*` chain on every boot; no schema version table; dual-call of `_migrate_multi_user_columns` historically. | Introduce `schema_version` + ordered migration module (still SQLite). | Open |
+| M1 | Data integrity | `PRAGMA foreign_keys` never enabled — FK clauses in schema are inert. | **Audit then enable (A)** with M2: orphan cleanup migration, then `PRAGMA foreign_keys=ON`. | **Done** |
+| M2 | Schema ops | Migrations are an ad-hoc `_migrate_*` chain on every boot; no schema version table; dual-call of `_migrate_multi_user_columns` historically. | Introduce `schema_version` + ordered migration module (still SQLite). | **Done** |
 | M3 | Connectors | Shared HTTP helpers timeout but do not retry idempotent GETs (429/5xx). | Jittered retry for reads only. | Open |
-| M4 | Privacy / MCP | Privacy mode still exposes watch-biased tools (`recommend_hidden_gems`, purge candidates, watch patterns) — raw fields stripped, but results encode household affinity. | Move those tools to full mode only, or document as intentional and tighten filters. | Open — needs decision |
+| M4 | Privacy / MCP | Privacy mode still exposes watch-biased tools (`recommend_hidden_gems`, purge candidates, watch patterns) — raw fields stripped, but results encode household affinity. | **Hybrid (C):** affinity tools → full only; catalog on privacy. | **Done** |
 | M5 | Prompt safety | TC-PROMPT-01 (LLM red-team) deferred. Tool JSON can carry internal ids to the model. | Protocol v1.1: confirm-token non-leak, secret non-leak, member sanitizer on tool paths. | Open |
 | M6 | Scheduler | Quarantine is in-memory (clears on restart); heartbeat can extend a wedged task if `should_stop()` keeps getting called. | Persist quarantine; absolute wall-clock deadline even with heartbeats. | Open |
-| M7 | Product debt | Dead / stub weight: `agent_blueprints` table with no CRUD; `lists/` stub; `llm_theme_tagging` stub; lens CRUD vs “ambient context / zero-touch” narrative. | Delete or finish; stop carrying dual product stories in APIs. | Open — needs decision |
+| M7 | Product debt | Dead / stub weight: `agent_blueprints` table with no CRUD; `lists/` stub; `llm_theme_tagging` stub; lens CRUD vs “ambient context / zero-touch” narrative. | **Prune + one story (C):** delete stubs; ambient/chat-first narrative. | **Done** |
 | M8 | Frontend | No shared auth/features context — N× `/api/features` + `/api/auth/me`. CSS was one 9k-line file. | Thin AuthProvider; split CSS by surface without visual rewrite. | Partial (CSS split done) |
 | M9 | Testing | Frontend unit tests are lib-only; e2e covers Plex login but not local/OIDC or member Admin deny. Coverage fail-under was **10**. | Add household authz e2e; raise backend cov gate gradually. | Partial (cov ≥74) |
-| M10 | Ops / Backup | Guidance is “copy `/config`” without WAL-safe `sqlite3 .backup` procedure. | Document stop-or-backup API; optional Admin download of settings+DB snapshot. | Open |
+| M10 | Ops / Backup | Guidance is “copy `/config`” without WAL-safe `sqlite3 .backup` procedure. | Document stop-or-backup API; optional Admin download of settings+DB snapshot. | **Done** (docs; Admin snapshot deferred) |
 | M11 | Auth crypto | MCP API key compare used `==`, not `hmac.compare_digest` (webhooks/passwords already did). | Align with webhook pattern. | **Done** |
-| M12 | Compose drift | `docker-compose.yml` thinner than Unraid rollout env (TZ, MCP, session secret, healthcheck). | Align compose with rollout `ENV_KEYS`. | Open / Unraid kit in flight |
+| M12 | Compose drift | `docker-compose.yml` thinner than Unraid rollout env (TZ, MCP, session secret, healthcheck). | Align compose with rollout `ENV_KEYS`. | **Done** |
 
 ### Low
 
@@ -190,13 +197,13 @@ C1 was a pure paste/indent regression with an obvious regression test — correc
 
 Right topology; file gravity improving (db/tools/styles split). Evolution path remains: FastAPI routers, thinner tool registry, DB repositories + versioned migrations, frontend hooks. Avoid introducing Redis/Postgres/service mesh.
 
-### Security & privacy — B+ (for stated threat model)
+### Security & privacy — A− / A (for stated threat model)
 
-Pentest remediation is real (S1–S2, S4–S10, S12–S15, P1–P6). Patch-train items H2/H3/C2 mitigations and M11 are closed. Remaining High items are secrets-at-rest (**H4**), agent auto-writes (**H5**), and operator bind exposure as a *documented* threat-model choice. **Do not rewrite for security** unless the product becomes internet multi-tenant SaaS.
+Pentest remediation is real (S1–S2, S4–S10, S12–S15, P1–P6). Patch-train items H2/H3/C2 mitigations and M11 are closed. **H4** hybrid secrets-at-rest and **H5** multi-user agent write gates are closed. **M4** affinity tools are full-MCP only. Operator bind exposure remains a *documented* threat-model choice. **Do not rewrite for security** unless the product becomes internet multi-tenant SaaS.
 
-### Data model & scale — B
+### Data model & scale — A− (was B)
 
-Schema is rich and honest. Materialized neighbors / facets / FTS are the correct homelab pattern. Scale cliff is embeddings I/O and O(n) semantic search, not browse queries. Foreign keys off + unversioned migrations are the integrity debt.
+Schema is rich and honest. Materialized neighbors / facets / FTS are the correct homelab pattern. **M1/M2** closed (`schema_version`, orphan cleanup, `PRAGMA foreign_keys=ON`). Scale cliff remains embeddings I/O and O(n) semantic search (**H8**).
 
 ### Agent / RAG — A− (was B before C1)
 
@@ -206,13 +213,13 @@ Tool surface is broad and mostly well-validated. Confirm-gated *arr is the crown
 
 Strong design system (Lights Up/Down, Fraunces/DM Sans, Explore hub, AppShell). Maintainability improved by CSS partials; still threatened by `App.jsx` / `ConfigPage.jsx`. Accessibility intent is good; dialog focus management incomplete.
 
-### Docker / Unraid ops — A− (A after H6/H7)
+### Docker / Unraid ops — A (ops Highs closed; Mediums in Train 1)
 
-Best-in-class honesty about Dockerman Force Update, multi-arch, CA template, rollout scripts, non-root. Gaps: CI image smoke, recursive chown, compose/XML parity, backup procedure depth.
+Best-in-class honesty about Dockerman Force Update, multi-arch, CA template, rollout scripts, non-root. **H6** CI image smoke and **H7** conditional chown are **Done**. Remaining operator polish: compose/XML parity (**M12**) and WAL-safe backup procedure (**M10**).
 
-### Testing & CI — B (was B−)
+### Testing & CI — B+ (was B)
 
-Backend test culture is excellent; coverage gate is now meaningful at 74%. Image build smoke still missing (**H6**). Frontend component risk and household auth paths in e2e remain thin.
+Backend test culture is excellent; coverage gate is now meaningful at 74%. Image build smoke is in CI (**H6 Done**). Frontend component risk and household auth paths in e2e remain thin.
 
 ### Documentation — A
 
@@ -227,7 +234,7 @@ ARCHITECTURE / DESIGN / DATA_MODEL / SECURITY / PRIVACY / wiki / pentest protoco
 | Full rewrite (new stack, new DB, microservices) | Internet SaaS, multi-region, hard multi-tenant isolation | **No.** Betrays Unraid audience and re-litigates solved problems. |
 | Architecture redesign (Postgres + worker queue + reverse-proxy-mandatory auth) | Sustained write contention + WAN-first product | **Not yet.** Add only if SQLite locked warnings become measurable *and* libraries routinely exceed ~10–20k with heavy idle write load. |
 | Modularize in place | Current pain: god files, migration opacity, CI gaps | **Yes — primary path.** |
-| Nothing / status quo | If only shipping cosmetics | **No.** Remaining H6–H7 and H4–H5 still compound support cost. |
+| Nothing / status quo | If only shipping cosmetics | **No.** H6–H7 are closed; remaining H4–H5 and integrity Mediums still compound support cost. |
 
 **Bottom line:** Projectionist should remain a **modular monolith on SQLite in one Docker container**. Invest in correctness, boundaries, and operator hardening. That meets the project objectives better than a redesign.
 
@@ -242,28 +249,40 @@ ARCHITECTURE / DESIGN / DATA_MODEL / SECURITY / PRIVACY / wiki / pentest protoco
 3. **H3** MCP confirm semantics — **done** (key-scoped)
 4. **M11** constant-time MCP key compare — **done**
 
-### Ops train (self-hosted confidence) — next for grade A
+### Ops train (self-hosted confidence) — grade A ops Highs done
 
-5. **H6** CI Docker build + health smoke — **in progress**
-6. **H7** conditional chown; CA docs for UID 1000 — **in progress**
-7. **M10** WAL-safe backup docs (+ optional Admin backup download)
-8. **M12** compose/env parity with Unraid rollout
+5. **H6** CI Docker build + health smoke — **Done**
+6. **H7** conditional chown; CA docs for UID 1000 — **Done**
+7. **M10** WAL-safe backup docs (+ optional Admin backup download) — Train 1
+8. **M12** compose/env parity with Unraid rollout — Train 1
 
-### Structure train (velocity)
+### Integrity train (A bar)
 
-9. Split `web/app.py` → routers (`auth`, `library`, `chat`, `admin`, `explore`, `settings`)
-10. Continue thinning `agent/tools` domain modules + registry
-11. Carve remaining DB gravity + `schema_version` migrations; enable FKs (**M1/M2**) after audit
-12. Extract `App.jsx` / `ConfigPage.jsx` hooks; AuthProvider (**M8**)
+9. **M2** `schema_version` + ordered migrations — Train 2
+10. **M1** orphan audit then `PRAGMA foreign_keys=ON` — Train 2
 
-### Hardening & scale train
+### Trust train (A bar)
 
-13. **H4** secrets at rest (encrypt or env-only persistence) — **needs product decision**
-14. **H5** agent auto-write gates for multi-user — **needs product decision**
-15. **H8** embedding storage + search prefilter (before marketing “works great at 10k+”)
-16. **M4/M5** privacy-tool audit + prompt red-team Protocol v1.1
-17. **M6** durable quarantine + absolute task deadline
-18. **M7** delete or finish stubs; collapse lens vs ambient product story
+11. **H4** secrets at rest — **Hybrid (C)** — Train 3
+12. **H5** agent auto-write gates for multi-user — **Multi-user gates (B)** — Train 3
+
+### Privacy + product honesty (A− → A)
+
+13. **M4** privacy MCP affinity split — **Hybrid (C)** — Train 4
+14. **M7** prune stubs + ambient/chat-first narrative — **Prune + one story (C)** — Train 4
+
+### Structure train (velocity; post-A)
+
+15. Split `web/app.py` → routers (`auth`, `library`, `chat`, `admin`, `explore`, `settings`)
+16. Continue thinning `agent/tools` domain modules + registry
+17. Extract `App.jsx` / `ConfigPage.jsx` hooks; AuthProvider (**M8**)
+
+### Later (after A)
+
+18. **H8** embedding storage + search prefilter (before marketing “works great at 10k+”)
+19. **M5** prompt red-team Protocol v1.1
+20. **M6** durable quarantine + absolute task deadline
+21. **M3** jittered GET retries
 
 ### Optional later (only with evidence)
 
@@ -281,11 +300,13 @@ A maintainer can declare the architecture healthy for the next major line when:
 - Core agent library search works under tests (**C1** closed) — **met**
 - Multi-user enablement cannot be raced by a LAN neighbor (**H2**) — **met** (env seed)
 - Full MCP cannot silently self-confirm fleet writes (**H3**) — **met** (key scope)
-- Every PR proves the shippable image boots and answers `/api/health` (**H6**) — **in progress**
-- The three backend megafiles are split enough that a feature touches one domain package, not all three — **partial**
-- Secrets on disk are encrypted or env-sourced (**H4** / S11) — **open**
-- Docs tell one product story (ambient/chat-first) with APIs that match — **open**
-- Backup + upgrade guidance includes WAL-safe DB snapshot steps operators can follow on Unraid — **open**
+- Every PR proves the shippable image boots and answers `/api/health` (**H6**) — **met**
+- Conditional chown / UID 1000 ops story is honest (**H7**) — **met**
+- The three backend megafiles are split enough that a feature touches one domain package, not all three — **partial** (Train 5)
+- Secrets on disk are encrypted or env-sourced (**H4** / S11) — **decided Hybrid (C); implementing**
+- Multi-user agent personal writes are gated (**H5**) — **decided Multi-user gates (B); implementing**
+- Docs tell one product story (ambient/chat-first) with APIs that match — **decided; implementing (M7)**
+- Backup + upgrade guidance includes WAL-safe DB snapshot steps operators can follow on Unraid — **implementing (M10)**
 
 Until then, keep shipping the product you already built — just stop letting gravity wells quietly tax every release.
 
@@ -300,7 +321,7 @@ Resist the rewrite urge. The architecture already meets the objectives. Make it 
 Respectfully,  
 **Architecture & Code Review (automated deep dive)**  
 2026-07-26  
-*(Remediation status updated 2026-07-27 / 2026-07-26 evening)*
+*(Remediation status updated 2026-07-26 — Architecture A Trains 0–4 kicked off; H6/H7 Done; H4/H5/M1/M4/M7 decisions locked)*
 
 ---
 

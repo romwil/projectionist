@@ -103,7 +103,7 @@ def record_service_integration(
     db.upsert_service_integration(
         service_name,
         base_url=base_url.strip().rstrip("/"),
-        api_token_encrypted=_integration_token_marker(api_token),
+        credential_marker=_integration_token_marker(api_token),
         connection_status="verified" if ok else "failed",
         last_tested_at=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
         certified=1 if ok else 0,

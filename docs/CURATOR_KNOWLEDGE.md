@@ -50,7 +50,7 @@ Treat curator knowledge as a stack, not one chip wall:
 | 3 | **Catalog tags** | Genres, TMDB keywords | Sync + `metadata_enrichment` | Mostly done; underused in Plot Lab today |
 | 4 | **Plot text layers** | summary → overview → tagline → optional long synopsis → rare LLM logline | Plex / TMDB / optional idle | Layered fields exist; long synopsis optional (Wikipedia/OMDb) |
 | 5 | **Lexical motifs** | Searchable plot tokens in `library_facets` (`facet_type='motif'`) | Idle `summary_motifs` | Improved (Phase A); hybrid Plot Lab AND mitigates sparsity |
-| 6 | **Tropes / themes** | Controlled vocab (`facet_type='theme'`) | Idle `keyword_theme_tagging` (local map); `llm_theme_tagging` stub reserved | Offline from keywords |
+| 6 | **Tropes / themes** | Controlled vocab (`facet_type='theme'`) | Idle `keyword_theme_tagging` (local map) | Offline from keywords |
 | 7 | **Similarity graph** | Embeddings + `item_neighbors` + `title_relations` | Idle embed / neighbors / relations | Embeddings often full; neighbor edges can lag |
 | 8 | **Taste / ops** | Lenses, reviews, purge, watchlist, gaps | User + other idle tasks | Separate from plot depth |
 
@@ -167,7 +167,6 @@ Chat turns must stay snappy. Building motifs across thousands of titles, embeddi
 | `llm_logline_enrichment` | Optional one-liner when free text is thin | Sparse `llm_logline` fills |
 | `long_synopsis_enrichment` | Longer plot from Wikipedia (default) or OMDb | `long_synopsis` + `synopsis_source` |
 | `keyword_theme_tagging` | Local keyword→controlled theme map | `facet_type='theme'` |
-| `llm_theme_tagging` | Reserved future LLM theme path (stub; skips) | Prefer `keyword_theme_tagging` |
 
 Other tasks (taste, health, anniversary, retention, …) support ops and taste — not plot depth. Full boundary table: [ARCHITECTURE.md — Agent tools vs. background scheduler](ARCHITECTURE.md#agent-tools-vs-background-scheduler).
 

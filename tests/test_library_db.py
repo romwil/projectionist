@@ -127,7 +127,7 @@ class DatabaseTests(unittest.TestCase):
                 "curation_lenses",
                 "lens_taste_profile",
                 "interaction_telemetry",
-                "agent_blueprints",
+                "schema_version",
             }
             with db.connect() as conn:
                 rows = conn.execute(
@@ -135,6 +135,7 @@ class DatabaseTests(unittest.TestCase):
                 ).fetchall()
                 names = {str(r["name"]) for r in rows}
             self.assertTrue(expected.issubset(names))
+            self.assertNotIn("agent_blueprints", names)
 
     def test_service_integrations_certified_column(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

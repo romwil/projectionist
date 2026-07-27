@@ -38,14 +38,14 @@ class ConfigStoreTests(unittest.TestCase):
         settings = Settings.from_mapping({"plex_url": "x", "unknown": "y"})
         self.assertEqual(settings.plex_url, "x")
 
-    def test_env_overrides_file_when_field_not_in_file(self) -> None:
+    def test_env_overrides_file_secret_when_set(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = Path(tmp)
             save_settings(data_dir, Settings(llm_api_key="from-file"))
             os.environ["LLM_API_KEY"] = "from-env"
             try:
                 loaded = load_merged_settings(data_dir)
-                self.assertEqual(loaded.llm_api_key, "from-file")
+                self.assertEqual(loaded.llm_api_key, "from-env")
             finally:
                 del os.environ["LLM_API_KEY"]
 
@@ -83,7 +83,8 @@ class ConfigStoreTests(unittest.TestCase):
                 self.assertEqual(loaded.llm_provider, "anthropic")
                 self.assertEqual(loaded.llm_base_url, "https://api.anthropic.com")
                 self.assertEqual(loaded.llm_model, "claude-sonnet-4-6")
-                self.assertEqual(loaded.llm_api_key, "file-key")
+                # H4: env wins for secret fields when set.
+                self.assertEqual(loaded.llm_api_key, "env-key")
             finally:
                 del os.environ["LLM_PROVIDER"]
                 del os.environ["LLM_BASE_URL"]
@@ -117,14 +118,14 @@ class ConfigStoreTests(unittest.TestCase):
                 if saved_plex is not None:
                     os.environ["PLEX_TOKEN"] = saved_plex
 
-    def test_secret_field_sources_prefers_file_over_env(self) -> None:
+    def test_secret_field_sources_prefers_env_over_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             data_dir = Path(tmp)
             save_settings(data_dir, Settings(llm_api_key="file-key"))
             os.environ["LLM_API_KEY"] = "env-key"
             try:
                 sources = secret_field_sources(data_dir)
-                self.assertEqual(sources["llm_api_key"], "file")
+                self.assertEqual(sources["llm_api_key"], "env")
             finally:
                 del os.environ["LLM_API_KEY"]
 

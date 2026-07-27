@@ -404,6 +404,27 @@ class ToolRegistry:
         # Titles stripped from Youth tool JSON this turn — for post-generation scrub.
         self._youth_blocked_titles: set[str] = set()
 
+    def _deny_personal_mutation_if_gated(self) -> Optional[str]:
+        """H5: under multi-user, block personal writes unless the household opts in.
+
+        Single-owner (multi-user off) keeps immediate writes. *arr / Seerr /
+        collections stay on the confirm-token path regardless.
+        """
+        if not self.settings.features.multi_user_enabled:
+            return None
+        if self.settings.features.agent_may_mutate_personal_data:
+            return None
+        return json.dumps(
+            {
+                "error": (
+                    "Personal data writes via chat are disabled while multi-user is on. "
+                    "An owner can enable “Agent may mutate personal data” in Settings → "
+                    "Household, or make the change in the UI."
+                ),
+                "code": "agent_personal_mutation_gated",
+            }
+        )
+
     def _apply_youth_filters(self, filters: LibraryFilters) -> LibraryFilters:
         if not self.is_youth:
             return filters
@@ -1181,6 +1202,9 @@ class ToolRegistry:
         )
 
     async def _tool_remember_preference(self, args: Mapping[str, Any]) -> str:
+        denied = self._deny_personal_mutation_if_gated()
+        if denied:
+            return denied
         from projectionist.models.schemas import PreferenceSignal
 
         remember_preference(
@@ -1195,6 +1219,9 @@ class ToolRegistry:
         return json.dumps({"saved": True})
 
     async def _tool_remember_about_user(self, args: Mapping[str, Any]) -> str:
+        denied = self._deny_personal_mutation_if_gated()
+        if denied:
+            return denied
         if not self.user_id:
             return json.dumps({"error": "Private memory requires an authenticated household account"})
         from projectionist.memory import UserMemoryService
@@ -1689,6 +1716,9 @@ class ToolRegistry:
         return json.dumps({"items": items, "count": len(items)})
 
     async def _tool_save_user_review(self, args: Mapping[str, Any]) -> str:
+        denied = self._deny_personal_mutation_if_gated()
+        if denied:
+            return denied
         stars = float(args["stars"])
         review = save_review(
             self.db,
@@ -1905,6 +1935,9 @@ class ToolRegistry:
         return json.dumps({"items": items, "count": len(items)})
 
     async def _tool_add_to_watchlist(self, args: Mapping[str, Any]) -> str:
+        denied = self._deny_personal_mutation_if_gated()
+        if denied:
+            return denied
         from projectionist.watchlist.plex_sync import push_pin_to_plex
 
         title = str(args.get("title") or "").strip()
@@ -1931,6 +1964,9 @@ class ToolRegistry:
         return json.dumps({"pin": pin, "plex_push": push})
 
     async def _tool_remove_from_watchlist(self, args: Mapping[str, Any]) -> str:
+        denied = self._deny_personal_mutation_if_gated()
+        if denied:
+            return denied
         from projectionist.watchlist.plex_sync import remove_pin_from_plex
 
         user_id = self.user_id if self.settings.features.multi_user_enabled else None
@@ -2007,6 +2043,9 @@ class ToolRegistry:
         return json.dumps({"items": items, "count": len(items)})
 
     async def _tool_create_list(self, args: Mapping[str, Any]) -> str:
+        denied = self._deny_personal_mutation_if_gated()
+        if denied:
+            return denied
         name = str(args.get("name") or "").strip()
         if not name:
             return json.dumps({"error": "name is required"})
@@ -2023,6 +2062,9 @@ class ToolRegistry:
         return json.dumps({"list": created})
 
     async def _tool_add_to_list(self, args: Mapping[str, Any]) -> str:
+        denied = self._deny_personal_mutation_if_gated()
+        if denied:
+            return denied
         list_id, error = self._resolve_curated_list_id(args)
         if error:
             return json.dumps({"error": error})
@@ -2050,6 +2092,9 @@ class ToolRegistry:
         return json.dumps({"item": item})
 
     async def _tool_remove_from_list(self, args: Mapping[str, Any]) -> str:
+        denied = self._deny_personal_mutation_if_gated()
+        if denied:
+            return denied
         list_id, error = self._resolve_curated_list_id(args)
         if error:
             return json.dumps({"error": error})
