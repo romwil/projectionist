@@ -4,7 +4,7 @@ Step-by-step maintainer / agent guide for shipping a Projectionist version. Foll
 
 **Audience:** developers and agents. Voice: direct and technical ([DOCS_STYLE.md](DOCS_STYLE.md) developer column).
 
-**Related:** [DOCKER.md](DOCKER.md) (image publish details) · [TESTING.md](TESTING.md) (CA / e2e layers) · [DOCS_STYLE.md](DOCS_STYLE.md) (Highlights voice) · host-local QA lifecycle (`/Volumes/appdata/curatorx-qa-scripts/qa-runs/QA-LIFECYCLE.md`)
+**Related:** [DOCKER.md](DOCKER.md) (image publish details) · [TESTING.md](TESTING.md) (CA / e2e layers) · [DOCS_STYLE.md](DOCS_STYLE.md) (Highlights voice) · host-local QA lifecycle (`/Volumes/appdata/projectionist-qa-scripts/qa-runs/QA-LIFECYCLE.md`)
 
 ---
 
@@ -162,11 +162,11 @@ Full Unraid / Force Update caveats: [DOCKER.md](DOCKER.md).
 
 ## Spin down maintainer QA (after Hub publish)
 
-After a successful Docker Hub publish (`scripts/docker-release.sh`), **spin down the maintainer QA container** (`curatorx-qa` on `:8790`) unless an active Interactive UI QA / Playwright role suite / agent probe is in progress. Spin up again when the next test pass needs `:8790`.
+After a successful Docker Hub publish (`scripts/docker-release.sh`), **spin down the maintainer QA container** (`projectionist-qa` on `:8790`) unless an active Interactive UI QA / Playwright role suite / agent probe is in progress. Spin up again when the next test pass needs `:8790`.
 
-- **Do** stop only QA: `ssh automat 'docker stop curatorx-qa'` (keeps image + volume for a fast `docker start`).
-- **Do not** stop, rm, or recreate production `projectionist` / legacy `curatorx` / `:8788`.
-- Full config / volumes / spin-up / spin-down runbook (host-local, not in this git tree): `/Volumes/appdata/curatorx-qa-scripts/qa-runs/QA-LIFECYCLE.md` (WIP recreate: same folder’s `QA-REDEPLOY.md`).
+- **Do** stop only QA: `ssh automat 'docker stop projectionist-qa'` (keeps image + volume for a fast `docker start`).
+- **Do not** stop, rm, or recreate production `projectionist` / `:8788`.
+- Full config / volumes / spin-up / spin-down runbook (host-local, not in this git tree): `/Volumes/appdata/projectionist-qa-scripts/qa-runs/QA-LIFECYCLE.md` (WIP recreate: same folder’s `QA-REDEPLOY.md`).
 
 ---
 
@@ -225,4 +225,4 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 - [ ] `gh release create` with Highlights
 - [ ] `./scripts/docker-release.sh X.Y.Z`
 - [ ] Post-release Hub / `gh` / optional Unraid verify
-- [ ] Spin down `curatorx-qa` (`:8790`) unless a QA/test campaign is still running — never touch prod `projectionist` / legacy `curatorx` / `:8788` (host runbook: `curatorx-qa-scripts/qa-runs/QA-LIFECYCLE.md`)
+- [ ] Spin down `projectionist-qa` (`:8790`) unless a QA/test campaign is still running — never touch prod `projectionist` / `:8788` (host runbook: `projectionist-qa-scripts/qa-runs/QA-LIFECYCLE.md`)

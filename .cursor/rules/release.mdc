@@ -31,10 +31,9 @@ GitHub release, or pushing Docker images, **read and follow**
   `romwil/projectionist` (`:X.Y.Z`, `:X.Y`, `:latest`) **and** dual-tag identical
   digests to `romwil/curatorx:*` during the compatibility window. Never invent
   alternate registries or skip the script’s Unraid-compatible manifest flags.
-- After a successful Hub publish, **spin down maintainer QA** (`curatorx-qa` on `:8790`)
-  unless an active QA/test campaign is in progress. Never stop prod `projectionist`
-  / legacy `curatorx` / `:8788`.
-  Runbook: `/Volumes/appdata/curatorx-qa-scripts/qa-runs/QA-LIFECYCLE.md`.
+- After a successful Hub publish, **spin down maintainer QA** (`projectionist-qa` on `:8790`)
+  unless an active QA/test campaign is in progress. Never stop prod `projectionist` / `:8788`.
+  Runbook: `/Volumes/appdata/projectionist-qa-scripts/qa-runs/QA-LIFECYCLE.md`.
 
 Checklist, exact test commands (pytest cov ≥74, frontend unit/lint/build), `gh release`
 notes shape, and failure modes: **docs/RELEASE.md**.

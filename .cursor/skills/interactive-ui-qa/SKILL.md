@@ -27,9 +27,9 @@ Do **not** use this skill for free-form exploratory testing, fixing product bugs
 | Item | Value |
 |------|--------|
 | Base URL | `http://10.10.1.202:8790` (`QA_BASE_URL` in maintainer scripts) |
-| Credentials | `/Volumes/appdata/curatorx-qa-scripts/.env.qa` — `QA_OWNER_*`, `QA_MEMBER_*`, `QA_YOUTH_*`, `QA_GUEST_*` |
+| Credentials | `/Volumes/appdata/projectionist-qa-scripts/.env.qa` — `QA_OWNER_*`, `QA_MEMBER_*`, `QA_YOUTH_*`, `QA_GUEST_*` |
 | Never | Production / tunnel **`:8788`** — refuse and redirect to `:8790` |
-| Artifacts | `/Volumes/appdata/curatorx-qa-scripts/qa-runs/` |
+| Artifacts | `/Volumes/appdata/projectionist-qa-scripts/qa-runs/` |
 
 If `.env.qa` is missing, stop and tell the user to copy `.env.qa.example` and seed roles. Do not invent passwords. Do not log passwords into reports.
 
@@ -81,7 +81,7 @@ Page-load alone is **never** PASS. Each ID requires its specified interaction an
 2. Grade visual / a11y / hydration / scroll / wrong gating as bugs with severity.
 3. Capture screenshots for fails and for representative passes on gating/theme/scroll IDs.
 4. Prefer Cursor browser MCP against `QA_BASE_URL`; do not start Playwright suites unless the user asks.
-5. Never commit `qa-runs/` contents into mediacurator (gitignored note + host-local dir).
+5. Never commit `qa-runs/` contents into the projectionist git tree (host-local under `projectionist-qa-scripts/`).
 
 ## Procedure
 
