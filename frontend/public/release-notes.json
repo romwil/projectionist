@@ -1,6 +1,39 @@
 {
-  "generated_at": "2026-07-25T04:17:34Z",
+  "generated_at": "2026-07-27T01:54:49Z",
   "releases": [
+    {
+      "version": "1.27.1",
+      "date": "2026-07-27",
+      "summary": "Achievements tree hover details sit next to the card again, Unraid gets the refreshed Projectionist icons, and architecture-review remediations ship in the Docker image.",
+      "highlights": [
+        "**Hover details land where you look.** On My Journey → Achievements tree, the detail popup opens beside the achievement you hover instead of drifting across the grid.",
+        "**Sharper Unraid icons.** Community Applications shows the updated Projectionist mark at both standard and 512px sizes.",
+        "**Safer defaults for owners.** Bind-all exposure is called out clearly, env-seeded owners stay locked to the intended account, and MCP active-curation confirms plus API keys harden a notch."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Journey achievement callout used `position: absolute` under `.journey-main` while coordinates mixed viewport `getBoundingClientRect()` X with document `scrollY` Y — popup appeared ~1–2 columns right and ~1–2 card heights down. Callout is now `position: fixed` with pure viewport coords."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Unraid CA icons `unraid/projectionist-icon.png` and `unraid/projectionist-icon-512.png` refreshed for the Projectionist brand.",
+            "Architecture-review remediations on main since v1.27.0 now ship in the image: bind exposure warning + `HOST` override (C2), env-seeded owner hardening (H2), MCP active-curation confirm scope (H3), constant-time MCP key compare (M11)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` **1354 passed**, 6 skipped (29 subtests) at **78.26%** total coverage (`--cov-fail-under=74`).",
+            "Frontend `node --test` unit suite **474 passed**. ESLint **0 errors** (94 pre-existing warnings). Production build succeeds.",
+            "`test_version` lockstep holds at **1.27.1** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.27.0",
       "date": "2026-07-25",

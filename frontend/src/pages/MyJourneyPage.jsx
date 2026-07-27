@@ -330,10 +330,11 @@ export default function MyJourneyPage() {
                               data-testid={`journey-tree-node-${node.id}`}
                               onMouseEnter={(event) => {
                                 const rect = event.currentTarget.getBoundingClientRect();
+                                // Viewport coords — callout is position:fixed (not relative to .journey-main).
                                 setCallout({
                                   node,
                                   x: rect.right + 8,
-                                  y: rect.top + window.scrollY,
+                                  y: rect.top,
                                 });
                               }}
                               onMouseLeave={() => setCallout(null)}
@@ -342,7 +343,7 @@ export default function MyJourneyPage() {
                                 setCallout({
                                   node,
                                   x: rect.right + 8,
-                                  y: rect.top + window.scrollY,
+                                  y: rect.top,
                                 });
                               }}
                               onBlur={() => setCallout(null)}
