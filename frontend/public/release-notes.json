@@ -1,6 +1,34 @@
 {
-  "generated_at": "2026-07-27T01:54:49Z",
+  "generated_at": "2026-07-27T02:04:36Z",
   "releases": [
+    {
+      "version": "1.27.2",
+      "date": "2026-07-27",
+      "summary": "Scheduled Tasks gets a tighter owner console: compact icon actions, sort by next run or heaviest load, and a one-click Optimize rates pass that nudges batch/interval within safe autotune bounds.",
+      "highlights": [
+        "**Scheduled Tasks actions fit the row.** Run, enable/disable, and related controls are a compact icon row so the table stays readable at desktop widths.",
+        "**Sort by what’s next — or what’s heaviest.** Toggle Next run vs Heaviest load (duty cycle: last duration ÷ cadence) so you can triage the queue by urgency or cost.",
+        "**Optimize rates in one click.** Owners can re-evaluate autotune-eligible tasks and apply safe batch/interval nudges (or dry-run a preview) without starting jobs."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "`POST /api/admin/scheduled-tasks/optimize-rates` (`dry_run` query) → `IdleScheduler.optimize_autotune_rates` (same `evaluate_autotune` guards as post-run tuning; never disables or starts tasks).",
+            "Task list sort modes: Next run / Heaviest load (`sortScheduledTasks`, `taskLoadScore`, persisted via `projectionist.scheduledTasks.sort`).",
+            "Compact icon-row actions + table layout polish on Admin → Scheduled Tasks."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` **1356 passed**, 6 skipped (29 subtests) at **78.23%** total coverage (`--cov-fail-under=74`).",
+            "Frontend `node --test` unit suite **475 passed**. ESLint **0 errors** (94 pre-existing warnings). Production build succeeds.",
+            "`test_version` lockstep holds at **1.27.2** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.27.1",
       "date": "2026-07-27",

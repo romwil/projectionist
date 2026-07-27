@@ -103,5 +103,68 @@ class AutotuneEvaluationTests(unittest.TestCase):
             self.assertEqual(resolve_batch_size(db, "plot_neighbors", 15), 42)
 
 
+class OptimizeRatesTests(unittest.TestCase):
+    def test_optimize_rates_dry_run_and_apply(self) -> None:
+        from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+        from projectionist.scheduler.run_history import append_task_run, ensure_run_history_table
+
+        async def _noop(db, settings, should_stop):  # noqa: ARG001
+            return {"status": "completed", "seeds": 15, "has_more": True}
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp)
+            db = Database(data_dir / "test.db")
+            with db.connect() as conn:
+                ensure_run_history_table(conn)
+            scheduler = IdleScheduler(db, data_dir)
+            scheduler.register(
+                TaskDefinition(
+                    name="plot_neighbors",
+                    run_interval_seconds=43200,
+                    enabled=True,
+                    timeout_seconds=300,
+                    run_fn=_noop,
+                    items_per_cycle=15,
+                    progress_scope="neighbors_backlog",
+                )
+            )
+            scheduler.update_task(
+                "plot_neighbors",
+                run_interval_seconds=43200,
+                items_per_cycle=15,
+            )
+            append_task_run(
+                db,
+                name="plot_neighbors",
+                started_at=1_700_000_000,
+                finished_at=1_700_000_020,
+                duration_ms=20_000,
+                status="completed",
+                trigger="schedule",
+                items_processed=15,
+                metrics={"has_more": True},
+            )
+
+            preview = scheduler.optimize_autotune_rates(dry_run=True)
+            self.assertTrue(preview["dry_run"])
+            self.assertGreaterEqual(preview["changed_count"], 1)
+            plot = next(row for row in preview["changed"] if row["name"] == "plot_neighbors")
+            self.assertFalse(plot["applied"])
+            self.assertGreater(plot["items_per_cycle_after"] or 0, 15)
+
+            # Dry-run must not persist.
+            after_preview = scheduler.update_task("plot_neighbors")
+            self.assertEqual(after_preview["items_per_cycle"], 15)
+
+            applied = scheduler.optimize_autotune_rates(dry_run=False)
+            self.assertFalse(applied["dry_run"])
+            plot_applied = next(
+                row for row in applied["changed"] if row["name"] == "plot_neighbors"
+            )
+            self.assertTrue(plot_applied["applied"])
+            state = scheduler.update_task("plot_neighbors")
+            self.assertEqual(state["items_per_cycle"], plot_applied["items_per_cycle_after"])
+
+
 if __name__ == "__main__":
     unittest.main()

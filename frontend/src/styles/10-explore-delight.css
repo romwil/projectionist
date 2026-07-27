@@ -380,7 +380,8 @@
 
 .scheduled-tasks-layout {
   display: grid;
-  grid-template-columns: minmax(620px, 2fr) minmax(340px, 0.9fr);
+  /* List needs room for readable Next/Last + compact actions; detail stays usable but narrower. */
+  grid-template-columns: minmax(0, 1.85fr) minmax(280px, 0.75fr);
   gap: 1rem;
   align-items: start;
 }
@@ -390,19 +391,72 @@
   min-width: 0;
 }
 
-.scheduled-tasks-list-panel .user-management-table-wrap {
+.scheduled-tasks-table-wrap {
   overscroll-behavior-x: contain;
 }
 
-.scheduled-tasks-list-panel .user-management-table {
-  min-width: 820px;
+.scheduled-tasks-table {
+  table-layout: fixed;
+  width: 100%;
+  min-width: 640px;
 }
 
-.scheduled-tasks-list-panel .user-management-table th:nth-child(4),
-.scheduled-tasks-list-panel .user-management-table th:nth-child(5),
-.scheduled-tasks-list-panel .user-management-table td:nth-child(4),
-.scheduled-tasks-list-panel .user-management-table td:nth-child(5) {
+.scheduled-tasks-col-task {
+  width: 22%;
+}
+
+.scheduled-tasks-col-cadence {
+  width: 7%;
+}
+
+.scheduled-tasks-col-status {
+  width: 11%;
+}
+
+.scheduled-tasks-col-next {
+  width: 16%;
+}
+
+.scheduled-tasks-col-last {
+  width: 22%;
+}
+
+.scheduled-tasks-col-duration {
+  width: 9%;
+}
+
+.scheduled-tasks-col-actions {
+  width: 6.25rem;
+}
+
+.scheduled-tasks-table th,
+.scheduled-tasks-table td {
+  padding: 0.55rem 0.55rem;
+  vertical-align: middle;
+}
+
+.scheduled-tasks-table th:nth-child(4),
+.scheduled-tasks-table th:nth-child(5),
+.scheduled-tasks-table th:nth-child(6),
+.scheduled-tasks-table td:nth-child(4),
+.scheduled-tasks-table td:nth-child(5),
+.scheduled-tasks-table td:nth-child(6) {
+  font-variant-numeric: tabular-nums;
+}
+
+.scheduled-tasks-table th:last-child,
+.scheduled-tasks-table td:last-child {
+  width: 6.25rem;
+  padding-right: 0.35rem;
+  text-align: right;
+}
+
+.scheduled-task-cell-truncate {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
 }
 
 .scheduled-task-row {
@@ -413,8 +467,73 @@
   background: color-mix(in srgb, var(--accent, #c4a35a) 12%, transparent);
 }
 
+.scheduled-task-row-actions {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.15rem;
+}
+
+.scheduled-task-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  margin: 0;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted, #9aa3ad);
+  cursor: pointer;
+  opacity: 0.72;
+  transition: opacity 0.12s ease, color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.scheduled-task-icon-btn .material-symbols-outlined {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.scheduled-task-row:hover .scheduled-task-icon-btn,
+.scheduled-task-row:focus-within .scheduled-task-icon-btn,
+.scheduled-task-row.is-selected .scheduled-task-icon-btn {
+  opacity: 1;
+}
+
+.scheduled-task-icon-btn:hover:not(:disabled),
+.scheduled-task-icon-btn:focus-visible:not(:disabled) {
+  opacity: 1;
+  color: var(--accent, #c4a35a);
+  border-color: color-mix(in srgb, var(--accent, #c4a35a) 45%, transparent);
+  background: color-mix(in srgb, var(--accent, #c4a35a) 10%, transparent);
+  outline: none;
+}
+
+.scheduled-task-icon-btn:focus-visible {
+  outline: 2px solid var(--accent, #c4a35a);
+  outline-offset: 1px;
+}
+
+.scheduled-task-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .scheduled-task-name {
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.scheduled-task-id {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scheduled-task-id,
@@ -474,6 +593,35 @@
 
 .scheduled-tasks-sort-hint {
   margin: 0 0 0.65rem;
+}
+
+.scheduled-tasks-list-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  margin-bottom: 0.35rem;
+}
+
+.scheduled-tasks-list-header .dash-panel-title {
+  margin: 0;
+}
+
+.scheduled-tasks-sort-control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.scheduled-tasks-sort-option {
+  padding: 0.25rem 0.55rem;
+  font-size: 0.78rem;
+}
+
+.scheduled-tasks-sort-option.is-active {
+  border-color: var(--accent, #c4a35a);
+  color: var(--accent, #c4a35a);
 }
 
 .scheduled-task-description {

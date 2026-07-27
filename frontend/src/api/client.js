@@ -1306,6 +1306,15 @@ export async function listScheduledTasks() {
   return api("/admin/scheduled-tasks");
 }
 
+export async function optimizeScheduledTaskRates({ dry_run = false } = {}) {
+  const search = new URLSearchParams();
+  if (dry_run) search.set("dry_run", "true");
+  const query = search.toString() ? `?${search}` : "";
+  return api(`/admin/scheduled-tasks/optimize-rates${query}`, {
+    method: "POST",
+  });
+}
+
 export async function runScheduledTask(name, { wait = false } = {}) {
   const query = wait ? "?wait=true" : "";
   return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/run${query}`, {

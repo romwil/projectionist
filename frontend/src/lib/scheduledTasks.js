@@ -386,6 +386,61 @@ export function sortTasksByNextRun(items, now = Date.now() / 1000) {
   return list;
 }
 
+/**
+ * Load contribution at the current cadence: last duration ÷ interval.
+ * Higher = heavier share of idle wall-clock (duty cycle). Returns 0 when
+ * duration or interval is missing/invalid.
+ */
+export function taskLoadScore(task) {
+  if (!task) return 0;
+  const durationMs = Number(task.last_duration_ms);
+  const interval = Number(task.run_interval_seconds);
+  if (!Number.isFinite(durationMs) || durationMs < 0) return 0;
+  if (!Number.isFinite(interval) || interval <= 0) return 0;
+  return durationMs / 1000 / interval;
+}
+
+/** Descending by duty cycle (heaviest first); disabled last. Stable by name. */
+export function compareTasksByLoad(a, b) {
+  const aEnabled = a?.enabled !== false;
+  const bEnabled = b?.enabled !== false;
+  if (aEnabled !== bEnabled) return aEnabled ? -1 : 1;
+
+  const aScore = taskLoadScore(a);
+  const bScore = taskLoadScore(b);
+  if (aScore !== bScore) return bScore - aScore;
+
+  const aDuration = Number(a?.last_duration_ms);
+  const bDuration = Number(b?.last_duration_ms);
+  const aDur = Number.isFinite(aDuration) ? aDuration : -1;
+  const bDur = Number.isFinite(bDuration) ? bDuration : -1;
+  if (aDur !== bDur) return bDur - aDur;
+
+  const aName = String(a?.name || "");
+  const bName = String(b?.name || "");
+  return aName.localeCompare(bName);
+}
+
+export function sortTasksByLoad(items) {
+  const list = Array.isArray(items) ? [...items] : [];
+  list.sort((a, b) => compareTasksByLoad(a, b));
+  return list;
+}
+
+export const TASK_SORT_MODES = Object.freeze({
+  next_run: "next_run",
+  heaviest: "heaviest",
+});
+
+export const TASK_SORT_STORAGE_KEY = "projectionist.scheduledTasks.sort";
+
+export function sortScheduledTasks(items, mode, now = Date.now() / 1000) {
+  if (mode === TASK_SORT_MODES.heaviest) {
+    return sortTasksByLoad(items);
+  }
+  return sortTasksByNextRun(items, now);
+}
+
 /** Owner-facing next-run label for list rows. */
 export function formatTaskNextRun(task, now = Date.now() / 1000) {
   if (!task) return "—";

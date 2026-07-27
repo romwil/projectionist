@@ -395,6 +395,138 @@ class IdleScheduler:
             )
         return result
 
+    def optimize_autotune_rates(self, *, dry_run: bool = False) -> Dict[str, Any]:
+        """Re-evaluate autotune for eligible tasks using the latest productive run.
+
+        Safe owner action: only :data:`AUTOTUNE_TASKS`, never disables tasks,
+        clamps batch/interval to per-task bounds, and skips tasks without a
+        recent successful run. Does not start any task.
+        """
+        from projectionist.scheduler.progress import count_remaining
+
+        states = {s.name: s for s in self._load_all_states()}
+        changed: List[Dict[str, Any]] = []
+        unchanged: List[Dict[str, Any]] = []
+        skipped: List[Dict[str, Any]] = []
+
+        for name in sorted(AUTOTUNE_TASKS):
+            defn = self._definitions.get(name)
+            if defn is None:
+                skipped.append({"name": name, "reason": "not_registered"})
+                continue
+            state = states.get(name)
+            if state is None:
+                skipped.append({"name": name, "reason": "no_state"})
+                continue
+            if not state.enabled:
+                skipped.append({"name": name, "reason": "disabled"})
+                continue
+
+            runs = list_task_runs(self._db, name, limit=8)
+            productive = next(
+                (
+                    run
+                    for run in runs
+                    if str(run.get("status") or "") in {"completed", "cycle_limit"}
+                    and run.get("duration_ms") is not None
+                ),
+                None,
+            )
+            duration_ms = None
+            status = None
+            items_processed = None
+            has_more = False
+            if productive is not None:
+                duration_ms = int(productive.get("duration_ms") or 0)
+                status = str(productive.get("status") or "completed")
+                items_processed = productive.get("items_processed")
+                metrics = productive.get("metrics") or {}
+                if isinstance(metrics, dict):
+                    has_more = bool(metrics.get("has_more"))
+                    if items_processed is None and metrics.get("items_processed") is not None:
+                        try:
+                            items_processed = int(metrics["items_processed"])
+                        except (TypeError, ValueError):
+                            pass
+            elif state.last_duration_ms is not None and str(state.last_status or "").startswith(
+                ("completed", "cycle_limit")
+            ):
+                duration_ms = int(state.last_duration_ms)
+                status = str(state.last_status or "completed").split(":", 1)[0]
+                summary = state.last_run_summary or {}
+                metrics = summary.get("metrics") if isinstance(summary, dict) else {}
+                if isinstance(metrics, dict):
+                    has_more = bool(metrics.get("has_more"))
+                    if metrics.get("items_processed") is not None:
+                        try:
+                            items_processed = int(metrics["items_processed"])
+                        except (TypeError, ValueError):
+                            pass
+            else:
+                skipped.append({"name": name, "reason": "no_productive_run"})
+                continue
+
+            current_batch = resolve_batch_size(
+                self._db,
+                name,
+                defn.items_per_cycle or 1,
+            )
+            current_interval = state.run_interval_seconds
+            remaining = None
+            if defn.progress_scope:
+                try:
+                    remaining = count_remaining(self._db, defn.progress_scope)
+                except Exception:  # noqa: BLE001 — still evaluate duration/batch
+                    remaining = None
+
+            decision = evaluate_autotune(
+                name=name,
+                status=status,
+                duration_ms=duration_ms,
+                timeout_seconds=defn.timeout_seconds,
+                items_per_cycle=current_batch,
+                interval_seconds=current_interval,
+                items_processed=items_processed,
+                remaining_items=remaining,
+                has_more=has_more,
+            )
+            entry = {
+                "name": name,
+                "changed": decision.changed,
+                "reasons": list(decision.reasons or []),
+                "items_per_cycle_before": current_batch,
+                "items_per_cycle_after": decision.items_per_cycle,
+                "run_interval_seconds_before": current_interval,
+                "run_interval_seconds_after": decision.run_interval_seconds,
+                "applied": False,
+            }
+            if not decision.changed:
+                unchanged.append(entry)
+                continue
+            if not dry_run:
+                updates: Dict[str, Any] = {}
+                if decision.items_per_cycle is not None:
+                    updates["items_per_cycle"] = decision.items_per_cycle
+                if decision.run_interval_seconds is not None:
+                    updates["run_interval_seconds"] = decision.run_interval_seconds
+                if updates:
+                    self.update_task(name, **updates)
+                    entry["applied"] = True
+            changed.append(entry)
+
+        return {
+            "dry_run": dry_run,
+            "changed": changed,
+            "unchanged": unchanged,
+            "skipped": skipped,
+            "changed_count": len(changed),
+            "message": (
+                f"{'Would update' if dry_run else 'Updated'} {len(changed)} task"
+                f"{'' if len(changed) == 1 else 's'}; "
+                f"{len(unchanged)} already optimal; {len(skipped)} skipped"
+            ),
+        }
+
     def update_task(
         self,
         name: str,

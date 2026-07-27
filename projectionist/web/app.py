@@ -2251,6 +2251,24 @@ def list_scheduled_tasks(user=Depends(require_role("owner"))) -> Dict[str, Any]:
     }
 
 
+@app.post("/api/admin/scheduled-tasks/optimize-rates")
+def optimize_scheduled_task_rates(
+    dry_run: bool = False,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Recompute safe batch/interval nudges for autotune-eligible tasks.
+
+    Uses the same ``evaluate_autotune`` guards as post-run tuning: per-task
+    min/max batch and interval caps, no disables, and no task starts. Pass
+    ``dry_run=true`` to preview without writing.
+    """
+    del user
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        raise HTTPException(status_code=503, detail="Scheduler not available")
+    return scheduler.optimize_autotune_rates(dry_run=dry_run)
+
+
 @app.put("/api/admin/scheduled-tasks/{name}")
 def update_scheduled_task(
     name: str,

@@ -23,6 +23,10 @@ import {
   resolveRunMetrics,
   resolveWarmExploreTasks,
   sortTasksByNextRun,
+  sortTasksByLoad,
+  sortScheduledTasks,
+  taskLoadScore,
+  TASK_SORT_MODES,
   summarizeLastStatus,
   taskDisplayName,
   taskRowTone,
@@ -229,6 +233,32 @@ describe("scheduledTasks helpers", () => {
       formatTaskNextRun({ enabled: true, next_run_at: now - 1, overdue: true }, now),
       "Due now",
     );
+  });
+
+  it("scores and sorts by duty cycle (duration ÷ cadence)", () => {
+    assert.equal(
+      taskLoadScore({ last_duration_ms: 60_000, run_interval_seconds: 600 }),
+      0.1,
+    );
+    assert.equal(taskLoadScore({ last_duration_ms: null, run_interval_seconds: 600 }), 0);
+    const sorted = sortTasksByLoad([
+      { name: "light", enabled: true, last_duration_ms: 5_000, run_interval_seconds: 3600 },
+      { name: "heavy", enabled: true, last_duration_ms: 120_000, run_interval_seconds: 600 },
+      { name: "disabled", enabled: false, last_duration_ms: 999_999, run_interval_seconds: 60 },
+      { name: "medium", enabled: true, last_duration_ms: 30_000, run_interval_seconds: 600 },
+    ]);
+    assert.deepEqual(
+      sorted.map((t) => t.name),
+      ["heavy", "medium", "light", "disabled"],
+    );
+    const viaMode = sortScheduledTasks(
+      [
+        { name: "a", enabled: true, last_duration_ms: 10_000, run_interval_seconds: 100 },
+        { name: "b", enabled: true, last_duration_ms: 1_000, run_interval_seconds: 100 },
+      ],
+      TASK_SORT_MODES.heaviest,
+    );
+    assert.equal(viaMode[0].name, "a");
   });
 
   it("formats and merges unified execution log rows", () => {
