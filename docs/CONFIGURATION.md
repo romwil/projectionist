@@ -55,7 +55,10 @@ Canonical branded variables use the `PROJECTIONIST_*` prefix. Matching `CURATORX
 | Log format | `LOG_FORMAT` or `PROJECTIONIST_LOG_FORMAT` (alias `CURATORX_LOG_FORMAT`) | `text` (default) or `json` |
 | Privacy MCP key | `PROJECTIONIST_MCP_API_KEY` (alias `CURATORX_MCP_API_KEY`) | Enables HTTP `/mcp` in **privacy** mode (public schema, read-only). Or generate in **Admin → Advanced**. |
 | Full MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` (alias `CURATORX_MCP_FULL_API_KEY`) | Enables `/mcp` in **full** mode (internal fields + confirm-gated *arr proposes). Must differ from the privacy key. |
+| MCP full confirm | `PROJECTIONIST_MCP_FULL_CONFIRM` (alias `CURATORX_MCP_FULL_CONFIRM`) | Active-curation scope: `1`/`true` lets the full MCP key confirm/execute its own *arr proposals. Off by default — a human confirms on the web plane. |
 | Session secret | `PROJECTIONIST_SESSION_SECRET` (alias `CURATORX_SESSION_SECRET`) | Multi-user session cookies (auto-generated under `DATA_DIR` if unset) |
+| Owner username | `PROJECTIONIST_OWNER_USERNAME` (alias `CURATORX_OWNER_USERNAME`) | Username for the env-seeded owner (default `owner`) |
+| Owner password | `PROJECTIONIST_OWNER_PASSWORD` (alias `CURATORX_OWNER_PASSWORD`) | Multi-user first-owner setup: seeds the owner account so the first login cannot be raced on a shared LAN. Sign in with local username + password (works even if local login is otherwise off). Rotating it and restarting resets the owner password (no lockout). Min 8 chars. |
 | Webhook secret | `PROJECTIONIST_WEBHOOK_SECRET` (alias `CURATORX_WEBHOOK_SECRET`) | Required for Plex webhook auth (`X-Projectionist-Webhook-Secret` or legacy `X-CuratorX-Webhook-Secret`) |
 
 MCP details: [MCP.md](MCP.md). Privacy disclosure: [PRIVACY.md](PRIVACY.md) and in-app `/privacy`.
@@ -122,7 +125,7 @@ When `features.multi_user_enabled` is `true`, CuratorX requires sign-in for the 
 1. **Enable in Admin** — Turn on **Enable multi-user auth** and choose login methods (Plex, local password, OIDC).
 2. **Set a session secret (required for any real deploy)** — Export `CURATORX_SESSION_SECRET` to a long random string in your container or `.env`. Without it, CuratorX auto-generates one under `DATA_DIR` (or refuses the public dev default for multi-user).
 3. **Sign in** — Open CuratorX; you are redirected to `/login`. Use a configured method. For Plex, CuratorX opens the plex.tv link flow; after approval, CuratorX stores a signed session cookie. Token paste remains an advanced fallback only.
-4. **Roles** — The first account to sign in becomes **owner**. Later accounts start as **member**. Owners can promote/demote, disable, or remove users under **Admin → Users**. Chat, pending actions, watchlist, recommendations, and reviews are partitioned by user.
+4. **Roles** — By default the first account to sign in becomes **owner** and later accounts start as **member**. On a shared LAN that first-login step can be raced, so for any deploy beyond a fully trusted network set `PROJECTIONIST_OWNER_PASSWORD` (and optionally `PROJECTIONIST_OWNER_USERNAME`, default `owner`) in your container/`.env`. Projectionist then seeds the owner account up front — sign in with that local username + password (works even if the local-login flag is off), and no other first login can claim owner. Rotating the password and restarting resets it (recovery path — no lockout). Owners can promote/demote, disable, or remove users under **Admin → Users**. Chat, pending actions, watchlist, recommendations, and reviews are partitioned by user.
 5. **Seerr bridge** — With Seerr enabled and **Link Plex users to Seerr on login** checked, CuratorX calls Seerr `POST /auth/plex` during Plex login and stores `seerr_user_id` + permissions on the user row.
 6. **OIDC** — Set `oidc_issuer_url`, `oidc_client_id`, `oidc_client_secret`, and `oidc_redirect_uri` (callback to your CuratorX URL). The authorize flow uses a CSRF `state` parameter.
 

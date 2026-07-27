@@ -159,9 +159,11 @@ Empty neighbor/relation results mean the idle scheduler has not materialized the
 |------|---------|
 | `propose_add_radarr` / `propose_add_sonarr` | Queue add; returns `pending_token` |
 | `propose_remove_arr` | Queue remove; returns `pending_token` |
-| `confirm_pending_action` | Confirm or cancel a pending token |
+| `confirm_pending_action` | Cancel a pending token, or confirm/execute it **when the key is scoped for active curation** |
 
 Privacy mode callers receive an error if they invoke propose/confirm tools. There is no silent `require_confirmation=false` path.
+
+**Active-curation scope (H3).** A full key can always *propose* and *cancel*. Whether it may *confirm/execute* its own proposals is a scope bound to key issuance: set `mcp_full_confirm_enabled` (Admin → rotate the full key with the active-curation scope) or `PROJECTIONIST_MCP_FULL_CONFIRM=1` (alias `CURATORX_MCP_FULL_CONFIRM`) for stdio / Unraid CA. Without the scope, `confirm_pending_action` returns `requires_human_confirmation` and the pending token survives so a human can confirm it in the web UI status dock (or `POST /api/actions/confirm`). This lets you issue read+propose keys for untrusted models and reserve self-confirming keys for trusted in-stack automation.
 
 ## See also
 

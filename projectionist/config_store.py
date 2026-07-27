@@ -603,6 +603,12 @@ class Settings:
     # Dual-mode MCP HTTP keys (also PROJECTIONIST_MCP_* / CURATORX_MCP_* env).
     mcp_api_key: str = ""
     mcp_full_api_key: str = ""
+    # Active-curation scope for the full key: when true, the full MCP key may
+    # confirm/execute its own *arr proposals (add/remove). Chosen at key
+    # creation (Admin rotate, or env PROJECTIONIST_MCP_FULL_CONFIRM for
+    # stdio/CA). Default false → the full key can propose but not self-confirm;
+    # a human confirms on the web plane. See review finding H3.
+    mcp_full_confirm_enabled: bool = False
     # MCP / privacy image CDN sizes (image.tmdb.org/t/p/{size}/…).
     mcp_tmdb_poster_size: str = "w500"
     mcp_tmdb_backdrop_size: str = "w1280"

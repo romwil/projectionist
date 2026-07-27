@@ -26,6 +26,7 @@ from projectionist.library.query import (
 from projectionist.library.titles import get_title_detail
 from projectionist.mcp.mode import (
     audience_for_mode,
+    full_confirm_scope_enabled,
     get_mcp_mode,
     resolve_stdio_mcp_mode,
     set_mcp_mode,
@@ -34,13 +35,15 @@ from projectionist.privacy import sanitize
 from projectionist.web.jobs import _resolve_db_path
 
 mcp = FastMCP(
-    "CuratorX Library",
+    "Projectionist Library",
     instructions=(
-        "Query the user's Plex library indexed by CuratorX. "
+        "Query the user's Plex library indexed by Projectionist. "
         "Use library_query for paginated owned-title browse with rich filters; "
         "library_aggregate for counts; library_facet_catalog for top directors/actors; "
         "library_tv_episodes and library_tv_progress for TV episode-level queries. "
-        "Full MCP mode also exposes confirm-gated *arr propose tools."
+        "Full MCP mode can propose confirm-gated *arr changes; confirming them over "
+        "MCP requires a key scoped for active curation, otherwise a human confirms "
+        "on the authenticated Projectionist web plane."
     ),
 )
 
@@ -472,7 +475,11 @@ def propose_add_radarr(tmdb_id: int, title: str = "") -> str:
             "pending_token": token,
             "confirmation_token": token,
             "summary": f"Add to Radarr: {title or tmdb_id}",
-            "message": "Call confirm_pending_action with this token to execute.",
+            "message": (
+                "Confirm with confirm_pending_action if this key is scoped for "
+                "active curation; otherwise a human confirms it in the Projectionist "
+                "web UI status dock (or POST /api/actions/confirm)."
+            ),
         }
     )
 
@@ -515,7 +522,11 @@ def propose_add_sonarr(tvdb_id: int, title: str = "") -> str:
             "pending_token": token,
             "confirmation_token": token,
             "summary": f"Add to Sonarr: {title or tvdb_id}",
-            "message": "Call confirm_pending_action with this token to execute.",
+            "message": (
+                "Confirm with confirm_pending_action if this key is scoped for "
+                "active curation; otherwise a human confirms it in the Projectionist "
+                "web UI status dock (or POST /api/actions/confirm)."
+            ),
         }
     )
 
@@ -566,26 +577,57 @@ def propose_remove_arr(
             "confirmation_token": token,
             "summary": f"Remove from *arr: {payload['title']}",
             "arr_id": resolved["arr_id"],
-            "message": "Call confirm_pending_action with this token to execute.",
+            "message": (
+                "Confirm with confirm_pending_action if this key is scoped for "
+                "active curation; otherwise a human confirms it in the Projectionist "
+                "web UI status dock (or POST /api/actions/confirm)."
+            ),
         }
     )
 
 
 @mcp.tool()
 def confirm_pending_action(token: str, confirmed: bool = True) -> str:
-    """Full mode: confirm or cancel a pending *arr propose token."""
+    """Full mode: confirm or cancel a pending *arr propose token.
+
+    Confirming (executing) a fleet mutation requires the full key to carry the
+    active-curation scope, chosen at key creation (``mcp_full_confirm_enabled``
+    setting, or ``PROJECTIONIST_MCP_FULL_CONFIRM`` for stdio/CA). A key without
+    that scope may propose and cancel, but cannot self-confirm — a human
+    confirms it on the authenticated web plane instead (review finding H3).
+    Cancelling is always allowed and leaves nothing to execute.
+    """
     denied = _require_full_mode()
     if denied:
         return denied
 
+    if not confirmed:
+        try:
+            popped = _database().pop_pending_action(token)
+        except Exception as error:  # noqa: BLE001
+            return _emit({"error": str(error)})
+        return _emit({"cancelled": True, "found": popped is not None})
+
+    if not full_confirm_scope_enabled():
+        return _emit(
+            {
+                "error": "This MCP key is not scoped for active curation.",
+                "requires_human_confirmation": True,
+                "pending_token": token,
+                "message": (
+                    "This full key can propose and cancel but not self-confirm. "
+                    "Confirm this token in the Projectionist web UI status dock or "
+                    "via POST /api/actions/confirm as an authenticated owner, or "
+                    "issue a full key with the active-curation scope "
+                    "(mcp_full_confirm_enabled / PROJECTIONIST_MCP_FULL_CONFIRM)."
+                ),
+            }
+        )
+
     async def _run() -> dict[str, Any]:
         from projectionist.agent.tools import execute_confirmed_action
 
-        db = _database()
-        if not confirmed:
-            db.pop_pending_action(token, user_id=None)
-            return {"cancelled": True}
-        result = await execute_confirmed_action(db, _settings(), token, user_id=None)
+        result = await execute_confirmed_action(_database(), _settings(), token, user_id=None)
         return {"ok": True, **result}
 
     try:
