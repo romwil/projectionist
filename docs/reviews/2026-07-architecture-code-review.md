@@ -20,6 +20,29 @@ This letter argues for **incremental evolution with surgical priority**, not a p
 
 ---
 
+## 0. Remediation progress — updated 2026-07-27
+
+Tracking the maintainer's follow-up work. Status legend: ✅ Done · 🟡 Partial · ⬜ Not started. Finding rows in the tables below are annotated with the same markers.
+
+| ID | Status | Where | Notes |
+|----|--------|-------|-------|
+| **C1** | ✅ Done | PR #3 | `_tool_search_library` body restored (was returning `None`); end-to-end regression tests fail against the bug and pass after the fix. |
+| **C2** | ✅ Done | PR #3 | Bind host configurable via `HOST` / `CURATORX_HOST` (default stays `0.0.0.0` so Docker/Unraid port mapping still works); loud startup warning when binding a non-loopback interface with auth disabled. |
+| **H2** | ✅ Done | PR #5 | Env-seeded owner (`CURATORX_OWNER_USERNAME` / `CURATORX_OWNER_PASSWORD`) closes the first-login race **without lockout**; new-user role is owner-existence based across Plex/local; Unraid CA template gains an **Owner password** field. |
+| **H3** | ✅ Done | PR #4 | Active curation is now a **per-key scope** chosen at key creation (`mcp_full_confirm_enabled` / `CURATORX_MCP_FULL_CONFIRM`). Without the scope, `confirm_pending_action` returns `requires_human_confirmation` and the token survives for a web-plane confirm; with it, the trusted key executes. |
+| **M11** | ✅ Done | PR #4 | MCP key comparison now uses `hmac.compare_digest`. |
+| **M12** | 🟡 Partial | PR #5 | `docker-compose.yml` gained owner + session-secret env passthrough; a full compose ↔ Unraid rollout `ENV_KEYS` parity pass is still pending. |
+
+**Design deltas from the original recommendations (agreed with maintainer):**
+- **H2** uses an env-injected owner credential surfaced as an Unraid CA field, rather than a claim code, to close the race while avoiding operator lockout (rotating the env password and restarting resets it).
+- **H3** treats active curation as a capability **scoped at key issuance**, not a blanket human-in-the-loop mandate: issue read+propose keys for untrusted models and self-confirming keys for trusted in-stack automation. The web-plane confirm remains the fallback for unscoped keys.
+
+**Verification:** full backend suite **1146 passed, 4 skipped** on the H3 branch; the only 2 failures in a full run are the pre-existing `test_api_authz` rate-limiter test-isolation flakes (they pass in isolation and are unrelated to these changes).
+
+**Not yet started:** H1, H4, H5, H6, H7, H8; M1–M10 (except M11); L1–L6. See sequencing in §7 — the ops train (H6 CI Docker smoke, H7 conditional chown) and the structure train (god-file splits) are the recommended next steps.
+
+---
+
 ## 1. Goals fit — does the architecture serve the product?
 
 | Project objective | Architectural choice | Fit |
@@ -84,18 +107,18 @@ Severities assume the documented threat model: **trusted LAN single-owner by def
 
 | ID | Category | Finding | Evidence / notes |
 |----|----------|---------|------------------|
-| **C1** | Correctness / Agent | **`search_library` agent tool is broken.** `_tool_search_library` awaits search then returns `None`. The card-extension + JSON return body was left as dead code *after* `return` inside `_tool_suggest_follow_ups`. Chat tool rounds get null content; no-LLM fallback that relies on this path fails silently. | `curatorx/agent/tools.py` ~1738–1780 |
-| **C2** | Security / Ops | **Default bind `0.0.0.0:8788` + no auth = full admin on any reachable interface.** Documented (S3) and accepted for trusted LAN, but still Critical the moment Unraid shares L2 with guests/IoT or someone port-forwards. | `curatorx/web/__main__.py`; `SECURITY.md` S3 Open |
+| **C1** ✅ | Correctness / Agent | **`search_library` agent tool is broken.** `_tool_search_library` awaits search then returns `None`. The card-extension + JSON return body was left as dead code *after* `return` inside `_tool_suggest_follow_ups`. Chat tool rounds get null content; no-LLM fallback that relies on this path fails silently. | `curatorx/agent/tools.py` ~1738–1780 — **fixed in PR #3** |
+| **C2** ✅ | Security / Ops | **Default bind `0.0.0.0:8788` + no auth = full admin on any reachable interface.** Documented (S3) and accepted for trusted LAN, but still Critical the moment Unraid shares L2 with guests/IoT or someone port-forwards. | `curatorx/web/__main__.py`; `SECURITY.md` S3 — **mitigated in PR #3** (configurable `HOST`, startup exposure warning) |
 
-**C1 should be fixed in the next patch release.** It is a pure paste/indent regression with an obvious regression test.
+**C1 should be fixed in the next patch release.** It is a pure paste/indent regression with an obvious regression test. ✅ **Done (PR #3).**
 
 ### High
 
 | ID | Category | Finding | Recommendation |
 |----|----------|---------|----------------|
 | **H1** | Maintainability | Three backend god modules (`db.py`, `app.py`, `tools.py`) + two frontend god components (`App.jsx`, `ConfigPage.jsx`) dominate regression risk. | Split along existing domain lines (routers / tool packages / repositories / chat hooks). No framework change. |
-| **H2** | Security / Multi-user | **First login/registration claims `owner`** with no invite lock. Neighbor on LAN can race ownership when multi-user is first enabled. | Require owner invite code / settings-seeded owner / “claim window” locked to setup wizard. |
-| **H3** | Security / MCP | Full MCP exposes `propose_*` **and** `confirm_pending_action`; same client/model can self-confirm. Pending pops with `user_id=None` match any token. | Confirm only via authenticated web UI/API, or require a separate human confirm channel for MCP. |
+| **H2** ✅ | Security / Multi-user | **First login/registration claims `owner`** with no invite lock. Neighbor on LAN can race ownership when multi-user is first enabled. | ~~Require owner invite code / settings-seeded owner~~ → **env-seeded owner in PR #5** (`CURATORX_OWNER_PASSWORD`, surfaced as an Unraid CA field): seeds the owner up front so ownership can't be raced, with no lockout. |
+| **H3** ✅ | Security / MCP | Full MCP exposes `propose_*` **and** `confirm_pending_action`; same client/model can self-confirm. Pending pops with `user_id=None` match any token. | **PR #4**: active curation is a **per-key scope** (`mcp_full_confirm_enabled` / `CURATORX_MCP_FULL_CONFIRM`) chosen at key creation; unscoped keys can propose/cancel but not self-confirm (web-plane confirm remains available, token preserved). |
 | **H4** | Security / Secrets | **S11 still Open:** Plex/*arr/LLM/MCP keys in plaintext `settings.json`. `api_token_encrypted` is a misnomer (marker only). | Encrypt-at-rest with key from env/`CURATORX_SESSION_SECRET`, or stop persisting secrets already supplied via env. |
 | **H5** | Agent safety | Watchlist / lists / reviews / memory write **without** confirmation. Fine for single trusted owner; risky under prompt injection or multi-user. | Gate auto-writes behind role + optional “agent may mutate” setting; keep *arr path as the gold standard. |
 | **H6** | CI / Ops | **CI never builds or smoke-tests the Docker image.** Release notes file is a hard Dockerfile fail; entrypoint/HEALTHCHECK/static mount untested in PR. | PR job: generate notes → `docker build` → run with tmp `/config` → `curl /api/health`. |
@@ -116,8 +139,8 @@ Severities assume the documented threat model: **trusted LAN single-owner by def
 | **M8** | Frontend | No shared auth/features context — N× `/api/features` + `/api/auth/me`. CSS is one 9k-line file. | Thin AuthProvider; split CSS by surface without visual rewrite. |
 | **M9** | Testing | Frontend unit tests are lib-only; e2e covers Plex login but not local/OIDC or member Admin deny. Coverage fail-under is **10**. | Add household authz e2e; raise backend cov gate gradually (e.g. 10→25→40). |
 | **M10** | Ops / Backup | Guidance is “copy `/config`” without WAL-safe `sqlite3 .backup` procedure. | Document stop-or-backup API; optional Admin download of settings+DB snapshot. |
-| **M11** | Auth crypto | MCP API key compare uses `==`, not `hmac.compare_digest` (webhooks/passwords already do). | Align with webhook pattern. |
-| **M12** | Compose drift | `docker-compose.yml` thinner than Unraid rollout env (TZ, MCP, session secret, healthcheck). | Align compose with rollout `ENV_KEYS`. |
+| **M11** ✅ | Auth crypto | MCP API key compare uses `==`, not `hmac.compare_digest` (webhooks/passwords already do). | **Done in PR #4** — constant-time `_secret_eq` (`hmac.compare_digest`). |
+| **M12** 🟡 | Compose drift | `docker-compose.yml` thinner than Unraid rollout env (TZ, MCP, session secret, healthcheck). | Partial (PR #5 added owner + session-secret env); full parity with rollout `ENV_KEYS` still pending. |
 
 ### Low
 
@@ -143,8 +166,8 @@ Pentest remediation is real (S1–S2, S4–S10, S12–S15, P1–P6). Remaining H
 ### Data model & scale — **B**
 Schema is rich and honest. Materialized neighbors / facets / FTS are the correct homelab pattern. Scale cliff is embeddings I/O and O(n) semantic search, not browse queries. Foreign keys off + unversioned migrations are the integrity debt.
 
-### Agent / RAG — **B** (would be A− after C1)
-Tool surface is broad and mostly well-validated (`test_p0` / `test_p1_p2` / agent tool suites). Confirm-gated *arr is the crown jewel. Broken `search_library` undercuts the flagship loop. Prompt-injection program incomplete.
+### Agent / RAG — **A−** (C1 closed)
+Tool surface is broad and mostly well-validated (`test_p0` / `test_p1_p2` / agent tool suites). Confirm-gated *arr is the crown jewel. ✅ `search_library` is fixed (PR #3), restoring the flagship loop. Prompt-injection program (M5) still incomplete.
 
 ### Frontend / UX — **B**
 Strong design system (Lights Up/Down, Fraunces/DM Sans, Explore hub, AppShell). Maintainability threatened by `App.jsx` / `ConfigPage.jsx` / monolithic CSS. Accessibility intent is good; dialog focus management incomplete.
@@ -175,13 +198,13 @@ ARCHITECTURE / DESIGN / DATA_MODEL / SECURITY / PRIVACY / wiki / pentest protoco
 
 ## 7. Recommended sequencing (technical priority, not calendar)
 
-### Patch train (correctness + trust)
-1. Fix **C1** `search_library` + regression test that executes `_tool_search_library` end-to-end.
-2. **H2** first-owner lock when enabling multi-user.
-3. **H3** MCP confirm semantics (UI/API-only confirm, or equivalent human gate).
-4. **M11** constant-time MCP key compare (cheap).
+### Patch train (correctness + trust) — ✅ complete
+1. ✅ Fix **C1** `search_library` + regression test that executes `_tool_search_library` end-to-end. *(PR #3)*
+2. ✅ **H2** first-owner lock when enabling multi-user — env-seeded owner. *(PR #5)*
+3. ✅ **H3** MCP confirm semantics — per-key active-curation scope (unscoped keys fall back to web-plane confirm). *(PR #4)*
+4. ✅ **M11** constant-time MCP key compare. *(PR #4)*
 
-### Ops train (self-hosted confidence)
+### Ops train (self-hosted confidence) — ⬜ next up
 5. **H6** CI Docker build + health smoke.
 6. **H7** conditional chown; CA docs for UID 1000.
 7. **M10** WAL-safe backup docs (+ optional Admin backup download).
@@ -213,14 +236,14 @@ ARCHITECTURE / DESIGN / DATA_MODEL / SECURITY / PRIVACY / wiki / pentest protoco
 
 A maintainer can declare the architecture healthy for the next major line when:
 
-- Core agent library search works under tests (**C1** closed).
-- Multi-user enablement cannot be raced by a LAN neighbor (**H2**).
-- Full MCP cannot silently self-confirm fleet writes (**H3**).
-- Every PR proves the shippable image boots and answers `/api/health` (**H6**).
-- The three backend megafiles are split enough that a feature touches one domain package, not all three.
-- Secrets on disk are encrypted or env-sourced (**H4** / S11).
-- Docs tell one product story (ambient/chat-first) with APIs that match.
-- Backup + upgrade guidance includes WAL-safe DB snapshot steps operators can follow on Unraid.
+- ✅ Core agent library search works under tests (**C1** closed — PR #3).
+- ✅ Multi-user enablement cannot be raced by a LAN neighbor (**H2** — PR #5, env-seeded owner).
+- ✅ Full MCP cannot *silently* self-confirm fleet writes (**H3** — PR #4; self-confirm now requires an explicit active-curation key scope).
+- ⬜ Every PR proves the shippable image boots and answers `/api/health` (**H6**).
+- ⬜ The three backend megafiles are split enough that a feature touches one domain package, not all three.
+- ⬜ Secrets on disk are encrypted or env-sourced (**H4** / S11).
+- ⬜ Docs tell one product story (ambient/chat-first) with APIs that match.
+- ⬜ Backup + upgrade guidance includes WAL-safe DB snapshot steps operators can follow on Unraid.
 
 Until then, keep shipping the product you already built — just stop letting gravity wells and one broken tool quietly tax every release.
 
