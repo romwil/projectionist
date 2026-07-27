@@ -354,6 +354,30 @@ curl -s "http://localhost:8788/api/media-issues?status=open" | python3 -m json.t
 # → {"count": 3, "issues": [ ... ]}
 ```
 
+### Delete from Projectionist library (index vs full remove)
+
+Owner delete from a title detail page, browse multi-select, or Explore section toolbar opens a typed-`DELETE` confirm. Choose a **removal scope**:
+
+- **Index only** (default) — drops the Projectionist library index row. Plex files stay; the title can reappear on the next library sync.
+- **Full remove** — asks Radarr or Sonarr to delete the managed title **with files** and **add an import exclusion** (so list syncs do not re-add it), removes the Plex metadata entry when Plex is configured, then drops the Projectionist index row.
+
+Full remove is owner-only (same gate as index delete). Youth and guests never see it. If *arr is not configured, or the title is not managed there, Projectionist leaves the index row alone and returns a clear per-title error — it will not claim a silent full success.
+
+```bash
+# Index-only (default) — same as today's delete
+curl -s -X POST http://localhost:8788/api/library/items/delete \
+  -H 'Content-Type: application/json' \
+  -d '{"rating_keys":["RATING_KEY"],"mode":"index"}'
+
+# Full remove — *arr files + exclusion, Plex metadata, then index
+curl -s -X POST http://localhost:8788/api/library/items/delete \
+  -H 'Content-Type: application/json' \
+  -d '{"rating_keys":["RATING_KEY"],"mode":"full"}' | python3 -m json.tool
+# → {"mode":"full","deleted":1,"results":[...],"errors":[]}
+```
+
+**How it works / honest limits.** File deletion goes through Radarr/Sonarr (`deleteFiles` + `addExclusion`), not a direct filesystem wipe. Plex cleanup deletes library metadata after *arr has removed files; it does not delete disk media by itself. Purge-candidate deletes on the Dashboard remain **index-only** and stay undoable via the grooming action log — they are a different, reversible housekeeping path.
+
 ### One-click grooming rerun with safe undo
 
 Grooming is the housekeeping pass that finds **purge candidates** (stale, unwatched, or low-signal titles) so you can prune the library. From **Admin → Dashboard** you can rerun the grooming warm-up in one click (it runs the same scheduled tasks as the multi-task preset), then act on the refreshed candidates.

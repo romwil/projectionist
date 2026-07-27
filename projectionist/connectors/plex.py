@@ -543,6 +543,25 @@ class PlexClient:
                 return section.key
         raise RuntimeError(f"No Plex {section_type} library section found")
 
+    def delete_metadata(self, rating_key: str) -> None:
+        """Remove a library item from Plex (metadata only; does not delete disk files)."""
+        key = str(rating_key or "").strip()
+        if not key:
+            raise ValueError("rating_key is required")
+        self._request_empty(f"/library/metadata/{urllib.parse.quote(key)}", method="DELETE")
+
+    def refresh_section(self, section_key: str) -> None:
+        """Ask Plex to rescan a library section after files change on disk."""
+        key = str(section_key or "").strip()
+        if not key:
+            raise ValueError("section_key is required")
+        self._request_empty(f"/library/sections/{urllib.parse.quote(key)}/refresh", method="GET")
+
+    def _request_empty(self, path: str, *, method: str = "GET") -> None:
+        separator = "&" if "?" in path else "?"
+        url = f"{self.base_url}{path}{separator}X-Plex-Token={urllib.parse.quote(self.token)}"
+        request_empty(url, method=method, timeout=self.timeout)
+
     def _request_xml(self, path: str):
         separator = "&" if "?" in path else "?"
         url = f"{self.base_url}{path}{separator}X-Plex-Token={urllib.parse.quote(self.token)}"

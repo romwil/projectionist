@@ -1184,11 +1184,13 @@ export async function deletePurgeCandidates(ratingKeys) {
   });
 }
 
-/** Owner-only: remove Projectionist library index rows by rating_key (not Plex files). */
-export async function deleteLibraryItems(ratingKeys) {
+/** Owner-only: remove Projectionist library index rows by rating_key.
+ * Pass ``mode: "full"`` to also delete via *arr (files + exclusion) and Plex.
+ */
+export async function deleteLibraryItems(ratingKeys, { mode = "index" } = {}) {
   return api("/library/items/delete", {
     method: "POST",
-    body: JSON.stringify({ rating_keys: ratingKeys }),
+    body: JSON.stringify({ rating_keys: ratingKeys, mode }),
   });
 }
 

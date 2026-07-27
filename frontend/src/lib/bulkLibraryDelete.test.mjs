@@ -5,15 +5,20 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   BULK_DELETE_CONFIRM_PHRASE,
+  LIBRARY_DELETE_MODE_FULL,
+  LIBRARY_DELETE_MODE_INDEX,
   canBulkDeleteLibraryItem,
   canOwnerDeleteLibraryTitle,
   exploreSectionToolbarLayoutMatchers,
   formatBulkDeletePreviewTitles,
+  formatBulkLibraryDeleteResultMessage,
   formatLibraryDeleteSuccessMessage,
   isBulkDeleteConfirmPhrase,
+  libraryDeleteModeLabel,
   libraryDeleteNoticeFromState,
   libraryItemRatingKey,
   LIBRARY_DELETE_NOTICE_KEY,
+  normalizeLibraryDeleteMode,
   partitionBulkDeleteSelection,
 } from "./bulkLibraryDelete.js";
 import { readAllStyles } from "./readStyles.mjs";
@@ -133,6 +138,25 @@ describe("owner title-detail delete gating", () => {
       'No matching library record for "Dune".',
     );
     assert.equal(
+      formatLibraryDeleteSuccessMessage({
+        deleted: 1,
+        title: "Dune",
+        mode: LIBRARY_DELETE_MODE_FULL,
+      }),
+      'Fully removed "Dune" (files via *arr, Plex entry, Projectionist index).',
+    );
+    assert.equal(
+      formatBulkLibraryDeleteResultMessage({
+        mode: LIBRARY_DELETE_MODE_FULL,
+        deleted: 2,
+        errors: [{ error: "Radarr is not configured" }],
+      }),
+      "Fully removed 2; 1 failed (Radarr is not configured).",
+    );
+    assert.equal(normalizeLibraryDeleteMode("FULL"), LIBRARY_DELETE_MODE_FULL);
+    assert.equal(normalizeLibraryDeleteMode("nope"), LIBRARY_DELETE_MODE_INDEX);
+    assert.equal(libraryDeleteModeLabel(LIBRARY_DELETE_MODE_FULL), "Fully remove");
+    assert.equal(
       libraryDeleteNoticeFromState({ [LIBRARY_DELETE_NOTICE_KEY]: "  ok  " }),
       "ok",
     );
@@ -147,10 +171,17 @@ describe("owner title-detail delete gating", () => {
       "utf8",
     );
     const content = readFileSync(join(libDir, "components", "TitleDetailContent.jsx"), "utf8");
+    const dialog = readFileSync(
+      join(libDir, "components", "BulkLibraryDeleteDialog.jsx"),
+      "utf8",
+    );
     assert.match(page, /BulkLibraryDeleteDialog/);
     assert.match(page, /canOwnerDeleteLibraryTitle/);
     assert.match(page, /LIBRARY_DELETE_NOTICE_KEY/);
     assert.match(interactions, /deleteLibraryItems/);
+    assert.match(interactions, /mode/);
     assert.match(content, /data-testid="title-detail-delete-button"/);
+    assert.match(dialog, /bulk-library-delete-mode-full/);
+    assert.match(dialog, /LIBRARY_DELETE_MODE_FULL/);
   });
 });

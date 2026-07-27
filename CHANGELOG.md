@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.27.5] — 2026-07-27
+
+Owner library delete can fully remove titles through Radarr/Sonarr (files + import exclusion) and Plex, and Scheduled Tasks finally honors large owner batch sizes for LLM logline enrichment — Optimize rates sits next to Items per run.
+
+### Highlights
+- **Choose how far a delete goes.** Owner delete confirms now offer **Index only** (Projectionist row) or **Full remove** (Radarr/Sonarr files + import exclusion, Plex metadata, then the index) — with clear per-title errors when *arr cannot finish the job.
+- **Items per run means what it says.** Saved batch sizes for LLM logline enrichment are no longer capped at 10 at runtime; auto-tune still nudges within safer bounds, and the task timeout is 15 minutes for larger batches.
+- **Optimize rates where you edit cadence.** Autotune-eligible task detail shows Optimize rates next to Items per run so you can recompute a safe batch/interval without starting a job.
+
+### Added
+- `projectionist/library/full_remove.py` — full-remove orchestration (`mode=full` on `POST /api/library/items/delete`): *arr `deleteFiles` + `addExclusion` → Plex metadata delete → index drop; partial failures leave the index intact and return `errors`.
+- Bulk delete dialog **Removal scope** radios + styles; client `deleteLibraryItems(..., { mode })` and result message helpers.
+- Help / Design copy for index vs full remove; agent confirmed `remove_arr` passes `add_exclusion`.
+
+### Changed
+- `resolve_batch_size` honors owner-saved `items_per_cycle` up to `OWNER_BATCH_MAX` (500); `BATCH_BOUNDS` constrain auto-tune raises only (`llm_logline_enrichment` hi 100, `long_synopsis_enrichment` hi 50).
+- `llm_logline_enrichment` `timeout_seconds=900`; Optimize rates control in Scheduled Tasks cadence detail.
+- Radarr/Sonarr delete APIs accept `add_exclusion`; Plex connector supports metadata delete used by full remove.
+- Autotune / Optimize rates only persist batch/interval when values actually change.
+
+### Fixed
+- Owner batch for `llm_logline_enrichment` was silently clamped by `BATCH_BOUNDS` max 10 even when Admin showed a higher Items per run.
+
+### Verification
+- Backend `pytest` **1386 passed**, 6 skipped (29 subtests) at **78.30%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **493 passed**. ESLint **0 errors** (94 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.27.5** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.27.4] — 2026-07-27
 
 Apprise destinations get a guided builder, Taste clusters stop collecting junk words from free-text preference prose, and Architecture A hardens secrets-at-rest, foreign keys, and agent personal-write gates.

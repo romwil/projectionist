@@ -1,13 +1,18 @@
 import { useEffect, useState } from "react";
 import {
   BULK_DELETE_CONFIRM_PHRASE,
+  LIBRARY_DELETE_MODE_FULL,
+  LIBRARY_DELETE_MODE_INDEX,
   formatBulkDeletePreviewTitles,
   isBulkDeleteConfirmPhrase,
+  libraryDeleteModeLabel,
+  normalizeLibraryDeleteMode,
 } from "../lib/bulkLibraryDelete.js";
 
 /**
- * Hard-confirm dialog for removing Projectionist library index records by rating_key.
- * Does not delete Plex media files.
+ * Hard-confirm dialog for owner library delete.
+ * Default mode removes Projectionist index rows only; full remove also
+ * deletes via *arr (files + exclusion) and cleans Plex metadata.
  */
 export default function BulkLibraryDeleteDialog({
   open,
@@ -19,15 +24,22 @@ export default function BulkLibraryDeleteDialog({
   onConfirm,
 }) {
   const [phrase, setPhrase] = useState("");
+  const [mode, setMode] = useState(LIBRARY_DELETE_MODE_INDEX);
 
   useEffect(() => {
-    if (!open) setPhrase("");
+    if (!open) {
+      setPhrase("");
+      setMode(LIBRARY_DELETE_MODE_INDEX);
+    }
   }, [open]);
 
   if (!open) return null;
 
   const preview = formatBulkDeletePreviewTitles(titles, 5);
+  const normalizedMode = normalizeLibraryDeleteMode(mode);
+  const isFull = normalizedMode === LIBRARY_DELETE_MODE_FULL;
   const canConfirm = isBulkDeleteConfirmPhrase(phrase) && preview.total > 0 && !loading;
+  const countLabel = preview.total === 1 ? "title" : "titles";
 
   return (
     <div
@@ -45,7 +57,9 @@ export default function BulkLibraryDeleteDialog({
         <header className="bulk-delete-modal-header">
           <div>
             <p className="eyebrow">Owner action</p>
-            <h2 id="bulk-library-delete-title">Delete from Projectionist library</h2>
+            <h2 id="bulk-library-delete-title">
+              {isFull ? "Fully remove from library stack" : "Delete from Projectionist library"}
+            </h2>
           </div>
           <button
             type="button"
@@ -58,10 +72,64 @@ export default function BulkLibraryDeleteDialog({
           </button>
         </header>
 
-        <p className="bulk-delete-modal-warning">
-          This removes {preview.total} title{preview.total === 1 ? "" : "s"} from the Projectionist
-          library index. It does <strong>not</strong> delete files from Plex. Titles still in Plex
-          can reappear on the next library sync.
+        <fieldset className="bulk-delete-modal-modes" data-testid="bulk-library-delete-modes">
+          <legend className="bulk-delete-modal-modes-legend">Removal scope</legend>
+          <label className="bulk-delete-modal-mode">
+            <input
+              type="radio"
+              name="bulk-library-delete-mode"
+              value={LIBRARY_DELETE_MODE_INDEX}
+              checked={normalizedMode === LIBRARY_DELETE_MODE_INDEX}
+              disabled={loading}
+              data-testid="bulk-library-delete-mode-index"
+              onChange={() => setMode(LIBRARY_DELETE_MODE_INDEX)}
+            />
+            <span>
+              <strong>Index only</strong>
+              <span className="bulk-delete-modal-mode-hint">
+                Remove from the Projectionist library index. Does not delete Plex files or change
+                Radarr/Sonarr.
+              </span>
+            </span>
+          </label>
+          <label className="bulk-delete-modal-mode">
+            <input
+              type="radio"
+              name="bulk-library-delete-mode"
+              value={LIBRARY_DELETE_MODE_FULL}
+              checked={normalizedMode === LIBRARY_DELETE_MODE_FULL}
+              disabled={loading}
+              data-testid="bulk-library-delete-mode-full"
+              onChange={() => setMode(LIBRARY_DELETE_MODE_FULL)}
+            />
+            <span>
+              <strong>Full remove</strong>
+              <span className="bulk-delete-modal-mode-hint">
+                Delete media files via Radarr/Sonarr, add an import exclusion so lists cannot
+                re-add the title, remove it from Plex when configured, then drop the Projectionist
+                index row.
+              </span>
+            </span>
+          </label>
+        </fieldset>
+
+        <p
+          className={`bulk-delete-modal-warning${isFull ? " bulk-delete-modal-warning-danger" : ""}`}
+          data-testid="bulk-library-delete-warning"
+        >
+          {isFull ? (
+            <>
+              This permanently removes {preview.total} {countLabel} from your stack: disk files
+              (through Radarr/Sonarr), Plex library entry, and the Projectionist index. Titles not
+              managed by *arr cannot be fully removed — those stay in the index with a clear error.
+            </>
+          ) : (
+            <>
+              This removes {preview.total} {countLabel} from the Projectionist library index. It does{" "}
+              <strong>not</strong> delete files from Plex. Titles still in Plex can reappear on the
+              next library sync.
+            </>
+          )}
         </p>
 
         {preview.shown.length ? (
@@ -113,9 +181,13 @@ export default function BulkLibraryDeleteDialog({
             className="btn-danger"
             data-testid="bulk-library-delete-confirm"
             disabled={!canConfirm}
-            onClick={() => onConfirm?.()}
+            onClick={() => onConfirm?.({ mode: normalizedMode })}
           >
-            {loading ? "Deleting…" : `Delete ${preview.total || ""} from library`.trim()}
+            {loading
+              ? isFull
+                ? "Fully removing…"
+                : "Deleting…"
+              : `${libraryDeleteModeLabel(normalizedMode)} ${preview.total || ""}`.trim()}
           </button>
         </div>
       </div>

@@ -2707,6 +2707,7 @@ async def execute_confirmed_action(
         }
     if action == "remove_arr":
         delete_files = bool(payload.get("delete_files"))
+        add_exclusion = bool(payload.get("add_exclusion"))
         media_type = str(payload.get("media_type") or "movie")
         title = str(payload.get("title") or "")
         resolved = resolve_arr_removal_target(
@@ -2722,13 +2723,13 @@ async def execute_confirmed_action(
         try:
             if media_type == "movie":
                 RadarrClient(settings.radarr_url, settings.radarr_api_key).delete_movie(
-                    arr_id, delete_files=delete_files
+                    arr_id, delete_files=delete_files, add_exclusion=add_exclusion
                 )
                 if resolved.get("tmdb_id"):
                     db.set_arr_presence(tmdb_id=int(resolved["tmdb_id"]), in_radarr=False)
             else:
                 SonarrClient(settings.sonarr_url, settings.sonarr_api_key).delete_series(
-                    arr_id, delete_files=delete_files
+                    arr_id, delete_files=delete_files, add_exclusion=add_exclusion
                 )
                 if resolved.get("tvdb_id"):
                     db.set_arr_presence(tvdb_id=int(resolved["tvdb_id"]), in_sonarr=False)

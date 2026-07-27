@@ -7,12 +7,26 @@ export const BULK_DELETE_CONFIRM_PHRASE = "DELETE";
 /** location.state key for post-delete success feedback after navigating away. */
 export const LIBRARY_DELETE_NOTICE_KEY = "libraryDeleteNotice";
 
+export const LIBRARY_DELETE_MODE_INDEX = "index";
+export const LIBRARY_DELETE_MODE_FULL = "full";
+
 export const EXPLORE_SECTION_TOOLBAR_LAYOUT = {
   containerClass: "explore-section-toolbar",
   /** Must match reading-column containment used by hero/results/pagination. */
   widthRule: "min(var(--reading-column-max, 72rem), 100%)",
   overflowRule: "clip",
 };
+
+export function normalizeLibraryDeleteMode(value) {
+  const mode = String(value || LIBRARY_DELETE_MODE_INDEX).trim().toLowerCase();
+  return mode === LIBRARY_DELETE_MODE_FULL ? LIBRARY_DELETE_MODE_FULL : LIBRARY_DELETE_MODE_INDEX;
+}
+
+export function libraryDeleteModeLabel(mode) {
+  return normalizeLibraryDeleteMode(mode) === LIBRARY_DELETE_MODE_FULL
+    ? "Fully remove"
+    : "Delete from library";
+}
 
 export function libraryItemRatingKey(item) {
   const key = item?.rating_key ?? item?.plex_rating_key;
@@ -47,13 +61,55 @@ export function libraryDeleteNoticeFromState(locationState) {
   return text;
 }
 
-export function formatLibraryDeleteSuccessMessage({ deleted = 0, title = "" } = {}) {
+export function formatLibraryDeleteSuccessMessage({
+  deleted = 0,
+  title = "",
+  mode = LIBRARY_DELETE_MODE_INDEX,
+  errorCount = 0,
+} = {}) {
   const count = Number(deleted) || 0;
+  const failures = Number(errorCount) || 0;
   const label = String(title || "").trim() || "title";
+  const full = normalizeLibraryDeleteMode(mode) === LIBRARY_DELETE_MODE_FULL;
+  if (full) {
+    if (count > 0 && failures === 0) {
+      return `Fully removed "${label}" (files via *arr, Plex entry, Projectionist index).`;
+    }
+    if (count > 0 && failures > 0) {
+      return `Fully removed ${count} title${count === 1 ? "" : "s"}; ${failures} could not be fully removed.`;
+    }
+    if (failures > 0) {
+      return `Could not fully remove "${label}". Check Radarr/Sonarr configuration and whether the title is managed there.`;
+    }
+    return `No matching library record for "${label}".`;
+  }
   if (count > 0) {
     return `Removed "${label}" from the Projectionist library index.`;
   }
   return `No matching library record for "${label}".`;
+}
+
+export function formatBulkLibraryDeleteResultMessage(result, { titles = [] } = {}) {
+  const mode = normalizeLibraryDeleteMode(result?.mode);
+  const deleted = Number(result?.deleted) || 0;
+  const errors = Array.isArray(result?.errors) ? result.errors : [];
+  if (mode === LIBRARY_DELETE_MODE_FULL) {
+    if (deleted > 0 && errors.length === 0) {
+      return `Fully removed ${deleted} title${deleted === 1 ? "" : "s"} from the stack.`;
+    }
+    if (deleted > 0 && errors.length > 0) {
+      const first = String(errors[0]?.error || "unknown error");
+      return `Fully removed ${deleted}; ${errors.length} failed (${first}).`;
+    }
+    if (errors.length > 0) {
+      return String(errors[0]?.error || "Full remove failed for the selected titles.");
+    }
+    return "No titles were fully removed.";
+  }
+  if (deleted === 1 && titles.length === 1) {
+    return formatLibraryDeleteSuccessMessage({ deleted, title: titles[0], mode });
+  }
+  return `Removed ${deleted} title${deleted === 1 ? "" : "s"} from the Projectionist library index.`;
 }
 
 export function partitionBulkDeleteSelection(items, selectedKeys, itemKeyFn) {

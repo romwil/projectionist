@@ -980,7 +980,23 @@ export default function ScheduledTasksPage() {
                       <p className="scheduled-task-meta">
                         Auto-tune adjusts batch/interval after successful runs within safety
                         caps. Your saved values stick until the next tune or manual edit.
+                        Use Optimize rates to recompute a safe cadence/batch from recent runs
+                        without starting any job.
                       </p>
+                    ) : null}
+                    {selected.autotune_enabled ? (
+                      <div className="scheduled-task-cadence-actions">
+                        <button
+                          type="button"
+                          className="ghost"
+                          data-testid="optimize-rates-detail"
+                          disabled={optimizingRates}
+                          title="Safely nudge batch size and cadence for autotune-eligible tasks using the last successful run"
+                          onClick={handleOptimizeRates}
+                        >
+                          {optimizingRates ? "Optimizing…" : "Optimize rates"}
+                        </button>
+                      </div>
                     ) : null}
                   </div>
                 ) : null}

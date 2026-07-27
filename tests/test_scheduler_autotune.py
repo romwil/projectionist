@@ -102,6 +102,94 @@ class AutotuneEvaluationTests(unittest.TestCase):
             self.assertEqual(resolve_batch_size(db, "plot_neighbors", 15), 42)
             self.assertEqual(resolve_batch_size(db, "plot_neighbors", 15), 42)
 
+    def test_resolve_batch_honors_owner_llm_logline_size(self) -> None:
+        """Owner-saved 100 must not be silently clamped to the old autotune max of 10."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            with db.connect() as conn:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                        name TEXT PRIMARY KEY,
+                        enabled INTEGER DEFAULT 1,
+                        run_interval_seconds INTEGER NOT NULL,
+                        items_per_cycle INTEGER
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO scheduled_tasks (name, enabled, run_interval_seconds, items_per_cycle)
+                    VALUES ('llm_logline_enrichment', 1, 3600, 100)
+                    """
+                )
+            self.assertEqual(resolve_batch_size(db, "llm_logline_enrichment", 5), 100)
+            self.assertGreaterEqual(BATCH_BOUNDS["llm_logline_enrichment"][1], 100)
+
+    def test_autotune_preserves_owner_batch_when_only_interval_changes(self) -> None:
+        """Interval shorten must not rewrite an owner batch down to BATCH_BOUNDS hi."""
+        decision = evaluate_autotune(
+            name="llm_logline_enrichment",
+            status="completed",
+            duration_ms=40_000,
+            timeout_seconds=900,
+            items_per_cycle=100,
+            interval_seconds=86400,
+            items_processed=100,
+            remaining_items=5000,
+            has_more=True,
+        )
+        # Fast run with huge backlog → shorten interval; batch stays at owner 100.
+        self.assertEqual(decision.items_per_cycle, 100)
+        if decision.changed:
+            self.assertLess(decision.run_interval_seconds or 86400, 86400)
+            self.assertNotIn("near_timeout_lower_batch", decision.reasons or [])
+
+    def test_logline_run_passes_resolved_batch_as_query_limit(self) -> None:
+        """Configured items_per_cycle must become the enrichment query limit."""
+        import asyncio
+        from unittest.mock import patch
+
+        from projectionist.config_store import Settings
+        from projectionist.scheduler.tasks import llm_logline_enrichment
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            with db.connect() as conn:
+                conn.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS scheduled_tasks (
+                        name TEXT PRIMARY KEY,
+                        enabled INTEGER DEFAULT 1,
+                        run_interval_seconds INTEGER NOT NULL,
+                        items_per_cycle INTEGER
+                    )
+                    """
+                )
+                conn.execute(
+                    """
+                    INSERT INTO scheduled_tasks (name, enabled, run_interval_seconds, items_per_cycle)
+                    VALUES ('llm_logline_enrichment', 1, 3600, 100)
+                    """
+                )
+
+            captured: dict[str, int] = {}
+
+            def _fake_needing(*, limit: int = 10):
+                captured["limit"] = int(limit)
+                return []
+
+            with patch.object(db, "items_needing_llm_logline", side_effect=_fake_needing):
+                result = asyncio.run(
+                    llm_logline_enrichment.run(
+                        db,
+                        Settings(llm_api_key="test-key"),
+                        should_stop=lambda: False,
+                    )
+                )
+            self.assertEqual(captured.get("limit"), 100)
+            self.assertEqual(result.get("enriched"), 0)
+
 
 class OptimizeRatesTests(unittest.TestCase):
     def test_optimize_rates_dry_run_and_apply(self) -> None:

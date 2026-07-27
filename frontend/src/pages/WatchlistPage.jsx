@@ -17,7 +17,7 @@ import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
-import { partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
+import { formatBulkLibraryDeleteResultMessage, partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
 import {
   buildMediaBrowseParams,
   matchesMediaBrowseWatchState,
@@ -200,30 +200,32 @@ export default function WatchlistPage() {
     setDeleteOpen(true);
   }
 
-  async function handleBulkDeleteConfirm() {
+  async function handleBulkDeleteConfirm({ mode } = {}) {
     if (!isOwner || deleting) return;
     const { ratingKeys, titles } = deletePartition;
     if (!ratingKeys.length) return;
     const progressId = start({
-      label: "Deleting from library index",
+      label: mode === "full" ? "Fully removing from stack" : "Deleting from library index",
       total: ratingKeys.length,
       asynchronous: true,
     });
     setDeleting(true);
     setDeleteError("");
     try {
-      const result = await deleteLibraryItems(ratingKeys);
+      const result = await deleteLibraryItems(ratingKeys, { mode });
       const deletedCount = Number(result?.deleted) || 0;
+      const errors = Array.isArray(result?.errors) ? result.errors : [];
+      const summary = formatBulkLibraryDeleteResultMessage(result, { titles });
+      if (errors.length && !deletedCount) {
+        setDeleteError(summary);
+        finish(progressId, { label: summary, state: "error" });
+        return;
+      }
       setDeleteOpen(false);
       setSelected(new Set());
-      const summary = (
-        deletedCount
-          ? `Removed ${deletedCount} title${deletedCount === 1 ? "" : "s"} from the Projectionist library index.`
-          : `No matching library records for ${titles.length} selected title${titles.length === 1 ? "" : "s"}.`,
-      );
       setActionStatus(summary);
       update(progressId, ratingKeys.length);
-      finish(progressId, { label: summary });
+      finish(progressId, { label: summary, state: errors.length ? "error" : "success" });
       await refresh();
     } catch (err) {
       const message = err.message || "Could not delete selected titles.";
