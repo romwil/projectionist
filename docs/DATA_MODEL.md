@@ -133,7 +133,7 @@ Current extraction:
 3. **Split per-title budget** — top rare tokens **plus** guaranteed retention for tokens that also appear as keyword stems
 4. **Plot Lab hybrid query** (default) — each selected token may match via motif / keyword / theme facet **or** live plot-text `LIKE` (including `long_synopsis`), AND across tokens; pure motif-AND remains available via `plot_match_mode=motifs`
 
-**Themes (no LLM):** idle `keyword_theme_tagging` maps frequent TMDB keywords onto a small controlled vocabulary and writes `facet_type='theme'`. The stub `llm_theme_tagging` task remains registered for a future optional LLM path but skips in production.
+**Themes (no LLM):** idle `keyword_theme_tagging` maps frequent TMDB keywords onto a small controlled vocabulary and writes `facet_type='theme'`.
 
 Knowledge coverage stats (`GET /api/library/stats` → `knowledge_coverage`, or `/api/library/knowledge-coverage`) expose % with overview / motifs / keywords / neighbors / loglines so sparsity stays visible to Admin/Explore.
 
@@ -398,7 +398,7 @@ From the archived [curatorx_prd.md](archive/curatorx_prd.md):
 |--------|------|-------------|
 | `service_name` | TEXT PK | `plex`, `radarr`, `sonarr`, `tmdb`, … |
 | `base_url` | TEXT | |
-| `api_token_encrypted` | TEXT | Reserved for encrypted storage |
+| `credential_marker` | TEXT | Presence marker only (`***configured***`) — not ciphertext; secrets live in encrypted `settings.json` |
 | `connection_status` | TEXT | `unverified`, `verified`, `error` |
 | `last_tested_at` | DATETIME | |
 
@@ -449,17 +449,9 @@ Seeded on init: **`general`** lens.
 | `completion_percentage` | REAL | |
 | `timestamp` | DATETIME | |
 
-#### `agent_blueprints`
+#### `agent_blueprints` (removed)
 
-| Column | Type | Description |
-|--------|------|-------------|
-| `blueprint_id` | TEXT PK | |
-| `name` | TEXT | e.g. Midnight Scavenger |
-| `cron_schedule` | TEXT | Crontab string |
-| `active_lens_id` | TEXT FK | Lens context for scheduled runs |
-| `instructions_json` | TEXT | Serialized agent instructions |
-| `is_enabled` | INTEGER | 0/1 |
-| `last_run_status` / `last_run_timestamp` | | Job telemetry |
+Unused stub table; dropped in schema migration 36. Do not recreate.
 
 #### `user_title_reviews`
 

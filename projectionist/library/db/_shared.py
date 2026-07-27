@@ -173,7 +173,7 @@ CREATE TABLE IF NOT EXISTS curator_system_config (
 CREATE TABLE IF NOT EXISTS service_integrations (
     service_name TEXT PRIMARY KEY,
     base_url TEXT,
-    api_token_encrypted TEXT,
+    credential_marker TEXT,
     connection_status TEXT DEFAULT 'unverified',
     last_tested_at DATETIME,
     certified INTEGER DEFAULT 0
@@ -220,18 +220,6 @@ CREATE TABLE IF NOT EXISTS interaction_telemetry (
     FOREIGN KEY (lens_id) REFERENCES curation_lenses(lens_id)
 );
 
-CREATE TABLE IF NOT EXISTS agent_blueprints (
-    blueprint_id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    cron_schedule TEXT NOT NULL,
-    active_lens_id TEXT,
-    instructions_json TEXT,
-    is_enabled INTEGER DEFAULT 1,
-    last_run_status TEXT,
-    last_run_timestamp DATETIME,
-    FOREIGN KEY (active_lens_id) REFERENCES curation_lenses(lens_id)
-);
-
 CREATE TABLE IF NOT EXISTS derived_contexts (
     context_hash TEXT PRIMARY KEY,
     inferred_label TEXT DEFAULT 'General Exploration',
@@ -273,7 +261,7 @@ CREATE VIEW IF NOT EXISTS integration_profiles AS
 SELECT
     service_name AS service_id,
     base_url AS endpoint_url,
-    api_token_encrypted AS credential_encrypted,
+    credential_marker AS credential_encrypted,
     connection_status AS verification_state,
     last_tested_at AS synchronized_at
 FROM service_integrations;

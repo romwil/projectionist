@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [1.27.4] — 2026-07-27
+
+Apprise destinations get a guided builder, Taste clusters stop collecting junk words from free-text preference prose, and Architecture A hardens secrets-at-rest, foreign keys, and agent personal-write gates.
+
+### Highlights
+- **Build Apprise destinations without memorizing URLs.** Under Settings → Notifications, pick Discord, Telegram, Slack, email, Pushover, Gotify, or ntfy — or paste any Apprise URL — then edit, remove, or **Test** a row.
+- **Taste tags stay meaningful.** Preference sentences and feedback no longer spill stop-words and contractions into Settings → Taste; refresh also clears unlocked junk left by older runs.
+- **Secrets stay encrypted on disk.** UI-saved API keys in `settings.json` are encrypted at rest; set `PROJECTIONIST_SECRETS_KEY` (or rely on the session secret) and keep that key with your `/config` backups.
+- **Safer multi-user agent writes.** With multi-user on, chat cannot mutate personal data unless the owner opts in under Household settings.
+
+### Added
+- Apprise destinations builder UI (`AppriseDestinationsEditor`, `appriseDestinations.js`) with popular-target forms + raw URL paste.
+- `POST /api/auth/me/apprise/test` — member self-serve single-URL test (rate-limited); client `testMyAppriseSend`.
+- `projectionist/taste/clusters.py` — tokenize / validate / purge junk cluster tags; wired into `taste_refresh`, preferences store, and engagement/persona taste reads/writes.
+- `projectionist/secrets_crypto.py` + boot migration — encrypt UI-persisted settings secrets (H4 Hybrid); env still wins and is not written back as plaintext.
+- Versioned SQLite migrations (`projectionist/library/db/migrations.py`) with FK orphan cleanup, `credential_marker` rename, and drop of unused `agent_blueprints`.
+- Feature flag `agent_may_mutate_personal_data` (H5) + Admin Household toggle; privacy MCP gates affinity / watchlist tools to full mode.
+- Compose healthchecks; broader `PROJECTIONIST_*` / MCP / owner / secrets-key env passthrough.
+
+### Changed
+- SQLite connections enable `PRAGMA foreign_keys=ON` (M1).
+- Help docs describe the Apprise builder and member test endpoint; Docker docs cover WAL-safe `/config` backups and secrets-key backup.
+- Removed unused `llm_theme_tagging` scheduled task (keyword theme tagging remains).
+- Architecture review scorecard updates for H4–H7 / M1–M2 status.
+
+### Fixed
+- Telemetry chat events no longer pass `lens_id` as `associated_context_hash` (FK-safe under enforcement).
+- Legacy custom persona → `migrated-persona` template backfill runs on every boot after versioned migrations.
+
+### Verification
+- Backend `pytest` **1378 passed**, 6 skipped (29 subtests) at **78.33%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **493 passed**. ESLint **0 errors** (94 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.27.4** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.27.3] — 2026-07-27
 
 Unraid host kit and docs now default to `/mnt/user/appdata/projectionist`, Apprise can fan out household notifications to Discord/Telegram/etc., and failed API calls no longer dump gateway HTML into the UI.

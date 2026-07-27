@@ -15,6 +15,8 @@ class EngagementMixin:
     # --- Member taste (overrides on top of lens_taste_profile) ---
 
     def get_user_taste_overrides(self, user_id: str) -> List[Dict[str, Any]]:
+        from projectionist.taste.clusters import is_valid_cluster_tag
+
         with self.connect() as conn:
             rows = conn.execute(
                 """
@@ -34,6 +36,7 @@ class EngagementMixin:
                 "source": "user",
             }
             for row in rows
+            if is_valid_cluster_tag(str(row["cluster_tag"]))
         ]
 
     def set_user_taste_weight(
@@ -44,8 +47,10 @@ class EngagementMixin:
         *,
         explicit_lock: Optional[bool] = None,
     ) -> Dict[str, Any]:
-        tag = str(cluster_tag or "").strip().lower()
-        if not tag:
+        from projectionist.taste.clusters import is_valid_cluster_tag, normalize_cluster_tag
+
+        tag = normalize_cluster_tag(cluster_tag)
+        if not tag or not is_valid_cluster_tag(tag):
             raise ValueError("cluster_tag is required")
         clamped = max(0.0, min(1.0, float(weight)))
         now = time.time()
@@ -95,10 +100,14 @@ class EngagementMixin:
         limit: int = 40,
     ) -> List[Dict[str, Any]]:
         """Merge lens taste with optional per-user overrides (user wins)."""
+        from projectionist.taste.clusters import is_valid_cluster_tag
+
         lens_rows = self.get_lens_taste_profile(lens_id or DEFAULT_LENS_ID)
         merged: Dict[str, Dict[str, Any]] = {}
         for row in lens_rows:
             tag = str(row["cluster_tag"])
+            if not is_valid_cluster_tag(tag):
+                continue
             merged[tag] = {
                 "cluster_tag": tag,
                 "weight": float(row["weight"] or 0.5),

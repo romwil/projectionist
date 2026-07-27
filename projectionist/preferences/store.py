@@ -6,6 +6,11 @@ from typing import List, Optional
 
 from projectionist.library.db import DEFAULT_LENS_ID, Database
 from projectionist.models.schemas import PreferenceSignal
+from projectionist.taste.clusters import (
+    cluster_tokens_from_text,
+    is_valid_cluster_tag,
+    normalize_cluster_tag,
+)
 
 
 def remember_preference(
@@ -25,11 +30,22 @@ def remember_preference(
         }.get(signal.signal_type, 1.0)
 
     lens_id = signal.lens_id or db.get_active_lens_id() or DEFAULT_LENS_ID
-    cluster_tag = (signal.cluster_tag or signal.text or "").strip()
-    if cluster_tag:
+    # Prefer an explicit cluster_tag. Otherwise extract contentful tokens from
+    # free text so sentences never become cluster labels.
+    tags: List[str] = []
+    raw_tag = (signal.cluster_tag or "").strip()
+    if raw_tag and is_valid_cluster_tag(raw_tag):
+        tags = [normalize_cluster_tag(raw_tag)]
+    else:
+        candidate = (signal.text or "").strip()
+        if candidate and " " not in candidate and is_valid_cluster_tag(candidate):
+            tags = [normalize_cluster_tag(candidate)]
+        elif candidate:
+            tags = cluster_tokens_from_text(candidate)[:8]
+    for tag in tags:
         db.set_lens_taste_weight(
             lens_id,
-            cluster_tag[:120],
+            tag[:120],
             float(weight),
             explicit_lock=signal.explicit_lock if signal.explicit_lock is not None else (signal.signal_type == "explicit"),
             respect_lock=signal.explicit_lock is None,
@@ -53,15 +69,19 @@ def preference_context(
     *,
     user_id: Optional[str] = None,
 ) -> str:
+    from projectionist.taste.clusters import is_valid_cluster_tag
+
     resolved = lens_id or db.get_active_lens_id() or DEFAULT_LENS_ID
     taste_rows = db.get_lens_taste_profile(resolved)
     lines: List[str] = []
     if taste_rows:
-        lines.append(f"Lens taste profile ({resolved}):")
-        for row in taste_rows[:limit]:
-            lock = " [locked]" if int(row["explicit_lock"]) else ""
-            lines.append(f"- {row['cluster_tag']} (weight={row['weight']}){lock}")
-        return "\n".join(lines)
+        clean_rows = [row for row in taste_rows if is_valid_cluster_tag(str(row["cluster_tag"]))]
+        if clean_rows:
+            lines.append(f"Lens taste profile ({resolved}):")
+            for row in clean_rows[:limit]:
+                lock = " [locked]" if int(row["explicit_lock"]) else ""
+                lines.append(f"- {row['cluster_tag']} (weight={row['weight']}){lock}")
+            return "\n".join(lines)
 
     # v1.8.29 unified memory is the source of truth for account-scoped
     # preferences.  Legacy facts remain only for pre-migration installations.

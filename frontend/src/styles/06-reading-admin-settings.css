@@ -496,6 +496,186 @@
   color: var(--text-secondary, #b7c0ce);
 }
 
+/* ── Settings: Apprise destination grid / builder ─────────────────── */
+.apprise-destinations {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-2, #171a22) 80%, transparent);
+}
+
+.apprise-destinations-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.apprise-destinations-title {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.apprise-destinations-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.apprise-destinations-empty {
+  margin: 0;
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.apprise-destinations-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.apprise-destination-row {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--surface, #101218);
+}
+
+.apprise-destination-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+
+.apprise-destination-badge {
+  flex: 0 0 auto;
+  padding: 0.12rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.apprise-destination-url {
+  flex: 1 1 12rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--muted);
+  word-break: break-all;
+  background: transparent;
+}
+
+.apprise-destination-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.apprise-builder {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border));
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised, #1c2029);
+}
+
+.apprise-builder-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.apprise-builder-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+
+.apprise-scheme-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(11.5rem, 1fr));
+  gap: var(--space-2);
+}
+
+.apprise-scheme-card {
+  display: grid;
+  gap: 0.35rem;
+  text-align: left;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface, #101218);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.apprise-scheme-card:hover,
+.apprise-scheme-card:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+  outline: none;
+}
+
+.apprise-scheme-card-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.apprise-scheme-card-blurb {
+  font-size: var(--text-xs, 0.75rem);
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.apprise-builder-fields {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.apprise-builder-check {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.apprise-builder-check input {
+  margin-top: 0.2em;
+}
+
+.apprise-builder-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
 .settings-inline-link {
   color: var(--accent);
   font-size: var(--text-sm);

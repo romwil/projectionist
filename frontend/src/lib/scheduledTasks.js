@@ -7,7 +7,6 @@ const TASK_LABELS = {
   gap_analysis: "Gap analysis",
   health_metrics: "Health metrics",
   llm_logline_enrichment: "LLM logline enrichment",
-  llm_theme_tagging: "LLM theme tagging",
   metadata_enrichment: "Metadata enrichment",
   plot_neighbors: "Plot neighbors",
   purge_candidates: "Purge candidates",

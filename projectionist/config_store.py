@@ -494,6 +494,10 @@ class FeatureFlags:
     ephemeral_collection_gc_enabled: bool = True
     # When true, collection_gc only logs what it would delete.
     ephemeral_collection_gc_dry_run: bool = False
+    # Multi-user: when True, the agent may mutate personal data (watchlist, lists,
+    # reviews, memory) for the acting user without a confirm token. Single-owner
+    # mode ignores this flag and always allows immediate personal writes (H5).
+    agent_may_mutate_personal_data: bool = False
 
 
 @dataclass
@@ -690,18 +694,21 @@ class Settings:
     def load(cls, path: Path) -> "Settings":
         if not path.exists():
             return cls()
+        from projectionist.secrets_crypto import decrypt_settings_mapping
+
         data = json.loads(path.read_text(encoding="utf-8"))
-        return cls.from_mapping(data)
+        return cls.from_mapping(decrypt_settings_mapping(data, data_dir=path.parent))
 
     def save(self, path: Path) -> None:
+        from projectionist.secrets_crypto import encrypt_settings_mapping
+
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps(asdict(self), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        payload = encrypt_settings_mapping(asdict(self), data_dir=path.parent)
+        path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         # settings.json holds secrets (llm_api_key, plex_token, *_api_key,
-        # webhook_secret). Restrict it to owner read/write so other local
-        # accounts / volume readers can't lift credentials. Mirrors the
-        # session-secret file (session_tokens.py). chmod is a no-op or raises on
-        # filesystems that don't support POSIX perms (e.g. some Windows/network
-        # mounts) — degrade gracefully rather than failing the save.
+        # webhook_secret) — now encrypted at rest when a secrets key is available.
+        # Restrict it to owner read/write so other local accounts / volume readers
+        # can't lift credentials. Mirrors the session-secret file (session_tokens.py).
         try:
             os.chmod(path, 0o600)
         except OSError:
@@ -714,7 +721,10 @@ def _load_settings_file_data(data_dir: Path) -> Dict[str, Any]:
         logger.debug("No settings.json at %s; using defaults and env", data_dir)
         return {}
     try:
-        return json.loads(settings_path.read_text(encoding="utf-8"))
+        from projectionist.secrets_crypto import decrypt_settings_mapping
+
+        raw = json.loads(settings_path.read_text(encoding="utf-8"))
+        return decrypt_settings_mapping(raw, data_dir=data_dir)
     except json.JSONDecodeError as error:
         logger.warning("Invalid settings.json at %s: %s", settings_path, error)
         return {}
@@ -734,15 +744,25 @@ def _file_field_explicitly_set(file_data: Mapping[str, Any], field_name: str) ->
 def load_merged_settings(data_dir: Path) -> Settings:
     """Merge settings.json with environment variables.
 
-    Values explicitly saved in settings.json take precedence. Environment
-    variables fill gaps when a field is missing or empty in the file.
+    Non-secret fields: values explicitly saved in settings.json take precedence;
+    environment variables fill gaps when a field is missing or empty in the file.
+
+    Secret fields (H4 Hybrid): **environment wins when set** and is never written
+    back into settings.json as plaintext. File values are used only when env is unset.
     """
+    from projectionist.secrets_crypto import SETTINGS_SECRET_FIELDS
+
     file_data = _load_settings_file_data(data_dir)
     settings = Settings.from_mapping(file_data) if file_data else Settings()
     merged = asdict(settings)
+    secret_set = set(SETTINGS_SECRET_FIELDS)
     for env_name, field_name in ENV_TO_FIELD.items():
         env_value = resolve_env(env_name)
         if env_value is None:
+            continue
+        if field_name in secret_set:
+            merged[field_name] = env_value
+            logger.debug("Secret field %s taken from env %s (env wins)", field_name, env_name)
             continue
         if _file_field_explicitly_set(file_data, field_name):
             continue
@@ -766,7 +786,18 @@ def load_merged_settings(data_dir: Path) -> Settings:
 
 
 def secret_field_sources(data_dir: Path) -> Dict[str, str]:
-    """Return per-secret source: 'env', 'file', or '' (unset)."""
+    """Return per-secret source: 'env', 'file', or '' (unset).
+
+    When both env and file are set, reports ``env`` (H4: env wins at runtime).
+    """
+    # Read raw file (may be ciphertext) only to detect presence — decrypt for emptiness.
+    settings_path = data_dir / "settings.json"
+    raw_file: Dict[str, Any] = {}
+    if settings_path.exists():
+        try:
+            raw_file = json.loads(settings_path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            raw_file = {}
     file_data = _load_settings_file_data(data_dir)
     sources: Dict[str, str] = {}
     secret_fields = (
@@ -784,15 +815,44 @@ def secret_field_sources(data_dir: Path) -> Dict[str, str]:
         "mcp_full_api_key",
     )
     for field in secret_fields:
-        if _file_field_explicitly_set(file_data, field):
-            sources[field] = "file"
-            continue
         env_key = FIELD_TO_ENV.get(field, "")
-        if env_key and resolve_env(env_key) is not None:
+        env_set = bool(env_key and resolve_env(env_key) is not None)
+        file_set = _file_field_explicitly_set(file_data, field) or (
+            field in raw_file and str(raw_file.get(field) or "").strip() != ""
+        )
+        if env_set:
             sources[field] = "env"
+        elif file_set:
+            sources[field] = "file"
         else:
             sources[field] = ""
     return sources
+
+
+def migrate_plaintext_settings_secrets(data_dir: Path) -> bool:
+    """Encrypt any plaintext secrets already on disk (boot migration). Returns True if rewritten."""
+    from projectionist.secrets_crypto import (
+        encrypt_settings_mapping,
+        mapping_needs_secret_migration,
+    )
+
+    path = data_dir / "settings.json"
+    if not path.exists():
+        return False
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(raw, dict) or not mapping_needs_secret_migration(raw):
+        return False
+    encrypted = encrypt_settings_mapping(raw, data_dir=data_dir)
+    path.write_text(json.dumps(encrypted, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+    logger.info("Migrated plaintext settings secrets to encrypted-at-rest form in %s", path)
+    return True
 
 
 def save_settings(data_dir: Path, settings: Settings) -> Path:

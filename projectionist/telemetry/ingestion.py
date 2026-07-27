@@ -92,6 +92,9 @@ class TelemetryIngester:
         persona_id: Optional[str] = None,
         user_id: Optional[str] = None,
     ) -> None:
+        # Do not pass lens_id as associated_context_hash — that column FKs
+        # derived_contexts.context_hash (default seed is "general"), and FK
+        # enforcement rejects lens ids like "default".
         self._emit(
             EVENT_CHAT_MESSAGE,
             {
@@ -101,7 +104,6 @@ class TelemetryIngester:
                 "persona_id": persona_id,
                 "user_id": user_id,
             },
-            context_hash=lens_id,
         )
 
     def record_chat_feedback(

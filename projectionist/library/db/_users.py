@@ -647,6 +647,8 @@ class UsersAuthMixin:
         # NORMAL with WAL is a common Unraid/NAS tradeoff: much less fsync cost than
         # FULL, with only a small window of loss on abrupt power failure mid-commit.
         conn.execute(f"PRAGMA synchronous={SQLITE_SYNCHRONOUS}")
+        # Enforce declared FOREIGN KEY clauses (M1). Orphan cleanup runs in migrations.
+        conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     @contextmanager

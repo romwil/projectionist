@@ -1903,6 +1903,32 @@ export default function ConfigPage() {
             </p>
             {settings?.features?.multi_user_enabled ? (
               <>
+                <label className="config-toggle" data-testid="agent-may-mutate-personal-data-toggle">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(settings?.features?.agent_may_mutate_personal_data)}
+                    onChange={(event) => {
+                      const enabled = event.target.checked;
+                      updateFeatureFlags({ agent_may_mutate_personal_data: enabled });
+                      persistSettings({
+                        features: {
+                          ...(settings.features || {}),
+                          agent_may_mutate_personal_data: enabled,
+                        },
+                      });
+                    }}
+                  />
+                  <span>Agent may mutate personal data</span>
+                </label>
+                <p className="wizard-note">
+                  When multi-user is on, chat tools that pin watchlist items, edit lists, save reviews, or
+                  write memory stay off unless you enable this. *arr / Seerr / collections still require a
+                  confirm token either way.
+                </p>
+              </>
+            ) : null}
+            {settings?.features?.multi_user_enabled ? (
+              <>
                 <label className="config-toggle" data-testid="invite-only-toggle">
                   <input
                     type="checkbox"

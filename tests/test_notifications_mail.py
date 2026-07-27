@@ -165,6 +165,28 @@ class NotificationPlatformTests(unittest.TestCase):
         self.assertTrue(user["notify_channel_apprise"])
         self.assertEqual(user["apprise_urls"], "json://localhost/me")
 
+    def test_my_apprise_test_endpoint(self) -> None:
+        with patch(
+            "projectionist.notifications.apprise_transport.send_apprise",
+            return_value=AppriseSendResult(ok=True, notified=1),
+        ) as mock_send:
+            with patch(
+                "projectionist.notifications.apprise_transport.apprise_available",
+                return_value=True,
+            ):
+                resp = self.client.post(
+                    "/api/auth/me/apprise/test",
+                    json={"url": "json://localhost/personal-test"},
+                )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertTrue(resp.json()["ok"])
+        self.assertEqual(resp.json()["notified"], 1)
+        mock_send.assert_called_once()
+        self.assertEqual(mock_send.call_args.kwargs["urls"], ["json://localhost/personal-test"])
+
+        bad = self.client.post("/api/auth/me/apprise/test", json={"url": "json://a\njson://b"})
+        self.assertEqual(bad.status_code, 400)
+
     def test_apprise_settings_mask_and_delivery(self) -> None:
         self._enable_multi_user()
         path = Path(self._tmpdir.name) / "settings.json"

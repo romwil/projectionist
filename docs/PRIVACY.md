@@ -144,7 +144,7 @@ Stored under the app data directory (typically `/config` → `settings.json` and
 - LLM provider base URL, model, and API key
 - Webhook secret, session secret material, feature flags
 
-**Who can view them in the UI:** owner Admin / Configuration only (not household members). Treat the Docker `/config` volume and backups as secret material — keys are not encrypted at rest on disk today.
+**Who can view them in the UI:** owner Admin / Configuration only (not household members). Treat the Docker `/config` volume and backups as secret material. UI-saved keys in `settings.json` are encrypted at rest when a secrets key is available; still protect the volume and back up `PROJECTIONIST_SECRETS_KEY` with `/config`.
 
 ### MCP keys
 
@@ -179,13 +179,14 @@ MCP lets external tools query your **indexed library**. Mode is determined by th
 
 ### Privacy mode (default for sharing)
 
-- **Tools:** read-only library intelligence (query, facets, watch suggestions, etc.).
+- **Tools:** sanitized catalog/search browse — library query, facets, aggregate counts, TV progress filters, TMDB discovery. Progress filters (e.g. unwatched / in-progress) may still narrow *owned catalog* results; they do **not** expose household affinity tools.
+- **Affinity-biased tools are full-only:** `analyze_watch_patterns`, `recommend_hidden_gems`, purge candidates, watchlist pins, and “tonight”-style bias helpers require the full MCP key (even though raw Plex fields stay stripped in privacy mode, those answers encode household taste).
 - **Schema:** public content — titles, years, genres, cast, truncated overviews, `tmdb_id` / `tvdb_id`, optional coarse watch state, **TMDB** image URLs when available.
 - **Must not include:** Plex/LAN/`X-Plex-Token` media URLs, `rating_key`, machine identifiers, household user identity, email/avatar, file sizes in bytes, raw view timestamps, `in_radarr` / `in_sonarr`, absolute paths, secrets, or *arr write tools.
 
 ### Full / in-stack mode (trusted LAN automation)
 
-- **Tools:** privacy read tools with richer **internal** fields, plus confirm-gated propose tools for Radarr/Sonarr (and optional Seerr) that return a pending token — no silent writes.
+- **Tools:** privacy catalog tools with richer **internal** fields, affinity/watch-biased helpers, plus confirm-gated propose tools for Radarr/Sonarr (and optional Seerr) that return a pending token — no silent writes.
 - **Still must not include:** live `X-Plex-Token` in any URL or field; webhook / session / LLM / *arr API keys; dumps of `settings.json`.
 - Prefer TMDB CDN images even in full mode.
 

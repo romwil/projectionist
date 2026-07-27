@@ -272,6 +272,17 @@ async def lifespan(_app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("Startup: session secret bootstrap failed (continuing)")
 
+    logger.info("Startup: migrating plaintext settings secrets (H4)…")
+    try:
+        from projectionist.config_store import migrate_plaintext_settings_secrets
+
+        if migrate_plaintext_settings_secrets(DATA_DIR):
+            logger.info("Startup: settings secrets migrated to encrypted-at-rest")
+        else:
+            logger.info("Startup: settings secrets already encrypted or empty")
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup: settings secret migration failed (continuing)")
+
     logger.info("Startup: initializing job manager…")
     manager = get_job_manager()
     logger.info("Startup: job manager ready")
@@ -578,6 +589,12 @@ class AppriseTestPayload(BaseModel):
     """Optional override URLs for an owner Apprise test (newline / comma separated)."""
 
     urls: Optional[str] = Field(default=None, max_length=4000)
+
+
+class MyAppriseTestPayload(BaseModel):
+    """Single Apprise URL for a member self-serve test notification."""
+
+    url: str = Field(min_length=3, max_length=2000)
 
 
 class WeeklyNewsletterGeneratePayload(BaseModel):
@@ -1294,6 +1311,53 @@ async def upload_my_avatar(
         ) from error
     updated["avatar_url"] = local_avatar_api_path(user.id)
     return {"user": updated, "authenticated": True}
+
+
+@app.post("/api/auth/me/apprise/test")
+def test_my_apprise_send(
+    request: Request,
+    payload: MyAppriseTestPayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Send a short test notification to one self-serve Apprise URL."""
+    del user
+    from projectionist.notifications.apprise_transport import (
+        AppriseSendError,
+        apprise_available,
+        send_apprise,
+        split_apprise_urls,
+    )
+
+    enforce_rate_limit(request, bucket="apprise_me_test", limit=10, window_seconds=60)
+    if not apprise_available():
+        raise HTTPException(
+            status_code=400,
+            detail="Apprise is not installed. Ask the owner to reinstall with the web extras.",
+        )
+    urls = split_apprise_urls(payload.url)
+    if len(urls) != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide exactly one Apprise URL to test.",
+        )
+    try:
+        result = send_apprise(
+            None,
+            title="Projectionist Apprise test",
+            body=(
+                "This is a test notification from your Projectionist notification settings.\n\n"
+                "If you received it, this destination is working."
+            ),
+            urls=urls,
+        )
+    except AppriseSendError as exc:
+        # Detail is safe (transport already avoids echoing raw URLs in common paths).
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "notified": result.notified,
+        "detail": result.detail,
+    }
 
 
 @app.post("/api/auth/plex/pin")

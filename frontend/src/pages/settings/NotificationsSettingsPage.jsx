@@ -5,9 +5,14 @@ import {
   getFeatures,
   patchAuthMe,
 } from "../../api/client";
+import AppriseDestinationsEditor from "../../components/settings/AppriseDestinationsEditor";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
 import SettingsToggle from "../../components/settings/SettingsToggle";
+import {
+  parseAppriseDestinationRows,
+  serializeAppriseDestinationRows,
+} from "../../lib/appriseDestinations.js";
 import {
   newsletterConfirmMessage,
   newsletterResultMessage,
@@ -43,7 +48,7 @@ export default function NotificationsSettingsPage() {
   const [inboxOn, setInboxOn] = useState(true);
   const [emailOn, setEmailOn] = useState(false);
   const [appriseOn, setAppriseOn] = useState(false);
-  const [appriseUrls, setAppriseUrls] = useState("");
+  const [appriseRows, setAppriseRows] = useState([]);
   const [newsletterOn, setNewsletterOn] = useState(false);
   const [nudgeOn, setNudgeOn] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
@@ -63,7 +68,7 @@ export default function NotificationsSettingsPage() {
         setInboxOn(user.notify_channel_inbox !== false);
         setEmailOn(Boolean(user.notify_channel_email));
         setAppriseOn(Boolean(user.notify_channel_apprise));
-        setAppriseUrls(user.apprise_urls || "");
+        setAppriseRows(parseAppriseDestinationRows(user.apprise_urls || ""));
         setNewsletterOn(Boolean(user.newsletter_opt_in));
         setNudgeOn(Boolean(user.nudge_opt_in));
         setIsOwner(user.role === "owner");
@@ -89,7 +94,7 @@ export default function NotificationsSettingsPage() {
         notify_channel_inbox: inboxOn,
         notify_channel_email: emailOn,
         notify_channel_apprise: appriseOn,
-        apprise_urls: appriseUrls.trim() || null,
+        apprise_urls: serializeAppriseDestinationRows(appriseRows) || null,
         newsletter_opt_in: newsletterOn,
         nudge_opt_in: nudgeOn,
       });
@@ -98,7 +103,7 @@ export default function NotificationsSettingsPage() {
       setInboxOn(user.notify_channel_inbox !== false);
       setEmailOn(Boolean(user.notify_channel_email));
       setAppriseOn(Boolean(user.notify_channel_apprise));
-      setAppriseUrls(user.apprise_urls || "");
+      setAppriseRows(parseAppriseDestinationRows(user.apprise_urls || ""));
       setNewsletterOn(Boolean(user.newsletter_opt_in));
       setNudgeOn(Boolean(user.nudge_opt_in));
       setStatus({ type: "success", message: "Notification preferences saved." });
@@ -209,7 +214,7 @@ export default function NotificationsSettingsPage() {
               label="Apprise alerts"
               help={
                 appriseAvailable
-                  ? "Send matching alerts to your Apprise URLs (Discord, Telegram, push, and more). Optional household URLs come from the owner."
+                  ? "Send matching alerts to your Apprise destinations (Discord, Telegram, push, and more). Optional household URLs come from the owner under Admin → Mail."
                   : "Apprise package is not installed on this server yet — ask the owner to reinstall with web extras."
               }
               testId="notifications-apprise-toggle"
@@ -221,24 +226,11 @@ export default function NotificationsSettingsPage() {
             />
           </div>
 
-          <label className="settings-field">
-            <span>Your Apprise URLs (self-serve)</span>
-            <textarea
-              rows={4}
-              value={appriseUrls}
-              onChange={(e) => setAppriseUrls(e.target.value)}
-              placeholder={"discord://webhook_id/webhook_token\ntgram://bot_token/chat_id"}
-              data-testid="notifications-apprise-urls"
-              spellCheck={false}
-            />
-            <span className="settings-field-hint">
-              One URL per line. These are yours alone — no owner setup required. See{" "}
-              <a href="https://github.com/caronc/apprise#supported-notifications" target="_blank" rel="noreferrer">
-                Apprise notification types
-              </a>
-              . Household-wide destinations (if any) are configured under Admin → Mail.
-            </span>
-          </label>
+          <AppriseDestinationsEditor
+            rows={appriseRows}
+            onChange={setAppriseRows}
+            ownerConfigured={Boolean(appriseMeta?.owner_configured)}
+          />
 
           <SettingsToggle
             id="notify-newsletter"

@@ -1,6 +1,6 @@
 # Projectionist — Platform Architecture
 
-Projectionist is an **intent-aware curation companion** for Plex libraries. It combines a single-workspace chat UI, a tool-using LLM agent, RAG over your indexed library, **curation lens isolation**, **dynamic persona tuning**, personal **reviews** with optional Plex rating sync, **Plex webhooks** for near-completion rating prompts, and confirmation-gated Radarr/Sonarr actions.
+Projectionist is an **ambient, chat-first curation companion** for Plex libraries. It combines a single-workspace chat UI, a tool-using LLM agent, RAG over your indexed library, **dynamic persona tuning**, personal **reviews** with optional Plex rating sync, **Plex webhooks** for near-completion rating prompts, and confirmation-gated Radarr/Sonarr actions. Curation **lenses** remain an internal/advanced agent context mechanism (taste/history isolation) — not a parallel product surface beside chat.
 
 It is a **separate product** from [Reclaimspace](https://github.com/romwil/reclaimspace): Reclaimspace reclaims disk space by quarantining duplicate Plex files; Projectionist helps you discover, add, watch, and purge titles based on taste and usage within explicit cognitive boundaries.
 
@@ -10,8 +10,8 @@ It is a **separate product** from [Reclaimspace](https://github.com/romwil/recla
 
 | Goal | How Projectionist addresses it |
 |------|---------------------------|
-| **Intent-aware curation** | Lenses sandbox taste; persona sliders shape agent behavior |
-| **Anti-monolith taste** | `lens_id` on chat, telemetry, and taste profiles prevents context contamination |
+| **Intent-aware curation** | Ambient context + chat; lenses sandbox taste for advanced/agent isolation |
+| **Anti-monolith taste** | `lens_id` on chat, telemetry, and taste profiles prevents context contamination (advanced) |
 | **Chat-first interaction** | Single chat workspace with welcome panel, watchlist, and status dock |
 | **Informed recommendations** | RAG embeddings + TMDB discovery grounded in library ownership |
 | **Safe automation** | Radarr/Sonarr writes require explicit confirmation tokens |
@@ -396,7 +396,7 @@ Some features span both sides. The scheduler pre-computes; the agent tool (or Ex
 1. `metadata_enrichment` — missing dates, overviews, taglines, collection ids, credits
 2. `semantic_embeddings` — capped batches (see [Trickle ingestion](#trickle-ingestion-for-embeddings))
 3. `plot_neighbors` — materialize top-K cosine (+ surprise) into `item_neighbors`, preferring titles still missing neighbor rows (`neighbors_backlog`)
-4. `summary_motifs` / `keyword_theme_tagging` / optional `long_synopsis_enrichment` / optional `llm_logline_enrichment` (stub `llm_theme_tagging` reserved)
+4. `summary_motifs` / `keyword_theme_tagging` / optional `long_synopsis_enrichment` / optional `llm_logline_enrichment`
 5. `title_relations_refresh` — collection + neighbor + shared-crew edges
 
 Batch sizes for (1)–(3) and loglines are **auto-tuned** from durable run history (see [Active auto-tune](#active-auto-tune-batch--interval)); agent tools and Explore feeds **read caches**; they do not recompute embeddings or graphs per chat turn.
@@ -578,7 +578,8 @@ See [SECURITY.md](SECURITY.md) and [wiki/Multi-User.md](wiki/Multi-User.md) for 
 | Layered plot text | **Implemented** — Plex summary + TMDB overview/tagline + optional `long_synopsis` + optional LLM logline |
 | Materialized neighbors | **Implemented** — `item_neighbors` via `plot_neighbors` idle task |
 | Title relations graph | **Implemented** — collection / neighbor / shared_crew (+ optional llm_theme) |
-| Motif / theme facets | **Implemented** — `summary_motifs`, `keyword_theme_tagging`; stub `llm_theme_tagging` reserved |
+| Motif / theme facets | **Implemented** — `summary_motifs`, `keyword_theme_tagging` (local keyword map) |
+| Named curated lists | **Implemented** locally; Plex Lists publish = **Future** (no stable Discover Lists API) |
 | Owner dashboard | **Implemented** — `/admin/dashboard` composition, health, purge, taste |
 | Idle task scheduler | **Implemented** — embeddings, enrichment, neighbors, relations, motifs, taste, health, …; circuit breaker |
 | Durable sync jobs | **Implemented** — `jobs_state.json` + restart recovery |

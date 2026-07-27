@@ -11,6 +11,7 @@ services:
     environment:
       DATA_DIR: /config
       PORT: "8788"
+      TZ: ${TZ:-UTC}
       PLEX_URL: ${PLEX_URL:-}
       PLEX_TOKEN: ${PLEX_TOKEN:-}
       PLEX_MOVIE_SECTION: ${PLEX_MOVIE_SECTION:-}
@@ -33,7 +34,20 @@ services:
       PROJECTIONIST_OWNER_USERNAME: ${PROJECTIONIST_OWNER_USERNAME:-${CURATORX_OWNER_USERNAME:-}}
       PROJECTIONIST_OWNER_PASSWORD: ${PROJECTIONIST_OWNER_PASSWORD:-${CURATORX_OWNER_PASSWORD:-}}
       PROJECTIONIST_SESSION_SECRET: ${PROJECTIONIST_SESSION_SECRET:-${CURATORX_SESSION_SECRET:-}}
+      PROJECTIONIST_WEBHOOK_SECRET: ${PROJECTIONIST_WEBHOOK_SECRET:-${CURATORX_WEBHOOK_SECRET:-}}
+      PROJECTIONIST_MCP_API_KEY: ${PROJECTIONIST_MCP_API_KEY:-${CURATORX_MCP_API_KEY:-}}
+      PROJECTIONIST_MCP_FULL_API_KEY: ${PROJECTIONIST_MCP_FULL_API_KEY:-${CURATORX_MCP_FULL_API_KEY:-}}
+      # Active-curation scope for the full MCP key (off by default).
+      PROJECTIONIST_MCP_FULL_CONFIRM: ${PROJECTIONIST_MCP_FULL_CONFIRM:-${CURATORX_MCP_FULL_CONFIRM:-}}
+      # Optional dedicated key for settings.json secret encryption (H4).
+      PROJECTIONIST_SECRETS_KEY: ${PROJECTIONIST_SECRETS_KEY:-}
       PROJECTIONIST_LOG_LEVEL: ${PROJECTIONIST_LOG_LEVEL:-${CURATORX_LOG_LEVEL:-${LOG_LEVEL:-INFO}}}
       LOG_FORMAT: ${LOG_FORMAT:-text}
     volumes:
       - ${CONFIG_PATH:-./config}:/config
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8788/api/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s

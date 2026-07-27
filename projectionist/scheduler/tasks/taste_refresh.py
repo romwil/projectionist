@@ -4,6 +4,11 @@ Reads ``preference_facts``, ``message_feedback``, ``user_title_reviews``, and
 ``library_episodes`` (season-decay + episode sentiment) to build genre/keyword
 cluster weights, then upserts them into ``lens_taste_profile``.
 
+Free-text preference / feedback prose is tokenized with
+``projectionist.taste.clusters`` so stop-words, contractions, and punctuation
+never become Taste settings clusters. Each run also purges unlocked junk rows
+left by older naive splits.
+
 Lightweight — should complete in under a second for typical libraries.
 Default interval: 6 hours.
 """
@@ -19,6 +24,11 @@ from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.preferences.tv_taste import show_taste_multiplier
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.taste.clusters import (
+    cluster_tokens_from_text,
+    filter_cluster_tags,
+    is_valid_cluster_tag,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +44,7 @@ def _parse_tags(raw: Any) -> List[str]:
         return []
     if not isinstance(tags, list):
         return []
-    return [str(tag).strip().lower() for tag in tags if str(tag).strip()]
+    return filter_cluster_tags(str(tag).strip().lower() for tag in tags if str(tag).strip())
 
 
 def _load_show_episode_multipliers(conn: Any) -> Dict[int, float]:
@@ -66,8 +76,33 @@ def _apply_tags(cluster_weights: Counter[str], tags: List[str], weight: float) -
     if not weight:
         return
     for tag in tags:
-        cluster_weights[tag] += weight
+        if is_valid_cluster_tag(tag):
+            cluster_weights[tag] += weight
 
+
+def _purge_junk_clusters(conn: Any) -> int:
+    """Delete unlocked junk tags left over from older naive tokenization."""
+    deleted = 0
+    for table, key_col in (
+        ("lens_taste_profile", "lens_id"),
+        ("user_taste_profile", "user_id"),
+    ):
+        rows = conn.execute(
+            f"SELECT {key_col} AS scope_key, cluster_tag, explicit_lock FROM {table}"
+        ).fetchall()
+        for row in rows:
+            tag = str(row["cluster_tag"] or "")
+            if is_valid_cluster_tag(tag):
+                continue
+            # Leave locked overrides alone; owners can Reset them in Taste settings.
+            if int(row["explicit_lock"] or 0):
+                continue
+            conn.execute(
+                f"DELETE FROM {table} WHERE {key_col} = ? AND cluster_tag = ?",
+                (row["scope_key"], tag),
+            )
+            deleted += 1
+    return deleted
 
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
@@ -108,7 +143,7 @@ async def run(
                     tv_shows_adjusted += 1
             text = str(row["text"] or "").strip().lower()
             if text:
-                for token in text.split():
+                for token in cluster_tokens_from_text(text):
                     cluster_weights[token] += multiplier
 
         if should_stop():
@@ -121,9 +156,8 @@ async def run(
         for row in fb_rows:
             w = 1.0 if str(row["feedback_type"]) == "helpful" else -0.5
             excerpt = str(row["excerpt"] or "").strip().lower()
-            for token in excerpt.split()[:20]:
+            for token in cluster_tokens_from_text(excerpt)[:20]:
                 cluster_weights[token] += w
-
         if should_stop():
             return {"status": "interrupted"}
 
@@ -178,10 +212,13 @@ async def run(
             tv_shows_adjusted += 1
 
     if not cluster_weights:
+        with db.connect() as conn:
+            purged = _purge_junk_clusters(conn)
         return {
             "status": "completed",
             "clusters_updated": 0,
             "tv_shows_adjusted": tv_shows_adjusted,
+            "junk_purged": purged,
         }
 
     # Normalize to 0..1 range.
@@ -190,8 +227,14 @@ async def run(
         tag: max(0.0, min(1.0, (w / max_abs + 1) / 2)) for tag, w in cluster_weights.items()
     }
 
-    # Keep top 200 clusters.
-    top = sorted(normalized.items(), key=lambda x: abs(x[1] - 0.5), reverse=True)[:200]
+    # Keep top 200 clusters (already filtered at ingest).
+    top = [
+        (tag, weight)
+        for tag, weight in sorted(
+            normalized.items(), key=lambda x: abs(x[1] - 0.5), reverse=True
+        )
+        if is_valid_cluster_tag(tag)
+    ][:200]
 
     with db.connect() as conn:
         for tag, weight in top:
@@ -206,16 +249,20 @@ async def run(
                 """,
                 (tag, round(weight, 4)),
             )
+        purged = _purge_junk_clusters(conn)
 
     logger.info(
-        "Taste profile refreshed: %d cluster weights updated (tv_shows_adjusted=%d)",
+        "Taste profile refreshed: %d cluster weights updated "
+        "(tv_shows_adjusted=%d, junk_purged=%d)",
         len(top),
         tv_shows_adjusted,
+        purged,
     )
     return {
         "status": "completed",
         "clusters_updated": len(top),
         "tv_shows_adjusted": tv_shows_adjusted,
+        "junk_purged": purged,
     }
 
 

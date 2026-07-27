@@ -24,7 +24,6 @@ from projectionist.scheduler.run_outcome import (
     extract_outcome_detail,
     format_run_outcome_message,
 )
-from projectionist.scheduler.tasks import llm_theme_tagging
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
 
@@ -267,18 +266,6 @@ class SchedulerRunLogIntegrationTests(unittest.TestCase):
             finished = [event for event in log["events"] if event["message"].startswith("Skipped —")]
             self.assertEqual(len(finished), 1)
 
-    def test_llm_theme_tagging_manual_skip_reason(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            db = Database(Path(tmp) / "test.db")
-            scheduler = IdleScheduler(db, Path(tmp))
-            llm_theme_tagging.register(scheduler)
-            result = asyncio.run(scheduler.trigger_task("llm_theme_tagging"))
-            self.assertEqual(result["status"], "skipped")
-            self.assertEqual(result["reason"], "no_llm_api_key")
-            states = scheduler.get_task_states()
-            theme = next(item for item in states if item["name"] == "llm_theme_tagging")
-            self.assertEqual(theme["last_status"], "skipped")
-            self.assertTrue(theme["last_outcome_reason"])
 
     def test_trigger_persists_run_summary(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

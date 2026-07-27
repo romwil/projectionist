@@ -3,8 +3,7 @@
 Runs offline from keywords already stored on ``library_items``. Writes
 ``library_facets`` with ``facet_type='theme'`` via ``replace_facets_of_type``.
 
-The optional ``llm_theme_tagging`` stub remains for a future LLM path; this
-task is the supported production theme source.
+This task is the supported production theme source.
 
 Default interval: 24 hours (full-pass, like ``summary_motifs``).
 """

@@ -1,10 +1,13 @@
-"""Named curated lists (local CuratorX shelf).
+"""Named curated lists (local Projectionist shelf).
 
-Plex Lists publish spike (2026-07): No clear public/stable API exists for
-Plex Discover personal Lists (`watch.plex.tv/watchlist/my-lists`). Official
-PMS docs cover Playlists and Collections; Discover exposes Watchlist
-add/remove only. Third-party clients do not document a Lists CRUD surface.
-Publish-to-Plex-Lists is deferred — CuratorX must not fake a broken publish.
+**Status: Future for Plex Lists publish.** Local list CRUD ships via the agent
+and UI. Plex Discover personal Lists (`watch.plex.tv/watchlist/my-lists`) have
+no clear public/stable API — PMS docs cover Playlists and Collections; Discover
+exposes Watchlist add/remove only. Publish-to-Plex-Lists stays deferred — we
+must not fake a broken publish.
+
+Product narrative is ambient / chat-first; lenses remain an internal/advanced
+agent context mechanism, not a parallel product surface.
 """
 
 from __future__ import annotations

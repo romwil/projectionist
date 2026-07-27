@@ -45,7 +45,8 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
             result = await registry.execute("remember_preference", {"text": "loves 70s sci-fi"})
             self.assertIn("saved", result)
-            self.assertIn("70s", build_system_prompt(db, lens_id=DEFAULT_LENS_ID))
+            prompt = build_system_prompt(db, lens_id=DEFAULT_LENS_ID)
+            self.assertIn("sci-fi", prompt)
 
     async def test_remember_preference_uses_agent_lens_not_active_lens(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -60,7 +61,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             noir_taste = db.get_lens_taste_profile("noir")
             general_taste = db.get_lens_taste_profile(DEFAULT_LENS_ID)
             self.assertEqual(len(noir_taste), 1)
-            self.assertIn("neo-noir", noir_taste[0]["cluster_tag"])
+            self.assertEqual(noir_taste[0]["cluster_tag"], "neo-noir")
             self.assertEqual(len(general_taste), 0)
             self.assertIn("neo-noir", build_system_prompt(db, lens_id="noir"))
 

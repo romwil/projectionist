@@ -326,7 +326,10 @@ def what_to_watch_tonight(
     query: Optional[str] = None,
     limit: int = 12,
 ) -> str:
-    """Suggest owned titles worth watching now (unwatched / in-progress bias)."""
+    """Suggest owned titles worth watching now (unwatched / in-progress bias). Full MCP only."""
+    denied = _require_full_mode()
+    if denied:
+        return denied
     filters = filters_from_mapping(
         _filter_mapping(
             media_type=media_type,
@@ -370,7 +373,10 @@ def recommend_hidden_gems(
     media_type: Optional[str] = "movie",
     limit: int = 12,
 ) -> str:
-    """Surface lower-view-count owned titles (hidden gems in the library)."""
+    """Surface lower-view-count owned titles (hidden gems). Full MCP only — affinity-biased."""
+    denied = _require_full_mode()
+    if denied:
+        return denied
     filters = filters_from_mapping(
         _filter_mapping(
             media_type=media_type,
@@ -384,7 +390,10 @@ def recommend_hidden_gems(
 
 @mcp.tool()
 def suggest_purge_candidates_tool(limit: int = 12) -> str:
-    """Suggest rarely watched / low-affinity owned titles for purge review."""
+    """Suggest rarely watched / low-affinity owned titles for purge review. Full MCP only."""
+    denied = _require_full_mode()
+    if denied:
+        return denied
     from projectionist.preferences.purge import suggest_purge_candidates
 
     cards = suggest_purge_candidates(_database(), _settings(), limit=min(max(1, limit), 25))
@@ -393,7 +402,10 @@ def suggest_purge_candidates_tool(limit: int = 12) -> str:
 
 @mcp.tool()
 def analyze_watch_patterns(limit: int = 25) -> str:
-    """High-level watch pattern snapshot from library overview + progress."""
+    """High-level watch pattern snapshot from library overview + progress. Full MCP only."""
+    denied = _require_full_mode()
+    if denied:
+        return denied
     overview = library_overview(_database())
     progress = summarize_tv_progress(_database(), group_by="show", in_progress_only=True, limit=limit)
     return _emit({"overview": overview, "in_progress_tv": progress})
@@ -401,7 +413,10 @@ def analyze_watch_patterns(limit: int = 25) -> str:
 
 @mcp.tool()
 def list_watchlist_pins(limit: int = 50) -> str:
-    """List household watchlist pins (shared library sidecar; no per-user MCP auth yet)."""
+    """List household watchlist pins. Full MCP only (personal affinity sidecar)."""
+    denied = _require_full_mode()
+    if denied:
+        return denied
     items = _database().list_watchlist_pins()[: max(1, min(limit, 200))]
     return _emit({"items": items, "count": len(items)})
 
