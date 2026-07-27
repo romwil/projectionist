@@ -493,6 +493,18 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
             second = body["runs"][1].get("finished_at") or 0
             self.assertGreaterEqual(first, second)
 
+    def test_optimize_rates_endpoint_dry_run(self) -> None:
+        self._write_settings(multi_user=False)
+        response = self.client.post(
+            "/api/admin/scheduled-tasks/optimize-rates?dry_run=true"
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertTrue(body.get("dry_run"))
+        self.assertIn("changed", body)
+        self.assertIn("skipped", body)
+        self.assertIn("message", body)
+
 
 if __name__ == "__main__":
     unittest.main()

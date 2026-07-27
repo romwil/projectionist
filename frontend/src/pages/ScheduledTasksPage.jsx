@@ -4,6 +4,7 @@ import {
   getScheduledTaskHistory,
   getScheduledTaskLog,
   listScheduledTasks,
+  optimizeScheduledTaskRates,
   resetScheduledTaskQuarantine,
   runScheduledTask,
   updateScheduledTask,
@@ -29,7 +30,10 @@ import {
   mergeExecutionLogRuns,
   resolveLastOutcome,
   resolveWarmExploreTasks,
+  sortScheduledTasks,
   sortTasksByNextRun,
+  TASK_SORT_MODES,
+  TASK_SORT_STORAGE_KEY,
   summarizeLastStatus,
   taskDisplayName,
   taskRowTone,
@@ -39,6 +43,18 @@ const POLL_IDLE_MS = 5000;
 const POLL_ACTIVE_MS = 1200;
 const MIN_INTERVAL_SECONDS = 60;
 const MAX_INTERVAL_SECONDS = 30 * 86400;
+
+function readStoredSortMode() {
+  try {
+    const raw = sessionStorage.getItem(TASK_SORT_STORAGE_KEY);
+    if (raw === TASK_SORT_MODES.heaviest || raw === TASK_SORT_MODES.next_run) {
+      return raw;
+    }
+  } catch {
+    /* private mode */
+  }
+  return TASK_SORT_MODES.next_run;
+}
 
 export default function ScheduledTasksPage() {
   const { start, update, finish } = useBulkActionProgress();
@@ -56,6 +72,9 @@ export default function ScheduledTasksPage() {
   const [busyNames, setBusyNames] = useState(() => new Set());
   const [warmStatus, setWarmStatus] = useState("");
   const [warming, setWarming] = useState(false);
+  const [optimizingRates, setOptimizingRates] = useState(false);
+  const [optimizeStatus, setOptimizeStatus] = useState("");
+  const [sortMode, setSortMode] = useState(readStoredSortMode);
   const [optimisticStart, setOptimisticStart] = useState(null);
   const [draftInterval, setDraftInterval] = useState(null);
   const [customHours, setCustomHours] = useState("");
@@ -69,10 +88,23 @@ export default function ScheduledTasksPage() {
   const latestSeqRef = useRef(0);
   const warmExploreNames = useMemo(() => resolveWarmExploreTasks(items), [items]);
 
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(TASK_SORT_STORAGE_KEY, sortMode);
+    } catch {
+      /* private mode */
+    }
+  }, [sortMode]);
+
   const sortedItems = useMemo(
-    () => sortTasksByNextRun(items, nowTick),
-    [items, nowTick],
+    () => sortScheduledTasks(items, sortMode, nowTick),
+    [items, sortMode, nowTick],
   );
+
+  const sortHint =
+    sortMode === TASK_SORT_MODES.heaviest
+      ? "Sorted by duty cycle: last duration ÷ cadence (heaviest first). Disabled tasks sort last."
+      : "Ordered by next run (soonest first). Disabled tasks sort last.";
 
   const selected = useMemo(
     () => items.find((item) => item.name === selectedName) || null,
@@ -444,6 +476,56 @@ export default function ScheduledTasksPage() {
     }
   }
 
+  async function handleOptimizeRates() {
+    if (optimizingRates) return;
+    const confirmed = window.confirm(
+      "Optimize rates for autotune-eligible enrichment tasks?\n\n"
+        + "Uses the same safe auto-tune rules as after a successful run: "
+        + "nudges batch size and cadence within per-task min/max bounds, "
+        + "never disables tasks, and does not start any job. "
+        + "Tasks without a recent successful run are skipped.",
+    );
+    if (!confirmed) return;
+    setOptimizingRates(true);
+    setActionError("");
+    setOptimizeStatus("Optimizing rates…");
+    try {
+      const result = await optimizeScheduledTaskRates();
+      const changed = Array.isArray(result.changed) ? result.changed : [];
+      const summary =
+        result.message
+        || (changed.length
+          ? `Updated ${changed.length} task${changed.length === 1 ? "" : "s"}`
+          : "No cadence changes needed");
+      const details = changed
+        .slice(0, 6)
+        .map((row) => {
+          const label = taskDisplayName(row.name);
+          const parts = [];
+          if (row.items_per_cycle_before !== row.items_per_cycle_after) {
+            parts.push(
+              `batch ${row.items_per_cycle_before}→${row.items_per_cycle_after}`,
+            );
+          }
+          if (row.run_interval_seconds_before !== row.run_interval_seconds_after) {
+            parts.push(
+              `cadence ${formatInterval(row.run_interval_seconds_before)}→${formatInterval(row.run_interval_seconds_after)}`,
+            );
+          }
+          return parts.length ? `${label}: ${parts.join(", ")}` : label;
+        });
+      setOptimizeStatus(
+        details.length ? `${summary}. ${details.join("; ")}` : summary,
+      );
+      await refreshList();
+    } catch (err) {
+      setActionError(err.message || "Optimize rates failed");
+      setOptimizeStatus("");
+    } finally {
+      setOptimizingRates(false);
+    }
+  }
+
   return (
     <div className="scheduled-tasks-page" data-testid="scheduled-tasks-page">
       <header className="dash-header">
@@ -457,6 +539,11 @@ export default function ScheduledTasksPage() {
           {warmStatus ? (
             <p className="status status-secondary" data-testid="warm-explore-status">
               {warmStatus}
+            </p>
+          ) : null}
+          {optimizeStatus ? (
+            <p className="status status-secondary" data-testid="optimize-rates-status">
+              {optimizeStatus}
             </p>
           ) : null}
         </div>
@@ -474,6 +561,16 @@ export default function ScheduledTasksPage() {
             onClick={handleWarmExplore}
           >
             {warming ? "Warming…" : "Warm Explore"}
+          </button>
+          <button
+            type="button"
+            className="ghost"
+            data-testid="optimize-rates"
+            disabled={optimizingRates}
+            title="Safely nudge batch size and cadence for autotune-eligible tasks using the last successful run"
+            onClick={handleOptimizeRates}
+          >
+            {optimizingRates ? "Optimizing…" : "Optimize rates"}
           </button>
           <button type="button" className="ghost" onClick={() => refreshList()} data-testid="tasks-refresh">
             Refresh
@@ -495,12 +592,54 @@ export default function ScheduledTasksPage() {
       ) : (
         <div className="scheduled-tasks-layout">
           <section className="dash-panel scheduled-tasks-list-panel">
-            <h3 className="dash-panel-title">All tasks</h3>
-            <p className="scheduled-task-meta scheduled-tasks-sort-hint">
-              Ordered by next run (soonest first). Disabled tasks sort last.
+            <div className="scheduled-tasks-list-header">
+              <h3 className="dash-panel-title">All tasks</h3>
+              <div
+                className="scheduled-tasks-sort-control"
+                role="group"
+                aria-label="Sort tasks"
+              >
+                <button
+                  type="button"
+                  className={`ghost scheduled-tasks-sort-option${
+                    sortMode === TASK_SORT_MODES.next_run ? " is-active" : ""
+                  }`}
+                  data-testid="sort-next-run"
+                  aria-pressed={sortMode === TASK_SORT_MODES.next_run}
+                  onClick={() => setSortMode(TASK_SORT_MODES.next_run)}
+                >
+                  Next run
+                </button>
+                <button
+                  type="button"
+                  className={`ghost scheduled-tasks-sort-option${
+                    sortMode === TASK_SORT_MODES.heaviest ? " is-active" : ""
+                  }`}
+                  data-testid="sort-heaviest"
+                  aria-pressed={sortMode === TASK_SORT_MODES.heaviest}
+                  onClick={() => setSortMode(TASK_SORT_MODES.heaviest)}
+                >
+                  Heaviest load
+                </button>
+              </div>
+            </div>
+            <p className="scheduled-task-meta scheduled-tasks-sort-hint" data-testid="tasks-sort-hint">
+              {sortHint}
             </p>
-            <div className="user-management-table-wrap">
-              <table className="user-management-table" data-testid="scheduled-tasks-table">
+            <div className="user-management-table-wrap scheduled-tasks-table-wrap">
+              <table
+                className="user-management-table scheduled-tasks-table"
+                data-testid="scheduled-tasks-table"
+              >
+                <colgroup>
+                  <col className="scheduled-tasks-col-task" />
+                  <col className="scheduled-tasks-col-cadence" />
+                  <col className="scheduled-tasks-col-status" />
+                  <col className="scheduled-tasks-col-next" />
+                  <col className="scheduled-tasks-col-last" />
+                  <col className="scheduled-tasks-col-duration" />
+                  <col className="scheduled-tasks-col-actions" />
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Task</th>
@@ -509,7 +648,9 @@ export default function ScheduledTasksPage() {
                     <th>Next run</th>
                     <th>Last run</th>
                     <th>Duration</th>
-                    <th>Actions</th>
+                    <th>
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -517,6 +658,13 @@ export default function ScheduledTasksPage() {
                     const tone = taskRowTone(task);
                     const selectedRow = task.name === selectedName;
                     const busy = busyNames.has(task.name);
+                    const nextRunLabel = formatTaskNextRun(task, nowTick);
+                    const lastRunLabel = formatTaskLastRun(task);
+                    const lastRunDetail = formatTaskLastRunDetail(task);
+                    const lastRunTitle = lastRunDetail
+                      ? `${lastRunLabel} · ${lastRunDetail}`
+                      : lastRunLabel;
+                    const enableLabel = task.enabled ? "Disable" : "Enable";
                     return (
                       <tr
                         key={task.name}
@@ -526,7 +674,9 @@ export default function ScheduledTasksPage() {
                       >
                         <td>
                           <div className="scheduled-task-name">{taskDisplayName(task.name)}</div>
-                          <div className="scheduled-task-id">{task.name}</div>
+                          <div className="scheduled-task-id" title={task.name}>
+                            {task.name}
+                          </div>
                         </td>
                         <td>{formatInterval(task.run_interval_seconds)}</td>
                         <td>
@@ -541,49 +691,65 @@ export default function ScheduledTasksPage() {
                           </span>
                         </td>
                         <td data-testid={`task-next-run-${task.name}`}>
-                          {formatTaskNextRun(task, nowTick)}
+                          <span className="scheduled-task-cell-truncate" title={nextRunLabel}>
+                            {nextRunLabel}
+                          </span>
                         </td>
                         <td data-testid={`task-last-run-${task.name}`}>
-                          <div>{formatTaskLastRun(task)}</div>
-                          {formatTaskLastRunDetail(task) ? (
-                            <div
-                              className="scheduled-task-meta"
-                              title={formatTaskLastRunDetail(task)}
-                            >
-                              {formatTaskLastRunDetail(task)}
+                          <div className="scheduled-task-cell-truncate" title={lastRunTitle}>
+                            {lastRunLabel}
+                          </div>
+                          {lastRunDetail ? (
+                            <div className="scheduled-task-meta scheduled-task-cell-truncate" title={lastRunDetail}>
+                              {lastRunDetail}
                             </div>
                           ) : null}
                         </td>
                         <td>{formatDurationMs(task.last_duration_ms)}</td>
                         <td>
-                          <div className="user-management-actions" onClick={(event) => event.stopPropagation()}>
+                          <div
+                            className="scheduled-task-row-actions"
+                            onClick={(event) => event.stopPropagation()}
+                          >
                             <button
                               type="button"
-                              className="ghost"
+                              className="scheduled-task-icon-btn"
                               disabled={busy || isTaskRunning(task) || Boolean(running)}
                               data-testid={`run-task-${task.name}`}
+                              aria-label={`Run now: ${taskDisplayName(task.name)}`}
+                              title="Run now"
                               onClick={() => handleRun(task.name)}
                             >
-                              Run now
+                              <span className="material-symbols-outlined" aria-hidden="true">
+                                play_arrow
+                              </span>
                             </button>
                             <button
                               type="button"
-                              className="ghost"
+                              className="scheduled-task-icon-btn"
                               disabled={busy}
                               data-testid={`toggle-task-${task.name}`}
+                              aria-label={`${enableLabel}: ${taskDisplayName(task.name)}`}
+                              title={enableLabel}
                               onClick={() => handleToggleEnabled(task)}
                             >
-                              {task.enabled ? "Disable" : "Enable"}
+                              <span className="material-symbols-outlined" aria-hidden="true">
+                                {task.enabled ? "toggle_on" : "toggle_off"}
+                              </span>
                             </button>
                             {task.quarantine?.is_quarantined ? (
                               <button
                                 type="button"
-                                className="ghost"
+                                className="scheduled-task-icon-btn"
                                 disabled={busy}
                                 data-testid={`reset-task-${task.name}`}
+                                aria-label={`Reset quarantine: ${taskDisplayName(task.name)}`}
+                                title="Reset quarantine"
                                 onClick={() => handleResetQuarantine(task.name)}
                               >
-                                Reset
+                                <span className="material-symbols-outlined" aria-hidden="true">
+                                  restart_alt
+                                </span>
                               </button>
                             ) : null}
                           </div>
