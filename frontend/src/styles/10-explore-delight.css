@@ -1672,7 +1672,8 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   text-transform: capitalize;
 }
 .journey-callout {
-  position: absolute;
+  /* fixed + getBoundingClientRect() viewport coords; absolute under .journey-main was offset */
+  position: fixed;
   z-index: 40;
   max-width: 240px;
   padding: 0.7rem 0.8rem;
