@@ -1,0 +1,53 @@
+# Projectionist on Unraid — optional Compose reference (stock Unraid has no Compose).
+# Prefer ./rollout.sh which uses plain Docker CLI (or Compose when present).
+# Human installs: Community Applications XML (templates/projectionist.xml).
+# Config lives on the host bind mount; never wipe ./config.
+#
+# Path on host: /mnt/user/appdata/projectionist
+# Canonical in repo: docker-compose.unraid.yml
+#   cp docker-compose.unraid.yml /mnt/user/appdata/projectionist/docker-compose.yml
+# Usage:       ./rollout.sh            # romwil/projectionist:latest
+#              ./rollout.sh 1.27.3     # pin a release tag
+#
+# Legacy note: CURATORX_* env aliases still work in-app during the compatibility
+# window; prefer PROJECTIONIST_* for new installs. Dual-tagged Hub image
+# romwil/curatorx:* shares digests with romwil/projectionist:* during compat.
+
+services:
+  projectionist:
+    image: romwil/projectionist:${IMAGE_TAG:-latest}
+    container_name: projectionist
+    restart: unless-stopped
+    # Optional seed env via ./.env (Compose loads it for ${VAR} interpolation).
+    # Most settings already persist in ./config/settings.json.
+    ports:
+      - "${HOST_PORT:-8788}:8788"
+    environment:
+      DATA_DIR: /config
+      PORT: "8788"
+      TZ: ${TZ:-UTC}
+      PLEX_URL: ${PLEX_URL:-}
+      PLEX_TOKEN: ${PLEX_TOKEN:-}
+      RADARR_URL: ${RADARR_URL:-}
+      RADARR_API_KEY: ${RADARR_API_KEY:-}
+      SONARR_URL: ${SONARR_URL:-}
+      SONARR_API_KEY: ${SONARR_API_KEY:-}
+      TMDB_API_KEY: ${TMDB_API_KEY:-}
+      FANART_API_KEY: ${FANART_API_KEY:-}
+      TAUTULLI_URL: ${TAUTULLI_URL:-}
+      TAUTULLI_API_KEY: ${TAUTULLI_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai_compatible}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      PROJECTIONIST_SESSION_SECRET: ${PROJECTIONIST_SESSION_SECRET:-${CURATORX_SESSION_SECRET:-}}
+      PROJECTIONIST_WEBHOOK_SECRET: ${PROJECTIONIST_WEBHOOK_SECRET:-${CURATORX_WEBHOOK_SECRET:-}}
+      PROJECTIONIST_MCP_API_KEY: ${PROJECTIONIST_MCP_API_KEY:-${CURATORX_MCP_API_KEY:-}}
+      PROJECTIONIST_MCP_FULL_API_KEY: ${PROJECTIONIST_MCP_FULL_API_KEY:-${CURATORX_MCP_FULL_API_KEY:-}}
+      PROJECTIONIST_LOG_LEVEL: ${PROJECTIONIST_LOG_LEVEL:-${CURATORX_LOG_LEVEL:-INFO}}
+    volumes:
+      # Host appdata config — do not use docker volume rm / wipe this path
+      - ./config:/config
+    extra_hosts:
+      # Matches Unraid CA ExtraParams: --add-host=host.docker.internal:host-gateway
+      - "host.docker.internal:host-gateway"

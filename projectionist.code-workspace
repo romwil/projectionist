@@ -15,6 +15,9 @@
         {
             "name": "Projectionist QA Scripts",
             "path": "../../../../Volumes/appdata/curatorx-qa-scripts"
+        },
+        {
+            "path": "../../../../Volumes/appdata/projectionist"
         }
     ]
 }

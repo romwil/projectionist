@@ -135,8 +135,9 @@ Youth-mode accounts see youth-safe achievements only. Member-facing copy never s
 Under **Settings → Notifications** you can:
 
 - Set a **notification email** (or leave blank to use your account email)
-- Turn the **in-app inbox** on or off
-- Opt into **email alerts** when the owner has mail configured
+- Turn the **in-app inbox** on or off (always self-serve)
+- Opt into **email alerts** when the owner has mail configured (**Needs owner setup**)
+- Opt into **Apprise alerts** and paste your own Discord / Telegram / push URLs (**Self-serve**; optional household URLs can also be configured by the owner)
 - Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available). It usually arrives on the weekly schedule; the owner can also push one early from Admin.
 - Opt into **curator nudges** — occasional “you have to see this” picks (optionally reacting to what you recently watched / continue-watching). These are never live Plex session alerts.
 
@@ -447,6 +448,25 @@ curl -s -X POST http://localhost:8788/api/admin/mail/test \
 ```
 
 **How it works / honest limits.** One provider is active at a time (`smtp` or `resend`). Empty password / API-key fields on save keep the previously stored secret. Without mail configured, notifications still appear in the in-app inbox.
+
+### Apprise (Discord, Telegram, push, …)
+
+Projectionist can fan out the same alerts through [Apprise](https://github.com/caronc/apprise) URLs.
+
+- **Self-serve:** under **Settings → Notifications**, turn on **Apprise alerts** and paste your own URLs (one per line). No owner setup required.
+- **Installation / owner:** under **Admin → Mail & alerts**, enable installation Apprise URLs (and optional config / tag) for household-wide destinations. Members who opt into Apprise also receive those. Empty URL/config fields on save keep the previously stored secrets.
+
+```bash
+# Inspect masked Apprise settings (owner session cookie required)
+curl -s http://localhost:8788/api/settings | python3 -c "import sys,json; print(json.load(sys.stdin).get('apprise'))"
+
+# Test notify (uses saved install URLs/config, or pass urls override)
+curl -s -X POST http://localhost:8788/api/admin/apprise/test \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+**How it works / honest limits.** Apprise ships with the web extras (`pip install '.[web]'`). Email still uses Admin → Mail; Apprise does not replace SMTP/Resend. Without any URLs configured, inbox delivery is unchanged.
 
 ### Youth gate & guest access requests
 

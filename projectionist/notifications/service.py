@@ -1,4 +1,4 @@
-"""Notification fan-out: inbox rows + optional email."""
+"""Notification fan-out: inbox rows + optional email / Apprise."""
 
 from __future__ import annotations
 
@@ -10,6 +10,12 @@ from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.db._notifications import NOTIFICATION_KINDS
 from projectionist.mail import MailSendError, mail_configured, send_mail
+from projectionist.notifications.apprise_transport import (
+    AppriseSendError,
+    apprise_install_configured,
+    resolve_apprise_targets,
+    send_apprise,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -49,6 +55,12 @@ def user_wants_channel(user: Dict[str, Any], *, kind: str, channel: str) -> bool
         if cleaned_kind == "digest" and not user.get("newsletter_opt_in"):
             return False
         return True
+    if cleaned_channel == "apprise":
+        if not user.get("notify_channel_apprise"):
+            return False
+        if cleaned_kind == "digest" and not user.get("newsletter_opt_in"):
+            return False
+        return True
     return False
 
 
@@ -71,13 +83,20 @@ def deliver_notification(
     related_id: Optional[str] = None,
     email_subject: Optional[str] = None,
     force_email: bool = False,
+    force_apprise: bool = False,
 ) -> Dict[str, Any]:
-    """Create an inbox notification and optionally email the member."""
+    """Create an inbox notification and optionally email / Apprise the member."""
     user = _user_dict(db, user_id)
     if user is None:
         raise ValueError(f"User not found: {user_id}")
 
-    result: Dict[str, Any] = {"notification": None, "emailed": False, "email_error": None}
+    result: Dict[str, Any] = {
+        "notification": None,
+        "emailed": False,
+        "email_error": None,
+        "apprised": False,
+        "apprise_error": None,
+    }
     if user_wants_channel(user, kind=kind, channel="inbox"):
         result["notification"] = db.create_notification(
             notification_id=str(uuid.uuid4()),
@@ -111,6 +130,32 @@ def deliver_notification(
             except MailSendError as exc:
                 logger.warning("Notification email failed for %s: %s", user_id, exc)
                 result["email_error"] = str(exc)
+
+    should_apprise = force_apprise or user_wants_channel(user, kind=kind, channel="apprise")
+    if should_apprise:
+        user_urls = str(user.get("apprise_urls") or "").strip()
+        include_install = apprise_install_configured(settings)
+        targets = resolve_apprise_targets(
+            settings,
+            user_urls=user_urls,
+            include_install=include_install,
+        )
+        install_config = ""
+        if include_install:
+            install_config = str(getattr(settings.apprise, "config", "") or "").strip()
+        if targets or install_config:
+            try:
+                send_apprise(
+                    settings,
+                    title=email_subject or title,
+                    body=body or title,
+                    urls=targets,
+                    config_body=install_config or None,
+                )
+                result["apprised"] = True
+            except AppriseSendError as exc:
+                logger.warning("Notification Apprise failed for %s: %s", user_id, exc)
+                result["apprise_error"] = str(exc)
     return result
 
 
@@ -150,3 +195,38 @@ def fan_out_notifications(
         except Exception:  # noqa: BLE001
             logger.exception("Failed to deliver %s notification to %s", kind, uid)
     return delivered
+
+
+def notification_channel_offerings(settings: Settings) -> List[Dict[str, Any]]:
+    """Describe channels for Settings → Notifications (self-serve vs owner-required)."""
+    from projectionist.notifications.apprise_transport import apprise_available
+
+    mail_ok = mail_configured(settings)
+    install_apprise = apprise_install_configured(settings)
+    return [
+        {
+            "id": "inbox",
+            "label": "In-app inbox",
+            "requires_owner": False,
+            "available": True,
+            "help": "Always available inside Projectionist.",
+        },
+        {
+            "id": "email",
+            "label": "Email alerts",
+            "requires_owner": True,
+            "available": mail_ok,
+            "help": "Requires the owner to configure Admin → Mail (SMTP or Resend).",
+        },
+        {
+            "id": "apprise",
+            "label": "Apprise (Discord, Telegram, push, …)",
+            "requires_owner": False,
+            "available": apprise_available(),
+            "owner_configured": install_apprise,
+            "help": (
+                "Paste your own Apprise URLs anytime. Optional household destinations "
+                "need owner configuration under Admin → Mail."
+            ),
+        },
+    ]

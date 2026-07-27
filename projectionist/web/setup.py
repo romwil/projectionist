@@ -518,6 +518,14 @@ def merge_secret_fields(incoming: Mapping[str, Any], existing: Settings) -> Dict
         if not str(mail_merged.get("resend_api_key") or "").strip():
             mail_merged["resend_api_key"] = existing.mail.resend_api_key
         merged["mail"] = mail_merged
+    apprise_incoming = merged.get("apprise")
+    if isinstance(apprise_incoming, Mapping):
+        apprise_merged = dict(apprise_incoming)
+        if not str(apprise_merged.get("urls") or "").strip():
+            apprise_merged["urls"] = existing.apprise.urls
+        if not str(apprise_merged.get("config") or "").strip():
+            apprise_merged["config"] = existing.apprise.config
+        merged["apprise"] = apprise_merged
     for field in PRESERVE_IF_EMPTY_FIELDS:
         if not str(merged.get(field) or "").strip():
             merged[field] = getattr(existing, field)

@@ -185,8 +185,8 @@ docker buildx imagetools inspect romwil/curatorx:latest --format '{{.Manifest.Di
 # GitHub
 gh release view "vX.Y.Z"
 
-# Optional Unraid host (config preserved; host path often still …/curatorx during compat)
-# cd /mnt/user/appdata/curatorx && ./rollout.sh X.Y.Z
+# Optional Unraid host (config preserved)
+# cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z
 # docker exec projectionist cat /app/.build-info
 ```
 

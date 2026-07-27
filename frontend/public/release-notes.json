@@ -1,6 +1,48 @@
 {
-  "generated_at": "2026-07-27T02:04:36Z",
+  "generated_at": "2026-07-27T02:30:59Z",
   "releases": [
+    {
+      "version": "1.27.3",
+      "date": "2026-07-27",
+      "summary": "Unraid host kit and docs now default to `/mnt/user/appdata/projectionist`, Apprise can fan out household notifications to Discord/Telegram/etc., and failed API calls no longer dump gateway HTML into the UI.",
+      "highlights": [
+        "**Unraid kit lives under Projectionist.** Rollout helpers, optional Compose, and the env example ship for `/mnt/user/appdata/projectionist` — legacy `…/curatorx` still works if you never moved.",
+        "**Push alerts beyond email.** Owners can enable Apprise destinations so inbox events also reach Discord, Telegram, and other Apprise-supported services.",
+        "**Clearer errors when something fails.** Sign-in and API failures show a short human message instead of raw Cloudflare/nginx HTML pages."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "`docker-compose.unraid.yml` — optional Compose reference for hosts that have Compose (canonical → host `docker-compose.yml`).",
+            "`scripts/unraid.env.example` — optional seed env template (canonical → host `.env.example`).",
+            "Apprise notification transport (`projectionist/notifications/apprise_transport.py`): install-level settings, per-user URLs + `notify_channel_apprise`, fan-out from `deliver_notification`, and `POST /api/admin/apprise/test`.",
+            "Admin → Mail & alerts Apprise panel + Settings → Notifications Apprise opt-in/URLs; Help docs for the channel.",
+            "Optional `apprise` dependency on the `web` extra (`apprise>=1.7.0`).",
+            "Frontend `apiError` helper (`frontend/src/lib/apiError.js`) — status-aware messages; strips HTML/gateway dumps from failed responses."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Docs (`DOCKER.md`, `FAQ.md`, `wiki/Unraid.md`, `RELEASE.md`, `HELP.md`) and Unraid CA template Overview/Description prefer `/mnt/user/appdata/projectionist`; legacy `…/curatorx` noted for unmigrated installs.",
+            "`scripts/unraid-rollout.sh` / `scripts/unraid-force-pull.sh` comments and sync instructions target the Projectionist appdata kit paths.",
+            "Workspace adds `/Volumes/appdata/projectionist` folder for host kit editing.",
+            "Features payload advertises notification channel offerings; settings mask Apprise secrets like Mail.",
+            "Admin nav label **Mail & alerts**; Docker entrypoint skips recursive `/config` chown when already UID/GID 1000.",
+            "CI adds a `docker-smoke` job (build image + `/api/health`)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` **1359 passed**, 6 skipped (29 subtests) at **78.18%** total coverage (`--cov-fail-under=74`).",
+            "Frontend `node --test` unit suite **483 passed**. ESLint **0 errors** (94 pre-existing warnings). Production build succeeds.",
+            "`test_version` lockstep holds at **1.27.3** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.27.2",
       "date": "2026-07-27",

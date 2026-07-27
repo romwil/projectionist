@@ -118,14 +118,14 @@ Install from the Community Applications template (`templates/projectionist.xml` 
 | Setting | Value |
 |---------|-------|
 | **Port** | 8788 |
-| **Config path** | `/mnt/user/appdata/curatorx/config` → `/config` |
+| **Config path** | `/mnt/user/appdata/projectionist/config` → `/config` (legacy …/curatorx/config OK if never migrated) |
 | **Image** | `romwil/projectionist:latest` (or a `:X.Y` line / `:X.Y.Z` pin) — multi-arch amd64+arm64; dual-tagged `romwil/curatorx:*` during compat |
 
-Optional advanced env (or generate in **Admin → Advanced**): `CURATORX_MCP_API_KEY` (privacy) and `CURATORX_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
+Optional advanced env (or generate in **Admin → Advanced**): `PROJECTIONIST_MCP_API_KEY` (privacy) and `PROJECTIONIST_MCP_FULL_API_KEY` (full; must differ). `CURATORX_*` aliases still work during compat. See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
 ### Ollama on the Unraid host
 
-Point CuratorX at the host LLM:
+Point Projectionist at the host LLM:
 
 ```
 LLM_PROVIDER=ollama
@@ -142,18 +142,19 @@ CA XML remains the human install source of truth. For pull/recreate rollouts (po
 
 | Path | Purpose |
 |------|---------|
-| `/mnt/user/appdata/curatorx/rollout.sh` | `docker pull` + stop/rm + `docker run` + log/health confirm (stock Unraid; no Compose required). Canonical: `scripts/unraid-rollout.sh` |
-| `scripts/unraid-force-pull.sh` | Pull + verify RepoDigest moved; optional `--rmi-retry` / `--recreate` — then Force Update in the UI |
-| `/mnt/user/appdata/curatorx/docker-compose.yml` | Optional reference / hosts that have Compose |
-| `/mnt/user/appdata/curatorx/config` | Bind-mounted `/config` — never wipe |
+| `/mnt/user/appdata/projectionist/rollout.sh` | `docker pull` + stop/rm + `docker run` + log/health confirm (stock Unraid; no Compose required). Canonical: `scripts/unraid-rollout.sh` |
+| `/mnt/user/appdata/projectionist/unraid-force-pull.sh` | Pull + verify RepoDigest moved; optional `--rmi-retry` / `--recreate` — then Force Update in the UI. Canonical: `scripts/unraid-force-pull.sh` |
+| `/mnt/user/appdata/projectionist/docker-compose.yml` | Optional reference / hosts that have Compose. Canonical: `docker-compose.unraid.yml` |
+| `/mnt/user/appdata/projectionist/.env.example` | Optional seed env template. Canonical: `scripts/unraid.env.example` |
+| `/mnt/user/appdata/projectionist/config` | Bind-mounted `/config` — never wipe |
 
 ```bash
 ssh automat
-cd /mnt/user/appdata/curatorx
+cd /mnt/user/appdata/projectionist
 ./rollout.sh           # :latest
-./rollout.sh 1.11.0    # pin a release tag
+./rollout.sh 1.27.3    # pin a release tag
 # image-only (keep Dockerman template):
-# /path/to/curatorx/scripts/unraid-force-pull.sh latest
+# ./unraid-force-pull.sh latest
 ```
 
 `rollout.sh` uses plain Docker CLI on Unraid (Compose is usually absent). If `docker compose` / `docker-compose` is available it prefers that instead. Same-named containers are stop/rm only — `./config` is never wiped. Optional seed env: copy `.env.example` → `.env` (secrets usually already live in `config/`).
@@ -168,16 +169,16 @@ cd /mnt/user/appdata/curatorx
 
 This is **not** fixed by OCI labels or `/app/.build-info` alone — those make each Hub release unique; they do not force Engine to re-resolve a floating tag. There is **no Community Applications XML attribute** that forces a stronger pull than Force Update already performs. Maintainers still publish with `--provenance=false --sbom=false` so Dockerman sees Docker v2 **manifest lists** (OCI attestation indexes historically showed as “not available”).
 
-**Supported update path for CA users (config preserved — never wipe `/mnt/user/appdata/curatorx/config`):**
+**Supported update path for CA users (config preserved — never wipe `/mnt/user/appdata/projectionist/config`):**
 
 ```bash
 # On the Unraid host (SSH) — preferred one-shot:
-cd /mnt/user/appdata/curatorx && ./rollout.sh latest
+cd /mnt/user/appdata/projectionist && ./rollout.sh latest
 
 # Or image refresh only, then Docker UI → Force Update / Apply:
 docker pull romwil/projectionist:latest
 # dual-tag alias during compat: docker pull romwil/curatorx:latest
-# or: ./scripts/unraid-force-pull.sh latest
+# or: ./unraid-force-pull.sh latest
 ```
 
 **If pull reports up-to-date but Hub is newer**, delete the local tag and pull again (or use the helper):
@@ -237,20 +238,22 @@ The script builds with `--provenance=false --sbom=false`, passes `PROJECTIONIST_
 
 ## Non-root container user
 
-Starting with v1.7, the CuratorX image runs as user **`curatorx`** (UID **1000**, GID **1000**) instead of root. This limits the impact of a container breakout (security finding S13).
+Starting with v1.7, the image runs as a dedicated non-root user at **UID/GID 1000** (historically `curatorx`; now `projectionist` — same numeric IDs so bind-mounted appdata stays valid). This limits the impact of a container breakout (security finding S13).
 
 Starting with v1.7.3, the container uses an **entrypoint script** that automatically handles permission migration:
 
 1. Container starts as root (the entrypoint script runs first)
-2. `chown -R curatorx:curatorx /config` fixes ownership for existing installs
-3. Privileges drop to the `curatorx` user via `gosu` before the application starts
+2. If `/config` is not already owned by UID/GID **1000**, `chown -R projectionist:projectionist /config` fixes ownership for existing installs (skipped when ownership is already correct so large DBs do not slow every Unraid Force Update / recreate)
+3. Privileges drop to the `projectionist` user via `gosu` before the application starts
 4. If the container is already running as non-root (e.g. Kubernetes `runAsUser`), the entrypoint skips the chown and runs the application directly
 
-**New installs:** no action needed.
+**New installs:** no action needed. Keep the appdata directory owned by UID/GID 1000 (Unraid default for many templates).
 
-**Existing installs upgrading from pre-1.7.3:** no manual action needed — the entrypoint auto-fixes `/config` ownership on first boot. No more `chown` required on the host.
+**Existing installs upgrading from pre-1.7.3:** no manual action needed — the entrypoint auto-fixes `/config` ownership on first boot when it is still root-owned. No more host-side `chown` required.
 
 **Kubernetes / rootless runtimes:** if your pod security context sets `runAsUser`, the entrypoint detects it is already non-root and runs the CMD directly without attempting chown.
+
+**PUID/PGID:** not supported yet — the image is fixed at 1000:1000. Map host ownership to that UID/GID rather than expecting arbitrary remapping.
 
 ---
 

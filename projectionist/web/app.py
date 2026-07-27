@@ -539,6 +539,8 @@ class AuthMeUpdatePayload(BaseModel):
     notify_channel_email: Optional[bool] = None
     newsletter_opt_in: Optional[bool] = None
     nudge_opt_in: Optional[bool] = None
+    notify_channel_apprise: Optional[bool] = None
+    apprise_urls: Optional[str] = Field(default=None, max_length=4000)
 
 
 class LibraryItemWatchedPayload(BaseModel):
@@ -570,6 +572,12 @@ class NotificationsSeenPayload(BaseModel):
 
 class MailTestPayload(BaseModel):
     to_email: Optional[str] = Field(default=None, max_length=320)
+
+
+class AppriseTestPayload(BaseModel):
+    """Optional override URLs for an owner Apprise test (newline / comma separated)."""
+
+    urls: Optional[str] = Field(default=None, max_length=4000)
 
 
 class WeeklyNewsletterGeneratePayload(BaseModel):
@@ -613,6 +621,13 @@ class MailSettingsPayload(BaseModel):
     subject_prefix: str = "[CuratorX]"
     footer_text: str = ""
     logo_url: str = ""
+
+
+class AppriseSettingsPayload(BaseModel):
+    enabled: bool = False
+    urls: str = ""
+    config: str = ""
+    tag: str = ""
 
 
 class YouthSettingsPayload(BaseModel):
@@ -663,6 +678,7 @@ class SettingsPayload(BaseModel):
     auth: AuthSettingsPayload = Field(default_factory=AuthSettingsPayload)
     seerr: SeerrSettingsPayload = Field(default_factory=SeerrSettingsPayload)
     mail: MailSettingsPayload = Field(default_factory=MailSettingsPayload)
+    apprise: AppriseSettingsPayload = Field(default_factory=AppriseSettingsPayload)
     youth: YouthSettingsPayload = Field(default_factory=YouthSettingsPayload)
 
 
@@ -822,6 +838,23 @@ def _mask_settings(settings: Settings) -> Dict[str, Any]:
         and str(settings.mail.from_email or "").strip()
     )
     payload["mail"] = mail_payload
+    from projectionist.notifications.apprise_transport import (
+        apprise_available,
+        apprise_install_configured,
+        split_apprise_urls,
+    )
+
+    apprise_payload = dict(payload.get("apprise") or {})
+    url_count = len(split_apprise_urls(settings.apprise.urls))
+    config_set = bool(str(settings.apprise.config or "").strip())
+    apprise_payload["urls_set"] = url_count > 0
+    apprise_payload["url_count"] = url_count
+    apprise_payload["urls"] = ""
+    apprise_payload["config_set"] = config_set
+    apprise_payload["config"] = ""
+    apprise_payload["configured"] = apprise_install_configured(settings)
+    apprise_payload["package_available"] = apprise_available()
+    payload["apprise"] = apprise_payload
     return payload
 
 
@@ -862,6 +895,7 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
         user = bootstrap_owner(_db())
     request_path = "seerr" if uses_seerr_request_path(settings, role=user.role) else "arr"
     from projectionist.config_store import resolve_guest_tour_enabled
+    from projectionist.notifications.service import notification_channel_offerings
 
     payload: Dict[str, Any] = {
         "features": {
@@ -888,6 +922,14 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
         },
         "request_path": request_path,
         "authenticated": authenticated,
+        "notifications": {
+            "channels": notification_channel_offerings(settings),
+            "mail_configured": bool(
+                settings.mail.enabled
+                and str(settings.mail.provider or "off").lower() in {"smtp", "resend"}
+                and str(settings.mail.from_email or "").strip()
+            ),
+        },
     }
     if authenticated and user is not None:
         payload["user"] = {
@@ -1196,6 +1238,10 @@ def patch_auth_me(
         updates["newsletter_opt_in"] = payload.newsletter_opt_in
     if "nudge_opt_in" in fields_set:
         updates["nudge_opt_in"] = payload.nudge_opt_in
+    if "notify_channel_apprise" in fields_set:
+        updates["notify_channel_apprise"] = payload.notify_channel_apprise
+    if "apprise_urls" in fields_set:
+        updates["apprise_urls"] = payload.apprise_urls
     if not updates:
         return {"user": user.to_dict(), "authenticated": True}
     try:
@@ -5315,6 +5361,52 @@ def test_mail_send(
         "provider": result.provider,
         "message_id": result.message_id,
         "to_email": to_email,
+    }
+
+
+@app.post("/api/admin/apprise/test")
+def test_apprise_send(
+    payload: AppriseTestPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Send a test notification via install Apprise URLs/config (optional override)."""
+    del user
+    from projectionist.notifications.apprise_transport import (
+        AppriseSendError,
+        apprise_available,
+        apprise_install_configured,
+        send_apprise,
+        split_apprise_urls,
+    )
+
+    settings = _settings()
+    if not apprise_available():
+        raise HTTPException(
+            status_code=400,
+            detail="Apprise is not installed. Reinstall Projectionist with the web extras.",
+        )
+    override_urls = split_apprise_urls(payload.urls)
+    if not override_urls and not apprise_install_configured(settings):
+        raise HTTPException(
+            status_code=400,
+            detail="Enable Apprise and add URLs (or config) under Admin → Mail, or pass test urls.",
+        )
+    try:
+        result = send_apprise(
+            settings,
+            title="Projectionist Apprise test",
+            body=(
+                "This is a test notification from Projectionist.\n\n"
+                "If you received it, your Apprise settings are working."
+            ),
+            urls=override_urls or None,
+        )
+    except AppriseSendError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {
+        "ok": True,
+        "notified": result.notified,
+        "detail": result.detail,
     }
 
 

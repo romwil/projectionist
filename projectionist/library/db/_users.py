@@ -189,6 +189,8 @@ class UsersAuthMixin:
         notify_channel_email: Any = ...,
         newsletter_opt_in: Any = ...,
         nudge_opt_in: Any = ...,
+        notify_channel_apprise: Any = ...,
+        apprise_urls: Any = ...,
     ) -> Dict[str, Any]:
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
@@ -237,6 +239,13 @@ class UsersAuthMixin:
             if nudge_opt_in is not ... and "nudge_opt_in" in cols:
                 updates.append("nudge_opt_in = ?")
                 params.append(1 if nudge_opt_in else 0)
+            if notify_channel_apprise is not ... and "notify_channel_apprise" in cols:
+                updates.append("notify_channel_apprise = ?")
+                params.append(1 if notify_channel_apprise else 0)
+            if apprise_urls is not ... and "apprise_urls" in cols:
+                cleaned_urls = (apprise_urls or "").strip() or None
+                updates.append("apprise_urls = ?")
+                params.append(cleaned_urls)
             if updates:
                 params.append(user_id)
                 conn.execute(
@@ -471,6 +480,12 @@ class UsersAuthMixin:
         nudge_opt_in = False
         if "nudge_opt_in" in keys and row["nudge_opt_in"] is not None:
             nudge_opt_in = bool(int(row["nudge_opt_in"]))
+        notify_channel_apprise = False
+        if "notify_channel_apprise" in keys and row["notify_channel_apprise"] is not None:
+            notify_channel_apprise = bool(int(row["notify_channel_apprise"]))
+        apprise_urls = None
+        if "apprise_urls" in keys and row["apprise_urls"] is not None:
+            apprise_urls = str(row["apprise_urls"]).strip() or None
         return {
             "id": str(row["id"]),
             "display_name": str(row["display_name"]),
@@ -483,6 +498,8 @@ class UsersAuthMixin:
             "notify_channel_email": notify_channel_email,
             "newsletter_opt_in": newsletter_opt_in,
             "nudge_opt_in": nudge_opt_in,
+            "notify_channel_apprise": notify_channel_apprise,
+            "apprise_urls": apprise_urls,
             "role": str(row["role"]),
             "disabled": disabled,
             "is_youth": is_youth,

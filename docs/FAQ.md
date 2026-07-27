@@ -26,18 +26,18 @@ Images are multi-arch (**amd64 + arm64**), run as non-root `curatorx` (UID/GID 1
 
 ## Unraid Force Update pulled 0 B and I'm still on an old version
 
-Force Update calls Docker Engine pull, then recreates the container. **0 B** means Engine kept the existing local `romwil/projectionist:latest` mapping while Hub may already have a newer digest. Dockerfile labels / `.build-info` don't bypass that. Fix (config stays under `/mnt/user/appdata/curatorx/config`):
+Force Update calls Docker Engine pull, then recreates the container. **0 B** means Engine kept the existing local `romwil/projectionist:latest` mapping while Hub may already have a newer digest. Dockerfile labels / `.build-info` don't bypass that. Fix (config stays under `/mnt/user/appdata/projectionist/config`):
 
 ```bash
-cd /mnt/user/appdata/curatorx && ./rollout.sh latest
+cd /mnt/user/appdata/projectionist && ./rollout.sh latest
 # or: docker pull romwil/projectionist:latest   # then Force Update / Apply
-# or: ./scripts/unraid-force-pull.sh latest --rmi-retry
+# or: ./unraid-force-pull.sh latest --rmi-retry
 ```
 
 Verify what you're actually running:
 
 ```bash
-docker exec curatorx cat /app/.build-info
+docker exec projectionist cat /app/.build-info
 ```
 
 Details: [DOCKER.md](DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
@@ -55,7 +55,7 @@ Everything lives under `/config` (`DATA_DIR`) on the owner's disk:
 Back up the whole directory before major changes:
 
 ```bash
-tar czf projectionist-config-$(date +%F).tgz -C /mnt/user/appdata/curatorx config
+tar czf projectionist-config-$(date +%F).tgz -C /mnt/user/appdata/projectionist config
 ```
 
 ## Do I need an LLM API key?

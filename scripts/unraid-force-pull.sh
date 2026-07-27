@@ -13,14 +13,14 @@
 # step; use this when you want to keep Dockerman's container definition and only
 # refresh the image before Force Update / Apply in the UI.
 #
-# Host appdata path usually stays /mnt/user/appdata/curatorx during the
-# compatibility window even though the image/container name is Projectionist.
+# Host appdata path: /mnt/user/appdata/projectionist (legacy …/curatorx OK if
+# you never migrated). Prefer ./rollout.sh for pull+recreate in one step.
 #
-# Usage (on Unraid host):
-#   ./scripts/unraid-force-pull.sh              # pull :latest, print digests
-#   ./scripts/unraid-force-pull.sh 1.8.11       # pull a pinned tag
-#   ./scripts/unraid-force-pull.sh latest --rmi-retry
-#   ./scripts/unraid-force-pull.sh latest --recreate   # stop/rm + instruct template start
+# Usage (on Unraid host, from appdata or repo checkout):
+#   ./unraid-force-pull.sh              # pull :latest, print digests
+#   ./unraid-force-pull.sh 1.27.3       # pull a pinned tag
+#   ./unraid-force-pull.sh latest --rmi-retry
+#   ./unraid-force-pull.sh latest --recreate   # stop/rm + instruct template start
 #
 set -euo pipefail
 
@@ -125,13 +125,12 @@ if [[ "$RECREATE" -eq 1 ]]; then
     docker rm "$CONTAINER_NAME" >/dev/null || true
   fi
   log "Container removed. Start again from Docker → User Templates → projectionist"
-  log "(or: cd /mnt/user/appdata/curatorx && ./rollout.sh ${IMAGE_TAG})"
-  log "  (host appdata path often still …/curatorx during compat; new installs may use …/projectionist)"
+  log "(or: cd /mnt/user/appdata/projectionist && ./rollout.sh ${IMAGE_TAG})"
 else
   log ""
-  log "Next: Docker UI → projectionist (or legacy curatorx) → Force Update / Apply"
+  log "Next: Docker UI → projectionist → Force Update / Apply"
   log "  (recreates from the refreshed local tag; keeps Dockerman template)"
-  log "Or: cd /mnt/user/appdata/curatorx && ./rollout.sh ${IMAGE_TAG}"
+  log "Or: cd /mnt/user/appdata/projectionist && ./rollout.sh ${IMAGE_TAG}"
 fi
 
 log "Verify after recreate: docker exec $CONTAINER_NAME cat /app/.build-info"

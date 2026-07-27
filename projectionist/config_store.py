@@ -538,6 +538,19 @@ class MailSettings:
 
 
 @dataclass
+class AppriseSettings:
+    """Owner-configured Apprise destinations for the installation."""
+
+    enabled: bool = False
+    # Newline / comma separated Apprise URLs (discord://, tgram://, …).
+    urls: str = ""
+    # Optional Apprise config body (YAML/TEXT) understood by AppriseConfig.
+    config: str = ""
+    # Optional Apprise tag filter when notifying (empty = all).
+    tag: str = ""
+
+
+@dataclass
 class YouthSettings:
     """Owner Youth-mode content gate (fail-closed for unrated titles)."""
 
@@ -551,6 +564,7 @@ NESTED_SETTINGS_TYPES.update(
         "auth": AuthSettings,
         "seerr": SeerrSettings,
         "mail": MailSettings,
+        "apprise": AppriseSettings,
         "youth": YouthSettings,
     }
 )
@@ -616,6 +630,7 @@ class Settings:
     auth: AuthSettings = field(default_factory=AuthSettings)
     seerr: SeerrSettings = field(default_factory=SeerrSettings)
     mail: MailSettings = field(default_factory=MailSettings)
+    apprise: AppriseSettings = field(default_factory=AppriseSettings)
     youth: YouthSettings = field(default_factory=YouthSettings)
 
     def apply_to_environ(self) -> None:

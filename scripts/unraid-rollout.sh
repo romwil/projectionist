@@ -6,19 +6,21 @@
 # Does NOT wipe ./config (settings.json, SQLite, secrets).
 #
 # Canonical copy lives in the repo as scripts/unraid-rollout.sh — keep the
-# host copy in sync after upgrades. During the rebrand compatibility window
-# most installs still live under /mnt/user/appdata/curatorx (keep that path):
-#   cp scripts/unraid-rollout.sh /mnt/user/appdata/curatorx/rollout.sh
-# New installs may use /mnt/user/appdata/projectionist instead.
+# host copy in sync after upgrades:
+#   cp scripts/unraid-rollout.sh /mnt/user/appdata/projectionist/rollout.sh
+#   cp docker-compose.unraid.yml /mnt/user/appdata/projectionist/docker-compose.yml
+#   cp scripts/unraid.env.example /mnt/user/appdata/projectionist/.env.example
+#   cp scripts/unraid-force-pull.sh /mnt/user/appdata/projectionist/unraid-force-pull.sh
+# Legacy installs that never moved off /mnt/user/appdata/curatorx can keep that
+# path (same scripts; override CONTAINER_NAME=curatorx if needed).
 #
 # For image-only refresh (keep Dockerman template, then Force Update):
-#   ./scripts/unraid-force-pull.sh
+#   ./unraid-force-pull.sh
 #
 # Usage (on Unraid host):
-#   cd /mnt/user/appdata/curatorx    # existing installs (compat)
-#   # or: cd /mnt/user/appdata/projectionist
+#   cd /mnt/user/appdata/projectionist
 #   ./rollout.sh                     # romwil/projectionist:latest
-#   ./rollout.sh 1.8.11              # pin a release tag
+#   ./rollout.sh 1.27.3              # pin a release tag
 #
 # First migration from an Unraid dockerman-managed container: this script
 # removes a same-named container (stop/rm only; never docker volume rm /
@@ -215,7 +217,7 @@ log "=== Projectionist rollout ==="
 log "Dir:   $SCRIPT_DIR"
 log "Image: $IMAGE"
 log "Port:  ${HOST_PORT} → 8788"
-log "Config bind: $CONFIG_DIR → /config (preserved; host appdata path often still …/curatorx during compat)"
+log "Config bind: $CONFIG_DIR → /config (preserved)"
 
 if ((${#COMPOSE[@]})); then
   run_compose
