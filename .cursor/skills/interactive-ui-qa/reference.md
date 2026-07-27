@@ -13,7 +13,7 @@ Each ID:
 | **steps** | Required interactions (page-load alone ≠ pass) |
 | **pass** | Observable pass criteria |
 
-Target: `http://10.10.1.202:8790`. Creds: `curatorx-qa-scripts/.env.qa`.
+Target: `http://10.10.1.202:8790`. Creds: `projectionist-qa-scripts/.env.qa`.
 
 ---
 

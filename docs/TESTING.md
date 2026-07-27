@@ -199,13 +199,13 @@ CURATORX_E2E_LIVE=1 E2E_MOCK_APIS=0 E2E_BASE_URL=http://127.0.0.1:8788 npm run t
 
 Without `CURATORX_E2E_LIVE=1`, `e2e/live.spec.ts` skips so default `npm run test:e2e` stays green offline.
 
-Multi-role GUI / auth-ON sidecar tooling is **maintainer-local only** (not in this repo). Keep personal runbooks on the host deploy kit under `curatorx-qa-scripts` on `automat` (`:8790` only — never prod `:8788`):
+Multi-role GUI / auth-ON sidecar tooling is **maintainer-local only** (not in this repo). Keep personal runbooks on the host deploy kit under `projectionist-qa-scripts` on `automat` (`:8790` only — never prod `:8788`):
 
 | Host path | Contents |
 |-----------|----------|
-| `/Volumes/appdata/curatorx-qa-scripts/qa-runs/QA-LIFECYCLE.md` | Config, volumes, spin-up / spin-down, idle policy |
-| `/Volumes/appdata/curatorx-qa-scripts/qa-runs/QA-REDEPLOY.md` | Path A/B/C WIP / Hub recreate |
-| `/Volumes/appdata/curatorx-qa-scripts/.env.qa` | Secrets + seed persona env vars (do not commit) |
+| `/Volumes/appdata/projectionist-qa-scripts/qa-runs/QA-LIFECYCLE.md` | Config, volumes, spin-up / spin-down, idle policy |
+| `/Volumes/appdata/projectionist-qa-scripts/qa-runs/QA-REDEPLOY.md` | Path A/B/C WIP / Hub recreate |
+| `/Volumes/appdata/projectionist-qa-scripts/.env.qa` | Secrets + seed persona env vars (do not commit) |
 
 Default idle = QA stopped; spin up for tests; after a Hub publish, spin down unless a campaign is active ([RELEASE.md](RELEASE.md)). Do not turn production auth off or mount production `/config` for role testing.
 

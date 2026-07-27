@@ -12,8 +12,8 @@ If the user asks for **browser QA**, **UI QA**, **role QA**, **absolute baseline
 2. Execute **only** authored IDs in
    [`.cursor/skills/interactive-ui-qa/reference.md`](../skills/interactive-ui-qa/reference.md).
 3. Target maintainer QA **`http://10.10.1.202:8790`** +
-   `/Volumes/appdata/curatorx-qa-scripts/.env.qa` — **never** production **`:8788`**.
-4. Write artifacts under `/Volumes/appdata/curatorx-qa-scripts/qa-runs/`.
+   `/Volumes/appdata/projectionist-qa-scripts/.env.qa` — **never** production **`:8788`**.
+4. Write artifacts under `/Volumes/appdata/projectionist-qa-scripts/qa-runs/`.
 5. Verdict **FAIL** if any `blocker` / `major` remains open.
 
 Do not invent pathways. New UI → update `reference.md`.
