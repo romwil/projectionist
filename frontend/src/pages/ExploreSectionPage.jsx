@@ -15,7 +15,7 @@ import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { exploreSectionPath } from "../lib/browseLinks.js";
 import { ROUTES } from "../lib/backNav.js";
-import { partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
+import { formatBulkLibraryDeleteResultMessage, partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
 import {
   EXPLORE_PAGE_SIZES,
   EXPLORE_SECTION_SORTS,
@@ -313,46 +313,56 @@ export default function ExploreSectionPage() {
     setDeleteOpen(true);
   }
 
-  async function handleBulkDeleteConfirm() {
+  async function handleBulkDeleteConfirm({ mode } = {}) {
     if (!isOwner || deleting) return;
     const { ratingKeys, titles } = deletePartition;
     if (!ratingKeys.length) return;
     const progressId = start({
-      label: "Deleting from library index",
+      label: mode === "full" ? "Fully removing from stack" : "Deleting from library index",
       total: ratingKeys.length,
       asynchronous: true,
     });
     setDeleting(true);
     setDeleteError("");
     try {
-      const result = await deleteLibraryItems(ratingKeys);
+      const result = await deleteLibraryItems(ratingKeys, { mode });
       const deletedCount = Number(result?.deleted) || 0;
-      const drop = new Set(ratingKeys);
-      setState((prev) => {
-        const nextItems = prev.items.filter((item) => {
-          const key = String(item?.rating_key || item?.plex_rating_key || "").trim();
-          return !key || !drop.has(key);
-        });
-        const prevTotal = Number(prev.payload?.total);
-        const nextTotal = Number.isFinite(prevTotal)
-          ? Math.max(0, prevTotal - deletedCount)
-          : nextItems.length;
-        return {
-          ...prev,
-          items: nextItems,
-          payload: prev.payload ? { ...prev.payload, items: nextItems, total: nextTotal } : prev.payload,
-        };
-      });
-      setSelected(new Set());
-      setDeleteOpen(false);
-      const summary = (
-        deletedCount
-          ? `Removed ${deletedCount} title${deletedCount === 1 ? "" : "s"} from the Projectionist library index.`
-          : `No matching library records for ${titles.length} selected title${titles.length === 1 ? "" : "s"}.`,
+      const errors = Array.isArray(result?.errors) ? result.errors : [];
+      const okKeys = new Set(
+        (Array.isArray(result?.results) ? result.results : [])
+          .filter((entry) => entry?.index_deleted)
+          .map((entry) => String(entry.rating_key || "").trim())
+          .filter(Boolean),
       );
+      const drop = okKeys.size ? okKeys : mode === "full" ? okKeys : new Set(ratingKeys);
+      if (drop.size) {
+        setState((prev) => {
+          const nextItems = prev.items.filter((item) => {
+            const key = String(item?.rating_key || item?.plex_rating_key || "").trim();
+            return !key || !drop.has(key);
+          });
+          const prevTotal = Number(prev.payload?.total);
+          const nextTotal = Number.isFinite(prevTotal)
+            ? Math.max(0, prevTotal - deletedCount)
+            : nextItems.length;
+          return {
+            ...prev,
+            items: nextItems,
+            payload: prev.payload ? { ...prev.payload, items: nextItems, total: nextTotal } : prev.payload,
+          };
+        });
+        setSelected(new Set());
+      }
+      const summary = formatBulkLibraryDeleteResultMessage(result, { titles });
+      if (errors.length && !deletedCount) {
+        setDeleteError(summary);
+        finish(progressId, { label: summary, state: "error" });
+        return;
+      }
+      setDeleteOpen(false);
       setActionStatus(summary);
       update(progressId, ratingKeys.length);
-      finish(progressId, { label: summary });
+      finish(progressId, { label: summary, state: errors.length ? "error" : "success" });
     } catch (err) {
       const message = err.message || "Could not delete selected titles.";
       setDeleteError(message);

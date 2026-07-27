@@ -158,9 +158,24 @@ class SonarrClient:
             raise
         return result if isinstance(result, dict) else {}
 
-    def delete_series(self, series_id: int, *, delete_files: bool = False) -> None:
+    def delete_series(
+        self,
+        series_id: int,
+        *,
+        delete_files: bool = False,
+        add_exclusion: bool = False,
+    ) -> None:
+        """Remove a series from Sonarr.
+
+        ``delete_files`` removes media on disk. ``add_exclusion`` adds the title
+        to Sonarr's import exclusion list so list syncs will not re-add it.
+        """
+        params = (
+            f"deleteFiles={'true' if delete_files else 'false'}"
+            f"&addExclusion={'true' if add_exclusion else 'false'}"
+        )
         request_json(
-            f"{self.base_url}/api/v3/series/{series_id}?deleteFiles={'true' if delete_files else 'false'}",
+            f"{self.base_url}/api/v3/series/{series_id}?{params}",
             method="DELETE",
             headers=self._headers(),
             timeout=self.timeout,

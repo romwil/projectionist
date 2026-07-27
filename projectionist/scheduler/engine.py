@@ -505,9 +505,15 @@ class IdleScheduler:
                 continue
             if not dry_run:
                 updates: Dict[str, Any] = {}
-                if decision.items_per_cycle is not None:
+                if (
+                    decision.items_per_cycle is not None
+                    and decision.items_per_cycle != current_batch
+                ):
                     updates["items_per_cycle"] = decision.items_per_cycle
-                if decision.run_interval_seconds is not None:
+                if (
+                    decision.run_interval_seconds is not None
+                    and decision.run_interval_seconds != current_interval
+                ):
                     updates["run_interval_seconds"] = decision.run_interval_seconds
                 if updates:
                     self.update_task(name, **updates)
@@ -1163,9 +1169,15 @@ class IdleScheduler:
             metrics.update(decision.as_metrics())
             if decision.changed:
                 updates: Dict[str, Any] = {}
-                if decision.items_per_cycle is not None:
+                if (
+                    decision.items_per_cycle is not None
+                    and decision.items_per_cycle != current_batch
+                ):
                     updates["items_per_cycle"] = decision.items_per_cycle
-                if decision.run_interval_seconds is not None:
+                if (
+                    decision.run_interval_seconds is not None
+                    and decision.run_interval_seconds != current_interval
+                ):
                     updates["run_interval_seconds"] = decision.run_interval_seconds
                 if updates:
                     self.update_task(defn.name, **updates)

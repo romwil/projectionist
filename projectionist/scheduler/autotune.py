@@ -5,8 +5,10 @@ optionally ``run_interval_seconds`` based on measured duration vs timeout and
 backlog ETA vs a target catch-up horizon.
 
 Safety caps are per-task so TMDB / LLM / CPU-heavy neighbor work cannot runaway.
-Owner interval overrides still win on the next save; auto-tune only nudges within
-bounds and records every decision in the run's metrics for audit.
+Owner batch/interval overrides still win on the next save; auto-tune only nudges
+within bounds and records every decision in the run's metrics for audit.
+Persisted owner batch sizes are honored at runtime (hard-capped at
+:data:`OWNER_BATCH_MAX`); :data:`BATCH_BOUNDS` only constrain auto-tune raises.
 """
 
 from __future__ import annotations
@@ -29,6 +31,9 @@ AUTOTUNE_TASKS = frozenset(
     }
 )
 
+# Absolute safety cap for owner-saved / runtime batch sizes (matches Admin API).
+OWNER_BATCH_MAX = 500
+
 # Target wall-clock catch-up horizon when backlog is large (seconds).
 TARGET_HORIZON_SECONDS = {
     "metadata_enrichment": 7 * 86400,
@@ -48,12 +53,15 @@ INTERVAL_BOUNDS: Dict[str, Tuple[int, int]] = {
     "long_synopsis_enrichment": (3600, 172800),  # 1h – 2d
 }
 
+# Soft batch bounds for auto-tune nudges only. Owner-saved values above ``hi``
+# are still used at runtime (see :func:`resolve_batch_size`); auto-tune will not
+# raise past ``hi``, but may lower toward safer sizes when near timeout.
 BATCH_BOUNDS: Dict[str, Tuple[int, int]] = {
     "metadata_enrichment": (5, 50),
     "semantic_embeddings": (10, 100),
     "plot_neighbors": (5, 60),
-    "llm_logline_enrichment": (1, 10),
-    "long_synopsis_enrichment": (3, 20),
+    "llm_logline_enrichment": (1, 100),
+    "long_synopsis_enrichment": (3, 50),
 }
 
 # Raise batch when duration is under this fraction of the timeout.
@@ -102,8 +110,19 @@ def clamp_interval(name: str, value: int) -> int:
     return max(lo, min(hi, max(60, int(value))))
 
 
+def clamp_owner_batch(value: int) -> int:
+    """Hard safety cap for owner-saved / runtime batch sizes."""
+    return max(1, min(OWNER_BATCH_MAX, int(value)))
+
+
 def resolve_batch_size(db: Any, name: str, default: int) -> int:
-    """Read persisted ``items_per_cycle`` for a task, falling back to *default*."""
+    """Read persisted ``items_per_cycle`` for a task, falling back to *default*.
+
+    Owner-saved values are honored (hard-capped at :data:`OWNER_BATCH_MAX`) so
+    Admin "Items per run" matches what the next execution actually processes.
+    Missing rows still fall back to the task default, clamped to autotune bounds
+    when the task is auto-tune eligible.
+    """
     try:
         with db.connect() as conn:
             row = conn.execute(
@@ -111,17 +130,18 @@ def resolve_batch_size(db: Any, name: str, default: int) -> int:
                 (name,),
             ).fetchone()
     except Exception:
-        return clamp_batch(name, default) if name in AUTOTUNE_TASKS else max(1, int(default))
+        return clamp_batch(name, default) if name in AUTOTUNE_TASKS else clamp_owner_batch(default)
     if row is None:
-        return clamp_batch(name, default) if name in AUTOTUNE_TASKS else max(1, int(default))
+        return clamp_batch(name, default) if name in AUTOTUNE_TASKS else clamp_owner_batch(default)
     keys = row.keys() if hasattr(row, "keys") else []
     if "items_per_cycle" not in keys or row["items_per_cycle"] is None:
-        return clamp_batch(name, default) if name in AUTOTUNE_TASKS else max(1, int(default))
+        return clamp_batch(name, default) if name in AUTOTUNE_TASKS else clamp_owner_batch(default)
     try:
         value = int(row["items_per_cycle"])
     except (TypeError, ValueError):
         value = int(default)
-    return clamp_batch(name, value) if name in AUTOTUNE_TASKS else max(1, value)
+        return clamp_batch(name, value) if name in AUTOTUNE_TASKS else clamp_owner_batch(value)
+    return clamp_owner_batch(value)
 
 
 def evaluate_autotune(
@@ -153,8 +173,10 @@ def evaluate_autotune(
 
     timeout_ms = max(1, int(timeout_seconds) * 1000)
     duration_ms = max(0, int(duration_ms))
-    current_batch = clamp_batch(name, items_per_cycle)
+    # Preserve owner-set batch above BATCH_BOUNDS hi; only proposals are clamped.
+    current_batch = clamp_owner_batch(items_per_cycle)
     current_interval = clamp_interval(name, interval_seconds)
+    batch_hi = BATCH_BOUNDS.get(name, (1, 100))[1]
     new_batch = current_batch
     new_interval = current_interval
     reasons: list[str] = []
@@ -170,13 +192,22 @@ def evaluate_autotune(
     duration_frac = duration_ms / float(timeout_ms)
     high_backlog = backlog >= max(current_batch * 2, 10) or has_more
 
-    if duration_frac >= LOWER_DURATION_FRACTION or status == "cycle_limit" and duration_frac >= 0.7:
-        lowered = clamp_batch(name, max(1, int(math.floor(current_batch * LOWER_FACTOR))))
+    if duration_frac >= LOWER_DURATION_FRACTION or (
+        status == "cycle_limit" and duration_frac >= 0.7
+    ):
+        candidate = max(1, int(math.floor(current_batch * LOWER_FACTOR)))
+        if current_batch > batch_hi:
+            # Owner above autotune max: step down gradually; floor at hi first.
+            lowered = max(batch_hi, candidate)
+        else:
+            lowered = clamp_batch(name, candidate)
         if lowered < current_batch:
             new_batch = lowered
             reasons.append("near_timeout_lower_batch")
-    elif duration_frac <= RAISE_DURATION_FRACTION and high_backlog:
-        raised = clamp_batch(name, max(current_batch + 1, int(math.ceil(current_batch * RAISE_FACTOR))))
+    elif duration_frac <= RAISE_DURATION_FRACTION and high_backlog and current_batch < batch_hi:
+        raised = clamp_batch(
+            name, max(current_batch + 1, int(math.ceil(current_batch * RAISE_FACTOR)))
+        )
         if raised > current_batch:
             new_batch = raised
             reasons.append("headroom_raise_batch")

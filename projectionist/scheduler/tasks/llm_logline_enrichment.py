@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 INTERVAL_SECONDS = 86400  # 24 hours
 DEFAULT_BATCH_SIZE = 5
+# Allow larger owner/autotune batches (~100 @ ~4s/item) without hitting the
+# scheduler's default 5-minute timeout.
+TIMEOUT_SECONDS = 900
 REQUEST_PAUSE_SECONDS = 1.0
 _MAX_LOGLINE_CHARS = 180
 TASK_NAME = "llm_logline_enrichment"
@@ -159,11 +162,13 @@ def register(scheduler: IdleScheduler) -> None:
             name=TASK_NAME,
             run_interval_seconds=INTERVAL_SECONDS,
             enabled=True,
+            timeout_seconds=TIMEOUT_SECONDS,
             run_fn=run,
             description=(
                 "When an LLM API key is configured, writes short narrative loglines used "
-                f"in embedding text. Processes about {DEFAULT_BATCH_SIZE} titles per run "
-                "(batch auto-tunes gently); skips cleanly when no LLM is configured."
+                f"in embedding text. Default batch is {DEFAULT_BATCH_SIZE} titles per run; "
+                "owner-saved Items per run is honored (auto-tune may nudge within safety "
+                "caps). Skips cleanly when no LLM is configured."
             ),
             items_per_cycle=DEFAULT_BATCH_SIZE,
             progress_scope="llm_logline_backlog",

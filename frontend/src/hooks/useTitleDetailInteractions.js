@@ -111,7 +111,7 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
     setDeleteOpen(true);
   }
 
-  async function handleLibraryDeleteConfirm() {
+  async function handleLibraryDeleteConfirm({ mode } = {}) {
     if (deleting) return;
     if (!canOwnerDeleteLibraryTitle(detail, { role: userRole, multiUserEnabled })) return;
     const ratingKey = libraryItemRatingKey(detail);
@@ -119,12 +119,20 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
     setDeleting(true);
     setDeleteError("");
     try {
-      const result = await deleteLibraryItems([ratingKey]);
+      const result = await deleteLibraryItems([ratingKey], { mode });
+      const errors = Array.isArray(result?.errors) ? result.errors : [];
+      if (errors.length && !(Number(result?.deleted) > 0)) {
+        setDeleteError(String(errors[0]?.error || "Could not fully remove this title."));
+        setDeleting(false);
+        return;
+      }
       const notice = formatLibraryDeleteSuccessMessage({
         deleted: Number(result?.deleted) || 0,
         title: detail.title,
+        mode: result?.mode || mode,
+        errorCount: errors.length,
       });
-      onDeleted?.({ notice, detail });
+      onDeleted?.({ notice, detail, result });
     } catch (err) {
       setDeleteError(formatApiError(err) || "Could not delete this title from the library index.");
       setDeleting(false);

@@ -147,7 +147,7 @@ Two surfaces, one job each:
 
 | Surface | Job |
 |---------|-----|
-| **Watchlist page (`/watchlist`)** | Full media explore list — poster/title grid of merged Plex Discover + local pins, multi-select bulk toolbar (**Remove** = unpin/soft; owner-only **Delete** = library index delete with typed `DELETE` confirm), title click opens the right-docked **TitleDetailDrawer** (with **Open full page**). Sidebar **Watchlist (N)** button and AppNav **Watchlist** both route here. |
+| **Watchlist page (`/watchlist`)** | Full media explore list — poster/title grid of merged Plex Discover + local pins, multi-select bulk toolbar (**Remove** = unpin/soft; owner-only **Delete** = typed `DELETE` confirm with **Index only** vs **Full remove**), title click opens the right-docked **TitleDetailDrawer** (with **Open full page**). Sidebar **Watchlist (N)** button and AppNav **Watchlist** both route here. |
 | **Settings → Watchlist** | Sync/token only — Plex Discover pull/push toggles, enable flags, Sync now, and pull stats (`Pulled N · unresolved M`). Links to the Watchlist page; not the pin browser. |
 
 - The Watchlist page **pull-syncs from Plex Discover** on load when a Sign-in-with-Plex account token is available, then lists local + imported pins.

@@ -159,9 +159,24 @@ class RadarrClient:
             raise
         return result if isinstance(result, dict) else {}
 
-    def delete_movie(self, movie_id: int, *, delete_files: bool = False) -> None:
+    def delete_movie(
+        self,
+        movie_id: int,
+        *,
+        delete_files: bool = False,
+        add_exclusion: bool = False,
+    ) -> None:
+        """Remove a movie from Radarr.
+
+        ``delete_files`` removes media on disk. ``add_exclusion`` adds the title
+        to Radarr's import exclusion list so list syncs will not re-add it.
+        """
+        params = (
+            f"deleteFiles={'true' if delete_files else 'false'}"
+            f"&addExclusion={'true' if add_exclusion else 'false'}"
+        )
         request_json(
-            f"{self.base_url}/api/v3/movie/{movie_id}?deleteFiles={'true' if delete_files else 'false'}",
+            f"{self.base_url}/api/v3/movie/{movie_id}?{params}",
             method="DELETE",
             headers=self._headers(),
             timeout=self.timeout,

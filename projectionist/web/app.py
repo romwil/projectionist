@@ -2174,17 +2174,35 @@ def delete_library_items(
     payload: Dict[str, Any],
     user=Depends(require_role("owner")),
 ):
-    """Owner-only: remove CuratorX library index records by rating_key.
+    """Owner-only library delete.
 
-    Does not delete Plex media files. Titles still present in Plex may return
-    on the next library sync.
+    ``mode=index`` (default): remove Projectionist index rows only. Does not
+    delete Plex files; titles still in Plex may return on the next sync.
+
+    ``mode=full``: delete via Radarr/Sonarr (files + import exclusion), remove
+    Plex metadata when configured, then drop the Projectionist index row.
+    Per-title *arr failures leave the index intact and are listed under
+    ``errors`` — never reported as a silent full success.
     """
+    from projectionist.library.full_remove import (
+        full_remove_library_items,
+        normalize_library_delete_mode,
+    )
+
     keys = _normalize_rating_keys(payload)
+    try:
+        mode = normalize_library_delete_mode(payload.get("mode"))
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
     db = _db()
+    del user
+    if mode == "full":
+        return full_remove_library_items(db, _settings(), keys)
+
     deleted = db.delete_library_items_by_rating_keys(keys)
     drop_cached_purge_keys(db, keys)
-    del user
-    return {"deleted": deleted}
+    return {"mode": "index", "deleted": deleted}
 
 
 @app.post("/api/library/items/watched")
