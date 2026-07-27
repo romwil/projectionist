@@ -283,6 +283,16 @@ async def lifespan(_app: FastAPI):
     except Exception:  # noqa: BLE001
         logger.exception("Startup: seed data failed (continuing)")
 
+    # Seed the env-injected owner (PROJECTIONIST_OWNER_PASSWORD) so the
+    # first-login ownership race is closed for multi-user deployments (H2).
+    try:
+        if _settings().features.multi_user_enabled:
+            from projectionist.web.auth import seed_env_owner
+
+            seed_env_owner(manager.db)
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup: owner seeding failed (continuing)")
+
     def _warm_library_facets() -> None:
         try:
             logger.info("Startup: background library facet index check…")
@@ -646,6 +656,7 @@ class SettingsPayload(BaseModel):
     auto_repair_issue_codes: List[str] = Field(default_factory=list)
     mcp_api_key: str = ""
     mcp_full_api_key: str = ""
+    mcp_full_confirm_enabled: bool = False
     mcp_tmdb_poster_size: str = "w500"
     mcp_tmdb_backdrop_size: str = "w1280"
     features: FeatureFlagsPayload = Field(default_factory=FeatureFlagsPayload)
@@ -657,6 +668,9 @@ class SettingsPayload(BaseModel):
 
 class McpKeyWhichPayload(BaseModel):
     which: Literal["privacy", "full"]
+    # Active-curation scope for a newly issued full key (H3). Only meaningful
+    # when which == "full"; None leaves the current scope unchanged.
+    confirm_scope: Optional[bool] = None
 
 
 class RevealSecretPayload(BaseModel):
@@ -1279,10 +1293,10 @@ def auth_local_register(
     """Create a local-password account.  Owner-only unless bootstrapping."""
     enforce_rate_limit(request, bucket="auth_local_register", limit=5, window_seconds=60)
     db = _db()
-    from projectionist.web.auth import _count_local_users
+    from projectionist.web.auth import has_real_owner
 
     requesting_user = None
-    if _count_local_users(db) > 0:
+    if has_real_owner(db):
         requesting_user = get_current_user_dep(request)
 
     user = register_local_user(
@@ -1702,6 +1716,15 @@ def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) 
     invalidate_certifications_on_settings_change(_db(), before, settings, payload.model_dump())
     save_settings(DATA_DIR, settings)
     sync_settings_to_db(_db(), settings)
+    # Seed the env-injected owner the moment multi-user is turned on, so there
+    # is no window for a LAN neighbor to race the first login (H2).
+    if settings.features.multi_user_enabled:
+        try:
+            from projectionist.web.auth import seed_env_owner
+
+            seed_env_owner(_db())
+        except Exception:  # noqa: BLE001
+            logger.exception("Owner seeding after settings update failed (continuing)")
     return _mask_settings(settings)
 
 
@@ -1722,9 +1745,13 @@ def rotate_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner
     other_value = str(getattr(existing, other_field) or "").strip()
     if other_value and new_key == other_value:
         raise HTTPException(status_code=500, detail="Generated MCP key collided; retry rotate.")
-    updated = Settings.from_mapping({**asdict(existing), field: new_key})
+    overrides: Dict[str, Any] = {field: new_key}
+    # The active-curation scope is bound to full-key issuance (H3).
+    if payload.which == "full" and payload.confirm_scope is not None:
+        overrides["mcp_full_confirm_enabled"] = bool(payload.confirm_scope)
+    updated = Settings.from_mapping({**asdict(existing), **overrides})
     _validate_distinct_mcp_keys(updated)
-    invalidate_certifications_on_settings_change(_db(), before, updated, {field: new_key})
+    invalidate_certifications_on_settings_change(_db(), before, updated, overrides)
     save_settings(DATA_DIR, updated)
     sync_settings_to_db(_db(), updated)
     return {
@@ -1760,8 +1787,12 @@ def clear_mcp_key(payload: McpKeyWhichPayload, user=Depends(require_role("owner"
     settings_path = DATA_DIR / "settings.json"
     before = Settings.load(settings_path) if settings_path.exists() else Settings()
     existing = _settings()
-    updated = Settings.from_mapping({**asdict(existing), field: ""})
-    invalidate_certifications_on_settings_change(_db(), before, updated, {field: ""})
+    overrides: Dict[str, Any] = {field: ""}
+    # Clearing the full key also drops its active-curation scope (H3).
+    if payload.which == "full":
+        overrides["mcp_full_confirm_enabled"] = False
+    updated = Settings.from_mapping({**asdict(existing), **overrides})
+    invalidate_certifications_on_settings_change(_db(), before, updated, overrides)
     save_settings(DATA_DIR, updated)
     sync_settings_to_db(_db(), updated)
     return {"which": payload.which, "field": field, "settings": _mask_settings(updated)}

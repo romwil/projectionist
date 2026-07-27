@@ -187,6 +187,109 @@ def bootstrap_owner(db: Optional[Database] = None) -> CurrentUser:
     return CurrentUser(id=BOOTSTRAP_OWNER_ID, display_name="Owner", role="owner")
 
 
+# --- First-owner setup (review finding H2) ------------------------------------------
+#
+# When multi-user auth is enabled there is a window where the *first* account to
+# log in claims the owner role. On a shared LAN a neighbor could race it. Rather
+# than a claim code (which risks locking the operator out), Projectionist lets
+# the owner credential be injected into the container via environment variables —
+# a natural fit for an Unraid CA template field. When set, the owner account is
+# seeded up front, so ownership is never up for grabs and the operator always
+# holds the credential (no lockout). When unset, the legacy trusted-LAN behavior
+# is preserved (first login claims owner).
+
+DEFAULT_OWNER_USERNAME = "owner"
+MIN_OWNER_PASSWORD_LENGTH = 8
+
+
+def resolve_owner_credentials() -> tuple[str, str]:
+    """Return (username, password) for the env-injected owner.
+
+    ``password`` is empty when ``PROJECTIONIST_OWNER_PASSWORD`` /
+    ``CURATORX_OWNER_PASSWORD`` is not set. The password is never persisted in
+    plaintext — only its salted hash lands in the users table when seeded.
+    """
+    from projectionist.envcompat import branded_env
+
+    username = (branded_env("OWNER_USERNAME") or "").strip() or DEFAULT_OWNER_USERNAME
+    password = branded_env("OWNER_PASSWORD") or ""
+    return username, password
+
+
+def env_owner_password_configured() -> bool:
+    from projectionist.envcompat import branded_env
+
+    return bool((branded_env("OWNER_PASSWORD") or "").strip())
+
+
+def has_real_owner(db: Database) -> bool:
+    """True when a non-bootstrap account already holds the owner role."""
+    return _has_real_owner(db)
+
+
+def resolve_new_user_role(db: Database) -> str:
+    """Role for a brand-new account.
+
+    ``member`` when a real owner already exists (e.g. an env-seeded owner);
+    otherwise ``owner`` (legacy trusted-LAN first-login behavior).
+    """
+    return "member" if has_real_owner(db) else "owner"
+
+
+def seed_env_owner(db: Database) -> Optional[str]:
+    """Ensure the env-injected owner account exists; return its user id or None.
+
+    Idempotent and safe to call on every startup and whenever multi-user is
+    enabled. Keeps the injected credential authoritative for the owner account
+    (so rotating ``PROJECTIONIST_OWNER_PASSWORD`` and restarting resets the
+    password — a recovery path that avoids lockout). Never clobbers a different
+    existing owner.
+    """
+    username, password = resolve_owner_credentials()
+    if not password:
+        return None
+    if len(password) < MIN_OWNER_PASSWORD_LENGTH:
+        logger.warning(
+            "PROJECTIONIST_OWNER_PASSWORD is set but shorter than %d characters; "
+            "refusing to seed a weak owner.",
+            MIN_OWNER_PASSWORD_LENGTH,
+        )
+        return None
+
+    existing = db.get_user_by_display_name(username)
+    if existing is not None:
+        user_id = str(existing["id"])
+        changed = False
+        if str(existing["role"]) != "owner":
+            db.update_user_role(user_id, "owner")
+            changed = True
+        stored_hash = existing["password_hash"] if "password_hash" in existing.keys() else None
+        if not _verify_password(password, str(stored_hash or "")):
+            db.update_user_password(user_id, _hash_password(password))
+            changed = True
+        if changed:
+            logger.info("Owner account '%s' updated from PROJECTIONIST_OWNER_PASSWORD.", username)
+        return user_id
+
+    if has_real_owner(db):
+        logger.warning(
+            "PROJECTIONIST_OWNER_PASSWORD is set but a different owner already exists; "
+            "skipping seed of '%s'.",
+            username,
+        )
+        return None
+
+    user_id = f"local-{secrets.token_hex(12)}"
+    db.create_local_user(
+        user_id=user_id,
+        display_name=username,
+        password_hash=_hash_password(password),
+        role="owner",
+    )
+    logger.info("Seeded owner account '%s' from PROJECTIONIST_OWNER_PASSWORD.", username)
+    return user_id
+
+
 def _cookie_should_be_secure(request: Optional[Request]) -> bool:
     if request is None:
         return False
@@ -676,7 +779,10 @@ def _ensure_local_login_enabled() -> Settings:
     settings = _settings()
     if not settings.features.multi_user_enabled:
         raise HTTPException(status_code=400, detail="Multi-user auth is not enabled")
-    if not settings.auth.local_login_enabled:
+    # An env-injected owner credential implies local login for that account, so
+    # a bare Unraid CA setup (owner password only) works without also toggling
+    # the local-login flag.
+    if not settings.auth.local_login_enabled and not env_owner_password_configured():
         raise HTTPException(status_code=400, detail="Local password login is not enabled")
     return settings
 
@@ -697,9 +803,11 @@ def register_local_user(
     """Create a local-password account.
 
     Rules:
-      - If no local-auth users exist yet → first user becomes ``owner``
-        (bootstrap — no session required).
-      - Otherwise the caller must be an ``owner``.
+      - While ownership is unclaimed (no real owner yet) anyone may register a
+        bootstrap account with no session. Whether it becomes ``owner`` follows
+        the owner-existence gate (legacy first-user-is-owner, unless an owner
+        has already been seeded — e.g. via ``PROJECTIONIST_OWNER_PASSWORD``).
+      - Once a real owner exists, only that owner can create further accounts.
     """
     _ensure_local_login_enabled()
 
@@ -713,12 +821,11 @@ def register_local_user(
     if existing is not None:
         raise HTTPException(status_code=409, detail="Username already taken")
 
-    is_first_local = _count_local_users(db) == 0
-    if not is_first_local:
+    if has_real_owner(db):
         if requesting_user is None or requesting_user.role != "owner":
             raise HTTPException(status_code=403, detail="Only the owner can create local accounts")
 
-    role = "owner" if is_first_local else "member"
+    role = resolve_new_user_role(db)
     user_id = f"local-{secrets.token_hex(12)}"
     password_hash = _hash_password(password)
 
