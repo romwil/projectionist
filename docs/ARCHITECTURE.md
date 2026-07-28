@@ -65,7 +65,7 @@ flowchart TB
 - **Chat isolation:** `chat_messages.lens_id` filters history per lens within a session.
 - **Explicit lock:** `lens_taste_profile.explicit_lock` blocks automatic telemetry drift on protected clusters.
 
-See the archived [curatorx_prd.md](archive/curatorx_prd.md) for the original product spec (historical).
+The original product PRD (`curatorx_prd.md`) is historical only and is retained locally under `archive/docs/archive/` (gitignored), not in the shared tree.
 
 ---
 

@@ -382,7 +382,7 @@ Lightweight per-user activity log for memory operations.
 
 ### PRD cognitive tables
 
-From the archived [curatorx_prd.md](archive/curatorx_prd.md):
+From the historical PRD (local `archive/docs/archive/curatorx_prd.md`, not in the shared tree):
 
 #### `curator_system_config`
 
@@ -609,4 +609,4 @@ erDiagram
 - [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) — knowledge dimensions, motifs, idle curation
 - [ARCHITECTURE.md](ARCHITECTURE.md) — sync and chat data flows
 - [DESIGN.md](DESIGN.md) — block schema and API usage
-- [curatorx_prd.md](archive/curatorx_prd.md) — product source spec (archived / historical)
+- Historical PRD (`curatorx_prd.md`) — retained locally under `archive/docs/archive/` (gitignored)

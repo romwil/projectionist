@@ -89,8 +89,8 @@ Open **http://localhost:8788**.
 ## Docker Compose (all platforms)
 
 ```bash
-git clone https://github.com/romwil/curatorx.git
-cd curatorx
+git clone https://github.com/romwil/projectionist.git
+cd projectionist
 cp .env.example .env
 docker compose up -d --build
 ```
