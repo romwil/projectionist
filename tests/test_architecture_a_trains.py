@@ -68,6 +68,51 @@ class SchemaIntegrityTests(unittest.TestCase):
                 ).fetchone()
                 self.assertEqual(int(left["c"]), 0)
 
+    def test_library_graph_orphan_cleanup_migration(self) -> None:
+        """Migration 37 removes item_neighbors orphans that break title_relations rebuild."""
+        import sqlite3
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "test.db"
+            db = Database(db_path)
+            item_id = db.upsert_library_item(
+                {
+                    "rating_key": "rk1",
+                    "media_type": "movie",
+                    "title": "Seed",
+                    "year": 2000,
+                }
+            )
+            raw = sqlite3.connect(db_path)
+            try:
+                raw.execute("PRAGMA foreign_keys=OFF")
+                raw.execute(
+                    """
+                    INSERT INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
+                    VALUES (?, 999999, 0.5, 0.0)
+                    """,
+                    (item_id,),
+                )
+                raw.execute(
+                    "DELETE FROM schema_version WHERE version = ?",
+                    (CURRENT_SCHEMA_VERSION,),
+                )
+                raw.commit()
+            finally:
+                raw.close()
+
+            # Re-open applies the library-graph orphan cleanup migration.
+            db2 = Database(db_path)
+            with db2.connect() as conn:
+                left = conn.execute(
+                    "SELECT COUNT(*) AS c FROM item_neighbors WHERE neighbor_id = 999999"
+                ).fetchone()
+                self.assertEqual(int(left["c"]), 0)
+                ver = conn.execute(
+                    "SELECT MAX(version) AS v FROM schema_version"
+                ).fetchone()
+                self.assertEqual(int(ver["v"]), CURRENT_SCHEMA_VERSION)
+
 
 class SecretsAtRestTests(unittest.TestCase):
     def test_encrypt_roundtrip_and_persist(self) -> None:

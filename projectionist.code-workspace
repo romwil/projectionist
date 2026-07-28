@@ -5,19 +5,16 @@
             "path": "."
         },
         {
-            "name": "Projectionist QA",
-            "path": "../../../../Volumes/appdata/curatorx-qa"
-        },
-        {
-            "name": "Projectionist QA Build",
-            "path": "../../../../Volumes/appdata/curatorx-qa-build"
-        },
-        {
-            "name": "Projectionist QA Scripts",
-            "path": "../../../../Volumes/appdata/curatorx-qa-scripts"
-        },
-        {
             "path": "../../../../Volumes/appdata/projectionist"
+        },
+        {
+            "path": "../../../../Volumes/appdata/projectionist-qa"
+        },
+        {
+            "path": "../../../../Volumes/appdata/projectionist-qa-build"
+        },
+        {
+            "path": "../../../../Volumes/appdata/projectionist-qa-scripts"
         }
     ]
 }

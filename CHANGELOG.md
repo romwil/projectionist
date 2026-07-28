@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.27.6] — 2026-07-27
+
+Dashboard Storage Intelligence purge now defaults to a real full remove (files + exclusion), and Scheduled Tasks Title relations refresh no longer fails under foreign-key enforcement when stale neighbor rows linger.
+
+### Highlights
+- **Dashboard purge actually frees disk.** Storage Intelligence purge now defaults to **full remove** through Radarr/Sonarr (files + import exclusion), then Plex metadata and the Projectionist index — with a clear confirm that it is not undoable.
+- **Index-only purge stays reversible.** Choose Index only in the purge dialog when you want an undoable Projectionist-index prune; Grooming undo only covers those runs.
+- **Title relations refresh stays healthy.** The scheduled rebuild skips orphaned neighbor/credit edges so foreign-key enforcement cannot fail the task after library deletes.
+
+### Changed
+- `POST /api/library/purge-candidates/delete` defaults to `mode=full` via `full_remove_library_items`; `mode=index` keeps the grooming undo snapshot path.
+- Dashboard Purge Selected uses `BulkLibraryDeleteDialog` (default full, `surface=purge`); Grooming panel copy clarifies index-only undo.
+- Help: purge defaults to full remove; empty leftover dirs rely on *arr (no Projectionist filesystem walk).
+- Workspace folder paths point at `projectionist` / `projectionist-qa*` appdata (not legacy `curatorx-qa*`).
+
+### Fixed
+- Purge-candidate delete no longer left media on disk by only dropping Projectionist index rows.
+- `title_relations_refresh` / `refresh_title_relations` no longer raise `FOREIGN KEY constraint failed` when `item_neighbors` (or credits) still reference deleted `library_items` — builders join live titles, `replace_relations_of_types` filters missing parents, and migration 37 cleans library-graph orphans.
+
+### Verification
+- Backend `pytest` **1394 passed**, 6 skipped (29 subtests) at **78.34%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **493 passed**. ESLint **0 errors** (94 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.27.6** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.27.5] — 2026-07-27
 
 Owner library delete can fully remove titles through Radarr/Sonarr (files + import exclusion) and Plex, and Scheduled Tasks finally honors large owner batch sizes for LLM logline enrichment — Optimize rates sits next to Items per run.

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib
 import json
 import os
+import sqlite3
 import tempfile
 import time
 import unittest
@@ -502,6 +503,64 @@ class RelationsTests(unittest.IsolatedAsyncioTestCase):
 
             counts = refresh_title_relations(db)
             self.assertGreaterEqual(counts["collection"], 2)
+
+    async def test_refresh_skips_orphan_neighbor_fk(self) -> None:
+        """Legacy orphan item_neighbors must not break title_relations rebuild under FK ON."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db_path = Path(tmp) / "test.db"
+            db = Database(db_path)
+            a = db.upsert_library_item(
+                {
+                    "rating_key": "alive",
+                    "media_type": "movie",
+                    "title": "Alive",
+                    "year": 2020,
+                }
+            )
+            b = db.upsert_library_item(
+                {
+                    "rating_key": "peer",
+                    "media_type": "movie",
+                    "title": "Peer",
+                    "year": 2021,
+                }
+            )
+            db.set_neighbors(a, [(b, 0.95, 0.1)])
+
+            # Simulate pre–FK-enforcement orphans still sitting in item_neighbors.
+            raw = sqlite3.connect(db_path)
+            try:
+                raw.execute("PRAGMA foreign_keys=OFF")
+                raw.execute(
+                    """
+                    INSERT INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
+                    VALUES (?, ?, 0.99, 0.0)
+                    """,
+                    (a, 9_999_999),
+                )
+                raw.execute(
+                    """
+                    INSERT INTO item_neighbors (item_id, neighbor_id, score, surprise_score)
+                    VALUES (?, ?, 0.98, 0.0)
+                    """,
+                    (9_999_998, b),
+                )
+                raw.commit()
+            finally:
+                raw.close()
+
+            # Without the join/filter, INSERT into title_relations would raise
+            # sqlite3.IntegrityError: FOREIGN KEY constraint failed.
+            result = await title_relations_refresh.run(
+                db, Settings(), should_stop=lambda: False
+            )
+            self.assertEqual(result["status"], "completed")
+            self.assertGreaterEqual(result["neighbor"], 1)
+
+            rows = db.list_title_relations(a, relation="neighbor", limit=20)
+            to_ids = {int(r["to_id"]) for r in rows}
+            self.assertIn(b, to_ids)
+            self.assertNotIn(9_999_999, to_ids)
 
 
     def test_theme_facets_queryable_and_preserved(self) -> None:

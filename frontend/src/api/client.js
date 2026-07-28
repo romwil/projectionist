@@ -1177,10 +1177,13 @@ export async function refreshPurgeCandidates(limit = 25) {
   });
 }
 
-export async function deletePurgeCandidates(ratingKeys) {
+/** Owner-only: delete purge candidates. Default ``mode: "full"`` (*arr + Plex + index).
+ * Pass ``mode: "index"`` for undoable index-only prune.
+ */
+export async function deletePurgeCandidates(ratingKeys, { mode = "full" } = {}) {
   return api("/library/purge-candidates/delete", {
     method: "POST",
-    body: JSON.stringify({ rating_keys: ratingKeys }),
+    body: JSON.stringify({ rating_keys: ratingKeys, mode }),
   });
 }
 
