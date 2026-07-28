@@ -12,11 +12,11 @@ import {
 } from "../lib/groomingActions.js";
 
 /**
- * One-click grooming rerun + safe undo of the last destructive grooming run.
+ * One-click grooming rerun + undo for index-only purge deletes.
  *
  * "Rerun grooming" recomputes purge candidates (a non-destructive grooming pass).
- * Undo restores the Projectionist index rows a purge delete removed; it does not touch
- * Plex files (the delete never did) and embeddings backfill on the next enrichment.
+ * Undo restores Projectionist index rows from **index-only** purge deletes.
+ * Full purge (via *arr) deletes disk files and cannot be undone here.
  */
 export default function GroomingUndoPanel({ onChanged }) {
   const [actions, setActions] = useState([]);
@@ -80,7 +80,7 @@ export default function GroomingUndoPanel({ onChanged }) {
       <div className="grooming-panel-head">
         <div>
           <p className="eyebrow">Grooming</p>
-          <h3 className="dash-panel-title">Rerun &amp; safe undo</h3>
+          <h3 className="dash-panel-title">Rerun &amp; index-only undo</h3>
         </div>
         <button
           type="button"
@@ -94,8 +94,9 @@ export default function GroomingUndoPanel({ onChanged }) {
       </div>
 
       <p className="scheduled-task-meta">
-        Undo restores the Projectionist index rows a purge delete removed. Plex media files
-        are never touched, and plot embeddings backfill on the next enrichment cycle.
+        Undo restores Projectionist index rows from <strong>index-only</strong> purge deletes.
+        Full purge deletes files via Radarr/Sonarr and cannot be undone. Embeddings backfill on
+        the next enrichment cycle.
       </p>
 
       {notice ? (
@@ -109,7 +110,7 @@ export default function GroomingUndoPanel({ onChanged }) {
         <p className="status status-secondary">Loading grooming history…</p>
       ) : !actions.length ? (
         <p className="dash-empty" data-testid="grooming-empty">
-          No reversible grooming runs yet. Deleting purge candidates records an undoable action here.
+          No reversible index-only purge runs yet. Full purges are not undoable.
         </p>
       ) : (
         <ul className="grooming-action-list">

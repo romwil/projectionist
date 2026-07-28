@@ -2248,8 +2248,35 @@ def delete_purge_candidates(
     payload: Dict[str, Any],
     user=Depends(require_role("owner")),
 ):
+    """Owner-only purge-candidate delete.
+
+    Default ``mode=full`` (missing/blank): delete via Radarr/Sonarr (files +
+    import exclusion), remove Plex metadata when configured, then drop the
+    Projectionist index row. Full removes are not undoable.
+
+    ``mode=index``: remove Projectionist index rows only and record a grooming
+    action so the owner can restore those rows. Does not delete disk files.
+    """
+    from projectionist.library.full_remove import (
+        full_remove_library_items,
+        normalize_library_delete_mode,
+    )
+
     keys = _normalize_rating_keys(payload)
+    raw_mode = payload.get("mode")
+    if raw_mode is None or str(raw_mode).strip() == "":
+        mode = "full"
+    else:
+        try:
+            mode = normalize_library_delete_mode(raw_mode)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+
     db = _db()
+    if mode == "full":
+        result = full_remove_library_items(db, _settings(), keys)
+        return {**result, "action_id": None, "undoable": False}
+
     # Snapshot the index rows BEFORE deleting so the owner can undo this run.
     snapshot = db.snapshot_library_items_by_rating_keys(keys)
     deleted = db.delete_library_items_by_rating_keys(keys)
@@ -2260,7 +2287,9 @@ def delete_purge_candidates(
         preview = ", ".join(titles[:3])
         if len(titles) > 3:
             preview += f" +{len(titles) - 3} more"
-        summary = f"Deleted {deleted} purge candidate{'s' if deleted != 1 else ''}"
+        summary = (
+            f"Deleted {deleted} purge candidate{'s' if deleted != 1 else ''} (index only)"
+        )
         if preview:
             summary += f": {preview}"
         action = db.record_grooming_action(
@@ -2272,7 +2301,12 @@ def delete_purge_candidates(
             snapshot=snapshot,
         )
         action_id = action["id"]
-    return {"deleted": deleted, "action_id": action_id, "undoable": action_id is not None}
+    return {
+        "mode": "index",
+        "deleted": deleted,
+        "action_id": action_id,
+        "undoable": action_id is not None,
+    }
 
 
 @app.get("/api/admin/grooming/actions")

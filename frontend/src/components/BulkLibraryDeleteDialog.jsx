@@ -13,6 +13,7 @@ import {
  * Hard-confirm dialog for owner library delete.
  * Default mode removes Projectionist index rows only; full remove also
  * deletes via *arr (files + exclusion) and cleans Plex metadata.
+ * Pass ``defaultMode`` / ``surface="purge"`` for Dashboard purge flows.
  */
 export default function BulkLibraryDeleteDialog({
   open,
@@ -20,18 +21,19 @@ export default function BulkLibraryDeleteDialog({
   unavailableCount = 0,
   loading = false,
   error = "",
+  defaultMode = LIBRARY_DELETE_MODE_INDEX,
+  surface = "",
   onCancel,
   onConfirm,
 }) {
   const [phrase, setPhrase] = useState("");
-  const [mode, setMode] = useState(LIBRARY_DELETE_MODE_INDEX);
+  const [mode, setMode] = useState(() => normalizeLibraryDeleteMode(defaultMode));
+  const isPurgeSurface = String(surface || "").trim().toLowerCase() === "purge";
 
   useEffect(() => {
-    if (!open) {
-      setPhrase("");
-      setMode(LIBRARY_DELETE_MODE_INDEX);
-    }
-  }, [open]);
+    setPhrase("");
+    setMode(normalizeLibraryDeleteMode(defaultMode));
+  }, [open, defaultMode]);
 
   if (!open) return null;
 
@@ -56,9 +58,15 @@ export default function BulkLibraryDeleteDialog({
       >
         <header className="bulk-delete-modal-header">
           <div>
-            <p className="eyebrow">Owner action</p>
+            <p className="eyebrow">{isPurgeSurface ? "Storage Intelligence" : "Owner action"}</p>
             <h2 id="bulk-library-delete-title">
-              {isFull ? "Fully remove from library stack" : "Delete from Projectionist library"}
+              {isFull
+                ? isPurgeSurface
+                  ? "Fully purge from library stack"
+                  : "Fully remove from library stack"
+                : isPurgeSurface
+                  ? "Prune purge candidates (index only)"
+                  : "Delete from Projectionist library"}
             </h2>
           </div>
           <button
@@ -87,8 +95,9 @@ export default function BulkLibraryDeleteDialog({
             <span>
               <strong>Index only</strong>
               <span className="bulk-delete-modal-mode-hint">
-                Remove from the Projectionist library index. Does not delete Plex files or change
-                Radarr/Sonarr.
+                {isPurgeSurface
+                  ? "Remove from the Projectionist library index only. Undoable via Grooming. Does not delete Plex files or change Radarr/Sonarr."
+                  : "Remove from the Projectionist library index. Does not delete Plex files or change Radarr/Sonarr."}
               </span>
             </span>
           </label>
@@ -118,10 +127,27 @@ export default function BulkLibraryDeleteDialog({
           data-testid="bulk-library-delete-warning"
         >
           {isFull ? (
+            isPurgeSurface ? (
+              <>
+                This permanently deletes disk files for {preview.total} {countLabel} via
+                Radarr/Sonarr (<code>deleteFiles</code> + import exclusion), removes the Plex
+                library entry when configured, and drops the Projectionist index.{" "}
+                <strong>Full purge is not undoable</strong> — Grooming undo cannot restore files
+                or index rows from a full remove. Titles not managed by *arr stay in the index with
+                a clear error.
+              </>
+            ) : (
+              <>
+                This permanently removes {preview.total} {countLabel} from your stack: disk files
+                (through Radarr/Sonarr), Plex library entry, and the Projectionist index. Titles not
+                managed by *arr cannot be fully removed — those stay in the index with a clear error.
+              </>
+            )
+          ) : isPurgeSurface ? (
             <>
-              This permanently removes {preview.total} {countLabel} from your stack: disk files
-              (through Radarr/Sonarr), Plex library entry, and the Projectionist index. Titles not
-              managed by *arr cannot be fully removed — those stay in the index with a clear error.
+              This removes {preview.total} {countLabel} from the Projectionist library index only
+              (undoable via Grooming). It does <strong>not</strong> delete files from disk or Plex.
+              Titles still in Plex can reappear on the next library sync.
             </>
           ) : (
             <>

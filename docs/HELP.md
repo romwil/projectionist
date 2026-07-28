@@ -376,27 +376,32 @@ curl -s -X POST http://localhost:8788/api/library/items/delete \
 # → {"mode":"full","deleted":1,"results":[...],"errors":[]}
 ```
 
-**How it works / honest limits.** File deletion goes through Radarr/Sonarr (`deleteFiles` + `addExclusion`), not a direct filesystem wipe. Plex cleanup deletes library metadata after *arr has removed files; it does not delete disk media by itself. Purge-candidate deletes on the Dashboard remain **index-only** and stay undoable via the grooming action log — they are a different, reversible housekeeping path.
+**How it works / honest limits.** File deletion goes through Radarr/Sonarr (`deleteFiles` + `addExclusion`), not a direct filesystem wipe — leftover empty folders are left to *arr's own cleanup, not a Projectionist filesystem walk. Plex cleanup deletes library metadata after *arr has removed files; it does not delete disk media by itself. Dashboard **Storage Intelligence** purge defaults to this **full remove** path (same *arr + Plex + index stack). Choose **Index only** in the purge confirm dialog when you want an undoable Projectionist-index prune without touching disk.
 
-### One-click grooming rerun with safe undo
+### One-click grooming rerun with index-only undo
 
 Grooming is the housekeeping pass that finds **purge candidates** (stale, unwatched, or low-signal titles) so you can prune the library. From **Admin → Dashboard** you can rerun the grooming warm-up in one click (it runs the same scheduled tasks as the multi-task preset), then act on the refreshed candidates.
 
-Deleting purge candidates is destructive, so Projectionist records every bulk delete in a **grooming action log** before it runs. Each entry snapshots the exact Projectionist index rows removed, so you can reverse the last run:
+**Index-only** purge deletes are reversible: Projectionist records them in a **grooming action log** with a snapshot of the exact index rows removed, so you can restore those rows. **Full purge** (the Dashboard default) deletes files via *arr and is **not** undoable — it does not appear as a reversible grooming action and cannot put media back on disk.
 
 ```bash
-# List recent destructive grooming actions (most recent first)
+# Index-only purge delete (undoable) — omit mode or use "full" for disk remove
+curl -s -X POST http://localhost:8788/api/library/purge-candidates/delete \
+  -H 'Content-Type: application/json' \
+  -d '{"rating_keys":["RATING_KEY"],"mode":"index"}' | python3 -m json.tool
+
+# List recent index-only grooming actions (most recent first)
 curl -s http://localhost:8788/api/admin/grooming/actions | python3 -m json.tool
 # → {"actions": [{"id": "…", "action_type": "purge_delete", "item_count": 12,
-#                 "summary": "Deleted 12 purge candidates", "undone_at": null}]}
+#                 "summary": "Deleted 12 purge candidates (index only)", "undone_at": null}]}
 
-# Undo one — restores the snapshotted rows
+# Undo one — restores the snapshotted index rows (not disk files)
 curl -s -X POST http://localhost:8788/api/admin/grooming/actions/ACTION_ID/undo
 ```
 
-Use the **Undo last grooming run** panel on the Dashboard for the same thing without a terminal.
+Use the **Rerun & index-only undo** panel on the Dashboard for the same thing without a terminal.
 
-**How it works / honest limits.** Undo restores the Projectionist **index rows** (the metadata, knowledge, and neighbor edges the delete removed); regenerable derived data such as embeddings is rebuilt by the normal idle tasks, so it is not snapshotted. Undo does **not** touch Plex or your files — a purge only prunes Projectionist's own index, never the media on disk. Once an action is undone it is marked `undone_at` and can't be undone twice.
+**How it works / honest limits.** Undo restores Projectionist **index rows** from index-only purge deletes (metadata, knowledge, and neighbor edges); regenerable derived data such as embeddings is rebuilt by the normal idle tasks, so it is not snapshotted. Undo does **not** restore disk files or reverse a full purge — full remove already deleted media through Radarr/Sonarr. Once an action is undone it is marked `undone_at` and can't be undone twice.
 
 ### Collections & courses (publish a list to members)
 

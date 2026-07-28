@@ -152,11 +152,20 @@ class EnrichmentMixin:
         self,
         by_type: Mapping[str, Sequence[Tuple[int, int, str, float, str]]],
     ) -> int:
-        """Replace all rows for the given relation types in one transaction."""
+        """Replace all rows for the given relation types in one transaction.
+
+        Only inserts edges whose ``from_id`` / ``to_id`` both exist in
+        ``library_items`` so a full rebuild never trips FOREIGN KEY failures
+        from stale neighbor/credit caches.
+        """
 
         def _write() -> int:
             total = 0
             with self.connect() as conn:
+                existing_ids = {
+                    int(row["id"])
+                    for row in conn.execute("SELECT id FROM library_items").fetchall()
+                }
                 for relation, rows in by_type.items():
                     cleaned = str(relation or "").strip().lower()
                     if not cleaned:
@@ -175,6 +184,8 @@ class EnrichmentMixin:
                         )
                         for from_id, to_id, _rel, weight, source in rows
                         if int(from_id) != int(to_id)
+                        and int(from_id) in existing_ids
+                        and int(to_id) in existing_ids
                     ]
                     if normalized:
                         conn.executemany(

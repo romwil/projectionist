@@ -71,6 +71,32 @@ def _cleanup_fk_orphans(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -
         "DELETE FROM user_memory_notes WHERE user_id NOT IN (SELECT id FROM users)",
         "DELETE FROM library_episodes WHERE item_id NOT IN (SELECT id FROM library_items)",
     )
+    _run_orphan_deletes(conn, statements)
+
+
+def _cleanup_library_graph_fk_orphans(
+    db: "SchemaMigrationsMixin", conn: sqlite3.Connection
+) -> None:
+    """Remove library-graph orphans that break title_relations rebuild under FK ON.
+
+    Migration 34 cleaned chat/memory/episodes but not item_neighbors / credits /
+    title_relations / embeddings. Legacy rows (written before PRAGMA foreign_keys=ON)
+    made ``title_relations_refresh`` fail with FOREIGN KEY constraint failed.
+    """
+    del db
+    statements: Sequence[str] = (
+        "DELETE FROM item_neighbors WHERE item_id NOT IN (SELECT id FROM library_items)",
+        "DELETE FROM item_neighbors WHERE neighbor_id NOT IN (SELECT id FROM library_items)",
+        "DELETE FROM title_relations WHERE from_id NOT IN (SELECT id FROM library_items)",
+        "DELETE FROM title_relations WHERE to_id NOT IN (SELECT id FROM library_items)",
+        "DELETE FROM credits WHERE item_id NOT IN (SELECT id FROM library_items)",
+        "DELETE FROM credits WHERE person_id NOT IN (SELECT id FROM people)",
+        "DELETE FROM embeddings WHERE item_id NOT IN (SELECT id FROM library_items)",
+    )
+    _run_orphan_deletes(conn, statements)
+
+
+def _run_orphan_deletes(conn: sqlite3.Connection, statements: Sequence[str]) -> None:
     for sql in statements:
         try:
             cursor = conn.execute(sql)
@@ -159,6 +185,7 @@ def _build_migrations() -> List[Migration]:
         (34, "fk_orphan_cleanup", _cleanup_fk_orphans),
         (35, "credential_marker_rename", _rename_credential_marker),
         (36, "drop_agent_blueprints", _drop_agent_blueprints),
+        (37, "library_graph_fk_orphan_cleanup", _cleanup_library_graph_fk_orphans),
     ]
 
 

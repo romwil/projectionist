@@ -15,11 +15,16 @@ import BarChart from "../components/charts/BarChart";
 import DonutChart from "../components/charts/DonutChart";
 import Gauge from "../components/charts/Gauge";
 import { useBulkActionProgress } from "../components/BulkActionProgress";
+import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import OwnerHealthHero from "../components/OwnerHealthHero";
 import WeeklyDigestPanel from "../components/WeeklyDigestPanel";
 import GroomingUndoPanel from "../components/GroomingUndoPanel";
 import TitleDetailDrawer from "../components/TitleDetailDrawer";
+import {
+  LIBRARY_DELETE_MODE_FULL,
+  formatBulkLibraryDeleteResultMessage,
+} from "../lib/bulkLibraryDelete.js";
 import { buildRuntimeBuckets, sortPurgeCandidates } from "../lib/dashboardCharts.js";
 import { titleDetailTargetFromPurgeCandidate } from "../lib/titleDetailDrawer.js";
 
@@ -87,19 +92,32 @@ function formatPurgeGeneratedAt(generatedAt) {
   }
 }
 
-function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, onRefreshNow }) {
+function PurgeTable({
+  candidates,
+  onRefresh,
+  stale = false,
+  generatedAt = null,
+  onRefreshNow,
+  onGroomingChanged,
+}) {
   const { start, update, finish } = useBulkActionProgress();
   const [sortKey, setSortKey] = useState("purge_score");
   const [sortDir, setSortDir] = useState("desc");
   const [selected, setSelected] = useState(new Set());
   const [confirmAction, setConfirmAction] = useState(null);
+  const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
+  const [purgeError, setPurgeError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [drawerTarget, setDrawerTarget] = useState(null);
   const titleTriggerRef = useRef(null);
   const sorted = sortPurgeCandidates(candidates, sortKey, sortDir);
   const displayed = sorted.slice(0, 20);
   const generatedLabel = formatPurgeGeneratedAt(generatedAt);
+  const selectedItems = displayed.filter((c) => selected.has(c.rating_key));
+  const selectedTitles = selectedItems.map(
+    (c) => String(c?.title || "Untitled").trim() || "Untitled",
+  );
 
   async function handleRefreshNow() {
     if (refreshing || !onRefreshNow) return;
@@ -137,24 +155,53 @@ function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, 
     }
   }
 
-  async function handleConfirmedAction() {
+  async function handlePurgeConfirm({ mode } = {}) {
     const keys = [...selected];
     if (!keys.length) return;
-    const actionLabel = confirmAction === "delete" ? "Deleting purge candidates" : "Dismissing purge candidates";
-    const progressId = start({ label: actionLabel, total: keys.length, asynchronous: true });
+    const progressId = start({
+      label: "Purging selected titles",
+      total: keys.length,
+      asynchronous: true,
+    });
     setActionLoading(true);
+    setPurgeError("");
     try {
-      if (confirmAction === "delete") {
-        await deletePurgeCandidates(keys);
-      } else if (confirmAction === "dismiss") {
-        await dismissPurgeCandidates(keys);
-      }
+      const result = await deletePurgeCandidates(keys, { mode });
       update(progressId, keys.length);
       finish(progressId, {
-        label: `${confirmAction === "delete" ? "Deleted" : "Dismissed"} ${keys.length} purge candidate${keys.length === 1 ? "" : "s"}.`,
+        label: formatBulkLibraryDeleteResultMessage(result, { titles: selectedTitles }),
+      });
+      setSelected(new Set());
+      setPurgeDialogOpen(false);
+      onRefresh?.();
+      onGroomingChanged?.();
+    } catch (err) {
+      const message = err?.message || "Could not complete the purge.";
+      setPurgeError(message);
+      finish(progressId, { label: message, state: "error" });
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleConfirmedDismiss() {
+    const keys = [...selected];
+    if (!keys.length) return;
+    const progressId = start({
+      label: "Dismissing purge candidates",
+      total: keys.length,
+      asynchronous: true,
+    });
+    setActionLoading(true);
+    try {
+      await dismissPurgeCandidates(keys);
+      update(progressId, keys.length);
+      finish(progressId, {
+        label: `Dismissed ${keys.length} purge candidate${keys.length === 1 ? "" : "s"}.`,
       });
       setSelected(new Set());
       onRefresh?.();
+      onGroomingChanged?.();
     } catch {
       finish(progressId, { label: "Could not complete the bulk action.", state: "error" });
     } finally {
@@ -201,9 +248,13 @@ function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, 
           <button
             type="button"
             className="dash-purge-btn dash-purge-btn--danger"
-            onClick={() => setConfirmAction("delete")}
+            data-testid="purge-selected"
+            onClick={() => {
+              setPurgeError("");
+              setPurgeDialogOpen(true);
+            }}
           >
-            Delete Selected <span className="dash-purge-badge">{selected.size}</span>
+            Purge Selected <span className="dash-purge-badge">{selected.size}</span>
           </button>
           <button
             type="button"
@@ -215,19 +266,18 @@ function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, 
         </div>
       )}
 
-      {confirmAction && (
-        <div className="dash-purge-confirm" role="alertdialog" aria-label="Confirm action">
+      {confirmAction === "dismiss" && (
+        <div className="dash-purge-confirm" role="alertdialog" aria-label="Confirm dismiss">
           <p>
-            {confirmAction === "delete"
-              ? `Are you sure you want to remove ${selected.size} title${selected.size > 1 ? "s" : ""} from your library?`
-              : `Dismiss ${selected.size} title${selected.size > 1 ? "s" : ""} from purge suggestions? They won't appear again.`}
+            Dismiss {selected.size} title{selected.size > 1 ? "s" : ""} from purge suggestions?
+            They won&apos;t appear again.
           </p>
           <div className="dash-purge-confirm-actions">
             <button
               type="button"
               className="dash-purge-btn dash-purge-btn--danger"
               disabled={actionLoading}
-              onClick={handleConfirmedAction}
+              onClick={handleConfirmedDismiss}
             >
               {actionLoading ? "Processing…" : "Confirm"}
             </button>
@@ -242,6 +292,21 @@ function PurgeTable({ candidates, onRefresh, stale = false, generatedAt = null, 
           </div>
         </div>
       )}
+
+      <BulkLibraryDeleteDialog
+        open={purgeDialogOpen}
+        titles={selectedTitles}
+        loading={actionLoading}
+        error={purgeError}
+        defaultMode={LIBRARY_DELETE_MODE_FULL}
+        surface="purge"
+        onCancel={() => {
+          if (actionLoading) return;
+          setPurgeDialogOpen(false);
+          setPurgeError("");
+        }}
+        onConfirm={handlePurgeConfirm}
+      />
 
       {sorted.length ? (
         <div className="dash-table-wrap">
@@ -341,6 +406,7 @@ export default function DashboardPage() {
   const genreAgg = useDashData(fetchGenreAgg);
   const countryAgg = useDashData(fetchCountryAgg);
   const languageAgg = useDashData(fetchLanguageAgg);
+  const [groomingEpoch, setGroomingEpoch] = useState(0);
 
   async function handlePurgeRefreshNow() {
     const payload = await refreshPurgeCandidates();
@@ -409,8 +475,8 @@ export default function DashboardPage() {
       {/* ─── Weekly in-app digest (M4) ─── */}
       <WeeklyDigestPanel />
 
-      {/* ─── One-click grooming rerun + safe undo (M4) ─── */}
-      <GroomingUndoPanel onChanged={purge.reload} />
+      {/* ─── One-click grooming rerun + index-only undo ─── */}
+      <GroomingUndoPanel key={groomingEpoch} onChanged={purge.reload} />
 
       {/* ─── Panel 1: Library Composition ─── */}
       <div className="dash-grid">
@@ -513,6 +579,7 @@ export default function DashboardPage() {
           stale={purgeStale}
           generatedAt={purgeGeneratedAt}
           onRefreshNow={handlePurgeRefreshNow}
+          onGroomingChanged={() => setGroomingEpoch((n) => n + 1)}
         />
       </Panel>
 

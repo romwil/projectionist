@@ -64,12 +64,16 @@ def build_neighbor_relations(
     """Mirror high-cosine neighbors into ``title_relations`` (optional)."""
     rows: List[RelationRow] = []
     with db.connect() as conn:
+        # Join both ends so legacy orphan neighbor rows (pre–FK enforcement)
+        # cannot produce title_relations inserts that fail FOREIGN KEY checks.
         neighbor_rows = conn.execute(
             """
-            SELECT item_id, neighbor_id, score
-            FROM item_neighbors
-            WHERE score > 0
-            ORDER BY item_id ASC, score DESC
+            SELECT n.item_id, n.neighbor_id, n.score
+            FROM item_neighbors n
+            JOIN library_items seed ON seed.id = n.item_id
+            JOIN library_items peer ON peer.id = n.neighbor_id
+            WHERE n.score > 0
+            ORDER BY n.item_id ASC, n.score DESC
             """
         ).fetchall()
     per_seed: Dict[int, int] = defaultdict(int)
@@ -102,10 +106,11 @@ def build_shared_crew_relations(
     with db.connect() as conn:
         credit_rows = conn.execute(
             """
-            SELECT item_id, person_id, department, job
-            FROM credits
-            WHERE department IN ('Directing', 'Writing')
-               OR lower(job) IN ('director', 'writer', 'screenplay', 'creator')
+            SELECT c.item_id, c.person_id, c.department, c.job
+            FROM credits c
+            JOIN library_items li ON li.id = c.item_id
+            WHERE c.department IN ('Directing', 'Writing')
+               OR lower(c.job) IN ('director', 'writer', 'screenplay', 'creator')
             """
         ).fetchall()
     for row in credit_rows:

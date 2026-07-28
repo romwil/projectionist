@@ -139,11 +139,13 @@ class GroomingUndoApiTests(unittest.TestCase):
         db = self.app_mod._db()
         _seed(db, "rk-a", "Purge Me")
         resp = self.client.post(
-            "/api/library/purge-candidates/delete", json={"rating_keys": ["rk-a"]}
+            "/api/library/purge-candidates/delete",
+            json={"rating_keys": ["rk-a"], "mode": "index"},
         )
         self.assertEqual(resp.status_code, 200)
         body = resp.json()
         self.assertEqual(body["deleted"], 1)
+        self.assertEqual(body.get("mode"), "index")
         self.assertTrue(body["undoable"])
         action_id = body["action_id"]
 
