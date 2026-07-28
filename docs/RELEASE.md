@@ -137,7 +137,7 @@ EOF
 )"
 ```
 
-Recent example: [v1.19.4](https://github.com/romwil/curatorx/releases/tag/v1.19.4). If `gh` reports the release already exists, update notes only when asked.
+Recent example: [v1.19.4](https://github.com/romwil/projectionist/releases/tag/v1.19.4). If `gh` reports the release already exists, update notes only when asked.
 
 ---
 

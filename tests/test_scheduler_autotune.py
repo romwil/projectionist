@@ -145,6 +145,54 @@ class AutotuneEvaluationTests(unittest.TestCase):
             self.assertLess(decision.run_interval_seconds or 86400, 86400)
             self.assertNotIn("near_timeout_lower_batch", decision.reasons or [])
 
+    def test_autotune_does_not_raise_owner_batch_above_bounds_hi(self) -> None:
+        """Owner batch above BATCH_BOUNDS hi must not be a reason to raise further.
+
+        Runtime may honor owner 500 via resolve_batch_size/clamp_owner_batch, but
+        evaluate_autotune must not propose a raise past the task soft max.
+        """
+        lo, hi = BATCH_BOUNDS["llm_logline_enrichment"]
+        owner_batch = 500
+        self.assertGreater(owner_batch, hi)
+
+        decision = evaluate_autotune(
+            name="llm_logline_enrichment",
+            status="completed",
+            duration_ms=5_000,
+            timeout_seconds=900,
+            items_per_cycle=owner_batch,
+            interval_seconds=86400,
+            items_processed=owner_batch,
+            remaining_items=50_000,
+            has_more=True,
+        )
+        self.assertNotIn("headroom_raise_batch", decision.reasons or [])
+        # May shorten interval for backlog ETA, but batch must stay at owner value
+        # (not raised) and must not land above owner or invent a value > hi via raise.
+        self.assertEqual(decision.items_per_cycle, owner_batch)
+        self.assertGreaterEqual(decision.items_per_cycle or lo, lo)
+
+    def test_autotune_may_lower_owner_batch_above_hi_near_timeout(self) -> None:
+        """Near-timeout may step owner batch down toward BATCH_BOUNDS hi, not raise."""
+        _, hi = BATCH_BOUNDS["llm_logline_enrichment"]
+        owner_batch = 500
+        decision = evaluate_autotune(
+            name="llm_logline_enrichment",
+            status="completed",
+            duration_ms=800_000,
+            timeout_seconds=900,
+            items_per_cycle=owner_batch,
+            interval_seconds=86400,
+            items_processed=owner_batch,
+            remaining_items=2000,
+            has_more=True,
+        )
+        self.assertTrue(decision.changed)
+        self.assertIn("near_timeout_lower_batch", decision.reasons or [])
+        self.assertLess(decision.items_per_cycle or owner_batch, owner_batch)
+        self.assertGreaterEqual(decision.items_per_cycle or 0, hi)
+        self.assertNotIn("headroom_raise_batch", decision.reasons or [])
+
     def test_logline_run_passes_resolved_batch_as_query_limit(self) -> None:
         """Configured items_per_cycle must become the enrichment query limit."""
         import asyncio

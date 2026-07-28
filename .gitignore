@@ -27,6 +27,10 @@ htmlcov/
 .coverage
 .coverage.*
 frontend/coverage/
+# Local historical retention (replicates former paths under archive/).
+# Not part of the shared tree — keep drafts/superseded docs on disk only.
+archive/
+
 # Local Stitch design exports — keep on disk, never commit.
 stitch_curatorx_design_system/
 
