@@ -1026,7 +1026,8 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 .bulk-delete-modal-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  /* Above title-detail-drawer scrim (85) / panel (90) so mode radios are clickable. */
+  z-index: 100;
   background: rgba(0, 0, 0, 0.55);
   display: grid;
   place-items: center;
@@ -1154,6 +1155,206 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* Full-remove results (paths / folders / bytes) */
+.removal-summary-modal {
+  width: min(640px, 100%);
+  max-height: min(88vh, 820px);
+  display: flex;
+  flex-direction: column;
+}
+
+.removal-summary-title-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+.removal-summary-totals {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2, rgba(255, 255, 255, 0.03));
+}
+
+.removal-summary-totals div {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.removal-summary-totals strong {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.removal-summary-totals span {
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.removal-summary-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(48vh, 420px);
+  overflow: auto;
+  display: grid;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-3);
+  padding-right: var(--space-1);
+}
+
+.removal-summary-item {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.removal-summary-item-head {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  align-items: baseline;
+  margin-bottom: var(--space-2);
+}
+
+.removal-summary-item-head h3 {
+  margin: 0;
+  font-size: var(--text-sm, 0.95rem);
+  font-family: var(--font-display);
+}
+
+.removal-summary-item-bytes {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.removal-summary-paths {
+  margin-top: var(--space-2);
+}
+
+.removal-summary-paths-label {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.removal-summary-paths ul,
+.removal-summary-errors ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+
+.removal-summary-paths code {
+  font-size: 0.78rem;
+  word-break: break-all;
+  color: var(--text);
+}
+
+.removal-summary-errors {
+  margin: 0 0 var(--space-3);
+  padding: var(--space-3);
+  border-left: 3px solid var(--danger, #c44);
+  background: rgba(196, 68, 68, 0.08);
+}
+
+@media (max-width: 560px) {
+  .removal-summary-totals {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+/* Section help popover (?) */
+.section-help {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.section-help-trigger {
+  width: 1.4rem;
+  height: 1.4rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface-2, rgba(255, 255, 255, 0.04));
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.section-help-trigger:hover,
+.section-help-trigger:focus-visible {
+  color: var(--text);
+  border-color: var(--accent, var(--border));
+  outline: none;
+}
+
+.section-help-popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  width: min(20rem, 72vw);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  color: var(--text);
+}
+
+.section-help-popover-body {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.section-help-popover-body p {
+  margin: 0 0 0.55rem;
+}
+
+.section-help-popover-body p:last-child {
+  margin-bottom: 0;
+}
+
+.section-help-popover-body strong {
+  font-weight: 600;
+}
+
+.dash-section-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-5) 0 var(--space-3);
+}
+
+.dash-section-heading .dash-section-title {
+  margin: 0;
+}
+
+.grooming-panel-title-row {
+  display: flex;
+  align-items: flex-start;
   gap: var(--space-2);
 }
 

@@ -8,12 +8,14 @@ import {
 } from "./adminNav.js";
 
 describe("adminNav", () => {
-  it("lists core admin sections including Issues and Youth review", () => {
+  it("lists core admin sections including Issues, Logs, and Youth review", () => {
     const ids = ADMIN_NAV.map((item) => item.id);
     assert.ok(ids.includes("overview"));
+    assert.ok(ids.includes("logs"));
     assert.ok(ids.includes("issues"));
     assert.ok(ids.includes("youth"));
     assert.equal(ADMIN_NAV.find((item) => item.id === "issues")?.badge, "openIssues");
+    assert.equal(ADMIN_NAV.find((item) => item.id === "logs")?.to, "/admin/logs");
   });
 
   it("detects /admin paths", () => {

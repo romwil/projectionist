@@ -53,6 +53,8 @@ Canonical branded variables use the `PROJECTIONIST_*` prefix. Matching `CURATORX
 | Sync reviews to Plex | `sync_reviews_to_plex` in settings | When `true`, saving a 1–5 star review writes the matching Plex user rating (2/4/6/8/10) via `PUT /:/rate` |
 | Log level | `PROJECTIONIST_LOG_LEVEL` (alias `CURATORX_LOG_LEVEL`) or `LOG_LEVEL` | `ERROR`, `WARNING`, `INFO` (default), or `DEBUG` |
 | Log format | `LOG_FORMAT` or `PROJECTIONIST_LOG_FORMAT` (alias `CURATORX_LOG_FORMAT`) | `text` (default) or `json` |
+| App log file | `PROJECTIONIST_LOG_FILE` (alias `CURATORX_LOG_FILE`) or `LOG_FILE` | Durable rotating log for **Admin → Logs**. Default `{DATA_DIR}/logs/projectionist.log` (Docker/Unraid: `/config/logs/projectionist.log`). Stdout still receives the same stream. |
+| Log rotation | `PROJECTIONIST_LOG_MAX_BYTES` / `PROJECTIONIST_LOG_BACKUP_COUNT` | Max size per file (default 5 MiB) and rotated backups kept (default 3). |
 | Privacy MCP key | `PROJECTIONIST_MCP_API_KEY` (alias `CURATORX_MCP_API_KEY`) | Enables HTTP `/mcp` in **privacy** mode (public schema, read-only). Or generate in **Admin → Advanced**. |
 | Full MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` (alias `CURATORX_MCP_FULL_API_KEY`) | Enables `/mcp` in **full** mode (internal fields + confirm-gated *arr proposes). Must differ from the privacy key. |
 | MCP full confirm | `PROJECTIONIST_MCP_FULL_CONFIRM` (alias `CURATORX_MCP_FULL_CONFIRM`) | Active-curation scope: `1`/`true` lets the full MCP key confirm/execute its own *arr proposals. Off by default — a human confirms on the web plane. |

@@ -623,6 +623,9 @@ class NeighborsFeedTests(unittest.TestCase):
             self.assertEqual(surprising["items"][0]["title"], "Odd")
             self.assertIn("score", similar["items"][0])
             self.assertIn("surprise_score", similar["items"][0])
+            # surprise = cosine × (1 − overlap) → Odd: 0.85 = 0.9 × (1 − overlap)
+            self.assertAlmostEqual(surprising["items"][0]["metadata_overlap"], 1.0 - (0.85 / 0.9), places=5)
+            self.assertEqual(surprising["seed"]["genres"], ["Sci-Fi"])
 
 
 class ExploreFeedApiTests(unittest.TestCase):

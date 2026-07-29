@@ -224,6 +224,9 @@ export default function HelpPage() {
                 <Link to={ROUTES.adminDashboard} data-testid="help-link-admin-dashboard">
                   Dashboard
                 </Link>
+                <Link to={ROUTES.adminLogs} data-testid="help-link-admin-logs">
+                  Logs
+                </Link>
               </>
             ) : null}
             <Link to={ROUTES.plotLab}>Plot Lab app</Link>

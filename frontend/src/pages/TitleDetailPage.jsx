@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from "reac
 import BackLink from "../components/BackLink";
 import { api, queryLibrary } from "../api/client";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
+import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import PosterOverlayControls from "../components/PosterOverlayControls";
 import RecommendModal from "../components/RecommendModal";
 import TitleDetailContent from "../components/TitleDetailContent";
@@ -16,10 +17,11 @@ import {
   canOwnerDeleteLibraryTitle,
   LIBRARY_DELETE_NOTICE_KEY,
 } from "../lib/bulkLibraryDelete.js";
+import { SURPRISE_SECTION_INTRO, buildSurpriseWhy } from "../lib/surpriseNeighbors.js";
 import { filterCollectionPeers } from "../lib/titleDetailExtras.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 
-function TitleNeighborCard({ item, testId }) {
+function TitleNeighborCard({ item, testId, surpriseWhy = null }) {
   // Both endpoint sources are library relations; make that explicit because
   // the compact relation payloads do not consistently include in_library.
   const libraryItem = { ...item, in_library: true };
@@ -38,6 +40,14 @@ function TitleNeighborCard({ item, testId }) {
       </div>
       <h3>{path ? <Link to={path}>{libraryItem.title}</Link> : libraryItem.title}</h3>
       {libraryItem.year ? <p className="title-neighbor-year">{libraryItem.year}</p> : null}
+      {surpriseWhy?.headline ? (
+        <p className="title-neighbor-why" data-testid={`${testId}-why`}>
+          {surpriseWhy.headline}
+          {surpriseWhy.signals?.[0] ? (
+            <span className="title-neighbor-why-detail"> · {surpriseWhy.signals[0]}</span>
+          ) : null}
+        </p>
+      ) : null}
     </article>
   );
 }
@@ -208,9 +218,12 @@ export default function TitleDetailPage() {
       ) : null}
 
       {showNeighbors ? (
-        <section className="title-neighbors" data-testid="title-neighbors">
+        <section
+          className={`title-neighbors${neighborMode === "surprising" ? " title-neighbors--surprising" : ""}`}
+          data-testid="title-neighbors"
+        >
           <div className="title-neighbors-header">
-            <h2>More Like This</h2>
+            <h2>{neighborMode === "surprising" ? "Surprising neighbors" : "More Like This"}</h2>
             <div className="title-neighbors-controls">
               <div className="title-neighbors-modes" role="group" aria-label="Neighbor ranking">
                 <button
@@ -254,12 +267,24 @@ export default function TitleDetailPage() {
               </button>
             </div>
           </div>
+          {neighborMode === "surprising" ? (
+            <p className="title-neighbors-intro" data-testid="title-neighbors-surprise-intro">
+              {SURPRISE_SECTION_INTRO}
+            </p>
+          ) : null}
           <div className="title-neighbors-track" ref={carouselRef}>
             {neighbors.map((item) => (
               <TitleNeighborCard
                 key={`${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`}
                 item={item}
                 testId="title-neighbor-card"
+                surpriseWhy={
+                  neighborMode === "surprising"
+                    ? buildSurpriseWhy(item, {
+                        seedGenres: Array.isArray(detail.genres) ? detail.genres : [],
+                      })
+                    : null
+                }
               />
             ))}
           </div>
@@ -346,6 +371,12 @@ export default function TitleDetailPage() {
           interactions.setDeleteError("");
         }}
         onConfirm={interactions.handleLibraryDeleteConfirm}
+      />
+
+      <RemovalSummaryDialog
+        open={Boolean(interactions.removalSummary)}
+        result={interactions.removalSummary}
+        onClose={interactions.dismissRemovalSummary}
       />
     </AppShell>
   );

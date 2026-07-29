@@ -14,6 +14,7 @@ export const ADMIN_NAV = [
   { to: "/admin/mail", id: "mail", label: "Mail & alerts" },
   { to: "/admin/access", id: "access", label: "Access requests" },
   { to: "/admin/advanced", id: "advanced", label: "Advanced" },
+  { to: "/admin/logs", id: "logs", label: "Logs" },
   { to: "/admin/dashboard", id: "dashboard", label: "Dashboard" },
   { to: "/admin/issues", id: "issues", label: "Issues", badge: "openIssues" },
   { to: "/admin/youth", id: "youth", label: "Youth review" },

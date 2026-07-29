@@ -30,6 +30,7 @@ export const ROUTES = {
   admin: "/admin",
   adminTasks: "/admin/tasks",
   adminDashboard: "/admin/dashboard",
+  adminLogs: "/admin/logs",
   about: "/about",
   help: "/help",
   privacy: "/privacy",

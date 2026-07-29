@@ -723,6 +723,18 @@ def neighbors_payload(
             "note": "Library item not found",
         }
     neighbor_rows = db.get_neighbors(int(item_id), mode=normalized, limit=capped)
+    seed_genres = []
+    if "genres" in seed.keys() and seed["genres"]:
+        raw_seed_genres = seed["genres"]
+        if isinstance(raw_seed_genres, list):
+            seed_genres = [str(g) for g in raw_seed_genres if g]
+        elif isinstance(raw_seed_genres, str):
+            try:
+                parsed = json.loads(raw_seed_genres)
+            except (TypeError, json.JSONDecodeError):
+                parsed = []
+            if isinstance(parsed, list):
+                seed_genres = [str(g) for g in parsed if g]
     items: List[Dict[str, Any]] = []
     for neighbor in neighbor_rows:
         item = _feed_item(neighbor)
@@ -735,6 +747,11 @@ def neighbors_payload(
         item["score"] = score
         item["surprise_score"] = surprise
         item["match_score"] = surprise if normalized == "surprising" else score
+        # Exact inverse of surprise_score = cosine × (1 − overlap); never invent.
+        if score > 0:
+            item["metadata_overlap"] = max(0.0, min(1.0, 1.0 - (surprise / score)))
+        else:
+            item["metadata_overlap"] = None
         item["overview"] = str(neighbor["summary"] or "") if "summary" in neighbor.keys() else ""
         item["in_library"] = True
         items.append(item)
@@ -745,6 +762,7 @@ def neighbors_payload(
             "title": str(seed["title"]),
             "year": seed["year"],
             "media_type": str(seed["media_type"]),
+            "genres": seed_genres,
         },
         "mode": normalized,
         "items": items,

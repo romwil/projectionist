@@ -9,6 +9,7 @@ from unittest.mock import patch
 from projectionist.logging_config import (
     _RedactionFilter,
     configure_logging,
+    resolve_log_file_path,
     resolve_log_format,
     resolve_log_level,
     sanitize_log_message,
@@ -68,6 +69,13 @@ class LoggingConfigTests(unittest.TestCase):
     def test_json_format_option(self) -> None:
         with patch.dict(os.environ, {"LOG_FORMAT": "json"}, clear=False):
             self.assertEqual(resolve_log_format(), "json")
+
+    def test_resolve_log_file_path_defaults_under_data_dir(self) -> None:
+        with patch.dict(os.environ, {"DATA_DIR": "/tmp/projectionist-logs-test"}, clear=False):
+            path = resolve_log_file_path()
+            self.assertEqual(path.name, "projectionist.log")
+            self.assertEqual(path.parent.name, "logs")
+            self.assertTrue(str(path).endswith("projectionist-logs-test/logs/projectionist.log"))
 
     def test_redaction_filter_redacts_under_text_formatter(self) -> None:
         """The text formatter path must redact secrets, not just JSON."""

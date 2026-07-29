@@ -10,6 +10,7 @@ import {
 import BackLink from "../components/BackLink";
 import { useBulkActionProgress } from "../components/BulkActionProgress";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
+import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
@@ -17,7 +18,12 @@ import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
-import { formatBulkLibraryDeleteResultMessage, partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
+import {
+  BULK_DELETE_EMPTY_SELECTION_MESSAGE,
+  formatBulkLibraryDeleteResultMessage,
+  hasRemovalSummary,
+  partitionBulkDeleteSelection,
+} from "../lib/bulkLibraryDelete.js";
 import {
   buildMediaBrowseParams,
   matchesMediaBrowseWatchState,
@@ -51,6 +57,7 @@ export default function WatchlistPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [removalSummary, setRemovalSummary] = useState(null);
   const [drawerTarget, setDrawerTarget] = useState(null);
   const [recommendItem, setRecommendItem] = useState(null);
   const titleTriggerRef = useRef(null);
@@ -103,6 +110,7 @@ export default function WatchlistPage() {
   );
 
   function toggleSelect(pin) {
+    if (deleteOpen || deleting) return;
     const key = pinKey(pin);
     if (!key) return;
     setSelected((prev) => {
@@ -114,10 +122,12 @@ export default function WatchlistPage() {
   }
 
   function selectAllOnPage() {
+    if (deleteOpen || deleting) return;
     setSelected(new Set(sortedItems.map(pinKey).filter(Boolean)));
   }
 
   function clearSelection() {
+    if (deleteOpen || deleting) return;
     setSelected(new Set());
   }
 
@@ -203,7 +213,10 @@ export default function WatchlistPage() {
   async function handleBulkDeleteConfirm({ mode } = {}) {
     if (!isOwner || deleting) return;
     const { ratingKeys, titles } = deletePartition;
-    if (!ratingKeys.length) return;
+    if (!ratingKeys.length) {
+      setDeleteError(BULK_DELETE_EMPTY_SELECTION_MESSAGE);
+      return;
+    }
     const progressId = start({
       label: mode === "full" ? "Fully removing from stack" : "Deleting from library index",
       total: ratingKeys.length,
@@ -224,6 +237,7 @@ export default function WatchlistPage() {
       setDeleteOpen(false);
       setSelected(new Set());
       setActionStatus(summary);
+      if (hasRemovalSummary(result)) setRemovalSummary(result);
       update(progressId, ratingKeys.length);
       finish(progressId, { label: summary, state: errors.length ? "error" : "success" });
       await refresh();
@@ -293,7 +307,7 @@ export default function WatchlistPage() {
               type="button"
               className="ghost"
               data-testid="watchlist-select-all"
-              disabled={!sortedItems.length}
+              disabled={!sortedItems.length || deleteOpen || deleting}
               onClick={selectAllOnPage}
             >
               Select all
@@ -302,7 +316,7 @@ export default function WatchlistPage() {
               type="button"
               className="ghost"
               data-testid="watchlist-clear-selection"
-              disabled={!selected.size}
+              disabled={!selected.size || deleteOpen || deleting}
               onClick={clearSelection}
             >
               Clear
@@ -386,6 +400,12 @@ export default function WatchlistPage() {
           />
         ) : null}
       </section>
+
+      <RemovalSummaryDialog
+        open={Boolean(removalSummary)}
+        result={removalSummary}
+        onClose={() => setRemovalSummary(null)}
+      />
 
       <BulkLibraryDeleteDialog
         open={deleteOpen}

@@ -13,6 +13,7 @@ import {
 import BackLink from "../components/BackLink";
 import { useBulkActionProgress } from "../components/BulkActionProgress.jsx";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
+import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
@@ -43,7 +44,12 @@ import {
   shouldShowBeyondAffordance,
 } from "../lib/beyondSearch.js";
 import { ROUTES } from "../lib/browseLinks.js";
-import { formatBulkLibraryDeleteResultMessage, partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
+import {
+  BULK_DELETE_EMPTY_SELECTION_MESSAGE,
+  formatBulkLibraryDeleteResultMessage,
+  hasRemovalSummary,
+  partitionBulkDeleteSelection,
+} from "../lib/bulkLibraryDelete.js";
 import {
   MEDIA_BROWSE_PAGE_SIZES,
   buildMediaBrowseParams,
@@ -102,6 +108,7 @@ export default function LibraryBrowsePage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [removalSummary, setRemovalSummary] = useState(null);
   const [access, setAccess] = useState({
     userRole: "owner",
     requestPath: "arr",
@@ -237,6 +244,7 @@ export default function LibraryBrowsePage() {
   }
 
   function toggleSelect(item) {
+    if (deleteOpen || deleting) return;
     const key = itemKey(item);
     if (!pinnableKeys.has(key)) return;
     setSelected((prev) => {
@@ -248,10 +256,12 @@ export default function LibraryBrowsePage() {
   }
 
   function selectAllOnPage() {
+    if (deleteOpen || deleting) return;
     setSelected(new Set(pinnableKeys));
   }
 
   function clearSelection() {
+    if (deleteOpen || deleting) return;
     setSelected(new Set());
   }
 
@@ -297,7 +307,10 @@ export default function LibraryBrowsePage() {
   async function handleBulkDeleteConfirm({ mode } = {}) {
     if (!isOwner || deleting) return;
     const { ratingKeys, titles } = deletePartition;
-    if (!ratingKeys.length) return;
+    if (!ratingKeys.length) {
+      setDeleteError(BULK_DELETE_EMPTY_SELECTION_MESSAGE);
+      return;
+    }
     const progressId = start({
       label: mode === "full" ? "Fully removing from stack" : "Deleting from library index",
       total: ratingKeys.length,
@@ -340,6 +353,7 @@ export default function LibraryBrowsePage() {
       }
       setDeleteOpen(false);
       setActionStatus(summary);
+      if (hasRemovalSummary(result)) setRemovalSummary(result);
       update(progressId, ratingKeys.length);
       finish(progressId, { label: summary, state: errors.length ? "error" : "success" });
     } catch (err) {
@@ -463,7 +477,7 @@ export default function LibraryBrowsePage() {
               type="button"
               className="ghost"
               data-testid="library-browse-select-all"
-              disabled={!pinnableKeys.size}
+              disabled={!pinnableKeys.size || deleteOpen || deleting}
               onClick={selectAllOnPage}
             >
               Select page
@@ -472,7 +486,7 @@ export default function LibraryBrowsePage() {
               type="button"
               className="ghost"
               data-testid="library-browse-clear-selection"
-              disabled={!selected.size}
+              disabled={!selected.size || deleteOpen || deleting}
               onClick={clearSelection}
             >
               Clear
@@ -640,6 +654,12 @@ export default function LibraryBrowsePage() {
           {beyondUnavailableNote()}
         </p>
       ) : null}
+
+      <RemovalSummaryDialog
+        open={Boolean(removalSummary)}
+        result={removalSummary}
+        onClose={() => setRemovalSummary(null)}
+      />
 
       <BulkLibraryDeleteDialog
         open={deleteOpen}

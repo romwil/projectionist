@@ -9,13 +9,19 @@ import {
 import BackLink from "../components/BackLink.jsx";
 import { useBulkActionProgress } from "../components/BulkActionProgress.jsx";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
+import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import MediaBrowseControls from "../components/MediaBrowseControls.jsx";
 import MediaBrowseResults from "../components/MediaBrowseResults.jsx";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { exploreSectionPath } from "../lib/browseLinks.js";
 import { ROUTES } from "../lib/backNav.js";
-import { formatBulkLibraryDeleteResultMessage, partitionBulkDeleteSelection } from "../lib/bulkLibraryDelete.js";
+import {
+  BULK_DELETE_EMPTY_SELECTION_MESSAGE,
+  formatBulkLibraryDeleteResultMessage,
+  hasRemovalSummary,
+  partitionBulkDeleteSelection,
+} from "../lib/bulkLibraryDelete.js";
 import {
   EXPLORE_PAGE_SIZES,
   EXPLORE_SECTION_SORTS,
@@ -137,6 +143,7 @@ export default function ExploreSectionPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [removalSummary, setRemovalSummary] = useState(null);
   const [columns, setColumns] = useState(null);
 
   useEffect(() => {
@@ -250,6 +257,7 @@ export default function ExploreSectionPage() {
   }
 
   function toggleSelect(item) {
+    if (deleteOpen || deleting) return;
     const key = itemKey(item);
     if (!pinnableKeys.has(key)) return;
     setSelected((prev) => {
@@ -261,10 +269,12 @@ export default function ExploreSectionPage() {
   }
 
   function selectAllOnPage() {
+    if (deleteOpen || deleting) return;
     setSelected(new Set(pinnableKeys));
   }
 
   function clearSelection() {
+    if (deleteOpen || deleting) return;
     setSelected(new Set());
   }
 
@@ -316,7 +326,10 @@ export default function ExploreSectionPage() {
   async function handleBulkDeleteConfirm({ mode } = {}) {
     if (!isOwner || deleting) return;
     const { ratingKeys, titles } = deletePartition;
-    if (!ratingKeys.length) return;
+    if (!ratingKeys.length) {
+      setDeleteError(BULK_DELETE_EMPTY_SELECTION_MESSAGE);
+      return;
+    }
     const progressId = start({
       label: mode === "full" ? "Fully removing from stack" : "Deleting from library index",
       total: ratingKeys.length,
@@ -361,6 +374,7 @@ export default function ExploreSectionPage() {
       }
       setDeleteOpen(false);
       setActionStatus(summary);
+      if (hasRemovalSummary(result)) setRemovalSummary(result);
       update(progressId, ratingKeys.length);
       finish(progressId, { label: summary, state: errors.length ? "error" : "success" });
     } catch (err) {
@@ -479,7 +493,7 @@ export default function ExploreSectionPage() {
               type="button"
               className="ghost"
               data-testid="explore-section-select-all"
-              disabled={!pinnableKeys.size}
+              disabled={!pinnableKeys.size || deleteOpen || deleting}
               onClick={selectAllOnPage}
             >
               Select page
@@ -488,7 +502,7 @@ export default function ExploreSectionPage() {
               type="button"
               className="ghost"
               data-testid="explore-section-clear-selection"
-              disabled={!selected.size}
+              disabled={!selected.size || deleteOpen || deleting}
               onClick={clearSelection}
             >
               Clear
@@ -591,6 +605,12 @@ export default function ExploreSectionPage() {
           </button>
         </p>
       ) : null}
+
+      <RemovalSummaryDialog
+        open={Boolean(removalSummary)}
+        result={removalSummary}
+        onClose={() => setRemovalSummary(null)}
+      />
 
       <BulkLibraryDeleteDialog
         open={deleteOpen}

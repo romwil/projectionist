@@ -117,6 +117,77 @@ class LibrarySearchTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual([(card.title, card.year) for card in cards], [("Simpsley", 2026)])
 
+    async def test_single_word_tv_title_beats_unrelated_keyword_facets(self) -> None:
+        """Regression: 'Industry' must not be swallowed by keyword facet short-circuit."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "208081",
+                    "media_type": "show",
+                    "title": "Industry",
+                    "year": 2020,
+                    "tmdb_id": 90812,
+                    "keywords": ["london, england", "banking", "finance"],
+                    "summary": "Young graduates compete at a London investment bank.",
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "noise-industry-kw",
+                    "media_type": "movie",
+                    "title": "Boogie Nights",
+                    "year": 1997,
+                    "tmdb_id": 197,
+                    "keywords": ["pornography industry", "1970s"],
+                    "summary": "An ambitious young man seeks fame in adult film.",
+                }
+            )
+            rebuild_library_facets(db)
+
+            cards = await search_library(db, Settings(), "Industry", limit=12)
+            self.assertTrue(cards)
+            self.assertEqual(cards[0].title, "Industry")
+            self.assertEqual(cards[0].year, 2020)
+            self.assertEqual(cards[0].media_type, "show")
+            self.assertEqual(cards[0].rating_key, "208081")
+
+            show_cards = await search_library(
+                db, Settings(), "Industry", media_type="show", limit=12
+            )
+            self.assertEqual([(c.title, c.rating_key) for c in show_cards[:1]], [("Industry", "208081")])
+
+    async def test_quoted_single_word_title_in_conversational_query(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "208081",
+                    "media_type": "show",
+                    "title": "Industry",
+                    "year": 2020,
+                    "summary": "Finance drama.",
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "space-noise",
+                    "media_type": "movie",
+                    "title": "2001: A Space Odyssey",
+                    "year": 1968,
+                    "summary": "A voyage through space and time.",
+                }
+            )
+
+            cards = await search_library(
+                db,
+                Settings(),
+                "is 'Industry' the tv series worth the hard drive space?",
+            )
+            self.assertTrue(cards)
+            self.assertEqual(cards[0].title, "Industry")
+            self.assertEqual(cards[0].rating_key, "208081")
+
 
 if __name__ == "__main__":
     unittest.main()

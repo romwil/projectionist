@@ -1,4 +1,4 @@
-"""Central logging configuration for CuratorX (stdout/stderr, Docker-friendly)."""
+"""Central logging configuration for CuratorX (stdout + durable file under DATA_DIR)."""
 
 from __future__ import annotations
 
@@ -8,12 +8,20 @@ import os
 import re
 import sys
 from datetime import datetime, timezone
-from typing import Any
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
+from typing import Any, Optional
 
 _CONFIGURED = False
 
 _VALID_LEVELS = {"ERROR", "WARNING", "INFO", "DEBUG"}
 _DEFAULT_LEVEL = "INFO"
+
+# Durable app log under DATA_DIR (Docker/Unraid: /config/logs/projectionist.log).
+_DEFAULT_LOG_RELATIVE = Path("logs") / "projectionist.log"
+_DEFAULT_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5 MiB
+_DEFAULT_LOG_BACKUP_COUNT = 3
+_FILE_HANDLER_NAME = "projectionist.file"
 
 # Query params and header-like patterns that may carry secrets.
 _API_KEY_PARAM = re.compile(r"(api_key=)[^&\s\"']+", re.IGNORECASE)
@@ -87,6 +95,61 @@ def resolve_log_format(raw: str | None = None) -> str:
     return "json" if normalized == "json" else "text"
 
 
+def resolve_data_dir() -> Path:
+    """Return the config/data directory (Docker default ``/config``)."""
+    return Path(os.environ.get("DATA_DIR", "/config")).expanduser()
+
+
+def resolve_log_file_path(raw: str | None = None) -> Path:
+    """Path of the durable application log file.
+
+    Override with ``PROJECTIONIST_LOG_FILE`` / ``CURATORX_LOG_FILE``, or absolute
+    ``LOG_FILE``. Relative values resolve under ``DATA_DIR``.
+    """
+    from projectionist.envcompat import branded_env
+
+    value = (
+        raw
+        or branded_env("LOG_FILE")
+        or os.environ.get("LOG_FILE")
+        or ""
+    ).strip()
+    if value:
+        path = Path(value).expanduser()
+        if not path.is_absolute():
+            path = resolve_data_dir() / path
+        return path
+    return resolve_data_dir() / _DEFAULT_LOG_RELATIVE
+
+
+def resolve_log_max_bytes() -> int:
+    raw = os.environ.get("PROJECTIONIST_LOG_MAX_BYTES") or os.environ.get(
+        "CURATORX_LOG_MAX_BYTES"
+    )
+    if raw:
+        try:
+            value = int(str(raw).strip())
+            if value >= 64 * 1024:
+                return value
+        except ValueError:
+            pass
+    return _DEFAULT_LOG_MAX_BYTES
+
+
+def resolve_log_backup_count() -> int:
+    raw = os.environ.get("PROJECTIONIST_LOG_BACKUP_COUNT") or os.environ.get(
+        "CURATORX_LOG_BACKUP_COUNT"
+    )
+    if raw:
+        try:
+            value = int(str(raw).strip())
+            if 0 <= value <= 20:
+                return value
+        except ValueError:
+            pass
+    return _DEFAULT_LOG_BACKUP_COUNT
+
+
 def sanitize_log_message(message: str) -> str:
     """Redact likely secrets from log text (never log API keys or tokens)."""
     cleaned = str(message or "")
@@ -103,8 +166,45 @@ def sanitize_url(url: str) -> str:
     return sanitize_log_message(url)
 
 
+def _make_formatter(log_format: str) -> logging.Formatter:
+    if log_format == "json":
+        return _JsonFormatter()
+    return logging.Formatter(
+        fmt="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+
+def _attach_file_handler(root: logging.Logger, *, level: int, log_format: str) -> Optional[Path]:
+    """Add a rotating file handler under DATA_DIR. Returns the path, or None on failure."""
+    path = resolve_log_file_path()
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        handler: logging.Handler = RotatingFileHandler(
+            path,
+            maxBytes=resolve_log_max_bytes(),
+            backupCount=resolve_log_backup_count(),
+            encoding="utf-8",
+        )
+    except OSError as exc:
+        # Never fail boot because the log directory is unwritable (permissions, read-only FS).
+        sys.stderr.write(f"projectionist: could not open log file {path}: {exc}\n")
+        return None
+
+    handler.set_name(_FILE_HANDLER_NAME)
+    handler.setLevel(level)
+    handler.addFilter(_RedactionFilter())
+    handler.setFormatter(_make_formatter(log_format))
+    root.addHandler(handler)
+    return path
+
+
 def configure_logging(*, force: bool = False) -> int:
-    """Configure root and framework loggers once. Returns numeric log level."""
+    """Configure root and framework loggers once. Returns numeric log level.
+
+    Emits to stdout (Docker-friendly) and a rotating file at
+    ``{DATA_DIR}/logs/projectionist.log`` for the in-app owner log viewer.
+    """
     global _CONFIGURED
     if _CONFIGURED and not force:
         return resolve_log_level()
@@ -121,16 +221,10 @@ def configure_logging(*, force: bool = False) -> int:
     # Redact secrets on the record before formatting so both the JSON and the
     # default text formatter emit sanitized output.
     handler.addFilter(_RedactionFilter())
-    if log_format == "json":
-        handler.setFormatter(_JsonFormatter())
-    else:
-        handler.setFormatter(
-            logging.Formatter(
-                fmt="%(asctime)s %(levelname)s %(name)s: %(message)s",
-                datefmt="%Y-%m-%d %H:%M:%S",
-            )
-        )
+    handler.setFormatter(_make_formatter(log_format))
     root.addHandler(handler)
+
+    log_path = _attach_file_handler(root, level=level, log_format=log_format)
 
     # Keep third-party noise down unless debugging.
     for name in ("httpx", "httpcore", "urllib3", "asyncio"):
@@ -147,8 +241,9 @@ def configure_logging(*, force: bool = False) -> int:
     _CONFIGURED = True
 
     logging.getLogger(__name__).debug(
-        "Logging configured level=%s format=%s",
+        "Logging configured level=%s format=%s file=%s",
         logging.getLevelName(level),
         log_format,
+        log_path or "(none)",
     )
     return level
