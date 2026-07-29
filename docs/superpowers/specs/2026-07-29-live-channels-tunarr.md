@@ -46,7 +46,7 @@ Owner enables **Live Channels** via a guided wizard (feature flag + certified-se
 
 | Mode | Behavior |
 |------|----------|
-| **ON** | Pull pinned `chrisbenincasa/tunarr:1.3.x`; start with `/config/tunarr` volume; poll health; wire Plex media source from Projectionist credentials; propose/publish starters; Plex attach checklist |
+| **ON** | Pull pinned `chrisbenincasa/tunarr:1.3.9`; start with `/config/tunarr` volume; poll health; wire Plex media source from Projectionist credentials; propose/publish starters; Plex attach checklist |
 | **OFF** | Stop container; channels offline; **keep volume** (hand-tuned channels survive) |
 | **No Docker socket** | Dynamic include unavailable — BYO Tunarr URL; same wizard from “wire” onward |
 

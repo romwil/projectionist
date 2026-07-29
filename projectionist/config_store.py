@@ -542,7 +542,7 @@ class TunarrSettings:
     # pull/start/stop a Tunarr container if a Docker socket is available.
     docker_orchestration: bool = False
     # Pinned image reference for orchestrated installs.
-    image_tag: str = "chrisbenincasa/tunarr:1.3.x"
+    image_tag: str = "chrisbenincasa/tunarr:1.3.9"
     # Relative directory under DATA_DIR for the Tunarr /config volume.
     volume_path: str = "tunarr"
     # Virtual channel number base (coexist with OTA HDHomeRun).

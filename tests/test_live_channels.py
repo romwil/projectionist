@@ -38,7 +38,7 @@ class FeatureFlagAndTunarrSettingsTests(unittest.TestCase):
         self.assertFalse(settings.features.live_channels_enabled)
         self.assertEqual(settings.tunarr.url, "")
         self.assertFalse(settings.tunarr.docker_orchestration)
-        self.assertEqual(settings.tunarr.image_tag, "chrisbenincasa/tunarr:1.3.x")
+        self.assertEqual(settings.tunarr.image_tag, "chrisbenincasa/tunarr:1.3.9")
 
     def test_round_trip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

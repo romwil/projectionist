@@ -43,7 +43,7 @@ Prefer this section + task checkboxes over older chat claims. Residual gaps live
 - Watch surface is **Plex Live TV only** — no Projectionist player / Coax clone / full EPG.
 - **Zero Tunarr UI** — API gaps are Projectionist work, not a UI escape hatch.
 - Disable stops the container and **keeps** `/config/tunarr` volume.
-- Pin Tunarr image to `chrisbenincasa/tunarr:1.3.x` (exact tag at implement time after pilot).
+- Pin Tunarr image to `chrisbenincasa/tunarr:1.3.9` (exact tag at implement time after pilot).
 - Follow optional-off patterns already used for Seerr / Plex collections.
 - User-facing docs (`HELP.md`, `CONFIGURATION.md`, CHANGELOG Highlights) land in the same PR as the shipping code — this plan is contributor-facing only until then.
 - Follow [docs/DOCS_STYLE.md](../../DOCS_STYLE.md) for any member/owner copy.
@@ -81,7 +81,7 @@ Settings keys (proposed; nest under `Settings` like `seerr` / `youth`):
   "tunarr": {
     "url": "",                       // BYO or resolved sibling URL
     "docker_orchestration": false,
-    "image_tag": "chrisbenincasa/tunarr:1.3.x",
+    "image_tag": "chrisbenincasa/tunarr:1.3.9",
     "plex_pass_confirmed": false,
     "last_publish_at": null,
     "last_error": ""

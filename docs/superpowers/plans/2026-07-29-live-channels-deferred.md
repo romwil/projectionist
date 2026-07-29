@@ -121,7 +121,7 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 ### OpenAPI stability / pin `1.3.x` + contract tests
 
 - **Status:** `deferred`
-- **Why / note:** Default image tag remains `chrisbenincasa/tunarr:1.3.x` (placeholder pin — not an exact digest/tag from Automat). Client unit tests exist; **no** OpenAPI contract/snapshot tests. Exact pin + gap list tied to Automat Phase 0 (still unchecked).
+- **Why / note:** Default image tag pinned to `chrisbenincasa/tunarr:1.3.9` (verified on Docker Hub; Automat settings match). Client unit tests exist; **no** OpenAPI contract/snapshot tests. Digest pin + OpenAPI gap list still tied to Automat Phase 0 (still unchecked).
 - **Suggested next phase:** Phase 0 pilot → pin exact tag → add contract tests against recorded fixtures.
 - **Owner surface:** backend / ops
 
@@ -245,7 +245,7 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 #### Exact Tunarr 1.3.x pin + OpenAPI gap list tied to Automat Phase 0
 
 - **Status:** `deferred` / `blocked` (host access)
-- **Why / note:** Image still uses placeholder `chrisbenincasa/tunarr:1.3.x`. Exact tag/digest, measured RAM/CPU, HDHR/XMLTV acceptance, and durable OpenAPI gap backlog require Automat Phase 0 pilot (Task 0) — not closable from product tree alone.
+- **Why / note:** Default image tag is now `chrisbenincasa/tunarr:1.3.9` (Hub-verified; Automat pinned the same). Digest pin, measured RAM/CPU, HDHR/XMLTV acceptance, and durable OpenAPI gap backlog still require Automat Phase 0 pilot (Task 0) for full closure.
 - **Suggested next phase:** Phase 0 Automat ops pilot → pin + contract fixtures.
 - **Owner surface:** ops / backend
 

@@ -636,7 +636,7 @@ class SeerrSettingsPayload(BaseModel):
 class TunarrSettingsPayload(BaseModel):
     url: str = ""
     docker_orchestration: bool = False
-    image_tag: str = "chrisbenincasa/tunarr:1.3.x"
+    image_tag: str = "chrisbenincasa/tunarr:1.3.9"
     volume_path: str = "tunarr"
     channel_number_base: int = 100
     plex_pass_confirmed: bool = False

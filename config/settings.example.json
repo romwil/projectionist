@@ -54,6 +54,6 @@
   "tunarr": {
     "url": "",
     "docker_orchestration": false,
-    "image_tag": "chrisbenincasa/tunarr:1.3.x"
+    "image_tag": "chrisbenincasa/tunarr:1.3.9"
   }
 }

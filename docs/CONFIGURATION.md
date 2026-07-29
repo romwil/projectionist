@@ -115,7 +115,7 @@ Default values (also in `config/settings.example.json`):
 | `features.live_channels_enabled` | `false` | Tunarr-backed Live Channels (additional Plex Live TV tuner alongside OTA); owner toggle in Admin → Live Channels |
 | `tunarr.url` | `""` | BYO Tunarr base URL (`http://host:8000`); API at `{url}/api` |
 | `tunarr.docker_orchestration` | `false` | Allow pull/start/stop of a Tunarr sibling when a Docker socket is present |
-| `tunarr.image_tag` | `chrisbenincasa/tunarr:1.3.x` | Pinned image for orchestrated installs |
+| `tunarr.image_tag` | `chrisbenincasa/tunarr:1.3.9` | Pinned image for orchestrated installs |
 | `auth.mode` | `disabled` | Set to `plex`, `oidc`, or `local` when multi-user is on |
 | `seerr.link_on_login` | `true` | After Plex login, bridge identity to Seerr |
 | `seerr.require_linked_user_for_requests` | `false` | Block Seerr requests until the user is linked |

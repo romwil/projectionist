@@ -25,7 +25,7 @@ from urllib.parse import quote
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONTAINER_NAME = "projectionist-tunarr"
-DEFAULT_IMAGE = "chrisbenincasa/tunarr:1.3.x"
+DEFAULT_IMAGE = "chrisbenincasa/tunarr:1.3.9"
 DEFAULT_HOST_PORT = 8000
 DEFAULT_HDHR_PORT = 5004
 DEFAULT_SOCKET_PATHS = (
