@@ -233,6 +233,15 @@ class TunarrDockerLifecycle:
             image=self.image,
         )
 
+    def _reachable_url_hint(self) -> str:
+        """URL Projectionist (in Docker) should use to reach published Tunarr.
+
+        Sibling containers must not use 127.0.0.1 (that is the Projectionist
+        container itself). host.docker.internal works with Unraid ExtraParams /
+        compose extra_hosts host-gateway.
+        """
+        return f"http://host.docker.internal:{self.host_port}"
+
     def start(self, *, config_volume: str = "") -> DockerLifecycleResult:
         if not self.can_orchestrate():
             return self._skip("start", "Docker orchestration unavailable; skip start.")
@@ -249,6 +258,7 @@ class TunarrDockerLifecycle:
                 message="Tunarr container already running.",
                 container_name=self.container_name,
                 image=self.image,
+                detail={"url_hint": self._reachable_url_hint()},
             )
         if existing.status == "stopped":
             try:
@@ -282,6 +292,7 @@ class TunarrDockerLifecycle:
                 message="Started existing Tunarr container.",
                 container_name=self.container_name,
                 image=self.image,
+                detail={"url_hint": self._reachable_url_hint()},
             )
 
         # missing or unknown — create then start
@@ -367,7 +378,7 @@ class TunarrDockerLifecycle:
             message=f"Created and started Tunarr ({self.image}).",
             container_name=self.container_name,
             image=self.image,
-            detail={"url_hint": f"http://127.0.0.1:{self.host_port}"},
+            detail={"url_hint": self._reachable_url_hint()},
         )
 
     def ensure_running(self, *, config_volume: str = "") -> DockerLifecycleResult:
@@ -382,6 +393,14 @@ class TunarrDockerLifecycle:
             # Still try start if image may already be local
             logger.warning("Tunarr pull soft-failed: %s", pull_result.message)
         start_result = self.start(config_volume=config_volume)
+        detail: Dict[str, Any] = {
+            "pull": pull_result.to_dict(),
+            "start": start_result.to_dict(),
+        }
+        start_detail = start_result.detail if isinstance(start_result.detail, dict) else {}
+        url_hint = str(start_detail.get("url_hint") or "").strip()
+        if start_result.ok and start_result.status == "running":
+            detail["url_hint"] = url_hint or self._reachable_url_hint()
         return DockerLifecycleResult(
             ok=start_result.ok,
             action="ensure_running",
@@ -391,10 +410,7 @@ class TunarrDockerLifecycle:
             else f"{pull_result.message}; {start_result.message}",
             container_name=self.container_name,
             image=self.image,
-            detail={
-                "pull": pull_result.to_dict(),
-                "start": start_result.to_dict(),
-            },
+            detail=detail,
         )
 
     def stop(self, *, keep_volume: bool = True) -> DockerLifecycleResult:

@@ -1654,7 +1654,13 @@ def live_channels_lifecycle_endpoint(
         result = life.ensure_running(config_volume=volume)
 
     detail = result.detail or {}
-    url_hint = str(detail.get("url_hint") or "")
+    url_hint = str(detail.get("url_hint") or "").strip()
+    if not url_hint:
+        start_payload = detail.get("start") if isinstance(detail.get("start"), dict) else {}
+        start_detail = (
+            start_payload.get("detail") if isinstance(start_payload.get("detail"), dict) else {}
+        )
+        url_hint = str(start_detail.get("url_hint") or "").strip()
     if (
         result.ok
         and result.status == "running"
@@ -1793,15 +1799,21 @@ def live_channels_from_collection_endpoint(
 def live_channels_plex_attach_endpoint(
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Plain-language Plex Live TV attach checklist + copy URLs."""
+    """Plex Live TV attach checklist — add Tunarr as an *additional* tuner."""
     del user
-    from projectionist.live_channels.plex_attach import build_plex_attach, probe_tuner_discovery
+    from projectionist.live_channels.plex_attach import (
+        build_plex_attach,
+        probe_existing_plex_livetv,
+        probe_tuner_discovery,
+    )
 
     settings = _settings()
     discovery = probe_tuner_discovery(str(settings.tunarr.url or ""))
+    existing = probe_existing_plex_livetv(settings)
     attach = build_plex_attach(
         settings,
         discovery_ok=bool(discovery.get("ok")) if discovery else None,
+        existing_livetv=existing,
     )
     attach["discovery"] = {
         "ok": discovery.get("ok"),

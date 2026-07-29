@@ -46,6 +46,13 @@ HOST_PORT="${HOST_PORT:-8788}"
 CONTAINER_NAME="${CONTAINER_NAME:-projectionist}"
 IMAGE="romwil/projectionist:${IMAGE_TAG}"
 CONFIG_DIR="$SCRIPT_DIR/config"
+# Optional Live Channels managed Tunarr (root-equivalent). Set in .env:
+#   MOUNT_DOCKER_SOCK=1
+# or DOCKER_SOCK=/var/run/docker.sock
+DOCKER_SOCK="${DOCKER_SOCK:-}"
+case "${MOUNT_DOCKER_SOCK:-}" in
+  1|true|TRUE|yes|YES|on|ON) DOCKER_SOCK="${DOCKER_SOCK:-/var/run/docker.sock}" ;;
+esac
 HEALTH_URL="http://127.0.0.1:${HOST_PORT}/api/health"
 STARTUP_PATTERN='Projectionist startup'
 # Accept legacy log line during image transition
@@ -117,6 +124,13 @@ run_plain_docker() {
     -e DATA_DIR=/config
     -e PORT=8788
   )
+  if [[ -n "$DOCKER_SOCK" ]]; then
+    if [[ ! -S "$DOCKER_SOCK" && ! -e "$DOCKER_SOCK" ]]; then
+      die "DOCKER_SOCK path missing on host: $DOCKER_SOCK"
+    fi
+    log "Mounting Docker socket $DOCKER_SOCK → /var/run/docker.sock (Live Channels orchestration)"
+    run_args+=(-v "${DOCKER_SOCK}:/var/run/docker.sock")
+  fi
 
   local key val
   for key in "${ENV_KEYS[@]}"; do
@@ -222,6 +236,9 @@ log "=== Projectionist rollout ==="
 log "Dir:   $SCRIPT_DIR"
 log "Image: $IMAGE"
 log "Port:  ${HOST_PORT} → 8788"
+if [[ -n "$DOCKER_SOCK" ]]; then
+  log "Docker socket: ${DOCKER_SOCK} → /var/run/docker.sock"
+fi
 log "Config bind: $CONFIG_DIR → /config (preserved)"
 
 if ((${#COMPOSE[@]})); then

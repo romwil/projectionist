@@ -52,6 +52,10 @@ services:
     volumes:
       # Host appdata config — do not use docker volume rm / wipe this path
       - ./config:/config
+      # OPTIONAL — Live Channels managed Tunarr (root-equivalent). Off by default.
+      # Uncomment only if you want Projectionist to pull/start/stop a Tunarr sibling.
+      # Same opt-in as Unraid CA template path "Docker Socket".
+      # - /var/run/docker.sock:/var/run/docker.sock
     extra_hosts:
       # Matches Unraid CA ExtraParams: --add-host=host.docker.internal:host-gateway
       - "host.docker.internal:host-gateway"

@@ -491,10 +491,30 @@ class PreflightAndPublishTests(unittest.TestCase):
         from projectionist.live_channels.plex_attach import build_plex_attach, xmltv_url
 
         settings = Settings(tunarr=TunarrSettings(url="http://tunarr.test:8000"))
-        attach = build_plex_attach(settings)
+        attach = build_plex_attach(
+            settings,
+            existing_livetv={
+                "status": "detected",
+                "ok": True,
+                "device_count": 1,
+                "message": "Existing Live TV setup detected — Tunarr will be added as another tuner.",
+            },
+        )
         self.assertEqual(attach["guide_url"], "http://tunarr.test:8000/api/xmltv.xml")
         self.assertEqual(xmltv_url("http://tunarr.test:8000/"), "http://tunarr.test:8000/api/xmltv.xml")
         self.assertGreaterEqual(len(attach["steps"]), 3)
+        joined = " ".join(f"{s['title']} {s['body']}" for s in attach["steps"]).lower()
+        self.assertIn("another", joined)
+        self.assertNotIn("wipe", joined)
+        self.assertEqual(attach["coexistence"]["mode"], "additional_tuner")
+        self.assertEqual(attach["existing_livetv"]["status"], "detected")
+
+    def test_probe_existing_livetv_unknown_without_plex(self) -> None:
+        from projectionist.live_channels.plex_attach import probe_existing_plex_livetv
+
+        result = probe_existing_plex_livetv(Settings())
+        self.assertEqual(result["status"], "unknown")
+        self.assertIn("additional", result["message"].lower())
 
     def test_publish_recipes_creates_channels(self) -> None:
         from projectionist.live_channels.publish import publish_recipes
