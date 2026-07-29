@@ -32,6 +32,7 @@ SortField = Literal[
     "added_at",
     "last_viewed_at",
     "unwatched_episode_count",
+    "total_episode_count",
 ]
 GroupBy = Literal[
     "decade",
@@ -92,6 +93,8 @@ class LibraryFilters:
     missing_tmdb_id: bool = False
     min_unwatched_episodes: Optional[int] = None
     max_unwatched_episodes: Optional[int] = None
+    min_total_episodes: Optional[int] = None
+    max_total_episodes: Optional[int] = None
     in_progress_only: bool = False
     sort: SortField = "title"
     sort_dir: Literal["asc", "desc"] | None = None
@@ -127,6 +130,7 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         "added_at",
         "last_viewed_at",
         "unwatched_episode_count",
+        "total_episode_count",
     }
     if sort not in allowed_sort:
         sort = "title"
@@ -193,6 +197,8 @@ def filters_from_mapping(data: Mapping[str, Any]) -> LibraryFilters:
         missing_tmdb_id=bool(data.get("missing_tmdb_id")),
         min_unwatched_episodes=_optional_int(data.get("min_unwatched_episodes")),
         max_unwatched_episodes=_optional_int(data.get("max_unwatched_episodes")),
+        min_total_episodes=_optional_int(data.get("min_total_episodes")),
+        max_total_episodes=_optional_int(data.get("max_total_episodes")),
         in_progress_only=bool(data.get("in_progress_only")),
         sort=sort,  # type: ignore[arg-type]
         sort_dir=sort_dir,
@@ -585,6 +591,12 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
     if filters.max_unwatched_episodes is not None:
         clauses.append("unwatched_episode_count <= ?")
         params.append(filters.max_unwatched_episodes)
+    if filters.min_total_episodes is not None:
+        clauses.append("total_episode_count >= ?")
+        params.append(filters.min_total_episodes)
+    if filters.max_total_episodes is not None:
+        clauses.append("total_episode_count <= ?")
+        params.append(filters.max_total_episodes)
     if filters.in_progress_only:
         clauses.append(
             "("
@@ -619,6 +631,7 @@ def _sort_clause(sort: SortField, sort_dir: Literal["asc", "desc"] | None = None
         "added_at": "added_at IS NULL, added_at DESC, title ASC",
         "last_viewed_at": "last_viewed_at IS NULL, last_viewed_at DESC, title ASC",
         "unwatched_episode_count": "unwatched_episode_count DESC, title ASC",
+        "total_episode_count": "total_episode_count DESC, title ASC",
     }
     return mapping.get(sort, "title ASC")
 

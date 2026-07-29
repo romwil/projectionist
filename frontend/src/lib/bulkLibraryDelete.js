@@ -4,6 +4,10 @@ import { normalizeUserRole } from "./addActions.js";
 
 export const BULK_DELETE_CONFIRM_PHRASE = "DELETE";
 
+/** Shown when confirm is attempted with an empty deletable selection. */
+export const BULK_DELETE_EMPTY_SELECTION_MESSAGE =
+  "No titles selected. Cancel and select at least one title to continue.";
+
 /** location.state key for post-delete success feedback after navigating away. */
 export const LIBRARY_DELETE_NOTICE_KEY = "libraryDeleteNotice";
 
@@ -89,17 +93,83 @@ export function formatLibraryDeleteSuccessMessage({
   return `No matching library record for "${label}".`;
 }
 
+export function formatRemovalBytes(bytes) {
+  const value = Number(bytes) || 0;
+  if (value <= 0) return "0 B";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 ** 2) return `${(value / 1024).toFixed(1)} KB`;
+  if (value < 1024 ** 3) return `${(value / 1024 ** 2).toFixed(1)} MB`;
+  return `${(value / 1024 ** 3).toFixed(2)} GB`;
+}
+
+/** Prefer API totals including 0; only fall back when missing/non-finite. */
+function coerceTotal(value, fallback) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+export function normalizeRemovalSummary(result) {
+  const results = Array.isArray(result?.results)
+    ? result.results.map((entry) => ({
+        rating_key: String(entry?.rating_key || ""),
+        title: String(entry?.title || "Untitled").trim() || "Untitled",
+        media_type: String(entry?.media_type || ""),
+        files: Array.isArray(entry?.files) ? entry.files.map(String).filter(Boolean) : [],
+        folders: Array.isArray(entry?.folders)
+          ? entry.folders.map(String).filter(Boolean)
+          : [],
+        bytes_freed: Number(entry?.bytes_freed) || 0,
+        ok: Boolean(entry?.ok),
+      }))
+    : [];
+  const totalsRaw = result?.totals && typeof result.totals === "object" ? result.totals : null;
+  const totals = {
+    files: coerceTotal(
+      totalsRaw?.files,
+      results.reduce((sum, entry) => sum + entry.files.length, 0),
+    ),
+    folders: coerceTotal(
+      totalsRaw?.folders,
+      results.reduce((sum, entry) => sum + entry.folders.length, 0),
+    ),
+    bytes_freed: coerceTotal(
+      totalsRaw?.bytes_freed,
+      results.reduce((sum, entry) => sum + (Number(entry.bytes_freed) || 0), 0),
+    ),
+  };
+  return {
+    deleted: Number(result?.deleted) || 0,
+    results,
+    errors: Array.isArray(result?.errors) ? result.errors : [],
+    totals,
+  };
+}
+
+/** True when a full-remove payload has per-title or aggregate path/size detail. */
+export function hasRemovalSummary(result) {
+  if (normalizeLibraryDeleteMode(result?.mode) !== LIBRARY_DELETE_MODE_FULL) return false;
+  const summary = normalizeRemovalSummary(result);
+  if (summary.results.length > 0) return true;
+  return (
+    summary.totals.files > 0 ||
+    summary.totals.folders > 0 ||
+    summary.totals.bytes_freed > 0
+  );
+}
+
 export function formatBulkLibraryDeleteResultMessage(result, { titles = [] } = {}) {
   const mode = normalizeLibraryDeleteMode(result?.mode);
   const deleted = Number(result?.deleted) || 0;
   const errors = Array.isArray(result?.errors) ? result.errors : [];
   if (mode === LIBRARY_DELETE_MODE_FULL) {
+    const freed = Number(result?.totals?.bytes_freed) || 0;
+    const freedSuffix = freed > 0 ? ` · ${formatRemovalBytes(freed)} freed` : "";
     if (deleted > 0 && errors.length === 0) {
-      return `Fully removed ${deleted} title${deleted === 1 ? "" : "s"} from the stack.`;
+      return `Fully removed ${deleted} title${deleted === 1 ? "" : "s"} from the stack${freedSuffix}.`;
     }
     if (deleted > 0 && errors.length > 0) {
       const first = String(errors[0]?.error || "unknown error");
-      return `Fully removed ${deleted}; ${errors.length} failed (${first}).`;
+      return `Fully removed ${deleted}; ${errors.length} failed (${first})${freedSuffix}.`;
     }
     if (errors.length > 0) {
       return String(errors[0]?.error || "Full remove failed for the selected titles.");

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   BULK_DELETE_CONFIRM_PHRASE,
+  BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   LIBRARY_DELETE_MODE_FULL,
   LIBRARY_DELETE_MODE_INDEX,
   canBulkDeleteLibraryItem,
@@ -12,6 +13,9 @@ import {
   exploreSectionToolbarLayoutMatchers,
   formatBulkDeletePreviewTitles,
   formatBulkLibraryDeleteResultMessage,
+  formatRemovalBytes,
+  hasRemovalSummary,
+  normalizeRemovalSummary,
   formatLibraryDeleteSuccessMessage,
   isBulkDeleteConfirmPhrase,
   libraryDeleteModeLabel,
@@ -76,6 +80,31 @@ describe("bulkLibraryDelete typed confirm", () => {
     assert.deepEqual(preview.shown, ["One", "Two", "Three"]);
     assert.equal(preview.remaining, 3);
     assert.equal(preview.total, 6);
+  });
+
+  it("freezes selection while delete dialog is open and surfaces empty-confirm errors", () => {
+    const libDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const dialog = readFileSync(
+      join(libDir, "components", "BulkLibraryDeleteDialog.jsx"),
+      "utf8",
+    );
+    const dashboard = readFileSync(join(libDir, "pages", "DashboardPage.jsx"), "utf8");
+    const browse = readFileSync(join(libDir, "pages", "LibraryBrowsePage.jsx"), "utf8");
+    const explore = readFileSync(join(libDir, "pages", "ExploreSectionPage.jsx"), "utf8");
+    const watchlist = readFileSync(join(libDir, "pages", "WatchlistPage.jsx"), "utf8");
+
+    assert.match(BULK_DELETE_EMPTY_SELECTION_MESSAGE, /No titles selected/);
+    assert.match(dialog, /preview\.total > 0/);
+    assert.match(dialog, /No titles selected\. Confirm stays disabled/);
+    assert.match(dashboard, /titles=\{selectedTitles\}/);
+    assert.match(dashboard, /if \(purgeDialogOpen \|\| actionLoading\) return;/);
+    assert.match(dashboard, /disabled=\{purgeDialogOpen \|\| actionLoading\}/);
+    assert.match(dashboard, /setPurgeError\(BULK_DELETE_EMPTY_SELECTION_MESSAGE\)/);
+    for (const page of [browse, explore, watchlist]) {
+      assert.match(page, /if \(deleteOpen \|\| deleting\) return;/);
+      assert.match(page, /setDeleteError\(BULK_DELETE_EMPTY_SELECTION_MESSAGE\)/);
+      assert.match(page, /titles=\{deletePartition\.titles\}/);
+    }
   });
 });
 
@@ -153,6 +182,69 @@ describe("owner title-detail delete gating", () => {
       }),
       "Fully removed 2; 1 failed (Radarr is not configured).",
     );
+    assert.equal(
+      formatBulkLibraryDeleteResultMessage({
+        mode: LIBRARY_DELETE_MODE_FULL,
+        deleted: 1,
+        errors: [],
+        totals: { files: 1, folders: 1, bytes_freed: 1024 ** 3 },
+      }),
+      "Fully removed 1 title from the stack · 1.00 GB freed.",
+    );
+    assert.equal(formatRemovalBytes(0), "0 B");
+    assert.equal(formatRemovalBytes(2048), "2.0 KB");
+    assert.equal(
+      hasRemovalSummary({
+        mode: LIBRARY_DELETE_MODE_FULL,
+        results: [{ title: "Dune", files: ["/a.mkv"], folders: ["/a"], bytes_freed: 10 }],
+        totals: { files: 1, folders: 1, bytes_freed: 10 },
+      }),
+      true,
+    );
+    assert.equal(hasRemovalSummary({ mode: LIBRARY_DELETE_MODE_INDEX, deleted: 1 }), false);
+    assert.deepEqual(
+      normalizeRemovalSummary({
+        mode: LIBRARY_DELETE_MODE_FULL,
+        deleted: 1,
+        results: [{ title: "Dune", files: ["/a.mkv"], folders: ["/a"], bytes_freed: 10 }],
+      }).totals,
+      { files: 1, folders: 1, bytes_freed: 10 },
+    );
+    assert.deepEqual(
+      normalizeRemovalSummary({
+        mode: LIBRARY_DELETE_MODE_FULL,
+        deleted: 0,
+        results: [
+          {
+            title: "Ghost",
+            files: ["/ghost.mkv"],
+            folders: ["/ghost"],
+            bytes_freed: 999,
+          },
+        ],
+        totals: { files: 0, folders: 0, bytes_freed: 0 },
+      }).totals,
+      { files: 0, folders: 0, bytes_freed: 0 },
+      "API totals of 0 must not fall back to recalculating from results",
+    );
+    assert.equal(
+      normalizeRemovalSummary({
+        mode: LIBRARY_DELETE_MODE_FULL,
+        deleted: 0,
+        results: [{ title: "Ghost", files: [], folders: [], bytes_freed: 0 }],
+        totals: { files: 0, folders: 0, bytes_freed: 0 },
+      }).deleted,
+      0,
+    );
+    assert.equal(
+      formatBulkLibraryDeleteResultMessage({
+        mode: LIBRARY_DELETE_MODE_FULL,
+        deleted: 1,
+        errors: [],
+        totals: { files: 0, folders: 0, bytes_freed: 0 },
+      }),
+      "Fully removed 1 title from the stack.",
+    );
     assert.equal(normalizeLibraryDeleteMode("FULL"), LIBRARY_DELETE_MODE_FULL);
     assert.equal(normalizeLibraryDeleteMode("nope"), LIBRARY_DELETE_MODE_INDEX);
     assert.equal(libraryDeleteModeLabel(LIBRARY_DELETE_MODE_FULL), "Fully remove");
@@ -175,6 +267,10 @@ describe("owner title-detail delete gating", () => {
       join(libDir, "components", "BulkLibraryDeleteDialog.jsx"),
       "utf8",
     );
+    const removalSummary = readFileSync(
+      join(libDir, "components", "RemovalSummaryDialog.jsx"),
+      "utf8",
+    );
     assert.match(page, /BulkLibraryDeleteDialog/);
     assert.match(page, /canOwnerDeleteLibraryTitle/);
     assert.match(page, /LIBRARY_DELETE_NOTICE_KEY/);
@@ -183,5 +279,44 @@ describe("owner title-detail delete gating", () => {
     assert.match(content, /data-testid="title-detail-delete-button"/);
     assert.match(dialog, /bulk-library-delete-mode-full/);
     assert.match(dialog, /LIBRARY_DELETE_MODE_FULL/);
+    assert.match(
+      removalSummary,
+      /titleCount = Number\.isFinite\(deleted\) \? deleted : results\.length/,
+    );
+    assert.doesNotMatch(removalSummary, /titleCount = deleted \|\| results\.length/);
+  });
+
+  it("portals delete dialog above title-detail drawer dismiss targets", () => {
+    const libDir = join(dirname(fileURLToPath(import.meta.url)), "..");
+    const dialog = readFileSync(
+      join(libDir, "components", "BulkLibraryDeleteDialog.jsx"),
+      "utf8",
+    );
+    const drawer = readFileSync(join(libDir, "components", "TitleDetailDrawer.jsx"), "utf8");
+    const css = readFileSync(join(libDir, "styles", "10-explore-delight.css"), "utf8");
+
+    assert.match(dialog, /createPortal/);
+    assert.match(dialog, /document\.body/);
+    assert.match(dialog, /function stopBubble/);
+    assert.match(dialog, /onChange=\{\(event\) => selectMode\(LIBRARY_DELETE_MODE_FULL, event\)\}/);
+    assert.match(dialog, /onClick=\{stopBubble\}/);
+    assert.match(drawer, /interactions\.deleteOpen/);
+    assert.match(drawer, /setDeleteOpen\(false\)/);
+
+    const backdropRule = css.match(
+      /\.bulk-delete-modal-backdrop\s*\{[^}]*z-index:\s*(\d+)/s,
+    );
+    const scrimRule = css.match(/\.title-detail-drawer-scrim\s*\{[^}]*z-index:\s*(\d+)/s);
+    const panelRule = css.match(/\.title-detail-drawer-panel\s*\{[^}]*z-index:\s*(\d+)/s);
+    assert.ok(backdropRule, "expected bulk-delete-modal-backdrop z-index");
+    assert.ok(scrimRule, "expected title-detail-drawer-scrim z-index");
+    assert.ok(panelRule, "expected title-detail-drawer-panel z-index");
+    const backdropZ = Number(backdropRule[1]);
+    const scrimZ = Number(scrimRule[1]);
+    const panelZ = Number(panelRule[1]);
+    assert.ok(
+      backdropZ > scrimZ && backdropZ > panelZ,
+      `delete dialog z-index (${backdropZ}) must exceed drawer scrim (${scrimZ}) and panel (${panelZ})`,
+    );
   });
 });

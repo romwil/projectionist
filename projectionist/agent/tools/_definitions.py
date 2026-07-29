@@ -20,7 +20,10 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "search_library",
             "description": (
                 "Search the user's Plex library by theme, genre, title, or mood. "
-                "Uses semantic/fuzzy matching over owned titles — not for exact external TMDB lookups."
+                "Uses semantic/fuzzy matching over owned titles — not for exact external TMDB lookups. "
+                "For a named title, pass the bare title (optionally media_type). Response includes "
+                "presence (exact|partial|none) and exact_title_matches — use those before claiming "
+                "a title is missing or offering Radarr/Sonarr/Seerr. Empty/partial is uncertain, not absence."
             ),
             "parameters": {
                 "type": "object",
@@ -626,6 +629,14 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                         "description": "Titles without TMDB id (metadata gaps)",
                     },
                     "in_progress_only": {"type": "boolean", "description": "Shows partially watched"},
+                    "min_total_episodes": {
+                        "type": "integer",
+                        "description": "Minimum total_episode_count (TV shows)",
+                    },
+                    "max_total_episodes": {
+                        "type": "integer",
+                        "description": "Maximum total_episode_count (TV shows)",
+                    },
                     "sort": {
                         "type": "string",
                         "enum": [
@@ -638,6 +649,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                             "added_at",
                             "last_viewed_at",
                             "unwatched_episode_count",
+                            "total_episode_count",
                         ],
                     },
                     "offset": {"type": "integer"},

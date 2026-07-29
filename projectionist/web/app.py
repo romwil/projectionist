@@ -19,7 +19,7 @@ from pathlib import Path
 import asyncio
 from typing import Any, Dict, List, Literal, Optional
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -148,7 +148,11 @@ from projectionist.persona import (
 from projectionist.persona.presets import persona_ui_for, typing_phrases_for
 from projectionist.preferences.store import remember_preference
 from projectionist.scheduler.tasks.purge_candidates import (
+    BUFFER_TARGET,
+    DEFAULT_LIMIT as PURGE_BUFFER_DEFAULT_LIMIT,
     drop_cached_purge_keys,
+    enrich_cached_purge_items,
+    maybe_top_up_purge_candidates,
     read_cached_purge_candidates,
     recompute_purge_candidates,
 )
@@ -2137,8 +2141,11 @@ def library_purge_candidates(
             "count": 0,
             "items": [],
             "generated_at": None,
+            "page_size": 20,
+            "buffer_target": BUFFER_TARGET,
             "stale": True,
             "cached": False,
+            "refilling": False,
         }
     else:
         payload = cached
@@ -2147,16 +2154,63 @@ def library_purge_candidates(
 
 @app.post("/api/library/purge-candidates/refresh")
 def refresh_library_purge_candidates(
-    limit: int = 25,
+    limit: int = PURGE_BUFFER_DEFAULT_LIMIT,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
     """Force-recompute purge candidates and refresh the cache."""
     payload = recompute_purge_candidates(
         _db(),
         _settings(),
-        limit=min(max(1, limit), 25),
+        limit=min(max(1, limit), BUFFER_TARGET),
     )
     return _sanitize_library_payload(payload, user)
+
+
+@app.post("/api/library/purge-candidates/enrich")
+def enrich_library_purge_candidates(
+    payload: Dict[str, Any],
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Refresh size / last-watched for visible purge rows (SQLite + *arr when set)."""
+    keys = _normalize_rating_keys(payload)
+    cached = read_cached_purge_candidates(_db()) or {"items": []}
+    by_key = {
+        str(item.get("rating_key") or ""): item
+        for item in (cached.get("items") or [])
+        if str(item.get("rating_key") or "").strip()
+    }
+    selected = [by_key[key] for key in keys if key in by_key]
+    # Also allow enriching keys not currently cached (title drawer / stale page).
+    missing = [key for key in keys if key not in by_key]
+    for key in missing:
+        row = _db().library_item_by_rating_key(key)
+        if row is None:
+            continue
+        selected.append(
+            {
+                "rating_key": key,
+                "media_type": row["media_type"],
+                "title": row["title"],
+                "year": row["year"],
+                "tmdb_id": row["tmdb_id"],
+                "tvdb_id": row["tvdb_id"],
+                "file_size": int(row["file_size"] or 0),
+            }
+        )
+    enriched = enrich_cached_purge_items(_db(), _settings(), selected)
+    return _sanitize_library_payload({"items": enriched, "count": len(enriched)}, user)
+
+
+def _queue_purge_buffer_top_up(background_tasks: BackgroundTasks) -> None:
+    """After purge/keep, refill the far end of the 5× candidate buffer."""
+
+    def _run() -> None:
+        try:
+            maybe_top_up_purge_candidates(_db(), _settings())
+        except Exception:  # noqa: BLE001 — background refill must not break the request
+            logger.exception("Purge buffer top-up failed")
+
+    background_tasks.add_task(_run)
 
 
 def _normalize_rating_keys(payload: Dict[str, Any]) -> List[str]:
@@ -2246,6 +2300,7 @@ def set_library_item_watched_endpoint(
 @app.post("/api/library/purge-candidates/delete")
 def delete_purge_candidates(
     payload: Dict[str, Any],
+    background_tasks: BackgroundTasks,
     user=Depends(require_role("owner")),
 ):
     """Owner-only purge-candidate delete.
@@ -2275,12 +2330,14 @@ def delete_purge_candidates(
     db = _db()
     if mode == "full":
         result = full_remove_library_items(db, _settings(), keys)
+        _queue_purge_buffer_top_up(background_tasks)
         return {**result, "action_id": None, "undoable": False}
 
     # Snapshot the index rows BEFORE deleting so the owner can undo this run.
     snapshot = db.snapshot_library_items_by_rating_keys(keys)
     deleted = db.delete_library_items_by_rating_keys(keys)
     drop_cached_purge_keys(db, keys)
+    _queue_purge_buffer_top_up(background_tasks)
     action_id: Optional[str] = None
     if deleted > 0 and snapshot.get("items"):
         titles = [str(item.get("title") or "") for item in snapshot["items"] if item.get("title")]
@@ -2371,6 +2428,7 @@ def generate_weekly_digest(user=Depends(require_role("owner"))) -> Dict[str, Any
 @app.post("/api/library/purge-candidates/dismiss")
 def dismiss_purge_candidates_endpoint(
     payload: Dict[str, Any],
+    background_tasks: BackgroundTasks,
     user=Depends(require_role("owner")),
 ):
     rating_keys = payload.get("rating_keys", [])
@@ -2379,6 +2437,7 @@ def dismiss_purge_candidates_endpoint(
     db = _db()
     dismissed = db.dismiss_purge_candidates(rating_keys)
     drop_cached_purge_keys(db, [str(key) for key in rating_keys])
+    _queue_purge_buffer_top_up(background_tasks)
     del user
     return {"dismissed": dismissed}
 
@@ -4351,6 +4410,14 @@ def propose_action(payload: Dict[str, Any], user=Depends(get_current_user_dep)) 
         if root_error:
             raise HTTPException(status_code=400, detail=root_error)
         tmdb_id = int(payload["tmdb_id"])
+        if _db().is_acquisition_excluded(media_type="movie", tmdb_id=tmdb_id):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{payload.get('title') or 'This title'} was removed with an "
+                    "acquisition exclusion and will not be re-added"
+                ),
+            )
         existing = check_radarr_already_exists(
             client,
             tmdb_id,
@@ -4392,6 +4459,14 @@ def propose_action(payload: Dict[str, Any], user=Depends(get_current_user_dep)) 
         if root_error:
             raise HTTPException(status_code=400, detail=root_error)
         tvdb_id = int(payload["tvdb_id"])
+        if _db().is_acquisition_excluded(media_type="show", tvdb_id=tvdb_id):
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"{payload.get('title') or 'This title'} was removed with an "
+                    "acquisition exclusion and will not be re-added"
+                ),
+            )
         existing = check_sonarr_already_exists(
             client,
             tvdb_id,

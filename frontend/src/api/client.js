@@ -1170,10 +1170,18 @@ export async function getPurgeCandidates() {
   return api("/library/purge-candidates");
 }
 
-export async function refreshPurgeCandidates(limit = 25) {
+export async function refreshPurgeCandidates(limit = 100) {
   const params = new URLSearchParams({ limit: String(limit) });
   return api(`/library/purge-candidates/refresh?${params}`, {
     method: "POST",
+  });
+}
+
+/** Owner-only: refresh size/last-watched for visible purge rows. */
+export async function enrichPurgeCandidates(ratingKeys) {
+  return api("/library/purge-candidates/enrich", {
+    method: "POST",
+    body: JSON.stringify({ rating_keys: ratingKeys }),
   });
 }
 

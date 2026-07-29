@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import {
   BULK_DELETE_CONFIRM_PHRASE,
   LIBRARY_DELETE_MODE_FULL,
@@ -9,11 +10,18 @@ import {
   normalizeLibraryDeleteMode,
 } from "../lib/bulkLibraryDelete.js";
 
+function stopBubble(event) {
+  event.stopPropagation();
+}
+
 /**
  * Hard-confirm dialog for owner library delete.
  * Default mode removes Projectionist index rows only; full remove also
  * deletes via *arr (files + exclusion) and cleans Plex metadata.
  * Pass ``defaultMode`` / ``surface="purge"`` for Dashboard purge flows.
+ *
+ * Portaled to document.body so drawer scrims / click-outside handlers cannot
+ * intercept mode radio clicks (drawer scrim is z-index 85; this dialog is 100).
  */
 export default function BulkLibraryDeleteDialog({
   open,
@@ -31,11 +39,12 @@ export default function BulkLibraryDeleteDialog({
   const isPurgeSurface = String(surface || "").trim().toLowerCase() === "purge";
 
   useEffect(() => {
+    if (!open) return;
     setPhrase("");
     setMode(normalizeLibraryDeleteMode(defaultMode));
   }, [open, defaultMode]);
 
-  if (!open) return null;
+  if (!open || typeof document === "undefined") return null;
 
   const preview = formatBulkDeletePreviewTitles(titles, 5);
   const normalizedMode = normalizeLibraryDeleteMode(mode);
@@ -43,10 +52,16 @@ export default function BulkLibraryDeleteDialog({
   const canConfirm = isBulkDeleteConfirmPhrase(phrase) && preview.total > 0 && !loading;
   const countLabel = preview.total === 1 ? "title" : "titles";
 
-  return (
+  function selectMode(nextMode, event) {
+    stopBubble(event);
+    setMode(nextMode);
+  }
+
+  return createPortal(
     <div
       className="bulk-delete-modal-backdrop"
       data-testid="bulk-library-delete-dialog"
+      onMouseDown={stopBubble}
       onClick={onCancel}
     >
       <div
@@ -54,7 +69,8 @@ export default function BulkLibraryDeleteDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="bulk-library-delete-title"
-        onClick={(event) => event.stopPropagation()}
+        onMouseDown={stopBubble}
+        onClick={stopBubble}
       >
         <header className="bulk-delete-modal-header">
           <div>
@@ -82,7 +98,7 @@ export default function BulkLibraryDeleteDialog({
 
         <fieldset className="bulk-delete-modal-modes" data-testid="bulk-library-delete-modes">
           <legend className="bulk-delete-modal-modes-legend">Removal scope</legend>
-          <label className="bulk-delete-modal-mode">
+          <label className="bulk-delete-modal-mode" onClick={stopBubble} onMouseDown={stopBubble}>
             <input
               type="radio"
               name="bulk-library-delete-mode"
@@ -90,18 +106,19 @@ export default function BulkLibraryDeleteDialog({
               checked={normalizedMode === LIBRARY_DELETE_MODE_INDEX}
               disabled={loading}
               data-testid="bulk-library-delete-mode-index"
-              onChange={() => setMode(LIBRARY_DELETE_MODE_INDEX)}
+              onClick={stopBubble}
+              onChange={(event) => selectMode(LIBRARY_DELETE_MODE_INDEX, event)}
             />
             <span>
               <strong>Index only</strong>
               <span className="bulk-delete-modal-mode-hint">
                 {isPurgeSurface
-                  ? "Remove from the Projectionist library index only. Undoable via Grooming. Does not delete Plex files or change Radarr/Sonarr."
+                  ? "Remove from the Projectionist library index only. Undoable via Purge candidates & index undo. Does not delete Plex files or change Radarr/Sonarr."
                   : "Remove from the Projectionist library index. Does not delete Plex files or change Radarr/Sonarr."}
               </span>
             </span>
           </label>
-          <label className="bulk-delete-modal-mode">
+          <label className="bulk-delete-modal-mode" onClick={stopBubble} onMouseDown={stopBubble}>
             <input
               type="radio"
               name="bulk-library-delete-mode"
@@ -109,7 +126,8 @@ export default function BulkLibraryDeleteDialog({
               checked={normalizedMode === LIBRARY_DELETE_MODE_FULL}
               disabled={loading}
               data-testid="bulk-library-delete-mode-full"
-              onChange={() => setMode(LIBRARY_DELETE_MODE_FULL)}
+              onClick={stopBubble}
+              onChange={(event) => selectMode(LIBRARY_DELETE_MODE_FULL, event)}
             />
             <span>
               <strong>Full remove</strong>
@@ -132,7 +150,7 @@ export default function BulkLibraryDeleteDialog({
                 This permanently deletes disk files for {preview.total} {countLabel} via
                 Radarr/Sonarr (<code>deleteFiles</code> + import exclusion), removes the Plex
                 library entry when configured, and drops the Projectionist index.{" "}
-                <strong>Full purge is not undoable</strong> — Grooming undo cannot restore files
+                <strong>Full purge is not undoable</strong> — index undo cannot restore files
                 or index rows from a full remove. Titles not managed by *arr stay in the index with
                 a clear error.
               </>
@@ -146,8 +164,8 @@ export default function BulkLibraryDeleteDialog({
           ) : isPurgeSurface ? (
             <>
               This removes {preview.total} {countLabel} from the Projectionist library index only
-              (undoable via Grooming). It does <strong>not</strong> delete files from disk or Plex.
-              Titles still in Plex can reappear on the next library sync.
+              (undoable via Purge candidates &amp; index undo). It does <strong>not</strong> delete
+              files from disk or Plex. Titles still in Plex can reappear on the next library sync.
             </>
           ) : (
             <>
@@ -169,7 +187,9 @@ export default function BulkLibraryDeleteDialog({
           </ul>
         ) : (
           <p className="error" data-testid="bulk-library-delete-none">
-            None of the selected titles have a library rating key, so nothing can be deleted.
+            {unavailableCount > 0
+              ? "None of the selected titles have a library rating key, so nothing can be deleted."
+              : "No titles selected. Confirm stays disabled until at least one title is selected."}
           </p>
         )}
 
@@ -217,6 +237,7 @@ export default function BulkLibraryDeleteDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

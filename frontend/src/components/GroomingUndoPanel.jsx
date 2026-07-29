@@ -10,11 +10,12 @@ import {
   formatUndoSuccess,
   groomingActionStatusLabel,
 } from "../lib/groomingActions.js";
+import SectionHelp from "./SectionHelp.jsx";
 
 /**
- * One-click grooming rerun + undo for index-only purge deletes.
+ * Refresh purge-candidate cache + undo for index-only purge deletes.
  *
- * "Rerun grooming" recomputes purge candidates (a non-destructive grooming pass).
+ * "Refresh purge candidates" recomputes the Storage Intelligence list (non-destructive).
  * Undo restores Projectionist index rows from **index-only** purge deletes.
  * Full purge (via *arr) deletes disk files and cannot be undone here.
  */
@@ -33,7 +34,7 @@ export default function GroomingUndoPanel({ onChanged }) {
       setActions(data?.actions || []);
       setError("");
     } catch (err) {
-      setError(err.message || "Could not load grooming history.");
+      setError(err.message || "Could not load index undo history.");
     } finally {
       setLoading(false);
     }
@@ -53,7 +54,7 @@ export default function GroomingUndoPanel({ onChanged }) {
       await load();
       onChanged?.();
     } catch (err) {
-      setError(err.message || "Could not undo that grooming action.");
+      setError(err.message || "Could not undo that index-only delete.");
     } finally {
       setBusyId(null);
     }
@@ -66,10 +67,12 @@ export default function GroomingUndoPanel({ onChanged }) {
     try {
       const payload = await refreshPurgeCandidates();
       const count = payload?.count ?? (payload?.items || []).length;
-      setNotice(`Grooming rerun complete — ${count} purge candidate${count === 1 ? "" : "s"} recomputed.`);
+      setNotice(
+        `Purge candidates refreshed — ${count} candidate${count === 1 ? "" : "s"} ready.`,
+      );
       onChanged?.();
     } catch (err) {
-      setError(err.message || "Could not rerun grooming.");
+      setError(err.message || "Could not refresh purge candidates.");
     } finally {
       setRerunning(false);
     }
@@ -78,9 +81,25 @@ export default function GroomingUndoPanel({ onChanged }) {
   return (
     <section className="grooming-panel" data-testid="grooming-panel">
       <div className="grooming-panel-head">
-        <div>
-          <p className="eyebrow">Grooming</p>
-          <h3 className="dash-panel-title">Rerun &amp; index-only undo</h3>
+        <div className="grooming-panel-title-row">
+          <div>
+            <p className="eyebrow">Library maintenance</p>
+            <h3 className="dash-panel-title">Purge candidates &amp; index undo</h3>
+          </div>
+          <SectionHelp
+            label="About purge candidates and index undo"
+            testId="grooming-section-help"
+          >
+            <p>
+              <strong>Refresh purge candidates</strong> rebuilds the Storage Intelligence
+              suggestions (stale or low-signal titles). It does not delete anything.
+            </p>
+            <p>
+              <strong>Undo</strong> only restores Projectionist index rows from{" "}
+              <em>index-only</em> deletes. Full remove deletes disk files through
+              Radarr/Sonarr and cannot be undone here.
+            </p>
+          </SectionHelp>
         </div>
         <button
           type="button"
@@ -89,13 +108,13 @@ export default function GroomingUndoPanel({ onChanged }) {
           disabled={rerunning}
           onClick={handleRerun}
         >
-          {rerunning ? "Rerunning…" : "Rerun grooming"}
+          {rerunning ? "Refreshing…" : "Refresh purge candidates"}
         </button>
       </div>
 
       <p className="scheduled-task-meta">
         Undo restores Projectionist index rows from <strong>index-only</strong> purge deletes.
-        Full purge deletes files via Radarr/Sonarr and cannot be undone. Embeddings backfill on
+        Full remove deletes files via Radarr/Sonarr and cannot be undone. Embeddings backfill on
         the next enrichment cycle.
       </p>
 
@@ -107,10 +126,10 @@ export default function GroomingUndoPanel({ onChanged }) {
       {error ? <p className="dash-panel-error">{error}</p> : null}
 
       {loading ? (
-        <p className="status status-secondary">Loading grooming history…</p>
+        <p className="status status-secondary">Loading index undo history…</p>
       ) : !actions.length ? (
         <p className="dash-empty" data-testid="grooming-empty">
-          No reversible index-only purge runs yet. Full purges are not undoable.
+          No reversible index-only purge runs yet. Full removes are not undoable.
         </p>
       ) : (
         <ul className="grooming-action-list">

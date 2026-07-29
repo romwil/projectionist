@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [1.28.0] — 2026-07-29
+
+Storage Intelligence now includes TV shows with real disk sizes, a paginated 100-title purge buffer that refills as you act, and agent TV tools that report honest totals — plus durable acquisition exclusions so full removes stay gone.
+
+### Highlights
+- **Shows show up in Storage Intelligence.** TV sizes roll up from episode files, so large neglected series appear alongside movies when you need disk space.
+- **Page through candidates without waiting.** The purge grid shows 20 at a time over a 100-title buffer and quietly tops up after you purge or keep titles.
+- **Deleted titles stay deleted.** Full remove records an acquisition exclusion so Chat, MCP, and add flows will not casually re-queue what you just cleaned out.
+- **Agent TV answers stay honest.** Progress summaries report totals and caps, and you can sort or filter shows by total episode count.
+
+### Added
+- Migration 39 + episode rollup: `library_items.file_size` for shows = sum of episode sizes; boot-safe backfill.
+- Purge buffer constants (page 20 / buffer 100 / refill under 80), `top_up_purge_candidates`, `POST /api/library/purge-candidates/enrich`, background refill after purge/keep.
+- `acquisition_exclusions` table (migration 38) honored on recommend/add/propose paths; recorded on full remove and confirmed `remove_arr` with `add_exclusion`.
+- Library query / agent tools: `total_episode_count` sort + `min_total_episodes` / `max_total_episodes`; `summarize_tv_progress` returns `total_shows` / `matched` / `returned` / `limit`.
+- Dashboard Storage Intelligence: Type column, pagination, visible-row enrich, Keep label, buffer meta; removal summary dialog after full remove.
+
+### Changed
+- Purge cache payload includes `page_size`, `buffer_target`, `refilling`; refresh default limit 100.
+- Help: Storage Intelligence movies+shows, buffer/pagination, acquisition exclusions after full remove.
+
+### Verification
+- Backend `pytest` **1421 passed**, 6 skipped (29 subtests) at **77.68%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **502 passed**. ESLint **0 errors** (99 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.28.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.27.6] — 2026-07-27
 
 Dashboard Storage Intelligence purge now defaults to a real full remove (files + exclusion), and Scheduled Tasks Title relations refresh no longer fails under foreign-key enforcement when stale neighbor rows linger.

@@ -573,6 +573,61 @@ class LibraryQueryTests(unittest.TestCase):
             result = query_library(db, LibraryFilters(sort="file_size", limit=5))
             self.assertEqual(result["items"][0]["title"], "Large")
 
+    def test_query_total_episode_count_sort_and_filters(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "s-short",
+                    "media_type": "show",
+                    "title": "Short Run",
+                    "year": 2020,
+                    "total_episode_count": 8,
+                    "unwatched_episode_count": 8,
+                    "view_count": 0,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "s-long",
+                    "media_type": "show",
+                    "title": "Long Run",
+                    "year": 2018,
+                    "total_episode_count": 80,
+                    "unwatched_episode_count": 10,
+                    "view_count": 0,
+                }
+            )
+            sorted_result = query_library(
+                db, LibraryFilters(media_type="show", sort="total_episode_count", limit=5)
+            )
+            self.assertEqual(
+                [item["title"] for item in sorted_result["items"]],
+                ["Long Run", "Short Run"],
+            )
+            filtered = query_library(
+                db,
+                LibraryFilters(
+                    media_type="show",
+                    min_total_episodes=20,
+                    max_total_episodes=100,
+                ),
+            )
+            self.assertEqual(filtered["total_matched"], 1)
+            self.assertEqual(filtered["items"][0]["title"], "Long Run")
+            mapped = filters_from_mapping(
+                {
+                    "media_type": "show",
+                    "min_total_episodes": "12",
+                    "max_total_episodes": "40",
+                    "sort": "total_episode_count",
+                }
+            )
+            self.assertEqual(mapped.min_total_episodes, 12)
+            self.assertEqual(mapped.max_total_episodes, 40)
+            self.assertEqual(mapped.sort, "total_episode_count")
+
+
     def test_query_collection_name_filter(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

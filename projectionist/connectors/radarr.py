@@ -159,6 +159,15 @@ class RadarrClient:
             raise
         return result if isinstance(result, dict) else {}
 
+    def movie_by_id(self, movie_id: int) -> Optional[Mapping[str, Any]]:
+        """Return the raw Radarr movie payload (includes movieFile / sizeOnDisk)."""
+        payload = request_json(
+            f"{self.base_url}/api/v3/movie/{int(movie_id)}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, dict) else None
+
     def delete_movie(
         self,
         movie_id: int,

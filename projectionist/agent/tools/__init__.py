@@ -344,6 +344,14 @@ def _append_recommendation_cards(registry: "ToolRegistry", cards: List[TitleCard
     for card in cards:
         if card.in_library or card.in_radarr or card.in_sonarr:
             continue
+        if card.tmdb_id and registry.db.is_acquisition_excluded(
+            media_type=card.media_type, tmdb_id=card.tmdb_id
+        ):
+            continue
+        if card.tvdb_id and registry.db.is_acquisition_excluded(
+            media_type="show", tvdb_id=card.tvdb_id
+        ):
+            continue
         if card.tmdb_id and registry.db.is_arr_queued(media_type=card.media_type, tmdb_id=card.tmdb_id):
             card.in_radarr = card.media_type == "movie"
             card.in_sonarr = card.media_type == "show"
@@ -372,7 +380,11 @@ def _append_recommendation_cards(registry: "ToolRegistry", cards: List[TitleCard
 
 
 def _excluded_add_tmdb_ids(db: Database, media_type: str) -> set[int]:
-    return db.owned_tmdb_ids(media_type) | db.queued_tmdb_ids(media_type)
+    return (
+        db.owned_tmdb_ids(media_type)
+        | db.queued_tmdb_ids(media_type)
+        | db.excluded_tmdb_ids(media_type)
+    )
 
 
 class ToolRegistry:
@@ -1423,6 +1435,12 @@ class ToolRegistry:
         media_type = str(args.get("media_type") or "movie")
         title = str(args.get("title") or "")
         delete_files = bool(args.get("delete_files"))
+        # Full removes should stay off acquisition lists; default matches *arr UI.
+        add_exclusion = (
+            True
+            if "add_exclusion" not in args
+            else bool(args.get("add_exclusion"))
+        )
         tmdb_id = args.get("tmdb_id")
         tvdb_id = args.get("tvdb_id")
         arr_id = args.get("arr_id")
@@ -1444,6 +1462,7 @@ class ToolRegistry:
             "arr_id": resolved["arr_id"],
             "title": resolved.get("title") or title,
             "delete_files": delete_files,
+            "add_exclusion": add_exclusion,
         }
         if resolved.get("tmdb_id") is not None:
             payload["tmdb_id"] = resolved["tmdb_id"]
@@ -2645,6 +2664,11 @@ async def execute_confirmed_action(
         client = RadarrClient(settings.radarr_url, settings.radarr_api_key)
         tmdb_id = int(payload["tmdb_id"])
         title = str(payload.get("title") or "")
+        if db.is_acquisition_excluded(media_type="movie", tmdb_id=tmdb_id):
+            raise RuntimeError(
+                f"{title or 'This title'} was removed with an acquisition exclusion "
+                "and will not be re-added"
+            )
         try:
             result = client.add_movie(
                 tmdb_id,
@@ -2663,6 +2687,11 @@ async def execute_confirmed_action(
         client = SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
         tvdb_id = int(payload["tvdb_id"])
         title = str(payload.get("title") or "")
+        if db.is_acquisition_excluded(media_type="show", tvdb_id=tvdb_id):
+            raise RuntimeError(
+                f"{title or 'This title'} was removed with an acquisition exclusion "
+                "and will not be re-added"
+            )
         try:
             result = client.add_series(
                 tvdb_id,
@@ -2683,6 +2712,20 @@ async def execute_confirmed_action(
         tmdb_id = int(payload["tmdb_id"])
         tvdb_id = payload.get("tvdb_id")
         title = str(payload.get("title") or "")
+        excluded = False
+        if media_type == "movie":
+            excluded = db.is_acquisition_excluded(media_type="movie", tmdb_id=tmdb_id)
+        elif tvdb_id is not None and db.is_acquisition_excluded(
+            media_type="show", tvdb_id=int(tvdb_id)
+        ):
+            excluded = True
+        elif db.is_acquisition_excluded(media_type="show", tmdb_id=tmdb_id):
+            excluded = True
+        if excluded:
+            raise RuntimeError(
+                f"{title or 'This title'} was removed with an acquisition exclusion "
+                "and will not be re-requested. Clear the exclusion first if you want it back."
+            )
         seerr_uid = payload.get("seerr_user_id")
         result = client.create_request(
             media_type,
@@ -2743,6 +2786,14 @@ async def execute_confirmed_action(
                     arr_id=arr_id,
                 ) from error
             raise RuntimeError(format_arr_http_error(error)) from error
+        if add_exclusion:
+            db.record_acquisition_exclusion(
+                media_type="movie" if media_type == "movie" else "show",
+                title=removed_title,
+                tmdb_id=int(resolved["tmdb_id"]) if resolved.get("tmdb_id") is not None else None,
+                tvdb_id=int(resolved["tvdb_id"]) if resolved.get("tvdb_id") is not None else None,
+                source="remove_arr",
+            )
         return {
             "action": action,
             "removed": True,
