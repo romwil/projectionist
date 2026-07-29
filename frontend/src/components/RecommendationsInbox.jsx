@@ -85,10 +85,17 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
           const kind = String(rec.kind || "recommendation");
           const showPoster = Boolean(rec.poster_url) || kind === "recommendation" || kind === "arrival";
           const mediaTitle = kind === "recommendation" ? recommendationMediaTitle(rec) : rec.title;
+          const cardClass = [
+            "recommendation-card",
+            `recommendation-card--${kind}`,
+            showPoster ? "" : "recommendation-card--text-only",
+          ]
+            .filter(Boolean)
+            .join(" ");
           return (
             <article
               key={rec.id}
-              className={`recommendation-card recommendation-card--${kind}`}
+              className={cardClass}
               data-testid={`recommendation-card-${rec.id}`}
               data-kind={kind}
               style={{ zIndex: recommendations.length - index }}

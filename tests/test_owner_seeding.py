@@ -106,6 +106,93 @@ class OwnerSeedingTests(unittest.TestCase):
             self.assertIsNone(auth.seed_env_owner(self.db))
         self.assertIsNone(self.db.get_user_by_display_name(auth.DEFAULT_OWNER_USERNAME))
 
+    def test_seed_does_not_promote_member_when_real_owner_exists(self) -> None:
+        """Matching username must not become a second owner via env seed."""
+        self.db.upsert_plex_user(
+            user_id="plex-1",
+            display_name="Existing",
+            email=None,
+            plex_user_id="1",
+            role="owner",
+            avatar_url=None,
+            seerr_user_id=None,
+            seerr_permissions=None,
+        )
+        self.db.create_local_user(
+            user_id="local-member",
+            display_name="boss",
+            password_hash=auth._hash_password("memberpassword"),
+            role="member",
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "PROJECTIONIST_OWNER_USERNAME": "boss",
+                "PROJECTIONIST_OWNER_PASSWORD": "supersecretpw",
+            },
+            clear=False,
+        ):
+            self.assertIsNone(auth.seed_env_owner(self.db))
+        row = self.db.get_user_by_display_name("boss")
+        self.assertIsNotNone(row)
+        self.assertEqual(row["role"], "member")
+        self.assertTrue(auth._verify_password("memberpassword", str(row["password_hash"])))
+        owners = [
+            u
+            for u in self.db.list_users(limit=100)
+            if u.get("role") == "owner" and u.get("id") != BOOTSTRAP_OWNER_ID
+        ]
+        self.assertEqual(len(owners), 1)
+        self.assertEqual(owners[0]["id"], "plex-1")
+
+    def test_seed_promotes_matching_member_when_no_real_owner(self) -> None:
+        self.db.create_local_user(
+            user_id="local-member",
+            display_name="boss",
+            password_hash=auth._hash_password("oldpassword"),
+            role="member",
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "PROJECTIONIST_OWNER_USERNAME": "boss",
+                "PROJECTIONIST_OWNER_PASSWORD": "newownerpw",
+            },
+            clear=False,
+        ):
+            user_id = auth.seed_env_owner(self.db)
+        self.assertEqual(user_id, "local-member")
+        row = self.db.get_user("local-member")
+        self.assertEqual(row["role"], "owner")
+        self.assertTrue(auth._verify_password("newownerpw", str(row["password_hash"])))
+
+    def test_seed_syncs_password_when_existing_is_already_owner(self) -> None:
+        self.db.create_local_user(
+            user_id="local-owner",
+            display_name="boss",
+            password_hash=auth._hash_password("oldownerpw"),
+            role="owner",
+        )
+        with patch.dict(
+            os.environ,
+            {
+                "PROJECTIONIST_OWNER_USERNAME": "boss",
+                "PROJECTIONIST_OWNER_PASSWORD": "rotatedownerpw",
+            },
+            clear=False,
+        ):
+            user_id = auth.seed_env_owner(self.db)
+        self.assertEqual(user_id, "local-owner")
+        row = self.db.get_user("local-owner")
+        self.assertEqual(row["role"], "owner")
+        self.assertTrue(auth._verify_password("rotatedownerpw", str(row["password_hash"])))
+        owners = [
+            u
+            for u in self.db.list_users(limit=100)
+            if u.get("role") == "owner" and u.get("id") != BOOTSTRAP_OWNER_ID
+        ]
+        self.assertEqual(len(owners), 1)
+
 
 class NewUserRoleTests(unittest.TestCase):
     def setUp(self) -> None:

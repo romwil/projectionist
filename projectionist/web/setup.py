@@ -64,6 +64,7 @@ CERTIFIED_SERVICES = (
     "fanart",
     "tautulli",
     "seerr",
+    "tunarr",
 )
 
 ONBOARDING_HINTS = [
@@ -267,6 +268,34 @@ def test_seerr(url: str, api_key: str) -> CheckResult:
         return {"ok": False, "message": str(error)}
 
 
+def test_tunarr(url: str) -> CheckResult:
+    """Reachability check for Tunarr when Live Channels is in use."""
+    cleaned = str(url or "").strip().rstrip("/")
+    if not cleaned:
+        return {"ok": False, "message": "Tunarr URL is required."}
+    try:
+        from projectionist.connectors.tunarr import TunarrClient
+
+        client = TunarrClient(cleaned, timeout=8)
+        result = client.check()
+        version = str(result.get("tunarr_version") or "").strip()
+        message = f"Connected — Tunarr{f' v{version}' if version else ''}."
+        channels: list[Any] = []
+        try:
+            channels = list(client.list_channels())
+            message = f"{message} | {len(channels)} channel(s)"
+        except Exception:  # noqa: BLE001
+            pass
+        return {
+            "ok": True,
+            "message": message,
+            "tunarr_version": version,
+            "channel_count": len(channels),
+        }
+    except Exception as error:  # noqa: BLE001
+        return {"ok": False, "message": str(error)}
+
+
 async def _ping_llm(settings: Settings) -> None:
     provider = get_chat_provider(settings)
     response = await provider.chat([{"role": "user", "content": "ping"}])
@@ -403,6 +432,10 @@ def invalidate_certifications_on_settings_change(
             before.seerr.url != after.seerr.url
             or _incoming_seerr_secret_changed(incoming, before.seerr.api_key)
             or before.features.seerr_enabled != after.features.seerr_enabled
+        ),
+        "tunarr": (
+            before.tunarr.url != after.tunarr.url
+            or before.features.live_channels_enabled != after.features.live_channels_enabled
         ),
     }
     for service_name, changed in checks.items():
@@ -616,7 +649,22 @@ def resolve_test_payload(payload: Mapping[str, Any], existing: Settings) -> Dict
         if not str(merged.get(key_field) or "").strip():
             merged[key_field] = getattr(existing, key_field)
 
-    for url_field in ("plex_url", "radarr_url", "sonarr_url", "tautulli_url", "seerr_url", "llm_base_url"):
+    # Tunarr has no secret — backfill URL from nested settings or saved value.
+    tunarr_incoming = merged.get("tunarr")
+    if isinstance(tunarr_incoming, Mapping) and not str(merged.get("tunarr_url") or "").strip():
+        merged["tunarr_url"] = str(tunarr_incoming.get("url") or "")
+    if not str(merged.get("tunarr_url") or "").strip():
+        merged["tunarr_url"] = existing.tunarr.url
+
+    for url_field in (
+        "plex_url",
+        "radarr_url",
+        "sonarr_url",
+        "tautulli_url",
+        "seerr_url",
+        "llm_base_url",
+        "tunarr_url",
+    ):
         candidate = str(merged.get(url_field) or "").strip()
         if candidate:
             try:

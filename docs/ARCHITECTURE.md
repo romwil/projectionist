@@ -541,7 +541,7 @@ save_repo_insight  → memory_insights (+ citations {source, ref, note})
 
 ### Privacy scoping
 
-`UserMemoryService._authorize` is **fail-closed**: a caller reads only its own per-user notes; adults are isolated from each other and from the owner. The one exception is **owner youth review** — the owner may review/export a member account **only** when it carries the owner-set Youth flag (`users.is_youth`). Export is available to the account holder; purge hard-deletes that user's notes and chat sessions/messages atomically while shared repository knowledge remains intact. (Cross-user prompt-injection hardening for globally shared insights/snapshots is a tracked security follow-up, not yet landed.)
+`UserMemoryService._authorize` is **fail-closed**: a caller reads only its own per-user notes; adults are isolated from each other and from the owner. The one exception is **owner youth review** — the owner may review/export a member account **only** when it carries the owner-set Youth flag (`users.is_youth`). Export is available to the account holder; purge hard-deletes that user's notes and chat sessions/messages atomically while shared repository knowledge remains intact. Globally shared repository insights/snapshots and memory/research tool results are **fenced** as untrusted DATA (`wrap_untrusted_data` / `UNTRUSTED_MEMORY_TOOLS`, TC-PROMPT-01) before they re-enter the model; see `tests/test_prompt_injection.py`. Residual risk is behavioral (model may still mis-follow fenced text) plus confirm-gated *arr writes — not an open missing fence.
 
 ---
 

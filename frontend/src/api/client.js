@@ -732,6 +732,11 @@ export async function getWeeklyDigest({ limit = 8 } = {}) {
   return api(`/admin/weekly-digest?${params}`);
 }
 
+/** Household: read-only Live Channels guide snapshot (empty-safe when off). */
+export async function getLiveChannelsOnNow() {
+  return api("/live-channels/on-now");
+}
+
 /** Owner-only: assemble and store the digest for the current week on demand. */
 export async function generateWeeklyDigest() {
   return api("/admin/weekly-digest/generate", { method: "POST" });
@@ -1017,6 +1022,7 @@ export const AUTO_CERTIFY_SERVICES = [
   "fanart",
   "tautulli",
   "seerr",
+  "tunarr",
 ];
 
 export async function getWizardStatus() {
@@ -1284,11 +1290,45 @@ export async function testService(service, settings) {
     ...settings,
     seerr_url: settings?.seerr?.url ?? settings?.seerr_url ?? "",
     seerr_api_key: settings?.seerr?.api_key ?? settings?.seerr_api_key ?? "",
+    tunarr_url: settings?.tunarr?.url ?? settings?.tunarr_url ?? "",
   };
   return api(`/setup/test/${service}`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function getLiveChannelsStatus() {
+  return api("/admin/live-channels/status");
+}
+
+export async function postLiveChannelsPreflight(body = {}) {
+  return api("/admin/live-channels/preflight", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function postLiveChannelsLifecycle(action = "ensure_running") {
+  return api("/admin/live-channels/lifecycle", {
+    method: "POST",
+    body: JSON.stringify({ action }),
+  });
+}
+
+export async function getLiveChannelsStarterPack() {
+  return api("/admin/live-channels/starter-pack");
+}
+
+export async function publishLiveChannelsStarters(body = {}) {
+  return api("/admin/live-channels/starters/publish", {
+    method: "POST",
+    body: JSON.stringify({ confirm: true, wire_plex: true, ...body }),
+  });
+}
+
+export async function getLiveChannelsPlexAttach() {
+  return api("/admin/live-channels/plex-attach");
 }
 
 export async function listRequests(params = {}) {

@@ -78,6 +78,7 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 | **P4** | High | Single shared MCP key with no mode separation. | Compromised limited app inherits full schema / propose tools. | **Mitigated** | Dual keys; equal keys refuse full mode. |
 | **P5** | Medium | Authenticated members received owner-grade library JSON. | Member curls dump rating keys, sizes, arr flags. | **Mitigated** | Member browse uses public-content sanitizer when multi-user is on. |
 | **P6** | Medium | Full MCP / stdio without a distinct full secret. | Accidental escalate to propose tools. | **Mitigated** | Stdio full requires distinct full key; HTTP maps key → mode. |
+| **S16** | Medium | Shared repository memory/research returned into any user's LLM context unfenced (stored prompt injection). | Poison a global insight/snapshot; steer another user's tool calls. | **Mitigated** | Tool/memory results fenced as untrusted DATA (`wrap_untrusted_data`); system-prompt clause; CI `tests/test_prompt_injection.py`; pentest `TC-PROMPT-01` runs that suite. Residual: model may still mis-follow fenced text; *arr writes stay confirm-gated. |
 
 ---
 
@@ -147,11 +148,14 @@ If your platform doesn't support POSIX permissions (some network mounts), the `0
 
 Repeatable full-platform engagements: [docs/security/pentests/README.md](security/pentests/README.md) (Protocol v1.0, harness under `scripts/security/pentest/`). Baseline run: [2026-07-platform-full](security/pentests/2026-07-platform-full/).
 
+How pentest fits with CI, maintainer QA, and Interactive UI QA: [Feature testing environment blueprint](superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md).
+
 ## Related docs
 
 - [PRIVACY.md](PRIVACY.md) — plain-language privacy & data use (household + owner; in-app at `/privacy`)
 - [MCP.md](MCP.md) — dual-mode MCP keys, schemas, TMDB image policy
 - [TESTING.md](TESTING.md) — API authz regression (`tests/test_api_authz.py`)
+- [Feature testing environment blueprint](superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md) — layered QA + red-hat protocol
 - [security/pentests/README.md](security/pentests/README.md) — repeatable penetration-test protocol
 - [CONFIGURATION.md](CONFIGURATION.md) — feature flags and session secret
 - [WEB_UI.md](WEB_UI.md) — UI login vs API surface

@@ -846,6 +846,8 @@ a.on-this-day-item:focus-visible {
 .recommendations-inbox {
   margin: var(--space-4) var(--space-4) 0;
   padding: var(--space-4);
+  min-width: 0;
+  max-width: 100%;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background:
@@ -859,6 +861,7 @@ a.on-this-day-item:focus-visible {
   justify-content: space-between;
   gap: var(--space-3);
   margin-bottom: var(--space-4);
+  min-width: 0;
 }
 
 .recommendations-inbox-header h2 {
@@ -870,21 +873,34 @@ a.on-this-day-item:focus-visible {
 .recommendations-inbox-stack {
   display: grid;
   gap: var(--space-3);
+  min-width: 0;
 }
 
+/* Poster + body. Use minmax(0, 1fr) so the text column can shrink without
+   forcing the card wider than the reading column (classic grid min-content blowout). */
 .recommendation-card {
   display: grid;
-  grid-template-columns: 64px 1fr;
+  grid-template-columns: 64px minmax(0, 1fr);
   gap: var(--space-3);
   padding: var(--space-3);
+  min-width: 0;
+  max-width: 100%;
   border-radius: var(--radius);
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
 }
 
+/* Digest / access-request / nudge (and any card without a poster cell): a single
+   body child must NOT sit in the 64px poster track — that collapses copy to
+   character-by-character vertical wrapping. */
+.recommendation-card--text-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .recommendation-card-poster {
   position: relative;
   width: 64px;
+  flex-shrink: 0;
   aspect-ratio: 2 / 3;
   overflow: hidden;
   border-radius: var(--radius-sm);
@@ -900,10 +916,15 @@ a.on-this-day-item:focus-visible {
   place-items: center;
 }
 
+.recommendation-card-body {
+  min-width: 0;
+}
+
 .recommendation-card-from {
   margin: 0 0 var(--space-2);
   font-size: var(--text-sm);
   line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .recommendation-card-note {
@@ -911,6 +932,7 @@ a.on-this-day-item:focus-visible {
   color: var(--muted);
   font-size: var(--text-sm);
   font-style: italic;
+  overflow-wrap: anywhere;
 }
 
 .recommendation-card-actions {

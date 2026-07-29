@@ -498,6 +498,8 @@ class FeatureFlags:
     # reviews, memory) for the acting user without a confirm token. Single-owner
     # mode ignores this flag and always allows immediate personal writes (H5).
     agent_may_mutate_personal_data: bool = False
+    # Tunarr-backed Live Channels (Plex Live TV). Off until owner enables.
+    live_channels_enabled: bool = False
 
 
 @dataclass
@@ -519,6 +521,37 @@ class SeerrSettings:
     api_key: str = ""
     link_on_login: bool = True
     require_linked_user_for_requests: bool = False
+
+
+@dataclass
+class TunarrSettings:
+    """BYO Tunarr sibling + optional Docker orchestration for Live Channels.
+
+    Env overrides (see docs/CONFIGURATION.md):
+    - ``PROJECTIONIST_TUNARR_URL`` — fill gap when ``url`` is empty in settings.json
+    - ``PROJECTIONIST_DOCKER_ORCHESTRATION`` — when set, wins over
+      ``docker_orchestration`` (``1``/``true``/``yes``/``on``)
+    - ``PROJECTIONIST_TUNARR_IMAGE`` — when set, wins over ``image_tag``
+    """
+
+    # Base URL of a running Tunarr instance (e.g. http://192.168.1.50:8000).
+    # API calls use ``{url}/api/...``. Empty = not configured (orchestration may
+    # start a sibling later).
+    url: str = ""
+    # When true (or env PROJECTIONIST_DOCKER_ORCHESTRATION=1), Projectionist may
+    # pull/start/stop a Tunarr container if a Docker socket is available.
+    docker_orchestration: bool = False
+    # Pinned image reference for orchestrated installs.
+    image_tag: str = "chrisbenincasa/tunarr:1.3.x"
+    # Relative directory under DATA_DIR for the Tunarr /config volume.
+    volume_path: str = "tunarr"
+    # Virtual channel number base (coexist with OTA HDHomeRun).
+    channel_number_base: int = 100
+    # Owner wizard confirm — Plex does not expose Pass on server identity.
+    plex_pass_confirmed: bool = False
+    # Last successful starter/collection publish (ISO UTC) and last error string.
+    last_publish_at: str = ""
+    last_error: str = ""
 
 
 @dataclass
@@ -567,6 +600,7 @@ NESTED_SETTINGS_TYPES.update(
         "features": FeatureFlags,
         "auth": AuthSettings,
         "seerr": SeerrSettings,
+        "tunarr": TunarrSettings,
         "mail": MailSettings,
         "apprise": AppriseSettings,
         "youth": YouthSettings,
@@ -633,6 +667,7 @@ class Settings:
     features: FeatureFlags = field(default_factory=FeatureFlags)
     auth: AuthSettings = field(default_factory=AuthSettings)
     seerr: SeerrSettings = field(default_factory=SeerrSettings)
+    tunarr: TunarrSettings = field(default_factory=TunarrSettings)
     mail: MailSettings = field(default_factory=MailSettings)
     apprise: AppriseSettings = field(default_factory=AppriseSettings)
     youth: YouthSettings = field(default_factory=YouthSettings)
@@ -782,7 +817,37 @@ def load_merged_settings(data_dir: Path) -> Settings:
         if _file_field_explicitly_set(file_data, int_field):
             continue
         merged[int_field] = int(env_value)
+    merged = _apply_tunarr_env_overrides(merged, file_data)
     return normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
+
+
+def _apply_tunarr_env_overrides(
+    merged: Dict[str, Any], file_data: Mapping[str, Any]
+) -> Dict[str, Any]:
+    """Apply Tunarr nested env overrides (URL / image gap-fill; docker env wins)."""
+    from projectionist.envcompat import branded_env, env_bool
+
+    tunarr = dict(merged.get("tunarr") or {})
+    file_tunarr = file_data.get("tunarr") if isinstance(file_data.get("tunarr"), Mapping) else {}
+    if not isinstance(file_tunarr, Mapping):
+        file_tunarr = {}
+
+    # URL: gap-fill when settings.json leaves it empty.
+    url_env = branded_env("TUNARR_URL")
+    if url_env and not str(file_tunarr.get("url") or "").strip():
+        tunarr["url"] = url_env
+
+    # Image pin + docker orchestration: env wins when set (deploy/host capability).
+    image_env = branded_env("TUNARR_IMAGE")
+    if image_env:
+        tunarr["image_tag"] = image_env
+
+    docker_env = env_bool("PROJECTIONIST_DOCKER_ORCHESTRATION")
+    if docker_env is not None:
+        tunarr["docker_orchestration"] = docker_env
+
+    merged["tunarr"] = tunarr
+    return merged
 
 
 def secret_field_sources(data_dir: Path) -> Dict[str, str]:

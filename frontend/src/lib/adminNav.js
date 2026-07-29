@@ -11,6 +11,7 @@ export const ADMIN_NAV = [
   { to: "/admin/persona", id: "persona", label: "Persona" },
   { to: "/admin/household", id: "household", label: "Household" },
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },
+  { to: "/admin/live-channels", id: "live-channels", label: "Live Channels" },
   { to: "/admin/mail", id: "mail", label: "Mail & alerts" },
   { to: "/admin/access", id: "access", label: "Access requests" },
   { to: "/admin/advanced", id: "advanced", label: "Advanced" },

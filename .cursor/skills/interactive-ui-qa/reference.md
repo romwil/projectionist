@@ -163,6 +163,14 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **steps:** With at least one notification present (`recommendations-inbox`), identify card `data-kind` (recommendation / arrival / digest / access-request / nudge). Dismiss one card via `recommendation-dismiss-*` **or** open via `recommendation-open-*` (which also marks seen).
 - **pass:** Card removes from stack (or navigates to title after open). No crash. If inbox empty, N/A (use `inbox.empty-state`). Multi-kind: when several kinds are present, note each `data-kind` observed; a single kind is still PASS.
 
+### `inbox.card-layout`
+
+- **roles:** `member`, `owner`, `youth`
+- **tags:** `inbox`, `layout`
+- **source:** `frontend/src/components/RecommendationsInbox.jsx`, `frontend/src/styles/08-dashboard-coverage-cards.css`
+- **steps:** Open `/inbox` with at least one card. Prefer a mix that includes a **text-only** kind (digest / access-request / nudge without poster → `recommendation-card--text-only`) and a poster kind (recommendation / arrival). At desktop width, inspect card geometry.
+- **pass:** Every card spans the inbox reading column (not a ~64px strip). Lead/note text wraps as normal lines — **not** character-by-character vertically. Huge empty vertical gaps from collapsed columns are FAIL. If inbox empty, N/A.
+
 ### `inbox.dismiss-all`
 
 - **roles:** `member`, `owner`, `youth`
@@ -346,6 +354,46 @@ Owner peers: member set **plus** Admin (before My Journey).
 - **source:** `frontend/src/pages/ScheduledTasksPage.jsx`, `frontend/src/styles/10-explore-delight.css`
 - **steps:** At a typical desktop viewport between 1280px and 1440px wide, open `/admin/tasks` and select a task with a multi-line description. Inspect the table, selected-task header/meta, description, and detail actions in both Lights Up and Lights Down. If the table overflows its list pane, scroll that pane horizontally to its Last run / Next run columns.
 - **pass:** The detail pane has a usable width; its description reads as normal prose rather than wrapping one word per line. Status, Next/Last times, and action buttons are not jammed into a narrow strip. The table keeps legible Last run and Next run values without being clipped by or overlapping the detail pane; any horizontal overflow is contained inside the table pane. The layout remains usable throughout 1280–1440px desktop widths in both themes.
+
+### `admin.logs-surface`
+
+- **roles:** `owner`
+- **tags:** `admin`, `logs`
+- **source:** `frontend/src/pages/LogsPage.jsx`, `frontend/src/lib/adminNav.js`
+- **steps:** Open Admin → Logs (`admin-nav-logs` / `/admin/logs`). Confirm `logs-page` and `logs-toolbar` render. Change `logs-level-filter` (e.g. INFO → WARNING) and apply a logger or text filter if fields are present (`logs-logger-apply` / `logs-q-apply`). Click `logs-refresh`. Toggle `logs-follow-toggle` once each way.
+- **pass:** Page loads for owner (not redirected to Settings). Toolbar + scroller (`logs-scroller`) visible; level change and refresh re-query without a blank crash. Sensitive warning (`logs-sensitive-warning`) may appear — note if present. Empty state (`logs-empty`) or lines (`logs-line`) acceptable. Member/youth redirected away (covered by `nav.admin-redirect`).
+
+### `admin.storage-purge-type-pagination`
+
+- **roles:** `owner`
+- **tags:** `admin`, `library`, `purge`
+- **source:** `frontend/src/pages/DashboardPage.jsx` (Storage Intelligence / purge table)
+- **steps:** Open Admin overview / dashboard with Storage Intelligence candidates. If `purge-empty`, note N/A (no candidates). Otherwise inspect the candidate table for a Type column (`purge-candidate-type` showing Movie or Show). When more than one page of candidates exists, use `purge-pagination` Previous/Next and confirm page label updates.
+- **pass:** Type column visible and correct for at least one row when candidates exist. Pagination controls present when multi-page; page index changes on Next/Previous. Single-page lists still show pagination chrome or a clear single-page label without error.
+
+### `admin.grooming-section-help`
+
+- **roles:** `owner`
+- **tags:** `admin`, `purge`, `help`
+- **source:** `frontend/src/components/GroomingUndoPanel.jsx`, `frontend/src/components/SectionHelp.jsx`
+- **steps:** On Admin overview, locate Purge candidates & index undo (`grooming-panel`). Open SectionHelp (`grooming-section-help`). Read that refresh is non-destructive and undo is index-only. Optionally click `grooming-rerun` and wait for notice or error (do not require disk deletes).
+- **pass:** Help popover opens with refresh vs index-undo distinction. Panel remains usable; rerun (if clicked) completes without crashing the page.
+
+### `admin.removal-summary-dialog`
+
+- **roles:** `owner`
+- **tags:** `admin`, `purge`, `library`
+- **source:** `frontend/src/components/RemovalSummaryDialog.jsx`, `frontend/src/pages/DashboardPage.jsx`
+- **steps:** After a successful full remove that returns a removal summary (or when QA seed already surfaces one), confirm `removal-summary-dialog` opens with totals (`removal-summary-totals`) and list (`removal-summary-list`). Open `removal-summary-help`. Close via `removal-summary-close` or `removal-summary-done`.
+- **pass:** Dialog shows title/file/folder totals; help explains *arr path reporting. Close dismisses the dialog. If no remove was performed this session, mark N/A and do not invent a destructive delete solely for this ID — prefer pairing with an intentional QA purge campaign.
+
+### `explore.surprising-neighbors-showcase`
+
+- **roles:** `member`, `owner`
+- **tags:** `explore`, `neighbors`
+- **source:** `frontend/src/components/SurprisingNeighborsShowcase.jsx`, `frontend/src/pages/TitleDetailPage.jsx`
+- **steps:** Open a title detail (or Plot Lab / neighbors surface) that shows surprising neighbors (`title-neighbors-surprising` or showcase `data-testid` such as `explore-neighbors-rail`). Confirm featured card + why copy (`*-featured`, `*-featured-why` or equivalent). If `*-show-more` is present, expand then collapse.
+- **pass:** Showcase renders with intro and at least one featured neighbor when data exists; why signals/headline visible. Show more toggles extra cells when hidden count > 0. Empty/missing neighbors → N/A (not FAIL).
 
 ---
 
@@ -848,7 +896,11 @@ after direct URL navigation.
 | `notifications` | Settings → Notifications prefs; owner self-send; Admin → Mail |
 | `recommend` | Household Recommend modal open/send |
 | `settings` | Profile role line; notification prefs |
-| `admin` | Owner admin shell / Mail / Scheduled Tasks / non-owner redirect |
+| `admin` | Owner admin shell / Mail / Scheduled Tasks / Logs / Storage Intelligence / non-owner redirect |
+| `logs` | Admin → Logs filters, follow, refresh |
+| `purge` | Storage Intelligence candidates, grooming undo, removal summary |
+| `neighbors` | Surprising neighbors showcase on title / explore |
+| `help` | SectionHelp popovers on admin/library panels |
 | `shell` | youth / guest / default shell classes |
 | `login` | Local form fields |
 | `tour` | Public guest tour |
@@ -883,6 +935,7 @@ after direct URL navigation.
 | `inbox.empty-state` | member, owner, youth |
 | `inbox.badge` | member, owner, youth |
 | `inbox.card-actions` | member, owner, youth |
+| `inbox.card-layout` | member, owner, youth |
 | `inbox.dismiss-all` | member, owner, youth |
 | `recommend.open-modal` | member, owner |
 | `recommend.send-to-peer` | member, owner |
@@ -893,6 +946,11 @@ after direct URL navigation.
 | `admin.tasks-execution-log` | owner |
 | `admin.tasks-next-run-sort` | owner |
 | `admin.tasks-detail-layout` | owner |
+| `admin.logs-surface` | owner |
+| `admin.storage-purge-type-pagination` | owner |
+| `admin.grooming-section-help` | owner |
+| `admin.removal-summary-dialog` | owner |
+| `explore.surprising-neighbors-showcase` | member, owner |
 | `journey.list-filter` | member, owner, youth |
 | `journey.tree-mode` | member, owner, youth |
 | `journey.tree-detail` | member, owner, youth |

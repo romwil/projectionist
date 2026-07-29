@@ -21,6 +21,7 @@ import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import OwnerHealthHero from "../components/OwnerHealthHero";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import SectionHelp from "../components/SectionHelp.jsx";
+import OnNowPanel from "../components/OnNowPanel";
 import WeeklyDigestPanel from "../components/WeeklyDigestPanel";
 import GroomingUndoPanel from "../components/GroomingUndoPanel";
 import TitleDetailDrawer from "../components/TitleDetailDrawer";
@@ -572,8 +573,11 @@ export default function DashboardPage() {
       {/* ─── At-a-glance owner health hero (M4) ─── */}
       <OwnerHealthHero health={hlth} streak={streak.data} />
 
-      {/* ─── Weekly in-app digest (M4) ─── */}
-      <WeeklyDigestPanel />
+      {/* ─── Weekly digest + Live Channels on-now (household delight) ─── */}
+      <div className="dash-delight-row">
+        <WeeklyDigestPanel />
+        <OnNowPanel />
+      </div>
 
       {/* ─── Purge candidate refresh + index-only undo ─── */}
       <GroomingUndoPanel key={groomingEpoch} onChanged={purge.reload} />

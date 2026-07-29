@@ -43,4 +43,17 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(styles, /\.viewport \.title-card\s*\{[^}]*min-width:\s*0/s);
     assert.match(styles, /\.viewport \.title-card \.overview\s*\{[^}]*-webkit-line-clamp:\s*4/s);
   });
+
+  it("keeps inbox recommendation cards from collapsing into the 64px poster track", () => {
+    assert.match(
+      styles,
+      /\.recommendation-card\s*\{[^}]*grid-template-columns:\s*64px\s+minmax\(0,\s*1fr\)/s,
+    );
+    assert.match(
+      styles,
+      /\.recommendation-card--text-only\s*\{[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)/s,
+    );
+    assert.match(styles, /\.recommendation-card-body\s*\{[^}]*min-width:\s*0/s);
+    assert.match(styles, /\.recommendations-inbox\s*\{[^}]*min-width:\s*0/s);
+  });
 });

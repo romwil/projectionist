@@ -64,6 +64,18 @@ cd frontend && npm run build
 
 Optional CA / e2e layers: [TESTING.md](TESTING.md). CI (`.github/workflows/ci.yml`) runs frontend unit + build + pytest + Playwright with the same coverage floor as local (`--cov-fail-under=74`).
 
+### Recommended (not CI-mandatory)
+
+Run these before tagging when the ship matches the trigger. Lab / QA only — never prod `:8788`.
+
+| Trigger | Recommended gate | Command / action |
+|---------|------------------|------------------|
+| Security-touching (authz, MCP, prompt fencing, sessions, webhooks, headers, packaging) | Pentest harness green | `python3 scripts/security/pentest/run-checklist.py` (disposable lab; see [security/pentests/README.md](security/pentests/README.md)) |
+| Chrome / gating / role-shell ships | Interactive UI QA **delta** on `:8790` | `.cursor/skills/interactive-ui-qa` — open bugs + tagged IDs; never `:8788` |
+| Major chrome / periodic audit | Absolute baseline refresh | Same skill, mode `full` → host `qa-runs/ABSOLUTE_BASELINE.md` |
+
+Layer map: [Feature testing environment blueprint](superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md).
+
 Record pass counts / coverage in the CHANGELOG `### Verification` section (match recent entries).
 
 ---
@@ -220,6 +232,8 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 - [ ] Tests: pytest (≥74% cov, same floor in CI), `npm run test:unit`, `npm run lint` (0 errors), `npm run build`
 - [ ] `CHANGELOG.md`: `## [X.Y.Z]`, Highlights + technical + Verification
 - [ ] Docs updated if user-facing
+- [ ] *(Recommended)* Security-touching ship: pentest harness green (`python3 scripts/security/pentest/run-checklist.py`)
+- [ ] *(Recommended)* Chrome / gating ship: Interactive UI QA delta on `:8790` (never `:8788`)
 - [ ] `./scripts/generate-release-notes.sh --require-version X.Y.Z`
 - [ ] Commit `vX.Y.Z: …`, tag `vX.Y.Z`, push commit + tag
 - [ ] `gh release create` with Highlights

@@ -36,7 +36,8 @@
   "features": {
     "multi_user_enabled": false,
     "seerr_enabled": false,
-    "plex_collections_enabled": false
+    "plex_collections_enabled": false,
+    "live_channels_enabled": false
   },
   "auth": {
     "mode": "disabled",
@@ -49,5 +50,10 @@
     "api_key": "",
     "link_on_login": true,
     "require_linked_user_for_requests": false
+  },
+  "tunarr": {
+    "url": "",
+    "docker_orchestration": false,
+    "image_tag": "chrisbenincasa/tunarr:1.3.x"
   }
 }
