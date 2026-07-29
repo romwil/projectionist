@@ -39,7 +39,7 @@ class LiveChannelsApiTests(unittest.TestCase):
         tunarr = {
             "url": "http://tunarr.test:8000",
             "docker_orchestration": False,
-            "image_tag": "chrisbenincasa/tunarr:1.3.x",
+            "image_tag": "chrisbenincasa/tunarr:1.3.9",
             **tunarr_extra,
         }
         resp = self.client.put(

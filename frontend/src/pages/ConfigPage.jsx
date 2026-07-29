@@ -2552,14 +2552,14 @@ export default function ConfigPage() {
                           <input
                             type="text"
                             data-testid="tunarr-image-tag"
-                            value={settings?.tunarr?.image_tag ?? "chrisbenincasa/tunarr:1.3.x"}
+                            value={settings?.tunarr?.image_tag ?? "chrisbenincasa/tunarr:1.3.9"}
                             onChange={(event) => updateTunarrSettings({ image_tag: event.target.value })}
                             onBlur={() =>
                               persistSettings({
                                 tunarr: {
                                   ...(settings.tunarr || {}),
                                   image_tag:
-                                    settings?.tunarr?.image_tag ?? "chrisbenincasa/tunarr:1.3.x",
+                                    settings?.tunarr?.image_tag ?? "chrisbenincasa/tunarr:1.3.9",
                                 },
                               }).catch((error) =>
                                 setActionFeedback("live-channels", "error", error.message),

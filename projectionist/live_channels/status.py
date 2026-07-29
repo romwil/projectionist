@@ -170,7 +170,7 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         "tunarr": {
             "url": url,
             "url_configured": bool(url),
-            "image_tag": image_tag or "chrisbenincasa/tunarr:1.3.x",
+            "image_tag": image_tag or "chrisbenincasa/tunarr:1.3.9",
             "docker_orchestration": orchestration_enabled(settings),
             "docker_socket_available": docker_socket_available(),
             "reachability": reachability,

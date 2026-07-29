@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Fixed
+- Default Tunarr Docker image pin is now `chrisbenincasa/tunarr:1.3.9` (Hub tag; `1.3.x` was a non-existent placeholder that broke Start engine on fresh installs).
+
 ## [1.29.1] — 2026-07-29
 
 Live Channels enable feels like a guided launch, Unraid can opt into the Docker socket for turnkey Tunarr, and managed starts point Projectionist at a reachable sibling URL.
