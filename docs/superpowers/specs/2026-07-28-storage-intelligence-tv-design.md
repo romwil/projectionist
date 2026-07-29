@@ -1,7 +1,7 @@
 # Storage Intelligence for TV + show rollup health
 
 **Date:** 2026-07-28  
-**Status:** Approved  
+**Status:** Shipped (v1.28.0)  
 **Version target:** 1.28.0 (feature)
 
 ## Problem

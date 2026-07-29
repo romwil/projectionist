@@ -1,5 +1,7 @@
 # Storage Intelligence TV Implementation Plan
 
+> **Shipped as v1.28.0 (2026-07-29).**
+
 > **For agentic workers:** Execute task-by-task with TDD. Checkbox tracking.
 
 **Goal:** Bring TV shows into Storage Intelligence with durable show size rollups, a 5× paginated candidate buffer with async refill, visible-row freshness enrichment, and honest agent TV progress APIs — then ship as v1.28.0.
@@ -24,10 +26,10 @@
 - Modify: `projectionist/library/db/_schema.py` + `migrations.py` (migration 39 backfill)
 - Test: `tests/test_library_episodes.py` (or new `tests/test_show_rollups.py`)
 
-- [ ] Failing test: after replace episodes with sizes, show `file_size` equals sum
-- [ ] Implement rollup SQL to include `SUM(file_size)`
-- [ ] Migration 39: backfill all shows from `library_episodes`
-- [ ] Tests pass
+- [x] Failing test: after replace episodes with sizes, show `file_size` equals sum
+- [x] Implement rollup SQL to include `SUM(file_size)`
+- [x] Migration 39: backfill all shows from `library_episodes`
+- [x] Tests pass
 
 ### Task 2: Purge buffer, enrich, top-up, shows
 
@@ -37,11 +39,11 @@
 - Modify: `projectionist/web/app.py` (enrich + top-up triggers on delete/dismiss)
 - Test: `tests/test_purge_candidates_cache.py`, new enrich/top-up tests
 
-- [ ] `DEFAULT_LIMIT = 100`, constants `PAGE_SIZE=20`, `BUFFER_TARGET=100`, `REFILL_THRESHOLD=80`
-- [ ] `top_up_purge_candidates(db, settings, *, target=100)` appends excluding existing+dismissed
-- [ ] `enrich_purge_candidates(db, settings, items)` refreshes size/last_watched; *arr size for visible
-- [ ] delete/dismiss endpoints drop keys then schedule/top-up if &lt; 80
-- [ ] GET purge-candidates optionally enriches by `rating_keys` query or body on POST enrich
+- [x] `DEFAULT_LIMIT = 100`, constants `PAGE_SIZE=20`, `BUFFER_TARGET=100`, `REFILL_THRESHOLD=80`
+- [x] `top_up_purge_candidates(db, settings, *, target=100)` appends excluding existing+dismissed
+- [x] `enrich_purge_candidates(db, settings, items)` refreshes size/last_watched; *arr size for visible
+- [x] delete/dismiss endpoints drop keys then schedule/top-up if &lt; 80
+- [x] GET purge-candidates optionally enriches by `rating_keys` query or body on POST enrich
 
 ### Task 3: Paginated Storage Intelligence UI
 
@@ -50,10 +52,10 @@
 - Modify: `frontend/src/api/client.js` if new enrich endpoint
 - Test: frontend unit if extractable helpers; otherwise rely on API tests + manual smoke
 
-- [ ] Type column (Movie/Show)
-- [ ] Page state; display `slice(page*20, page*20+20)`
-- [ ] Enrich visible keys on mount/page change
-- [ ] Keep/Dismiss + Purge trigger reload; show refill meta when count climbing
+- [x] Type column (Movie/Show)
+- [x] Page state; display `slice(page*20, page*20+20)`
+- [x] Enrich visible keys on mount/page change
+- [x] Keep/Dismiss + Purge trigger reload; show refill meta when count climbing
 
 ### Task 4: Agent TV honesty
 
@@ -62,13 +64,13 @@
 - Modify: `projectionist/library/episodes.py` (`summarize_tv_progress`)
 - Test: `tests/test_library_query.py`, episode/progress tests
 
-- [ ] Sort + min/max total episode filters
-- [ ] Progress payload totals
+- [x] Sort + min/max total episode filters
+- [x] Progress payload totals
 
 ### Task 5: Docs + release v1.28.0
 
 **Files:** HELP.md (Storage Intelligence), CHANGELOG, version lockstep, release-notes.json
 
-- [ ] Full pytest + frontend unit/lint/build
-- [ ] Version bump, CHANGELOG Highlights, generate release notes
-- [ ] Commit, tag, `gh release`, `docker-release.sh` per user ship request
+- [x] Full pytest + frontend unit/lint/build
+- [x] Version bump, CHANGELOG Highlights, generate release notes
+- [x] Commit, tag, `gh release`, `docker-release.sh` per user ship request
