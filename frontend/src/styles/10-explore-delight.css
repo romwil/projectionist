@@ -1584,6 +1584,18 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   color: var(--success);
 }
 
+/* Dashboard delight row: weekly digest + on-now side by side when space allows */
+.dash-delight-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  margin: 0 0 1.5rem;
+}
+.dash-delight-row > .weekly-digest,
+.dash-delight-row > .on-now-panel {
+  margin-bottom: 0;
+}
+
 /* Weekly digest panel */
 .weekly-digest {
   border: 1px solid var(--border);
@@ -1642,6 +1654,79 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   border: 1px solid var(--border-subtle);
   border-radius: 999px;
   padding: 0.2rem 0.6rem;
+}
+
+/* Live Channels on-now panel */
+.on-now-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  padding: 1rem 1.15rem;
+  margin: 0 0 1.5rem;
+}
+.on-now-panel-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.on-now-panel-meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+  margin: 0.25rem 0 0;
+  max-width: 36rem;
+}
+.on-now-plex-cta {
+  text-decoration: none;
+  white-space: nowrap;
+}
+.on-now-list {
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.on-now-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-subtle);
+}
+.on-now-channel {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text);
+}
+.on-now-titles {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.on-now-progress-meta {
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
+.on-now-progress-bar {
+  margin-top: 0.2rem;
+  height: 0.28rem;
+  border-radius: 999px;
+  background: var(--border-subtle);
+  overflow: hidden;
+}
+.on-now-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent, var(--text));
+  opacity: 0.75;
+}
+.on-now-panel--compact .on-now-list {
+  margin-top: 0.65rem;
 }
 
 /* Grooming safe-undo panel */
@@ -2077,7 +2162,8 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   max-width: 240px;
   padding: 0.7rem 0.8rem;
   border-radius: 10px;
-  border: 1px solid var(--border-subtle);
+  /* --border (not --border-subtle): subtle matches surface-raised and bleeds into the page */
+  border: 1px solid var(--border);
   background: var(--surface-raised);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--text) 12%, transparent);
 }

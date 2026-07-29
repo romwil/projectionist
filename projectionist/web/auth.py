@@ -271,8 +271,18 @@ def seed_env_owner(db: Database) -> Optional[str]:
     existing = db.get_user_by_display_name(username)
     if existing is not None:
         user_id = str(existing["id"])
+        is_owner = str(existing["role"]) == "owner"
+        # Never promote a matching local user into a second owner — has_real_owner
+        # must gate the promote path the same way it gates create.
+        if not is_owner and has_real_owner(db):
+            logger.warning(
+                "PROJECTIONIST_OWNER_PASSWORD is set but a different owner already exists; "
+                "skipping promote of '%s'.",
+                username,
+            )
+            return None
         changed = False
-        if str(existing["role"]) != "owner":
+        if not is_owner:
             db.update_user_role(user_id, "owner")
             changed = True
         stored_hash = existing["password_hash"] if "password_hash" in existing.keys() else None

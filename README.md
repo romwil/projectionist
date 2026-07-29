@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fprojectionist-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/projectionist)
-[![Version](https://img.shields.io/badge/version-1.28.1-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.29.0-green.svg)](CHANGELOG.md)
 
 **Cinema intelligence for your personal archive.**
 
@@ -212,6 +212,7 @@ Default install is **single-owner** — no login screen. Household features are 
 |------|---------|--------|
 | `features.multi_user_enabled` | `false` | Login + session cookies; owner vs member partitioning |
 | `features.seerr_enabled` | `false` | Seerr discovery / request path for members |
+| `features.live_channels_enabled` | `false` | Tunarr-backed Live Channels → Plex Live TV (Admin → Live Channels) |
 
 Auth methods are opt-in: **Sign in with Plex** (PIN), **local password** (owner registration), and/or **OIDC** (Authelia, Authentik, Keycloak, etc.). The login page shows whatever is configured (`auth_methods` from `GET /api/features`). Plex token paste remains an advanced fallback.
 
@@ -243,6 +244,8 @@ Details: [Wiki → Multi-User](docs/wiki/Multi-User.md) · [Wiki → Seerr](docs
 | [Documentation style](docs/DOCS_STYLE.md) | The durable docs standard (warm + E-E-A-T, worked examples, runnable snippets) |
 | [Testing (e2e / CA)](docs/TESTING.md) | Playwright and CA release checklist |
 | [Value-based testing](TESTING.md) | How to write logic-level backend tests |
+| [Feature testing blueprint](docs/superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md) | CI + QA sidecar + Interactive UI QA + pentest layers |
+| [Cursor QA environment design](docs/superpowers/specs/2026-07-29-cursor-qa-environment-design.md) | Product-agnostic extract for other Cursor projects |
 | [Changelog](CHANGELOG.md) | Release notes |
 
 ---
@@ -260,7 +263,7 @@ cd frontend && npm run test:unit
 npm run test:e2e
 ```
 
-CA-focused suites and live optional gates: [TESTING.md](docs/TESTING.md).
+CA-focused suites and live optional gates: [TESTING.md](docs/TESTING.md). Full-stack layers (value tests, mocked e2e, maintainer QA, red-hat pentest): [Feature testing environment blueprint](docs/superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md).
 
 ---
 

@@ -52,7 +52,7 @@ Design deltas vs original letter:
 | M2 | Medium | L | **Done** | `schema_version` + ordered migration module |
 | M3 | Medium | S | Open | Jittered retry for idempotent connector GETs |
 | M4 | Medium | M | **Done** (Hybrid C) | Affinity tools -> full-only; catalog stays on privacy |
-| M5 | Medium | M | Open | Protocol v1.1 prompt red-team (TC-PROMPT-01 deferred) |
+| M5 | Medium | M | **Mitigated** | Stored prompt fencing + pytest (`tests/test_prompt_injection.py`); harness TC-PROMPT-01 runs that suite |
 | M6 | Medium | M | Open | Persist quarantine; absolute wall-clock task deadline |
 | M7 | Medium | M | **Done** (Prune + one story C) | Deleted stubs; ambient/chat-first narrative |
 | M8 | Medium | M | Open (partial) | AuthProvider; finish god-component extraction |
@@ -188,7 +188,7 @@ Default bind `0.0.0.0:8788` + no auth = full admin on any reachable interface (d
 | M2 | Schema ops | Migrations are an ad-hoc `_migrate_*` chain on every boot; no schema version table; dual-call of `_migrate_multi_user_columns` historically. | Introduce `schema_version` + ordered migration module (still SQLite). | **Done** |
 | M3 | Connectors | Shared HTTP helpers timeout but do not retry idempotent GETs (429/5xx). | Jittered retry for reads only. | Open |
 | M4 | Privacy / MCP | Privacy mode still exposes watch-biased tools (`recommend_hidden_gems`, purge candidates, watch patterns) - raw fields stripped, but results encode household affinity. | **Hybrid (C):** affinity tools -> full only; catalog on privacy. | **Done** |
-| M5 | Prompt safety | TC-PROMPT-01 (LLM red-team) deferred. Tool JSON can carry internal ids to the model. | Protocol v1.1: confirm-token non-leak, secret non-leak, member sanitizer on tool paths. | Open |
+| M5 | Prompt safety | Stored cross-user memory/research injection reached the model unfenced. | Fence untrusted tool/memory data; system-prompt clause; pytest TC-PROMPT-01; confirm-gated *arr writes remain. Residual: model behavioral risk + internal ids in tool JSON. | **Mitigated** |
 | M6 | Scheduler | Quarantine is in-memory (clears on restart); heartbeat can extend a wedged task if `should_stop()` keeps getting called. | Persist quarantine; absolute wall-clock deadline even with heartbeats. | Open |
 | M7 | Product debt | Dead / stub weight: `agent_blueprints` table with no CRUD; `lists/` stub; `llm_theme_tagging` stub; lens CRUD vs "ambient context / zero-touch" narrative. | **Prune + one story (C):** delete stubs; ambient/chat-first narrative. | **Done** |
 | M8 | Frontend | No shared auth/features context - Nx `/api/features` + `/api/auth/me`. CSS was one 9k-line file. | Thin AuthProvider; split CSS by surface without visual rewrite. | Partial (CSS split done) |
@@ -229,7 +229,7 @@ Schema is rich and honest. Materialized neighbors / facets / FTS are the correct
 
 ### Agent / RAG - A- (was B before C1)
 
-Tool surface is broad and mostly well-validated. Confirm-gated `*arr` is the crown jewel. `search_library` is fixed. Prompt-injection program incomplete (**M5**).
+Tool surface is broad and mostly well-validated. Confirm-gated `*arr` is the crown jewel. `search_library` is fixed. Stored prompt-injection fencing landed (**M5** Mitigated); residual is model behavioral risk.
 
 ### Frontend / UX - B
 
@@ -302,7 +302,7 @@ ARCHITECTURE / DESIGN / DATA_MODEL / SECURITY / PRIVACY / wiki / pentest protoco
 ### Later (after A)
 
 18. **H8** embedding storage + search prefilter (before marketing "works great at 10k+")
-19. **M5** prompt red-team Protocol v1.1
+19. **M5** ~~prompt red-team Protocol v1.1~~ → **Mitigated** (fencing + pytest; harness TC-PROMPT-01)
 20. **M6** durable quarantine + absolute task deadline
 21. **M3** jittered GET retries
 

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "projectionist"
-version = "1.28.1"
+version = "1.29.0"
 description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
 readme = "README.md"
 license = { text = "MIT" }

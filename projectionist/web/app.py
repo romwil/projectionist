@@ -211,6 +211,7 @@ from projectionist.web.setup import (
     test_sonarr,
     test_tautulli,
     test_tmdb,
+    test_tunarr,
 )
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "/config"))
@@ -484,9 +485,13 @@ class FeatureFlagsPayload(BaseModel):
     multi_user_enabled: bool = False
     seerr_enabled: bool = False
     plex_collections_enabled: bool = False
-    guest_tour_enabled: bool = False
+    guest_access_enabled: bool = False
     invite_only: bool = True
     open_auto_provision: bool = False
+    ephemeral_collection_gc_enabled: bool = True
+    ephemeral_collection_gc_dry_run: bool = False
+    agent_may_mutate_personal_data: bool = False
+    live_channels_enabled: bool = False
 
 
 class AuthSettingsPayload(BaseModel):
@@ -628,6 +633,17 @@ class SeerrSettingsPayload(BaseModel):
     require_linked_user_for_requests: bool = False
 
 
+class TunarrSettingsPayload(BaseModel):
+    url: str = ""
+    docker_orchestration: bool = False
+    image_tag: str = "chrisbenincasa/tunarr:1.3.x"
+    volume_path: str = "tunarr"
+    channel_number_base: int = 100
+    plex_pass_confirmed: bool = False
+    last_publish_at: str = ""
+    last_error: str = ""
+
+
 class MailSettingsPayload(BaseModel):
     enabled: bool = False
     provider: str = "off"
@@ -698,6 +714,7 @@ class SettingsPayload(BaseModel):
     features: FeatureFlagsPayload = Field(default_factory=FeatureFlagsPayload)
     auth: AuthSettingsPayload = Field(default_factory=AuthSettingsPayload)
     seerr: SeerrSettingsPayload = Field(default_factory=SeerrSettingsPayload)
+    tunarr: TunarrSettingsPayload = Field(default_factory=TunarrSettingsPayload)
     mail: MailSettingsPayload = Field(default_factory=MailSettingsPayload)
     apprise: AppriseSettingsPayload = Field(default_factory=AppriseSettingsPayload)
     youth: YouthSettingsPayload = Field(default_factory=YouthSettingsPayload)
@@ -755,6 +772,7 @@ class TestPayload(BaseModel):
     llm_model: str = ""
     seerr_url: str = ""
     seerr_api_key: str = ""
+    tunarr_url: str = ""
 
 
 def _settings() -> Settings:
@@ -927,6 +945,9 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "invite_only": bool(getattr(settings.features, "invite_only", True)),
             "open_auto_provision": bool(
                 getattr(settings.features, "open_auto_provision", False)
+            ),
+            "live_channels_enabled": bool(
+                getattr(settings.features, "live_channels_enabled", False)
             ),
         },
         "auth": {
@@ -1537,6 +1558,288 @@ def redeem_invite_local_endpoint(
     return {"authenticated": True, **result}
 
 
+@app.get("/api/admin/live-channels/status")
+def live_channels_status_endpoint(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Owner-only Live Channels flag + Tunarr reachability snapshot."""
+    del user
+    from projectionist.live_channels.status import build_live_channels_status
+
+    return build_live_channels_status(_settings())
+
+
+@app.get("/api/admin/live-channels/starter-pack")
+def live_channels_starter_pack_endpoint(
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner-only library-aware starter channel proposals."""
+    from projectionist.live_channels.starter_pack import propose_starter_pack_from_db
+
+    settings = _settings()
+    return propose_starter_pack_from_db(
+        _db(),
+        settings=settings,
+        owner_user_id=str(user.id),
+    )
+
+
+class LiveChannelsPreflightPayload(BaseModel):
+    plex_pass_confirmed: Optional[bool] = None
+
+
+class LiveChannelsLifecyclePayload(BaseModel):
+    action: Literal["start", "stop", "pull", "ensure_running"] = "ensure_running"
+
+
+class LiveChannelsPublishStartersPayload(BaseModel):
+    recipes: List[Dict[str, Any]] = Field(default_factory=list)
+    wire_plex: bool = True
+    confirm: bool = False
+
+
+class LiveChannelsFromCollectionPayload(BaseModel):
+    collection_id: str = ""
+    collection_title: str = ""
+    channel_number: int = 0
+    name: str = ""
+    confirm: bool = False
+
+
+@app.post("/api/admin/live-channels/preflight")
+def live_channels_preflight_endpoint(
+    payload: Optional[LiveChannelsPreflightPayload] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner preflight checklist for the Live Channels enable flow."""
+    del user
+    from projectionist.live_channels.preflight import run_preflight
+
+    body = payload or LiveChannelsPreflightPayload()
+    settings = _settings()
+    if body.plex_pass_confirmed is not None:
+        tunarr = asdict(settings.tunarr)
+        tunarr["plex_pass_confirmed"] = bool(body.plex_pass_confirmed)
+        updated = Settings.from_mapping({**asdict(settings), "tunarr": tunarr})
+        save_settings(DATA_DIR, updated)
+        settings = updated
+    return run_preflight(
+        settings,
+        data_dir=DATA_DIR,
+        owner_confirmed_plex_pass=body.plex_pass_confirmed,
+    )
+
+
+@app.post("/api/admin/live-channels/lifecycle")
+def live_channels_lifecycle_endpoint(
+    payload: LiveChannelsLifecyclePayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner Docker lifecycle: pull / start / stop / ensure_running."""
+    del user
+    from projectionist.live_channels.docker import (
+        lifecycle_from_settings,
+        resolve_config_volume,
+    )
+
+    settings = _settings()
+    life = lifecycle_from_settings(settings)
+    volume = resolve_config_volume(settings, DATA_DIR)
+    action = str(payload.action or "ensure_running").strip().lower()
+    if action == "pull":
+        result = life.pull()
+    elif action == "stop":
+        result = life.stop(keep_volume=True)
+    elif action == "start":
+        result = life.start(config_volume=volume)
+    else:
+        result = life.ensure_running(config_volume=volume)
+
+    detail = result.detail or {}
+    url_hint = str(detail.get("url_hint") or "")
+    if (
+        result.ok
+        and result.status == "running"
+        and url_hint
+        and not str(settings.tunarr.url or "").strip()
+    ):
+        tunarr = asdict(settings.tunarr)
+        tunarr["url"] = url_hint
+        updated = Settings.from_mapping({**asdict(settings), "tunarr": tunarr})
+        save_settings(DATA_DIR, updated)
+        settings = updated
+
+    payload_out = result.to_dict()
+    payload_out["tunarr_url"] = str(settings.tunarr.url or "")
+    payload_out["config_volume"] = volume
+    return payload_out
+
+
+@app.post("/api/admin/live-channels/starters/publish")
+def live_channels_publish_starters_endpoint(
+    payload: LiveChannelsPublishStartersPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Publish selected starter recipes to Tunarr (owner confirm-gated)."""
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Publishing starters requires confirm=true",
+        )
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.publish import (
+        publish_recipes,
+        tunarr_client_from_settings,
+        wire_plex_media_source,
+    )
+    from projectionist.live_channels.starter_pack import propose_starter_pack_from_db
+
+    try:
+        client = tunarr_client_from_settings(settings)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    wire: Dict[str, Any] = {"ok": False, "skipped": True}
+    if payload.wire_plex and settings.plex_url and settings.plex_token:
+        try:
+            wire = wire_plex_media_source(
+                client,
+                plex_url=settings.plex_url,
+                plex_token=settings.plex_token,
+            )
+        except Exception as error:  # noqa: BLE001
+            wire = {"ok": False, "message": str(error)[:240]}
+
+    recipes = list(payload.recipes or [])
+    if not recipes:
+        pack = propose_starter_pack_from_db(
+            _db(),
+            settings=settings,
+            owner_user_id=str(user.id),
+        )
+        recipes = list(pack.get("proposals") or [])
+
+    try:
+        result = publish_recipes(client, recipes)
+    except Exception as error:  # noqa: BLE001
+        tunarr = asdict(settings.tunarr)
+        tunarr["last_error"] = str(error)[:240]
+        save_settings(
+            DATA_DIR,
+            Settings.from_mapping({**asdict(settings), "tunarr": tunarr}),
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not publish starters to Tunarr"),
+        ) from error
+
+    tunarr = asdict(settings.tunarr)
+    if result.get("ok") or result.get("count_published"):
+        tunarr["last_publish_at"] = str(result.get("published_at") or "")
+        tunarr["last_error"] = ""
+    elif result.get("errors"):
+        tunarr["last_error"] = str(result["errors"][0].get("error") or "publish failed")[:240]
+    save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
+    result["media_source"] = wire
+    return result
+
+
+@app.post("/api/admin/live-channels/channels/from-collection")
+def live_channels_from_collection_endpoint(
+    payload: LiveChannelsFromCollectionPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Publish a collection/list as a Tunarr channel (owner confirm-gated)."""
+    del user
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Creating a channel from a collection requires confirm=true",
+        )
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.publish import (
+        publish_collection_channel,
+        tunarr_client_from_settings,
+    )
+
+    try:
+        client = tunarr_client_from_settings(settings)
+        result = publish_collection_channel(
+            client,
+            collection_id=payload.collection_id,
+            collection_title=payload.collection_title,
+            channel_number=payload.channel_number,
+            name=payload.name,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not create channel from collection"),
+        ) from error
+
+    tunarr = asdict(settings.tunarr)
+    if result.get("ok") or result.get("count_published"):
+        tunarr["last_publish_at"] = str(result.get("published_at") or "")
+        tunarr["last_error"] = ""
+    save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
+    return result
+
+
+@app.get("/api/admin/live-channels/plex-attach")
+def live_channels_plex_attach_endpoint(
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Plain-language Plex Live TV attach checklist + copy URLs."""
+    del user
+    from projectionist.live_channels.plex_attach import build_plex_attach, probe_tuner_discovery
+
+    settings = _settings()
+    discovery = probe_tuner_discovery(str(settings.tunarr.url or ""))
+    attach = build_plex_attach(
+        settings,
+        discovery_ok=bool(discovery.get("ok")) if discovery else None,
+    )
+    attach["discovery"] = {
+        "ok": discovery.get("ok"),
+        "message": discovery.get("message") or "",
+    }
+    return attach
+
+
+@app.get("/api/live-channels/on-now")
+def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    """Household-readable guide snapshot (channel name + now/next). Empty-safe.
+
+    Owners and members may call this. Youth accounts filter rated titles via the
+    existing rating gate when Tunarr programs carry content ratings. CTA is always
+    Plex Live TV — never in-app playback.
+    """
+    from projectionist.live_channels.guide import build_on_now_snapshot
+    from projectionist.live_channels.nudges import maybe_deliver_live_channels_ready_nudge
+    from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
+
+    settings = _settings()
+    youth_ceiling = None
+    if youth_gate_active(user):
+        youth_ceiling = resolve_youth_max_rating(settings)
+    snapshot = build_on_now_snapshot(settings, youth_max_rating=youth_ceiling)
+    # Soft, deduped ready nudge for opt-in members (never blocks the response).
+    try:
+        maybe_deliver_live_channels_ready_nudge(
+            _db(),
+            settings,
+            ready=bool(snapshot.get("ready")),
+            channel_count=int(snapshot.get("count") or 0),
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("Live Channels ready nudge skipped", exc_info=True)
+    return snapshot
+
+
 @app.get("/api/admin/access-requests")
 def list_access_requests_endpoint(
     status: Optional[str] = None,
@@ -2020,6 +2323,21 @@ def api_test_seerr(payload: TestPayload, user=Depends(require_role("owner"))) ->
         "seerr",
         base_url=resolved["seerr_url"],
         api_token=resolved["seerr_api_key"],
+        ok=bool(result.get("ok")),
+    )
+    return result
+
+
+@app.post("/api/setup/test/tunarr")
+def api_test_tunarr(payload: TestPayload, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
+    resolved = _resolve_test_payload(payload)
+    result = test_tunarr(resolved.get("tunarr_url") or "")
+    record_service_integration(
+        _db(),
+        "tunarr",
+        base_url=resolved.get("tunarr_url") or "",
+        api_token="",
         ok=bool(result.get("ok")),
     )
     return result

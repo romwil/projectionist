@@ -40,3 +40,15 @@ export function canWatchOnPlex(item) {
 export function plexPlayRatingKey(item) {
   return String(item?.play_rating_key || item?.rating_key || item?.plex_rating_key || "").trim();
 }
+
+/**
+ * Plex web deep link for Live TV (household watch surface for Live Channels).
+ * machineId prefers the correct server; without it, open the generic Live TV hub.
+ */
+export function plexLiveTvUrl(machineId = "") {
+  const server = String(machineId || "").trim();
+  if (server) {
+    return `https://app.plex.tv/desktop/#!/server/${encodeURIComponent(server)}/live-tv`;
+  }
+  return "https://app.plex.tv/desktop/#!/live-tv";
+}

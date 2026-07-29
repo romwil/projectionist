@@ -4,6 +4,8 @@ CuratorX uses [Playwright](https://playwright.dev/) for browser tests against th
 
 For **value-based backend unit tests** (assert exact tool/SQL results, not just response shape), see the root [TESTING.md](../TESTING.md).
 
+Full-stack testing environment blueprint (CI + QA sidecar + Interactive UI QA + red-hat pentest protocol): [Feature testing environment blueprint](superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md). Product-agnostic extract for other Cursor projects: [Cursor QA environment design](superpowers/specs/2026-07-29-cursor-qa-environment-design.md).
+
 ## CA release checklist
 
 > **Docs gate:** every user-facing change updates the relevant guide **and** adds a benefit-led `### Highlights` entry to `CHANGELOG.md`, meeting [DOCS_STYLE.md](DOCS_STYLE.md). Docs are a first-class deliverable, checked in every PR.

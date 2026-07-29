@@ -12,6 +12,9 @@ import {
   getAuthMe,
   getFeatures,
   getHealth,
+  getLiveChannelsPlexAttach,
+  getLiveChannelsStarterPack,
+  getLiveChannelsStatus,
   getPersona,
   getSettings,
   getWizardStatus,
@@ -21,6 +24,9 @@ import {
   listUsers,
   patchUserDisabled,
   patchUserYouthMode,
+  postLiveChannelsLifecycle,
+  postLiveChannelsPreflight,
+  publishLiveChannelsStarters,
   putPersona,
   putSystemConfig,
   resolveModelForProvider,
@@ -37,6 +43,7 @@ import {
   formatLastSyncRelative,
   formatSyncJobDetails,
 } from "../lib/jobProgress.js";
+import { formatRemaining } from "../lib/onNow.js";
 import {
   canToggleSecretVisibility,
   isSecretConfigured,
@@ -52,6 +59,7 @@ const ADMIN_SECTIONS = new Set([
   "persona",
   "household",
   "seerr",
+  "live-channels",
   "advanced",
 ]);
 
@@ -63,6 +71,7 @@ const SECTION_TITLES = {
   persona: "Persona",
   household: "Household",
   seerr: "Seerr",
+  "live-channels": "Live Channels",
   advanced: "Advanced",
 };
 
@@ -133,12 +142,20 @@ function fieldLabel(field) {
 }
 
 function settingsPayloadForTest(service, settings) {
-  if (service !== "seerr") return settings;
-  return {
-    ...settings,
-    seerr_url: settings.seerr?.url || "",
-    seerr_api_key: settings.seerr?.api_key || "",
-  };
+  if (service === "seerr") {
+    return {
+      ...settings,
+      seerr_url: settings.seerr?.url || "",
+      seerr_api_key: settings.seerr?.api_key || "",
+    };
+  }
+  if (service === "tunarr") {
+    return {
+      ...settings,
+      tunarr_url: settings.tunarr?.url || "",
+    };
+  }
+  return settings;
 }
 
 function SecretInput({
@@ -241,6 +258,8 @@ function serviceCredentialsPresent(service, settings) {
       return Boolean(settings.tautulli_url && settings.tautulli_api_key_set);
     case "seerr":
       return Boolean(settings.seerr?.url && settings.seerr?.api_key_set);
+    case "tunarr":
+      return Boolean(settings.features?.live_channels_enabled && settings.tunarr?.url);
     default:
       return false;
   }
@@ -363,6 +382,12 @@ export default function ConfigPage() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [mcpRevealedKeys, setMcpRevealedKeys] = useState({});
   const [mcpKeyBusy, setMcpKeyBusy] = useState(null);
+  const [liveChannelsStatus, setLiveChannelsStatus] = useState(null);
+  const [livePreflight, setLivePreflight] = useState(null);
+  const [liveStarters, setLiveStarters] = useState(null);
+  const [liveAttach, setLiveAttach] = useState(null);
+  const [liveBusy, setLiveBusy] = useState(null);
+  const [selectedStarters, setSelectedStarters] = useState({});
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
 
@@ -470,6 +495,17 @@ export default function ConfigPage() {
     if (!settings) return;
     refreshManagedUsers().catch(() => {});
   }, [settings?.features?.multi_user_enabled]);
+
+  useEffect(() => {
+    if (showWizard || section !== "live-channels") return;
+    if (!settings?.features?.live_channels_enabled) {
+      setLiveChannelsStatus(null);
+      return;
+    }
+    getLiveChannelsStatus()
+      .then(setLiveChannelsStatus)
+      .catch(() => setLiveChannelsStatus(null));
+  }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url]);
 
   useEffect(() => {
     if (!settings || autoCertifyDone || autoCertifying) return;
@@ -600,6 +636,13 @@ export default function ConfigPage() {
     setSettings((prev) => ({
       ...prev,
       seerr: { ...(prev?.seerr || {}), ...patch },
+    }));
+  }
+
+  function updateTunarrSettings(patch) {
+    setSettings((prev) => ({
+      ...prev,
+      tunarr: { ...(prev?.tunarr || {}), ...patch },
     }));
   }
 
@@ -2290,6 +2333,491 @@ export default function ConfigPage() {
                   />
                 ) : null}
               </div>
+          </section>
+        ) : null}
+
+        {!showWizard && showSection("live-channels") ? (
+          <section className="config-section" data-testid="live-channels-settings">
+            <h2>Live Channels (optional)</h2>
+            <p className="wizard-note">
+              Projectionist manages a Tunarr sibling that feeds Plex Live TV — no Tunarr admin UI required.
+              Enable, run preflight, start Tunarr if Docker is available, publish library-aware starters, then add
+              the tuner in Plex.
+            </p>
+            <label className="config-toggle" data-testid="live-channels-enabled-toggle">
+              <input
+                type="checkbox"
+                checked={Boolean(settings?.features?.live_channels_enabled)}
+                onChange={async (event) => {
+                  const enabled = event.target.checked;
+                  updateFeatureFlags({ live_channels_enabled: enabled });
+                  try {
+                    await persistSettings({
+                      features: { ...(settings.features || {}), live_channels_enabled: enabled },
+                    });
+                    if (!enabled && settings?.tunarr?.docker_orchestration) {
+                      setLiveBusy("lifecycle");
+                      try {
+                        await postLiveChannelsLifecycle("stop");
+                      } catch {
+                        /* stop is best-effort on disable */
+                      } finally {
+                        setLiveBusy(null);
+                      }
+                    }
+                    setActionFeedback(
+                      "live-channels",
+                      "success",
+                      enabled
+                        ? "Live Channels enabled — continue with the checklist below."
+                        : "Live Channels disabled (Tunarr volume kept).",
+                    );
+                    if (enabled) {
+                      getLiveChannelsStatus().then(setLiveChannelsStatus).catch(() => {});
+                    } else {
+                      setLiveChannelsStatus(null);
+                      setLivePreflight(null);
+                      setLiveStarters(null);
+                      setLiveAttach(null);
+                    }
+                  } catch (error) {
+                    setActionFeedback("live-channels", "error", error.message);
+                  }
+                }}
+              />
+              <span>Enable Live Channels (Tunarr → Plex Live TV)</span>
+            </label>
+
+            {settings?.features?.live_channels_enabled ? (
+              <>
+                <div
+                  className="service-card"
+                  data-testid="live-channels-health-strip"
+                  style={{ marginTop: "1rem" }}
+                >
+                  <div className="service-card-header">
+                    <div className="service-card-title">
+                      <h3>Broadcast health</h3>
+                    </div>
+                    <button
+                      type="button"
+                      className="ghost"
+                      data-testid="live-channels-refresh-status"
+                      disabled={liveBusy === "status"}
+                      onClick={() => {
+                        setLiveBusy("status");
+                        getLiveChannelsStatus()
+                          .then(setLiveChannelsStatus)
+                          .catch((error) => setActionFeedback("live-channels", "error", error.message))
+                          .finally(() => setLiveBusy(null));
+                      }}
+                    >
+                      Refresh
+                    </button>
+                  </div>
+                  <p className="wizard-note" data-testid="live-channels-health-summary">
+                    {liveChannelsStatus
+                      ? [
+                          liveChannelsStatus.broadcast?.sidecar_up ? "Sidecar up" : "Sidecar down",
+                          `${liveChannelsStatus.channel_count ?? 0} channel(s)`,
+                          liveChannelsStatus.airing?.length
+                            ? `${liveChannelsStatus.airing.length} airing`
+                            : null,
+                          liveChannelsStatus.sessions?.total_connections
+                            ? `${liveChannelsStatus.sessions.total_connections} stream connection(s)`
+                            : null,
+                          liveChannelsStatus.last_publish_at
+                            ? `Last publish ${liveChannelsStatus.last_publish_at}`
+                            : "Not published yet",
+                          liveChannelsStatus.last_error ? `Error: ${liveChannelsStatus.last_error}` : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ")
+                      : "Status not loaded yet."}
+                  </p>
+                  {liveChannelsStatus?.airing?.length ? (
+                    <ul className="wizard-note" data-testid="live-channels-airing-progress">
+                      {liveChannelsStatus.airing.slice(0, 6).map((row) => {
+                        const label =
+                          row.number != null ? `${row.number} · ${row.name}` : row.name;
+                        const pct =
+                          row.percent == null || !Number.isFinite(Number(row.percent))
+                            ? null
+                            : `${Math.round(Number(row.percent))}%`;
+                        const remaining = formatRemaining(row.seconds_remaining);
+                        return (
+                          <li key={row.id || label}>
+                            {label}: {row.title}
+                            {pct ? ` — ${pct}` : ""}
+                            {remaining ? ` (${remaining})` : ""}
+                            {row.is_paused ? " · paused" : ""}
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
+                </div>
+
+                <div
+                  className={`service-card ${testResults.tunarr?.state === "success" ? "service-ok" : ""} ${testing === "tunarr" ? "service-loading" : ""} ${testResults.tunarr?.state === "error" ? "service-error" : ""}`}
+                >
+                  <div className="service-card-header">
+                    <div className="service-card-title">
+                      <h3>Tunarr connection</h3>
+                      <CertifiedBadge
+                        certified={certifications.tunarr?.certified}
+                        testing={testing === "tunarr"}
+                        serviceId="tunarr"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="verify-tunarr"
+                      onClick={() => runTest("tunarr")}
+                      disabled={testing === "tunarr" || !settings?.tunarr?.url}
+                    >
+                      {testing === "tunarr" ? "Testing…" : "Test connection"}
+                    </button>
+                  </div>
+                  <div className="service-fields">
+                    <label>
+                      <span>Tunarr base URL</span>
+                      <input
+                        type="text"
+                        data-testid="tunarr-url"
+                        value={settings?.tunarr?.url ?? ""}
+                        placeholder="http://192.168.1.50:8000"
+                        onChange={(event) => updateTunarrSettings({ url: event.target.value })}
+                        onBlur={() =>
+                          persistSettings({
+                            tunarr: { ...(settings.tunarr || {}), url: settings?.tunarr?.url ?? "" },
+                          }).catch((error) => setActionFeedback("live-channels", "error", error.message))
+                        }
+                      />
+                    </label>
+                    <label>
+                      <span>Pinned image tag</span>
+                      <input
+                        type="text"
+                        data-testid="tunarr-image-tag"
+                        value={settings?.tunarr?.image_tag ?? "chrisbenincasa/tunarr:1.3.x"}
+                        onChange={(event) => updateTunarrSettings({ image_tag: event.target.value })}
+                        onBlur={() =>
+                          persistSettings({
+                            tunarr: {
+                              ...(settings.tunarr || {}),
+                              image_tag: settings?.tunarr?.image_tag ?? "chrisbenincasa/tunarr:1.3.x",
+                            },
+                          }).catch((error) => setActionFeedback("live-channels", "error", error.message))
+                        }
+                      />
+                    </label>
+                  </div>
+                  <label className="config-toggle" data-testid="tunarr-docker-orchestration">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(settings?.tunarr?.docker_orchestration)}
+                      onChange={(event) => {
+                        const enabled = event.target.checked;
+                        updateTunarrSettings({ docker_orchestration: enabled });
+                        persistSettings({
+                          tunarr: { ...(settings.tunarr || {}), docker_orchestration: enabled },
+                        }).catch((error) => setActionFeedback("live-channels", "error", error.message));
+                      }}
+                    />
+                    <span>Allow Docker orchestration (socket + PROJECTIONIST_DOCKER_ORCHESTRATION=1)</span>
+                  </label>
+                  {testResults.tunarr?.message ? (
+                    <InlineAlert
+                      type={actionAlert?.area === "live-channels" ? actionAlert.type : testResults.tunarr.state}
+                      message={
+                        actionAlert?.area === "live-channels" ? actionAlert.message : testResults.tunarr.message
+                      }
+                    />
+                  ) : null}
+                </div>
+
+                <div className="service-card" data-testid="live-channels-preflight">
+                  <div className="service-card-header">
+                    <div className="service-card-title">
+                      <h3>1. Preflight</h3>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="live-channels-run-preflight"
+                      disabled={liveBusy === "preflight"}
+                      onClick={async () => {
+                        setLiveBusy("preflight");
+                        try {
+                          const result = await postLiveChannelsPreflight({
+                            plex_pass_confirmed: Boolean(settings?.tunarr?.plex_pass_confirmed),
+                          });
+                          setLivePreflight(result);
+                          setActionFeedback(
+                            "live-channels",
+                            result.ready ? "success" : "error",
+                            result.summary || "Preflight finished.",
+                          );
+                        } catch (error) {
+                          setActionFeedback("live-channels", "error", error.message);
+                        } finally {
+                          setLiveBusy(null);
+                        }
+                      }}
+                    >
+                      {liveBusy === "preflight" ? "Checking…" : "Run preflight"}
+                    </button>
+                  </div>
+                  <label className="config-toggle" data-testid="live-channels-plex-pass-confirm">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(settings?.tunarr?.plex_pass_confirmed)}
+                      onChange={(event) => {
+                        const confirmed = event.target.checked;
+                        updateTunarrSettings({ plex_pass_confirmed: confirmed });
+                        persistSettings({
+                          tunarr: { ...(settings.tunarr || {}), plex_pass_confirmed: confirmed },
+                        }).catch((error) => setActionFeedback("live-channels", "error", error.message));
+                      }}
+                    />
+                    <span>
+                      I have an active Plex Pass (Live TV / DVR). Projectionist cannot verify this from the server
+                      alone.
+                    </span>
+                  </label>
+                  {livePreflight?.checks?.length ? (
+                    <ul className="wizard-note" data-testid="live-channels-preflight-list">
+                      {livePreflight.checks.map((check) => (
+                        <li key={check.id}>
+                          {check.ok ? "✓" : check.soft ? "○" : "✗"} {check.label}: {check.message}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="wizard-note">
+                      Checks Docker, disk, Plex reachability, Tunarr URL, and Plex Pass honesty.
+                    </p>
+                  )}
+                </div>
+
+                {settings?.tunarr?.docker_orchestration ? (
+                  <div className="service-card" data-testid="live-channels-lifecycle">
+                    <div className="service-card-header">
+                      <div className="service-card-title">
+                        <h3>2. Start Tunarr (Docker)</h3>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid="live-channels-ensure-running"
+                        disabled={liveBusy === "lifecycle"}
+                        onClick={async () => {
+                          setLiveBusy("lifecycle");
+                          try {
+                            const result = await postLiveChannelsLifecycle("ensure_running");
+                            if (result.tunarr_url) {
+                              updateTunarrSettings({ url: result.tunarr_url });
+                            }
+                            setActionFeedback(
+                              "live-channels",
+                              result.ok ? "success" : "error",
+                              result.message || "Lifecycle finished.",
+                            );
+                            const status = await getLiveChannelsStatus();
+                            setLiveChannelsStatus(status);
+                            if (result.tunarr_url) {
+                              await getSettings().then(setSettings).catch(() => {});
+                            }
+                          } catch (error) {
+                            setActionFeedback("live-channels", "error", error.message);
+                          } finally {
+                            setLiveBusy(null);
+                          }
+                        }}
+                      >
+                        {liveBusy === "lifecycle" ? "Working…" : "Ensure running"}
+                      </button>
+                    </div>
+                    <p className="wizard-note">
+                      Pulls the pinned image and starts the sibling with a config volume under your data directory.
+                      Disable later stops the container but keeps the volume.
+                    </p>
+                  </div>
+                ) : null}
+
+                <div className="service-card" data-testid="live-channels-starters">
+                  <div className="service-card-header">
+                    <div className="service-card-title">
+                      <h3>{settings?.tunarr?.docker_orchestration ? "3" : "2"}. Starter channels</h3>
+                    </div>
+                    <button
+                      type="button"
+                      className="ghost"
+                      data-testid="live-channels-load-starters"
+                      disabled={liveBusy === "starters"}
+                      onClick={async () => {
+                        setLiveBusy("starters");
+                        try {
+                          const pack = await getLiveChannelsStarterPack();
+                          setLiveStarters(pack);
+                          const next = {};
+                          for (const proposal of pack.proposals || []) {
+                            next[`${proposal.number}:${proposal.name}`] = true;
+                          }
+                          setSelectedStarters(next);
+                        } catch (error) {
+                          setActionFeedback("live-channels", "error", error.message);
+                        } finally {
+                          setLiveBusy(null);
+                        }
+                      }}
+                    >
+                      {liveBusy === "starters" ? "Loading…" : "Propose starters"}
+                    </button>
+                  </div>
+                  {liveStarters?.proposals?.length ? (
+                    <>
+                      <ul className="wizard-note" data-testid="live-channels-starter-list">
+                        {liveStarters.proposals.map((proposal) => {
+                          const key = `${proposal.number}:${proposal.name}`;
+                          return (
+                            <li key={key}>
+                              <label className="config-toggle">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(selectedStarters[key])}
+                                  onChange={(event) =>
+                                    setSelectedStarters((prev) => ({
+                                      ...prev,
+                                      [key]: event.target.checked,
+                                    }))
+                                  }
+                                />
+                                <span>
+                                  {proposal.number} · {proposal.name}
+                                  {proposal.summary ? ` — ${proposal.summary}` : ""}
+                                </span>
+                              </label>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <div className="wizard-actions">
+                        <button
+                          type="button"
+                          data-testid="live-channels-publish-starters"
+                          disabled={liveBusy === "publish"}
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                "Publish selected starter channels to Tunarr? Existing channel numbers are skipped.",
+                              )
+                            ) {
+                              return;
+                            }
+                            setLiveBusy("publish");
+                            try {
+                              const recipes = (liveStarters.proposals || []).filter((proposal) => {
+                                const key = `${proposal.number}:${proposal.name}`;
+                                return selectedStarters[key];
+                              });
+                              const result = await publishLiveChannelsStarters({ recipes });
+                              setActionFeedback(
+                                "live-channels",
+                                result.ok || result.count_published ? "success" : "error",
+                                `Published ${result.count_published || 0}, skipped ${result.count_skipped || 0}, errors ${result.count_errors || 0}.`,
+                              );
+                              const status = await getLiveChannelsStatus();
+                              setLiveChannelsStatus(status);
+                            } catch (error) {
+                              setActionFeedback("live-channels", "error", error.message);
+                            } finally {
+                              setLiveBusy(null);
+                            }
+                          }}
+                        >
+                          {liveBusy === "publish" ? "Publishing…" : "Publish starters"}
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="wizard-note">
+                      Propose 2–4 stations from your taste clusters, motifs, and collections (plus Chaos / youth-safe).
+                    </p>
+                  )}
+                </div>
+
+                <div className="service-card" data-testid="live-channels-plex-attach">
+                  <div className="service-card-header">
+                    <div className="service-card-title">
+                      <h3>{settings?.tunarr?.docker_orchestration ? "4" : "3"}. Add to Plex Live TV</h3>
+                    </div>
+                    <button
+                      type="button"
+                      className="ghost"
+                      data-testid="live-channels-load-attach"
+                      disabled={liveBusy === "attach"}
+                      onClick={async () => {
+                        setLiveBusy("attach");
+                        try {
+                          setLiveAttach(await getLiveChannelsPlexAttach());
+                        } catch (error) {
+                          setActionFeedback("live-channels", "error", error.message);
+                        } finally {
+                          setLiveBusy(null);
+                        }
+                      }}
+                    >
+                      {liveBusy === "attach" ? "Loading…" : "Show checklist"}
+                    </button>
+                  </div>
+                  {liveAttach ? (
+                    <>
+                      <ol className="wizard-note" data-testid="live-channels-attach-steps">
+                        {(liveAttach.steps || []).map((step) => (
+                          <li key={step.title}>
+                            <strong>{step.title}</strong> — {step.body}
+                          </li>
+                        ))}
+                      </ol>
+                      <div className="service-fields">
+                        <label>
+                          <span>Tuner URL (copy into Plex)</span>
+                          <input
+                            type="text"
+                            readOnly
+                            data-testid="live-channels-tuner-url"
+                            value={liveAttach.tuner_url || ""}
+                            onFocus={(event) => event.target.select()}
+                          />
+                        </label>
+                        <label>
+                          <span>Guide URL (copy into Plex)</span>
+                          <input
+                            type="text"
+                            readOnly
+                            data-testid="live-channels-guide-url"
+                            value={liveAttach.guide_url || ""}
+                            onFocus={(event) => event.target.select()}
+                          />
+                        </label>
+                      </div>
+                      <p className="wizard-note">
+                        {liveAttach.discovery?.ok ? "✓" : "○"}{" "}
+                        {liveAttach.discovery?.message || "Discovery not checked."}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="wizard-note">
+                      Plain-language steps with copyable tuner and guide URLs — watch stays in Plex Live TV.
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            {actionAlert?.area === "live-channels" ? (
+              <InlineAlert type={actionAlert.type} message={actionAlert.message} />
+            ) : null}
           </section>
         ) : null}
 

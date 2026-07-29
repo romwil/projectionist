@@ -25,19 +25,20 @@ editing frontend source, re-run `cd frontend && npm run build` (or use `npm run 
 own port, which proxies `/api` to `:8788`).
 
 ### Lint / test / build (commands live in README.md, TESTING.md, docs/TESTING.md)
-- **Lint:** there is no dedicated linter (no ruff/eslint/flake8 config, and CI has no lint step).
-  The build/compile gate for the SPA is the production build `cd frontend && npm run build`.
+- **Lint (frontend):** `cd frontend && npm run lint` — **0 errors** required at release (pre-existing
+  warnings OK). There is no dedicated Python linter in CI. The SPA compile gate is
+  `cd frontend && npm run build`.
 - **Backend tests:** `.venv/bin/python -m pytest tests/` (coverage is auto-enabled via `pyproject.toml`,
-  `--cov-fail-under=10`). Full suite ~2.5 min.
+  `--cov-fail-under=74`; same floor in `.github/workflows/ci.yml`). Full suite ~2.5 min.
 - **Frontend unit:** `cd frontend && npm run test:unit`.
 - **Mocked e2e:** `npm run test:e2e` (needs `npx playwright install chromium` once). Playwright starts
   its **own** temp server via `node scripts/start-e2e-server.mjs` on **port 8799** (NOT 8788 — see
   `.cursor/rules/e2e-port-8788.mdc`) using the `.venv` python; no live Plex/LLM needed.
+- **Full-stack QA layers** (CI, maintainer `:8790` sidecar, Interactive UI QA, pentest harness):
+  [docs/superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md](docs/superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md).
 
-### Known non-obvious gotcha (not an environment problem)
-`tests/test_api_authz.py` has 2 tests (`test_system_config_blocked_for_guest`,
-`test_system_config_blocked_for_member`) that **fail when the whole file/suite runs** but pass in
-isolation or as a pair. Cause: the module-global rate limiter in `projectionist/web/rate_limit.py` is not
-reset between tests, so the file's cumulative `POST /api/auth/plex` calls exceed the 10/60s limit and
-return 429 (the login response then lacks a `user` key → `KeyError`). This is a pre-existing
-test-isolation flake, unrelated to dependencies/setup — do not treat it as a broken environment.
+### Rate limits in API tests
+`tests/test_api_authz.py` (and several other API suites) call `clear_rate_limits()` in `setUp` /
+`tearDown` so cumulative `POST /api/auth/plex` calls do not trip the in-process 10/60s limiter.
+If you add suites that hit rate-limited auth routes heavily, clear the limiter between tests the
+same way — otherwise later cases can see 429 and missing `user` keys.

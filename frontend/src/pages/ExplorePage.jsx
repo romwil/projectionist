@@ -20,6 +20,7 @@ import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
+import OnNowPanel from "../components/OnNowPanel";
 import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import PosterRailLoader from "../components/PosterRailLoader";
 import RecommendModal from "../components/RecommendModal";
@@ -479,6 +480,8 @@ export default function ExplorePage() {
             />
           </ExploreSection>
         ) : null}
+
+        <OnNowPanel compact />
 
         <ExploreSection
           id="for-you"

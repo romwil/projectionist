@@ -155,6 +155,7 @@ See [docs/security/pentests/README.md](docs/security/pentests/README.md). Focuse
 ## Related
 
 - Playwright / CA release checklist: [docs/TESTING.md](docs/TESTING.md)
+- Full-stack testing environment (CI + QA sidecar + Interactive UI QA + pentest): [Feature testing environment blueprint](docs/superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md)
 
 ## Adding Tests for New Tools
 

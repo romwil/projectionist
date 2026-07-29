@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [1.29.0] — 2026-07-29
+
+Owners can stand up Tunarr-backed Live Channels from Admin and households see what’s on now — plus inbox card layout fixes, safer env-owner seeding, and clearer full-stack QA docs.
+
+### Highlights
+- **Live Channels from Admin.** Turn on Tunarr → Plex Live TV with a guided checklist: preflight, optional Docker sibling lifecycle, starter channels, and Plex attach — without opening Tunarr’s UI.
+- **See what’s on now.** Home surfaces a light “on now” strip from the Tunarr guide so the household knows what’s playing without a full EPG.
+- **Inbox cards stay readable.** Text-only notification cards no longer collapse into a skinny poster column that wraps one character per line.
+- **Env owner seed stays single-owner.** Matching a local username no longer promotes a second owner when one already exists.
+
+### Added
+- Live Channels feature flag + Tunarr settings (`tunarr.url`, docker orchestration, pinned `chrisbenincasa/tunarr:1.3.x`), connector, and `projectionist/live_channels/` (preflight, docker lifecycle, starter pack, publish, Plex attach, guide/on-now, status).
+- Owner Admin → Live Channels UI and APIs (`/api/admin/live-channels/*`); household `GET /api/live-channels/on-now` + On Now panel with derived airing progress (elapsed/remaining/percent) and Tunarr sessions/guide_status on admin status.
+- Tunarr certified-service test path; CONFIGURATION / README feature docs; plans + specs under `docs/superpowers/`.
+- Feature-testing environment blueprint + Cursor QA environment design docs; Interactive UI QA checklist IDs for inbox card layout and Admin Logs.
+
+### Changed
+- Inbox recommendation cards use a text-only grid track and `minmax(0, 1fr)` so copy wraps in the reading column.
+- `seed_env_owner` refuses to promote a non-owner when a real owner already exists; password rotation still updates the existing owner.
+- Pentest harness / authz checklist small hardening for lab runs.
+
+### Verification
+- Backend `pytest` **1483 passed**, 6 skipped (29 subtests) at **77.98%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **509 passed**. ESLint **0 errors** (100 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.29.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.28.1] — 2026-07-29
 
 Owner Admin gets a durable live log tail, full removes report what left the disk, Search finds exact titles before facet noise, and Plot Lab's surprising neighbors explain the leap — plus purge dialog freeze/feedback and delete-dialog stacking fixes.

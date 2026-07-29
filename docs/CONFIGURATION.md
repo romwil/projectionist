@@ -112,9 +112,21 @@ Default values (also in `config/settings.example.json`):
 | `features.ephemeral_collection_gc_enabled` | `true` | Idle prune of expired `[CuratorX]` movie-night / agent collections |
 | `features.ephemeral_collection_gc_dry_run` | `false` | Log what `collection_gc` would delete without calling Plex DELETE |
 | `features.seerr_enabled` | `false` | Activates Seerr connector for household discovery and requests |
+| `features.live_channels_enabled` | `false` | Tunarr-backed Live Channels (Plex Live TV); owner toggle in Admin → Live Channels |
+| `tunarr.url` | `""` | BYO Tunarr base URL (`http://host:8000`); API at `{url}/api` |
+| `tunarr.docker_orchestration` | `false` | Allow pull/start/stop of a Tunarr sibling when a Docker socket is present |
+| `tunarr.image_tag` | `chrisbenincasa/tunarr:1.3.x` | Pinned image for orchestrated installs |
 | `auth.mode` | `disabled` | Set to `plex`, `oidc`, or `local` when multi-user is on |
 | `seerr.link_on_login` | `true` | After Plex login, bridge identity to Seerr |
 | `seerr.require_linked_user_for_requests` | `false` | Block Seerr requests until the user is linked |
+
+**Live Channels env overrides** (optional; prefer settings UI for BYO URL):
+
+| Env var | Behavior |
+|---------|----------|
+| `PROJECTIONIST_TUNARR_URL` | Fills `tunarr.url` when the settings file leaves it empty |
+| `PROJECTIONIST_TUNARR_IMAGE` | When set, wins over `tunarr.image_tag` (deploy pin) |
+| `PROJECTIONIST_DOCKER_ORCHESTRATION` | When set (`1`/`true`/`yes`/`on`), wins over `tunarr.docker_orchestration` |
 
 **For most installs:** leave everything at the defaults. CuratorX behaves exactly as before — one implicit owner, no login, no Seerr calls.
 
