@@ -155,12 +155,23 @@ class LiveChannelsApiTests(unittest.TestCase):
         with patch(
             "projectionist.live_channels.plex_attach.probe_tuner_discovery",
             return_value={"ok": True, "message": "ok"},
+        ), patch(
+            "projectionist.live_channels.plex_attach.probe_existing_plex_livetv",
+            return_value={
+                "status": "detected",
+                "ok": True,
+                "device_count": 1,
+                "message": "Existing Live TV setup detected — Tunarr will be added as another tuner.",
+            },
         ):
             resp = self.client.get("/api/admin/live-channels/plex-attach")
         self.assertEqual(resp.status_code, 200, resp.text)
         body = resp.json()
         self.assertIn("api/xmltv.xml", body["guide_url"])
         self.assertTrue(body["steps"])
+        self.assertEqual(body["coexistence"]["mode"], "additional_tuner")
+        self.assertEqual(body["existing_livetv"]["status"], "detected")
+        self.assertIn("another tuner", body["existing_livetv"]["message"].lower())
 
 
 if __name__ == "__main__":

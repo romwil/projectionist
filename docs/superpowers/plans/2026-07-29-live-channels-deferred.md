@@ -79,7 +79,7 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 ### Full Docker / Unraid orchestration (exposed pull/start/stop)
 
 - **Status:** `done` (owner API + Engine path) / `deferred` (Automat hardening)
-- **Why / note:** `TunarrDockerLifecycle` + `POST /api/admin/live-channels/lifecycle` (`pull` / `start` / `stop` / `ensure_running`) gated by orchestration settings/env; disable keeps volume. Unraid-specific volume/network hardening and measured resource numbers still wait on Automat Phase 0.
+- **Why / note:** `TunarrDockerLifecycle` + `POST /api/admin/live-channels/lifecycle` (`pull` / `start` / `stop` / `ensure_running`) gated by orchestration settings/env; disable keeps volume. Unraid CA template exposes optional **Docker Socket** path (empty Default / `Required="false"` — off by default); owners enable host `/var/run/docker.sock` for managed Tunarr. Unraid CA / compose keep the socket opt-in (empty Default). Automat prod rollout may mount `/var/run/docker.sock` when the owner asks (`MOUNT_DOCKER_SOCK=1` in appdata `.env` / `rollout.sh`). Remaining Unraid volume/network hardening and measured resource numbers still wait on Phase 0.
 - **Suggested next phase:** Phase 0 ops pilot before declaring managed Docker “certified” on host.
 - **Owner surface:** backend / ops
 
@@ -89,6 +89,13 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 - **Why / note:** Household delight landed 2026-07-29: `GET /api/live-channels/on-now` + `OnNowPanel` on Dashboard/Explore; ready nudge once-ever per user via `related_id=live-channels-ready`. Residual: no e2e for on-now; nudge does not reset on disable/re-enable; Tunarr guide field shapes still best-effort pending Automat pilot. **Do not regress this status** when updating wizard/publish docs.
 - **Suggested next phase:** Residual gaps in **New discoveries** (e2e / nudge reset / guide validation); HELP/CHANGELOG with shipping PR.
 - **Owner surface:** household / frontend Dashboard + notifications
+
+### OTA / existing Live TV coexistence (multi-tuner)
+
+- **Status:** `done` (attach copy + soft detect) / residual (guide merge / number collisions)
+- **Why / note:** Plex supports multiple tuners. Attach checklist + Admin copy say **add Tunarr as another network tuner**; leave OTA DVR alone. Soft probe via `/livetv/dvrs` and `/livetv/tuners` surfaces “Existing Live TV setup detected…” when PMS answers; failures stay `unknown` (honest copy, never invent). Residual: guide-source merge quirks and channel-number collisions with OTA majors if owners override the 100+ floor.
+- **Suggested next phase:** Automat pilot with real OTA + Tunarr; optional smarter channel pick.
+- **Owner surface:** Admin → Live Channels → Plex attach
 
 ### Reliable Plex Pass / Live TV entitlement detection
 
@@ -154,7 +161,7 @@ From the spec — park here so they are not forgotten if capacity allows after c
 |------|--------|---------------|
 | Auto-refresh programming after library sync / arrivals | `deferred` | backend |
 | Gap fillers from trailers/extras | `deferred` | backend |
-| Channel number ranges (virtual 100+) vs OTA | `deferred` | backend / wizard |
+| Channel number ranges (virtual 100+) vs OTA | `done` (copy + 100+ floor) / residual collision risk | attach checklist documents 100+ floor + renumber; true auto-avoid of OTA majors still open |
 | Owner “re-run starter pack” (additive; no wipe) | `deferred` | wizard |
 | Ephemeral “tonight’s queue” shelf | `deferred` | household |
 

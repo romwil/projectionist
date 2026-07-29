@@ -1,6 +1,42 @@
 {
-  "generated_at": "2026-07-29T22:29:38Z",
+  "generated_at": "2026-07-29T23:06:44Z",
   "releases": [
+    {
+      "version": "1.29.1",
+      "date": "2026-07-29",
+      "summary": "Live Channels enable feels like a guided launch, Unraid can opt into the Docker socket for turnkey Tunarr, and managed starts point Projectionist at a reachable sibling URL.",
+      "highlights": [
+        "**Live Channels enable feels cinematic.** Admin opens with a clear “on the air” hero and a step checklist instead of a dense settings block.",
+        "**Tunarr sits beside your OTA tuner.** The Plex attach checklist adds Tunarr as another network tuner — keep your antenna / HDHomeRun DVR; nothing asks you to wipe Live TV.",
+        "**Optional Docker socket on Unraid.** Community Applications exposes an advanced Docker Socket path (off by default) so owners can let Projectionist manage Tunarr — or keep BYO URL with no socket.",
+        "**Tunarr URL stays reachable.** When orchestration starts Tunarr, Projectionist auto-fills `host.docker.internal` instead of loopback that only works inside the container."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Unraid CA / template optional **Docker Socket** path (`Required=false`, empty Default); commented sock volume in `docker-compose.unraid.yml`; `MOUNT_DOCKER_SOCK` / `DOCKER_SOCK` support in `scripts/unraid-rollout.sh`.",
+            "Live Channels Admin hero / step UI polish and onboarding CSS.",
+            "Plex attach coexistence copy + soft `existing_livetv` probe (`/livetv/dvrs` / `/livetv/tuners`, honest `unknown` when unreliable)."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Managed Tunarr lifecycle `url_hint` uses `http://host.docker.internal:<port>`; `ensure_running` surfaces `url_hint` for auto-save; lifecycle endpoint also reads nested start detail.",
+            "Plex Live TV attach checklist reframed as **add another tuner** (guide per tuner; virtual channels 100+); Admin journey copy no longer implies replacing OTA DVR."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` **1484 passed**, 6 skipped (29 subtests) at **77.90%** total coverage (`--cov-fail-under=74`).",
+            "Frontend `node --test` unit suite **509 passed**. ESLint **0 errors** (103 pre-existing warnings). Production build succeeds.",
+            "`test_version` lockstep holds at **1.29.1** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.0",
       "date": "2026-07-29",

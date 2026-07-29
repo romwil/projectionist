@@ -616,3 +616,8 @@ Generate/rotate both in **Admin → Advanced** (or set the env vars); the keys m
 | [DATA_MODEL.md](DATA_MODEL.md) | Tables & provenance |
 | [CONFIGURATION.md](CONFIGURATION.md) | Settings reference |
 | [DOCS_STYLE.md](DOCS_STYLE.md) | How these docs are written |
+
+## Live Channels (owners)
+
+When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. If you already have an OTA antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. In Admin → Live Channels, use the Plex steps to **add Tunarr as another network tuner** and attach its XMLTV guide for that device. Starter stations use channel numbers from 100+ to stay out of typical OTA ranges. Watching stays in Plex; Projectionist does not play live video in-app.
+

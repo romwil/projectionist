@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fprojectionist-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/projectionist)
-[![Version](https://img.shields.io/badge/version-1.29.0-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.29.1-green.svg)](CHANGELOG.md)
 
 **Cinema intelligence for your personal archive.**
 
@@ -212,7 +212,7 @@ Default install is **single-owner** — no login screen. Household features are 
 |------|---------|--------|
 | `features.multi_user_enabled` | `false` | Login + session cookies; owner vs member partitioning |
 | `features.seerr_enabled` | `false` | Seerr discovery / request path for members |
-| `features.live_channels_enabled` | `false` | Tunarr-backed Live Channels → Plex Live TV (Admin → Live Channels) |
+| `features.live_channels_enabled` | `false` | Tunarr-backed Live Channels → additional Plex Live TV tuner (Admin → Live Channels; keeps OTA) |
 
 Auth methods are opt-in: **Sign in with Plex** (PIN), **local password** (owner registration), and/or **OIDC** (Authelia, Authentik, Keycloak, etc.). The login page shows whatever is configured (`auth_methods` from `GET /api/features`). Plex token paste remains an advanced fallback.
 
