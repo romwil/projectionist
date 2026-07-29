@@ -290,6 +290,7 @@ def external_tmdb_search(
 
     owned = db.owned_tmdb_ids(media_type)
     queued = db.queued_tmdb_ids(media_type)
+    excluded = db.excluded_tmdb_ids(media_type)
     cards: List[TitleCard] = []
     items: List[Dict[str, Any]] = []
     for item in results:
@@ -310,8 +311,12 @@ def external_tmdb_search(
         tool_item["in_radarr"] = bool(card.in_radarr)
         tool_item["in_sonarr"] = bool(card.in_sonarr)
         tool_item["already_queued"] = bool(
-            card.in_radarr or card.in_sonarr or result_tmdb_id in queued
+            card.in_radarr
+            or card.in_sonarr
+            or result_tmdb_id in queued
+            or result_tmdb_id in excluded
         )
+        tool_item["acquisition_excluded"] = result_tmdb_id in excluded
         if reason:
             tool_item["recommendation_reason"] = reason
         items.append(tool_item)

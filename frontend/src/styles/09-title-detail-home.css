@@ -1120,6 +1120,143 @@ a.explore-cinema-card-link:focus-visible h3 {
   margin-top: var(--space-4);
 }
 
+.surprise-neighbors-panel {
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border));
+  border-radius: var(--radius);
+  background:
+    linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--accent) 10%, var(--surface)) 0%,
+      var(--surface) 48%,
+      var(--surface) 100%
+    );
+}
+
+.surprise-showcase {
+  margin-top: var(--space-4);
+  display: grid;
+  gap: var(--space-4);
+}
+
+.surprise-showcase-intro,
+.title-neighbors-intro {
+  margin: 0;
+  max-width: 42rem;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.title-neighbors-intro {
+  margin: 0 0 var(--space-3);
+}
+
+.surprise-showcase-featured {
+  display: grid;
+  grid-template-columns: minmax(140px, 168px) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--surface-2, var(--surface)) 88%, transparent);
+}
+
+.surprise-showcase-featured-card .explore-cinema-card {
+  min-width: 0;
+  max-width: none;
+  width: 100%;
+}
+
+.surprise-showcase-eyebrow {
+  margin: 0 0 var(--space-1);
+  font-size: var(--text-xs);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.surprise-showcase-headline {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.surprise-showcase-signals {
+  margin: 0;
+  padding-left: 1.1rem;
+  display: grid;
+  gap: 0.35rem;
+  font-size: var(--text-sm);
+  color: color-mix(in srgb, var(--muted) 35%, var(--fg, inherit));
+}
+
+.surprise-showcase-detail {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.surprise-showcase-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: var(--space-3) var(--space-3);
+}
+
+.surprise-showcase-cell {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+}
+
+.surprise-showcase-cell .explore-cinema-card {
+  min-width: 0;
+  max-width: none;
+  width: 100%;
+}
+
+.surprise-showcase-cell-why {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: 1.4;
+  color: var(--muted);
+}
+
+.surprise-showcase-more {
+  display: flex;
+  justify-content: flex-start;
+}
+
+.title-neighbor-why {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  color: color-mix(in srgb, var(--accent) 55%, var(--muted));
+}
+
+.title-neighbor-why-detail {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.title-neighbors--surprising .title-neighbor-card {
+  min-width: 168px;
+  max-width: 180px;
+}
+
+@media (max-width: 640px) {
+  .surprise-showcase-featured {
+    grid-template-columns: 1fr;
+  }
+
+  .surprise-showcase-featured-card {
+    max-width: 168px;
+  }
+}
+
 .explore-seed-label {
   display: block;
   margin-top: var(--space-3);

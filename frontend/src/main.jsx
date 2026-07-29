@@ -37,6 +37,7 @@ import MediaIssuesPage from "./pages/MediaIssuesPage";
 import YouthReviewPage from "./pages/YouthReviewPage";
 import MailSettingsPage from "./pages/MailSettingsPage";
 import AccessRequestsPage from "./pages/AccessRequestsPage";
+import LogsPage from "./pages/LogsPage";
 import JoinPage from "./pages/JoinPage";
 import GuestTourPage from "./pages/GuestTourPage";
 import { BulkActionProgressProvider } from "./components/BulkActionProgress";
@@ -82,6 +83,7 @@ createRoot(document.getElementById("root")).render(
             <Route path="youth" element={<YouthReviewPage />} />
             <Route path="access" element={<AccessRequestsPage />} />
             <Route path="mail" element={<MailSettingsPage />} />
+            <Route path="logs" element={<LogsPage />} />
             <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
             <Route path=":section" element={<ConfigPage />} />
           </Route>

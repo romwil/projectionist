@@ -8,11 +8,11 @@ import {
 } from "../api/client";
 import BackLink from "../components/BackLink";
 import HelpHint from "../components/HelpHint";
-import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import RecommendModal from "../components/RecommendModal";
+import SurprisingNeighborsShowcase from "../components/SurprisingNeighborsShowcase";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
@@ -32,30 +32,13 @@ import {
   toggleMotifSelection,
 } from "../lib/exploreFeeds.js";
 import { DEFAULT_MEDIA_BROWSE, queryFiltersFromBrowse } from "../lib/mediaBrowse.js";
+import { SURPRISE_SECTION_INTRO } from "../lib/surpriseNeighbors.js";
 
 const MEDIA_TABS = [
   { id: "all", label: "All", mediaType: null },
   { id: "movie", label: "Movies", mediaType: "movie" },
   { id: "show", label: "TV Shows", mediaType: "show" },
 ];
-
-function FeedRail({ testId, items, loading }) {
-  if (loading) {
-    return <p className="status status-secondary">Loading…</p>;
-  }
-  if (!items?.length) return null;
-  return (
-    <div className="explore-poster-rail" data-testid={testId}>
-      {items.map((item) => (
-        <LibraryMediaCard
-          key={item.id || item.rating_key || item.title}
-          item={item}
-          showRecommend={false}
-        />
-      ))}
-    </div>
-  );
-}
 
 function MotifWallPagination({ summary, pageSize, onPageChange, onPageSizeChange }) {
   if (!summary.total && !summary.returned) return null;
@@ -519,10 +502,12 @@ export default function PlotLabPage() {
           </div>
         ) : null}
 
-        <div className="explore-seed-panel" data-testid="explore-seed-panel">
+        <div className="explore-seed-panel surprise-neighbors-panel" data-testid="explore-seed-panel">
           <h3 className="explore-plot-lab-heading">Surprising neighbors</h3>
-          <p className="explore-section-subtitle">
-            Pick a seed title to surface narrative oddballs from the plot cache.
+          <p className="explore-section-subtitle" data-testid="surprise-neighbors-blurb">
+            {seed
+              ? SURPRISE_SECTION_INTRO
+              : "Pick a seed title to surface narrative oddballs from the plot cache — titles that share DNA but sit far from the obvious shelf."}
           </p>
           <label className="explore-seed-label" htmlFor="explore-seed-input">
             Seed title
@@ -565,10 +550,12 @@ export default function PlotLabPage() {
               ) : null}
             </div>
           ) : null}
-          <FeedRail
+          <SurprisingNeighborsShowcase
             testId="explore-neighbors-rail"
             items={neighbors.items}
             loading={neighbors.loading}
+            seedGenres={Array.isArray(seed?.genres) ? seed.genres : []}
+            showIntro={false}
           />
         </div>
 

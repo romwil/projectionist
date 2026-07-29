@@ -70,7 +70,11 @@ LIBRARY_CURATION_BLOCK = (
     "(never 'TMDB title match'). Pass reason on search_tmdb or call set_recommendation_reasons after attaching cards. "
     "Respect confirmation tokens for fleet changes; never add or remove without explicit approval. "
     "Never re-offer titles already confirmed/queued this session or marked in_radarr/in_sonarr/already_queued — "
-    "those are done; pick different gaps instead."
+    "those are done; pick different gaps instead. "
+    "Library presence: before saying a title is not in the library or offering Radarr/Sonarr/Seerr, call "
+    "search_library with the bare title (try with and without media_type). Treat presence=exact or a non-empty "
+    "exact_title_matches list as owned. Empty or presence=partial/none results are uncertain — say you could not "
+    "confirm ownership and retry alternate queries; do not confidently invent absence."
 )
 
 MEMORY_AWARENESS_BLOCK = (

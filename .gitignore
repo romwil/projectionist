@@ -7,6 +7,7 @@ config/curatorx.db
 config/curatorx.db-*
 config/jobs_state.json
 config/jobs_state.tmp
+config/logs/
 build/
 dist/
 frontend/node_modules/

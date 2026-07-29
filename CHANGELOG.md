@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [1.28.1] — 2026-07-29
+
+Owner Admin gets a durable live log tail, full removes report what left the disk, Search finds exact titles before facet noise, and Plot Lab's surprising neighbors explain the leap — plus purge dialog freeze/feedback and delete-dialog stacking fixes.
+
+### Highlights
+- **See what the box is doing.** Admin → Logs tails the durable application log with level and logger filters, so owners can diagnose sync and task issues without SSH.
+- **Know what a full remove took.** After deleting titles for real, a summary lists files, folders, and bytes freed — with matching detail in the logs.
+- **Search hits the title you typed.** Exact title matches win over keyword-facet noise, so a query like *Industry* finds the show instead of missing it.
+- **Surprising neighbors say why.** Plot Lab's leap-across-the-library picks include short why-copy so the connection is readable, not just a poster row.
+
+### Added
+- Durable rotating app log under `{DATA_DIR}/logs/projectionist.log` plus owner **Admin → Logs** UI (`GET /api/admin/logs`, SSE `/api/admin/logs/stream`) with level/logger/q filters and live follow.
+- Surprising neighbors showcase component + why-copy helpers on Plot Lab / title surfaces.
+- Section help / purge candidates & index undo naming clarity (Dashboard grooming panel).
+
+### Changed
+- Library search ranks exact title matches ahead of keyword-facet hits (fixes Industry-style false negatives).
+- Full-remove path emits richer file/folder/byte summary for owner UI and logs.
+
+### Fixed
+- Purge confirm dialog freezes the selection and gives empty-confirm feedback instead of hanging.
+- Removal summary no longer shows zero totals when sizes were known.
+- Delete dialog portals above the title drawer (z-index / stacking).
+
+### Verification
+- Backend `pytest` **1432 passed**, 6 skipped (29 subtests) at **78.19%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **502 passed**. ESLint **0 errors** (99 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.28.1** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.28.0] — 2026-07-29
 
 Storage Intelligence now includes TV shows with real disk sizes, a paginated 100-title purge buffer that refills as you act, and agent TV tools that report honest totals — plus durable acquisition exclusions so full removes stay gone.

@@ -6,6 +6,7 @@ import {
   summarizeKnowledgeCoverage,
 } from "../lib/knowledgeCoverage.js";
 import { helpAnchor } from "../lib/backNav.js";
+import SectionHelp from "./SectionHelp.jsx";
 
 /**
  * Knowledge coverage strip/card for Admin Dashboard / Scheduled Tasks / Explore.
@@ -84,7 +85,16 @@ export default function KnowledgeCoverageCard({
       data-testid="knowledge-coverage-panel"
     >
       <div className="knowledge-coverage-header">
-        <h3 className="dash-panel-title">Knowledge coverage</h3>
+        <div className="grooming-panel-title-row">
+          <h3 className="dash-panel-title">Knowledge coverage</h3>
+          <SectionHelp label="About knowledge coverage" testId="knowledge-coverage-section-help">
+            <p>
+              Each bar is the share of your library that already has that kind of curator
+              knowledge. Gaps usually clear as scheduled enrichment runs — they are not
+              missing Plex files.
+            </p>
+          </SectionHelp>
+        </div>
         {showHelpLink ? (
           <Link
             to={helpAnchor("coverage-over-time")}

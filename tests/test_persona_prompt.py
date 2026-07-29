@@ -55,6 +55,7 @@ class PersonaPromptTests(unittest.TestCase):
         self.assertIn("Atlas", prompt)
         self.assertIn("Vocabulary", prompt)
         self.assertIn("Library curation:", prompt)
+        self.assertIn("could not confirm ownership", prompt)
         self.assertIn("Review memory:", prompt)
         self.assertIn("get_user_reviews", prompt)
 

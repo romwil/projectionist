@@ -445,6 +445,16 @@ export async function getSystemConfig() {
   return api("/system-config");
 }
 
+export async function getAdminLogs({ limit = 300, level, logger, q } = {}) {
+  const params = new URLSearchParams();
+  if (limit != null) params.set("limit", String(limit));
+  if (level) params.set("level", level);
+  if (logger) params.set("logger", logger);
+  if (q) params.set("q", q);
+  const qs = params.toString();
+  return api(`/admin/logs${qs ? `?${qs}` : ""}`);
+}
+
 export async function putSystemConfig(values) {
   return api("/system-config", {
     method: "PUT",

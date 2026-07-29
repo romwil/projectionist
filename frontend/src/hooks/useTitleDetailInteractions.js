@@ -19,6 +19,7 @@ import {
 import {
   canOwnerDeleteLibraryTitle,
   formatLibraryDeleteSuccessMessage,
+  hasRemovalSummary,
   libraryItemRatingKey,
 } from "../lib/bulkLibraryDelete.js";
 import { canMarkTitleWatched, isTitleWatched } from "../lib/titleDetailExtras.js";
@@ -26,6 +27,7 @@ import { canMarkTitleWatched, isTitleWatched } from "../lib/titleDetailExtras.js
 /**
  * Shared add / watch / delete interactions for title detail surfaces.
  * `onDeleted` runs after a successful library delete (drawer closes, page navigates back).
+ * Full removes with path/size detail show a summary first; dismiss then calls `onDeleted`.
  */
 export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
@@ -36,6 +38,8 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  const [removalSummary, setRemovalSummary] = useState(null);
+  const [pendingDeletedPayload, setPendingDeletedPayload] = useState(null);
   const [watchStatus, setWatchStatus] = useState(null);
   const [watchMessage, setWatchMessage] = useState("");
 
@@ -60,6 +64,8 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
     setDeleteOpen(false);
     setDeleting(false);
     setDeleteError("");
+    setRemovalSummary(null);
+    setPendingDeletedPayload(null);
     setWatchStatus(null);
     setWatchMessage("");
   }, [detail?.rating_key, detail?.tmdb_id, detail?.title]);
@@ -132,11 +138,26 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
         mode: result?.mode || mode,
         errorCount: errors.length,
       });
-      onDeleted?.({ notice, detail, result });
+      const payload = { notice, detail, result };
+      setDeleteOpen(false);
+      setDeleting(false);
+      if (hasRemovalSummary(result)) {
+        setRemovalSummary(result);
+        setPendingDeletedPayload(payload);
+        return;
+      }
+      onDeleted?.(payload);
     } catch (err) {
       setDeleteError(formatApiError(err) || "Could not delete this title from the library index.");
       setDeleting(false);
     }
+  }
+
+  function dismissRemovalSummary() {
+    const payload = pendingDeletedPayload;
+    setRemovalSummary(null);
+    setPendingDeletedPayload(null);
+    if (payload) onDeleted?.(payload);
   }
 
   async function handleToggleWatched() {
@@ -186,6 +207,8 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
     deleting,
     deleteError,
     setDeleteError,
+    removalSummary,
+    dismissRemovalSummary,
     watchStatus,
     watchMessage,
     handleRequestAdd,

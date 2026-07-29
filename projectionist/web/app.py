@@ -2402,6 +2402,87 @@ def undo_grooming_action(
     }
 
 
+@app.get("/api/admin/logs")
+def get_admin_logs(
+    limit: int = 300,
+    level: Optional[str] = None,
+    logger: Optional[str] = None,
+    q: Optional[str] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Return a filtered tail of the durable application log (owner only)."""
+    del user
+    from projectionist.web.log_viewer import read_log_tail
+
+    try:
+        return read_log_tail(limit=limit, min_level=level, logger_prefix=logger, q=q)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+
+@app.get("/api/admin/logs/stream")
+async def stream_admin_logs(
+    request: Request,
+    after_offset: int = 0,
+    level: Optional[str] = None,
+    logger: Optional[str] = None,
+    q: Optional[str] = None,
+    user=Depends(require_role("owner")),
+) -> EventSourceResponse:
+    """SSE tail of new log lines after ``after_offset`` (owner only)."""
+    del user
+    from projectionist.logging_config import resolve_log_file_path
+    from projectionist.web.log_viewer import (
+        SENSITIVE_WARNING,
+        iter_log_chunks,
+        normalize_min_level,
+        read_new_lines,
+    )
+
+    try:
+        min_level = normalize_min_level(level)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    path = resolve_log_file_path()
+    offset = max(0, int(after_offset or 0))
+
+    async def event_generator():
+        nonlocal offset
+        yield {
+            "event": "ready",
+            "data": json.dumps(
+                {
+                    "path": str(path),
+                    "next_offset": offset,
+                    "sensitive_warning": SENSITIVE_WARNING,
+                }
+            ),
+        }
+        while True:
+            if await request.is_disconnected():
+                break
+            try:
+                lines, offset = read_new_lines(
+                    path,
+                    after_offset=offset,
+                    min_level=min_level,
+                    logger_prefix=logger,
+                    q=q,
+                )
+            except OSError as error:
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"error": f"Could not read log file: {error}"}),
+                }
+                break
+            for chunk in iter_log_chunks(lines):
+                yield chunk
+            await asyncio.sleep(1.0)
+
+    return EventSourceResponse(event_generator())
+
+
 @app.get("/api/admin/weekly-digest")
 def get_weekly_digest(
     limit: int = 8,

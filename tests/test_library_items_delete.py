@@ -234,6 +234,11 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
             patch("projectionist.library.full_remove.PlexClient") as plex_cls,
         ):
             radarr = MagicMock()
+            radarr.movie_by_id.return_value = {
+                "path": "/movies/Full Remove Me",
+                "sizeOnDisk": 1000,
+                "movieFile": {"path": "/movies/Full Remove Me/movie.mkv", "size": 1000},
+            }
             radarr_cls.return_value = radarr
             plex = MagicMock()
             plex_cls.return_value = plex
@@ -246,6 +251,10 @@ class LibraryItemsDeleteApiTests(unittest.TestCase):
         self.assertEqual(body["mode"], "full")
         self.assertEqual(body["deleted"], 1)
         self.assertEqual(body["errors"], [])
+        self.assertEqual(body["totals"]["files"], 1)
+        self.assertEqual(body["totals"]["bytes_freed"], 1000)
+        self.assertEqual(body["results"][0]["files"], ["/movies/Full Remove Me/movie.mkv"])
+        radarr.movie_by_id.assert_called_once_with(55)
         radarr.delete_movie.assert_called_once_with(55, delete_files=True, add_exclusion=True)
         plex.delete_metadata.assert_called_once_with("rk-full-1")
 
