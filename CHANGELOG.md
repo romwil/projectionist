@@ -2,8 +2,20 @@
 
 ## [Unreleased]
 
+## [1.29.2] — 2026-07-29
+
+Fresh Live Channels installs get a Tunarr image tag that actually exists on Docker Hub, so Start engine works without a manual image override.
+
+### Highlights
+- **Live Channels Start engine works out of the box.** Managed Tunarr pulls `chrisbenincasa/tunarr:1.3.9` instead of a non-existent `1.3.x` placeholder tag.
+
 ### Fixed
 - Default Tunarr Docker image pin is now `chrisbenincasa/tunarr:1.3.9` (Hub tag; `1.3.x` was a non-existent placeholder that broke Start engine on fresh installs).
+
+### Verification
+- Backend `pytest` **1484 passed**, 6 skipped (29 subtests) at **77.90%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **509 passed**. ESLint **0 errors** (103 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.29.2** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
 
 ## [1.29.1] — 2026-07-29
 
