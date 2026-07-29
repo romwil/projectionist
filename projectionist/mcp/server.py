@@ -478,6 +478,15 @@ def propose_add_radarr(tmdb_id: int, title: str = "") -> str:
     )
     if root_error:
         return _emit({"error": root_error})
+    if _database().is_acquisition_excluded(media_type="movie", tmdb_id=int(tmdb_id)):
+        return _emit(
+            {
+                "error": (
+                    f"{title or 'This title'} was removed with an acquisition "
+                    "exclusion and will not be re-added"
+                )
+            }
+        )
     existing = check_radarr_already_exists(client, int(tmdb_id), title=title)
     if existing:
         mark_in_radarr(_database(), int(tmdb_id), title=title)
@@ -525,6 +534,15 @@ def propose_add_sonarr(tvdb_id: int, title: str = "") -> str:
     )
     if root_error:
         return _emit({"error": root_error})
+    if _database().is_acquisition_excluded(media_type="show", tvdb_id=int(tvdb_id)):
+        return _emit(
+            {
+                "error": (
+                    f"{title or 'This title'} was removed with an acquisition "
+                    "exclusion and will not be re-added"
+                )
+            }
+        )
     existing = check_sonarr_already_exists(client, int(tvdb_id), title=title)
     if existing:
         mark_in_sonarr(_database(), int(tvdb_id), title=title)

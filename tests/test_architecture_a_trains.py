@@ -93,10 +93,8 @@ class SchemaIntegrityTests(unittest.TestCase):
                     """,
                     (item_id,),
                 )
-                raw.execute(
-                    "DELETE FROM schema_version WHERE version = ?",
-                    (CURRENT_SCHEMA_VERSION,),
-                )
+                # Re-run migration 37 specifically (not merely the latest version).
+                raw.execute("DELETE FROM schema_version WHERE version = ?", (37,))
                 raw.commit()
             finally:
                 raw.close()

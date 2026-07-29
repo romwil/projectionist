@@ -6,6 +6,7 @@ import {
   getLibraryStats,
   getPurgeCandidates,
   refreshPurgeCandidates,
+  enrichPurgeCandidates,
   getEngagementStreak,
   listReviews,
   deletePurgeCandidates,
@@ -18,12 +19,16 @@ import { useBulkActionProgress } from "../components/BulkActionProgress";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import OwnerHealthHero from "../components/OwnerHealthHero";
+import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
+import SectionHelp from "../components/SectionHelp.jsx";
 import WeeklyDigestPanel from "../components/WeeklyDigestPanel";
 import GroomingUndoPanel from "../components/GroomingUndoPanel";
 import TitleDetailDrawer from "../components/TitleDetailDrawer";
 import {
+  BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   LIBRARY_DELETE_MODE_FULL,
   formatBulkLibraryDeleteResultMessage,
+  hasRemovalSummary,
 } from "../lib/bulkLibraryDelete.js";
 import { buildRuntimeBuckets, sortPurgeCandidates } from "../lib/dashboardCharts.js";
 import { titleDetailTargetFromPurgeCandidate } from "../lib/titleDetailDrawer.js";
@@ -97,27 +102,71 @@ function PurgeTable({
   onRefresh,
   stale = false,
   generatedAt = null,
+  pageSize = 20,
+  bufferTarget = 100,
+  refilling = false,
   onRefreshNow,
   onGroomingChanged,
 }) {
   const { start, update, finish } = useBulkActionProgress();
   const [sortKey, setSortKey] = useState("purge_score");
   const [sortDir, setSortDir] = useState("desc");
+  const [page, setPage] = useState(0);
   const [selected, setSelected] = useState(new Set());
   const [confirmAction, setConfirmAction] = useState(null);
   const [purgeDialogOpen, setPurgeDialogOpen] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [purgeError, setPurgeError] = useState("");
+  const [removalSummary, setRemovalSummary] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [drawerTarget, setDrawerTarget] = useState(null);
+  const [enrichedByKey, setEnrichedByKey] = useState({});
   const titleTriggerRef = useRef(null);
   const sorted = sortPurgeCandidates(candidates, sortKey, sortDir);
-  const displayed = sorted.slice(0, 20);
+  const effectivePageSize = Math.max(1, Number(pageSize) || 20);
+  const pageCount = Math.max(1, Math.ceil(sorted.length / effectivePageSize) || 1);
+  const safePage = Math.min(page, pageCount - 1);
+  const pageStart = safePage * effectivePageSize;
+  const displayed = sorted.slice(pageStart, pageStart + effectivePageSize).map((c) => {
+    const key = String(c?.rating_key || "");
+    return key && enrichedByKey[key] ? { ...c, ...enrichedByKey[key] } : c;
+  });
+  const displayedKeys = displayed.map((c) => c.rating_key).join("|");
   const generatedLabel = formatPurgeGeneratedAt(generatedAt);
   const selectedItems = displayed.filter((c) => selected.has(c.rating_key));
   const selectedTitles = selectedItems.map(
     (c) => String(c?.title || "Untitled").trim() || "Untitled",
   );
+
+  useEffect(() => {
+    setPage(0);
+    setSelected(new Set());
+  }, [candidates]);
+
+  useEffect(() => {
+    const keys = displayed
+      .map((c) => String(c?.rating_key || "").trim())
+      .filter(Boolean);
+    if (!keys.length) return undefined;
+    let cancelled = false;
+    (async () => {
+      try {
+        const payload = await enrichPurgeCandidates(keys);
+        if (cancelled) return;
+        const next = {};
+        for (const item of payload?.items || []) {
+          const key = String(item?.rating_key || "").trim();
+          if (key) next[key] = item;
+        }
+        setEnrichedByKey((prev) => ({ ...prev, ...next }));
+      } catch {
+        // Enrichment is best-effort; keep cached row values.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [safePage, displayedKeys]);
 
   async function handleRefreshNow() {
     if (refreshing || !onRefreshNow) return;
@@ -136,9 +185,11 @@ function PurgeTable({
       setSortKey(key);
       setSortDir("desc");
     }
+    setPage(0);
   }
 
   function toggleSelect(ratingKey) {
+    if (purgeDialogOpen || actionLoading) return;
     setSelected((prev) => {
       const next = new Set(prev);
       if (next.has(ratingKey)) next.delete(ratingKey);
@@ -148,6 +199,7 @@ function PurgeTable({
   }
 
   function toggleSelectAll() {
+    if (purgeDialogOpen || actionLoading) return;
     if (selected.size === displayed.length) {
       setSelected(new Set());
     } else {
@@ -157,7 +209,10 @@ function PurgeTable({
 
   async function handlePurgeConfirm({ mode } = {}) {
     const keys = [...selected];
-    if (!keys.length) return;
+    if (!keys.length) {
+      setPurgeError(BULK_DELETE_EMPTY_SELECTION_MESSAGE);
+      return;
+    }
     const progressId = start({
       label: "Purging selected titles",
       total: keys.length,
@@ -173,6 +228,7 @@ function PurgeTable({
       });
       setSelected(new Set());
       setPurgeDialogOpen(false);
+      if (hasRemovalSummary(result)) setRemovalSummary(result);
       onRefresh?.();
       onGroomingChanged?.();
     } catch (err) {
@@ -188,7 +244,7 @@ function PurgeTable({
     const keys = [...selected];
     if (!keys.length) return;
     const progressId = start({
-      label: "Dismissing purge candidates",
+      label: "Keeping selected titles",
       total: keys.length,
       asynchronous: true,
     });
@@ -197,7 +253,7 @@ function PurgeTable({
       await dismissPurgeCandidates(keys);
       update(progressId, keys.length);
       finish(progressId, {
-        label: `Dismissed ${keys.length} purge candidate${keys.length === 1 ? "" : "s"}.`,
+        label: `Kept ${keys.length} title${keys.length === 1 ? "" : "s"} out of purge suggestions.`,
       });
       setSelected(new Set());
       onRefresh?.();
@@ -219,10 +275,11 @@ function PurgeTable({
           {stale
             ? "Cache empty — run Refresh now to compute candidates."
             : generatedLabel
-              ? `Cached ${generatedLabel}`
+              ? `Cached ${generatedLabel} · ${sorted.length}/${bufferTarget || 100} buffered`
               : sorted.length
-                ? "Showing cached candidates"
+                ? `Showing ${sorted.length} buffered candidates`
                 : "No purge candidates in cache."}
+          {refilling ? " · Refilling…" : ""}
         </p>
         <button
           type="button"
@@ -259,17 +316,18 @@ function PurgeTable({
           <button
             type="button"
             className="dash-purge-btn dash-purge-btn--muted"
+            data-testid="purge-keep-selected"
             onClick={() => setConfirmAction("dismiss")}
           >
-            Dismiss Selected <span className="dash-purge-badge">{selected.size}</span>
+            Keep Selected <span className="dash-purge-badge">{selected.size}</span>
           </button>
         </div>
       )}
 
       {confirmAction === "dismiss" && (
-        <div className="dash-purge-confirm" role="alertdialog" aria-label="Confirm dismiss">
+        <div className="dash-purge-confirm" role="alertdialog" aria-label="Confirm keep">
           <p>
-            Dismiss {selected.size} title{selected.size > 1 ? "s" : ""} from purge suggestions?
+            Keep {selected.size} title{selected.size > 1 ? "s" : ""} out of purge suggestions?
             They won&apos;t appear again.
           </p>
           <div className="dash-purge-confirm-actions">
@@ -308,67 +366,102 @@ function PurgeTable({
         onConfirm={handlePurgeConfirm}
       />
 
+      <RemovalSummaryDialog
+        open={Boolean(removalSummary)}
+        result={removalSummary}
+        onClose={() => setRemovalSummary(null)}
+      />
+
       {sorted.length ? (
-        <div className="dash-table-wrap">
-          <table className="dash-table">
-            <thead>
-              <tr>
-                <th className="dash-table-check">
-                  <input
-                    type="checkbox"
-                    checked={displayed.length > 0 && selected.size === displayed.length}
-                    onChange={toggleSelectAll}
-                    aria-label="Select all"
-                  />
-                </th>
-                <th onClick={() => handleSort("title")}>Title{arrow("title")}</th>
-                <th onClick={() => handleSort("file_size")}>Size{arrow("file_size")}</th>
-                <th onClick={() => handleSort("last_watched")}>Last Watched{arrow("last_watched")}</th>
-                <th onClick={() => handleSort("taste_match")}>Taste %{arrow("taste_match")}</th>
-                <th onClick={() => handleSort("purge_score")}>Score{arrow("purge_score")}</th>
-                <th>Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              {displayed.map((c, i) => (
-                <tr key={c.rating_key || c.title + i} className={selected.has(c.rating_key) ? "dash-table-row--selected" : ""}>
-                  <td className="dash-table-check">
+        <>
+          <div className="dash-table-wrap">
+            <table className="dash-table">
+              <thead>
+                <tr>
+                  <th className="dash-table-check">
                     <input
                       type="checkbox"
-                      checked={selected.has(c.rating_key)}
-                      onChange={() => toggleSelect(c.rating_key)}
-                      aria-label={`Select ${c.title}`}
+                      checked={displayed.length > 0 && selected.size === displayed.length}
+                      disabled={purgeDialogOpen || actionLoading}
+                      onChange={toggleSelectAll}
+                      aria-label="Select all"
                     />
-                  </td>
-                  <td className="dash-table-title">
-                    {titleDetailTargetFromPurgeCandidate(c) ? (
-                      <button
-                        type="button"
-                        className="dash-table-title-btn"
-                        data-testid="purge-candidate-title"
-                        onClick={(event) => {
-                          const target = titleDetailTargetFromPurgeCandidate(c);
-                          if (!target) return;
-                          titleTriggerRef.current = event.currentTarget;
-                          setDrawerTarget(target);
-                        }}
-                      >
-                        {c.title}
-                      </button>
-                    ) : (
-                      c.title
-                    )}
-                  </td>
-                  <td>{formatBytes(c.file_size)}</td>
-                  <td>{c.last_watched || "Never"}</td>
-                  <td>{c.taste_match != null ? `${Math.round(c.taste_match)}%` : "—"}</td>
-                  <td>{c.purge_score != null ? c.purge_score.toFixed(1) : "—"}</td>
-                  <td className="dash-table-reason">{c.reason || "—"}</td>
+                  </th>
+                  <th onClick={() => handleSort("title")}>Title{arrow("title")}</th>
+                  <th onClick={() => handleSort("media_type")}>Type{arrow("media_type")}</th>
+                  <th onClick={() => handleSort("file_size")}>Size{arrow("file_size")}</th>
+                  <th onClick={() => handleSort("last_watched")}>Last Watched{arrow("last_watched")}</th>
+                  <th onClick={() => handleSort("taste_match")}>Taste %{arrow("taste_match")}</th>
+                  <th onClick={() => handleSort("purge_score")}>Score{arrow("purge_score")}</th>
+                  <th>Reason</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {displayed.map((c, i) => (
+                  <tr key={c.rating_key || c.title + i} className={selected.has(c.rating_key) ? "dash-table-row--selected" : ""}>
+                    <td className="dash-table-check">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(c.rating_key)}
+                        disabled={purgeDialogOpen || actionLoading}
+                        onChange={() => toggleSelect(c.rating_key)}
+                        aria-label={`Select ${c.title}`}
+                      />
+                    </td>
+                    <td className="dash-table-title">
+                      {titleDetailTargetFromPurgeCandidate(c) ? (
+                        <button
+                          type="button"
+                          className="dash-table-title-btn"
+                          data-testid="purge-candidate-title"
+                          onClick={(event) => {
+                            const target = titleDetailTargetFromPurgeCandidate(c);
+                            if (!target) return;
+                            titleTriggerRef.current = event.currentTarget;
+                            setDrawerTarget(target);
+                          }}
+                        >
+                          {c.title}
+                        </button>
+                      ) : (
+                        c.title
+                      )}
+                    </td>
+                    <td data-testid="purge-candidate-type">
+                      {String(c.media_type || "").toLowerCase() === "show" ? "Show" : "Movie"}
+                    </td>
+                    <td>{formatBytes(c.file_size)}</td>
+                    <td>{c.last_watched || "Never"}</td>
+                    <td>{c.taste_match != null ? `${Math.round(c.taste_match)}%` : "—"}</td>
+                    <td>{c.purge_score != null ? c.purge_score.toFixed(1) : "—"}</td>
+                    <td className="dash-table-reason">{c.reason || "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="dash-purge-pagination" data-testid="purge-pagination">
+            <button
+              type="button"
+              className="dash-purge-btn dash-purge-btn--muted"
+              disabled={safePage <= 0 || actionLoading}
+              onClick={() => setPage((p) => Math.max(0, p - 1))}
+            >
+              Previous
+            </button>
+            <span className="dash-purge-meta">
+              Page {safePage + 1} of {pageCount}
+            </span>
+            <button
+              type="button"
+              className="dash-purge-btn dash-purge-btn--muted"
+              disabled={safePage >= pageCount - 1 || actionLoading}
+              onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+            >
+              Next
+            </button>
+          </div>
+        </>
       ) : null}
 
       <TitleDetailDrawer
@@ -452,6 +545,13 @@ export default function DashboardPage() {
     : purge.data?.candidates ?? purge.data?.items ?? [];
   const purgeStale = Boolean(purge.data && !Array.isArray(purge.data) && purge.data.stale);
   const purgeGeneratedAt = Array.isArray(purge.data) ? null : purge.data?.generated_at ?? null;
+  const purgePageSize = Array.isArray(purge.data) ? 20 : Number(purge.data?.page_size) || 20;
+  const purgeBufferTarget = Array.isArray(purge.data)
+    ? 100
+    : Number(purge.data?.buffer_target) || 100;
+  const purgeRefilling = Boolean(
+    !Array.isArray(purge.data) && purge.data?.refilling,
+  );
 
   const recentReviews = Array.isArray(reviews.data)
     ? reviews.data
@@ -475,7 +575,7 @@ export default function DashboardPage() {
       {/* ─── Weekly in-app digest (M4) ─── */}
       <WeeklyDigestPanel />
 
-      {/* ─── One-click grooming rerun + index-only undo ─── */}
+      {/* ─── Purge candidate refresh + index-only undo ─── */}
       <GroomingUndoPanel key={groomingEpoch} onChanged={purge.reload} />
 
       {/* ─── Panel 1: Library Composition ─── */}
@@ -539,7 +639,16 @@ export default function DashboardPage() {
       </div>
 
       {/* ─── Knowledge depth (Phase D) ─── */}
-      <h2 className="dash-section-title">Curator knowledge</h2>
+      <div className="dash-section-heading">
+        <h2 className="dash-section-title">Curator knowledge</h2>
+        <SectionHelp label="About curator knowledge" testId="knowledge-section-help">
+          <p>
+            These bars show how thoroughly Projectionist has learned your shelves —
+            overviews, plot motifs, keywords, and neighbors. Sparse coverage just means
+            idle enrichment tasks still have work; it is not a library problem.
+          </p>
+        </SectionHelp>
+      </div>
       <KnowledgeCoverageCard variant="panel" />
 
       {/* ─── Panel 2: Health & Engagement ─── */}
@@ -571,13 +680,26 @@ export default function DashboardPage() {
       </div>
 
       {/* ─── Panel 3: Storage Intelligence ─── */}
-      <h2 className="dash-section-title">Storage Intelligence</h2>
+      <div className="dash-section-heading">
+        <h2 className="dash-section-title">Storage Intelligence</h2>
+        <SectionHelp label="About Storage Intelligence" testId="purge-section-help">
+          <p>
+            Purge candidates are titles that look stale or low-signal — good prune
+            targets when you need disk space. Select rows and purge: full remove deletes
+            files through Radarr/Sonarr; index-only only drops Projectionist&apos;s copy
+            (undoable from the maintenance panel above).
+          </p>
+        </SectionHelp>
+      </div>
       <Panel title="Purge Candidates" loading={purge.loading} error={purge.error}>
         <PurgeTable
           candidates={purgeCandidates}
           onRefresh={purge.reload}
           stale={purgeStale}
           generatedAt={purgeGeneratedAt}
+          pageSize={purgePageSize}
+          bufferTarget={purgeBufferTarget}
+          refilling={purgeRefilling}
           onRefreshNow={handlePurgeRefreshNow}
           onGroomingChanged={() => setGroomingEpoch((n) => n + 1)}
         />

@@ -54,6 +54,9 @@ class PurgeCandidatesCacheTests(unittest.TestCase):
         self.assertEqual(cached["count"], 1)
         self.assertEqual(cached["items"][0]["rating_key"], "rk-1")
         self.assertEqual(cached["generated_at"], 123.0)
+        self.assertEqual(cached["page_size"], 20)
+        self.assertEqual(cached["buffer_target"], 100)
+        self.assertFalse(cached["refilling"])
 
     def test_drop_cached_purge_keys_filters_items(self) -> None:
         write_purge_candidates_cache(
@@ -114,6 +117,9 @@ class PurgeCandidatesApiCacheTests(unittest.TestCase):
         self.assertEqual(body["items"], [])
         self.assertTrue(body["stale"])
         self.assertFalse(body["cached"])
+        self.assertEqual(body["page_size"], 20)
+        self.assertEqual(body["buffer_target"], 100)
+        self.assertFalse(body["refilling"])
 
     def test_get_returns_cached_payload(self) -> None:
         write_purge_candidates_cache(

@@ -701,8 +701,17 @@ def summarize_tv_progress(
                 }
             )
         buckets.sort(key=lambda item: (-item["completion_percent"], item["show_title"]))
+        matched = len(buckets)
         buckets = buckets[:capped]
-        return {"group_by": "show", "buckets": buckets, "returned": len(buckets)}
+        return {
+            "group_by": "show",
+            "buckets": buckets,
+            "returned": len(buckets),
+            "matched": matched,
+            "total_shows": len(rows),
+            "limit": capped,
+            "in_progress_only": bool(in_progress_only),
+        }
 
     with db.connect() as conn:
         rows = conn.execute(
@@ -714,9 +723,7 @@ def summarize_tv_progress(
             JOIN library_items li ON li.id = le.show_item_id
             GROUP BY le.show_item_id, le.season_number
             ORDER BY li.title ASC, le.season_number ASC
-            LIMIT ?
             """,
-            (capped,),
         ).fetchall()
 
     buckets = []
@@ -737,4 +744,14 @@ def summarize_tv_progress(
                 "completion_percent": completion,
             }
         )
-    return {"group_by": "season", "buckets": buckets, "returned": len(buckets)}
+    matched = len(buckets)
+    buckets = buckets[:capped]
+    return {
+        "group_by": "season",
+        "buckets": buckets,
+        "returned": len(buckets),
+        "matched": matched,
+        "total_seasons": len(rows),
+        "limit": capped,
+        "in_progress_only": bool(in_progress_only),
+    }

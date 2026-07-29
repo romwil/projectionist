@@ -1455,6 +1455,37 @@ class SchemaMigrationsMixin:
             (migrated_id, f"{name} (migrated)", BOOTSTRAP_OWNER_ID, bro, snark, auto, override),
         )
 
+    def _migrate_acquisition_exclusions(self, conn: sqlite3.Connection) -> None:
+        """Titles removed via full-remove / *arr exclusion stay blocked from re-add.
+
+        Radarr/Sonarr ``addExclusion`` only stops list syncs. Projectionist can still
+        recommend and API-add the same TMDB/TVDB id once the library row is gone —
+        this table is the local companion so acquisition tools honor the delete.
+        """
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS acquisition_exclusions (
+                id TEXT PRIMARY KEY,
+                media_type TEXT NOT NULL,
+                tmdb_id INTEGER,
+                tvdb_id INTEGER,
+                title TEXT DEFAULT '',
+                source TEXT NOT NULL DEFAULT 'full_remove',
+                excluded_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_acquisition_exclusions_tmdb
+                ON acquisition_exclusions(tmdb_id, media_type);
+            CREATE INDEX IF NOT EXISTS idx_acquisition_exclusions_tvdb
+                ON acquisition_exclusions(tvdb_id, media_type);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_acquisition_exclusions_identity
+                ON acquisition_exclusions(
+                    media_type,
+                    COALESCE(tmdb_id, -1),
+                    COALESCE(tvdb_id, -1)
+                );
+            """
+        )
+
     def _seed_defaults(self, conn: sqlite3.Connection) -> None:
         conn.execute(
             """

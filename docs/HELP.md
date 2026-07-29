@@ -184,7 +184,7 @@ Anything already in your library (or already queued to download) is shown with a
 3. Choose **Multi-signal** (default) so each token can match via motif, keyword, or plot text — or **Motifs only** for pure facet walls.
 4. When theme enrichment has run, optional **theme chips** appear and AND with your motif selection.
 5. Open **Why?** on a poster to see which layer matched (motif / keyword / plot text) and summary excerpts.
-6. Seed a title under **Surprising neighbors** for narrative oddballs from the plot-similarity cache.
+6. Seed a title under **Surprising neighbors** for narrative oddballs from the plot-similarity cache. Each card explains *why* it ranked — plot kinship plus how little genre/keyword/credit shelf it shares with the seed.
 
 **Worked example:** tap `heist` + `betrayal` in **Multi-signal** mode → a wall of your library titles that carry both ideas, even when only one is a formal motif chip and the other lives in the plot text. Switch to **Motifs only** and the same wall tightens to titles where both are extracted facets.
 
@@ -258,6 +258,19 @@ Owners (or single-workspace installs with no login) also configure sync and idle
 1. Run **Sync library** from Admin / Config (or `/sync` in chat when multi-user is off).
 2. Leave the container **idle** so the scheduler can trickle metadata, embeddings, motifs, and neighbors.
 3. Open **Admin → Scheduled Tasks** (`/admin/tasks`) — confirm knowledge tasks are enabled; adjust cadence after large imports.
+
+### Application logs
+
+Owners can live-tail the durable application log from **Admin → Logs** (`/admin/logs`). Filter by level (DEBUG / INFO / WARNING / ERROR) or logger name (for example `projectionist.web` or `uvicorn`), and use **Follow** to auto-scroll — scrolling up pauses the tail so you can read older lines.
+
+The same file Docker/Unraid writes under your config volume:
+
+| Install | Path on disk |
+|---------|----------------|
+| Docker / Unraid bind mount | `{appdata}/config/logs/projectionist.log` (inside the container: `/config/logs/projectionist.log`) |
+| Local `DATA_DIR` | `{DATA_DIR}/logs/projectionist.log` |
+
+Stdout still goes to the container log (`docker logs`); the file exists so the in-app viewer (and host tools) can read history after rotation. Rotation keeps the active file around 5 MiB with a few backups so the volume does not grow without bound. Treat the viewer as private: common API keys and tokens are redacted best-effort, but lines can still include paths and request detail.
 
 Knowledge-related tasks: `metadata_enrichment`, `semantic_embeddings`, `summary_motifs`, `plot_neighbors`, `title_relations_refresh`, optional `llm_logline_enrichment`.
 
@@ -376,13 +389,15 @@ curl -s -X POST http://localhost:8788/api/library/items/delete \
 # → {"mode":"full","deleted":1,"results":[...],"errors":[]}
 ```
 
-**How it works / honest limits.** File deletion goes through Radarr/Sonarr (`deleteFiles` + `addExclusion`), not a direct filesystem wipe — leftover empty folders are left to *arr's own cleanup, not a Projectionist filesystem walk. Plex cleanup deletes library metadata after *arr has removed files; it does not delete disk media by itself. Dashboard **Storage Intelligence** purge defaults to this **full remove** path (same *arr + Plex + index stack). Choose **Index only** in the purge confirm dialog when you want an undoable Projectionist-index prune without touching disk.
+**How it works / honest limits.** File deletion goes through Radarr/Sonarr (`deleteFiles` + `addExclusion`), not a direct filesystem wipe. Before delete, Projectionist snapshots file paths and sizes from *arr (and infers parent folders from those known paths) so the owner summary and logs can show what was removed — it does not walk the disk outside those paths. Plex cleanup deletes library metadata after *arr has removed files; it does not delete disk media by itself. Dashboard **Storage Intelligence** purge defaults to this **full remove** path (same *arr + Plex + index stack). Choose **Index only** in the purge confirm dialog when you want an undoable Projectionist-index prune without touching disk.
 
-### One-click grooming rerun with index-only undo
+### Purge candidates & index undo
 
-Grooming is the housekeeping pass that finds **purge candidates** (stale, unwatched, or low-signal titles) so you can prune the library. From **Admin → Dashboard** you can rerun the grooming warm-up in one click (it runs the same scheduled tasks as the multi-task preset), then act on the refreshed candidates.
+The **Purge candidates & index undo** panel on **Admin → Dashboard** does two separate jobs: **Refresh purge candidates** rebuilds the Storage Intelligence suggestions (stale, unwatched, or low-signal titles) without deleting anything, and **Undo** restores Projectionist index rows from earlier **index-only** deletes.
 
-**Index-only** purge deletes are reversible: Projectionist records them in a **grooming action log** with a snapshot of the exact index rows removed, so you can restore those rows. **Full purge** (the Dashboard default) deletes files via *arr and is **not** undoable — it does not appear as a reversible grooming action and cannot put media back on disk.
+**Storage Intelligence** lists **movies and TV shows** in one grid (Type column). Show sizes come from episode rollups in the library index (sum of episode file sizes), refreshed for the visible page when *arr is configured. The panel pages **20** rows at a time over a buffered list of up to **100** candidates; after you purge or keep titles, Projectionist tops the buffer back up in the background when it dips below **80**. **Keep** dismisses a title from future suggestions without deleting anything.
+
+**Index-only** purge deletes are reversible: Projectionist records them in an action log with a snapshot of the exact index rows removed, so you can restore those rows. **Full remove** (the Dashboard purge default) deletes files via *arr and is **not** undoable — it does not appear as a reversible action and cannot put media back on disk. After a successful full remove, titles are also recorded in Projectionist's acquisition exclusions so they are not recommended or re-added through the app. The owner sees a scrollable summary of files, folders, and storage freed.
 
 ```bash
 # Index-only purge delete (undoable) — omit mode or use "full" for disk remove
@@ -399,7 +414,7 @@ curl -s http://localhost:8788/api/admin/grooming/actions | python3 -m json.tool
 curl -s -X POST http://localhost:8788/api/admin/grooming/actions/ACTION_ID/undo
 ```
 
-Use the **Rerun & index-only undo** panel on the Dashboard for the same thing without a terminal.
+Use the **Purge candidates & index undo** panel on the Dashboard for the same thing without a terminal.
 
 **How it works / honest limits.** Undo restores Projectionist **index rows** from index-only purge deletes (metadata, knowledge, and neighbor edges); regenerable derived data such as embeddings is rebuilt by the normal idle tasks, so it is not snapshotted. Undo does **not** restore disk files or reverse a full purge — full remove already deleted media through Radarr/Sonarr. Once an action is undone it is marked `undone_at` and can't be undone twice.
 

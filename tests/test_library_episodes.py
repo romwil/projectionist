@@ -96,6 +96,51 @@ class LibraryEpisodeTests(unittest.TestCase):
             self.assertEqual(summary["group_by"], "show")
             self.assertEqual(len(summary["buckets"]), 1)
             self.assertEqual(summary["buckets"][0]["completion_percent"], 50.0)
+            self.assertEqual(summary["matched"], 1)
+            self.assertEqual(summary["returned"], 1)
+            self.assertEqual(summary["total_shows"], 1)
+            self.assertTrue(summary["in_progress_only"])
+            self.assertEqual(summary["limit"], 25)
+
+    def test_show_rollup_sets_file_size_from_episodes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = db.upsert_library_item(
+                {
+                    "rating_key": "show-size",
+                    "media_type": "show",
+                    "title": "Sized Show",
+                    "year": 2020,
+                    "file_size": 0,
+                }
+            )
+            db.replace_library_episodes_for_show(
+                show_id,
+                [
+                    {
+                        "show_item_id": show_id,
+                        "rating_key": "ep-a",
+                        "season_number": 1,
+                        "episode_number": 1,
+                        "title": "A",
+                        "view_count": 0,
+                        "file_size": 1_000_000_000,
+                    },
+                    {
+                        "show_item_id": show_id,
+                        "rating_key": "ep-b",
+                        "season_number": 1,
+                        "episode_number": 2,
+                        "title": "B",
+                        "view_count": 1,
+                        "file_size": 500_000_000,
+                    },
+                ],
+            )
+            row = db.library_item_by_id(show_id)
+            self.assertEqual(int(row["file_size"] or 0), 1_500_000_000)
+            self.assertEqual(int(row["total_episode_count"] or 0), 2)
+            self.assertEqual(int(row["unwatched_episode_count"] or 0), 1)
 
     def test_backfill_from_plex_restores_rating_key_and_syncs_episodes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

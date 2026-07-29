@@ -158,6 +158,24 @@ class SonarrClient:
             raise
         return result if isinstance(result, dict) else {}
 
+    def series_by_id(self, series_id: int) -> Optional[Mapping[str, Any]]:
+        """Return the raw Sonarr series payload (includes path / statistics)."""
+        payload = request_json(
+            f"{self.base_url}/api/v3/series/{int(series_id)}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, dict) else None
+
+    def episode_files(self, series_id: int) -> List[Mapping[str, Any]]:
+        """Return episode file records for a series (path + size)."""
+        payload = request_json(
+            f"{self.base_url}/api/v3/episodefile?seriesId={int(series_id)}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, list) else []
+
     def delete_series(
         self,
         series_id: int,

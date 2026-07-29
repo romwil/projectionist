@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fprojectionist-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/projectionist)
-[![Version](https://img.shields.io/badge/version-1.27.6-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.28.0-green.svg)](CHANGELOG.md)
 
 **Cinema intelligence for your personal archive.**
 
@@ -191,6 +191,7 @@ Prefer `PROJECTIONIST_*`. During the compatibility window (~2 releases), matchin
 | `PROJECTIONIST_MCP_*` | MCP mode / API keys (see [MCP.md](docs/MCP.md)) |
 | `PROJECTIONIST_GUEST_TOUR_ENABLED` | Guest tour gate |
 | `PROJECTIONIST_LOG_LEVEL` | Logging verbosity |
+| `PROJECTIONIST_LOG_FILE` | Optional override for the durable app log (default `{DATA_DIR}/logs/projectionist.log`; Unraid: `/config/logs/projectionist.log`) |
 | `DATA_DIR` | Config + SQLite directory (unchanged; not brand-prefixed) |
 
 See [CONFIGURATION.md](docs/CONFIGURATION.md) and [Wiki → Configuration](docs/wiki/Configuration.md) for the full matrix.

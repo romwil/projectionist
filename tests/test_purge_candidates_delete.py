@@ -126,6 +126,7 @@ class PurgeCandidatesDeleteApiTests(unittest.TestCase):
             patch("projectionist.library.full_remove.PlexClient") as plex_cls,
         ):
             radarr = MagicMock()
+            radarr.movie_by_id.return_value = None
             radarr_cls.return_value = radarr
             plex = MagicMock()
             plex_cls.return_value = plex
@@ -140,6 +141,10 @@ class PurgeCandidatesDeleteApiTests(unittest.TestCase):
         self.assertEqual(body["errors"], [])
         self.assertFalse(body["undoable"])
         self.assertIsNone(body["action_id"])
+        self.assertIn("totals", body)
+        self.assertEqual(body["totals"]["files"], 0)
+        self.assertEqual(body["totals"]["folders"], 0)
+        self.assertEqual(body["totals"]["bytes_freed"], 0)
         radarr.delete_movie.assert_called_once_with(55, delete_files=True, add_exclusion=True)
         plex.delete_metadata.assert_called_once_with("rk-full-purge")
 

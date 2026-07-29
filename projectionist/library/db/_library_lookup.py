@@ -271,6 +271,107 @@ class LibraryLookupMixin:
             ).fetchone()
         return row is not None
 
+    def record_acquisition_exclusion(
+        self,
+        *,
+        media_type: str,
+        title: str = "",
+        tmdb_id: Optional[int] = None,
+        tvdb_id: Optional[int] = None,
+        source: str = "full_remove",
+    ) -> None:
+        """Remember a deleted title so recommend/add paths will not re-acquire it."""
+        if tmdb_id is None and tvdb_id is None:
+            return
+        now = time.time()
+        with self.connect() as conn:
+            existing = conn.execute(
+                """
+                SELECT id FROM acquisition_exclusions
+                WHERE media_type = ?
+                  AND COALESCE(tmdb_id, -1) = COALESCE(?, -1)
+                  AND COALESCE(tvdb_id, -1) = COALESCE(?, -1)
+                """,
+                (
+                    media_type,
+                    int(tmdb_id) if tmdb_id is not None else None,
+                    int(tvdb_id) if tvdb_id is not None else None,
+                ),
+            ).fetchone()
+            if existing is not None:
+                conn.execute(
+                    """
+                    UPDATE acquisition_exclusions
+                    SET title = COALESCE(NULLIF(?, ''), title),
+                        source = ?,
+                        excluded_at = ?
+                    WHERE id = ?
+                    """,
+                    (str(title or ""), str(source or "full_remove"), now, str(existing["id"])),
+                )
+                return
+            conn.execute(
+                """
+                INSERT INTO acquisition_exclusions (
+                    id, media_type, tmdb_id, tvdb_id, title, source, excluded_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    uuid.uuid4().hex,
+                    media_type,
+                    int(tmdb_id) if tmdb_id is not None else None,
+                    int(tvdb_id) if tvdb_id is not None else None,
+                    str(title or ""),
+                    str(source or "full_remove"),
+                    now,
+                ),
+            )
+
+    def excluded_tmdb_ids(self, media_type: str = "movie") -> set[int]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT tmdb_id FROM acquisition_exclusions
+                WHERE media_type = ? AND tmdb_id IS NOT NULL
+                """,
+                (media_type,),
+            ).fetchall()
+            return {int(row["tmdb_id"]) for row in rows}
+
+    def excluded_tvdb_ids(self) -> set[int]:
+        with self.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT tvdb_id FROM acquisition_exclusions
+                WHERE media_type = 'show' AND tvdb_id IS NOT NULL
+                """
+            ).fetchall()
+            return {int(row["tvdb_id"]) for row in rows}
+
+    def is_acquisition_excluded(
+        self,
+        *,
+        media_type: str,
+        tmdb_id: Optional[int] = None,
+        tvdb_id: Optional[int] = None,
+    ) -> bool:
+        clauses: List[str] = ["media_type = ?"]
+        params: List[Any] = [media_type]
+        if tmdb_id is not None:
+            clauses.append("tmdb_id = ?")
+            params.append(int(tmdb_id))
+        elif tvdb_id is not None:
+            clauses.append("tvdb_id = ?")
+            params.append(int(tvdb_id))
+        else:
+            return False
+        with self.connect() as conn:
+            row = conn.execute(
+                f"SELECT 1 FROM acquisition_exclusions WHERE {' AND '.join(clauses)} LIMIT 1",
+                params,
+            ).fetchone()
+        return row is not None
+
     def clear_library_facets(self) -> None:
         with self.connect() as conn:
             conn.execute("DELETE FROM library_facets")
@@ -464,7 +565,8 @@ class LibraryLookupMixin:
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE WHEN view_count IS NULL OR view_count = 0 THEN 1 ELSE 0 END) AS unwatched,
-                MAX(last_viewed_at) AS last_watched
+                MAX(last_viewed_at) AS last_watched,
+                COALESCE(SUM(COALESCE(file_size, 0)), 0) AS bytes_on_disk
             FROM library_episodes
             WHERE show_item_id = ?
             """,
@@ -476,7 +578,8 @@ class LibraryLookupMixin:
             SET total_episode_count = ?,
                 unwatched_episode_count = ?,
                 last_episode_watched_at = ?,
-                last_episode_sync_at = ?
+                last_episode_sync_at = ?,
+                file_size = ?
             WHERE id = ?
             """,
             (
@@ -484,9 +587,23 @@ class LibraryLookupMixin:
                 int(row["unwatched"] or 0),
                 row["last_watched"],
                 time.time(),
+                int(row["bytes_on_disk"] or 0),
                 show_item_id,
             ),
         )
+
+    def backfill_show_file_size_rollups(self) -> int:
+        """Recompute show episode rollups (including file_size) from library_episodes."""
+        with self.connect() as conn:
+            show_ids = [
+                int(row["id"])
+                for row in conn.execute(
+                    "SELECT id FROM library_items WHERE media_type = 'show'"
+                ).fetchall()
+            ]
+            for show_id in show_ids:
+                self._update_show_episode_rollups_on_conn(conn, show_id)
+        return len(show_ids)
 
     def update_show_episode_rollups(self, show_item_id: int) -> None:
         with self.connect() as conn:

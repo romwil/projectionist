@@ -141,6 +141,58 @@ def _drop_agent_blueprints(db: "SchemaMigrationsMixin", conn: sqlite3.Connection
     logger.info("Dropped unused agent_blueprints table")
 
 
+def _backfill_show_file_size_rollups(
+    db: "SchemaMigrationsMixin", conn: sqlite3.Connection
+) -> None:
+    """Roll episode sizes (and counts) up onto show library_items rows.
+
+    Storage Intelligence and browse/sort by size need show ``file_size``; episode
+    sync already stored per-episode bytes but never summed them onto the show.
+    """
+    del db
+    show_ids = [
+        int(row[0])
+        for row in conn.execute(
+            "SELECT id FROM library_items WHERE media_type = 'show'"
+        ).fetchall()
+    ]
+    now = time.time()
+    for show_id in show_ids:
+        row = conn.execute(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN view_count IS NULL OR view_count = 0 THEN 1 ELSE 0 END)
+                    AS unwatched,
+                MAX(last_viewed_at) AS last_watched,
+                COALESCE(SUM(COALESCE(file_size, 0)), 0) AS bytes_on_disk
+            FROM library_episodes
+            WHERE show_item_id = ?
+            """,
+            (show_id,),
+        ).fetchone()
+        conn.execute(
+            """
+            UPDATE library_items
+            SET total_episode_count = ?,
+                unwatched_episode_count = ?,
+                last_episode_watched_at = ?,
+                last_episode_sync_at = ?,
+                file_size = ?
+            WHERE id = ?
+            """,
+            (
+                int(row[0] or 0),
+                int(row[1] or 0),
+                row[2],
+                now,
+                int(row[3] or 0),
+                show_id,
+            ),
+        )
+    logger.info("Backfilled show file_size rollups for %s shows", len(show_ids))
+
+
 def _build_migrations() -> List[Migration]:
     def wrap(method_name: str) -> MigrationFn:
         def _run(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> None:
@@ -186,6 +238,8 @@ def _build_migrations() -> List[Migration]:
         (35, "credential_marker_rename", _rename_credential_marker),
         (36, "drop_agent_blueprints", _drop_agent_blueprints),
         (37, "library_graph_fk_orphan_cleanup", _cleanup_library_graph_fk_orphans),
+        (38, "acquisition_exclusions", wrap("_migrate_acquisition_exclusions")),
+        (39, "show_file_size_rollups", _backfill_show_file_size_rollups),
     ]
 
 
