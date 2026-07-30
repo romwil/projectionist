@@ -1327,7 +1327,12 @@ export async function getLiveChannelsStarterPack() {
 export async function publishLiveChannelsStarters(body = {}) {
   return api("/admin/live-channels/starters/publish", {
     method: "POST",
-    body: JSON.stringify({ confirm: true, wire_plex: true, ...body }),
+    body: JSON.stringify({
+      confirm: true,
+      wire_plex: true,
+      fill_programming: true,
+      ...body,
+    }),
   });
 }
 

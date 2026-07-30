@@ -14,7 +14,7 @@ import csv
 import io
 from contextlib import asynccontextmanager
 from dataclasses import asdict
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 import asyncio
 from typing import Any, Dict, List, Literal, Optional
@@ -645,6 +645,10 @@ class TunarrSettingsPayload(BaseModel):
     plex_pass_confirmed: bool = False
     last_publish_at: str = ""
     last_error: str = ""
+    last_guide_attach_at: str = ""
+    last_guide_attach_ok: bool = False
+    last_guide_attach_message: str = ""
+    last_guide_attach_dvr_key: str = ""
 
 
 class MailSettingsPayload(BaseModel):
@@ -1596,9 +1600,9 @@ class LiveChannelsLifecyclePayload(BaseModel):
 class LiveChannelsPublishStartersPayload(BaseModel):
     recipes: List[Dict[str, Any]] = Field(default_factory=list)
     wire_plex: bool = True
-    # When true, existing channels get programming_body_for_recipe applied
-    # (flex/empty shells until Tunarr has scanned program IDs).
-    fill_programming: bool = False
+    # Default true: enable Tunarr libraries, scan, and fill existing empty
+    # stations with scanned program IDs (flex-only shells cannot play in Plex).
+    fill_programming: bool = True
     confirm: bool = False
 
 
@@ -1937,6 +1941,19 @@ def live_channels_plex_attach_guide_endpoint(
     forwarded = str(request.headers.get("x-forwarded-host") or "").strip()
     request_host = forwarded or str(request.headers.get("host") or "").strip()
     result = attach_tunarr_xmltv_to_plex(settings, request_host=request_host)
+    tunarr = asdict(settings.tunarr)
+    tunarr["last_guide_attach_at"] = datetime.now(timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    tunarr["last_guide_attach_ok"] = bool(result.get("ok"))
+    tunarr["last_guide_attach_message"] = str(
+        result.get("message") or result.get("error") or ""
+    )[:240]
+    tunarr["last_guide_attach_dvr_key"] = str(result.get("dvr_key") or "")
+    save_settings(
+        DATA_DIR,
+        Settings.from_mapping({**asdict(settings), "tunarr": tunarr}),
+    )
     if not result.get("ok"):
         raise HTTPException(
             status_code=400,

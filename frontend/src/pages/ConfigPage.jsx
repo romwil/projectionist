@@ -231,7 +231,12 @@ function formatPublishFeedback(result) {
   const published = result?.count_published || 0;
   const skipped = result?.count_skipped || 0;
   const errors = result?.count_errors || 0;
-  const summary = `Published ${published}, skipped ${skipped}, errors ${errors}.`;
+  const filled = result?.count_content_filled || 0;
+  const updated = result?.count_programming_updated || 0;
+  const parts = [`Published ${published}`, `skipped ${skipped}`, `errors ${errors}`];
+  if (updated) parts.push(`lineups refreshed ${updated}`);
+  if (filled) parts.push(`with real titles ${filled}`);
+  const summary = `${parts.join(", ")}.${result?.note ? ` ${result.note}` : ""}`;
   const details = (result?.errors || []).map((err) => {
     const label = [err?.number, err?.name].filter((part) => part != null && part !== "").join(" · ");
     return `${label || "Channel"}: ${err?.error || "unknown error"}`;
@@ -2665,6 +2670,15 @@ export default function ConfigPage() {
                               ? "Broadcast engine running"
                               : "Broadcast engine unreachable",
                             `${liveChannelsStatus.channel_count ?? 0} station(s)`,
+                            liveChannelsStatus.guide_index?.lineup
+                              ? `${liveChannelsStatus.guide_index.lineup.filled_count ?? 0} with lineups` +
+                                (liveChannelsStatus.guide_index.lineup.empty_count
+                                  ? ` · ${liveChannelsStatus.guide_index.lineup.empty_count} empty`
+                                  : "")
+                              : null,
+                            liveChannelsStatus.guide_index?.xmltv?.ok
+                              ? `${liveChannelsStatus.guide_index.xmltv.content_programme_count ?? 0} guide titles in XMLTV`
+                              : null,
                             liveChannelsStatus.airing?.length
                               ? `${liveChannelsStatus.airing.length} airing now`
                               : null,
@@ -2679,6 +2693,52 @@ export default function ConfigPage() {
                             .join(" · ")
                         : "Status not loaded yet — hit Refresh after you connect."}
                     </p>
+                    {liveChannelsStatus?.guide_index ? (
+                      <div
+                        className="wizard-note"
+                        data-testid="live-channels-guide-index"
+                      >
+                        <p>
+                          <strong>Guide / indexing</strong>
+                          {" — "}
+                          {liveChannelsStatus.guide_index.owner_hint ||
+                            "Refresh after publish or attach."}
+                        </p>
+                        <ul data-testid="live-channels-guide-index-list">
+                          <li>
+                            Tunarr libraries enabled:{" "}
+                            {liveChannelsStatus.guide_index.media_libraries?.enabled_count ?? 0}
+                            {liveChannelsStatus.guide_index.media_libraries?.scanning_count
+                              ? ` · scanning ${liveChannelsStatus.guide_index.media_libraries.scanning_count}`
+                              : ""}
+                          </li>
+                          <li>
+                            Lineups playable:{" "}
+                            {liveChannelsStatus.guide_index.lineup?.playable ? "yes" : "no"}
+                            {liveChannelsStatus.guide_index.lineup?.empty_count
+                              ? ` (${liveChannelsStatus.guide_index.lineup.empty_count} empty)`
+                              : ""}
+                          </li>
+                          <li>
+                            XMLTV programmes:{" "}
+                            {liveChannelsStatus.guide_index.xmltv?.programme_count ?? 0}
+                            {" · "}
+                            titled content:{" "}
+                            {liveChannelsStatus.guide_index.xmltv?.content_programme_count ?? 0}
+                          </li>
+                          <li>
+                            Last Plex guide attach:{" "}
+                            {liveChannelsStatus.guide_index.last_attach?.at
+                              ? `${liveChannelsStatus.guide_index.last_attach.ok ? "ok" : "failed"} · ${liveChannelsStatus.guide_index.last_attach.at}${
+                                  liveChannelsStatus.guide_index.last_attach.dvr_key
+                                    ? ` · DVR ${liveChannelsStatus.guide_index.last_attach.dvr_key}`
+                                    : ""
+                                }`
+                              : "not run yet — use Attach Tunarr guide in Plex below"}
+                          </li>
+                        </ul>
+                      </div>
+                    ) : null}
                     {liveChannelsStatus?.last_error && actionAlert?.area !== "live-channels" ? (
                       <InlineAlert
                         type="error"
@@ -3022,7 +3082,7 @@ export default function ConfigPage() {
                         <p className="live-channels-step-label">
                           Step {settings?.tunarr?.docker_orchestration ? "3" : "2"}
                         </p>
-                        <h3>Propose starter stations</h3>
+                        <h3>Create / publish channels</h3>
                       </div>
                       <button
                         type="button"
@@ -3049,6 +3109,12 @@ export default function ConfigPage() {
                         {liveBusy === "starters" ? "Loading…" : "Propose starters"}
                       </button>
                     </div>
+                    <p className="wizard-note">
+                      This is how you create new stations: propose a library-aware starter pack, then
+                      publish. Publish also enables Tunarr’s Plex libraries, fills lineups with real
+                      titles, and skips channel numbers that already exist (re-publish refreshes empty
+                      lineups).
+                    </p>
                     {liveStarters?.proposals?.length ? (
                       <>
                         <ul className="wizard-note" data-testid="live-channels-starter-list">
@@ -3084,7 +3150,7 @@ export default function ConfigPage() {
                             onClick={async () => {
                               if (
                                 !window.confirm(
-                                  "Publish the selected starter stations? Existing channel numbers are skipped.",
+                                  "Create / publish the selected starter stations? Existing channel numbers keep their stations; empty lineups are filled from your Plex library.",
                                 )
                               ) {
                                 return;
@@ -3095,7 +3161,10 @@ export default function ConfigPage() {
                                   const key = `${proposal.number}:${proposal.name}`;
                                   return selectedStarters[key];
                                 });
-                                const result = await publishLiveChannelsStarters({ recipes });
+                                const result = await publishLiveChannelsStarters({
+                                  recipes,
+                                  fill_programming: true,
+                                });
                                 const feedback = formatPublishFeedback(result);
                                 setActionFeedback(
                                   "live-channels",
@@ -3112,14 +3181,15 @@ export default function ConfigPage() {
                               }
                             }}
                           >
-                            {liveBusy === "publish" ? "Publishing…" : "Publish starters"}
+                            {liveBusy === "publish" ? "Publishing…" : "Create / publish channels"}
                           </button>
                         </div>
                       </>
                     ) : (
                       <p className="wizard-note">
-                        Suggest 2–4 stations from your taste clusters, motifs, and collections (plus a Chaos /
-                        youth-safe option when it fits).
+                        Click Propose starters for 2–4 stations from your taste clusters, motifs, and
+                        collections (plus Chaos / youth-safe when it fits). Then Create / publish
+                        channels.
                       </p>
                     )}
                   </div>

@@ -29,7 +29,7 @@ from __future__ import annotations
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
-from typing import Any, List, Mapping, Optional, Union
+from typing import Any, Dict, List, Mapping, Optional, Union
 from urllib.parse import urlencode
 
 from projectionist.connectors.http import request_json
@@ -116,6 +116,111 @@ class TunarrClient:
         if not isinstance(payload, dict):
             raise RuntimeError("Unexpected response from Tunarr create media-source")
         return payload
+
+    def list_media_source_libraries(self, media_source_id: str) -> List[Mapping[str, Any]]:
+        """List libraries for a media source (``GET /media-sources/{id}/libraries``)."""
+        msid = str(media_source_id or "").strip()
+        if not msid:
+            raise ValueError("media_source_id is required")
+        payload = request_json(
+            self._api_url(f"/media-sources/{msid}/libraries"),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, list):
+            return []
+        return [item for item in payload if isinstance(item, Mapping)]
+
+    def set_library_enabled(
+        self, media_source_id: str, library_id: str, *, enabled: bool = True
+    ) -> Mapping[str, Any]:
+        """Enable/disable a Tunarr media library (required before scan/programming)."""
+        msid = str(media_source_id or "").strip()
+        lid = str(library_id or "").strip()
+        if not msid or not lid:
+            raise ValueError("media_source_id and library_id are required")
+        payload = request_json(
+            self._api_url(f"/media-sources/{msid}/libraries/{lid}"),
+            method="PUT",
+            body={"enabled": bool(enabled)},
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr set library enabled")
+        return payload
+
+    def scan_library(
+        self,
+        media_source_id: str,
+        library_id: str,
+        *,
+        force: bool = True,
+    ) -> Mapping[str, Any]:
+        """Kick a library scan (``POST …/libraries/{id}/scan``). Returns quickly (202)."""
+        msid = str(media_source_id or "").strip()
+        lid = str(library_id or "").strip()
+        if not msid or not lid:
+            raise ValueError("media_source_id and library_id are required")
+        query = urlencode({"forceScan": "true" if force else "false"})
+        payload = request_json(
+            f"{self._api_url(f'/media-sources/{msid}/libraries/{lid}/scan')}?{query}",
+            method="POST",
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, dict) else {}
+
+    def get_library_scan_status(
+        self, media_source_id: str, library_id: str
+    ) -> Mapping[str, Any]:
+        """Poll scan progress (``GET /media-sources/{ms}/{lib}/status``)."""
+        msid = str(media_source_id or "").strip()
+        lid = str(library_id or "").strip()
+        if not msid or not lid:
+            raise ValueError("media_source_id and library_id are required")
+        payload = request_json(
+            self._api_url(f"/media-sources/{msid}/{lid}/status"),
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, dict) else {}
+
+    def list_library_programs(self, library_id: str) -> List[Mapping[str, Any]]:
+        """Programs already indexed for a library (``GET /media-libraries/{id}/programs``)."""
+        lid = str(library_id or "").strip()
+        if not lid:
+            raise ValueError("library_id is required")
+        payload = request_json(
+            self._api_url(f"/media-libraries/{lid}/programs"),
+            timeout=max(self.timeout, 60),
+        )
+        if not isinstance(payload, list):
+            return []
+        return [item for item in payload if isinstance(item, Mapping)]
+
+    def search_programs(
+        self,
+        query: str = "",
+        *,
+        limit: int = 40,
+        page: int = 1,
+        media_source_id: str = "",
+        library_id: str = "",
+    ) -> Mapping[str, Any]:
+        """Search Tunarr's program index (``POST /programs/search``)."""
+        body: Dict[str, Any] = {
+            "query": {"query": str(query or "")},
+            "limit": max(1, min(int(limit or 40), 200)),
+            "page": max(1, int(page or 1)),
+        }
+        if media_source_id:
+            body["mediaSourceId"] = str(media_source_id).strip()
+        if library_id:
+            body["libraryId"] = str(library_id).strip()
+        payload = request_json(
+            self._api_url("/programs/search"),
+            method="POST",
+            body=body,
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, dict) else {"results": [], "totalHits": 0}
 
     def list_channels(self) -> List[Mapping[str, Any]]:
         payload = request_json(self._api_url("/channels"), timeout=self.timeout)

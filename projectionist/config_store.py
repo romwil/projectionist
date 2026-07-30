@@ -562,6 +562,11 @@ class TunarrSettings:
     # Last successful starter/collection publish (ISO UTC) and last error string.
     last_publish_at: str = ""
     last_error: str = ""
+    # Last Plex XMLTV attach attempt (Admin → Attach Tunarr guide).
+    last_guide_attach_at: str = ""
+    last_guide_attach_ok: bool = False
+    last_guide_attach_message: str = ""
+    last_guide_attach_dvr_key: str = ""
 
 
 @dataclass
