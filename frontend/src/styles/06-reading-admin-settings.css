@@ -447,6 +447,136 @@
   align-items: center;
 }
 
+/* ── Mail & alerts: subsections, advanced disclosure, save bar ───── */
+.mail-settings-form {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.settings-field-grid {
+  display: grid;
+  gap: var(--space-4);
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+}
+
+.settings-subsection {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.settings-subsection-title {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary, #b7c0ce);
+  text-transform: uppercase;
+}
+
+.settings-panel-meta {
+  margin: 0;
+}
+
+.settings-code-input {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.settings-advanced {
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px dashed var(--border-subtle, rgba(255, 255, 255, 0.1));
+}
+
+.settings-advanced-nested {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+.settings-advanced > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  list-style: none;
+  user-select: none;
+}
+
+.settings-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-advanced > summary::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+
+.settings-advanced[open] > summary::before {
+  content: "▾ ";
+}
+
+.settings-advanced > summary:hover {
+  color: var(--text);
+}
+
+.settings-advanced-body {
+  display: grid;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
+}
+
+.settings-learn-more {
+  margin-top: var(--space-1);
+}
+
+.settings-learn-more > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  list-style: none;
+  user-select: none;
+}
+
+.settings-learn-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-learn-more > summary:hover {
+  color: var(--accent, var(--gold, #c9a227));
+}
+
+.settings-learn-more p {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  max-width: 56ch;
+}
+
+.mail-settings-save-bar {
+  display: grid;
+  gap: var(--space-3);
+  position: sticky;
+  bottom: 0;
+  padding: var(--space-3) 0;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, var(--bg, #0f1218) 92%, transparent),
+    color-mix(in srgb, var(--bg, #0f1218) 88%, transparent) 70%,
+    transparent
+  );
+  z-index: 2;
+}
+
+.mail-settings-save-bar .settings-actions {
+  align-items: baseline;
+}
+
 .settings-checklist {
   list-style: none;
   margin: 0;

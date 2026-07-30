@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.29.13] — 2026-07-30
+
+Admin **Mail & alerts** is easier to scan and safer to operate: clearer sections, advanced options tucked away, and save/test feedback next to each action.
+
+### Highlights
+- **Mail & alerts easier to scan.** Outbound email, installation Apprise, and weekly newsletter are separate sections instead of one long wall of form fields.
+- **Advanced options stay out of the way.** Email template, Apprise YAML/tag, and test URL overrides live under progressive disclosure.
+- **You can tell what worked.** Save, email test, Apprise test, and newsletter each show their own dismissible status next to the button that ran them.
+
+### Changed
+- Admin Mail page title matches the nav label (**Mail & alerts**); shorter helper copy; sticky Save for email + Apprise together.
+- Interactive UI QA checklist `admin.mail-notify-surface` updated for the Outbound email panel.
+
+### Added
+- `frontend/src/lib/mailSettingsUi.js` helpers (+ unit tests) for field labels and test result copy.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1507 passed, 6 skipped; coverage **77.2%** (≥74%).
+- `cd frontend && npm run test:unit` — 514 passed (incl. `mailSettingsUi`); `npm run lint` — 0 errors; `npm run build` — pass.
+- `pytest tests/test_version.py` — lockstep **1.29.13**.
+
 ## [1.29.12] — 2026-07-30
 
 Storage Intelligence layout and delete feedback: maintenance panel under the grid, Movies/TV filter tabs, and honest progress after deleting a show from the title drawer.

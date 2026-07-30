@@ -7,9 +7,16 @@ import {
   testAppriseSend,
   testMailSend,
 } from "../api/client";
+import InlineAlert from "../components/InlineAlert";
 import SettingsPageHeader from "../components/settings/SettingsPageHeader";
 import SettingsPanel from "../components/settings/SettingsPanel";
 import SettingsToggle from "../components/settings/SettingsToggle";
+import {
+  appriseTestResultMessage,
+  appriseUrlsLabel,
+  mailTestResultMessage,
+  savedSecretLabel,
+} from "../lib/mailSettingsUi.js";
 import {
   NEWSLETTER_SCOPES,
   newsletterConfirmMessage,
@@ -55,7 +62,9 @@ export default function MailSettingsPage() {
   const [apprise, setApprise] = useState(EMPTY_APPRISE);
   const [testTo, setTestTo] = useState("");
   const [appriseTestUrls, setAppriseTestUrls] = useState("");
-  const [status, setStatus] = useState(null);
+  const [saveStatus, setSaveStatus] = useState(null);
+  const [mailTestStatus, setMailTestStatus] = useState(null);
+  const [appriseTestStatus, setAppriseTestStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testingApprise, setTestingApprise] = useState(false);
@@ -74,7 +83,7 @@ export default function MailSettingsPage() {
         setReady(true);
       })
       .catch((error) => {
-        setStatus({ type: "error", message: error.message || "Could not load settings." });
+        setSaveStatus({ type: "error", message: error.message || "Could not load settings." });
         setReady(true);
       });
     listUsers()
@@ -106,7 +115,7 @@ export default function MailSettingsPage() {
   async function handleSave(event) {
     event.preventDefault();
     setSaving(true);
-    setStatus(null);
+    setSaveStatus(null);
     try {
       const current = await getSettings();
       const result = await saveSettings({
@@ -135,9 +144,9 @@ export default function MailSettingsPage() {
       });
       setMail((prev) => ({ ...prev, ...(result.mail || {}), smtp_password: "", resend_api_key: "" }));
       setApprise((prev) => ({ ...prev, ...(result.apprise || {}), urls: "", config: "" }));
-      setStatus({ type: "success", message: "Mail & Apprise settings saved." });
+      setSaveStatus({ type: "success", message: "Mail & Apprise settings saved." });
     } catch (error) {
-      setStatus({ type: "error", message: error.message || "Could not save." });
+      setSaveStatus({ type: "error", message: error.message || "Could not save." });
     } finally {
       setSaving(false);
     }
@@ -145,15 +154,12 @@ export default function MailSettingsPage() {
 
   async function handleTest() {
     setTesting(true);
-    setStatus(null);
+    setMailTestStatus(null);
     try {
       const result = await testMailSend(testTo.trim() ? { to_email: testTo.trim() } : {});
-      setStatus({
-        type: "success",
-        message: `Test email sent to ${result.to_email || "your notification address"}.`,
-      });
+      setMailTestStatus({ type: "success", message: mailTestResultMessage(result) });
     } catch (error) {
-      setStatus({ type: "error", message: error.message || "Test send failed." });
+      setMailTestStatus({ type: "error", message: error.message || "Test send failed." });
     } finally {
       setTesting(false);
     }
@@ -161,17 +167,14 @@ export default function MailSettingsPage() {
 
   async function handleAppriseTest() {
     setTestingApprise(true);
-    setStatus(null);
+    setAppriseTestStatus(null);
     try {
       const result = await testAppriseSend(
         appriseTestUrls.trim() ? { urls: appriseTestUrls.trim() } : {},
       );
-      setStatus({
-        type: "success",
-        message: `Apprise test notified ${result.notified || 0} destination(s).`,
-      });
+      setAppriseTestStatus({ type: "success", message: appriseTestResultMessage(result) });
     } catch (error) {
-      setStatus({ type: "error", message: error.message || "Apprise test failed." });
+      setAppriseTestStatus({ type: "error", message: error.message || "Apprise test failed." });
     } finally {
       setTestingApprise(false);
     }
@@ -208,27 +211,32 @@ export default function MailSettingsPage() {
   if (!ready) {
     return (
       <div className="settings-stack" data-testid="admin-mail">
-        <SettingsPageHeader title="Mail & notifications">Loading…</SettingsPageHeader>
+        <SettingsPageHeader title="Mail & alerts">Loading…</SettingsPageHeader>
       </div>
     );
   }
 
+  const mailTransportOpen = Boolean(mail.enabled) || (mail.provider && mail.provider !== "off");
+
   return (
     <div className="settings-stack" data-testid="admin-mail">
-      <SettingsPageHeader title="Mail & notifications">
-        Configure outbound email (SMTP / Resend) and installation-level Apprise destinations.
-        Members opt in under Settings → Notifications — email needs this page; personal Apprise
-        URLs are self-serve.
+      <SettingsPageHeader title="Mail & alerts">
+        Household email and installation Apprise. Members choose channels under Settings →
+        Notifications.
       </SettingsPageHeader>
 
-      <form onSubmit={handleSave}>
-        <SettingsPanel title="Transport">
+      <form onSubmit={handleSave} className="mail-settings-form">
+        <SettingsPanel
+          title="Outbound email"
+          lead="SMTP or Resend for digests and alerts. When off, notifications stay in the in-app inbox."
+          testId="mail-transport-panel"
+        >
           <SettingsToggle
             id="mail-enabled"
             checked={Boolean(mail.enabled)}
             onChange={(v) => patchMail({ enabled: v })}
             label="Enable outbound mail"
-            help="When off, notifications stay in the in-app inbox only."
+            help="Turn on to deliver email when members opt in."
             testId="mail-enabled-toggle"
           />
           <label className="settings-field">
@@ -245,262 +253,311 @@ export default function MailSettingsPage() {
               ))}
             </select>
           </label>
-          <label className="settings-field">
-            <span>From email</span>
-            <input
-              type="email"
-              value={mail.from_email || ""}
-              onChange={(e) => patchMail({ from_email: e.target.value })}
-              data-testid="mail-from-email"
+
+          {mailTransportOpen ? (
+            <div className="settings-field-grid">
+              <label className="settings-field">
+                <span>From email</span>
+                <input
+                  type="email"
+                  value={mail.from_email || ""}
+                  onChange={(e) => patchMail({ from_email: e.target.value })}
+                  placeholder="alerts@example.com"
+                  data-testid="mail-from-email"
+                />
+              </label>
+              <label className="settings-field">
+                <span>From name</span>
+                <input
+                  type="text"
+                  value={mail.from_name || ""}
+                  onChange={(e) => patchMail({ from_name: e.target.value })}
+                  placeholder="Projectionist"
+                  data-testid="mail-from-name"
+                />
+              </label>
+            </div>
+          ) : null}
+
+          {mail.provider === "smtp" ? (
+            <div className="settings-subsection" data-testid="mail-smtp-section">
+              <h4 className="settings-subsection-title">SMTP</h4>
+              <div className="settings-field-grid">
+                <label className="settings-field">
+                  <span>Host</span>
+                  <input
+                    type="text"
+                    value={mail.smtp_host || ""}
+                    onChange={(e) => patchMail({ smtp_host: e.target.value })}
+                    placeholder="smtp.example.com"
+                    data-testid="mail-smtp-host"
+                  />
+                </label>
+                <label className="settings-field">
+                  <span>Port</span>
+                  <input
+                    type="number"
+                    value={mail.smtp_port ?? 587}
+                    onChange={(e) => patchMail({ smtp_port: Number(e.target.value) || 587 })}
+                    data-testid="mail-smtp-port"
+                  />
+                </label>
+                <label className="settings-field">
+                  <span>Username</span>
+                  <input
+                    type="text"
+                    value={mail.smtp_username || ""}
+                    onChange={(e) => patchMail({ smtp_username: e.target.value })}
+                    data-testid="mail-smtp-username"
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="settings-field">
+                  <span>{savedSecretLabel("Password", Boolean(mail.smtp_password_set))}</span>
+                  <input
+                    type="password"
+                    value={mail.smtp_password || ""}
+                    onChange={(e) => patchMail({ smtp_password: e.target.value })}
+                    data-testid="mail-smtp-password"
+                    autoComplete="new-password"
+                    placeholder={mail.smtp_password_set ? "••••••••" : ""}
+                  />
+                </label>
+              </div>
+              <SettingsToggle
+                id="mail-smtp-tls"
+                checked={mail.smtp_use_tls !== false}
+                onChange={(v) => patchMail({ smtp_use_tls: v })}
+                label="Use STARTTLS"
+                testId="mail-smtp-tls-toggle"
+              />
+            </div>
+          ) : null}
+
+          {mail.provider === "resend" ? (
+            <div className="settings-subsection" data-testid="mail-resend-section">
+              <h4 className="settings-subsection-title">Resend</h4>
+              <label className="settings-field">
+                <span>{savedSecretLabel("API key", Boolean(mail.resend_api_key_set))}</span>
+                <input
+                  type="password"
+                  value={mail.resend_api_key || ""}
+                  onChange={(e) => patchMail({ resend_api_key: e.target.value })}
+                  data-testid="mail-resend-api-key"
+                  autoComplete="new-password"
+                  placeholder={mail.resend_api_key_set ? "••••••••" : "re_…"}
+                />
+              </label>
+            </div>
+          ) : null}
+
+          <details className="settings-advanced">
+            <summary>Email template</summary>
+            <div className="settings-advanced-body">
+              <label className="settings-field">
+                <span>Subject prefix</span>
+                <input
+                  type="text"
+                  value={mail.subject_prefix || ""}
+                  onChange={(e) => patchMail({ subject_prefix: e.target.value })}
+                  placeholder="[Projectionist]"
+                  data-testid="mail-subject-prefix"
+                />
+              </label>
+              <label className="settings-field">
+                <span>Footer text</span>
+                <textarea
+                  rows={3}
+                  value={mail.footer_text || ""}
+                  onChange={(e) => patchMail({ footer_text: e.target.value })}
+                  placeholder="Optional sign-off shown at the bottom of emails"
+                  data-testid="mail-footer-text"
+                />
+              </label>
+              <label className="settings-field">
+                <span>Logo URL</span>
+                <input
+                  type="url"
+                  value={mail.logo_url || ""}
+                  onChange={(e) => patchMail({ logo_url: e.target.value })}
+                  data-testid="mail-logo-url"
+                  placeholder="https://…"
+                />
+              </label>
+            </div>
+          </details>
+
+          <div className="settings-subsection" data-testid="mail-test-section">
+            <h4 className="settings-subsection-title">Send a test</h4>
+            <label className="settings-field">
+              <span>Send test to</span>
+              <input
+                type="email"
+                value={testTo}
+                onChange={(e) => setTestTo(e.target.value)}
+                placeholder="Defaults to your notification email"
+                data-testid="mail-test-to"
+              />
+            </label>
+            <div className="settings-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={handleTest}
+                disabled={testing}
+                data-testid="mail-test-send"
+              >
+                {testing ? "Sending…" : "Send test email"}
+              </button>
+            </div>
+            <InlineAlert
+              type={mailTestStatus?.type}
+              message={mailTestStatus?.message}
+              testId="mail-test-status"
+              onDismiss={() => setMailTestStatus(null)}
             />
-          </label>
-          <label className="settings-field">
-            <span>From name</span>
-            <input
-              type="text"
-              value={mail.from_name || ""}
-              onChange={(e) => patchMail({ from_name: e.target.value })}
-              data-testid="mail-from-name"
-            />
-          </label>
+          </div>
         </SettingsPanel>
 
-        {mail.provider === "smtp" ? (
-          <SettingsPanel title="SMTP">
-            <label className="settings-field">
-              <span>Host</span>
-              <input
-                type="text"
-                value={mail.smtp_host || ""}
-                onChange={(e) => patchMail({ smtp_host: e.target.value })}
-                data-testid="mail-smtp-host"
-              />
-            </label>
-            <label className="settings-field">
-              <span>Port</span>
-              <input
-                type="number"
-                value={mail.smtp_port ?? 587}
-                onChange={(e) => patchMail({ smtp_port: Number(e.target.value) || 587 })}
-                data-testid="mail-smtp-port"
-              />
-            </label>
-            <label className="settings-field">
-              <span>Username</span>
-              <input
-                type="text"
-                value={mail.smtp_username || ""}
-                onChange={(e) => patchMail({ smtp_username: e.target.value })}
-                data-testid="mail-smtp-username"
-                autoComplete="off"
-              />
-            </label>
-            <label className="settings-field">
-              <span>Password{mail.smtp_password_set ? " (saved — leave blank to keep)" : ""}</span>
-              <input
-                type="password"
-                value={mail.smtp_password || ""}
-                onChange={(e) => patchMail({ smtp_password: e.target.value })}
-                data-testid="mail-smtp-password"
-                autoComplete="new-password"
-                placeholder={mail.smtp_password_set ? "••••••••" : ""}
-              />
-            </label>
-            <SettingsToggle
-              id="mail-smtp-tls"
-              checked={mail.smtp_use_tls !== false}
-              onChange={(v) => patchMail({ smtp_use_tls: v })}
-              label="Use STARTTLS"
-              testId="mail-smtp-tls-toggle"
-            />
-          </SettingsPanel>
-        ) : null}
-
-        {mail.provider === "resend" ? (
-          <SettingsPanel title="Resend">
-            <label className="settings-field">
-              <span>API key{mail.resend_api_key_set ? " (saved — leave blank to keep)" : ""}</span>
-              <input
-                type="password"
-                value={mail.resend_api_key || ""}
-                onChange={(e) => patchMail({ resend_api_key: e.target.value })}
-                data-testid="mail-resend-api-key"
-                autoComplete="new-password"
-                placeholder={mail.resend_api_key_set ? "••••••••" : "re_…"}
-              />
-            </label>
-          </SettingsPanel>
-        ) : null}
-
-        <SettingsPanel title="Template">
-          <label className="settings-field">
-            <span>Subject prefix</span>
-            <input
-              type="text"
-              value={mail.subject_prefix || ""}
-              onChange={(e) => patchMail({ subject_prefix: e.target.value })}
-              data-testid="mail-subject-prefix"
-            />
-          </label>
-          <label className="settings-field">
-            <span>Footer text</span>
-            <textarea
-              rows={3}
-              value={mail.footer_text || ""}
-              onChange={(e) => patchMail({ footer_text: e.target.value })}
-              data-testid="mail-footer-text"
-            />
-          </label>
-          <label className="settings-field">
-            <span>Logo URL</span>
-            <input
-              type="url"
-              value={mail.logo_url || ""}
-              onChange={(e) => patchMail({ logo_url: e.target.value })}
-              data-testid="mail-logo-url"
-              placeholder="https://…"
-            />
-          </label>
-        </SettingsPanel>
-
-        <SettingsPanel title="Test email">
-          <label className="settings-field">
-            <span>Send test to</span>
-            <input
-              type="email"
-              value={testTo}
-              onChange={(e) => setTestTo(e.target.value)}
-              placeholder="Defaults to your notification email"
-              data-testid="mail-test-to"
-            />
-          </label>
-          <button
-            type="button"
-            className="ghost"
-            onClick={handleTest}
-            disabled={testing}
-            data-testid="mail-test-send"
-          >
-            {testing ? "Sending…" : "Send test email"}
-          </button>
-        </SettingsPanel>
-
-        <SettingsPanel title="Apprise (installation)">
-          <p className="settings-field-hint">
-            Optional household destinations for members who enable Apprise under Settings →
-            Notifications. Members can also paste their own URLs without anything here.
-            {" "}
+        <SettingsPanel
+          title="Apprise (installation)"
+          lead="Optional household destinations for members who enable Apprise. Personal URLs stay self-serve."
+          testId="mail-apprise-panel"
+        >
+          <p className="settings-panel-meta">
             <span className="settings-channel-badge is-owner-required">Owner / server setup</span>
           </p>
           {!apprise.package_available ? (
-            <p className="status status-error" data-testid="apprise-package-missing">
-              The Apprise package is not installed on this server. Reinstall with the web extras
-              (pip install &quot;.[web]&quot;) and restart.
-            </p>
+            <InlineAlert
+              type="error"
+              message='The Apprise package is not installed on this server. Reinstall with the web extras (pip install ".[web]") and restart.'
+              testId="apprise-package-missing"
+            />
           ) : null}
           <SettingsToggle
             id="apprise-enabled"
             checked={Boolean(apprise.enabled)}
             onChange={(v) => patchApprise({ enabled: v })}
             label="Enable installation Apprise URLs"
-            help="When on, opted-in members also receive alerts on these household destinations."
+            help="When on, opted-in members also get alerts on these household destinations."
             testId="apprise-enabled-toggle"
           />
           <label className="settings-field">
-            <span>
-              Apprise URLs
-              {apprise.urls_set
-                ? ` (${apprise.url_count || "saved"} saved — leave blank to keep)`
-                : ""}
-            </span>
+            <span>{appriseUrlsLabel(apprise)}</span>
             <textarea
               rows={4}
               value={apprise.urls || ""}
               onChange={(e) => patchApprise({ urls: e.target.value })}
-              placeholder={"discord://webhook_id/webhook_token\ntgram://bot_token/chat_id"}
+              placeholder={"discord://…\ntgram://…"}
               data-testid="apprise-urls"
               spellCheck={false}
+              className="settings-code-input"
             />
-            <span className="settings-field-hint">
-              One URL per line. See{" "}
-              <a
-                href="https://github.com/caronc/apprise#supported-notifications"
-                target="_blank"
-                rel="noreferrer"
+            <span className="settings-field-hint">One URL per line. Leave blank on save to keep stored URLs.</span>
+            <details className="settings-learn-more">
+              <summary>Learn more</summary>
+              <p>
+                See{" "}
+                <a
+                  href="https://github.com/caronc/apprise#supported-notifications"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Apprise notification types
+                </a>{" "}
+                for Discord, Telegram, and other schemes.
+              </p>
+            </details>
+          </label>
+
+          <details className="settings-advanced">
+            <summary>Advanced config</summary>
+            <div className="settings-advanced-body">
+              <label className="settings-field">
+                <span>{savedSecretLabel("Apprise config (YAML/JSON)", Boolean(apprise.config_set))}</span>
+                <textarea
+                  rows={5}
+                  value={apprise.config || ""}
+                  onChange={(e) => patchApprise({ config: e.target.value })}
+                  placeholder={"urls:\n  - json://hostname/path"}
+                  data-testid="apprise-config"
+                  spellCheck={false}
+                  className="settings-code-input"
+                />
+              </label>
+              <label className="settings-field">
+                <span>Tag filter</span>
+                <input
+                  type="text"
+                  value={apprise.tag || ""}
+                  onChange={(e) => patchApprise({ tag: e.target.value })}
+                  placeholder="Optional — blank means all tags"
+                  data-testid="apprise-tag"
+                />
+              </label>
+            </div>
+          </details>
+
+          <div className="settings-subsection" data-testid="apprise-test-section">
+            <h4 className="settings-subsection-title">Send a test</h4>
+            <details className="settings-advanced settings-advanced-nested">
+              <summary>Override URLs for this test</summary>
+              <div className="settings-advanced-body">
+                <label className="settings-field">
+                  <span>Test URLs</span>
+                  <textarea
+                    rows={2}
+                    value={appriseTestUrls}
+                    onChange={(e) => setAppriseTestUrls(e.target.value)}
+                    placeholder="Leave blank to use saved installation URLs/config"
+                    data-testid="apprise-test-urls"
+                    spellCheck={false}
+                    className="settings-code-input"
+                  />
+                </label>
+              </div>
+            </details>
+            <div className="settings-actions">
+              <button
+                type="button"
+                className="ghost"
+                onClick={handleAppriseTest}
+                disabled={testingApprise}
+                data-testid="apprise-test-send"
               >
-                Apprise notification types
-              </a>
-              .
-            </span>
-          </label>
-          <label className="settings-field">
-            <span>
-              Optional Apprise config
-              {apprise.config_set ? " (saved — leave blank to keep)" : ""}
-            </span>
-            <textarea
-              rows={5}
-              value={apprise.config || ""}
-              onChange={(e) => patchApprise({ config: e.target.value })}
-              placeholder={"# Optional YAML/TEXT Apprise config\nurls:\n  - json://hostname/path"}
-              data-testid="apprise-config"
-              spellCheck={false}
+                {testingApprise ? "Sending…" : "Send Apprise test"}
+              </button>
+            </div>
+            <InlineAlert
+              type={appriseTestStatus?.type}
+              message={appriseTestStatus?.message}
+              testId="apprise-test-status"
+              onDismiss={() => setAppriseTestStatus(null)}
             />
-          </label>
-          <label className="settings-field">
-            <span>Tag filter (optional)</span>
-            <input
-              type="text"
-              value={apprise.tag || ""}
-              onChange={(e) => patchApprise({ tag: e.target.value })}
-              placeholder="Leave blank for all"
-              data-testid="apprise-tag"
-            />
-          </label>
-          <label className="settings-field">
-            <span>Test with override URLs (optional)</span>
-            <textarea
-              rows={2}
-              value={appriseTestUrls}
-              onChange={(e) => setAppriseTestUrls(e.target.value)}
-              placeholder="Leave blank to use saved installation URLs/config"
-              data-testid="apprise-test-urls"
-              spellCheck={false}
-            />
-          </label>
-          <button
-            type="button"
-            className="ghost"
-            onClick={handleAppriseTest}
-            disabled={testingApprise}
-            data-testid="apprise-test-send"
-          >
-            {testingApprise ? "Sending…" : "Send Apprise test"}
-          </button>
+          </div>
         </SettingsPanel>
 
-        {status ? (
-          <p
-            className={`status ${status.type === "error" ? "status-error" : "status-success"}`}
-            data-testid="mail-status"
-          >
-            {status.message}
-          </p>
-        ) : null}
-
-        <div className="settings-actions">
-          <button type="submit" className="primary" disabled={saving} data-testid="mail-save">
-            {saving ? "Saving…" : "Save mail & Apprise settings"}
-          </button>
+        <div className="mail-settings-save-bar">
+          <InlineAlert
+            type={saveStatus?.type}
+            message={saveStatus?.message}
+            testId="mail-status"
+            onDismiss={() => setSaveStatus(null)}
+          />
+          <div className="settings-actions">
+            <button type="submit" className="primary" disabled={saving} data-testid="mail-save">
+              {saving ? "Saving…" : "Save"}
+            </button>
+            <span className="settings-field-hint">Saves outbound email and installation Apprise together.</span>
+          </div>
         </div>
       </form>
 
-      <SettingsPanel title="Weekly newsletter">
-        <p className="settings-field-hint">
-          Push this week’s personalized newsletter now — same content as the scheduled send.
-          Only people who opted in under Settings → Notifications are included; inbox and email
-          channel prefs still apply.
-        </p>
+      <SettingsPanel
+        title="Weekly newsletter"
+        lead="Push this week’s personalized newsletter now — same content as the scheduled send. Only opted-in members are included."
+        testId="mail-newsletter-panel"
+      >
         <label className="settings-field">
           <span>Send to</span>
           <select
@@ -542,23 +599,23 @@ export default function MailSettingsPage() {
             )}
           </fieldset>
         ) : null}
-        <button
-          type="button"
-          className="primary"
-          onClick={handleSendNewsletter}
-          disabled={sendingNewsletter}
-          data-testid="mail-newsletter-send"
-        >
-          {sendingNewsletter ? "Sending…" : "Send weekly newsletter now"}
-        </button>
-        {newsletterStatus ? (
-          <p
-            className={`status ${newsletterStatus.type === "error" ? "status-error" : "status-success"}`}
-            data-testid="mail-newsletter-status"
+        <div className="settings-actions">
+          <button
+            type="button"
+            className="primary"
+            onClick={handleSendNewsletter}
+            disabled={sendingNewsletter}
+            data-testid="mail-newsletter-send"
           >
-            {newsletterStatus.message}
-          </p>
-        ) : null}
+            {sendingNewsletter ? "Sending…" : "Send weekly newsletter now"}
+          </button>
+        </div>
+        <InlineAlert
+          type={newsletterStatus?.type}
+          message={newsletterStatus?.message}
+          testId="mail-newsletter-status"
+          onDismiss={() => setNewsletterStatus(null)}
+        />
       </SettingsPanel>
     </div>
   );

@@ -216,7 +216,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **roles:** `owner`
 - **tags:** `notifications`, `admin`
 - **source:** `frontend/src/pages/MailSettingsPage.jsx`, `frontend/src/layouts/AdminLayout.jsx`
-- **steps:** Open Admin → Mail (`admin-nav-mail` / `/admin/mail`). Inspect Transport (enable toggle, provider, from fields) and Weekly newsletter scope (`mail-newsletter-scope`). Do **not** save destructive mail changes or send newsletter unless explicitly requested.
+- **steps:** Open Admin → Mail & alerts (`admin-nav-mail` / `/admin/mail`). Inspect Outbound email (`mail-transport-panel`: enable toggle, provider, from fields when open) and Weekly newsletter scope (`mail-newsletter-scope`). Do **not** save destructive mail changes or send newsletter unless explicitly requested.
 - **pass:** `admin-mail` loads; transport controls + newsletter scope select visible. Member navigating to `/admin/mail` still redirects away (covered by `nav.admin-redirect`).
 
 ### `journey.list-filter`
