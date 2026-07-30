@@ -82,6 +82,45 @@ def _plex_identity_hints(
     return user_id, username
 
 
+
+def configured_plex_external_keys(
+    settings: Any = None,
+    *,
+    media_types: Sequence[str] = ("movies", "shows"),
+    movie_section: str = "",
+    tv_section: str = "",
+) -> set[str]:
+    """Plex section keys Projectionist is allowed to expose into Tunarr.
+
+    Tunarr libraries carry Plex section ids on ``externalKey``. Only those
+    matching ``plex_movie_section`` / ``plex_tv_section`` (filtered by the
+    requested media types) should be enabled or scanned.
+    """
+    movie = str(movie_section or "").strip()
+    tv = str(tv_section or "").strip()
+    if settings is not None:
+        if not movie:
+            movie = str(getattr(settings, "plex_movie_section", "") or "").strip()
+        if not tv:
+            tv = str(getattr(settings, "plex_tv_section", "") or "").strip()
+    wanted = {str(t).lower() for t in media_types} or set(_PREFERRED_LIBRARY_TYPES)
+    keys: set[str] = set()
+    if "movies" in wanted and movie:
+        keys.add(movie)
+    if "shows" in wanted and tv:
+        keys.add(tv)
+    return keys
+
+
+def _tunarr_library_external_key(lib: Mapping[str, Any]) -> str:
+    return str(
+        lib.get("externalKey")
+        or lib.get("external_key")
+        or lib.get("key")
+        or ""
+    ).strip()
+
+
 def wire_plex_media_source(
     client: TunarrClient,
     *,
@@ -90,8 +129,13 @@ def wire_plex_media_source(
     name: str = "Plex",
     user_id: Optional[str] = None,
     username: Optional[str] = None,
+    settings: Any = None,
 ) -> Dict[str, Any]:
-    """Ensure a Plex media source exists in Tunarr (idempotent best-effort)."""
+    """Ensure a Plex media source exists in Tunarr (idempotent best-effort).
+
+    Only enables libraries that match Projectionist's configured Plex
+    sections (``plex_movie_section`` / ``plex_tv_section``).
+    """
     url = str(plex_url or "").strip().rstrip("/")
     token = str(plex_token or "").strip()
     if not url or not token:
@@ -109,7 +153,9 @@ def wire_plex_media_source(
         if stype == "plex" and (not uri or uri == url):
             msid = str(source.get("id") or source.get("uuid") or "")
             libraries = (
-                ensure_media_libraries_enabled(client, media_source_id=msid)
+                ensure_media_libraries_enabled(
+                    client, media_source_id=msid, settings=settings
+                )
                 if msid
                 else {"ok": False, "enabled": [], "scanned": []}
             )
@@ -136,7 +182,9 @@ def wire_plex_media_source(
     created = client.create_media_source(body)
     msid = str(created.get("id") or created.get("uuid") or "")
     libraries = (
-        ensure_media_libraries_enabled(client, media_source_id=msid)
+        ensure_media_libraries_enabled(
+            client, media_source_id=msid, settings=settings
+        )
         if msid
         else {"ok": False, "enabled": [], "scanned": []}
     )
@@ -158,11 +206,26 @@ def ensure_media_libraries_enabled(
     media_source_id: str = "",
     media_types: Sequence[str] = ("movies", "shows"),
     scan: bool = True,
+    force_scan: bool = False,
+    settings: Any = None,
+    movie_section: str = "",
+    tv_section: str = "",
 ) -> Dict[str, Any]:
-    """Enable preferred Plex libraries in Tunarr and kick scans.
+    """Enable configured Plex libraries in Tunarr and kick scans.
 
     Tunarr wires a Plex source with libraries ``enabled: false`` by default —
     channels then stay empty (flex-only guide, playback ends immediately).
+
+    Only libraries whose Tunarr ``externalKey`` matches Projectionist's
+    ``plex_movie_section`` / ``plex_tv_section`` are enabled. Other discovered
+    Plex libraries (e.g. side collections) stay disabled — never deleted.
+
+    When ``scan`` is true, only force-scan libraries that were just enabled
+    (or when ``force_scan`` is set). Re-publishing must not stampede Tunarr
+    with concurrent ``forceScan`` and trip library locks.
+
+    Channel media scope (``tv`` / ``movies`` / ``both``) further narrows via
+    ``media_types`` within that configured set.
     """
     msid = str(media_source_id or "").strip()
     if not msid:
@@ -178,12 +241,34 @@ def ensure_media_libraries_enabled(
             "ok": False,
             "enabled": [],
             "scanned": [],
+            "skipped": [],
             "message": "No Plex media source in Tunarr yet.",
         }
 
     wanted = {str(t).lower() for t in media_types} or set(_PREFERRED_LIBRARY_TYPES)
+    allowed_keys = configured_plex_external_keys(
+        settings,
+        media_types=tuple(wanted),
+        movie_section=movie_section,
+        tv_section=tv_section,
+    )
+    if not allowed_keys:
+        return {
+            "ok": False,
+            "media_source_id": msid,
+            "enabled": [],
+            "scanned": [],
+            "skipped": [],
+            "allowed_external_keys": [],
+            "message": (
+                "Configure Plex library mapping (movie / TV section) in "
+                "Projectionist before enabling Tunarr libraries."
+            ),
+        }
+
     enabled: List[Dict[str, Any]] = []
     scanned: List[Dict[str, Any]] = []
+    skipped: List[Dict[str, Any]] = []
     errors: List[str] = []
     try:
         libraries = client.list_media_source_libraries(msid)
@@ -193,28 +278,42 @@ def ensure_media_libraries_enabled(
             "media_source_id": msid,
             "enabled": [],
             "scanned": [],
+            "skipped": [],
             "message": f"Could not list Tunarr libraries: {error}"[:240],
         }
 
     for lib in libraries:
         media_type = str(lib.get("mediaType") or lib.get("type") or "").lower()
-        if media_type not in wanted:
-            continue
         lid = str(lib.get("id") or "").strip()
-        if not lid:
+        name = str(lib.get("name") or lid or "library")
+        external_key = _tunarr_library_external_key(lib)
+        if media_type not in wanted or not lid:
             continue
-        name = str(lib.get("name") or lid)
+        if external_key not in allowed_keys:
+            skipped.append(
+                {
+                    "id": lid,
+                    "name": name,
+                    "media_type": media_type,
+                    "external_key": external_key,
+                    "reason": "not_in_projectionist_plex_sections",
+                }
+            )
+            continue
         try:
+            just_enabled = False
             if not bool(lib.get("enabled")):
                 client.set_library_enabled(msid, lid, enabled=True)
+                just_enabled = True
             enabled.append(
                 {
                     "id": lid,
                     "name": name,
                     "media_type": media_type,
+                    "external_key": external_key,
                 }
             )
-            if scan:
+            if scan and (just_enabled or force_scan):
                 client.scan_library(msid, lid, force=True)
                 scanned.append({"id": lid, "name": name})
         except Exception as error:  # noqa: BLE001
@@ -225,9 +324,12 @@ def ensure_media_libraries_enabled(
         "media_source_id": msid,
         "enabled": enabled,
         "scanned": scanned,
+        "skipped": skipped,
+        "allowed_external_keys": sorted(allowed_keys),
         "errors": errors,
         "message": (
-            f"Enabled {len(enabled)} library(ies)"
+            f"Enabled {len(enabled)} configured library(ies)"
+            + (f"; skipped {len(skipped)} outside Projectionist mapping" if skipped else "")
             + (f"; scanning {len(scanned)}" if scanned else "")
             + ("." if not errors else f" ({len(errors)} error(s)).")
         ),
@@ -887,6 +989,7 @@ def collect_programs_for_recipe(
     limit: int = _DEFAULT_FILL_LIMIT,
     catalog: Optional[Sequence[Mapping[str, Any]]] = None,
     media_scope: str = "",
+    settings: Any = None,
 ) -> List[Dict[str, Any]]:
     """Pick Tunarr program IDs for a recipe from an indexed catalog / search."""
     scope = normalize_media_scope(media_scope or getattr(recipe, "media_scope", None))
@@ -939,7 +1042,7 @@ def collect_programs_for_recipe(
                 else ("movies", "shows")
             )
             libraries_state = ensure_media_libraries_enabled(
-                client, media_types=media_types, scan=False
+                client, media_types=media_types, scan=False, settings=settings
             )
             for lib in libraries_state.get("enabled") or []:
                 if not library_type_matches_scope(lib.get("media_type"), scope):
@@ -1091,7 +1194,7 @@ def publish_recipes(
     available. ``fill_programming`` (default true) updates existing channels so
     re-publish can recover empty flex-only stations.
     """
-    libraries = ensure_media_libraries_enabled(client, scan=True)
+    libraries = ensure_media_libraries_enabled(client, scan=True, settings=settings)
     resolved_icon = str(icon_url or "").strip() or resolve_channel_icon_url(settings)
 
     # Continuity filler list (union of filler paths) — attach when available.
@@ -1188,6 +1291,7 @@ def publish_recipes(
             recipe,
             catalog=_scoped_catalog(scope),
             media_scope=scope,
+            settings=settings,
         )
         prog_body = programming_body_for_recipe(
             recipe,
@@ -1585,7 +1689,9 @@ def refill_channel_lineup(
         if scope == MediaScope.MOVIES.value
         else ("movies", "shows")
     )
-    libraries = ensure_media_libraries_enabled(client, media_types=media_types, scan=True)
+    libraries = ensure_media_libraries_enabled(
+        client, media_types=media_types, scan=True, settings=settings
+    )
     catalog: List[Mapping[str, Any]] = []
     for lib in libraries.get("enabled") or []:
         if not library_type_matches_scope(lib.get("media_type"), scope):
@@ -1599,7 +1705,7 @@ def refill_channel_lineup(
             continue
 
     programs = collect_programs_for_recipe(
-        client, recipe, catalog=catalog, media_scope=scope
+        client, recipe, catalog=catalog, media_scope=scope, settings=settings
     )
     prog_body = programming_body_for_recipe(
         recipe,

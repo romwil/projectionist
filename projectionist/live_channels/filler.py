@@ -32,6 +32,22 @@ _THIN_POOL_DURATION_MS = 60 * 60 * 1000  # 60 minutes
 _DEFAULT_GUIDE_FLEX_SUFFIX = " · Up next"
 
 
+
+def _local_source_paths(source: Mapping[str, Any]) -> List[str]:
+    """Normalize Tunarr local media-source ``paths`` for compare."""
+    raw = source.get("paths")
+    out: List[str] = []
+    if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
+        for item in raw:
+            if isinstance(item, Mapping):
+                path = str(item.get("path") or item.get("value") or "").strip()
+            else:
+                path = str(item or "").strip()
+            if path:
+                out.append(path)
+    return sorted(out)
+
+
 def normalize_filler_bind(spec: str, *, index: int = 0) -> str:
     """Normalize a host path or ``host:container[:mode]`` into a Docker bind.
 
@@ -226,7 +242,12 @@ def ensure_local_filler_source(
     container_paths: Sequence[str],
     scan: bool = True,
 ) -> Dict[str, Any]:
-    """Ensure a Tunarr ``local`` media source covering filler container paths."""
+    """Ensure a Tunarr ``local`` media source covering filler container paths.
+
+    Never PUT/POST a media source without a string ``id``. Skip no-op updates
+    and only force-scan when the source was created, paths changed, or a library
+    was just enabled — avoids Tunarr library-lock stampedes on every ensure.
+    """
     paths = [str(p).strip() for p in container_paths if str(p).strip()]
     if not paths:
         return {
@@ -252,6 +273,8 @@ def ensure_local_filler_source(
         "pathReplacements": [],
     }
     created = False
+    paths_changed = False
+    msid = ""
     if match is None:
         try:
             created_payload = client.create_media_source(body)
@@ -262,15 +285,26 @@ def ensure_local_filler_source(
                 "library_ids": [],
                 "message": f"Could not create local filler source: {error}"[:240],
             }
-        msid = str(created_payload.get("id") or created_payload.get("uuid") or "")
+        msid = str(created_payload.get("id") or created_payload.get("uuid") or "").strip()
         created = True
+        paths_changed = True
     else:
-        msid = str(match.get("id") or match.get("uuid") or "")
-        # Update paths when the owner added/removed filler folders.
-        try:
-            client.update_media_source(msid, body)
-        except Exception:  # noqa: BLE001 — some Tunarr builds reject partial updates
-            pass
+        msid = str(match.get("id") or match.get("uuid") or "").strip()
+        if not msid:
+            return {
+                "ok": False,
+                "created": False,
+                "library_ids": [],
+                "message": "Local filler source missing id — refusing Tunarr update.",
+            }
+        if _local_source_paths(match) != sorted(paths):
+            # Tunarr Zod requires body.id (string); client also injects as backup.
+            update_body = {**body, "id": msid}
+            try:
+                client.update_media_source(msid, update_body)
+                paths_changed = True
+            except Exception as error:  # noqa: BLE001
+                logger.warning("update_media_source %s failed: %s", msid, error)
 
     if not msid:
         return {
@@ -282,6 +316,7 @@ def ensure_local_filler_source(
 
     library_ids: List[str] = []
     errors: List[str] = []
+    scanned: List[str] = []
     try:
         libraries = client.list_media_source_libraries(msid)
     except Exception as error:  # noqa: BLE001
@@ -297,19 +332,25 @@ def ensure_local_filler_source(
         if not lid:
             continue
         library_ids.append(lid)
+        just_enabled = False
         try:
             if not bool(lib.get("enabled")):
                 client.set_library_enabled(msid, lid, enabled=True)
-            if scan:
+                just_enabled = True
+            # Scan only when needed — parallel forceScan stamps out library locks.
+            if scan and (created or paths_changed or just_enabled):
                 client.scan_library(msid, lid, force=True)
+                scanned.append(lid)
         except Exception as error:  # noqa: BLE001
             errors.append(str(error)[:120])
 
     return {
         "ok": bool(library_ids) and not errors,
         "created": created,
+        "paths_changed": paths_changed,
         "media_source_id": msid,
         "library_ids": library_ids,
+        "scanned": scanned,
         "paths": paths,
         "errors": errors,
         "message": (

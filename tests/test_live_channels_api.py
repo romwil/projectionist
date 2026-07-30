@@ -54,6 +54,8 @@ class LiveChannelsApiTests(unittest.TestCase):
                 "tunarr": tunarr,
                 "plex_url": "http://plex.test",
                 "plex_token": "plex-token",
+                "plex_movie_section": "1",
+                "plex_tv_section": "2",
             },
         )
         self.assertEqual(resp.status_code, 200, resp.text)
@@ -136,6 +138,7 @@ class LiveChannelsApiTests(unittest.TestCase):
                 "id": "lib-m",
                 "name": "Movies",
                 "mediaType": "movies",
+                "externalKey": "1",
                 "enabled": False,
             }
         ]
@@ -383,6 +386,7 @@ class LiveChannelsApiTests(unittest.TestCase):
                 "id": "lib-m",
                 "name": "Movies",
                 "mediaType": "movies",
+                "externalKey": "1",
                 "enabled": True,
             }
         ]

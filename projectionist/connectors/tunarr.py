@@ -120,14 +120,21 @@ class TunarrClient:
     def update_media_source(
         self, media_source_id: str, body: Mapping[str, Any]
     ) -> Mapping[str, Any]:
-        """Update a media source (``PUT /api/media-sources/{id}``)."""
+        """Update a media source (``PUT /api/media-sources/{id}``).
+
+        Tunarr 1.3.x Zod schemas require ``id`` in the JSON body (not only the
+        path). Inject it when callers omit it so we never send ``undefined``.
+        """
         msid = str(media_source_id or "").strip()
         if not msid:
             raise ValueError("media_source_id is required")
+        payload_body = dict(body)
+        if not str(payload_body.get("id") or "").strip():
+            payload_body["id"] = msid
         payload = request_json(
             self._api_url(f"/media-sources/{msid}"),
             method="PUT",
-            body=dict(body),
+            body=payload_body,
             timeout=self.timeout,
         )
         if not isinstance(payload, dict):

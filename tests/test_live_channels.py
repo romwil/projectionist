@@ -1171,8 +1171,16 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "id": "lib-movies",
                 "name": "Movies",
                 "mediaType": "movies",
+                "externalKey": "1",
                 "enabled": False,
-            }
+            },
+            {
+                "id": "lib-magic",
+                "name": "Magical Media",
+                "mediaType": "movies",
+                "externalKey": "99",
+                "enabled": False,
+            },
         ]
         client.set_library_enabled.return_value = {"id": "lib-movies", "enabled": True}
         client.scan_library.return_value = {}
@@ -1189,6 +1197,7 @@ class PreflightAndPublishTests(unittest.TestCase):
                 client,
                 plex_url="http://plex.test:32400",
                 plex_token="tok",
+                settings=Settings(plex_movie_section="1", plex_tv_section="2"),
             )
         self.assertTrue(result["ok"])
         self.assertTrue(result["created"])
@@ -1201,6 +1210,10 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertNotEqual(body.get("userId"), "tok")
         client.set_library_enabled.assert_called()
         self.assertTrue(result["libraries"]["enabled"])
+        enabled_ids = {row["id"] for row in result["libraries"]["enabled"]}
+        self.assertEqual(enabled_ids, {"lib-movies"})
+        skipped_names = {row["name"] for row in result["libraries"].get("skipped") or []}
+        self.assertIn("Magical Media", skipped_names)
 
     def test_probe_existing_livetv_unknown_without_plex(self) -> None:
         from projectionist.live_channels.plex_attach import probe_existing_plex_livetv
@@ -1451,6 +1464,7 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "id": "lib-m",
                 "name": "Movies",
                 "mediaType": "movies",
+                "externalKey": "1",
                 "enabled": False,
             }
         ]
@@ -1513,6 +1527,7 @@ class PreflightAndPublishTests(unittest.TestCase):
             result = publish_recipes(
                 client,
                 [ChannelRecipe(name="Sci-Fi", number=101, source="motif")],
+                settings=Settings(plex_movie_section="1", plex_tv_section="2"),
             )
         self.assertTrue(result["ok"])
         self.assertEqual(result["count_content_filled"], 1)
@@ -1734,7 +1749,126 @@ class ContinuityFillerTests(unittest.TestCase):
             [binds[0].split(":")[1], "/data/filler/trailers"],
         )
 
+    def test_ensure_local_filler_source_skips_noop_update(self) -> None:
+        from projectionist.live_channels.filler import ensure_local_filler_source
+
+        client = MagicMock()
+        client.list_media_sources.return_value = [
+            {
+                "id": "local-1",
+                "type": "local",
+                "name": "Projectionist Fillers",
+                "paths": ["/data/filler/a", "/data/filler/b"],
+            }
+        ]
+        client.list_media_source_libraries.return_value = [
+            {"id": "lib-f", "name": "Fillers", "enabled": True}
+        ]
+        result = ensure_local_filler_source(
+            client,
+            container_paths=["/data/filler/a", "/data/filler/b"],
+            scan=True,
+        )
+        self.assertTrue(result["ok"])
+        client.update_media_source.assert_not_called()
+        client.scan_library.assert_not_called()
+
+    def test_ensure_local_filler_source_update_includes_id(self) -> None:
+        from projectionist.live_channels.filler import ensure_local_filler_source
+
+        client = MagicMock()
+        client.list_media_sources.return_value = [
+            {
+                "id": "local-1",
+                "type": "local",
+                "name": "Projectionist Fillers",
+                "paths": ["/data/filler/old"],
+            }
+        ]
+        client.list_media_source_libraries.return_value = [
+            {"id": "lib-f", "name": "Fillers", "enabled": True}
+        ]
+        result = ensure_local_filler_source(
+            client,
+            container_paths=["/data/filler/a"],
+            scan=True,
+        )
+        self.assertTrue(result["paths_changed"])
+        msid, body = client.update_media_source.call_args.args
+        self.assertEqual(msid, "local-1")
+        self.assertEqual(body["id"], "local-1")
+        self.assertEqual(body["paths"], ["/data/filler/a"])
+        client.scan_library.assert_called_once()
+
+    def test_ensure_media_libraries_skips_scan_when_already_enabled(self) -> None:
+        from projectionist.live_channels.publish import ensure_media_libraries_enabled
+
+        client = MagicMock()
+        client.list_media_sources.return_value = [{"id": "ms-1", "type": "plex"}]
+        client.list_media_source_libraries.return_value = [
+            {
+                "id": "lib-m",
+                "name": "Movies",
+                "mediaType": "movies",
+                "externalKey": "1",
+                "enabled": True,
+            }
+        ]
+        settings = Settings(plex_movie_section="1", plex_tv_section="2")
+        result = ensure_media_libraries_enabled(
+            client, media_source_id="ms-1", scan=True, settings=settings
+        )
+        self.assertEqual(len(result["enabled"]), 1)
+        client.scan_library.assert_not_called()
+        ensure_media_libraries_enabled(
+            client,
+            media_source_id="ms-1",
+            scan=True,
+            force_scan=True,
+            settings=settings,
+        )
+        client.scan_library.assert_called_once()
+
+    def test_ensure_media_libraries_skips_unconfigured_sections(self) -> None:
+        from projectionist.live_channels.publish import ensure_media_libraries_enabled
+
+        client = MagicMock()
+        client.list_media_source_libraries.return_value = [
+            {
+                "id": "lib-m",
+                "name": "Movies",
+                "mediaType": "movies",
+                "externalKey": "1",
+                "enabled": False,
+            },
+            {
+                "id": "lib-tv",
+                "name": "TV Shows",
+                "mediaType": "shows",
+                "externalKey": "2",
+                "enabled": False,
+            },
+            {
+                "id": "lib-magic",
+                "name": "Magical Media",
+                "mediaType": "movies",
+                "externalKey": "7",
+                "enabled": False,
+            },
+        ]
+        settings = Settings(plex_movie_section="1", plex_tv_section="2")
+        result = ensure_media_libraries_enabled(
+            client, media_source_id="ms-1", scan=True, settings=settings
+        )
+        enabled_names = {row["name"] for row in result["enabled"]}
+        self.assertEqual(enabled_names, {"Movies", "TV Shows"})
+        skipped = {row["name"] for row in result["skipped"]}
+        self.assertEqual(skipped, {"Magical Media"})
+        enabled_ids = {c.args[1] for c in client.set_library_enabled.call_args_list}
+        self.assertEqual(enabled_ids, {"lib-m", "lib-tv"})
+
     def test_ensure_continuity_filler_list_unions_and_shuffles(self) -> None:
+
         from projectionist.live_channels.filler import ensure_continuity_filler_list
 
         client = MagicMock()
