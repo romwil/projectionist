@@ -341,6 +341,146 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual(life.host_port, 18766)
         self.assertEqual(life.hdhr_port, 15005)
 
+    def test_parse_and_resolve_media_binds(self) -> None:
+        from projectionist.live_channels.docker import (
+            binds_include,
+            normalize_bind_spec,
+            parse_media_binds,
+            resolve_media_binds,
+        )
+
+        self.assertEqual(
+            parse_media_binds("/mnt/user/data/media:/data/media:ro"),
+            ["/mnt/user/data/media:/data/media:ro"],
+        )
+        self.assertEqual(
+            normalize_bind_spec("/mnt/user/data/media:/data/media:ro"),
+            "/mnt/user/data/media:/data/media",
+        )
+        self.assertTrue(
+            binds_include(
+                ["/config/tunarr:/config", "/mnt/user/data/media:/data/media:ro"],
+                ["/mnt/user/data/media:/data/media:ro"],
+            )
+        )
+        self.assertFalse(
+            binds_include(["/config/tunarr:/config"], ["/mnt/user/data/media:/data/media:ro"])
+        )
+        settings = Settings(
+            tunarr=TunarrSettings(
+                media_binds=["/host/media:/data/media:ro"],
+            )
+        )
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PROJECTIONIST_TUNARR_MEDIA_BINDS", None)
+            os.environ.pop("CURATORX_TUNARR_MEDIA_BINDS", None)
+            self.assertEqual(
+                resolve_media_binds(settings),
+                ["/host/media:/data/media:ro"],
+            )
+        with patch.dict(
+            os.environ,
+            {"PROJECTIONIST_TUNARR_MEDIA_BINDS": "/env/media:/data/media:ro"},
+            clear=False,
+        ):
+            self.assertEqual(
+                resolve_media_binds(settings),
+                ["/env/media:/data/media:ro"],
+            )
+
+    def test_create_includes_media_binds(self) -> None:
+        life = TunarrDockerLifecycle(
+            socket_path="/tmp/fake.sock",
+            orchestration=True,
+            media_binds=["/mnt/user/data/media:/data/media:ro"],
+        )
+        create_bodies: list[dict] = []
+
+        def fake_request(method, path, **kwargs):
+            if method == "GET" and path.startswith("/containers/json"):
+                return 200, []
+            if method == "GET" and path.endswith("/json"):
+                return 404, None
+            if method == "POST" and path.startswith("/containers/create"):
+                create_bodies.append(kwargs.get("json_body") or {})
+                return 201, {"Id": "abc123"}
+            if method == "POST" and path.endswith("/start"):
+                return 204, None
+            raise AssertionError(f"unexpected {method} {path}")
+
+        with patch(
+            "projectionist.live_channels.docker.resolve_docker_socket",
+            return_value="/tmp/fake.sock",
+        ), patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
+        ), patch.object(life, "_engine_request", side_effect=fake_request), patch(
+            "pathlib.Path.mkdir"
+        ):
+            result = life.start(config_volume="/tmp/tunarr-vol")
+        self.assertTrue(result.ok)
+        binds = (create_bodies[0].get("HostConfig") or {}).get("Binds") or []
+        self.assertIn("/tmp/tunarr-vol:/config", binds)
+        self.assertIn("/mnt/user/data/media:/data/media:ro", binds)
+
+    def test_running_without_media_binds_recreates(self) -> None:
+        life = TunarrDockerLifecycle(
+            socket_path="/tmp/fake.sock",
+            orchestration=True,
+            host_port=18765,
+            hdhr_port=15004,
+            media_binds=["/mnt/user/data/media:/data/media:ro"],
+        )
+        calls: list[str] = []
+        create_bodies: list[dict] = []
+
+        def fake_request(method, path, **kwargs):
+            calls.append(f"{method} {path}")
+            if method == "GET" and path.endswith("/json"):
+                return (
+                    200,
+                    {
+                        "State": {"Running": True, "Status": "running"},
+                        "HostConfig": {
+                            "Binds": ["/mnt/user/appdata/projectionist/config/tunarr:/config"]
+                        },
+                        "NetworkSettings": {
+                            "Ports": {
+                                "8000/tcp": [{"HostIp": "0.0.0.0", "HostPort": "18765"}],
+                                "5004/tcp": [{"HostIp": "0.0.0.0", "HostPort": "15004"}],
+                            }
+                        },
+                    },
+                )
+            if method == "POST" and "/stop" in path:
+                return 204, None
+            if method == "DELETE" and path.startswith("/containers/"):
+                return 204, None
+            if method == "POST" and path.startswith("/containers/create"):
+                create_bodies.append(kwargs.get("json_body") or {})
+                return 201, {"Id": "recreated1"}
+            if method == "POST" and path.endswith("/start"):
+                return 204, None
+            raise AssertionError(f"unexpected {method} {path}")
+
+        with patch(
+            "projectionist.live_channels.docker.resolve_docker_socket",
+            return_value="/tmp/fake.sock",
+        ), patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
+        ), patch.object(life, "_engine_request", side_effect=fake_request), patch(
+            "pathlib.Path.mkdir"
+        ):
+            result = life.start(
+                config_volume="/mnt/user/appdata/projectionist/config/tunarr"
+            )
+        self.assertTrue(result.ok)
+        self.assertTrue(any("DELETE" in c for c in calls))
+        binds = (create_bodies[0].get("HostConfig") or {}).get("Binds") or []
+        self.assertIn("/mnt/user/data/media:/data/media:ro", binds)
+        self.assertEqual(life.host_port, 18765)
+
     def test_resolve_config_volume_uses_host_data_dir(self) -> None:
         settings = Settings(tunarr=TunarrSettings(volume_path="tunarr"))
         with patch.dict(
@@ -489,6 +629,29 @@ class RecipeDictTests(unittest.TestCase):
         payload = recipe.to_dict()
         self.assertEqual(payload["programming_mode"], "chaos")
         self.assertEqual(payload["number"], 102)
+
+
+class CraftOptionsTests(unittest.TestCase):
+    def test_next_channel_number_and_recipe(self) -> None:
+        from projectionist.live_channels.craft import (
+            build_craft_options,
+            next_channel_number,
+            recipe_from_craft_payload,
+        )
+
+        self.assertEqual(next_channel_number([], base=100), 100)
+        self.assertEqual(next_channel_number([100, 102], base=100), 103)
+        recipe = recipe_from_craft_payload(
+            {"source": "motif", "motif": "heist", "number": 0},
+            default_number=110,
+        )
+        self.assertEqual(recipe.number, 110)
+        self.assertEqual(recipe.source, "motif")
+        self.assertEqual(recipe.motif, "heist")
+        self.assertTrue(recipe.name)
+        opts = build_craft_options(None, existing_channel_numbers=[100])
+        self.assertEqual(opts["next_channel_number"], 101)
+        self.assertTrue(opts["sources"])
 
 
 class OnNowGuideTests(unittest.TestCase):

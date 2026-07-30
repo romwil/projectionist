@@ -721,6 +721,143 @@ def publish_collection_channel(
     return result
 
 
+def publish_custom_channel(
+    client: TunarrClient,
+    recipe_payload: Mapping[str, Any] | ChannelRecipe,
+    *,
+    fill_programming: bool = True,
+    channel_number_base: int = 100,
+) -> Dict[str, Any]:
+    """Publish one craft-form recipe (additive; fills lineup when possible)."""
+    from projectionist.live_channels.craft import (
+        next_channel_number,
+        recipe_from_craft_payload,
+    )
+
+    existing = client.list_channels()
+    numbers = [int(ch.get("number") or 0) for ch in existing if ch.get("number") is not None]
+    default_number = next_channel_number(numbers, base=int(channel_number_base or 100))
+    if isinstance(recipe_payload, ChannelRecipe):
+        recipe = recipe_payload
+        if recipe.number <= 0:
+            recipe = ChannelRecipe(
+                name=recipe.name,
+                number=default_number,
+                source=recipe.source,
+                programming_mode=recipe.programming_mode,
+                cluster_tag=recipe.cluster_tag,
+                motif=recipe.motif,
+                collection_id=recipe.collection_id,
+                collection_title=recipe.collection_title,
+                youth_safe=recipe.youth_safe,
+                summary=recipe.summary,
+                item_hints=recipe.item_hints,
+            )
+    else:
+        recipe = recipe_from_craft_payload(
+            recipe_payload or {},
+            default_number=default_number,
+        )
+    result = publish_recipes(
+        client,
+        [recipe],
+        skip_existing_numbers=True,
+        fill_programming=fill_programming,
+    )
+    result["recipe"] = recipe.to_dict()
+    return result
+
+
+def refill_channel_lineup(
+    client: TunarrClient,
+    channel_id: str,
+    *,
+    recipe_payload: Optional[Mapping[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Re-fill an existing Tunarr station lineup from craft vocabulary / Chaos."""
+    from projectionist.live_channels.craft import recipe_from_craft_payload
+
+    cid = str(channel_id or "").strip()
+    if not cid:
+        raise ValueError("channel_id is required")
+    match: Optional[Mapping[str, Any]] = None
+    for ch in client.list_channels():
+        if not isinstance(ch, Mapping):
+            continue
+        if str(ch.get("id") or ch.get("uuid") or "") == cid:
+            match = ch
+            break
+    if match is None:
+        raise ValueError(f"Channel not found: {cid}")
+
+    number = int(match.get("number") or 0)
+    name = str(match.get("name") or "Station").strip() or "Station"
+    if recipe_payload:
+        recipe = recipe_from_craft_payload(
+            {
+                **dict(recipe_payload),
+                "name": str(recipe_payload.get("name") or name),
+                "number": int(recipe_payload.get("number") or number or 100),
+            },
+            default_number=number or 100,
+        )
+    else:
+        recipe = ChannelRecipe(
+            name=name[:48],
+            number=number or 100,
+            source="chaos",
+            programming_mode=ProgrammingMode.CHAOS,
+            summary=f"Refill lineup for “{name}”",
+        )
+
+    libraries = ensure_media_libraries_enabled(client, scan=True)
+    catalog: List[Mapping[str, Any]] = []
+    for lib in libraries.get("enabled") or []:
+        lid = str(lib.get("id") or "")
+        if not lid:
+            continue
+        try:
+            catalog.extend(client.list_library_programs(lid))
+        except Exception:  # noqa: BLE001
+            continue
+        if str(lib.get("media_type") or "") == "movies" and catalog:
+            break
+
+    programs = collect_programs_for_recipe(client, recipe, catalog=catalog)
+    prog_body = programming_body_for_recipe(recipe, programs=programs)
+    programming = (
+        client.set_channel_programming(cid, prog_body) if prog_body is not None else {}
+    )
+    return {
+        "ok": bool(programs),
+        "channel_id": cid,
+        "name": name,
+        "number": number,
+        "program_count": len(programs),
+        "titles": [p.get("title") for p in programs[:8]],
+        "programming": dict(programming) if programming else {},
+        "libraries": libraries,
+        "catalog_size": len(catalog),
+        "recipe": recipe.to_dict(),
+        "note": (
+            f"Filled {len(programs)} titles into {name}."
+            if programs
+            else (
+                "No Tunarr program IDs yet — wait for the library scan, then refill again."
+            )
+        ),
+    }
+
+
+def delete_published_channel(client: TunarrClient, channel_id: str) -> Dict[str, Any]:
+    """Delete a Tunarr station by id (owner manage path)."""
+    cid = str(channel_id or "").strip()
+    if not cid:
+        raise ValueError("channel_id is required")
+    client.delete_channel(cid)
+    return {"ok": True, "channel_id": cid, "deleted": True}
+
+
 def tunarr_client_from_settings(settings: Any) -> TunarrClient:
     tunarr = getattr(settings, "tunarr", None)
     url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""

@@ -149,9 +149,16 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 ### Collection → channel API + Admin Live Channels surface
 
 - **Status:** `done` (core path)
-- **Why / note:** `POST /api/admin/live-channels/channels/from-collection` + starter pack propose/publish; Admin/Config Live Channels surface with status, preflight, lifecycle, publish, plex-attach. Owner “re-run starter pack” additive polish still in Strong candidates.
+- **Why / note:** `POST /api/admin/live-channels/channels/from-collection` + starter pack propose/publish; Admin/Config Live Channels surface with status, preflight, lifecycle, publish, plex-attach. **2026-07-29 craft build:** custom craft form + `POST …/channels/publish`, collection one-tap, manage list with refill/delete, `GET …/craft-options`. Owner “re-run starter pack” additive polish still in Strong candidates.
 - **Suggested next phase:** Strong-candidate polish if capacity; otherwise ship docs.
 - **Owner surface:** backend / wizard
+
+### Custom craft (name / number / motif / rules) lagged behind starters
+
+- **Status:** `done` (2026-07-29)
+- **Why / note:** Starters existed but owner could not craft a custom station or manage/delete from Admin — felt “no way to craft/publish.” Landed: craft vocabulary form, collection publish UI, Your stations refill/delete, HELP owner steps.
+- **Suggested next phase:** schedule-slots + richer motif→ID matching (still deferred separately).
+- **Owner surface:** Admin → Live Channels
 
 ### Strong candidates (same release if capacity)
 
@@ -262,6 +269,13 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 - **Why / note:** Owner screenshots on Automat confirm Device Settings, DVR Settings, and Tuner Setup EPG Location have **no** XMLTV URL field for the Tunarr HDHomeRun-style device — only commercial ZIP lineups in the wizard. 1.29.9 owner tip (“DVR Settings → add/switch XMLTV”) was false; 1.29.10 corrects attach/HELP/Config copy. Tunarr streams work; guide titles wrong until XMLTV attaches via a working path. **Landed 1.29.10:** Admin Attach Tunarr guide in Plex via PMS API (separate XMLTV DVR; OTA cloud DVR preserved). Verified on Automat (DVR 8 cloud + DVR 12 XMLTV).
 - **Suggested next phase:** Wire Admin “Attach guide” when a safe API path is verified (prefer separate Tunarr DVR / avoid clobbering OTA cloud EPG).
 - **Owner surface:** Admin → Live Channels → Plex attach / HELP
+
+### 2026-07-30 — HDHR tune empty despite real guide titles
+
+- **Status:** `done` (Automat hotfix + code in **1.29.14**)
+- **Why / note:** Guide/XMLTV showed real titles (Detective Dee / 2001 / etc.) but Plex play failed with “This live TV session has ended.” Root cause: Tunarr container had only `/config` — no `/data/media` mount matching Plex file paths. Cold `.ts` tune returned HTTP 200 with 0 bytes (`No master playlist found` → concat exit → session close) while ffmpeg tried mid-program `-ss` over `http://plex/library/parts/...`. Warm streams worked once HLS segments existed. **Fix:** mount host media at the same path Plex reports (`/mnt/user/data/media:/data/media:ro`); Projectionist `tunarr.media_binds` / `PROJECTIONIST_TUNARR_MEDIA_BINDS` + recreate-on-missing-binds. Residual: Plex **desktop** apps may still hit Tunarr#718 Direct Stream quirk — prefer web client or disable Direct Stream if needed.
+- **Suggested next phase:** Optional GPU `/dev/dri` for soft-transcode; document client workaround in HELP.
+- **Owner surface:** ops / docker lifecycle / Plex Live TV
 
 ### 2026-07-29 — Tunarr airing / consumption progress
 

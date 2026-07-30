@@ -1336,6 +1336,48 @@ export async function publishLiveChannelsStarters(body = {}) {
   });
 }
 
+export async function getLiveChannelsCraftOptions() {
+  return api("/admin/live-channels/craft-options");
+}
+
+export async function publishLiveChannelsChannel(body = {}) {
+  return api("/admin/live-channels/channels/publish", {
+    method: "POST",
+    body: JSON.stringify({
+      confirm: true,
+      wire_plex: true,
+      fill_programming: true,
+      ...body,
+    }),
+  });
+}
+
+export async function publishLiveChannelsFromCollection(body = {}) {
+  return api("/admin/live-channels/channels/from-collection", {
+    method: "POST",
+    body: JSON.stringify({
+      confirm: true,
+      ...body,
+    }),
+  });
+}
+
+export async function refillLiveChannelsChannel(channelId, body = {}) {
+  return api(`/admin/live-channels/channels/${encodeURIComponent(channelId)}/refill`, {
+    method: "POST",
+    body: JSON.stringify({
+      confirm: true,
+      ...body,
+    }),
+  });
+}
+
+export async function deleteLiveChannelsChannel(channelId) {
+  return api(`/admin/live-channels/channels/${encodeURIComponent(channelId)}`, {
+    method: "DELETE",
+  });
+}
+
 export async function getLiveChannelsPlexAttach() {
   return api("/admin/live-channels/plex-attach");
 }

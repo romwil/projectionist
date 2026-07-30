@@ -7,7 +7,7 @@ REST API under ``{base}/api``:
 | Coax / product vocabulary | Tunarr API |
 |---------------------------|------------|
 | Library / media server wire | ``GET/POST /media-sources`` |
-| Station / channel | ``GET/POST /channels`` |
+| Station / channel | ``GET/POST /channels``, ``PUT/DELETE /channels/{id}`` |
 | Lineup / programming | ``GET/POST /channels/{id}/programming`` |
 | Shuffle / Chaos schedule | ``POST /channels/{id}/schedule-slots`` |
 | Gap fillers / commercials | ``GET/POST /filler-lists`` |
@@ -290,6 +290,32 @@ class TunarrClient:
         if not isinstance(payload, dict):
             raise RuntimeError("Unexpected response from Tunarr create channel")
         return payload
+
+    def update_channel(self, channel_id: str, body: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Update channel metadata (``PUT /api/channels/{id}``)."""
+        cid = str(channel_id or "").strip()
+        if not cid:
+            raise ValueError("channel_id is required")
+        payload = request_json(
+            self._api_url(f"/channels/{cid}"),
+            method="PUT",
+            body=dict(body),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr update channel")
+        return payload
+
+    def delete_channel(self, channel_id: str) -> None:
+        """Delete a channel (``DELETE /api/channels/{id}``). Empty 200 body is OK."""
+        cid = str(channel_id or "").strip()
+        if not cid:
+            raise ValueError("channel_id is required")
+        request_json(
+            self._api_url(f"/channels/{cid}"),
+            method="DELETE",
+            timeout=self.timeout,
+        )
 
     def get_channel_programming(self, channel_id: str) -> Mapping[str, Any]:
         cid = str(channel_id or "").strip()

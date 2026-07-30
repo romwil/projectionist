@@ -308,6 +308,112 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertNotIn("host.docker.internal", body["tuner_url"])
         self.assertFalse(body.get("docker_only_url"))
 
+    def test_craft_options(self) -> None:
+        self._enable()
+        with patch(
+            "projectionist.live_channels.publish.TunarrClient.list_channels",
+            return_value=[{"id": "1", "number": 100, "name": "Chaos"}],
+        ):
+            resp = self.client.get("/api/admin/live-channels/craft-options")
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertIn("sources", body)
+        self.assertEqual(body["next_channel_number"], 101)
+        self.assertTrue(any(s["id"] == "motif" for s in body["sources"]))
+
+    def test_publish_custom_channel(self) -> None:
+        self._enable()
+        client = MagicMock()
+        client.list_media_sources.return_value = []
+        client.create_media_source.return_value = {"id": "ms-1", "type": "plex"}
+        client.list_media_source_libraries.return_value = []
+        client.list_library_programs.return_value = []
+        client.list_channels.return_value = []
+        client.default_transcode_config_id.return_value = "tc-default"
+        client.create_channel.side_effect = lambda body: {
+            "id": "ch-craft",
+            "name": body["channel"]["name"],
+            "number": body["channel"]["number"],
+        }
+        client.set_channel_programming.return_value = {"programs": []}
+
+        with patch(
+            "projectionist.live_channels.publish.TunarrClient",
+            return_value=client,
+        ):
+            resp = self.client.post(
+                "/api/admin/live-channels/channels/publish",
+                json={
+                    "confirm": True,
+                    "wire_plex": True,
+                    "name": "Noir Night",
+                    "number": 107,
+                    "source": "motif",
+                    "motif": "noir",
+                    "programming_mode": "shuffle",
+                },
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertEqual(body["count_published"], 1)
+        self.assertEqual(body["recipe"]["name"], "Noir Night")
+        self.assertEqual(body["recipe"]["motif"], "noir")
+        create_channel = client.create_channel.call_args.args[0]
+        self.assertEqual(create_channel["channel"]["number"], 107)
+
+    def test_publish_custom_requires_confirm(self) -> None:
+        self._enable()
+        resp = self.client.post(
+            "/api/admin/live-channels/channels/publish",
+            json={"name": "X", "source": "chaos", "confirm": False},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_refill_and_delete_channel(self) -> None:
+        self._enable()
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "ch-del", "name": "Chaos", "number": 100}
+        ]
+        client.list_media_sources.return_value = [
+            {"id": "ms-1", "type": "plex"}
+        ]
+        client.list_media_source_libraries.return_value = [
+            {
+                "id": "lib-m",
+                "name": "Movies",
+                "mediaType": "movies",
+                "enabled": True,
+            }
+        ]
+        client.get_library_scan_status.return_value = {"state": "idle"}
+        client.list_library_programs.return_value = [
+            {
+                "id": "prog-1",
+                "duration": 5_400_000,
+                "title": "Demo",
+                "genres": ["thriller"],
+            }
+        ]
+        client.set_channel_programming.return_value = {"ok": True}
+        client.delete_channel.return_value = None
+
+        with patch(
+            "projectionist.live_channels.publish.TunarrClient",
+            return_value=client,
+        ):
+            refill = self.client.post(
+                "/api/admin/live-channels/channels/ch-del/refill",
+                json={"confirm": True},
+            )
+            delete = self.client.delete("/api/admin/live-channels/channels/ch-del")
+        self.assertEqual(refill.status_code, 200, refill.text)
+        self.assertTrue(refill.json()["ok"])
+        self.assertGreaterEqual(refill.json()["program_count"], 1)
+        self.assertEqual(delete.status_code, 200, delete.text)
+        self.assertTrue(delete.json()["deleted"])
+        client.delete_channel.assert_called_once_with("ch-del")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -641,6 +641,7 @@ class TunarrSettingsPayload(BaseModel):
     docker_orchestration: bool = False
     image_tag: str = "chrisbenincasa/tunarr:1.3.9"
     volume_path: str = "tunarr"
+    media_binds: List[str] = Field(default_factory=list)
     channel_number_base: int = 100
     plex_pass_confirmed: bool = False
     last_publish_at: str = ""
@@ -1614,6 +1615,30 @@ class LiveChannelsFromCollectionPayload(BaseModel):
     confirm: bool = False
 
 
+class LiveChannelsPublishChannelPayload(BaseModel):
+    """Craft-form publish: one ChannelRecipe-shaped body."""
+
+    recipe: Dict[str, Any] = Field(default_factory=dict)
+    name: str = ""
+    number: int = 0
+    source: str = "chaos"
+    programming_mode: str = ""
+    motif: str = ""
+    cluster_tag: str = ""
+    collection_id: str = ""
+    collection_title: str = ""
+    youth_safe: bool = False
+    summary: str = ""
+    wire_plex: bool = True
+    fill_programming: bool = True
+    confirm: bool = False
+
+
+class LiveChannelsRefillChannelPayload(BaseModel):
+    recipe: Dict[str, Any] = Field(default_factory=dict)
+    confirm: bool = False
+
+
 @app.post("/api/admin/live-channels/preflight")
 def live_channels_preflight_endpoint(
     payload: Optional[LiveChannelsPreflightPayload] = None,
@@ -1890,6 +1915,190 @@ def live_channels_from_collection_endpoint(
         tunarr["last_error"] = ""
     save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
     return result
+
+
+@app.get("/api/admin/live-channels/craft-options")
+def live_channels_craft_options_endpoint(
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Motifs / taste / collections + next channel number for the craft form."""
+    from projectionist.live_channels.craft import build_craft_options
+    from projectionist.live_channels.publish import tunarr_client_from_settings
+
+    settings = _settings()
+    existing_numbers: List[int] = []
+    if settings.features.live_channels_enabled and str(settings.tunarr.url or "").strip():
+        try:
+            client = tunarr_client_from_settings(settings)
+            for ch in client.list_channels():
+                if isinstance(ch, dict) and ch.get("number") is not None:
+                    existing_numbers.append(int(ch["number"]))
+        except Exception:  # noqa: BLE001
+            existing_numbers = []
+    return build_craft_options(
+        _db(),
+        settings=settings,
+        owner_user_id=str(user.id),
+        existing_channel_numbers=existing_numbers,
+    )
+
+
+@app.post("/api/admin/live-channels/channels/publish")
+def live_channels_publish_channel_endpoint(
+    payload: LiveChannelsPublishChannelPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Craft + publish one custom station to Tunarr (owner confirm-gated)."""
+    del user
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Publishing a channel requires confirm=true",
+        )
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.publish import (
+        publish_custom_channel,
+        tunarr_client_from_settings,
+        wire_plex_media_source,
+    )
+
+    try:
+        client = tunarr_client_from_settings(settings)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    wire: Dict[str, Any] = {"ok": False, "skipped": True}
+    if payload.wire_plex and settings.plex_url and settings.plex_token:
+        try:
+            wire = wire_plex_media_source(
+                client,
+                plex_url=settings.plex_url,
+                plex_token=settings.plex_token,
+            )
+        except Exception as error:  # noqa: BLE001
+            wire = {"ok": False, "message": str(error)[:240]}
+
+    recipe_body = dict(payload.recipe or {})
+    if not recipe_body:
+        recipe_body = {
+            "name": payload.name,
+            "number": payload.number,
+            "source": payload.source,
+            "programming_mode": payload.programming_mode,
+            "motif": payload.motif,
+            "cluster_tag": payload.cluster_tag,
+            "collection_id": payload.collection_id,
+            "collection_title": payload.collection_title,
+            "youth_safe": payload.youth_safe,
+            "summary": payload.summary,
+        }
+
+    try:
+        result = publish_custom_channel(
+            client,
+            recipe_body,
+            fill_programming=bool(payload.fill_programming),
+            channel_number_base=int(getattr(settings.tunarr, "channel_number_base", 100) or 100),
+        )
+    except Exception as error:  # noqa: BLE001
+        tunarr = asdict(settings.tunarr)
+        tunarr["last_error"] = str(error)[:240]
+        save_settings(
+            DATA_DIR,
+            Settings.from_mapping({**asdict(settings), "tunarr": tunarr}),
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not publish channel to Tunarr"),
+        ) from error
+
+    tunarr = asdict(settings.tunarr)
+    if (
+        result.get("ok")
+        or result.get("count_published")
+        or result.get("count_programming_updated")
+    ):
+        tunarr["last_publish_at"] = str(result.get("published_at") or "")
+        tunarr["last_error"] = ""
+    elif result.get("errors"):
+        tunarr["last_error"] = str(result["errors"][0].get("error") or "publish failed")[:240]
+    save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
+    result["media_source"] = wire
+    return result
+
+
+@app.post("/api/admin/live-channels/channels/{channel_id}/refill")
+def live_channels_refill_channel_endpoint(
+    channel_id: str,
+    payload: Optional[LiveChannelsRefillChannelPayload] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Re-fill an existing station lineup from the library (confirm-gated)."""
+    del user
+    body = payload or LiveChannelsRefillChannelPayload()
+    if not body.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Refilling a channel requires confirm=true",
+        )
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.publish import (
+        refill_channel_lineup,
+        tunarr_client_from_settings,
+    )
+
+    try:
+        client = tunarr_client_from_settings(settings)
+        result = refill_channel_lineup(
+            client,
+            channel_id,
+            recipe_payload=body.recipe or None,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not refill channel lineup"),
+        ) from error
+
+    tunarr = asdict(settings.tunarr)
+    if result.get("ok"):
+        tunarr["last_publish_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        tunarr["last_error"] = ""
+    save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
+    return result
+
+
+@app.delete("/api/admin/live-channels/channels/{channel_id}")
+def live_channels_delete_channel_endpoint(
+    channel_id: str,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Delete a Tunarr station (owner manage path)."""
+    del user
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.publish import (
+        delete_published_channel,
+        tunarr_client_from_settings,
+    )
+
+    try:
+        client = tunarr_client_from_settings(settings)
+        return delete_published_channel(client, channel_id)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not delete channel"),
+        ) from error
 
 
 @app.get("/api/admin/live-channels/plex-attach")
