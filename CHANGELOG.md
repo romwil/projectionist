@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.29.8] — 2026-07-30
+
+Plex Live TV attach steps match the real Tuner Setup UI: first screen is discovery + ZIP gate only; Tunarr XMLTV is attached later — not a Verizon/Fios cable lineup.
+
+### Highlights
+- **Select Tunarr on Tuner Setup.** If Plex lists Tunarr (for example `10.10.1.202:18765`), pick that card — no custom IP when it appears.
+- **ZIP only unlocks Next.** Postal code on the first screen is a Plex DVR wizard gate — enter any US ZIP to proceed; it is not your Tunarr guide.
+- **XMLTV comes later.** Paste Tunarr’s XMLTV URL after Next / in later guide setup (or Live TV & DVR → add XMLTV). Do not finish “Add another EPG data lineup” with Verizon Fios for Tunarr stations.
+
+### Changed
+- `plex_attach.build_plex_attach` steps + coexistence copy rewritten for real Plex UI; adds `manual_address` and `coexistence.guide_warning`; never claims XMLTV is on the first Tuner Setup screen.
+- Admin Live Channels attach panel labels: network address, tuner base URL, XMLTV guide URL (paste later); guide warning surfaced above the checklist.
+- HELP Live Channels owner blurb + deferred coexistence note aligned.
+
+### Verification
+- Backend live-channels plex-attach unit assertions updated (Tuner Setup / postal gate / later XMLTV / cable-lineup warning).
+- `test_version` lockstep holds at **1.29.8**.
+
 ## [1.29.7] — 2026-07-30
 
 Live Channels Step 2 shows broadcast-engine progress in the step itself — phases, a progress bar, and a green ready state when Tunarr is up — instead of relying only on the bottom logs.
