@@ -1123,6 +1123,42 @@ button.ghost.inline-link {
   gap: var(--space-4);
 }
 
+.live-channels-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 var(--space-3);
+  padding: 0.2rem;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--surface-2, transparent) 80%, var(--bg));
+  width: fit-content;
+  max-width: 100%;
+}
+
+.live-channels-tab {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  padding: 0.4rem 0.85rem;
+  border-radius: calc(var(--radius-md, 8px) - 2px);
+  cursor: pointer;
+}
+
+.live-channels-tab:hover {
+  color: var(--text);
+}
+
+.live-channels-tab.is-active {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
 .live-channels-craft-block {
   margin-top: 1.25rem;
   padding-top: 1rem;
@@ -1136,9 +1172,95 @@ button.ghost.inline-link {
 
 .live-channels-craft-fields {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem 1rem;
   margin: 0.75rem 0;
+  align-items: start;
+}
+
+.live-channels-craft-fields > label {
+  min-width: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.live-channels-craft-fields input,
+.live-channels-craft-fields select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+
+.live-channels-craft-collection {
+  grid-column: 1 / -1;
+}
+
+.live-channels-collection-filter,
+.live-channels-collection-select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.live-channels-collection-select {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.live-channels-collection-count {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+.live-channels-check-list {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.35rem;
+}
+
+.live-channels-check {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  gap: 0.4rem;
+  align-items: start;
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.live-channels-check-mark {
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.live-channels-check-ok {
+  color: var(--success);
+}
+
+.live-channels-check-ok .live-channels-check-mark {
+  color: var(--success);
+}
+
+.live-channels-check-soft {
+  color: var(--muted);
+}
+
+.live-channels-check-fail {
+  color: var(--danger);
+}
+
+.live-channels-check-fail .live-channels-check-mark {
+  color: var(--danger);
+}
+
+@media (max-width: 640px) {
+  .live-channels-craft-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .live-channels-manage-list {

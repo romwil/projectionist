@@ -272,6 +272,39 @@ function CertifiedBadge({ certified, testing, serviceId }) {
   );
 }
 
+/** Engine up + at least one station → maintenance-first UI (not the setup journey). */
+function isLiveChannelsLaunched(status, engineProgress) {
+  const engineUp = Boolean(
+    status?.broadcast?.sidecar_up || engineProgress?.ready || engineProgress?.http_ready,
+  );
+  return engineUp && Number(status?.channel_count ?? 0) > 0;
+}
+
+function LiveStatusCheck({ ok, soft = false, children, testId }) {
+  const mark = ok ? "✓" : soft ? "○" : "✗";
+  const tone = ok ? "ok" : soft ? "soft" : "fail";
+  return (
+    <li
+      className={`live-channels-check live-channels-check-${tone}`}
+      data-testid={testId}
+    >
+      <span className="live-channels-check-mark" aria-hidden="true">
+        {mark}
+      </span>
+      <span className="live-channels-check-body">{children}</span>
+    </li>
+  );
+}
+
+function LiveReadyBadge({ ready, label = "Ready", testId }) {
+  if (!ready) return null;
+  return (
+    <span className="certified-badge certified-badge-ok" data-testid={testId}>
+      ✓ {label}
+    </span>
+  );
+}
+
 function serviceCredentialsPresent(service, settings) {
   if (!settings) return false;
   switch (service) {
@@ -441,6 +474,8 @@ export default function ConfigPage() {
   const [tunarrLogsOpen, setTunarrLogsOpen] = useState(false);
   const [tunarrLogs, setTunarrLogs] = useState(null);
   const [tunarrLogsBusy, setTunarrLogsBusy] = useState(false);
+  const [liveChannelsTab, setLiveChannelsTab] = useState(null); // null = auto by launch state
+  const [collectionFilter, setCollectionFilter] = useState("");
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
   const enginePollRef = useRef(null);
@@ -459,6 +494,31 @@ export default function ConfigPage() {
   const preview = useMemo(() => wizardPersonaPreview(persona), [persona]);
   const movieSections = useMemo(() => sections.filter((s) => s.type === "movie"), [sections]);
   const tvSections = useMemo(() => sections.filter((s) => s.type === "show"), [sections]);
+  const liveLaunched = useMemo(
+    () => isLiveChannelsLaunched(liveChannelsStatus, liveEngineProgress),
+    [liveChannelsStatus, liveEngineProgress],
+  );
+  const effectiveLiveTab = liveChannelsTab || (liveLaunched ? "stations" : "setup");
+  const filteredLiveCollections = useMemo(() => {
+    const rows = liveCraftOptions?.collections || [];
+    const q = collectionFilter.trim().toLowerCase();
+    const filtered = !q
+      ? rows
+      : rows.filter((row) => {
+          const hay = `${row.title || ""} ${row.label || ""} ${row.source || ""}`.toLowerCase();
+          return hay.includes(q);
+        });
+    // Keep the current selection visible even if it does not match the filter.
+    const selectedId = liveCraft.collection_id;
+    if (
+      selectedId &&
+      !filtered.some((row) => row.id === selectedId)
+    ) {
+      const selected = rows.find((row) => row.id === selectedId);
+      if (selected) return [selected, ...filtered];
+    }
+    return filtered;
+  }, [liveCraftOptions?.collections, collectionFilter, liveCraft.collection_id]);
 
   function applyCertifications(certMap) {
     setCertifications(certMap || {});
@@ -1085,6 +1145,8 @@ export default function ConfigPage() {
         setLiveAttach(null);
         setLiveEngineProgress(null);
         setLiveEngineError("");
+        setLiveChannelsTab(null);
+        setCollectionFilter("");
         stopEngineProgressPoll();
       }
     } catch (error) {
@@ -2650,10 +2712,11 @@ export default function ConfigPage() {
                 >
                   <div className="live-channels-on-copy">
                     <p className="eyebrow">Live Channels</p>
-                    <h2>Live Channels is on</h2>
+                    <h2>{liveLaunched ? "Stations on the air" : "Live Channels is on"}</h2>
                     <p className="live-channels-hero-lede">
-                      Finish the steps below to add Tunarr beside any existing OTA tuner in Plex Live TV.
-                      Watching stays in Plex — nothing replaces your antenna DVR.
+                      {liveLaunched
+                        ? "Craft, refill, and watch system health here. Setup and Docker details live under Installation."
+                        : "Finish the steps below to add Tunarr beside any existing OTA tuner in Plex Live TV. Watching stays in Plex — nothing replaces your antenna DVR."}
                     </p>
                   </div>
                   <button
@@ -2668,11 +2731,63 @@ export default function ConfigPage() {
                   </button>
                 </div>
 
-                <div className="live-channels-journey">
-                  <div className="service-card" data-testid="live-channels-health-strip">
+                {liveLaunched ? (
+                  <div
+                    className="live-channels-tabs"
+                    role="tablist"
+                    aria-label="Live Channels sections"
+                    data-testid="live-channels-tabs"
+                  >
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={effectiveLiveTab === "stations"}
+                      className={
+                        effectiveLiveTab === "stations"
+                          ? "live-channels-tab is-active"
+                          : "live-channels-tab"
+                      }
+                      data-testid="live-channels-tab-stations"
+                      onClick={() => setLiveChannelsTab("stations")}
+                    >
+                      Stations
+                    </button>
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={effectiveLiveTab === "setup"}
+                      className={
+                        effectiveLiveTab === "setup"
+                          ? "live-channels-tab is-active"
+                          : "live-channels-tab"
+                      }
+                      data-testid="live-channels-tab-installation"
+                      onClick={() => setLiveChannelsTab("setup")}
+                    >
+                      Installation
+                    </button>
+                  </div>
+                ) : null}
+
+                <div
+                  className="live-channels-journey"
+                  data-live-mode={liveLaunched ? "maintenance" : "setup"}
+                >
+                  {!liveLaunched || effectiveLiveTab === "stations" ? (
+                  <div
+                    className={`service-card${
+                      liveChannelsStatus?.broadcast?.sidecar_up ? " service-ok" : ""
+                    }`}
+                    data-testid="live-channels-health-strip"
+                  >
                     <div className="service-card-header">
                       <div className="service-card-title">
                         <h3>What's on the air</h3>
+                        <LiveReadyBadge
+                          ready={Boolean(liveChannelsStatus?.broadcast?.sidecar_up)}
+                          label="Broadcast healthy"
+                          testId="live-channels-health-ready"
+                        />
                       </div>
                       <button
                         type="button"
@@ -2798,17 +2913,40 @@ export default function ConfigPage() {
                       </ul>
                     ) : null}
                   </div>
+                  ) : null}
 
+                  {!liveLaunched || effectiveLiveTab === "setup" ? (
+                  <>
                   <div
-                    className={`service-card ${testResults.tunarr?.state === "success" ? "service-ok" : ""} ${testing === "tunarr" ? "service-loading" : ""} ${testResults.tunarr?.state === "error" ? "service-error" : ""}`}
+                    className={`service-card ${
+                      testResults.tunarr?.state === "success" ||
+                      liveChannelsStatus?.broadcast?.sidecar_up ||
+                      liveEngineProgress?.ready
+                        ? "service-ok"
+                        : ""
+                    } ${testing === "tunarr" ? "service-loading" : ""} ${testResults.tunarr?.state === "error" ? "service-error" : ""}`}
                   >
                     <div className="service-card-header">
                       <div className="service-card-title">
+                        {!liveLaunched ? (
+                          <p className="live-channels-step-label">Connection</p>
+                        ) : null}
                         <h3>Broadcast engine connection</h3>
                         <CertifiedBadge
-                          certified={certifications.tunarr?.certified}
+                          certified={
+                            certifications.tunarr?.certified ||
+                            testResults.tunarr?.state === "success" ||
+                            liveChannelsStatus?.broadcast?.sidecar_up
+                          }
                           testing={testing === "tunarr"}
                           serviceId="tunarr"
+                        />
+                        <LiveReadyBadge
+                          ready={Boolean(
+                            liveEngineProgress?.ready || liveChannelsStatus?.broadcast?.sidecar_up,
+                          )}
+                          label="Engine ready"
+                          testId="live-channels-engine-ready-badge"
                         />
                       </div>
                       <button
@@ -2907,11 +3045,21 @@ export default function ConfigPage() {
                     ) : null}
                   </div>
 
-                  <div className="service-card" data-testid="live-channels-preflight">
+                  <div
+                    className={`service-card${livePreflight?.ready ? " service-ok" : ""}`}
+                    data-testid="live-channels-preflight"
+                  >
                     <div className="service-card-header">
                       <div className="service-card-title">
-                        <p className="live-channels-step-label">Step 1</p>
+                        {!liveLaunched ? (
+                          <p className="live-channels-step-label">Step 1</p>
+                        ) : null}
                         <h3>Check you're ready</h3>
+                        <LiveReadyBadge
+                          ready={Boolean(livePreflight?.ready)}
+                          label="Ready"
+                          testId="live-channels-preflight-ready"
+                        />
                       </div>
                       <button
                         type="button"
@@ -2961,11 +3109,11 @@ export default function ConfigPage() {
                       </span>
                     </label>
                     {livePreflight?.checks?.length ? (
-                      <ul className="wizard-note" data-testid="live-channels-preflight-list">
+                      <ul className="live-channels-check-list" data-testid="live-channels-preflight-list">
                         {livePreflight.checks.map((check) => (
-                          <li key={check.id}>
-                            {check.ok ? "✓" : check.soft ? "○" : "✗"} {check.label}: {check.message}
-                          </li>
+                          <LiveStatusCheck key={check.id} ok={check.ok} soft={check.soft}>
+                            {check.label}: {check.message}
+                          </LiveStatusCheck>
                         ))}
                       </ul>
                     ) : (
@@ -2977,19 +3125,21 @@ export default function ConfigPage() {
                   </div>
 
                   {settings?.tunarr?.docker_orchestration ? (
-                    <div className="service-card" data-testid="live-channels-lifecycle">
+                    <div
+                      className={`service-card${liveEngineProgress?.ready ? " service-ok" : ""}`}
+                      data-testid="live-channels-lifecycle"
+                    >
                       <div className="service-card-header">
                         <div className="service-card-title">
-                          <p className="live-channels-step-label">Step 2</p>
-                          <h3>Start the broadcast engine</h3>
-                          {liveEngineProgress?.ready ? (
-                            <span
-                              className="certified-badge certified-badge-ok"
-                              data-testid="live-channels-engine-ready"
-                            >
-                              ✓ Tunarr is ready
-                            </span>
+                          {!liveLaunched ? (
+                            <p className="live-channels-step-label">Step 2</p>
                           ) : null}
+                          <h3>Start the broadcast engine</h3>
+                          <LiveReadyBadge
+                            ready={Boolean(liveEngineProgress?.ready)}
+                            label="Tunarr is ready"
+                            testId="live-channels-engine-ready"
+                          />
                         </div>
                         <button
                           type="button"
@@ -3022,16 +3172,20 @@ export default function ConfigPage() {
                         >
                           {liveEngineProgress?.ready ? (
                             <ul
-                              className="wizard-note live-channels-engine-checks"
+                              className="live-channels-check-list"
                               data-testid="live-channels-engine-ready-list"
                             >
-                              <li>✓ Broadcast engine: Tunarr is ready</li>
+                              <LiveStatusCheck ok>Broadcast engine: Tunarr is ready</LiveStatusCheck>
                               {liveEngineProgress.http_ready ? (
-                                <li>✓ API health: responding</li>
-                              ) : null}
+                                <LiveStatusCheck ok>API health: responding</LiveStatusCheck>
+                              ) : (
+                                <LiveStatusCheck soft>API health: waiting</LiveStatusCheck>
+                              )}
                               {liveEngineProgress.logs_ready ? (
-                                <li>✓ Startup log: “Tunarr is ready!”</li>
-                              ) : null}
+                                <LiveStatusCheck ok>Startup log: “Tunarr is ready!”</LiveStatusCheck>
+                              ) : (
+                                <LiveStatusCheck soft>Startup log: waiting</LiveStatusCheck>
+                              )}
                             </ul>
                           ) : (
                             <>
@@ -3106,12 +3260,19 @@ export default function ConfigPage() {
                     </div>
                   ) : null}
 
+                  </>
+                  ) : null}
+
+                  {!liveLaunched || effectiveLiveTab === "stations" ? (
+                  <>
                   <div className="service-card" data-testid="live-channels-starters">
                     <div className="service-card-header">
                       <div className="service-card-title">
-                        <p className="live-channels-step-label">
-                          Step {settings?.tunarr?.docker_orchestration ? "3" : "2"}
-                        </p>
+                        {!liveLaunched ? (
+                          <p className="live-channels-step-label">
+                            Step {settings?.tunarr?.docker_orchestration ? "3" : "2"}
+                          </p>
+                        ) : null}
                         <h3>Create / publish channels</h3>
                       </div>
                       <button
@@ -3280,10 +3441,20 @@ export default function ConfigPage() {
                           </label>
                         ) : null}
                         {liveCraft.source === "collection" ? (
-                          <label>
+                          <label className="live-channels-craft-collection">
                             Collection
+                            <input
+                              type="search"
+                              className="live-channels-collection-filter"
+                              data-testid="live-channels-craft-collection-filter"
+                              placeholder="Search collections…"
+                              value={collectionFilter}
+                              onChange={(event) => setCollectionFilter(event.target.value)}
+                              autoComplete="off"
+                            />
                             <select
                               data-testid="live-channels-craft-collection"
+                              className="live-channels-collection-select"
                               value={liveCraft.collection_id}
                               onChange={(event) => {
                                 const id = event.target.value;
@@ -3299,8 +3470,8 @@ export default function ConfigPage() {
                               }}
                             >
                               <option value="">Select a collection…</option>
-                              {(liveCraftOptions?.collections || []).map((row) => (
-                                <option key={row.id || row.title} value={row.id}>
+                              {filteredLiveCollections.map((row) => (
+                                <option key={row.id || row.title} value={row.id} title={row.label}>
                                   {row.label}
                                   {row.source === "plex" ? " · Plex" : ""}
                                   {row.source === "published" ? " · Published" : ""}
@@ -3317,13 +3488,20 @@ export default function ConfigPage() {
                                   liveCraftOptions?.collections_error ||
                                   "No collections loaded. Create one in Plex, or publish a Projectionist list."}
                               </p>
-                            ) : liveCraftOptions?.collections_total >
-                              (liveCraftOptions?.collections || []).length ? (
-                              <p className="wizard-note">
-                                Showing {(liveCraftOptions?.collections || []).length} of{" "}
-                                {liveCraftOptions.collections_total} collections.
+                            ) : (
+                              <p
+                                className="wizard-note live-channels-collection-count"
+                                data-testid="live-channels-craft-collections-count"
+                              >
+                                {collectionFilter.trim()
+                                  ? `${filteredLiveCollections.length} match${
+                                      filteredLiveCollections.length === 1 ? "" : "es"
+                                    } of ${liveCraftOptions.collections_total} collections`
+                                  : `${liveCraftOptions.collections_total} collection${
+                                      liveCraftOptions.collections_total === 1 ? "" : "s"
+                                    } available`}
                               </p>
-                            ) : null}
+                            )}
                           </label>
                         ) : null}
                       </div>
@@ -3687,13 +3865,36 @@ export default function ConfigPage() {
                     )}
                   </div>
 
-                  <div className="service-card" data-testid="live-channels-plex-attach">
+                  </>
+                  ) : null}
+
+                  {!liveLaunched || effectiveLiveTab === "setup" ? (
+                  <>
+                  <div
+                    className={`service-card${
+                      liveAttach?.discovery?.ok ||
+                      liveChannelsStatus?.guide_index?.last_attach?.ok
+                        ? " service-ok"
+                        : ""
+                    }`}
+                    data-testid="live-channels-plex-attach"
+                  >
                     <div className="service-card-header">
                       <div className="service-card-title">
-                        <p className="live-channels-step-label">
-                          Step {settings?.tunarr?.docker_orchestration ? "5" : "4"}
-                        </p>
+                        {!liveLaunched ? (
+                          <p className="live-channels-step-label">
+                            Step {settings?.tunarr?.docker_orchestration ? "5" : "4"}
+                          </p>
+                        ) : null}
                         <h3>Add Tunarr beside your tuners in Plex</h3>
+                        <LiveReadyBadge
+                          ready={Boolean(
+                            liveAttach?.discovery?.ok ||
+                              liveChannelsStatus?.guide_index?.last_attach?.ok,
+                          )}
+                          label="Attached"
+                          testId="live-channels-attach-ready"
+                        />
                       </div>
                       <div className="service-card-actions">
                         <button
@@ -3818,10 +4019,19 @@ export default function ConfigPage() {
                             </label>
                           </div>
                         )}
-                        <p className="wizard-note">
-                          {liveAttach.discovery?.ok ? "✓" : "○"}{" "}
-                          {liveAttach.discovery?.message || "Discovery not checked."}
-                        </p>
+                        <ul className="live-channels-check-list">
+                          <LiveStatusCheck ok={Boolean(liveAttach.discovery?.ok)} soft={!liveAttach.discovery?.ok}>
+                            {liveAttach.discovery?.message || "Discovery not checked."}
+                          </LiveStatusCheck>
+                          {liveChannelsStatus?.guide_index?.last_attach?.ok ? (
+                            <LiveStatusCheck ok>
+                              Guide attached
+                              {liveChannelsStatus.guide_index.last_attach.dvr_key
+                                ? ` · DVR ${liveChannelsStatus.guide_index.last_attach.dvr_key}`
+                                : ""}
+                            </LiveStatusCheck>
+                          ) : null}
+                        </ul>
                       </>
                     ) : (
                       <p className="wizard-note">
@@ -3890,6 +4100,8 @@ export default function ConfigPage() {
                       </>
                     ) : null}
                   </details>
+                  </>
+                  ) : null}
                 </div>
               </>
             )}
