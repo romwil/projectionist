@@ -11,8 +11,29 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.live_channels.recipes import (
     ChannelRecipe,
+    MediaScope,
     ProgrammingMode,
+    collection_media_type_matches_scope,
+    normalize_media_scope,
     recipe_from_mapping,
+)
+
+_MEDIA_SCOPES = (
+    {
+        "id": MediaScope.TV.value,
+        "label": "TV",
+        "description": "Episodes from TV libraries only.",
+    },
+    {
+        "id": MediaScope.MOVIES.value,
+        "label": "Movies",
+        "description": "Movies only.",
+    },
+    {
+        "id": MediaScope.BOTH.value,
+        "label": "Both",
+        "description": "Movies and TV (mixed pacing).",
+    },
 )
 
 
@@ -268,9 +289,10 @@ def build_craft_options(
     return {
         "sources": list(_SOURCES),
         "programming_modes": list(_MODES),
+        "media_scopes": list(_MEDIA_SCOPES),
         "motifs": motifs[:24],
         "taste_clusters": clusters[:16],
-        # Full list — Admin filters client-side; do not hard-cap (owners often have 100+).
+        # Full list — Admin filters client-side by media_scope; do not hard-cap.
         "collections": collections,
         "collections_total": collections_total,
         "collections_published_count": published_count,
@@ -283,9 +305,9 @@ def build_craft_options(
         "youth_max_rating": youth_max,
         "empty_library": not bool(motifs or clusters or collections),
         "hint": (
-            "Pick a motif, taste cluster, Plex/Projectionist collection, Chaos, or "
-            "youth-safe recipe. Publish creates the station on Tunarr and fills the "
-            "lineup from your library."
+            "Pick TV, Movies, or Both, then a motif, taste cluster, collection, Chaos, "
+            "or youth-safe recipe. Publish creates the station on Tunarr and fills the "
+            "lineup from matching libraries."
         ),
     }
 
@@ -341,6 +363,21 @@ def recipe_from_craft_payload(
             mode_raw = ProgrammingMode.SHUFFLE.value
 
     youth_safe = bool(payload.get("youth_safe")) or source == "youth"
+    media_scope = normalize_media_scope(payload.get("media_scope"))
+    # Collection media_type can tighten scope when owner left Both.
+    collection_media_type = str(payload.get("collection_media_type") or "").strip()
+    if (
+        source == "collection"
+        and collection_media_type
+        and media_scope == MediaScope.BOTH.value
+    ):
+        if collection_media_type_matches_scope(collection_media_type, MediaScope.TV.value):
+            media_scope = MediaScope.TV.value
+        elif collection_media_type_matches_scope(
+            collection_media_type, MediaScope.MOVIES.value
+        ):
+            media_scope = MediaScope.MOVIES.value
+
     summary = str(payload.get("summary") or "").strip()
     if not summary:
         if source == "motif" and motif:
@@ -360,6 +397,7 @@ def recipe_from_craft_payload(
             "number": number,
             "source": source,
             "programming_mode": mode_raw,
+            "media_scope": media_scope,
             "cluster_tag": cluster,
             "motif": motif,
             "collection_id": collection_id,

@@ -1343,6 +1343,13 @@ class PreflightAndPublishTests(unittest.TestCase):
             ChannelRecipe(name="Chaos", number=100, source="chaos", programming_mode=ProgrammingMode.CHAOS),
             ChannelRecipe(name="Motif", number=101, source="motif", programming_mode=ProgrammingMode.SHUFFLE),
         ]
+        _filler = {
+            "ok": False,
+            "ready": False,
+            "filler_list_id": "",
+            "program_count": 0,
+            "message": "no filler",
+        }
         with patch(
             "projectionist.live_channels.publish.prepare_channels_for_playback",
             return_value={
@@ -1352,6 +1359,9 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "count_aligned": 0,
                 "count_warmed_ok": 0,
             },
+        ), patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value=_filler,
         ):
             result = publish_recipes(client, recipes)
         self.assertEqual(result["count_published"], 2)
@@ -1372,6 +1382,13 @@ class PreflightAndPublishTests(unittest.TestCase):
         client.list_sessions.return_value = {}
         client.default_transcode_config_id.return_value = "tc-default"
         client.set_channel_programming.return_value = {"totalPrograms": 0, "lineup": []}
+        _filler = {
+            "ok": False,
+            "ready": False,
+            "filler_list_id": "",
+            "program_count": 0,
+            "message": "no filler",
+        }
         # Default fill_programming=True refreshes existing empty stations.
         with patch(
             "projectionist.live_channels.publish.prepare_channels_for_playback",
@@ -1382,6 +1399,9 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "count_aligned": 0,
                 "count_warmed_ok": 0,
             },
+        ), patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value=_filler,
         ):
             result = publish_recipes(
                 client,
@@ -1407,6 +1427,9 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "count_aligned": 0,
                 "count_warmed_ok": 0,
             },
+        ), patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value=_filler,
         ):
             skipped = publish_recipes(
                 client2,
@@ -1441,6 +1464,7 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "program": {
                     "uuid": "p1",
                     "title": "Alien",
+                    "type": "movie",
                     "genres": ["Science Fiction"],
                 },
             },
@@ -1448,7 +1472,12 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "type": "content",
                 "id": "p2",
                 "duration": 6_000_000,
-                "program": {"uuid": "p2", "title": "Heat", "genres": ["Crime"]},
+                "program": {
+                    "uuid": "p2",
+                    "title": "Heat",
+                    "type": "movie",
+                    "genres": ["Crime"],
+                },
             },
         ]
         client.base_url = "http://tunarr.test:8000"
@@ -1470,6 +1499,15 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "warmed": [],
                 "count_aligned": 0,
                 "count_warmed_ok": 0,
+            },
+        ), patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value={
+                "ok": False,
+                "ready": False,
+                "filler_list_id": "",
+                "program_count": 0,
+                "message": "no filler",
             },
         ):
             result = publish_recipes(
@@ -1672,6 +1710,257 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
         self.assertEqual(result["count_warmed_ok"], 1)
         align.assert_called_once()
         warm.assert_called_once()
+
+
+class ContinuityFillerTests(unittest.TestCase):
+    def test_parse_filler_binds_multi_path_and_host_only(self) -> None:
+        from projectionist.live_channels.filler import (
+            filler_container_paths,
+            parse_filler_binds,
+        )
+
+        binds = parse_filler_binds(
+            [
+                "/mnt/user/bumpers",
+                "/mnt/user/trailers:/data/filler/trailers:ro",
+                "/mnt/user/bumpers",  # dedupe
+            ]
+        )
+        self.assertEqual(len(binds), 2)
+        self.assertTrue(binds[0].startswith("/mnt/user/bumpers:/data/filler/"))
+        self.assertEqual(binds[1], "/mnt/user/trailers:/data/filler/trailers:ro")
+        self.assertEqual(
+            filler_container_paths(binds),
+            [binds[0].split(":")[1], "/data/filler/trailers"],
+        )
+
+    def test_ensure_continuity_filler_list_unions_and_shuffles(self) -> None:
+        from projectionist.live_channels.filler import ensure_continuity_filler_list
+
+        client = MagicMock()
+        client.list_filler_lists.return_value = []
+        client.list_media_sources.return_value = []
+        client.create_media_source.return_value = {"id": "local-1"}
+        client.list_media_source_libraries.return_value = [
+            {"id": "lib-f", "name": "Fillers", "enabled": True}
+        ]
+        client.list_library_programs.return_value = [
+            {
+                "type": "content",
+                "id": f"s{i}",
+                "duration": 30_000 + i * 1000,
+                "program": {"uuid": f"s{i}", "title": f"Short {i}", "type": "other_video"},
+            }
+            for i in range(5)
+        ]
+        client.create_filler_list.return_value = {"id": "fl-1"}
+        settings = Settings(
+            tunarr=TunarrSettings(
+                filler_binds=["/mnt/a:/data/filler/a:ro", "/mnt/b:/data/filler/b:ro"]
+            )
+        )
+        rng = __import__("random").Random(0)
+        result = ensure_continuity_filler_list(
+            client, settings, shuffle=True, rng=rng, scan=True
+        )
+        self.assertTrue(result["ready"])
+        self.assertEqual(result["filler_list_id"], "fl-1")
+        self.assertEqual(result["program_count"], 5)
+        body = client.create_filler_list.call_args.args[0]
+        ids = [row["id"] for row in body["programs"]]
+        self.assertEqual(sorted(ids), ["s0", "s1", "s2", "s3", "s4"])
+        # Seeded shuffle is deterministic and not path-order identity.
+        self.assertNotEqual(ids, ["s0", "s1", "s2", "s3", "s4"])
+
+    def test_pad_lineup_caps_flex_at_15_minutes(self) -> None:
+        from projectionist.live_channels.filler import pad_lineup_with_flex
+        from projectionist.live_channels.publish import programming_body_for_recipe
+
+        # 22-minute commercial-cut episode starting on the hour → 8 min flex to :30.
+        lined = pad_lineup_with_flex(
+            [{"type": "content", "id": "ep1", "duration": 22 * 60 * 1000}],
+            max_flex_ms=15 * 60 * 1000,
+            start_time_ms=0,
+        )
+        self.assertEqual(lined[0]["type"], "content")
+        self.assertEqual(lined[1]["type"], "flex")
+        self.assertEqual(lined[1]["duration"], 8 * 60 * 1000)
+        self.assertLessEqual(lined[1]["duration"], 15 * 60 * 1000)
+
+        # Gap larger than cap is skipped (do not insert oversized flex).
+        long = pad_lineup_with_flex(
+            [{"type": "content", "id": "ep1", "duration": 10 * 60 * 1000}],
+            max_flex_ms=5 * 60 * 1000,
+            start_time_ms=0,
+        )
+        self.assertEqual(len(long), 1)
+
+        body = programming_body_for_recipe(
+            ChannelRecipe(name="TV", number=100, source="chaos", media_scope="tv"),
+            programs=[{"id": "ep1", "duration": 22 * 60 * 1000}],
+            pad_lineups=True,
+            max_flex_ms=15 * 60 * 1000,
+            start_time_ms=0,
+        )
+        flexes = [row for row in body["lineup"] if row["type"] == "flex"]
+        self.assertEqual(len(flexes), 1)
+        self.assertLessEqual(flexes[0]["duration"], 15 * 60 * 1000)
+
+    def test_media_scope_filters_movies_from_tv_recipe(self) -> None:
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+
+        client = MagicMock()
+        catalog = [
+            {
+                "type": "content",
+                "id": "m1",
+                "duration": 5_400_000,
+                "program": {"uuid": "m1", "title": "Heat", "type": "movie"},
+            },
+            {
+                "type": "content",
+                "id": "e1",
+                "duration": 1_320_000,
+                "program": {"uuid": "e1", "title": "Pilot", "type": "episode"},
+            },
+        ]
+        recipe = ChannelRecipe(
+            name="TV Only",
+            number=100,
+            source="chaos",
+            programming_mode=ProgrammingMode.CHAOS,
+            media_scope="tv",
+        )
+        picked = collect_programs_for_recipe(client, recipe, catalog=catalog, media_scope="tv")
+        self.assertEqual([p["id"] for p in picked], ["e1"])
+        movies = ChannelRecipe(
+            name="Movies",
+            number=101,
+            source="chaos",
+            programming_mode=ProgrammingMode.CHAOS,
+            media_scope="movies",
+        )
+        picked_m = collect_programs_for_recipe(
+            client, movies, catalog=catalog, media_scope="movies"
+        )
+        self.assertEqual([p["id"] for p in picked_m], ["m1"])
+
+    def test_repair_jumpstart_attaches_continuity(self) -> None:
+        from projectionist.live_channels.filler import repair_jumpstart_stations
+
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {
+                "id": "ch-m",
+                "name": "Mystery",
+                "number": 100,
+                "transcodeConfigId": "tc-1",
+                "duration": 0,
+                "startTime": 1,
+                "offline": {"mode": "pic"},
+                "icon": {"path": "", "width": 0, "duration": 0, "position": "bottom-right"},
+            }
+        ]
+        client.update_channel.return_value = {"id": "ch-m"}
+        settings = Settings(tunarr=TunarrSettings())
+        with patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value={
+                "ok": True,
+                "ready": True,
+                "filler_list_id": "fl-1",
+                "program_count": 3,
+                "message": "ready",
+            },
+        ), patch(
+            "projectionist.live_channels.publish.refill_channel_lineup",
+            return_value={
+                "ok": True,
+                "program_count": 10,
+                "padded": True,
+            },
+        ), patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={"ok": True, "count_aligned": 1, "count_warmed_ok": 1},
+        ):
+            result = repair_jumpstart_stations(client, settings, refill_lineups=True)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["count_attached"], 1)
+        put_body = client.update_channel.call_args.args[1]
+        self.assertEqual(put_body["fillerCollections"][0]["id"], "fl-1")
+        self.assertIn("Up next", put_body["guideFlexTitle"])
+
+        # Idempotent: already attached → no second PUT when force=False path.
+        client.list_channels.return_value = [
+            {
+                "id": "ch-m",
+                "name": "Mystery",
+                "number": 100,
+                "transcodeConfigId": "tc-1",
+                "duration": 0,
+                "startTime": 1,
+                "fillerCollections": [{"id": "fl-1", "weight": 100, "cooldownSeconds": 1800}],
+                "guideFlexTitle": "Mystery · Up next",
+                "offline": {"mode": "pic"},
+                "icon": {"path": "", "width": 0, "duration": 0, "position": "bottom-right"},
+            }
+        ]
+        client.update_channel.reset_mock()
+        with patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value={
+                "ok": True,
+                "ready": True,
+                "filler_list_id": "fl-1",
+                "program_count": 3,
+                "message": "ready",
+            },
+        ), patch(
+            "projectionist.live_channels.publish.refill_channel_lineup",
+            return_value={"ok": True, "program_count": 10, "padded": False},
+        ), patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={"ok": True},
+        ):
+            again = repair_jumpstart_stations(client, settings, refill_lineups=False)
+        self.assertIn("ch-m", again["already_ok"])
+        client.update_channel.assert_not_called()
+
+    def test_docker_includes_filler_binds_without_dropping_media(self) -> None:
+        life = TunarrDockerLifecycle(
+            socket_path="/tmp/fake.sock",
+            orchestration=True,
+            media_binds=["/mnt/user/data/media:/data/media:ro"],
+            filler_binds=["/mnt/user/bumpers:/data/filler/bumpers:ro"],
+        )
+        create_bodies: list[dict] = []
+
+        def fake_request(method, path, **kwargs):
+            if method == "GET" and path.startswith("/containers/json"):
+                return 200, []
+            if method == "GET" and path.endswith("/json"):
+                return 404, None
+            if method == "POST" and path.startswith("/containers/create"):
+                create_bodies.append(kwargs.get("json_body") or {})
+                return 201, {"Id": "abc123"}
+            if method == "POST" and path.endswith("/start"):
+                return 204, None
+            raise AssertionError(f"unexpected {method} {path}")
+
+        with patch(
+            "projectionist.live_channels.docker.resolve_docker_socket",
+            return_value="/tmp/fake.sock",
+        ), patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
+        ), patch.object(life, "_engine_request", side_effect=fake_request), patch(
+            "pathlib.Path.mkdir"
+        ):
+            result = life.start(config_volume="/tmp/tunarr-vol")
+        self.assertTrue(result.ok)
+        binds = (create_bodies[0].get("HostConfig") or {}).get("Binds") or []
+        self.assertIn("/mnt/user/data/media:/data/media:ro", binds)
+        self.assertIn("/mnt/user/bumpers:/data/filler/bumpers:ro", binds)
 
 
 if __name__ == "__main__":

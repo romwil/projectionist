@@ -167,7 +167,7 @@ From the spec — park here so they are not forgotten if capacity allows after c
 | Item | Status | Owner surface |
 |------|--------|---------------|
 | Auto-refresh programming after library sync / arrivals | `deferred` | backend |
-| Gap fillers from trailers/extras | `deferred` | backend |
+| Gap fillers from trailers/extras | `done` (1.29.19 — multi-path union filler list + attach + pad ≤15m + jump-start repair) | Installation / Stations |
 | Channel number ranges (virtual 100+) vs OTA | `done` (copy + 100+ floor) / residual collision risk | attach checklist documents 100+ floor + renumber; true auto-avoid of OTA majors still open |
 | Owner “re-run starter pack” (additive; no wipe) | `deferred` | wizard |
 | Ephemeral “tonight’s queue” shelf | `deferred` | household |

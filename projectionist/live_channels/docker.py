@@ -88,6 +88,30 @@ def resolve_media_binds(settings: Any = None) -> List[str]:
     return parse_media_binds(getattr(tunarr, "media_binds", None) if tunarr else None)
 
 
+def resolve_filler_binds(settings: Any = None) -> List[str]:
+    """Filler programming binds (settings / env). Delegates to filler module."""
+    from projectionist.live_channels.filler import resolve_filler_binds as _resolve
+
+    return _resolve(settings)
+
+
+def resolve_all_extra_binds(settings: Any = None) -> List[str]:
+    """Media library binds + filler binds (deduped) for Tunarr container create."""
+    from projectionist.live_channels.filler import parse_filler_binds
+
+    media = resolve_media_binds(settings)
+    filler = parse_filler_binds(resolve_filler_binds(settings))
+    out: List[str] = []
+    seen: set[str] = set()
+    for spec in (*media, *filler):
+        key = normalize_bind_spec(spec)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(spec)
+    return out
+
+
 def binds_include(current: Sequence[str], desired: Sequence[str]) -> bool:
     """True when every desired ``host:container`` appears in current binds."""
     have = {normalize_bind_spec(b) for b in current if normalize_bind_spec(b)}
@@ -290,6 +314,7 @@ class TunarrDockerLifecycle:
         host_port: int = DEFAULT_HOST_PORT,
         hdhr_port: int = DEFAULT_HDHR_PORT,
         media_binds: Optional[Sequence[str]] = None,
+        filler_binds: Optional[Sequence[str]] = None,
     ) -> None:
         self.container_name = container_name
         self.image = image
@@ -298,6 +323,10 @@ class TunarrDockerLifecycle:
         self.host_port = int(host_port or DEFAULT_HOST_PORT)
         self.hdhr_port = int(hdhr_port or DEFAULT_HDHR_PORT)
         self.media_binds = parse_media_binds(media_binds or ())
+        # Filler binds are additive; never drop media_binds when present.
+        from projectionist.live_channels.filler import parse_filler_binds
+
+        self.filler_binds = parse_filler_binds(filler_binds or ())
 
     def available(self) -> bool:
         return docker_socket_available(self.socket_path)
@@ -535,7 +564,21 @@ class TunarrDockerLifecycle:
             detail["public_url_hint"] = public
         if self.media_binds:
             detail["media_binds"] = list(self.media_binds)
+        if self.filler_binds:
+            detail["filler_binds"] = list(self.filler_binds)
         return detail
+
+    def _extra_binds(self) -> List[str]:
+        """Media + filler binds (deduped). Media first so library paths win ties."""
+        out: List[str] = []
+        seen: set[str] = set()
+        for spec in (*self.media_binds, *self.filler_binds):
+            key = normalize_bind_spec(spec)
+            if not key or key in seen:
+                continue
+            seen.add(key)
+            out.append(spec)
+        return out
 
     def _inspect_binds(self) -> List[str]:
         """HostConfig.Binds from the named container (empty when missing)."""
@@ -557,17 +600,18 @@ class TunarrDockerLifecycle:
     def _config_binds(self, config_volume: str) -> List[str]:
         volume = str(config_volume or "").strip()
         binds: List[str] = [f"{volume}:/config"] if volume else []
-        for spec in self.media_binds:
+        for spec in self._extra_binds():
             key = normalize_bind_spec(spec)
             if key and key not in {normalize_bind_spec(b) for b in binds}:
                 binds.append(spec)
         return binds
 
     def _needs_recreate_for_binds(self, config_volume: str) -> bool:
-        if not self.media_binds:
+        desired = self._extra_binds()
+        if not desired:
             return False
         current = self._inspect_binds()
-        return not binds_include(current, self.media_binds) or (
+        return not binds_include(current, desired) or (
             bool(config_volume)
             and not binds_include(current, [f"{config_volume}:/config"])
         )
@@ -689,11 +733,12 @@ class TunarrDockerLifecycle:
                 image=self.image,
             )
         logger.info(
-            "Tunarr docker started name=%s image=%s volume=%s media_binds=%s",
+            "Tunarr docker started name=%s image=%s volume=%s media_binds=%s filler_binds=%s",
             self.container_name,
             self.image,
             volume or "(none)",
             self.media_binds or [],
+            self.filler_binds or [],
         )
         detail = self._url_hints_detail()
         detail["container_id"] = cid[:12] if cid else ""
@@ -1021,6 +1066,7 @@ def lifecycle_from_settings(
         host_port=preferred_http,
         hdhr_port=preferred_hdhr,
         media_binds=resolve_media_binds(settings),
+        filler_binds=resolve_filler_binds(settings),
     )
 
 

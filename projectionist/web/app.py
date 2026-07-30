@@ -17,7 +17,7 @@ from dataclasses import asdict
 from datetime import date, datetime, timezone
 from pathlib import Path
 import asyncio
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Mapping, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
@@ -648,6 +648,10 @@ class TunarrSettingsPayload(BaseModel):
     image_tag: str = "chrisbenincasa/tunarr:1.3.9"
     volume_path: str = "tunarr"
     media_binds: List[str] = Field(default_factory=list)
+    filler_binds: List[str] = Field(default_factory=list)
+    continuity_filler_list_id: str = ""
+    pad_flex_max_minutes: int = 15
+    station_meta: Dict[str, Any] = Field(default_factory=dict)
     channel_number_base: int = 100
     plex_pass_confirmed: bool = False
     last_publish_at: str = ""
@@ -1629,6 +1633,7 @@ class LiveChannelsPublishChannelPayload(BaseModel):
     number: int = 0
     source: str = "chaos"
     programming_mode: str = ""
+    media_scope: str = "both"
     motif: str = ""
     cluster_tag: str = ""
     collection_id: str = ""
@@ -1643,6 +1648,18 @@ class LiveChannelsPublishChannelPayload(BaseModel):
 class LiveChannelsRefillChannelPayload(BaseModel):
     recipe: Dict[str, Any] = Field(default_factory=dict)
     confirm: bool = False
+
+
+class LiveChannelsStationSettingsPayload(BaseModel):
+    media_scope: str = "both"
+    confirm: bool = False
+
+
+class LiveChannelsContinuityPayload(BaseModel):
+    confirm: bool = False
+    rescan: bool = True
+    repair: bool = True
+    refill_lineups: bool = True
 
 
 @app.post("/api/admin/live-channels/preflight")
@@ -2026,6 +2043,7 @@ def live_channels_publish_channel_endpoint(
             "number": payload.number,
             "source": payload.source,
             "programming_mode": payload.programming_mode,
+            "media_scope": payload.media_scope or "both",
             "motif": payload.motif,
             "cluster_tag": payload.cluster_tag,
             "collection_id": payload.collection_id,
@@ -2033,6 +2051,8 @@ def live_channels_publish_channel_endpoint(
             "youth_safe": payload.youth_safe,
             "summary": payload.summary,
         }
+    elif payload.media_scope and not recipe_body.get("media_scope"):
+        recipe_body["media_scope"] = payload.media_scope
 
     try:
         result = publish_custom_channel(
@@ -2097,6 +2117,7 @@ def live_channels_refill_channel_endpoint(
             client,
             channel_id,
             recipe_payload=body.recipe or None,
+            settings=settings,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -2110,8 +2131,134 @@ def live_channels_refill_channel_endpoint(
     if result.get("ok"):
         tunarr["last_publish_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         tunarr["last_error"] = ""
+    # Persist station_meta / continuity id mutations from refill.
     save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
     return result
+
+
+@app.patch("/api/admin/live-channels/channels/{channel_id}/settings")
+def live_channels_station_settings_endpoint(
+    channel_id: str,
+    payload: LiveChannelsStationSettingsPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Update Projectionist-side station settings (media scope, etc.)."""
+    del user
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Updating station settings requires confirm=true",
+        )
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.publish import (
+        resolve_media_scope,
+        set_station_media_scope,
+        tunarr_client_from_settings,
+    )
+    from projectionist.live_channels.recipes import normalize_media_scope
+
+    cid = str(channel_id or "").strip()
+    if not cid:
+        raise HTTPException(status_code=400, detail="channel_id is required")
+    scope = normalize_media_scope(payload.media_scope)
+    set_station_media_scope(settings, cid, scope)
+    # Verify channel exists on Tunarr when reachable.
+    try:
+        client = tunarr_client_from_settings(settings)
+        found = any(
+            str(ch.get("id") or ch.get("uuid") or "") == cid
+            for ch in client.list_channels()
+            if isinstance(ch, Mapping)
+        )
+        if not found:
+            raise HTTPException(status_code=404, detail="Channel not found on Tunarr")
+    except HTTPException:
+        raise
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not verify channel on Tunarr"),
+        ) from error
+
+    tunarr = asdict(settings.tunarr)
+    save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
+    return {
+        "ok": True,
+        "channel_id": cid,
+        "media_scope": resolve_media_scope(settings, channel_id=cid),
+        "message": f"Station media scope set to {scope}. Refill to apply to the lineup.",
+    }
+
+
+@app.post("/api/admin/live-channels/continuity/repair")
+def live_channels_continuity_repair_endpoint(
+    payload: Optional[LiveChannelsContinuityPayload] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Rescan filler union + repair continuity on all stations (confirm-gated)."""
+    del user
+    body = payload or LiveChannelsContinuityPayload()
+    if not body.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Continuity repair requires confirm=true",
+        )
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.filler import (
+        ensure_continuity_filler_list,
+        repair_jumpstart_stations,
+    )
+    from projectionist.live_channels.publish import (
+        resolve_channel_icon_url,
+        tunarr_client_from_settings,
+    )
+
+    try:
+        client = tunarr_client_from_settings(settings)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    filler: Dict[str, Any] = {}
+    if body.rescan:
+        try:
+            filler = ensure_continuity_filler_list(client, settings, shuffle=True, scan=True)
+        except Exception as error:  # noqa: BLE001
+            raise HTTPException(
+                status_code=502,
+                detail=_safe_error_detail(error, "Could not rebuild continuity filler list"),
+            ) from error
+
+    repair: Dict[str, Any] = {"ok": True, "skipped": True}
+    if body.repair:
+        try:
+            repair = repair_jumpstart_stations(
+                client,
+                settings,
+                icon_url=resolve_channel_icon_url(settings),
+                refill_lineups=bool(body.refill_lineups),
+            )
+        except Exception as error:  # noqa: BLE001
+            raise HTTPException(
+                status_code=502,
+                detail=_safe_error_detail(error, "Could not repair station continuity"),
+            ) from error
+
+    tunarr = asdict(settings.tunarr)
+    if filler.get("filler_list_id"):
+        tunarr["continuity_filler_list_id"] = str(filler["filler_list_id"])
+    if repair.get("ok") or filler.get("ok"):
+        tunarr["last_error"] = ""
+    save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
+    return {
+        "ok": bool(repair.get("ok") or filler.get("ready")),
+        "filler": filler,
+        "repair": repair,
+        "message": repair.get("message") or filler.get("message") or "Continuity update finished.",
+    }
 
 
 @app.delete("/api/admin/live-channels/channels/{channel_id}")

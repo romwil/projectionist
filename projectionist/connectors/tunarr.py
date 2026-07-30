@@ -117,6 +117,23 @@ class TunarrClient:
             raise RuntimeError("Unexpected response from Tunarr create media-source")
         return payload
 
+    def update_media_source(
+        self, media_source_id: str, body: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        """Update a media source (``PUT /api/media-sources/{id}``)."""
+        msid = str(media_source_id or "").strip()
+        if not msid:
+            raise ValueError("media_source_id is required")
+        payload = request_json(
+            self._api_url(f"/media-sources/{msid}"),
+            method="PUT",
+            body=dict(body),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr update media-source")
+        return payload
+
     def list_media_source_libraries(self, media_source_id: str) -> List[Mapping[str, Any]]:
         """List libraries for a media source (``GET /media-sources/{id}/libraries``)."""
         msid = str(media_source_id or "").strip()
@@ -352,6 +369,32 @@ class TunarrClient:
             return []
         return [item for item in payload if isinstance(item, Mapping)]
 
+    def get_filler_list(self, filler_list_id: str) -> Mapping[str, Any]:
+        """Fetch one filler list (``GET /api/filler-lists/{id}``)."""
+        fid = str(filler_list_id or "").strip()
+        if not fid:
+            raise ValueError("filler_list_id is required")
+        payload = request_json(
+            self._api_url(f"/filler-lists/{fid}"),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr get filler-list")
+        return payload
+
+    def get_filler_list_programs(self, filler_list_id: str) -> List[Mapping[str, Any]]:
+        """Programs in a filler list (``GET /api/filler-lists/{id}/programs``)."""
+        fid = str(filler_list_id or "").strip()
+        if not fid:
+            raise ValueError("filler_list_id is required")
+        payload = request_json(
+            self._api_url(f"/filler-lists/{fid}/programs"),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, list):
+            return []
+        return [item for item in payload if isinstance(item, Mapping)]
+
     def create_filler_list(self, body: Mapping[str, Any]) -> Mapping[str, Any]:
         """Create a filler list (gap fillers / trailers). Stub-friendly."""
         payload = request_json(
@@ -362,6 +405,23 @@ class TunarrClient:
         )
         if not isinstance(payload, dict):
             raise RuntimeError("Unexpected response from Tunarr create filler-list")
+        return payload
+
+    def update_filler_list(
+        self, filler_list_id: str, body: Mapping[str, Any]
+    ) -> Mapping[str, Any]:
+        """Replace filler list membership (``PUT /api/filler-lists/{id}``)."""
+        fid = str(filler_list_id or "").strip()
+        if not fid:
+            raise ValueError("filler_list_id is required")
+        payload = request_json(
+            self._api_url(f"/filler-lists/{fid}"),
+            method="PUT",
+            body=dict(body),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr update filler-list")
         return payload
 
     def get_all_channel_guides(
