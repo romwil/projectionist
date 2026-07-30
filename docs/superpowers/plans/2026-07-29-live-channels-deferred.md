@@ -92,8 +92,8 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 
 ### OTA / existing Live TV coexistence (multi-tuner)
 
-- **Status:** `done` (attach copy + soft detect) / residual (guide merge / number collisions)
-- **Why / note:** Plex supports multiple tuners. Attach checklist + Admin copy say **add Tunarr as another network tuner**; leave OTA DVR alone. Soft probe via `/livetv/dvrs` and `/livetv/tuners` surfaces “Existing Live TV setup detected…” when PMS answers; failures stay `unknown` (honest copy, never invent). Residual: guide-source merge quirks and channel-number collisions with OTA majors if owners override the 100+ floor.
+- **Status:** `done` (attach copy + soft detect) / residual (number collisions)
+- **Why / note:** Plex supports multiple tuners. Attach checklist matches real Plex UI: first Tuner Setup = discovery + postal-code gate for Next (ZIP ≠ cable EPG choice); XMLTV is attached later (not on that screen); never finish “Add another EPG” with Verizon/Fios for Tunarr stations. Soft probe via `/livetv/dvrs` and `/livetv/tuners` surfaces “Existing Live TV setup detected…” when PMS answers; failures stay `unknown`. Residual: channel-number collisions with OTA majors if owners override the 100+ floor.
 - **Suggested next phase:** Automat pilot with real OTA + Tunarr; optional smarter channel pick.
 - **Owner surface:** Admin → Live Channels → Plex attach
 

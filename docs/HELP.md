@@ -619,5 +619,5 @@ Generate/rotate both in **Admin → Advanced** (or set the env vars); the keys m
 
 ## Live Channels (owners)
 
-When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. If you already have an OTA antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. In Admin → Live Channels, use the Plex steps to **add Tunarr as another network tuner** and attach its XMLTV guide for that device. Starter stations use channel numbers from 100+ to stay out of typical OTA ranges. Watching stays in Plex; Projectionist does not play live video in-app.
+When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. If you already have an OTA antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. In Admin → Live Channels, use the Plex steps: on the **first Tuner Setup screen** select the discovered Tunarr device (postal only unlocks Next — it is not your Tunarr guide; XMLTV is **not** on that screen). After Next / later guide setup, attach **Tunarr’s XMLTV** — do not finish “Add another EPG data lineup” with Verizon/Fios as the guide for Tunarr stations. Starter stations use channel numbers from 100+ to stay out of typical OTA ranges. Watching stays in Plex; Projectionist does not play live video in-app.
 

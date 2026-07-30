@@ -3160,6 +3160,14 @@ export default function ConfigPage() {
                             liveAttach.coexistence?.note ||
                             "Plex supports multiple tuners — add Tunarr alongside any OTA setup; do not remove existing Live TV."}
                         </p>
+                        {liveAttach.coexistence?.guide_warning ? (
+                          <p
+                            className="wizard-note live-channels-guide-warning"
+                            data-testid="live-channels-guide-warning"
+                          >
+                            {liveAttach.coexistence.guide_warning}
+                          </p>
+                        ) : null}
                         <ol className="wizard-note" data-testid="live-channels-attach-steps">
                           {(liveAttach.steps || []).map((step) => (
                             <li key={step.title}>
@@ -3175,7 +3183,19 @@ export default function ConfigPage() {
                         ) : (
                           <div className="service-fields">
                             <label>
-                              <span>Tuner URL (copy into Plex)</span>
+                              <span>
+                                Network address (host:port) — only if Plex did not discover Tunarr
+                              </span>
+                              <input
+                                type="text"
+                                readOnly
+                                data-testid="live-channels-manual-address"
+                                value={liveAttach.manual_address || ""}
+                                onFocus={(event) => event.target.select()}
+                              />
+                            </label>
+                            <label>
+                              <span>Tuner base URL (reference)</span>
                               <input
                                 type="text"
                                 readOnly
@@ -3185,7 +3205,9 @@ export default function ConfigPage() {
                               />
                             </label>
                             <label>
-                              <span>Guide URL (copy into Plex)</span>
+                              <span>
+                                XMLTV guide URL (paste later — not on first Tuner Setup screen)
+                              </span>
                               <input
                                 type="text"
                                 readOnly
@@ -3203,9 +3225,9 @@ export default function ConfigPage() {
                       </>
                     ) : (
                       <p className="wizard-note">
-                        Add Tunarr as another network tuner in Plex Live TV &amp; DVR — leave any OTA
-                        device in place. Copy the tuner and guide URLs when you are ready; the household
-                        tunes in from Plex.
+                        On the first Tuner Setup screen, select discovered Tunarr and enter any ZIP so
+                        Next unlocks (that ZIP is not your Tunarr guide). XMLTV is attached later —
+                        not a Verizon/Fios cable lineup. Leave any OTA device in place.
                       </p>
                     )}
                   </div>

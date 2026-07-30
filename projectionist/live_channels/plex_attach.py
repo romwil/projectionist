@@ -248,6 +248,19 @@ def xmltv_url(tunarr_base: str) -> str:
     return f"{base}/api/xmltv.xml"
 
 
+def host_port_for_plex(tunarr_base: str) -> str:
+    """Bare ``host:port`` for Plex's manual HDHomeRun network-address field."""
+    base = normalize_tunarr_base(tunarr_base)
+    if not base:
+        return ""
+    parsed = urlparse(base if "://" in base else f"http://{base}")
+    host = str(parsed.hostname or "").strip()
+    if not host or is_docker_only_host(host):
+        return ""
+    port = parsed.port or tunarr_port_from_url(base)
+    return f"{host}:{port}"
+
+
 def probe_existing_plex_livetv(settings: Any = None, *, timeout: int = 5) -> Dict[str, Any]:
     """Soft probe for existing Plex Live TV / DVR devices.
 
@@ -392,17 +405,22 @@ def build_plex_attach(
     hdhr = hdhr_url(url)
     xmltv = xmltv_url(url)
     host = _hostname_from_url_or_host(url)
+    manual_address = host_port_for_plex(url)
 
     livetv = existing_livetv if isinstance(existing_livetv, dict) else None
     if livetv is None:
         livetv = probe_existing_plex_livetv(settings)
 
     coexist_note = (
-        "Plex supports multiple tuners and guide sources. Tunarr is an "
-        "*additional* network tuner — leave any OTA HDHomeRun / antenna DVR in "
-        "place. Projectionist never asks you to wipe or replace existing Live TV."
+        "Plex supports multiple tuners. Tunarr is an *additional* HDHomeRun-style "
+        "network tuner — leave any OTA / antenna DVR in place. The first Tuner Setup "
+        "screen is discovery only (plus a postal-code gate for Next). Tunarr’s XMLTV "
+        "guide is attached later — not on that first screen. Do not finish "
+        "“Add another EPG data lineup” with Verizon Fios / DIRECTV / Xfinity as the "
+        "guide for Tunarr virtual stations."
     )
 
+    address_hint = manual_address or "host:port from the tuner URL below"
     steps: List[Dict[str, str]] = [
         {
             "title": "Open Plex Live TV & DVR (keep what you have)",
@@ -413,20 +431,37 @@ def build_plex_attach(
             ),
         },
         {
-            "title": "Add another network tuner (Tunarr)",
+            "title": "Tuner Setup (first screen) — select Tunarr only",
             "body": (
-                "Choose Add device / Set up Plex DVR → add a network tuner / HDHomeRun. "
-                "Paste the Tunarr tuner URL below (or the host if Plex only wants an IP). "
-                "Use a LAN address your Plex server can reach — not host.docker.internal. "
-                "Do not remove your existing OTA tuner during this step."
+                "Start Set up Plex DVR / Add device. The first Tuner Setup screen is "
+                "tuner discovery only — there is no XMLTV option here. Select the "
+                f"discovered Tunarr card (for example {address_hint} / "
+                '"We found hardware we recognize!"). You do not need a custom IP when '
+                "it appears. Only if it is missing: open "
+                '"Don\'t see your HDHomeRun device? Enter its network address manually" '
+                f"and paste {address_hint}. Leave any OTA tuner in place."
             ),
         },
         {
-            "title": "Attach Tunarr’s XMLTV guide for that tuner",
+            "title": "Postal code — wizard gate for Next",
             "body": (
-                "When Plex asks for an EPG / guide source for the *new* tuner, paste "
-                "the guide URL. Your OTA guide mapping can stay as it is — Plex merges "
-                "sources per tuner. You do not need Tunarr’s admin UI."
+                "Plex often shows Country / Cable / Postal code on this same first "
+                "screen and requires a postal code before Next is enabled. For Tunarr "
+                "(IPTV-style virtual channels), enter any valid US ZIP to proceed — "
+                "it does not mean you must use that region’s cable EPG for Tunarr. "
+                "Select Tunarr, enter a ZIP, then Next."
+            ),
+        },
+        {
+            "title": "Later — attach Tunarr XMLTV (not a cable lineup)",
+            "body": (
+                "XMLTV appears after Next — during later channel-scan / guide setup "
+                "steps, or under Live TV & DVR → set up / add an XMLTV guide for that "
+                "DVR. Paste the guide URL below. Do not complete "
+                "“Add another EPG data lineup” with Verizon Fios, DIRECTV, Xfinity, "
+                "or another ZIP-code cable provider as the guide for Tunarr stations — "
+                "that duplicates commercial guides and will not match library content. "
+                "Your existing OTA guide can stay as it is."
             ),
         },
         {
@@ -460,11 +495,12 @@ def build_plex_attach(
         xmltv = ""
         host = ""
         url = ""
+        manual_address = ""
         warning = (
             "Set a LAN Tunarr address so Plex can reach the tuner. "
             "Projectionist talks to Tunarr over host.docker.internal internally — "
             "that address must never be pasted into Plex. Set tunarr.public_url "
-            "(e.g. http://10.10.1.202:8000), PROJECTIONIST_HOST_IP, or "
+            "(e.g. http://10.10.1.202:18765), PROJECTIONIST_HOST_IP, or "
             "PROJECTIONIST_TUNARR_PUBLIC_URL, then reopen these steps."
         )
     else:
@@ -477,6 +513,7 @@ def build_plex_attach(
         "guide_url": xmltv,
         "hdhr_url": hdhr,
         "xmltv_url": xmltv,
+        "manual_address": manual_address,
         "host_hint": host,
         "url_source": facing.get("source") or "",
         "docker_only_url": docker_only or not bool(hdhr),
@@ -488,6 +525,11 @@ def build_plex_attach(
             "note": coexist_note,
             "virtual_channel_floor": _VIRTUAL_CHANNEL_FLOOR,
             "existing_livetv": livetv,
+            "guide_warning": (
+                "Postal code on Tuner Setup only unlocks Next — it is not your Tunarr "
+                "guide. Attach Tunarr XMLTV later; do not finish "
+                "“Add another EPG data lineup” with Verizon Fios / cable for these stations."
+            ),
         },
         "existing_livetv": livetv,
         "discovery": {
@@ -498,6 +540,7 @@ def build_plex_attach(
         "copy": {
             "tuner": hdhr,
             "guide": xmltv,
+            "manual_address": manual_address,
         },
     }
 

@@ -631,7 +631,11 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertTrue(result["ready"])
 
     def test_plex_attach_urls(self) -> None:
-        from projectionist.live_channels.plex_attach import build_plex_attach, xmltv_url
+        from projectionist.live_channels.plex_attach import (
+            build_plex_attach,
+            host_port_for_plex,
+            xmltv_url,
+        )
 
         settings = Settings(tunarr=TunarrSettings(url="http://tunarr.test:8000"))
         attach = build_plex_attach(
@@ -645,10 +649,22 @@ class PreflightAndPublishTests(unittest.TestCase):
         )
         self.assertEqual(attach["guide_url"], "http://tunarr.test:8000/api/xmltv.xml")
         self.assertEqual(xmltv_url("http://tunarr.test:8000/"), "http://tunarr.test:8000/api/xmltv.xml")
-        self.assertGreaterEqual(len(attach["steps"]), 3)
+        self.assertEqual(attach["manual_address"], "tunarr.test:8000")
+        self.assertEqual(host_port_for_plex("http://tunarr.test:8000/"), "tunarr.test:8000")
+        self.assertGreaterEqual(len(attach["steps"]), 4)
         joined = " ".join(f"{s['title']} {s['body']}" for s in attach["steps"]).lower()
-        self.assertIn("another", joined)
+        self.assertIn("tuner setup", joined)
+        self.assertIn("no xmltv option here", joined)
+        self.assertIn("postal code", joined)
+        self.assertIn("xmltv", joined)
+        self.assertIn("don't see your hdhomerun", joined)
+        self.assertIn("verizon", joined)
         self.assertNotIn("wipe", joined)
+        # First screen must not claim XMLTV lives there.
+        first_tuner = next(s for s in attach["steps"] if "tuner setup" in s["title"].lower())
+        self.assertIn("no xmltv", first_tuner["body"].lower())
+        self.assertIn("postal", attach["coexistence"]["guide_warning"].lower())
+        self.assertIn("later", attach["coexistence"]["guide_warning"].lower())
         self.assertEqual(attach["coexistence"]["mode"], "additional_tuner")
         self.assertEqual(attach["existing_livetv"]["status"], "detected")
 
@@ -675,6 +691,7 @@ class PreflightAndPublishTests(unittest.TestCase):
         )
         self.assertEqual(attach["tuner_url"], "http://10.10.1.202:8000/")
         self.assertEqual(attach["guide_url"], "http://10.10.1.202:8000/api/xmltv.xml")
+        self.assertEqual(attach["manual_address"], "10.10.1.202:8000")
         self.assertNotIn("host.docker.internal", attach["tuner_url"])
         self.assertEqual(attach["tunarr_api_url"], "http://host.docker.internal:8000")
         self.assertFalse(attach["needs_lan_url"])
