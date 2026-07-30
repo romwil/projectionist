@@ -252,9 +252,15 @@ fi
 log "Config bind: $CONFIG_DIR → /config (preserved)"
 log "Host data dir (Tunarr binds): PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
 
-if ((${#COMPOSE[@]})); then
+# Compose reference YAML keeps docker.sock commented (opt-in). When the host
+# .env asks for MOUNT_DOCKER_SOCK / DOCKER_SOCK, prefer plain docker so Live
+# Channels / Tunarr orchestration keeps the socket + group-add.
+if ((${#COMPOSE[@]})) && [[ -z "$DOCKER_SOCK" ]]; then
   run_compose
 else
+  if ((${#COMPOSE[@]})) && [[ -n "$DOCKER_SOCK" ]]; then
+    log "DOCKER_SOCK set — using plain Docker CLI so the socket mount is applied."
+  fi
   run_plain_docker
 fi
 
