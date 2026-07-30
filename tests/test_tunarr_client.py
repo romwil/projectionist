@@ -224,6 +224,43 @@ class TunarrClientTests(unittest.TestCase):
             status = client.get_guide_status()
             self.assertEqual(status["channelIds"], ["ch-1"])
 
+    def test_ensure_plex_stream_path_direct(self) -> None:
+        client = TunarrClient("http://tunarr.test")
+        calls: list[tuple[str, str, dict | None]] = []
+
+        def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):
+            del headers, timeout
+            calls.append((method, url, body))
+            if url.endswith("/plex-settings") and method == "GET":
+                return {
+                    "streamPath": "network",
+                    "updatePlayStatus": False,
+                    "pathReplace": "",
+                    "pathReplaceWith": "",
+                }
+            if url.endswith("/plex-settings") and method == "PUT":
+                return dict(body or {})
+            raise AssertionError(f"unexpected {method} {url}")
+
+        with patch("projectionist.connectors.tunarr.request_json", side_effect=fake_request_json):
+            first = client.ensure_plex_stream_path_direct()
+            self.assertTrue(first["ok"])
+            self.assertTrue(first["changed"])
+            self.assertEqual(first["streamPath"], "direct")
+            self.assertEqual(calls[-1][0], "PUT")
+            self.assertEqual(calls[-1][2]["streamPath"], "direct")
+
+        def already_direct(url, *, method="GET", headers=None, body=None, timeout=30):
+            del headers, body, timeout
+            if url.endswith("/plex-settings") and method == "GET":
+                return {"streamPath": "direct", "updatePlayStatus": False}
+            raise AssertionError(f"unexpected {method} {url}")
+
+        with patch("projectionist.connectors.tunarr.request_json", side_effect=already_direct):
+            second = client.ensure_plex_stream_path_direct()
+            self.assertTrue(second["ok"])
+            self.assertFalse(second["changed"])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -87,6 +87,8 @@ def wire_plex_media_source(
             "created": False,
             "message": "Plex URL and token are required to wire a media source.",
         }
+    # When library binds exist, prefer Tunarr direct file reads over Plex HTTP.
+    stream_path = client.ensure_plex_stream_path_direct()
     existing = client.list_media_sources()
     for source in existing:
         stype = str(source.get("type") or source.get("sourceType") or "").lower()
@@ -105,6 +107,7 @@ def wire_plex_media_source(
                 "message": "Plex media source already present in Tunarr.",
                 "source": dict(source),
                 "libraries": libraries,
+                "plex_stream": stream_path,
             }
     resolved_user_id = user_id
     resolved_username = username
@@ -132,6 +135,7 @@ def wire_plex_media_source(
         "source": dict(created),
         "request_body_keys": sorted(body.keys()),
         "libraries": libraries,
+        "plex_stream": stream_path,
     }
 
 

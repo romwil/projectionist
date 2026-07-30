@@ -1790,6 +1790,20 @@ def live_channels_lifecycle_endpoint(
     payload_out["host_port"] = int(getattr(settings.tunarr, "host_port", 0) or 0)
     payload_out["hdhr_port"] = int(getattr(settings.tunarr, "hdhr_port", 0) or 0)
     payload_out["config_volume"] = volume
+
+    # With media binds, prefer Tunarr direct file reads (not Plex HTTP parts).
+    if result.ok and result.status == "running":
+        media_binds = list(getattr(settings.tunarr, "media_binds", None) or [])
+        api_url = str(settings.tunarr.url or url_hint or "").strip()
+        if media_binds and api_url:
+            try:
+                from projectionist.connectors.tunarr import TunarrClient
+
+                payload_out["plex_stream"] = TunarrClient(
+                    api_url, timeout=8
+                ).ensure_plex_stream_path_direct()
+            except Exception:  # noqa: BLE001 — best-effort; lifecycle still succeeded
+                pass
     return payload_out
 
 

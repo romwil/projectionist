@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.29.15] — 2026-07-30
+
+Plex Live TV “session has ended” after guide titles: Tunarr now prefers direct library file reads when media binds exist, Attach cleans orphan dead tuners, and HELP covers the desktop Direct Stream quirk.
+
+### Highlights
+- **Live TV reads your library files.** With media mounts, Tunarr uses direct file access instead of fragile mid-program HTTP seeks through Plex.
+- **Leftover dead tuners get cleared.** Attach Tunarr guide removes orphan dead grabbers (not your OTA or Tunarr) so the guide is not cluttered with ghost sources.
+- **Clearer play tips.** If the desktop Plex app still says the session ended, use Plex Web or disable Direct Stream — documented in Help.
+
+### Fixed
+- Tunarr `plexStream.streamPath` left at `network` after media binds landed — now set to `direct` on wire / lifecycle when binds are configured (`TunarrClient.ensure_plex_stream_path_direct`).
+- Stale dead Plex grabbers (e.g. old `:7007` M3U with empty `deviceId`) confused Live TV sources; `prune_dead_grabber_devices` runs during Attach (OTA + Tunarr preserved).
+
+### Changed
+- Owner HELP Live Channels: use Tunarr HTTP port for Tuner Setup; Direct Stream / Tunarr#718 workaround for desktop clients.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1517 passed, 6 skipped (1 flaky authz cookie case passed on re-run); coverage **77.2%** (≥74%).
+- `cd frontend && npm run test:unit` — 514 passed; `npm run lint` — 0 errors; `npm run build` — pass.
+- `pytest tests/test_version.py` — lockstep **1.29.15**.
+
 ## [1.29.14] — 2026-07-30
 
 Owners can finally **craft** Live Channels stations in Admin and publish them to Tunarr — custom recipes, collections, starter packs, plus refill/delete — without opening Tunarr’s UI.

@@ -1,6 +1,38 @@
 {
-  "generated_at": "2026-07-30T02:32:32Z",
+  "generated_at": "2026-07-30T02:45:05Z",
   "releases": [
+    {
+      "version": "1.29.15",
+      "date": "2026-07-30",
+      "summary": "Plex Live TV “session has ended” after guide titles: Tunarr now prefers direct library file reads when media binds exist, Attach cleans orphan dead tuners, and HELP covers the desktop Direct Stream quirk.",
+      "highlights": [
+        "**Live TV reads your library files.** With media mounts, Tunarr uses direct file access instead of fragile mid-program HTTP seeks through Plex.",
+        "**Leftover dead tuners get cleared.** Attach Tunarr guide removes orphan dead grabbers (not your OTA or Tunarr) so the guide is not cluttered with ghost sources.",
+        "**Clearer play tips.** If the desktop Plex app still says the session ended, use Plex Web or disable Direct Stream — documented in Help."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Tunarr `plexStream.streamPath` left at `network` after media binds landed — now set to `direct` on wire / lifecycle when binds are configured (`TunarrClient.ensure_plex_stream_path_direct`).",
+            "Stale dead Plex grabbers (e.g. old `:7007` M3U with empty `deviceId`) confused Live TV sources; `prune_dead_grabber_devices` runs during Attach (OTA + Tunarr preserved)."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Owner HELP Live Channels: use Tunarr HTTP port for Tuner Setup; Direct Stream / Tunarr#718 workaround for desktop clients."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: `pytest tests/test_tunarr_client.py tests/test_live_channels.py -k \"plex_stream or prune_dead or wire_plex or attach_tunarr\"` — pass.",
+            "Full suite + frontend gates recorded after release prep."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.14",
       "date": "2026-07-30",

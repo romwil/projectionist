@@ -277,6 +277,13 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 - **Suggested next phase:** Optional GPU `/dev/dri` for soft-transcode; document client workaround in HELP.
 - **Owner surface:** ops / docker lifecycle / Plex Live TV
 
+### 2026-07-30 — Owner still “session has ended” after media binds (follow-up)
+
+- **Status:** `done` (Automat hotfix + code in **1.29.15**)
+- **Why / note:** Post-bind, Tunarr MPEG-TS from Plex container was healthy (~2–5 MB / 18–25s on `:18765`). Owner failures were compounded by (1) Tunarr `plexStream.streamPath` still `network` (now forced `direct` when binds exist), (2) a **dead enabled** leftover grabber at `http://10.10.1.202:7007/api/channels.m3u` (empty deviceId) causing “3 Sources” / duplicate plexomat noise — deleted via `DELETE /media/grabbers/devices/10` (OTA + Tunarr kept), (3) Tunarr 1.3.9 HDHR is on the **HTTP** port (mapped `18765`), not container `5004`/`15004` (nothing listens there), (4) Plex grabber logs still show Tunarr#718-class Direct Stream / matroska AAC extradata deaths on desktop — HELP documents web client or disable Direct Stream.
+- **Suggested next phase:** Optional stop publishing unused `5004→15004` remap; GPU soft-transcode.
+- **Owner surface:** ops / plex_attach prune / Tunarr plex-settings / HELP
+
 ### 2026-07-29 — Tunarr airing / consumption progress
 
 #### Airing progress derived from guide start/stop (landed)
