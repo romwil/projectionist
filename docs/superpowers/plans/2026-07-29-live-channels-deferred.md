@@ -185,6 +185,13 @@ From the spec — park here so they are not forgotten if capacity allows after c
 - **Owner surface:** …
 -->
 
+### 2026-07-30 — Cold HLS / deep playhead → Plex “session has ended” (1.29.18)
+
+- **Status:** `done` (Automat evidence + code in **1.29.18**)
+- **Why / note:** Guide titles were real (Flight 7500 / Alien³ / Bonhoeffer / Alice) but Plex play failed. From Plex container, cold Chaos `.ts` timed out at **0 bytes**; Tunarr logs showed `Stream not ready yet` / `No master playlist` while ffmpeg used huge mid-program `-ss` (Chaos **267m** into Bonhoeffer — past EOF). Plex: `Session appears to have died from under us`. **Fix:** `prepare_channels_for_playback` start-over when cold+deep or past EOF, aggressive media-playlist + MPEG-TS warm, keepalive scheduler (~3 min), hooked on publish / lifecycle / attach-guide + `POST …/prepare-playback`. After align+warm, all four channels delivered ~2.5 MB/10s from Plex container.
+- **Suggested next phase:** Optional XMLTV programme-icon host rewrite (still `127.0.0.1` for posters; channel icons already LAN). Desktop Direct Stream remains Tunarr#718 secondary tip.
+- **Owner surface:** Plex Live TV / publish / attach / Admin prepare-playback
+
 ### 2026-07-29 — `TunarrClient` schedule-slots gap
 
 - **Status:** `deferred`

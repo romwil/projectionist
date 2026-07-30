@@ -25,6 +25,14 @@ _DEFAULT_GROUP_TITLE = "Projectionist"
 _DEFAULT_GUIDE_MINIMUM_DURATION_MS = 30_000
 _DEFAULT_STREAM_MODE = "hls"
 
+# Cold HDHR tunes that seek deep into a program (or past EOF) lose the race with
+# Plex before ffmpeg writes playlist.m3u8 → "Stream not ready yet" / 0-byte .ts
+# → Plex "This live TV session has ended." Snap playhead forward when deep/cold.
+_ALIGN_MIN_ELAPSED_MS = 5 * 60 * 1000
+_WARM_DEFAULT_TIMEOUT_S = 45
+_WARM_MIN_TS_BYTES = 200_000
+_WARM_POLL_SLEEP_S = 1.5
+
 
 def plex_media_source_body(
     *,
@@ -302,6 +310,44 @@ def channel_create_body(
     }
 
 
+def _channel_put_body(
+    ch: Mapping[str, Any],
+    *,
+    name: str = "",
+    icon: Optional[Mapping[str, Any]] = None,
+    start_time_ms: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Trimmed Tunarr ``PUT /channels/{id}`` body from a list/detail channel row."""
+    cid = str(ch.get("id") or ch.get("uuid") or "").strip()
+    number = int(ch.get("number") or 0)
+    resolved_name = str(name or ch.get("name") or "").strip()
+    if not resolved_name:
+        resolved_name = f"Channel {number}" if number else "Station"
+    current_icon = ch.get("icon") if isinstance(ch.get("icon"), Mapping) else {}
+    return {
+        "id": cid,
+        "name": resolved_name[:48],
+        "number": number,
+        "stealth": bool(ch.get("stealth", False)),
+        "duration": int(ch.get("duration") or 0),
+        "disableFillerOverlay": bool(ch.get("disableFillerOverlay", False)),
+        "groupTitle": str(ch.get("groupTitle") or _DEFAULT_GROUP_TITLE),
+        "guideMinimumDuration": int(
+            ch.get("guideMinimumDuration") or _DEFAULT_GUIDE_MINIMUM_DURATION_MS
+        ),
+        "icon": dict(icon) if icon is not None else dict(current_icon or channel_icon_body("")),
+        "offline": dict(ch.get("offline") or {"mode": "pic"}),
+        "startTime": int(
+            start_time_ms
+            if start_time_ms is not None
+            else (ch.get("startTime") or time.time() * 1000)
+        ),
+        "streamMode": str(ch.get("streamMode") or _DEFAULT_STREAM_MODE),
+        "transcodeConfigId": str(ch.get("transcodeConfigId") or ""),
+        "subtitlesEnabled": bool(ch.get("subtitlesEnabled", False)),
+    }
+
+
 def ensure_channel_labels(
     client: TunarrClient,
     *,
@@ -335,25 +381,11 @@ def ensure_channel_labels(
         needs_name = not str(ch.get("name") or "").strip()
         if not needs_icon and not needs_name:
             continue
-        # Prefer a trimmed body — list payloads include sessions/programCount.
-        body: Dict[str, Any] = {
-            "id": cid,
-            "name": name[:48],
-            "number": number,
-            "stealth": bool(ch.get("stealth", False)),
-            "duration": int(ch.get("duration") or 0),
-            "disableFillerOverlay": bool(ch.get("disableFillerOverlay", False)),
-            "groupTitle": str(ch.get("groupTitle") or _DEFAULT_GROUP_TITLE),
-            "guideMinimumDuration": int(
-                ch.get("guideMinimumDuration") or _DEFAULT_GUIDE_MINIMUM_DURATION_MS
-            ),
-            "icon": dict(icon) if needs_icon else dict(current_icon or channel_icon_body("")),
-            "offline": dict(ch.get("offline") or {"mode": "pic"}),
-            "startTime": int(ch.get("startTime") or time.time() * 1000),
-            "streamMode": str(ch.get("streamMode") or _DEFAULT_STREAM_MODE),
-            "transcodeConfigId": str(ch.get("transcodeConfigId") or ""),
-            "subtitlesEnabled": bool(ch.get("subtitlesEnabled", False)),
-        }
+        body = _channel_put_body(
+            ch,
+            name=name,
+            icon=dict(icon) if needs_icon else dict(current_icon or channel_icon_body("")),
+        )
         if not body["transcodeConfigId"]:
             errors.append(f"{cid}: missing transcodeConfigId")
             continue
@@ -371,36 +403,259 @@ def ensure_channel_labels(
     }
 
 
+def _sessions_by_channel(client: TunarrClient) -> Dict[str, Any]:
+    try:
+        raw = client.list_sessions()
+    except Exception:  # noqa: BLE001
+        return {}
+    return dict(raw) if isinstance(raw, Mapping) else {}
+
+
+def should_align_playhead(
+    *,
+    elapsed_ms: int,
+    program_duration_ms: int = 0,
+    has_session: bool = False,
+    min_elapsed_ms: int = _ALIGN_MIN_ELAPSED_MS,
+) -> bool:
+    """True when a mid-program seek is likely to cold-fail Plex HDHR tunes."""
+    elapsed = max(0, int(elapsed_ms or 0))
+    duration = max(0, int(program_duration_ms or 0))
+    if duration and elapsed > duration:
+        return True  # past EOF — ffmpeg seek hangs / empty playlist
+    if has_session:
+        return False
+    return elapsed >= max(0, int(min_elapsed_ms or 0))
+
+
+def align_channel_playhead_to_program_start(
+    client: TunarrClient,
+    channel: Mapping[str, Any],
+    *,
+    has_session: bool = False,
+    min_elapsed_ms: int = _ALIGN_MIN_ELAPSED_MS,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Shift channel ``startTime`` so 'now' is the start of the current program.
+
+    Deep ``-ss`` seeks (or seeks past file EOF) delay HLS readiness past Plex's
+    patience. Start-over keeps cold tunes near ``-ss 0``.
+    """
+    cid = str(channel.get("id") or channel.get("uuid") or "").strip()
+    if not cid:
+        return {"ok": False, "aligned": False, "error": "channel_id required"}
+    now_ms = int(time.time() * 1000)
+    try:
+        playing = client.get_now_playing(cid) or {}
+    except Exception as error:  # noqa: BLE001
+        return {
+            "ok": False,
+            "aligned": False,
+            "channel_id": cid,
+            "error": str(error)[:200],
+        }
+    if not isinstance(playing, Mapping):
+        return {"ok": True, "aligned": False, "channel_id": cid, "reason": "no_now_playing"}
+    prog_start = int(playing.get("start") or 0)
+    prog_duration = int(playing.get("duration") or 0)
+    title = ""
+    program = playing.get("program")
+    if isinstance(program, Mapping):
+        title = str(program.get("title") or "").strip()
+    if not title:
+        title = str(playing.get("title") or "").strip()
+    elapsed = max(0, now_ms - prog_start) if prog_start else 0
+    if not force and not should_align_playhead(
+        elapsed_ms=elapsed,
+        program_duration_ms=prog_duration,
+        has_session=has_session,
+        min_elapsed_ms=min_elapsed_ms,
+    ):
+        return {
+            "ok": True,
+            "aligned": False,
+            "channel_id": cid,
+            "elapsed_ms": elapsed,
+            "title": title,
+            "reason": "near_start_or_active",
+        }
+    channel_start = int(channel.get("startTime") or now_ms)
+    new_start = channel_start + elapsed
+    body = _channel_put_body(channel, start_time_ms=new_start)
+    if not body["transcodeConfigId"]:
+        return {
+            "ok": False,
+            "aligned": False,
+            "channel_id": cid,
+            "error": "missing transcodeConfigId",
+        }
+    try:
+        client.update_channel(cid, body)
+    except Exception as error:  # noqa: BLE001
+        return {
+            "ok": False,
+            "aligned": False,
+            "channel_id": cid,
+            "error": str(error)[:200],
+        }
+    return {
+        "ok": True,
+        "aligned": True,
+        "channel_id": cid,
+        "elapsed_ms": elapsed,
+        "title": title,
+        "start_time_ms": new_start,
+        "message": f"Start-over: was {elapsed // 60000}m into {title or 'program'}.",
+    }
+
+
 def warm_channel_stream(
     client: TunarrClient,
     channel_id: str,
     *,
-    timeout: int = 12,
+    timeout: int = _WARM_DEFAULT_TIMEOUT_S,
+    min_ts_bytes: int = _WARM_MIN_TS_BYTES,
 ) -> Dict[str, Any]:
-    """Best-effort HLS warm-up so the first Plex tune is less likely to race cold start."""
+    """Warm HLS until the media playlist has segments, then pull MPEG-TS bytes.
+
+    A single GET of the master ``.m3u8`` is not enough — Tunarr often returns the
+    master before ``playlist.m3u8`` / segments exist. Plex HDHR uses ``.ts``.
+    """
     from urllib.request import Request, urlopen
 
     cid = str(channel_id or "").strip()
     if not cid:
         return {"ok": False, "error": "channel_id required"}
-    url = f"{client.base_url.rstrip('/')}/stream/channels/{cid}.m3u8?mode=hls"
+    base = client.base_url.rstrip("/")
+    master_url = f"{base}/stream/channels/{cid}.m3u8?mode=hls"
+    media_url = f"{base}/stream/channels/{cid}/hls/stream.m3u8"
+    ts_url = f"{base}/stream/channels/{cid}.ts"
+    deadline = time.time() + max(8, int(timeout or _WARM_DEFAULT_TIMEOUT_S))
+    playlist_ready = False
+    last_error = ""
+    poll_count = 0
+    hard_fail = False
+    while time.time() < deadline and not hard_fail:
+        poll_count += 1
+        for url in (media_url, master_url):
+            try:
+                request = Request(url, method="GET")
+                with urlopen(request, timeout=8) as response:
+                    body = response.read(8192).decode("utf-8", "replace")
+                if "#EXTINF" in body:
+                    playlist_ready = True
+                    break
+                if body.strip():
+                    last_error = "playlist returned without segments yet"
+            except Exception as error:  # noqa: BLE001
+                last_error = str(error)[:160]
+                # Connection refused / DNS / invalid URL — do not burn the full timeout.
+                err_l = last_error.lower()
+                if any(
+                    token in err_l
+                    for token in (
+                        "connection refused",
+                        "nodename nor servname",
+                        "name or service not known",
+                        "timed out",
+                        "unreachable",
+                        "invalid url",
+                        "unknown url type",
+                    )
+                ):
+                    hard_fail = True
+                    break
+        if playlist_ready or hard_fail:
+            break
+        time.sleep(_WARM_POLL_SLEEP_S)
+
+    ts_bytes = 0
+    ts_error = ""
     try:
-        request = Request(url, method="GET")
-        with urlopen(request, timeout=max(3, int(timeout or 12))) as response:
-            body = response.read(4096)
-        return {
-            "ok": bool(body),
-            "channel_id": cid,
-            "bytes": len(body or b""),
-            "message": "Stream playlist warmed.",
-        }
+        request = Request(ts_url, method="GET")
+        with urlopen(request, timeout=max(10, int(timeout or _WARM_DEFAULT_TIMEOUT_S))) as response:
+            ts_bytes = len(response.read(max(int(min_ts_bytes or 0), _WARM_MIN_TS_BYTES)))
     except Exception as error:  # noqa: BLE001
-        return {
-            "ok": False,
-            "channel_id": cid,
-            "error": str(error)[:200],
-            "message": "Warm-up skipped (tune may still work after a short wait).",
-        }
+        ts_error = str(error)[:200]
+
+    ok = playlist_ready or ts_bytes >= max(1, int(min_ts_bytes or _WARM_MIN_TS_BYTES) // 4)
+    return {
+        "ok": ok,
+        "channel_id": cid,
+        "playlist_ready": playlist_ready,
+        "ts_bytes": ts_bytes,
+        "polls": poll_count,
+        "error": "" if ok else (ts_error or last_error or "stream not ready"),
+        "message": (
+            "Stream warmed (playlist + MPEG-TS)."
+            if ok
+            else "Warm-up incomplete — first Plex tune may still race cold start."
+        ),
+    }
+
+
+def prepare_channels_for_playback(
+    client: TunarrClient,
+    *,
+    settings: Any = None,
+    channel_ids: Optional[Sequence[str]] = None,
+    icon_url: str = "",
+    align_playhead: bool = True,
+    warm_streams: bool = True,
+    min_elapsed_ms: int = _ALIGN_MIN_ELAPSED_MS,
+) -> Dict[str, Any]:
+    """Labels + start-over (when deep/cold) + aggressive HLS warm for Plex Live TV."""
+    wanted = {str(cid).strip() for cid in (channel_ids or ()) if str(cid).strip()}
+    resolved_icon = str(icon_url or "").strip() or resolve_channel_icon_url(settings)
+    labels = ensure_channel_labels(
+        client, icon_url=resolved_icon, channel_ids=list(wanted) if wanted else None
+    )
+    sessions = _sessions_by_channel(client)
+    channels = [ch for ch in client.list_channels() if isinstance(ch, Mapping)]
+    if wanted:
+        channels = [
+            ch
+            for ch in channels
+            if str(ch.get("id") or ch.get("uuid") or "").strip() in wanted
+        ]
+
+    aligned: List[Dict[str, Any]] = []
+    if align_playhead:
+        for ch in channels:
+            cid = str(ch.get("id") or ch.get("uuid") or "").strip()
+            has_session = bool(sessions.get(cid))
+            result = align_channel_playhead_to_program_start(
+                client,
+                ch,
+                has_session=has_session,
+                min_elapsed_ms=min_elapsed_ms,
+            )
+            aligned.append(result)
+
+    warmed: List[Dict[str, Any]] = []
+    if warm_streams:
+        for ch in channels:
+            cid = str(ch.get("id") or ch.get("uuid") or "").strip()
+            if cid:
+                warmed.append(warm_channel_stream(client, cid))
+
+    aligned_count = sum(1 for row in aligned if row.get("aligned"))
+    warmed_ok = sum(1 for row in warmed if row.get("ok"))
+    return {
+        "ok": (not labels.get("errors"))
+        and (warmed_ok == len(warmed) if warmed else True),
+        "labels": labels,
+        "aligned": aligned,
+        "count_aligned": aligned_count,
+        "warmed": warmed,
+        "count_warmed_ok": warmed_ok,
+        "count_channels": len(channels),
+        "icon_url": resolved_icon,
+        "message": (
+            f"Prepared {len(channels)} station(s): "
+            f"{aligned_count} start-over, {warmed_ok}/{len(warmed) or 0} warmed."
+        ),
+    }
 
 
 def plex_collection_item_hints(
@@ -884,13 +1139,18 @@ def publish_recipes(
         for row in (*published, *programming_updated)
         if str(row.get("channel_id") or "").strip()
     ]
-    labels = ensure_channel_labels(
-        client, icon_url=resolved_icon, channel_ids=touched_ids or None
+    # Prefer preparing every station after publish — idle channels go cold and
+    # deep mid-program seeks race Plex ("session has ended").
+    prepare = prepare_channels_for_playback(
+        client,
+        settings=settings,
+        channel_ids=touched_ids or None,
+        icon_url=resolved_icon,
+        align_playhead=True,
+        warm_streams=bool(warm_streams),
     )
-    warmed: List[Dict[str, Any]] = []
-    if warm_streams:
-        for cid in touched_ids[:4]:
-            warmed.append(warm_channel_stream(client, cid))
+    labels = prepare.get("labels") if isinstance(prepare.get("labels"), dict) else {}
+    warmed = list(prepare.get("warmed") or [])
 
     ok = bool(published) and not errors
     if published and errors:
@@ -914,6 +1174,13 @@ def publish_recipes(
         )
     if labels.get("count_updated"):
         note += f" Updated labels/icons on {labels['count_updated']} station(s)."
+    if prepare.get("count_aligned"):
+        note += (
+            f" Start-over on {prepare['count_aligned']} station(s) "
+            "(avoids deep mid-program seeks that fail cold Plex tunes)."
+        )
+    if warmed:
+        note += f" Warmed {prepare.get('count_warmed_ok', 0)}/{len(warmed)} stream(s)."
 
     return {
         "ok": ok or (bool(published) and not errors),
@@ -930,6 +1197,7 @@ def publish_recipes(
         "catalog_size": len(catalog),
         "labels": labels,
         "warmed": warmed,
+        "prepare": prepare,
         "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "note": note,
     }

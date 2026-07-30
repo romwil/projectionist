@@ -1328,8 +1328,10 @@ class PreflightAndPublishTests(unittest.TestCase):
         from projectionist.live_channels.publish import publish_recipes
 
         client = MagicMock()
+        client.base_url = "http://tunarr.test:8000"
         client.list_media_sources.return_value = []
         client.list_channels.return_value = []
+        client.list_sessions.return_value = {}
         client.default_transcode_config_id.return_value = "tc-default"
         client.create_channel.side_effect = lambda body: {
             "id": f"id-{body['channel']['number']}",
@@ -1341,7 +1343,17 @@ class PreflightAndPublishTests(unittest.TestCase):
             ChannelRecipe(name="Chaos", number=100, source="chaos", programming_mode=ProgrammingMode.CHAOS),
             ChannelRecipe(name="Motif", number=101, source="motif", programming_mode=ProgrammingMode.SHUFFLE),
         ]
-        result = publish_recipes(client, recipes)
+        with patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={
+                "ok": True,
+                "labels": {},
+                "warmed": [],
+                "count_aligned": 0,
+                "count_warmed_ok": 0,
+            },
+        ):
+            result = publish_recipes(client, recipes)
         self.assertEqual(result["count_published"], 2)
         self.assertEqual(client.create_channel.call_count, 2)
         self.assertTrue(result["ok"])
@@ -1354,29 +1366,53 @@ class PreflightAndPublishTests(unittest.TestCase):
         from projectionist.live_channels.publish import publish_recipes
 
         client = MagicMock()
+        client.base_url = "http://tunarr.test:8000"
         client.list_media_sources.return_value = []
         client.list_channels.return_value = [{"id": "x", "name": "Chaos", "number": 100}]
+        client.list_sessions.return_value = {}
         client.default_transcode_config_id.return_value = "tc-default"
         client.set_channel_programming.return_value = {"totalPrograms": 0, "lineup": []}
         # Default fill_programming=True refreshes existing empty stations.
-        result = publish_recipes(
-            client,
-            [ChannelRecipe(name="Chaos", number=100, source="chaos")],
-        )
+        with patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={
+                "ok": True,
+                "labels": {},
+                "warmed": [],
+                "count_aligned": 0,
+                "count_warmed_ok": 0,
+            },
+        ):
+            result = publish_recipes(
+                client,
+                [ChannelRecipe(name="Chaos", number=100, source="chaos")],
+            )
         self.assertEqual(result["count_skipped"], 0)
         self.assertEqual(result["count_programming_updated"], 1)
         client.create_channel.assert_not_called()
         client.set_channel_programming.assert_called()
 
         client2 = MagicMock()
+        client2.base_url = "http://tunarr.test:8000"
         client2.list_media_sources.return_value = []
         client2.list_channels.return_value = [{"id": "x", "name": "Chaos", "number": 100}]
+        client2.list_sessions.return_value = {}
         client2.default_transcode_config_id.return_value = "tc-default"
-        skipped = publish_recipes(
-            client2,
-            [ChannelRecipe(name="Chaos", number=100, source="chaos")],
-            fill_programming=False,
-        )
+        with patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={
+                "ok": True,
+                "labels": {},
+                "warmed": [],
+                "count_aligned": 0,
+                "count_warmed_ok": 0,
+            },
+        ):
+            skipped = publish_recipes(
+                client2,
+                [ChannelRecipe(name="Chaos", number=100, source="chaos")],
+                fill_programming=False,
+            )
         self.assertEqual(skipped["count_skipped"], 1)
         client2.create_channel.assert_not_called()
 
@@ -1415,7 +1451,9 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "program": {"uuid": "p2", "title": "Heat", "genres": ["Crime"]},
             },
         ]
+        client.base_url = "http://tunarr.test:8000"
         client.list_channels.return_value = []
+        client.list_sessions.return_value = {}
         client.default_transcode_config_id.return_value = "tc"
         client.create_channel.side_effect = lambda body: {
             "id": "ch-101",
@@ -1424,10 +1462,20 @@ class PreflightAndPublishTests(unittest.TestCase):
         }
         client.set_channel_programming.return_value = {"totalPrograms": 1}
 
-        result = publish_recipes(
-            client,
-            [ChannelRecipe(name="Sci-Fi", number=101, source="motif")],
-        )
+        with patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={
+                "ok": True,
+                "labels": {},
+                "warmed": [],
+                "count_aligned": 0,
+                "count_warmed_ok": 0,
+            },
+        ):
+            result = publish_recipes(
+                client,
+                [ChannelRecipe(name="Sci-Fi", number=101, source="motif")],
+            )
         self.assertTrue(result["ok"])
         self.assertEqual(result["count_content_filled"], 1)
         body = client.set_channel_programming.call_args.args[1]
@@ -1488,6 +1536,142 @@ class ReadyNudgeTests(unittest.TestCase):
             self.db, settings, ready=True, channel_count=2
         )
         self.assertEqual(second["delivered"], 0)
+
+
+class PlayheadAlignAndWarmTests(unittest.TestCase):
+    def test_should_align_playhead_past_eof_and_cold_deep(self) -> None:
+        from projectionist.live_channels.publish import should_align_playhead
+
+        self.assertTrue(
+            should_align_playhead(
+                elapsed_ms=10_000_000,
+                program_duration_ms=5_000_000,
+                has_session=True,
+            )
+        )
+        self.assertFalse(
+            should_align_playhead(
+                elapsed_ms=60_000,
+                program_duration_ms=5_000_000,
+                has_session=True,
+            )
+        )
+        self.assertTrue(
+            should_align_playhead(
+                elapsed_ms=6 * 60 * 1000,
+                program_duration_ms=5_000_000,
+                has_session=False,
+            )
+        )
+        self.assertFalse(
+            should_align_playhead(
+                elapsed_ms=30_000,
+                program_duration_ms=5_000_000,
+                has_session=False,
+            )
+        )
+
+    def test_align_channel_playhead_updates_start_time(self) -> None:
+        from projectionist.live_channels.publish import (
+            align_channel_playhead_to_program_start,
+        )
+
+        now_ms = 1_800_000_000_000
+        prog_start = now_ms - (40 * 60 * 1000)
+        channel = {
+            "id": "ch-1",
+            "name": "Mystery",
+            "number": 100,
+            "startTime": now_ms - (3 * 60 * 60 * 1000),
+            "duration": 10_000_000,
+            "transcodeConfigId": "tc-1",
+            "icon": {"path": "http://10.10.1.202:18765/images/tunarr.png"},
+            "offline": {"mode": "pic"},
+        }
+        client = MagicMock()
+        client.get_now_playing.return_value = {
+            "start": prog_start,
+            "duration": 90 * 60 * 1000,
+            "program": {"title": "Flight 7500"},
+        }
+        with patch("projectionist.live_channels.publish.time.time", return_value=now_ms / 1000):
+            result = align_channel_playhead_to_program_start(
+                client, channel, has_session=False, min_elapsed_ms=5 * 60 * 1000
+            )
+        self.assertTrue(result["aligned"])
+        self.assertEqual(result["title"], "Flight 7500")
+        client.update_channel.assert_called_once()
+        body = client.update_channel.call_args.args[1]
+        self.assertEqual(body["startTime"], channel["startTime"] + (40 * 60 * 1000))
+
+    def test_warm_channel_stream_ready_when_media_playlist_has_segments(self) -> None:
+        from projectionist.live_channels.publish import warm_channel_stream
+
+        client = MagicMock()
+        client.base_url = "http://tunarr.test:8000"
+        playlist = "#EXTM3U\n#EXTINF:4.0,\ndata000.ts\n"
+
+        class _Resp:
+            def __init__(self, body: bytes) -> None:
+                self._body = body
+
+            def read(self, _n: int = -1) -> bytes:
+                return self._body
+
+            def __enter__(self) -> "_Resp":
+                return self
+
+            def __exit__(self, *args: object) -> None:
+                return None
+
+        def fake_urlopen(req: object, timeout: int = 0) -> _Resp:  # noqa: ARG001
+            url = getattr(req, "full_url", None) or str(req)
+            if "stream.m3u8" in url or ".m3u8" in url:
+                return _Resp(playlist.encode())
+            return _Resp(b"\x00" * 250_000)
+
+        with patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            result = warm_channel_stream(client, "ch-1", timeout=5)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["playlist_ready"])
+        self.assertGreaterEqual(result["ts_bytes"], 200_000)
+
+    def test_prepare_channels_for_playback_aligns_and_warms(self) -> None:
+        from projectionist.live_channels.publish import prepare_channels_for_playback
+
+        client = MagicMock()
+        client.base_url = "http://tunarr.test:8000"
+        client.list_sessions.return_value = {}
+        client.list_channels.return_value = [
+            {
+                "id": "ch-1",
+                "name": "Chaos",
+                "number": 102,
+                "startTime": 1_700_000_000_000,
+                "duration": 100_000_000,
+                "transcodeConfigId": "tc-1",
+                "icon": {
+                    "path": "http://10.10.1.202:18765/images/tunarr.png",
+                    "width": 256,
+                    "duration": 0,
+                    "position": "bottom-right",
+                },
+                "offline": {"mode": "pic"},
+            }
+        ]
+        with patch(
+            "projectionist.live_channels.publish.align_channel_playhead_to_program_start",
+            return_value={"ok": True, "aligned": True, "channel_id": "ch-1"},
+        ) as align, patch(
+            "projectionist.live_channels.publish.warm_channel_stream",
+            return_value={"ok": True, "channel_id": "ch-1", "ts_bytes": 300_000},
+        ) as warm:
+            result = prepare_channels_for_playback(client, icon_url="")
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["count_aligned"], 1)
+        self.assertEqual(result["count_warmed_ok"], 1)
+        align.assert_called_once()
+        warm.assert_called_once()
 
 
 if __name__ == "__main__":
