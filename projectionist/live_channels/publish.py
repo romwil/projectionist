@@ -11,7 +11,11 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 from projectionist.connectors.tunarr import TunarrClient
 from projectionist.live_channels.recipes import (
     ChannelRecipe,
+    MediaScope,
     ProgrammingMode,
+    library_type_matches_scope,
+    normalize_media_scope,
+    program_type_matches_scope,
     recipe_from_mapping,
 )
 
@@ -19,6 +23,7 @@ from projectionist.live_channels.recipes import (
 _PREFERRED_LIBRARY_TYPES = frozenset({"movies", "shows"})
 _MIN_PROGRAM_DURATION_MS = 60_000
 _DEFAULT_FILL_LIMIT = 30
+_DEFAULT_PAD_FLEX_MAX_MINUTES = 15
 
 # Tunarr 1.3.x ``createChannelV2`` requires these channel fields (OpenAPI).
 _DEFAULT_GROUP_TITLE = "Projectionist"
@@ -268,6 +273,67 @@ def resolve_channel_icon_url(settings: Any = None, *, tunarr_base: str = "") -> 
     return f"{base}/images/tunarr.png"
 
 
+def resolve_media_scope(
+    settings: Any = None,
+    *,
+    channel_id: str = "",
+    recipe: Optional[ChannelRecipe] = None,
+    default: str = MediaScope.BOTH.value,
+) -> str:
+    """Resolve media scope from recipe, then station_meta, then default."""
+    if recipe is not None:
+        scope = normalize_media_scope(getattr(recipe, "media_scope", None), default="")
+        if scope:
+            return scope
+    cid = str(channel_id or "").strip()
+    tunarr = getattr(settings, "tunarr", None) if settings is not None else None
+    meta = getattr(tunarr, "station_meta", None) if tunarr is not None else None
+    if cid and isinstance(meta, Mapping):
+        row = meta.get(cid)
+        if isinstance(row, Mapping):
+            scope = normalize_media_scope(row.get("media_scope"), default="")
+            if scope:
+                return scope
+    return normalize_media_scope(default)
+
+
+def set_station_media_scope(
+    settings: Any,
+    channel_id: str,
+    scope: str,
+) -> None:
+    """Persist media_scope on settings.tunarr.station_meta[channel_id] (in-memory)."""
+    cid = str(channel_id or "").strip()
+    if not cid or settings is None:
+        return
+    tunarr = getattr(settings, "tunarr", None)
+    if tunarr is None:
+        return
+    meta = getattr(tunarr, "station_meta", None)
+    if not isinstance(meta, dict):
+        meta = {}
+        try:
+            setattr(tunarr, "station_meta", meta)
+        except Exception:  # noqa: BLE001
+            return
+    row = dict(meta.get(cid) or {}) if isinstance(meta.get(cid), Mapping) else {}
+    row["media_scope"] = normalize_media_scope(scope)
+    meta[cid] = row
+
+
+def pad_flex_max_ms(settings: Any = None) -> int:
+    tunarr = getattr(settings, "tunarr", None) if settings is not None else None
+    try:
+        minutes = int(
+            getattr(tunarr, "pad_flex_max_minutes", _DEFAULT_PAD_FLEX_MAX_MINUTES)
+            or _DEFAULT_PAD_FLEX_MAX_MINUTES
+        )
+    except (TypeError, ValueError):
+        minutes = _DEFAULT_PAD_FLEX_MAX_MINUTES
+    minutes = max(0, min(minutes, 30))
+    return minutes * 60 * 1000
+
+
 def channel_create_body(
     recipe: ChannelRecipe,
     *,
@@ -276,6 +342,7 @@ def channel_create_body(
     start_time_ms: Optional[int] = None,
     group_title: str = _DEFAULT_GROUP_TITLE,
     icon_url: str = "",
+    filler_list_id: str = "",
 ) -> Dict[str, Any]:
     """Tunarr ``POST /api/channels`` body for ``createChannelV2``.
 
@@ -283,31 +350,39 @@ def channel_create_body(
     live OpenAPI ``oneOf`` ``type=new`` branch — including a client-generated
     channel UUID and an existing ``transcodeConfigId``.
     """
+    from projectionist.live_channels.filler import continuity_channel_fields
+
     tcid = str(transcode_config_id or "").strip()
     if not tcid:
         raise ValueError("transcode_config_id is required to create a Tunarr channel")
     name = str(recipe.name or "").strip() or f"Channel {int(recipe.number)}"
-    return {
-        "type": "new",
-        "channel": {
-            "id": str(channel_id or uuid.uuid4()),
-            "name": name[:48],
-            "number": int(recipe.number),
-            "stealth": False,
-            "duration": 0,
-            "disableFillerOverlay": False,
-            "groupTitle": str(group_title or _DEFAULT_GROUP_TITLE),
-            "guideMinimumDuration": _DEFAULT_GUIDE_MINIMUM_DURATION_MS,
-            "icon": channel_icon_body(icon_url),
-            "offline": {"mode": "pic"},
-            "startTime": int(
-                start_time_ms if start_time_ms is not None else time.time() * 1000
-            ),
-            "streamMode": _DEFAULT_STREAM_MODE,
-            "transcodeConfigId": tcid,
-            "subtitlesEnabled": False,
-        },
+    channel: Dict[str, Any] = {
+        "id": str(channel_id or uuid.uuid4()),
+        "name": name[:48],
+        "number": int(recipe.number),
+        "stealth": False,
+        "duration": 0,
+        "disableFillerOverlay": False,
+        "groupTitle": str(group_title or _DEFAULT_GROUP_TITLE),
+        "guideMinimumDuration": _DEFAULT_GUIDE_MINIMUM_DURATION_MS,
+        "icon": channel_icon_body(icon_url),
+        "offline": {"mode": "pic"},
+        "startTime": int(
+            start_time_ms if start_time_ms is not None else time.time() * 1000
+        ),
+        "streamMode": _DEFAULT_STREAM_MODE,
+        "transcodeConfigId": tcid,
+        "subtitlesEnabled": False,
     }
+    channel.update(
+        continuity_channel_fields(
+            filler_list_id=filler_list_id,
+            station_name=name,
+            icon_url=icon_url,
+            attach=bool(str(filler_list_id or "").strip()),
+        )
+    )
+    return {"type": "new", "channel": channel}
 
 
 def _channel_put_body(
@@ -324,7 +399,7 @@ def _channel_put_body(
     if not resolved_name:
         resolved_name = f"Channel {number}" if number else "Station"
     current_icon = ch.get("icon") if isinstance(ch.get("icon"), Mapping) else {}
-    return {
+    body: Dict[str, Any] = {
         "id": cid,
         "name": resolved_name[:48],
         "number": number,
@@ -346,6 +421,13 @@ def _channel_put_body(
         "transcodeConfigId": str(ch.get("transcodeConfigId") or ""),
         "subtitlesEnabled": bool(ch.get("subtitlesEnabled", False)),
     }
+    if ch.get("fillerCollections") is not None:
+        body["fillerCollections"] = list(ch.get("fillerCollections") or [])
+    if ch.get("fillerRepeatCooldown") is not None:
+        body["fillerRepeatCooldown"] = ch.get("fillerRepeatCooldown")
+    if ch.get("guideFlexTitle") is not None:
+        body["guideFlexTitle"] = ch.get("guideFlexTitle")
+    return body
 
 
 def ensure_channel_labels(
@@ -689,13 +771,19 @@ def programming_body_for_recipe(
     recipe: ChannelRecipe,
     *,
     programs: Optional[Sequence[Mapping[str, Any]]] = None,
+    pad_lineups: bool = True,
+    max_flex_ms: int = _DEFAULT_PAD_FLEX_MAX_MINUTES * 60 * 1000,
+    start_time_ms: Optional[int] = None,
 ) -> Optional[Dict[str, Any]]:
     """Best-effort programming payload for ``POST …/programming``.
 
     Tunarr 1.3.x manual updates require ``lineup`` (array), not ``programs``.
     Prefer real ``content`` rows (Tunarr program UUIDs + duration). Fall back to
     flex/empty shells so create+set still succeed before a media-source scan.
+    When ``pad_lineups`` is true, insert flex (≤ ``max_flex_ms``) toward :00/:30.
     """
+    from projectionist.live_channels.filler import pad_lineup_with_flex
+
     content_lineup: List[Dict[str, Any]] = []
     for raw in programs or ():
         if not isinstance(raw, Mapping):
@@ -709,7 +797,16 @@ def programming_body_for_recipe(
             continue
         content_lineup.append({"type": "content", "id": pid, "duration": duration})
     if content_lineup:
-        return {"type": "manual", "lineup": content_lineup}
+        lineup = (
+            pad_lineup_with_flex(
+                content_lineup,
+                max_flex_ms=max_flex_ms,
+                start_time_ms=start_time_ms,
+            )
+            if pad_lineups
+            else content_lineup
+        )
+        return {"type": "manual", "lineup": lineup}
 
     # Flex shells are duration-only — OpenAPI has no ``title`` on flex items.
     if recipe.item_hints:
@@ -746,7 +843,11 @@ def _recipe_search_terms(recipe: ChannelRecipe) -> List[str]:
     return terms
 
 
-def _normalize_program_row(item: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
+def _normalize_program_row(
+    item: Mapping[str, Any],
+    *,
+    media_scope: str = MediaScope.BOTH.value,
+) -> Optional[Dict[str, Any]]:
     """Normalize library-program or search-hit shapes into content lineup fields."""
     prog = item.get("program") if isinstance(item.get("program"), Mapping) else item
     if not isinstance(prog, Mapping):
@@ -763,6 +864,9 @@ def _normalize_program_row(item: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
         duration = 0
     if not pid or duration < _MIN_PROGRAM_DURATION_MS:
         return None
+    ptype = str(prog.get("type") or item.get("type") or "").strip().lower()
+    if ptype and not program_type_matches_scope(ptype, media_scope):
+        return None
     title = str(prog.get("title") or item.get("title") or "").strip()
     genres = prog.get("genres") or prog.get("tags") or []
     if not isinstance(genres, list):
@@ -771,6 +875,7 @@ def _normalize_program_row(item: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
         "id": pid,
         "duration": duration,
         "title": title,
+        "type": ptype,
         "genres": [str(g) for g in genres if str(g).strip()],
     }
 
@@ -781,8 +886,10 @@ def collect_programs_for_recipe(
     *,
     limit: int = _DEFAULT_FILL_LIMIT,
     catalog: Optional[Sequence[Mapping[str, Any]]] = None,
+    media_scope: str = "",
 ) -> List[Dict[str, Any]]:
     """Pick Tunarr program IDs for a recipe from an indexed catalog / search."""
+    scope = normalize_media_scope(media_scope or getattr(recipe, "media_scope", None))
     target = max(1, min(int(limit or _DEFAULT_FILL_LIMIT), 80))
     pool: List[Dict[str, Any]] = []
     seen: set[str] = set()
@@ -790,7 +897,11 @@ def collect_programs_for_recipe(
     def _add(row: Optional[Mapping[str, Any]]) -> None:
         if not row:
             return
-        normalized = _normalize_program_row(row) if "duration" in row or "program" in row else None
+        normalized = (
+            _normalize_program_row(row, media_scope=scope)
+            if "duration" in row or "program" in row
+            else None
+        )
         if normalized is None and row.get("id") and row.get("duration"):
             try:
                 duration = int(row["duration"])
@@ -798,10 +909,14 @@ def collect_programs_for_recipe(
                 return
             if duration < _MIN_PROGRAM_DURATION_MS:
                 return
+            ptype = str(row.get("type") or "").strip().lower()
+            if ptype and not program_type_matches_scope(ptype, scope):
+                return
             normalized = {
                 "id": str(row["id"]),
                 "duration": duration,
                 "title": str(row.get("title") or ""),
+                "type": ptype,
                 "genres": list(row.get("genres") or []),
             }
         if not normalized or normalized["id"] in seen:
@@ -814,18 +929,26 @@ def collect_programs_for_recipe(
             _add(item)
 
     if not pool:
-        # Pull from first enabled movie/show library when no shared catalog.
+        # Pull from enabled libraries matching media scope when no shared catalog.
         try:
-            libraries_state = ensure_media_libraries_enabled(client, scan=False)
-            msid = str(libraries_state.get("media_source_id") or "")
+            media_types = (
+                ("shows",)
+                if scope == MediaScope.TV.value
+                else ("movies",)
+                if scope == MediaScope.MOVIES.value
+                else ("movies", "shows")
+            )
+            libraries_state = ensure_media_libraries_enabled(
+                client, media_types=media_types, scan=False
+            )
             for lib in libraries_state.get("enabled") or []:
+                if not library_type_matches_scope(lib.get("media_type"), scope):
+                    continue
                 lid = str(lib.get("id") or "")
                 if not lid:
                     continue
                 for item in client.list_library_programs(lid):
                     _add(item)
-                if msid:
-                    break
         except Exception:  # noqa: BLE001
             pass
 
@@ -971,8 +1094,22 @@ def publish_recipes(
     libraries = ensure_media_libraries_enabled(client, scan=True)
     resolved_icon = str(icon_url or "").strip() or resolve_channel_icon_url(settings)
 
+    # Continuity filler list (union of filler paths) — attach when available.
+    from projectionist.live_channels.filler import (
+        attach_continuity_to_channel,
+        ensure_continuity_filler_list,
+    )
+
+    filler_state: Dict[str, Any] = {}
+    filler_list_id = ""
+    try:
+        filler_state = ensure_continuity_filler_list(client, settings, shuffle=True)
+        filler_list_id = str(filler_state.get("filler_list_id") or "")
+    except Exception as error:  # noqa: BLE001
+        filler_state = {"ok": False, "message": str(error)[:200]}
+
+    # Load full movie+show catalog (no movies-first early break — media_scope filters).
     catalog: List[Mapping[str, Any]] = []
-    msid = str(libraries.get("media_source_id") or "")
     for lib in libraries.get("enabled") or []:
         lid = str(lib.get("id") or "")
         if not lid:
@@ -981,9 +1118,6 @@ def publish_recipes(
             catalog.extend(client.list_library_programs(lid))
         except Exception:  # noqa: BLE001
             continue
-        # Movies-first is enough for starter fill; TV scan may still be queued.
-        if str(lib.get("media_type") or "") == "movies" and catalog:
-            break
 
     existing = client.list_channels()
     by_number = {
@@ -1031,10 +1165,36 @@ def publish_recipes(
             ),
         }
 
+    max_flex_ms = pad_flex_max_ms(settings)
+
+    def _scoped_catalog(scope: str) -> List[Mapping[str, Any]]:
+        if normalize_media_scope(scope) == MediaScope.BOTH.value:
+            return catalog
+        out: List[Mapping[str, Any]] = []
+        for item in catalog:
+            if not isinstance(item, Mapping):
+                continue
+            prog = item.get("program") if isinstance(item.get("program"), Mapping) else item
+            ptype = str((prog or {}).get("type") or item.get("type") or "")
+            if program_type_matches_scope(ptype, scope):
+                out.append(item)
+        return out
+
     def _apply_programming(channel_id: str, recipe: ChannelRecipe) -> Dict[str, Any]:
         nonlocal content_filled
-        programs = collect_programs_for_recipe(client, recipe, catalog=catalog)
-        prog_body = programming_body_for_recipe(recipe, programs=programs)
+        scope = normalize_media_scope(getattr(recipe, "media_scope", None))
+        programs = collect_programs_for_recipe(
+            client,
+            recipe,
+            catalog=_scoped_catalog(scope),
+            media_scope=scope,
+        )
+        prog_body = programming_body_for_recipe(
+            recipe,
+            programs=programs,
+            pad_lineups=True,
+            max_flex_ms=max_flex_ms,
+        )
         programming = (
             client.set_channel_programming(channel_id, prog_body)
             if prog_body is not None
@@ -1042,10 +1202,18 @@ def publish_recipes(
         )
         if programs:
             content_filled += 1
+        flex_count = sum(
+            1
+            for row in (prog_body or {}).get("lineup") or []
+            if isinstance(row, Mapping) and str(row.get("type") or "") == "flex"
+        )
         return {
             "programming": dict(programming) if programming else {},
             "program_count": len(programs),
             "titles": [p.get("title") for p in programs[:8]],
+            "media_scope": scope,
+            "flex_pads": flex_count,
+            "padded": flex_count > 0,
         }
 
     for raw in recipes:
@@ -1056,6 +1224,22 @@ def publish_recipes(
         ):
             match = by_number.get(recipe.number) or by_name.get(key_name) or {}
             channel_id = str(match.get("id") or match.get("uuid") or "")
+            if channel_id and settings is not None:
+                set_station_media_scope(
+                    settings,
+                    channel_id,
+                    normalize_media_scope(getattr(recipe, "media_scope", None)),
+                )
+            if filler_list_id and channel_id and isinstance(match, Mapping):
+                try:
+                    attach_continuity_to_channel(
+                        client,
+                        match,
+                        filler_list_id=filler_list_id,
+                        icon_url=resolved_icon,
+                    )
+                except Exception:  # noqa: BLE001
+                    pass
             if fill_programming and channel_id:
                 try:
                     applied = _apply_programming(channel_id, recipe)
@@ -1095,9 +1279,16 @@ def publish_recipes(
                     recipe,
                     transcode_config_id=transcode_config_id,
                     icon_url=resolved_icon,
+                    filler_list_id=filler_list_id,
                 )
             )
             channel_id = str(created.get("id") or created.get("uuid") or "")
+            if channel_id and settings is not None:
+                set_station_media_scope(
+                    settings,
+                    channel_id,
+                    normalize_media_scope(getattr(recipe, "media_scope", None)),
+                )
             programming: Mapping[str, Any] = {}
             program_count = 0
             titles: List[Any] = []
@@ -1114,6 +1305,9 @@ def publish_recipes(
                     "name": recipe.name,
                     "number": recipe.number,
                     "source": recipe.source,
+                    "media_scope": normalize_media_scope(
+                        getattr(recipe, "media_scope", None)
+                    ),
                     "channel_id": channel_id,
                     "channel": dict(created),
                     "programming": dict(programming) if programming else {},
@@ -1181,6 +1375,10 @@ def publish_recipes(
         )
     if warmed:
         note += f" Warmed {prepare.get('count_warmed_ok', 0)}/{len(warmed)} stream(s)."
+    if filler_list_id and filler_state.get("ready"):
+        note += f" Continuity filler list attached ({filler_state.get('program_count', 0)} shorts)."
+    elif filler_state.get("message"):
+        note += f" Continuity: {filler_state.get('message')}"
 
     return {
         "ok": ok or (bool(published) and not errors),
@@ -1198,6 +1396,7 @@ def publish_recipes(
         "labels": labels,
         "warmed": warmed,
         "prepare": prepare,
+        "filler": filler_state,
         "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "note": note,
     }
@@ -1229,6 +1428,7 @@ def publish_collection_channel(
         number=number,
         source="collection",
         programming_mode=ProgrammingMode.SEQUENTIAL,
+        media_scope=MediaScope.BOTH.value,
         collection_id=str(collection_id or "").strip(),
         collection_title=title,
         summary=f"Sequential channel from collection “{title}”",
@@ -1270,6 +1470,7 @@ def publish_custom_channel(
                 number=default_number,
                 source=recipe.source,
                 programming_mode=recipe.programming_mode,
+                media_scope=normalize_media_scope(getattr(recipe, "media_scope", None)),
                 cluster_tag=recipe.cluster_tag,
                 motif=recipe.motif,
                 collection_id=recipe.collection_id,
@@ -1299,6 +1500,7 @@ def publish_custom_channel(
                 number=recipe.number,
                 source=recipe.source,
                 programming_mode=recipe.programming_mode,
+                media_scope=normalize_media_scope(getattr(recipe, "media_scope", None)),
                 cluster_tag=recipe.cluster_tag,
                 motif=recipe.motif,
                 collection_id=recipe.collection_id,
@@ -1323,9 +1525,16 @@ def refill_channel_lineup(
     channel_id: str,
     *,
     recipe_payload: Optional[Mapping[str, Any]] = None,
+    settings: Any = None,
+    pad_lineups: bool = True,
+    attach_continuity: bool = True,
 ) -> Dict[str, Any]:
     """Re-fill an existing Tunarr station lineup from craft vocabulary / Chaos."""
     from projectionist.live_channels.craft import recipe_from_craft_payload
+    from projectionist.live_channels.filler import (
+        attach_continuity_to_channel,
+        ensure_continuity_filler_list,
+    )
 
     cid = str(channel_id or "").strip()
     if not cid:
@@ -1342,12 +1551,16 @@ def refill_channel_lineup(
 
     number = int(match.get("number") or 0)
     name = str(match.get("name") or "Station").strip() or "Station"
+    stored_scope = resolve_media_scope(settings, channel_id=cid, default=MediaScope.BOTH.value)
     if recipe_payload:
+        payload = dict(recipe_payload)
+        if not payload.get("media_scope"):
+            payload["media_scope"] = stored_scope
         recipe = recipe_from_craft_payload(
             {
-                **dict(recipe_payload),
-                "name": str(recipe_payload.get("name") or name),
-                "number": int(recipe_payload.get("number") or number or 100),
+                **payload,
+                "name": str(payload.get("name") or name),
+                "number": int(payload.get("number") or number or 100),
             },
             default_number=number or 100,
         )
@@ -1357,12 +1570,26 @@ def refill_channel_lineup(
             number=number or 100,
             source="chaos",
             programming_mode=ProgrammingMode.CHAOS,
+            media_scope=stored_scope,
             summary=f"Refill lineup for “{name}”",
         )
 
-    libraries = ensure_media_libraries_enabled(client, scan=True)
+    scope = normalize_media_scope(getattr(recipe, "media_scope", None) or stored_scope)
+    if settings is not None:
+        set_station_media_scope(settings, cid, scope)
+
+    media_types = (
+        ("shows",)
+        if scope == MediaScope.TV.value
+        else ("movies",)
+        if scope == MediaScope.MOVIES.value
+        else ("movies", "shows")
+    )
+    libraries = ensure_media_libraries_enabled(client, media_types=media_types, scan=True)
     catalog: List[Mapping[str, Any]] = []
     for lib in libraries.get("enabled") or []:
+        if not library_type_matches_scope(lib.get("media_type"), scope):
+            continue
         lid = str(lib.get("id") or "")
         if not lid:
             continue
@@ -1370,14 +1597,40 @@ def refill_channel_lineup(
             catalog.extend(client.list_library_programs(lid))
         except Exception:  # noqa: BLE001
             continue
-        if str(lib.get("media_type") or "") == "movies" and catalog:
-            break
 
-    programs = collect_programs_for_recipe(client, recipe, catalog=catalog)
-    prog_body = programming_body_for_recipe(recipe, programs=programs)
+    programs = collect_programs_for_recipe(
+        client, recipe, catalog=catalog, media_scope=scope
+    )
+    prog_body = programming_body_for_recipe(
+        recipe,
+        programs=programs,
+        pad_lineups=pad_lineups,
+        max_flex_ms=pad_flex_max_ms(settings),
+    )
     programming = (
         client.set_channel_programming(cid, prog_body) if prog_body is not None else {}
     )
+    flex_count = sum(
+        1
+        for row in (prog_body or {}).get("lineup") or []
+        if isinstance(row, Mapping) and str(row.get("type") or "") == "flex"
+    )
+
+    filler_state: Dict[str, Any] = {}
+    if attach_continuity:
+        try:
+            filler_state = ensure_continuity_filler_list(client, settings, shuffle=False)
+            fid = str(filler_state.get("filler_list_id") or "")
+            if fid:
+                attach_continuity_to_channel(
+                    client,
+                    match,
+                    filler_list_id=fid,
+                    icon_url=resolve_channel_icon_url(settings),
+                )
+        except Exception as error:  # noqa: BLE001
+            filler_state = {"ok": False, "message": str(error)[:200]}
+
     return {
         "ok": bool(programs),
         "channel_id": cid,
@@ -1389,8 +1642,14 @@ def refill_channel_lineup(
         "libraries": libraries,
         "catalog_size": len(catalog),
         "recipe": recipe.to_dict(),
+        "media_scope": scope,
+        "flex_pads": flex_count,
+        "padded": flex_count > 0,
+        "filler": filler_state,
         "note": (
-            f"Filled {len(programs)} titles into {name}."
+            f"Filled {len(programs)} titles into {name}"
+            + (f" ({flex_count} flex pad(s))" if flex_count else "")
+            + "."
             if programs
             else (
                 "No Tunarr program IDs yet — wait for the library scan, then refill again."

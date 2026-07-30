@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
-from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+from projectionist.live_channels.recipes import ChannelRecipe, MediaScope, ProgrammingMode
 
 
 # Virtual channel numbers — sit above typical OTA HDHomeRun ranges.
@@ -54,6 +54,7 @@ def propose_starter_pack(
                 number=_BASE_CHANNEL_NUMBER + len(recipes),
                 source="taste_cluster",
                 programming_mode=ProgrammingMode.SHUFFLE,
+                media_scope=MediaScope.BOTH.value,
                 cluster_tag=tag,
                 summary=f"Shuffle station from your “{tag}” taste cluster"
                 + (f" (weight {weight:.2f})" if weight else ""),
@@ -75,6 +76,7 @@ def propose_starter_pack(
                 number=_BASE_CHANNEL_NUMBER + len(recipes),
                 source="motif",
                 programming_mode=ProgrammingMode.SHUFFLE,
+                media_scope=MediaScope.BOTH.value,
                 motif=value,
                 summary=f"Motif station for “{value}”"
                 + (f" ({count} titles)" if count else ""),
@@ -99,6 +101,7 @@ def propose_starter_pack(
                 number=_BASE_CHANNEL_NUMBER + len(recipes),
                 source="collection",
                 programming_mode=ProgrammingMode.SEQUENTIAL,
+                media_scope=MediaScope.BOTH.value,
                 collection_id=cid,
                 collection_title=title,
                 summary=f"Sequential channel from published collection “{title}”",
@@ -112,6 +115,7 @@ def propose_starter_pack(
                 number=_BASE_CHANNEL_NUMBER + len(recipes),
                 source="chaos",
                 programming_mode=ProgrammingMode.CHAOS,
+                media_scope=MediaScope.BOTH.value,
                 summary="Random shuffle across the library — the Chaos channel.",
             )
         )
@@ -123,6 +127,7 @@ def propose_starter_pack(
                 number=_BASE_CHANNEL_NUMBER + len(recipes),
                 source="youth",
                 programming_mode=ProgrammingMode.SHUFFLE,
+                media_scope=MediaScope.BOTH.value,
                 youth_safe=True,
                 summary=(
                     f"Youth-safe shuffle at or below {youth_max_rating} "
@@ -138,6 +143,7 @@ def propose_starter_pack(
             number=_BASE_CHANNEL_NUMBER + idx,
             source=r.source,
             programming_mode=r.programming_mode,
+            media_scope=r.media_scope,
             cluster_tag=r.cluster_tag,
             motif=r.motif,
             collection_id=r.collection_id,

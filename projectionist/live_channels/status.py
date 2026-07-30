@@ -301,14 +301,33 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                 listed = client.list_channels()
                 listed_raw = [ch for ch in listed if isinstance(ch, Mapping)]
                 channel_count = len(listed_raw)
-                channels = [
-                    {
-                        "id": ch.get("id") or ch.get("uuid"),
-                        "name": ch.get("name"),
-                        "number": ch.get("number"),
-                    }
-                    for ch in listed_raw[:40]
-                ]
+                from projectionist.live_channels.filler import channel_has_continuity
+                from projectionist.live_channels.publish import resolve_media_scope
+
+                continuity_fid = str(
+                    getattr(tunarr, "continuity_filler_list_id", "") or ""
+                )
+                channels = []
+                for ch in listed_raw[:40]:
+                    cid = str(ch.get("id") or ch.get("uuid") or "")
+                    cols = ch.get("fillerCollections") or []
+                    channels.append(
+                        {
+                            "id": cid,
+                            "name": ch.get("name"),
+                            "number": ch.get("number"),
+                            "has_continuity": channel_has_continuity(
+                                ch, filler_list_id=continuity_fid
+                            ),
+                            "filler_collections_count": (
+                                len(cols) if isinstance(cols, list) else 0
+                            ),
+                            "guide_flex_title": str(ch.get("guideFlexTitle") or ""),
+                            "media_scope": resolve_media_scope(
+                                settings, channel_id=cid, default="both"
+                            ),
+                        }
+                    )
             except Exception:  # noqa: BLE001
                 client = None
             if client is not None:
@@ -390,6 +409,18 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
 
     sidecar_up = bool(reachability.get("reachable")) or docker.get("status") == "running"
 
+    continuity: Dict[str, Any] = {
+        "ok": False,
+        "path_count": 0,
+        "checks": [],
+    }
+    try:
+        from projectionist.live_channels.filler import continuity_installation_status
+
+        continuity = continuity_installation_status(client, settings)
+    except Exception as error:  # noqa: BLE001
+        continuity = {"ok": False, "error": str(error)[:200], "checks": []}
+
     return {
         "live_channels_enabled": enabled,
         "broadcast": {
@@ -408,6 +439,7 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         "sessions": sessions,
         "guide_status": guide_status,
         "guide_index": guide_index,
+        "continuity": continuity,
         "last_publish_at": last_publish_at or None,
         "last_error": last_error,
         "tunarr": {
@@ -423,6 +455,13 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
             "channel_number_base": int(getattr(tunarr, "channel_number_base", 100) or 100)
             if tunarr
             else 100,
+            "filler_binds": list(getattr(tunarr, "filler_binds", None) or []) if tunarr else [],
+            "media_binds": list(getattr(tunarr, "media_binds", None) or []) if tunarr else [],
+            "pad_flex_max_minutes": int(
+                getattr(tunarr, "pad_flex_max_minutes", 15) or 15
+            )
+            if tunarr
+            else 15,
             "last_guide_attach_at": last_guide_attach_at or None,
             "last_guide_attach_ok": last_guide_attach_ok,
             "last_guide_attach_message": last_guide_attach_message,

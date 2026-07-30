@@ -133,6 +133,7 @@ Default values (also in `config/settings.example.json`):
 | `PROJECTIONIST_TUNARR_HDHR_PORT` | Preferred managed Tunarr HDHR host port (probed; default start **15004**) |
 | `PROJECTIONIST_TUNARR_IMAGE` | When set, wins over `tunarr.image_tag` (deploy pin) |
 | `PROJECTIONIST_TUNARR_MEDIA_BINDS` | Comma-separated Docker binds for Tunarr media (e.g. `/mnt/user/data/media:/data/media:ro`). Must match Plex on-disk paths inside Tunarr so ffmpeg can seek local files; without this, cold Live TV tunes often end immediately in Plex |
+| `PROJECTIONIST_TUNARR_FILLER_BINDS` | Comma-separated host folders (or `host:container:ro` binds) of short programming for Live Channels continuity. Bare host paths auto-map under `/data/filler/<basename>`. Wins over `tunarr.filler_binds` in settings when set |
 | `PROJECTIONIST_DOCKER_ORCHESTRATION` | When set (`1`/`true`/`yes`/`on`), wins over `tunarr.docker_orchestration` |
 | `PROJECTIONIST_HOST_DATA_DIR` (alias `HOST_DATA_DIR`) | Host path of the Config volume for managed Tunarr Docker binds (e.g. `/mnt/user/appdata/projectionist/config`). Required when docker.sock is mounted so Tunarr is not created at host `/config/tunarr` |
 | `PROJECTIONIST_HOST_IP` / `HOST_IP` | Optional LAN IP used to derive Plex attach URLs when `tunarr.public_url` is unset and Admin is opened via a Docker-only host |

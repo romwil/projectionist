@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.29.19] — 2026-07-30
+
+Live Channels continuity: stations keep airing after a title ends. Configure filler folders, pick TV / Movies / Both, and repair jump-start stations in place — no Tunarr admin UI.
+
+### Highlights
+- **Stations bridge the gaps.** Add one or more bumper / trailer folders; Projectionist mounts them, builds one randomized continuity filler list, and attaches it to every station so flex gaps play shorts instead of dying at end-of-title.
+- **Commercial-cut padding.** Lineups pad toward :00 / :30 with up to 15 minutes of flex per gap — the next episode still starts on schedule even when filler clips vary in length.
+- **TV, Movies, or Both — explicitly.** Craft and Station settings set media scope so TV stations stop filling with movies (and vice versa). Repair continuity fixes Mystery / Sci-Fi / Chaos in place.
+
+### Added
+- `tunarr.filler_binds` + `PROJECTIONIST_TUNARR_FILLER_BINDS` (multi-path); Docker mounts preserve media binds / sock / `HOST_*`.
+- `projectionist/live_channels/filler.py` — union+shuffle continuity list, attach, pad ≤15m, jump-start repair, Installation green checks.
+- Station media scope (`tv` | `movies` | `both`) on recipes, craft, refill, and `PATCH …/channels/{id}/settings`.
+- `POST /api/admin/live-channels/continuity/repair` — rescan filler + repair all stations.
+- Admin Installation: multi-path filler editor + Rescan; Stations: Repair continuity + per-station media scope.
+
+### Changed
+- Publish / refill / starters attach `fillerCollections`, `guideFlexTitle`, richer `offline`; remove movies-first catalog early break.
+- Deferred “Gap fillers…” marked done for 1.29.19.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1530 passed, 6 skipped; coverage **76.6%** (≥74%).
+- `cd frontend && npm run test:unit` — 514 passed; `npm run lint` — 0 errors; `npm run build` — pass.
+- `pytest tests/test_version.py` — lockstep **1.29.19**.
+
 ## [1.29.18] — 2026-07-30
 
 Live Channels playback: start-over deep playheads and aggressive HLS warm so Plex Live TV tunes instead of dying with “This live TV session has ended.”

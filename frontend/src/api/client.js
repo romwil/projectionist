@@ -1372,6 +1372,29 @@ export async function refillLiveChannelsChannel(channelId, body = {}) {
   });
 }
 
+export async function patchLiveChannelsStationSettings(channelId, body = {}) {
+  return api(`/admin/live-channels/channels/${encodeURIComponent(channelId)}/settings`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      confirm: true,
+      ...body,
+    }),
+  });
+}
+
+export async function postLiveChannelsContinuityRepair(body = {}) {
+  return api("/admin/live-channels/continuity/repair", {
+    method: "POST",
+    body: JSON.stringify({
+      confirm: true,
+      rescan: true,
+      repair: true,
+      refill_lineups: true,
+      ...body,
+    }),
+  });
+}
+
 export async function deleteLiveChannelsChannel(channelId) {
   return api(`/admin/live-channels/channels/${encodeURIComponent(channelId)}`, {
     method: "DELETE",

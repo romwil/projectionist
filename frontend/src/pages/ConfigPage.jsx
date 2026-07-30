@@ -27,8 +27,10 @@ import {
   listJobs,
   deleteUser,
   listUsers,
+  patchLiveChannelsStationSettings,
   patchUserDisabled,
   patchUserYouthMode,
+  postLiveChannelsContinuityRepair,
   postLiveChannelsLifecycle,
   postLiveChannelsPreflight,
   publishLiveChannelsChannel,
@@ -460,12 +462,15 @@ export default function ConfigPage() {
     number: "",
     source: "motif",
     programming_mode: "shuffle",
+    media_scope: "both",
     motif: "",
     cluster_tag: "",
     collection_id: "",
     collection_title: "",
     youth_safe: false,
   });
+  const [fillerPathDraft, setFillerPathDraft] = useState("");
+  const [stationSettingsOpen, setStationSettingsOpen] = useState(null);
   const [liveAttach, setLiveAttach] = useState(null);
   const [liveBusy, setLiveBusy] = useState(null);
   const [liveEngineProgress, setLiveEngineProgress] = useState(null);
@@ -501,10 +506,21 @@ export default function ConfigPage() {
   const effectiveLiveTab = liveChannelsTab || (liveLaunched ? "stations" : "setup");
   const filteredLiveCollections = useMemo(() => {
     const rows = liveCraftOptions?.collections || [];
+    const scope = liveCraft.media_scope || "both";
+    const scopeFiltered =
+      scope === "both"
+        ? rows
+        : rows.filter((row) => {
+            const mt = String(row.media_type || "").toLowerCase();
+            if (!mt) return true;
+            if (scope === "tv") return mt === "show" || mt === "shows" || mt === "tv";
+            if (scope === "movies") return mt === "movie" || mt === "movies";
+            return true;
+          });
     const q = collectionFilter.trim().toLowerCase();
     const filtered = !q
-      ? rows
-      : rows.filter((row) => {
+      ? scopeFiltered
+      : scopeFiltered.filter((row) => {
           const hay = `${row.title || ""} ${row.label || ""} ${row.source || ""}`.toLowerCase();
           return hay.includes(q);
         });
@@ -518,7 +534,13 @@ export default function ConfigPage() {
       if (selected) return [selected, ...filtered];
     }
     return filtered;
-  }, [liveCraftOptions?.collections, collectionFilter, liveCraft.collection_id]);
+  }, [
+    liveCraftOptions?.collections,
+    collectionFilter,
+    liveCraft.collection_id,
+    liveCraft.media_scope,
+  ]);
+  const fillerBinds = settings?.tunarr?.filler_binds || [];
 
   function applyCertifications(certMap) {
     setCertifications(certMap || {});
@@ -3260,6 +3282,137 @@ export default function ConfigPage() {
                     </div>
                   ) : null}
 
+                  <div
+                    className={`service-card${
+                      liveChannelsStatus?.continuity?.ok ? " service-ok" : ""
+                    }`}
+                    data-testid="live-channels-filler-paths"
+                  >
+                    <div className="service-card-header">
+                      <div className="service-card-title">
+                        <h3>Filler programming paths</h3>
+                        <LiveReadyBadge
+                          ready={Boolean(liveChannelsStatus?.continuity?.ok)}
+                          label="Continuity ready"
+                          testId="live-channels-continuity-ready"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="ghost"
+                        data-testid="live-channels-rescan-filler"
+                        disabled={liveBusy === "continuity-repair"}
+                        onClick={async () => {
+                          setLiveBusy("continuity-repair");
+                          try {
+                            const result = await postLiveChannelsContinuityRepair({
+                              rescan: true,
+                              repair: true,
+                              refill_lineups: true,
+                            });
+                            setActionFeedback(
+                              "live-channels",
+                              result.ok ? "success" : "error",
+                              result.message || "Filler rescan finished.",
+                            );
+                            setLiveChannelsStatus(await getLiveChannelsStatus());
+                          } catch (error) {
+                            setActionFeedback("live-channels", "error", error.message);
+                          } finally {
+                            setLiveBusy(null);
+                          }
+                        }}
+                      >
+                        {liveBusy === "continuity-repair" ? "Working…" : "Rescan filler"}
+                      </button>
+                    </div>
+                    <p className="wizard-note">
+                      Commercial-cut shows often need up to 15 minutes of filler between episodes.
+                      Add one or more host folders of bumpers / trailers / shorts — Projectionist
+                      mounts each path into Tunarr and builds one randomized continuity list for
+                      every station. Empty or thin pools show as continuity degraded rather than green.
+                    </p>
+                    <ul
+                      className="live-channels-check-list"
+                      data-testid="live-channels-continuity-checks"
+                    >
+                      {(liveChannelsStatus?.continuity?.checks || []).map((check) => (
+                        <LiveStatusCheck
+                          key={check.id}
+                          ok={check.ok}
+                          soft={check.soft}
+                          testId={`live-channels-install-continuity-${check.id}`}
+                        >
+                          {check.label}: {check.message}
+                        </LiveStatusCheck>
+                      ))}
+                    </ul>
+                    <div className="service-fields" data-testid="live-channels-filler-editor">
+                      {(fillerBinds || []).map((bind, index) => (
+                        <div
+                          key={`${bind}-${index}`}
+                          className="live-channels-filler-row"
+                          data-testid={`live-channels-filler-row-${index}`}
+                        >
+                          <code>{bind}</code>
+                          <button
+                            type="button"
+                            className="ghost"
+                            data-testid={`live-channels-filler-remove-${index}`}
+                            onClick={() => {
+                              const next = fillerBinds.filter((_, i) => i !== index);
+                              updateTunarrSettings({ filler_binds: next });
+                              persistSettings({
+                                tunarr: { ...(settings.tunarr || {}), filler_binds: next },
+                              }).catch((error) =>
+                                setActionFeedback("live-channels", "error", error.message),
+                              );
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      <label>
+                        Add host folder
+                        <input
+                          type="text"
+                          data-testid="live-channels-filler-path-input"
+                          placeholder="/mnt/user/media/bumpers"
+                          value={fillerPathDraft}
+                          onChange={(event) => setFillerPathDraft(event.target.value)}
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        data-testid="live-channels-filler-add"
+                        disabled={!fillerPathDraft.trim()}
+                        onClick={() => {
+                          const path = fillerPathDraft.trim();
+                          if (!path) return;
+                          const next = [...fillerBinds, path];
+                          updateTunarrSettings({ filler_binds: next });
+                          setFillerPathDraft("");
+                          persistSettings({
+                            tunarr: { ...(settings.tunarr || {}), filler_binds: next },
+                          })
+                            .then(() =>
+                              setActionFeedback(
+                                "live-channels",
+                                "success",
+                                "Filler path saved. Restart the broadcast engine if it is already running so Tunarr picks up the new mount, then Rescan filler.",
+                              ),
+                            )
+                            .catch((error) =>
+                              setActionFeedback("live-channels", "error", error.message),
+                            );
+                        }}
+                      >
+                        Add path
+                      </button>
+                    </div>
+                  </div>
+
                   </>
                   ) : null}
 
@@ -3389,6 +3542,31 @@ export default function ConfigPage() {
                             ]).map((mode) => (
                               <option key={mode.id} value={mode.id}>
                                 {mode.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Media
+                          <select
+                            data-testid="live-channels-craft-media-scope"
+                            value={liveCraft.media_scope || "both"}
+                            onChange={(event) =>
+                              setLiveCraft((prev) => ({
+                                ...prev,
+                                media_scope: event.target.value,
+                                collection_id: "",
+                                collection_title: "",
+                              }))
+                            }
+                          >
+                            {(liveCraftOptions?.media_scopes || [
+                              { id: "tv", label: "TV" },
+                              { id: "movies", label: "Movies" },
+                              { id: "both", label: "Both" },
+                            ]).map((scope) => (
+                              <option key={scope.id} value={scope.id}>
+                                {scope.label}
                               </option>
                             ))}
                           </select>
@@ -3527,6 +3705,7 @@ export default function ConfigPage() {
                                 number: Number.isFinite(number) ? number : 0,
                                 source: liveCraft.source,
                                 programming_mode: liveCraft.programming_mode,
+                                media_scope: liveCraft.media_scope || "both",
                                 motif: liveCraft.motif,
                                 cluster_tag: liveCraft.cluster_tag,
                                 collection_id: liveCraft.collection_id,
@@ -3744,30 +3923,82 @@ export default function ConfigPage() {
                       <div className="service-card-title">
                         <h3>Your stations</h3>
                       </div>
-                      <button
-                        type="button"
-                        className="ghost"
-                        data-testid="live-channels-refresh-manage"
-                        disabled={liveBusy === "manage-refresh"}
-                        onClick={async () => {
-                          setLiveBusy("manage-refresh");
-                          try {
-                            setLiveChannelsStatus(await getLiveChannelsStatus());
-                          } catch (error) {
-                            setActionFeedback("live-channels", "error", error.message);
-                          } finally {
-                            setLiveBusy(null);
-                          }
-                        }}
-                      >
-                        Refresh
-                      </button>
+                      <div className="service-card-actions">
+                        <button
+                          type="button"
+                          className="ghost"
+                          data-testid="live-channels-repair-continuity"
+                          disabled={liveBusy === "continuity-repair"}
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                "Repair continuity on all stations? This attaches the shared filler list, pads commercial-cut gaps (up to 15 minutes), and warms streams.",
+                              )
+                            ) {
+                              return;
+                            }
+                            setLiveBusy("continuity-repair");
+                            try {
+                              const result = await postLiveChannelsContinuityRepair();
+                              setActionFeedback(
+                                "live-channels",
+                                result.ok ? "success" : "error",
+                                result.message || "Continuity repair finished.",
+                              );
+                              setLiveChannelsStatus(await getLiveChannelsStatus());
+                            } catch (error) {
+                              setActionFeedback("live-channels", "error", error.message);
+                            } finally {
+                              setLiveBusy(null);
+                            }
+                          }}
+                        >
+                          {liveBusy === "continuity-repair"
+                            ? "Repairing…"
+                            : "Repair continuity"}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          data-testid="live-channels-refresh-manage"
+                          disabled={liveBusy === "manage-refresh"}
+                          onClick={async () => {
+                            setLiveBusy("manage-refresh");
+                            try {
+                              setLiveChannelsStatus(await getLiveChannelsStatus());
+                            } catch (error) {
+                              setActionFeedback("live-channels", "error", error.message);
+                            } finally {
+                              setLiveBusy(null);
+                            }
+                          }}
+                        >
+                          Refresh
+                        </button>
+                      </div>
                     </div>
                     <p className="wizard-note">
-                      Lineup depth and publish errors show here. Refill re-pulls titles after Tunarr
-                      finishes scanning; Delete removes the station from the tuner (Plex may take a
-                      minute to drop it from the guide).
+                      Lineup depth, media scope, and continuity show here. Refill re-pulls titles;
+                      Settings sets TV / Movies / Both; Repair continuity fixes jump-start stations
+                      in place.
                     </p>
+                    {(liveChannelsStatus?.continuity?.checks || []).length ? (
+                      <ul
+                        className="live-channels-check-list"
+                        data-testid="live-channels-continuity-checks-stations"
+                      >
+                        {liveChannelsStatus.continuity.checks.map((check) => (
+                          <LiveStatusCheck
+                            key={check.id}
+                            ok={check.ok}
+                            soft={check.soft}
+                            testId={`live-channels-continuity-${check.id}`}
+                          >
+                            {check.label}: {check.message}
+                          </LiveStatusCheck>
+                        ))}
+                      </ul>
+                    ) : null}
                     {(liveChannelsStatus?.guide_index?.lineup?.channels ||
                       liveChannelsStatus?.channels ||
                       []).length ? (
@@ -3780,6 +4011,14 @@ export default function ConfigPage() {
                           const id = ch.id || ch.channel_id;
                           const programs =
                             ch.total_programs != null ? Number(ch.total_programs) : null;
+                          const statusRow = (liveChannelsStatus?.channels || []).find(
+                            (row) => (row.id || row.channel_id) === id,
+                          );
+                          const mediaScope =
+                            statusRow?.media_scope || ch.media_scope || "both";
+                          const hasContinuity = Boolean(
+                            statusRow?.has_continuity ?? ch.has_continuity,
+                          );
                           return (
                             <li key={id || `${ch.number}:${ch.name}`}>
                               <div className="live-channels-manage-row">
@@ -3791,8 +4030,23 @@ export default function ConfigPage() {
                                       ? ` — ${programs} titles in lineup`
                                       : " — empty lineup (refill after scan)"
                                     : ""}
+                                  {` · ${mediaScope === "tv" ? "TV" : mediaScope === "movies" ? "Movies" : "Both"}`}
+                                  {hasContinuity ? " · continuity ✓" : " · continuity needed"}
                                 </span>
                                 <span className="live-channels-manage-actions">
+                                  <button
+                                    type="button"
+                                    className="ghost"
+                                    data-testid={`live-channels-settings-${id}`}
+                                    disabled={!id}
+                                    onClick={() =>
+                                      setStationSettingsOpen(
+                                        stationSettingsOpen === id ? null : id,
+                                      )
+                                    }
+                                  >
+                                    Settings
+                                  </button>
                                   <button
                                     type="button"
                                     className="ghost"
@@ -3803,7 +4057,9 @@ export default function ConfigPage() {
                                       if (!window.confirm(`Refill lineup for ${ch.name}?`)) return;
                                       setLiveBusy(`refill-${id}`);
                                       try {
-                                        const result = await refillLiveChannelsChannel(id);
+                                        const result = await refillLiveChannelsChannel(id, {
+                                          recipe: { media_scope: mediaScope },
+                                        });
                                         setActionFeedback(
                                           "live-channels",
                                           result.ok ? "success" : "error",
@@ -3854,6 +4110,52 @@ export default function ConfigPage() {
                                   </button>
                                 </span>
                               </div>
+                              {stationSettingsOpen === id ? (
+                                <div
+                                  className="live-channels-station-settings"
+                                  data-testid={`live-channels-station-settings-${id}`}
+                                >
+                                  <label>
+                                    Media scope
+                                    <select
+                                      data-testid={`live-channels-station-scope-${id}`}
+                                      defaultValue={mediaScope}
+                                      onChange={async (event) => {
+                                        const next = event.target.value;
+                                        setLiveBusy(`settings-${id}`);
+                                        try {
+                                          const result = await patchLiveChannelsStationSettings(
+                                            id,
+                                            { media_scope: next },
+                                          );
+                                          setActionFeedback(
+                                            "live-channels",
+                                            "success",
+                                            result.message || "Station settings saved.",
+                                          );
+                                          setLiveChannelsStatus(await getLiveChannelsStatus());
+                                        } catch (error) {
+                                          setActionFeedback(
+                                            "live-channels",
+                                            "error",
+                                            error.message,
+                                          );
+                                        } finally {
+                                          setLiveBusy(null);
+                                        }
+                                      }}
+                                    >
+                                      <option value="tv">TV</option>
+                                      <option value="movies">Movies</option>
+                                      <option value="both">Both</option>
+                                    </select>
+                                  </label>
+                                  <p className="wizard-note">
+                                    Refill after changing scope so the lineup only uses matching
+                                    libraries. Continuity fillers stay shared across stations.
+                                  </p>
+                                </div>
+                              ) : null}
                             </li>
                           );
                         })}

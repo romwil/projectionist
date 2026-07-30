@@ -533,6 +533,7 @@ class TunarrSettings:
       ``docker_orchestration`` (``1``/``true``/``yes``/``on``)
     - ``PROJECTIONIST_TUNARR_IMAGE`` — when set, wins over ``image_tag``
     - ``PROJECTIONIST_TUNARR_MEDIA_BINDS`` — when set, wins over ``media_binds``
+    - ``PROJECTIONIST_TUNARR_FILLER_BINDS`` — when set, wins over ``filler_binds``
     """
 
     # Base URL of a running Tunarr instance (e.g. http://192.168.1.50:8000).
@@ -562,6 +563,18 @@ class TunarrSettings:
     # empty MPEG-TS — Plex shows "This live TV session has ended."
     # Env (wins when set): PROJECTIONIST_TUNARR_MEDIA_BINDS (comma-separated).
     media_binds: List[str] = field(default_factory=list)
+    # Host folders of short programming (bumpers / trailers / interstitials).
+    # Mounted into Tunarr and unioned into one continuity filler list.
+    # Env (wins when set): PROJECTIONIST_TUNARR_FILLER_BINDS (comma-separated).
+    # Bare host paths auto-map to ``/data/filler/<basename>:ro``.
+    filler_binds: List[str] = field(default_factory=list)
+    # Cached Tunarr id for the shared ``Projectionist Continuity`` filler list.
+    continuity_filler_list_id: str = ""
+    # Max flex pad per gap toward :00/:30 (commercial-cut default 15 minutes).
+    pad_flex_max_minutes: int = 15
+    # Per-station Projectionist metadata keyed by Tunarr channel id
+    # (media_scope, continuity toggles, etc.). Tunarr has no first-class scope.
+    station_meta: Dict[str, Any] = field(default_factory=dict)
     # Virtual channel number base (coexist with OTA HDHomeRun).
     channel_number_base: int = 100
     # Owner wizard confirm — Plex does not expose Pass on server identity.
@@ -883,6 +896,15 @@ def _apply_tunarr_env_overrides(
         tunarr["media_binds"] = [
             part.strip()
             for part in str(media_binds_env).split(",")
+            if part.strip()
+        ]
+
+    # Filler binds: env wins when set (bumper / trailer folders for continuity).
+    filler_binds_env = branded_env("TUNARR_FILLER_BINDS")
+    if filler_binds_env is not None and str(filler_binds_env).strip() != "":
+        tunarr["filler_binds"] = [
+            part.strip()
+            for part in str(filler_binds_env).split(",")
             if part.strip()
         ]
 
