@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.29.9] — 2026-07-30
+
+Plex never offers XMLTV in the Tuner Setup EPG Location dropdown — finish the DVR with a temporary ZIP-code lineup, then attach Tunarr XMLTV in that DVR’s Settings.
+
+### Highlights
+- **No XMLTV in Tuner Setup.** Plex’s EPG Location list is commercial lineups only (Fios / DIRECTV / Xfinity / Local Broadcast) — on the first screen and on channel-mapping.
+- **Temporary lineup, then DVR Settings.** Pick any ZIP-code lineup so Plex can finish creating the DVR; afterward open that Tunarr DVR → DVR Settings → add/switch XMLTV and paste Tunarr’s guide URL.
+- **Fake cable names are expected.** Until XMLTV is attached, channel labels may show temporary cable mappings — switch the guide and refresh.
+
+### Changed
+- `plex_attach.build_plex_attach` steps + `coexistence.guide_warning` / notes document the temporary-lineup → DVR Settings → XMLTV flow (never claims XMLTV appears in the wizard EPG Location dropdown).
+- Admin ConfigPage “Show Plex steps” copy + XMLTV paste label; HELP Live Channels owner blurb; deferred coexistence one-liner.
+
+### Verification
+- Backend live-channels plex-attach unit assertions cover EPG Location / never-XMLTV / DVR Settings / temporary lineup.
+- `test_version` lockstep holds at **1.29.9**.
+
 ## [1.29.8] — 2026-07-30
 
 Plex Live TV attach steps match the real Tuner Setup UI: first screen is discovery + ZIP gate only; Tunarr XMLTV is attached later — not a Verizon/Fios cable lineup.

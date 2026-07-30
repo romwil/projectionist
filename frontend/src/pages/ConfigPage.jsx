@@ -3206,7 +3206,8 @@ export default function ConfigPage() {
                             </label>
                             <label>
                               <span>
-                                XMLTV guide URL (paste later — not on first Tuner Setup screen)
+                                XMLTV guide URL (paste in DVR Settings after the DVR exists —
+                                never in Tuner Setup EPG Location)
                               </span>
                               <input
                                 type="text"
@@ -3225,9 +3226,10 @@ export default function ConfigPage() {
                       </>
                     ) : (
                       <p className="wizard-note">
-                        On the first Tuner Setup screen, select discovered Tunarr and enter any ZIP so
-                        Next unlocks (that ZIP is not your Tunarr guide). XMLTV is attached later —
-                        not a Verizon/Fios cable lineup. Leave any OTA device in place.
+                        On Tuner Setup, select discovered Tunarr and enter any ZIP so Next unlocks.
+                        EPG Location is commercial lineups only — Plex never offers XMLTV in that
+                        dropdown. Pick a temporary lineup to finish the DVR, then attach Tunarr XMLTV
+                        under that DVR’s Settings. Leave any OTA device in place.
                       </p>
                     )}
                   </div>
