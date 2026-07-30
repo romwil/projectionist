@@ -59,6 +59,32 @@ class TunarrClientTests(unittest.TestCase):
             created = client.create_channel({"type": "new", "channel": {"name": "Motif", "number": 101}})
             self.assertEqual(created["id"], "ch-2")
 
+    def test_update_and_delete_channel(self) -> None:
+        client = TunarrClient("http://tunarr.test")
+        calls: list[tuple[str, str]] = []
+
+        def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):
+            del headers, timeout
+            calls.append((method, url))
+            if method == "PUT" and url.endswith("/channels/ch-9"):
+                self.assertEqual(body["name"], "Renamed")
+                return {"id": "ch-9", "name": "Renamed", "number": 105}
+            if method == "DELETE" and url.endswith("/channels/ch-9"):
+                return None
+            raise AssertionError(f"unexpected {method} {url}")
+
+        with patch("projectionist.connectors.tunarr.request_json", side_effect=fake_request_json):
+            updated = client.update_channel("ch-9", {"name": "Renamed"})
+            self.assertEqual(updated["name"], "Renamed")
+            client.delete_channel("ch-9")
+        self.assertEqual(
+            calls,
+            [
+                ("PUT", "http://tunarr.test/api/channels/ch-9"),
+                ("DELETE", "http://tunarr.test/api/channels/ch-9"),
+            ],
+        )
+
     def test_fetch_debug_logs_download(self) -> None:
         client = TunarrClient("http://tunarr.test")
         captured: dict[str, str] = {}

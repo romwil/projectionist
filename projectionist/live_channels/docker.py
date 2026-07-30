@@ -7,6 +7,7 @@ and a socket is present. Otherwise returns structured no-ops / unavailable.
 Contract:
 - ``pull(image)`` — ensure the pinned image exists locally
 - ``start(...)`` / ``ensure_running(...)`` — create/start with a config volume
+  and optional media library binds (so Tunarr ffmpeg can read Plex files locally)
 - ``stop(...)`` — stop the container; **keep** the volume (disable ≠ wipe)
 - ``status(...)`` — running / stopped / missing / unavailable / skipped
 """
@@ -19,7 +20,7 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 from urllib.parse import quote
 
 PhaseCallback = Callable[[str, str], None]
@@ -40,6 +41,58 @@ DEFAULT_SOCKET_PATHS = (
     "/var/run/docker.sock",
     "/run/docker.sock",
 )
+
+
+def normalize_bind_spec(spec: str) -> str:
+    """Normalize ``host:container[:mode]`` for comparison (drop mode)."""
+    text = str(spec or "").strip()
+    if not text:
+        return ""
+    parts = text.split(":")
+    if len(parts) >= 2:
+        return f"{parts[0]}:{parts[1]}"
+    return text
+
+
+def parse_media_binds(value: Any) -> List[str]:
+    """Parse media bind specs from a list or comma-separated string."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = [part.strip() for part in value.split(",")]
+    elif isinstance(value, Sequence) and not isinstance(value, (bytes, bytearray)):
+        items = [str(part).strip() for part in value]
+    else:
+        items = [str(value).strip()]
+    out: List[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if not item or ":" not in item:
+            continue
+        key = normalize_bind_spec(item)
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        out.append(item)
+    return out
+
+
+def resolve_media_binds(settings: Any = None) -> List[str]:
+    """Media library binds for Tunarr (settings nest and/or env)."""
+    from projectionist.envcompat import branded_env
+
+    env_raw = branded_env("TUNARR_MEDIA_BINDS")
+    if env_raw is not None and str(env_raw).strip() != "":
+        return parse_media_binds(env_raw)
+    tunarr = getattr(settings, "tunarr", None) if settings is not None else None
+    return parse_media_binds(getattr(tunarr, "media_binds", None) if tunarr else None)
+
+
+def binds_include(current: Sequence[str], desired: Sequence[str]) -> bool:
+    """True when every desired ``host:container`` appears in current binds."""
+    have = {normalize_bind_spec(b) for b in current if normalize_bind_spec(b)}
+    need = [normalize_bind_spec(b) for b in desired if normalize_bind_spec(b)]
+    return all(key in have for key in need)
 
 
 @dataclass(frozen=True)
@@ -236,6 +289,7 @@ class TunarrDockerLifecycle:
         orchestration: bool = False,
         host_port: int = DEFAULT_HOST_PORT,
         hdhr_port: int = DEFAULT_HDHR_PORT,
+        media_binds: Optional[Sequence[str]] = None,
     ) -> None:
         self.container_name = container_name
         self.image = image
@@ -243,6 +297,7 @@ class TunarrDockerLifecycle:
         self.orchestration = bool(orchestration)
         self.host_port = int(host_port or DEFAULT_HOST_PORT)
         self.hdhr_port = int(hdhr_port or DEFAULT_HDHR_PORT)
+        self.media_binds = parse_media_binds(media_binds or ())
 
     def available(self) -> bool:
         return docker_socket_available(self.socket_path)
@@ -478,7 +533,180 @@ class TunarrDockerLifecycle:
         public = self._public_url_hint()
         if public:
             detail["public_url_hint"] = public
+        if self.media_binds:
+            detail["media_binds"] = list(self.media_binds)
         return detail
+
+    def _inspect_binds(self) -> List[str]:
+        """HostConfig.Binds from the named container (empty when missing)."""
+        try:
+            code, body = self._engine_request(
+                "GET", f"/containers/{self.container_name}/json"
+            )
+        except Exception:  # noqa: BLE001
+            return []
+        if code >= 400 or not isinstance(body, dict):
+            return []
+        if isinstance(body, dict):
+            self._sync_ports_from_inspect(body)
+        binds = ((body.get("HostConfig") or {}).get("Binds")) or []
+        if not isinstance(binds, list):
+            return []
+        return [str(b) for b in binds if str(b).strip()]
+
+    def _config_binds(self, config_volume: str) -> List[str]:
+        volume = str(config_volume or "").strip()
+        binds: List[str] = [f"{volume}:/config"] if volume else []
+        for spec in self.media_binds:
+            key = normalize_bind_spec(spec)
+            if key and key not in {normalize_bind_spec(b) for b in binds}:
+                binds.append(spec)
+        return binds
+
+    def _needs_recreate_for_binds(self, config_volume: str) -> bool:
+        if not self.media_binds:
+            return False
+        current = self._inspect_binds()
+        return not binds_include(current, self.media_binds) or (
+            bool(config_volume)
+            and not binds_include(current, [f"{config_volume}:/config"])
+        )
+
+    def _remove_container(self) -> Optional[str]:
+        """Stop + remove named container; return error message or None."""
+        try:
+            self._engine_request(
+                "POST",
+                f"/containers/{self.container_name}/stop?t=10",
+                expect_json=False,
+            )
+        except Exception as error:  # noqa: BLE001
+            logger.debug("Tunarr stop before recreate: %s", error)
+        try:
+            code, _ = self._engine_request(
+                "DELETE",
+                f"/containers/{self.container_name}?force=1",
+                expect_json=False,
+            )
+        except Exception as error:  # noqa: BLE001
+            return f"Docker remove failed: {error}"[:240]
+        if code not in (204, 404) and code >= 400:
+            return f"Docker remove returned HTTP {code}"
+        return None
+
+    def _create_and_start(
+        self,
+        *,
+        config_volume: str,
+        on_phase: Optional[PhaseCallback] = None,
+        allocate_ports: bool = True,
+    ) -> DockerLifecycleResult:
+        volume = str(config_volume or "").strip()
+        if allocate_ports:
+            try:
+                self.allocate_host_ports()
+            except RuntimeError as error:
+                return DockerLifecycleResult(
+                    ok=False,
+                    action="start",
+                    status="error",
+                    message=str(error)[:240],
+                    container_name=self.container_name,
+                    image=self.image,
+                )
+        if on_phase:
+            on_phase("creating", "Creating Tunarr container")
+        binds = self._config_binds(volume)
+        http_key = f"{TUNARR_CONTAINER_HTTP_PORT}/tcp"
+        hdhr_key = f"{TUNARR_CONTAINER_HDHR_PORT}/tcp"
+        body = {
+            "Image": self.image,
+            "ExposedPorts": {
+                http_key: {},
+                hdhr_key: {},
+            },
+            "HostConfig": {
+                "Binds": binds,
+                "PortBindings": {
+                    http_key: [{"HostPort": str(self.host_port)}],
+                    hdhr_key: [{"HostPort": str(self.hdhr_port)}],
+                },
+                "RestartPolicy": {"Name": "unless-stopped"},
+            },
+        }
+        try:
+            code, created = self._engine_request(
+                "POST",
+                f"/containers/create?name={quote(self.container_name)}",
+                json_body=body,
+            )
+        except Exception as error:  # noqa: BLE001
+            return DockerLifecycleResult(
+                ok=False,
+                action="start",
+                status="error",
+                message=f"Docker create failed: {error}"[:240],
+                container_name=self.container_name,
+                image=self.image,
+            )
+        if code == 409:
+            return self.start(config_volume=volume, on_phase=on_phase)
+        if code >= 400:
+            return DockerLifecycleResult(
+                ok=False,
+                action="start",
+                status="error",
+                message=f"Docker create returned HTTP {code}",
+                container_name=self.container_name,
+                image=self.image,
+                detail={"response": created} if created else None,
+            )
+        cid = str((created or {}).get("Id") or self.container_name)
+        if on_phase:
+            on_phase("starting", "Starting Tunarr container")
+        try:
+            start_code, _ = self._engine_request(
+                "POST",
+                f"/containers/{cid}/start",
+                expect_json=False,
+            )
+        except Exception as error:  # noqa: BLE001
+            return DockerLifecycleResult(
+                ok=False,
+                action="start",
+                status="error",
+                message=f"Docker start after create failed: {error}"[:240],
+                container_name=self.container_name,
+                image=self.image,
+            )
+        if start_code not in (204, 304) and start_code >= 400:
+            return DockerLifecycleResult(
+                ok=False,
+                action="start",
+                status="error",
+                message=f"Docker start returned HTTP {start_code}",
+                container_name=self.container_name,
+                image=self.image,
+            )
+        logger.info(
+            "Tunarr docker started name=%s image=%s volume=%s media_binds=%s",
+            self.container_name,
+            self.image,
+            volume or "(none)",
+            self.media_binds or [],
+        )
+        detail = self._url_hints_detail()
+        detail["container_id"] = cid[:12] if cid else ""
+        detail["binds"] = binds
+        return DockerLifecycleResult(
+            ok=True,
+            action="start",
+            status="running",
+            message=f"Created and started Tunarr ({self.image}).",
+            container_name=self.container_name,
+            image=self.image,
+            detail=detail,
+        )
 
     def start(
         self,
@@ -498,6 +726,31 @@ class TunarrDockerLifecycle:
                 logger.debug("config_volume mkdir skipped for %s: %s", volume, error)
 
         existing = self.status()
+        if existing.status in {"running", "stopped"} and self._needs_recreate_for_binds(
+            volume
+        ):
+            if on_phase:
+                on_phase(
+                    "creating",
+                    "Recreating Tunarr with media library mounts",
+                )
+            err = self._remove_container()
+            if err:
+                return DockerLifecycleResult(
+                    ok=False,
+                    action="start",
+                    status="error",
+                    message=err,
+                    container_name=self.container_name,
+                    image=self.image,
+                )
+            # Keep already-synced host ports; do not re-probe into a new pair.
+            return self._create_and_start(
+                config_volume=volume,
+                on_phase=on_phase,
+                allocate_ports=False,
+            )
+
         if existing.status == "running":
             # status() already synced published ports from the living container.
             if on_phase:
@@ -549,108 +802,10 @@ class TunarrDockerLifecycle:
             )
 
         # missing or unknown — probe free host ports, then create + start
-        if on_phase:
-            on_phase("creating", "Creating Tunarr container")
-        try:
-            self.allocate_host_ports()
-        except RuntimeError as error:
-            return DockerLifecycleResult(
-                ok=False,
-                action="start",
-                status="error",
-                message=str(error)[:240],
-                container_name=self.container_name,
-                image=self.image,
-            )
-        binds = [f"{volume}:/config"] if volume else []
-        http_key = f"{TUNARR_CONTAINER_HTTP_PORT}/tcp"
-        hdhr_key = f"{TUNARR_CONTAINER_HDHR_PORT}/tcp"
-        body = {
-            "Image": self.image,
-            "ExposedPorts": {
-                http_key: {},
-                hdhr_key: {},
-            },
-            "HostConfig": {
-                "Binds": binds,
-                "PortBindings": {
-                    http_key: [{"HostPort": str(self.host_port)}],
-                    hdhr_key: [{"HostPort": str(self.hdhr_port)}],
-                },
-                "RestartPolicy": {"Name": "unless-stopped"},
-            },
-        }
-        try:
-            code, created = self._engine_request(
-                "POST",
-                f"/containers/create?name={quote(self.container_name)}",
-                json_body=body,
-            )
-        except Exception as error:  # noqa: BLE001
-            return DockerLifecycleResult(
-                ok=False,
-                action="start",
-                status="error",
-                message=f"Docker create failed: {error}"[:240],
-                container_name=self.container_name,
-                image=self.image,
-            )
-        if code == 409:
-            # Name conflict — try start of existing
-            return self.start(config_volume=volume, on_phase=on_phase)
-        if code >= 400:
-            return DockerLifecycleResult(
-                ok=False,
-                action="start",
-                status="error",
-                message=f"Docker create returned HTTP {code}",
-                container_name=self.container_name,
-                image=self.image,
-                detail={"response": created} if created else None,
-            )
-        cid = str((created or {}).get("Id") or self.container_name)
-        if on_phase:
-            on_phase("starting", "Starting Tunarr container")
-        try:
-            start_code, _ = self._engine_request(
-                "POST",
-                f"/containers/{cid}/start",
-                expect_json=False,
-            )
-        except Exception as error:  # noqa: BLE001
-            return DockerLifecycleResult(
-                ok=False,
-                action="start",
-                status="error",
-                message=f"Docker start after create failed: {error}"[:240],
-                container_name=self.container_name,
-                image=self.image,
-            )
-        if start_code not in (204, 304) and start_code >= 400:
-            return DockerLifecycleResult(
-                ok=False,
-                action="start",
-                status="error",
-                message=f"Docker start returned HTTP {start_code}",
-                container_name=self.container_name,
-                image=self.image,
-            )
-        logger.info(
-            "Tunarr docker started name=%s image=%s volume=%s",
-            self.container_name,
-            self.image,
-            volume or "(none)",
-        )
-        detail = self._url_hints_detail()
-        detail["container_id"] = cid[:12] if cid else ""
-        return DockerLifecycleResult(
-            ok=True,
-            action="start",
-            status="running",
-            message=f"Created and started Tunarr ({self.image}).",
-            container_name=self.container_name,
-            image=self.image,
-            detail=detail,
+        return self._create_and_start(
+            config_volume=volume,
+            on_phase=on_phase,
+            allocate_ports=True,
         )
 
     def ensure_running(
@@ -865,6 +1020,7 @@ def lifecycle_from_settings(
         orchestration=orchestration_enabled(settings),
         host_port=preferred_http,
         hdhr_port=preferred_hdhr,
+        media_binds=resolve_media_binds(settings),
     )
 
 

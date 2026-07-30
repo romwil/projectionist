@@ -532,6 +532,7 @@ class TunarrSettings:
     - ``PROJECTIONIST_DOCKER_ORCHESTRATION`` — when set, wins over
       ``docker_orchestration`` (``1``/``true``/``yes``/``on``)
     - ``PROJECTIONIST_TUNARR_IMAGE`` — when set, wins over ``image_tag``
+    - ``PROJECTIONIST_TUNARR_MEDIA_BINDS`` — when set, wins over ``media_binds``
     """
 
     # Base URL of a running Tunarr instance (e.g. http://192.168.1.50:8000).
@@ -555,6 +556,12 @@ class TunarrSettings:
     image_tag: str = "chrisbenincasa/tunarr:1.3.9"
     # Relative directory under DATA_DIR for the Tunarr /config volume.
     volume_path: str = "tunarr"
+    # Extra Docker bind mounts for Tunarr so ffmpeg can read Plex library files
+    # locally (e.g. ``["/mnt/user/data/media:/data/media:ro"]``). Without these,
+    # Tunarr falls back to HTTP part URLs and cold HDHR tunes often return an
+    # empty MPEG-TS — Plex shows "This live TV session has ended."
+    # Env (wins when set): PROJECTIONIST_TUNARR_MEDIA_BINDS (comma-separated).
+    media_binds: List[str] = field(default_factory=list)
     # Virtual channel number base (coexist with OTA HDHomeRun).
     channel_number_base: int = 100
     # Owner wizard confirm — Plex does not expose Pass on server identity.
@@ -869,6 +876,15 @@ def _apply_tunarr_env_overrides(
             tunarr["hdhr_port"] = int(str(hdhr_port_env).strip())
         except ValueError:
             pass
+
+    # Media binds: env wins when set (host library paths for Tunarr ffmpeg).
+    media_binds_env = branded_env("TUNARR_MEDIA_BINDS")
+    if media_binds_env is not None and str(media_binds_env).strip() != "":
+        tunarr["media_binds"] = [
+            part.strip()
+            for part in str(media_binds_env).split(",")
+            if part.strip()
+        ]
 
     # Image pin + docker orchestration: env wins when set (deploy/host capability).
     image_env = branded_env("TUNARR_IMAGE")

@@ -110,7 +110,11 @@ Env (proposed):
 | `POST` | `/api/admin/live-channels/lifecycle` | `{action: start\|stop\|pull\|ensure_running}` when orchestration on | yes |
 | `GET` | `/api/admin/live-channels/starter-pack` | Propose starter pack from library | yes |
 | `POST` | `/api/admin/live-channels/starters/publish` | Publish selected starters to Tunarr (`confirm=true`) | yes |
-| `POST` | `/api/admin/live-channels/channels/from-collection` | Collection → channel | yes (API; no dedicated Config UI yet) |
+| `GET` | `/api/admin/live-channels/craft-options` | Motifs / taste / collections + next number for craft form | yes |
+| `POST` | `/api/admin/live-channels/channels/publish` | Craft + publish one custom recipe | yes |
+| `POST` | `/api/admin/live-channels/channels/from-collection` | Collection → channel | yes (API + Admin UI) |
+| `POST` | `/api/admin/live-channels/channels/{id}/refill` | Re-fill lineup for an existing station | yes |
+| `DELETE` | `/api/admin/live-channels/channels/{id}` | Delete a Tunarr station | yes |
 | `GET` | `/api/live-channels/on-now` | Guide snapshot (owner + members when enabled) | yes |
 | `GET` | `/api/admin/live-channels/plex-attach` | Plain-language steps + copy URLs + discovery hint | yes |
 
@@ -214,7 +218,7 @@ Exact shapes follow existing setup / features response conventions in `projectio
 - [x] Plain-language attach steps; copy tuner/guide URLs in Admin UI
 - [x] Best-effort tuner discovery green-check
 - [x] Persist `last_publish_at` / `last_error` on Tunarr settings / status
-- [ ] Dedicated Config UI for collection → channel (API exists)
+- [x] Dedicated Config UI for collection → channel + custom craft + manage/refill/delete
 
 ---
 

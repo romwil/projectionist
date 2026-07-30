@@ -619,5 +619,13 @@ Generate/rotate both in **Admin → Advanced** (or set the env vars); the keys m
 
 ## Live Channels (owners)
 
-When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. If you already have an OTA antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. In Admin → Live Channels: on **Tuner Setup** select the discovered Tunarr device and enter any US ZIP so Next unlocks (gate only). The **EPG Location** dropdown is commercial lineups only — pick any temporary lineup so Plex finishes adding the tuner. Device Settings and DVR Settings do **not** offer an XMLTV paste field. After the tuner exists, click **Attach Tunarr guide in Plex** — Projectionist uses the PMS API to put Tunarr on its own XMLTV DVR and map channels, leaving your OTA commercial guide alone. Starter stations use channel numbers from 100+. Watching stays in Plex; Projectionist does not play live video in-app.
+When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. You never need Tunarr’s own admin UI.
+
+**Craft and publish (Admin → Live Channels):**
+1. Turn Live Channels on, run preflight, and start the broadcast engine (when Docker management is available).
+2. Under **Create / publish channels**, either **Craft a custom station** (name, number, motif / taste cluster / collection / Chaos / youth-safe), publish a **collection**, or **Propose starters** and publish the pack.
+3. Check **Your stations** for lineup depth — use **Refill** if a station is empty after a library scan, or **Delete** to remove it from the tuner.
+4. Add Tunarr beside your other tuners in Plex (below), then **Attach Tunarr guide in Plex**.
+
+If you already have an OTA antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. On **Tuner Setup** select the discovered Tunarr device and enter any US ZIP so Next unlocks (gate only). The **EPG Location** dropdown is commercial lineups only — pick any temporary lineup so Plex finishes adding the tuner. Device Settings and DVR Settings do **not** offer an XMLTV paste field. After the tuner exists, click **Attach Tunarr guide in Plex** — Projectionist uses the PMS API to put Tunarr on its own XMLTV DVR and map channels, leaving your OTA commercial guide alone. Virtual stations use channel numbers from 100+. Watching stays in Plex; Projectionist does not play live video in-app.
 

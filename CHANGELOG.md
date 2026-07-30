@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [1.29.14] — 2026-07-30
+
+Owners can finally **craft** Live Channels stations in Admin and publish them to Tunarr — custom recipes, collections, starter packs, plus refill/delete — without opening Tunarr’s UI.
+
+### Highlights
+- **Craft a station in Admin.** Name it, pick a channel number, choose a motif / taste cluster / collection / Chaos / youth-safe recipe, and publish to the tuner.
+- **Starter pack still one tap.** Propose library-aware starters and publish the ones you want.
+- **Manage what you published.** Your stations lists lineup depth; Refill after a library scan; Delete removes a station from Tunarr.
+- **Plex Live TV actually plays.** Tunarr mounts your library paths so streams start from local files instead of dying with “session has ended.”
+
+### Added
+- `GET /api/admin/live-channels/craft-options`, `POST …/channels/publish`, `POST …/channels/{id}/refill`, `DELETE …/channels/{id}`.
+- `projectionist/live_channels/craft.py` craft vocabulary helpers; Tunarr client `update_channel` / `delete_channel`.
+- Admin Live Channels: craft form, collection one-tap publish, Your stations manage list; HELP owner craft steps.
+- Tunarr Docker media binds (`tunarr.media_binds` / `PROJECTIONIST_TUNARR_MEDIA_BINDS`) with recreate-on-missing-binds.
+
+### Changed
+- Create / publish step copy clarifies three supported paths (craft, collection, starters); Plex attach renumbered as the step after manage.
+
+### Fixed
+- **Live TV “session has ended” after guide titles work.** Managed Tunarr was config-only — ffmpeg pulled Plex parts over HTTP with deep mid-program seeks, so cold HDHR tunes returned HTTP 200 with **0 bytes** and Plex closed the session. Tunarr now mounts library binds (e.g. `/mnt/user/data/media:/data/media:ro`); `ensure_running` recreates the sidecar when binds are missing.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1513 passed, 6 skipped; coverage **76.2%** (≥74%).
+- `cd frontend && npm run test:unit` — 514 passed; `npm run lint` — 0 errors; `npm run build` — pass.
+- `pytest tests/test_version.py` — lockstep **1.29.14**.
+
 ## [1.29.13] — 2026-07-30
 
 Admin **Mail & alerts** is easier to scan and safer to operate: clearer sections, advanced options tucked away, and save/test feedback next to each action.

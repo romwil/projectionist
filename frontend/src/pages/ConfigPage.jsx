@@ -12,6 +12,8 @@ import {
   getAuthMe,
   getFeatures,
   getHealth,
+  deleteLiveChannelsChannel,
+  getLiveChannelsCraftOptions,
   getLiveChannelsLifecycleStatus,
   getLiveChannelsPlexAttach,
   postLiveChannelsPlexAttachGuide,
@@ -29,7 +31,10 @@ import {
   patchUserYouthMode,
   postLiveChannelsLifecycle,
   postLiveChannelsPreflight,
+  publishLiveChannelsChannel,
+  publishLiveChannelsFromCollection,
   publishLiveChannelsStarters,
+  refillLiveChannelsChannel,
   putPersona,
   putSystemConfig,
   resolveModelForProvider,
@@ -416,6 +421,18 @@ export default function ConfigPage() {
   const [liveChannelsStatus, setLiveChannelsStatus] = useState(null);
   const [livePreflight, setLivePreflight] = useState(null);
   const [liveStarters, setLiveStarters] = useState(null);
+  const [liveCraftOptions, setLiveCraftOptions] = useState(null);
+  const [liveCraft, setLiveCraft] = useState({
+    name: "",
+    number: "",
+    source: "motif",
+    programming_mode: "shuffle",
+    motif: "",
+    cluster_tag: "",
+    collection_id: "",
+    collection_title: "",
+    youth_safe: false,
+  });
   const [liveAttach, setLiveAttach] = useState(null);
   const [liveBusy, setLiveBusy] = useState(null);
   const [liveEngineProgress, setLiveEngineProgress] = useState(null);
@@ -542,6 +559,19 @@ export default function ConfigPage() {
     getLiveChannelsStatus()
       .then(setLiveChannelsStatus)
       .catch(() => setLiveChannelsStatus(null));
+    getLiveChannelsCraftOptions()
+      .then((opts) => {
+        setLiveCraftOptions(opts);
+        setLiveCraft((prev) => ({
+          ...prev,
+          number: prev.number || String(opts.next_channel_number || 100),
+          motif: prev.motif || opts.motifs?.[0]?.value || "",
+          cluster_tag: prev.cluster_tag || opts.taste_clusters?.[0]?.cluster_tag || "",
+          collection_id: prev.collection_id || opts.collections?.[0]?.id || "",
+          collection_title: prev.collection_title || opts.collections?.[0]?.title || "",
+        }));
+      })
+      .catch(() => setLiveCraftOptions(null));
     if (settings?.tunarr?.docker_orchestration) {
       getLiveChannelsLifecycleStatus()
         .then(setLiveEngineProgress)
@@ -3110,11 +3140,314 @@ export default function ConfigPage() {
                       </button>
                     </div>
                     <p className="wizard-note">
-                      This is how you create new stations: propose a library-aware starter pack, then
-                      publish. Publish also enables Tunarr’s Plex libraries, fills lineups with real
-                      titles, and skips channel numbers that already exist (re-publish refreshes empty
-                      lineups).
+                      Three ways to add stations — none require Tunarr’s own UI. Publish enables
+                      Tunarr’s Plex libraries, fills lineups with real titles, and skips numbers that
+                      already exist (re-publish / Refill refreshes empty lineups).
                     </p>
+
+                    <div className="live-channels-craft-block" data-testid="live-channels-craft">
+                      <h4>Craft a custom station</h4>
+                      <p className="wizard-note">
+                        {liveCraftOptions?.hint ||
+                          "Name the station, pick a motif / taste cluster / collection / Chaos, then publish to the tuner."}
+                      </p>
+                      <div className="service-fields live-channels-craft-fields">
+                        <label>
+                          Station name
+                          <input
+                            type="text"
+                            data-testid="live-channels-craft-name"
+                            value={liveCraft.name}
+                            placeholder="e.g. Midnight Mystery"
+                            onChange={(event) =>
+                              setLiveCraft((prev) => ({ ...prev, name: event.target.value }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Channel number
+                          <input
+                            type="number"
+                            min={1}
+                            data-testid="live-channels-craft-number"
+                            value={liveCraft.number}
+                            onChange={(event) =>
+                              setLiveCraft((prev) => ({ ...prev, number: event.target.value }))
+                            }
+                          />
+                        </label>
+                        <label>
+                          Recipe
+                          <select
+                            data-testid="live-channels-craft-source"
+                            value={liveCraft.source}
+                            onChange={(event) => {
+                              const source = event.target.value;
+                              setLiveCraft((prev) => ({
+                                ...prev,
+                                source,
+                                programming_mode:
+                                  source === "collection"
+                                    ? "sequential"
+                                    : source === "chaos"
+                                      ? "chaos"
+                                      : "shuffle",
+                                youth_safe: source === "youth",
+                              }));
+                            }}
+                          >
+                            {(liveCraftOptions?.sources || [
+                              { id: "motif", label: "Plot motif" },
+                              { id: "taste_cluster", label: "Taste cluster" },
+                              { id: "collection", label: "Collection / list" },
+                              { id: "chaos", label: "Chaos" },
+                              { id: "youth", label: "Youth-safe" },
+                            ]).map((src) => (
+                              <option key={src.id} value={src.id}>
+                                {src.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          Programming
+                          <select
+                            data-testid="live-channels-craft-mode"
+                            value={liveCraft.programming_mode}
+                            onChange={(event) =>
+                              setLiveCraft((prev) => ({
+                                ...prev,
+                                programming_mode: event.target.value,
+                              }))
+                            }
+                          >
+                            {(liveCraftOptions?.programming_modes || [
+                              { id: "shuffle", label: "Shuffle" },
+                              { id: "sequential", label: "Sequential" },
+                              { id: "chaos", label: "Chaos" },
+                            ]).map((mode) => (
+                              <option key={mode.id} value={mode.id}>
+                                {mode.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {liveCraft.source === "motif" ? (
+                          <label>
+                            Motif
+                            <select
+                              data-testid="live-channels-craft-motif"
+                              value={liveCraft.motif}
+                              onChange={(event) =>
+                                setLiveCraft((prev) => ({
+                                  ...prev,
+                                  motif: event.target.value,
+                                  name: prev.name || event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Select a motif…</option>
+                              {(liveCraftOptions?.motifs || []).map((motif) => (
+                                <option key={motif.value} value={motif.value}>
+                                  {motif.label}
+                                  {motif.count ? ` (${motif.count})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        {liveCraft.source === "taste_cluster" ? (
+                          <label>
+                            Taste cluster
+                            <select
+                              data-testid="live-channels-craft-cluster"
+                              value={liveCraft.cluster_tag}
+                              onChange={(event) =>
+                                setLiveCraft((prev) => ({
+                                  ...prev,
+                                  cluster_tag: event.target.value,
+                                  name: prev.name || event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Select a cluster…</option>
+                              {(liveCraftOptions?.taste_clusters || []).map((cluster) => (
+                                <option key={cluster.cluster_tag} value={cluster.cluster_tag}>
+                                  {cluster.label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        {liveCraft.source === "collection" ? (
+                          <label>
+                            Collection
+                            <select
+                              data-testid="live-channels-craft-collection"
+                              value={liveCraft.collection_id}
+                              onChange={(event) => {
+                                const id = event.target.value;
+                                const match = (liveCraftOptions?.collections || []).find(
+                                  (row) => row.id === id,
+                                );
+                                setLiveCraft((prev) => ({
+                                  ...prev,
+                                  collection_id: id,
+                                  collection_title: match?.title || "",
+                                  name: prev.name || match?.title || "",
+                                }));
+                              }}
+                            >
+                              <option value="">Select a collection…</option>
+                              {(liveCraftOptions?.collections || []).map((row) => (
+                                <option key={row.id || row.title} value={row.id}>
+                                  {row.label}
+                                  {row.item_count ? ` (${row.item_count})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                      </div>
+                      <div className="wizard-actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="live-channels-craft-publish"
+                          disabled={liveBusy === "craft"}
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                "Publish this station to Tunarr? It will appear on the HDHomeRun tuner / Plex Live TV after guide attach.",
+                              )
+                            ) {
+                              return;
+                            }
+                            setLiveBusy("craft");
+                            try {
+                              const number = Number(liveCraft.number);
+                              const result = await publishLiveChannelsChannel({
+                                name: liveCraft.name,
+                                number: Number.isFinite(number) ? number : 0,
+                                source: liveCraft.source,
+                                programming_mode: liveCraft.programming_mode,
+                                motif: liveCraft.motif,
+                                cluster_tag: liveCraft.cluster_tag,
+                                collection_id: liveCraft.collection_id,
+                                collection_title: liveCraft.collection_title,
+                                youth_safe: liveCraft.youth_safe || liveCraft.source === "youth",
+                                fill_programming: true,
+                              });
+                              const feedback = formatPublishFeedback(result);
+                              setActionFeedback(
+                                "live-channels",
+                                feedback.type,
+                                feedback.summary,
+                                { details: feedback.details },
+                              );
+                              const [status, opts] = await Promise.all([
+                                getLiveChannelsStatus(),
+                                getLiveChannelsCraftOptions(),
+                              ]);
+                              setLiveChannelsStatus(status);
+                              setLiveCraftOptions(opts);
+                              setLiveCraft((prev) => ({
+                                ...prev,
+                                name: "",
+                                number: String(opts.next_channel_number || 100),
+                              }));
+                            } catch (error) {
+                              setActionFeedback("live-channels", "error", error.message);
+                            } finally {
+                              setLiveBusy(null);
+                            }
+                          }}
+                        >
+                          {liveBusy === "craft" ? "Publishing…" : "Publish station"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      className="live-channels-craft-block"
+                      data-testid="live-channels-from-collection"
+                    >
+                      <h4>From a published collection</h4>
+                      <p className="wizard-note">
+                        One-tap sequential station from a household collection (same as choosing
+                        Collection in the craft form).
+                      </p>
+                      <div className="wizard-actions">
+                        <button
+                          type="button"
+                          className="ghost"
+                          data-testid="live-channels-publish-collection"
+                          disabled={
+                            liveBusy === "collection" ||
+                            !(liveCraftOptions?.collections || []).length
+                          }
+                          onClick={async () => {
+                            const first = (liveCraftOptions?.collections || [])[0];
+                            if (!first) return;
+                            const picked =
+                              (liveCraft.collection_id &&
+                                (liveCraftOptions?.collections || []).find(
+                                  (row) => row.id === liveCraft.collection_id,
+                                )) ||
+                              first;
+                            if (
+                              !window.confirm(
+                                `Publish “${picked.title}” as a sequential Live Channel station?`,
+                              )
+                            ) {
+                              return;
+                            }
+                            setLiveBusy("collection");
+                            try {
+                              const result = await publishLiveChannelsFromCollection({
+                                collection_id: picked.id,
+                                collection_title: picked.title,
+                                name: picked.title,
+                              });
+                              const feedback = formatPublishFeedback(result);
+                              setActionFeedback(
+                                "live-channels",
+                                feedback.type,
+                                feedback.summary,
+                                { details: feedback.details },
+                              );
+                              setLiveChannelsStatus(await getLiveChannelsStatus());
+                              setLiveCraftOptions(await getLiveChannelsCraftOptions());
+                            } catch (error) {
+                              setActionFeedback("live-channels", "error", error.message);
+                            } finally {
+                              setLiveBusy(null);
+                            }
+                          }}
+                        >
+                          {liveBusy === "collection"
+                            ? "Publishing…"
+                            : (liveCraftOptions?.collections || []).length
+                              ? `Publish “${
+                                  (
+                                    (liveCraft.collection_id &&
+                                      (liveCraftOptions?.collections || []).find(
+                                        (row) => row.id === liveCraft.collection_id,
+                                      )) ||
+                                    liveCraftOptions.collections[0]
+                                  )?.title
+                                }”`
+                              : "No published collections yet"}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="live-channels-craft-block">
+                      <h4>Starter pack</h4>
+                      <p className="wizard-note">
+                        Propose 2–4 library-aware stations (taste, motifs, collections, Chaos /
+                        youth-safe), then publish the ones you want.
+                      </p>
                     {liveStarters?.proposals?.length ? (
                       <>
                         <ul className="wizard-note" data-testid="live-channels-starter-list">
@@ -3181,15 +3514,140 @@ export default function ConfigPage() {
                               }
                             }}
                           >
-                            {liveBusy === "publish" ? "Publishing…" : "Create / publish channels"}
+                            {liveBusy === "publish" ? "Publishing…" : "Publish selected starters"}
                           </button>
                         </div>
                       </>
                     ) : (
                       <p className="wizard-note">
-                        Click Propose starters for 2–4 stations from your taste clusters, motifs, and
-                        collections (plus Chaos / youth-safe when it fits). Then Create / publish
-                        channels.
+                        Click Propose starters above for 2–4 stations from your library signals.
+                      </p>
+                    )}
+                    </div>
+                  </div>
+
+                  <div className="service-card" data-testid="live-channels-manage">
+                    <div className="service-card-header">
+                      <div className="service-card-title">
+                        <h3>Your stations</h3>
+                      </div>
+                      <button
+                        type="button"
+                        className="ghost"
+                        data-testid="live-channels-refresh-manage"
+                        disabled={liveBusy === "manage-refresh"}
+                        onClick={async () => {
+                          setLiveBusy("manage-refresh");
+                          try {
+                            setLiveChannelsStatus(await getLiveChannelsStatus());
+                          } catch (error) {
+                            setActionFeedback("live-channels", "error", error.message);
+                          } finally {
+                            setLiveBusy(null);
+                          }
+                        }}
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                    <p className="wizard-note">
+                      Lineup depth and publish errors show here. Refill re-pulls titles after Tunarr
+                      finishes scanning; Delete removes the station from the tuner (Plex may take a
+                      minute to drop it from the guide).
+                    </p>
+                    {(liveChannelsStatus?.guide_index?.lineup?.channels ||
+                      liveChannelsStatus?.channels ||
+                      []).length ? (
+                      <ul className="wizard-note live-channels-manage-list" data-testid="live-channels-manage-list">
+                        {(
+                          liveChannelsStatus?.guide_index?.lineup?.channels ||
+                          liveChannelsStatus?.channels ||
+                          []
+                        ).map((ch) => {
+                          const id = ch.id || ch.channel_id;
+                          const programs =
+                            ch.total_programs != null ? Number(ch.total_programs) : null;
+                          return (
+                            <li key={id || `${ch.number}:${ch.name}`}>
+                              <div className="live-channels-manage-row">
+                                <span>
+                                  {ch.number != null ? `${ch.number} · ` : ""}
+                                  {ch.name || "Station"}
+                                  {programs != null
+                                    ? programs > 0
+                                      ? ` — ${programs} titles in lineup`
+                                      : " — empty lineup (refill after scan)"
+                                    : ""}
+                                </span>
+                                <span className="live-channels-manage-actions">
+                                  <button
+                                    type="button"
+                                    className="ghost"
+                                    data-testid={`live-channels-refill-${id}`}
+                                    disabled={!id || liveBusy === `refill-${id}`}
+                                    onClick={async () => {
+                                      if (!id) return;
+                                      if (!window.confirm(`Refill lineup for ${ch.name}?`)) return;
+                                      setLiveBusy(`refill-${id}`);
+                                      try {
+                                        const result = await refillLiveChannelsChannel(id);
+                                        setActionFeedback(
+                                          "live-channels",
+                                          result.ok ? "success" : "error",
+                                          result.note || "Refill finished.",
+                                        );
+                                        setLiveChannelsStatus(await getLiveChannelsStatus());
+                                      } catch (error) {
+                                        setActionFeedback("live-channels", "error", error.message);
+                                      } finally {
+                                        setLiveBusy(null);
+                                      }
+                                    }}
+                                  >
+                                    {liveBusy === `refill-${id}` ? "Refilling…" : "Refill"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="ghost"
+                                    data-testid={`live-channels-delete-${id}`}
+                                    disabled={!id || liveBusy === `delete-${id}`}
+                                    onClick={async () => {
+                                      if (!id) return;
+                                      if (
+                                        !window.confirm(
+                                          `Delete station ${ch.number != null ? ch.number + " · " : ""}${ch.name}? This cannot be undone.`,
+                                        )
+                                      ) {
+                                        return;
+                                      }
+                                      setLiveBusy(`delete-${id}`);
+                                      try {
+                                        await deleteLiveChannelsChannel(id);
+                                        setActionFeedback(
+                                          "live-channels",
+                                          "success",
+                                          `Deleted ${ch.name}.`,
+                                        );
+                                        setLiveChannelsStatus(await getLiveChannelsStatus());
+                                        setLiveCraftOptions(await getLiveChannelsCraftOptions());
+                                      } catch (error) {
+                                        setActionFeedback("live-channels", "error", error.message);
+                                      } finally {
+                                        setLiveBusy(null);
+                                      }
+                                    }}
+                                  >
+                                    {liveBusy === `delete-${id}` ? "Deleting…" : "Delete"}
+                                  </button>
+                                </span>
+                              </div>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="wizard-note" data-testid="live-channels-manage-empty">
+                        No stations on Tunarr yet — craft one above or publish a starter pack.
                       </p>
                     )}
                   </div>
@@ -3198,7 +3656,7 @@ export default function ConfigPage() {
                     <div className="service-card-header">
                       <div className="service-card-title">
                         <p className="live-channels-step-label">
-                          Step {settings?.tunarr?.docker_orchestration ? "4" : "3"}
+                          Step {settings?.tunarr?.docker_orchestration ? "5" : "4"}
                         </p>
                         <h3>Add Tunarr beside your tuners in Plex</h3>
                       </div>
