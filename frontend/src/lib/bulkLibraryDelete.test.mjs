@@ -293,6 +293,10 @@ describe("owner title-detail delete gating", () => {
       "utf8",
     );
     const drawer = readFileSync(join(libDir, "components", "TitleDetailDrawer.jsx"), "utf8");
+    const interactions = readFileSync(
+      join(libDir, "hooks", "useTitleDetailInteractions.js"),
+      "utf8",
+    );
     const css = readFileSync(join(libDir, "styles", "10-explore-delight.css"), "utf8");
 
     assert.match(dialog, /createPortal/);
@@ -302,6 +306,12 @@ describe("owner title-detail delete gating", () => {
     assert.match(dialog, /onClick=\{stopBubble\}/);
     assert.match(drawer, /interactions\.deleteOpen/);
     assert.match(drawer, /setDeleteOpen\(false\)/);
+    // Full-remove success must surface path/size totals from the drawer too —
+    // otherwise Storage Intelligence deletes look like a silent no-op.
+    assert.match(drawer, /RemovalSummaryDialog/);
+    assert.match(drawer, /dismissRemovalSummary/);
+    assert.match(interactions, /onDeleteSuccess/);
+    assert.match(interactions, /deleteInFlightRef/);
 
     const backdropRule = css.match(
       /\.bulk-delete-modal-backdrop\s*\{[^}]*z-index:\s*(\d+)/s,

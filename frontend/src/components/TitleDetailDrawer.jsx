@@ -1,11 +1,15 @@
 import { useEffect, useId, useRef, useState } from "react";
 import BulkLibraryDeleteDialog from "./BulkLibraryDeleteDialog.jsx";
 import RecommendModal from "./RecommendModal";
+import RemovalSummaryDialog from "./RemovalSummaryDialog.jsx";
 import TitleDetailContent from "./TitleDetailContent";
 import TitleReviewModal from "./TitleReviewModal";
 import { useTitleDetail } from "../hooks/useTitleDetail.js";
 import { useTitleDetailInteractions } from "../hooks/useTitleDetailInteractions.js";
-import { canOwnerDeleteLibraryTitle } from "../lib/bulkLibraryDelete.js";
+import {
+  canOwnerDeleteLibraryTitle,
+  LIBRARY_DELETE_MODE_INDEX,
+} from "../lib/bulkLibraryDelete.js";
 import { titleDetailHrefFromTarget } from "../lib/titleDetailDrawer.js";
 
 function getFocusableElements(root) {
@@ -20,6 +24,9 @@ function getFocusableElements(root) {
 /**
  * Right-docked slide-over for in-context title detail (reusable from lists).
  * Pass `target`: { mediaType, itemId, idType } from titleDetailTargetFromItem().
+ *
+ * Optional delete UI props match BulkLibraryDeleteDialog (e.g. Storage Intelligence
+ * passes ``deleteSurface="purge"`` + full-remove default).
  */
 export default function TitleDetailDrawer({
   open,
@@ -27,6 +34,8 @@ export default function TitleDetailDrawer({
   onClose,
   returnFocusRef,
   onDeleted,
+  deleteDefaultMode = LIBRARY_DELETE_MODE_INDEX,
+  deleteSurface = "",
 }) {
   const panelRef = useRef(null);
   const closeButtonRef = useRef(null);
@@ -49,14 +58,18 @@ export default function TitleDetailDrawer({
   const interactions = useTitleDetailInteractions({
     detail,
     setDetail,
-    onDeleted: (result) => {
+    // Refresh parent lists as soon as the API succeeds (even while summary is open).
+    onDeleteSuccess: (result) => {
       onDeleted?.(result);
+    },
+    onDeleted: () => {
       onClose?.();
     },
   });
 
   const fullPageHref = titleDetailHrefFromTarget(target);
   const trailerKey = String(detail?.trailer_youtube_key || "").trim();
+  const busyDeleting = Boolean(interactions.deleting || interactions.removalSummary);
 
   useEffect(() => {
     if (!open) {
@@ -80,6 +93,8 @@ export default function TitleDetailDrawer({
     function onKeyDown(event) {
       if (event.key === "Escape") {
         event.preventDefault();
+        // Do not dismiss while a full remove is running or the summary is open.
+        if (interactions.deleting || interactions.removalSummary) return;
         onClose?.();
         return;
       }
@@ -112,7 +127,13 @@ export default function TitleDetailDrawer({
         previousFocus.focus();
       }
     };
-  }, [open, onClose, returnFocusRef]);
+  }, [
+    open,
+    onClose,
+    returnFocusRef,
+    interactions.deleting,
+    interactions.removalSummary,
+  ]);
 
   useEffect(() => {
     if (!trailerOpen) return undefined;
@@ -123,88 +144,102 @@ export default function TitleDetailDrawer({
     return () => document.removeEventListener("keydown", onKey);
   }, [trailerOpen]);
 
-  if (!open) return null;
-
   const canDeleteLibrary = canOwnerDeleteLibraryTitle(detail, {
     role: interactions.userRole,
     multiUserEnabled: interactions.multiUserEnabled,
   });
 
+  function requestClose() {
+    if (busyDeleting) return;
+    onClose?.();
+  }
+
+  // Keep delete/summary portals mounted after the drawer closes so a slow full
+  // remove can still surface totals instead of vanishing silently.
+  if (!open && !interactions.deleteOpen && !interactions.removalSummary && !interactions.deleting) {
+    return null;
+  }
+
   return (
     <>
-      <button
-        type="button"
-        className="title-detail-drawer-scrim"
-        data-testid="title-detail-drawer-scrim"
-        aria-label="Close title detail"
-        onClick={onClose}
-      />
-
-      <aside
-        ref={panelRef}
-        className="title-detail-drawer-panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        data-testid="title-detail-drawer"
-      >
-        <header className="title-detail-drawer-header">
-          <p className="title-detail-drawer-eyebrow">
-            {detail?.media_type === "show" ? "TV Show" : "Movie"}
-          </p>
+      {open ? (
+        <>
           <button
-            ref={closeButtonRef}
             type="button"
-            className="title-detail-drawer-close ghost"
-            data-testid="title-detail-drawer-close"
-            aria-label="Close"
-            onClick={onClose}
+            className="title-detail-drawer-scrim"
+            data-testid="title-detail-drawer-scrim"
+            aria-label="Close title detail"
+            onClick={requestClose}
+          />
+
+          <aside
+            ref={panelRef}
+            className="title-detail-drawer-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            data-testid="title-detail-drawer"
           >
-            <span className="material-symbols-outlined" aria-hidden="true">
-              close
-            </span>
-          </button>
-        </header>
+            <header className="title-detail-drawer-header">
+              <p className="title-detail-drawer-eyebrow">
+                {detail?.media_type === "show" ? "TV Show" : "Movie"}
+              </p>
+              <button
+                ref={closeButtonRef}
+                type="button"
+                className="title-detail-drawer-close ghost"
+                data-testid="title-detail-drawer-close"
+                aria-label="Close"
+                disabled={busyDeleting}
+                onClick={requestClose}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  close
+                </span>
+              </button>
+            </header>
 
-        <div className="title-detail-drawer-body">
-          {loading ? (
-            <div className="title-detail-drawer-loading" aria-live="polite">
-              <div className="dash-skeleton" aria-label="Loading title">
-                <div className="dash-skeleton-bar" />
-                <div className="dash-skeleton-bar short" />
-                <div className="dash-skeleton-bar" />
-              </div>
+            <div className="title-detail-drawer-body">
+              {loading ? (
+                <div className="title-detail-drawer-loading" aria-live="polite">
+                  <div className="dash-skeleton" aria-label="Loading title">
+                    <div className="dash-skeleton-bar" />
+                    <div className="dash-skeleton-bar short" />
+                    <div className="dash-skeleton-bar" />
+                  </div>
+                </div>
+              ) : error ? (
+                <p className="error title-detail-drawer-error" role="alert">
+                  {error}
+                </p>
+              ) : detail ? (
+                <TitleDetailContent
+                  detail={detail}
+                  variant="compact"
+                  fullPageHref={fullPageHref}
+                  titleId={titleId}
+                  multiUserEnabled={interactions.multiUserEnabled}
+                  userRole={interactions.userRole}
+                  requestPath={interactions.requestPath}
+                  addStatus={interactions.addStatus}
+                  addMessage={interactions.addMessage}
+                  watchStatus={interactions.watchStatus}
+                  watchMessage={interactions.watchMessage}
+                  deleting={interactions.deleting}
+                  onRequestAdd={interactions.handleRequestAdd}
+                  onToggleWatched={interactions.handleToggleWatched}
+                  onOpenTrailer={() => setTrailerOpen(true)}
+                  onOpenReview={() => setReviewOpen(true)}
+                  onOpenRecommend={() => setRecommendOpen(true)}
+                  onOpenDelete={interactions.openLibraryDelete}
+                />
+              ) : null}
             </div>
-          ) : error ? (
-            <p className="error title-detail-drawer-error" role="alert">
-              {error}
-            </p>
-          ) : detail ? (
-            <TitleDetailContent
-              detail={detail}
-              variant="compact"
-              fullPageHref={fullPageHref}
-              titleId={titleId}
-              multiUserEnabled={interactions.multiUserEnabled}
-              userRole={interactions.userRole}
-              requestPath={interactions.requestPath}
-              addStatus={interactions.addStatus}
-              addMessage={interactions.addMessage}
-              watchStatus={interactions.watchStatus}
-              watchMessage={interactions.watchMessage}
-              deleting={interactions.deleting}
-              onRequestAdd={interactions.handleRequestAdd}
-              onToggleWatched={interactions.handleToggleWatched}
-              onOpenTrailer={() => setTrailerOpen(true)}
-              onOpenReview={() => setReviewOpen(true)}
-              onOpenRecommend={() => setRecommendOpen(true)}
-              onOpenDelete={interactions.openLibraryDelete}
-            />
-          ) : null}
-        </div>
-      </aside>
+          </aside>
+        </>
+      ) : null}
 
-      {trailerOpen && trailerKey && detail ? (
+      {open && trailerOpen && trailerKey && detail ? (
         <div
           className="trailer-modal-backdrop"
           data-testid="trailer-modal"
@@ -251,39 +286,51 @@ export default function TitleDetailDrawer({
         </div>
       ) : null}
 
-      <RecommendModal
-        item={detail}
-        open={recommendOpen}
-        onClose={() => setRecommendOpen(false)}
-      />
+      {open ? (
+        <>
+          <RecommendModal
+            item={detail}
+            open={recommendOpen}
+            onClose={() => setRecommendOpen(false)}
+          />
 
-      <TitleReviewModal
-        detail={detail}
-        open={reviewOpen}
-        onClose={() => setReviewOpen(false)}
-        onSaved={(saved) => {
-          setDetail((prev) =>
-            prev
-              ? {
-                  ...prev,
-                  user_stars: saved?.stars ?? prev.user_stars,
-                }
-              : prev,
-          );
-        }}
-      />
+          <TitleReviewModal
+            detail={detail}
+            open={reviewOpen}
+            onClose={() => setReviewOpen(false)}
+            onSaved={(saved) => {
+              setDetail((prev) =>
+                prev
+                  ? {
+                      ...prev,
+                      user_stars: saved?.stars ?? prev.user_stars,
+                    }
+                  : prev,
+              );
+            }}
+          />
+        </>
+      ) : null}
 
       <BulkLibraryDeleteDialog
         open={interactions.deleteOpen}
         titles={canDeleteLibrary ? [detail?.title || "Untitled"] : []}
         loading={interactions.deleting}
         error={interactions.deleteError}
+        defaultMode={deleteDefaultMode || LIBRARY_DELETE_MODE_INDEX}
+        surface={deleteSurface}
         onCancel={() => {
           if (interactions.deleting) return;
           interactions.setDeleteOpen(false);
           interactions.setDeleteError("");
         }}
         onConfirm={interactions.handleLibraryDeleteConfirm}
+      />
+
+      <RemovalSummaryDialog
+        open={Boolean(interactions.removalSummary)}
+        result={interactions.removalSummary}
+        onClose={interactions.dismissRemovalSummary}
       />
     </>
   );

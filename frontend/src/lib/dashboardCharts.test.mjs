@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildRuntimeBuckets, sortPurgeCandidates } from "./dashboardCharts.js";
+import {
+  buildRuntimeBuckets,
+  filterPurgeCandidatesByMediaType,
+  normalizePurgeMediaTypeFilter,
+  sortPurgeCandidates,
+} from "./dashboardCharts.js";
 
 // ── buildRuntimeBuckets ──
 
@@ -39,6 +44,35 @@ test("buildRuntimeBuckets omits buckets with zero count", () => {
   assert.equal(result.length, 2);
   assert.equal(result[0].label, "Short (<90m)");
   assert.equal(result[1].label, "Epic (150m+)");
+});
+
+// ── filterPurgeCandidatesByMediaType ──
+
+test("normalizePurgeMediaTypeFilter maps tabs and aliases", () => {
+  assert.equal(normalizePurgeMediaTypeFilter(null), null);
+  assert.equal(normalizePurgeMediaTypeFilter("all"), null);
+  assert.equal(normalizePurgeMediaTypeFilter("movie"), "movie");
+  assert.equal(normalizePurgeMediaTypeFilter("Movies"), "movie");
+  assert.equal(normalizePurgeMediaTypeFilter("show"), "show");
+  assert.equal(normalizePurgeMediaTypeFilter("tv"), "show");
+});
+
+test("filterPurgeCandidatesByMediaType keeps movies or shows", () => {
+  const input = [
+    { title: "Dune", media_type: "movie" },
+    { title: "The Expanse", media_type: "show" },
+    { title: "Local", media_type: "Movie" },
+  ];
+  assert.deepEqual(
+    filterPurgeCandidatesByMediaType(input, "movie").map((item) => item.title),
+    ["Dune", "Local"],
+  );
+  assert.deepEqual(
+    filterPurgeCandidatesByMediaType(input, "show").map((item) => item.title),
+    ["The Expanse"],
+  );
+  assert.equal(filterPurgeCandidatesByMediaType(input, "all").length, 3);
+  assert.deepEqual(filterPurgeCandidatesByMediaType(null, "movie"), []);
 });
 
 // ── sortPurgeCandidates ──
