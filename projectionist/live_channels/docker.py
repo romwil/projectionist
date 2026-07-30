@@ -116,7 +116,8 @@ def _socket_unavailable_message(socket_path: Optional[str] = None) -> str:
     if status.get("error") == "permission_denied":
         return (
             "Docker socket is present but not accessible (permission denied). "
-            "Run as root, add the docker group, or use a BYO Tunarr URL."
+            "The app runs as a non-root user — recreate with --group-add "
+            "matching the sock group (Unraid docker: 281), or use a BYO Tunarr URL."
         )
     if status.get("present") and not status.get("accessible"):
         detail = status.get("error") or "inaccessible"

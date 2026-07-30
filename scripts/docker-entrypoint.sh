@@ -14,6 +14,23 @@ if [ "$(id -u)" = "0" ]; then
     if [ "$cfg_uid" != "1000" ] || [ "$cfg_gid" != "1000" ]; then
         chown -R projectionist:projectionist /config
     fi
+    # Live Channels: docker.sock is typically mode 660 root:docker (Unraid GID 281).
+    # The app runs as uid 1000 after gosu — without the socket group, connect() is
+    # EACCES even though the mount exists. Match the sock GID before dropping privs
+    # so managed Tunarr works without requiring --group-add on every host.
+    if [ -S /var/run/docker.sock ]; then
+        sock_gid="$(stat -c '%g' /var/run/docker.sock 2>/dev/null || true)"
+        if [ -n "$sock_gid" ] && [ "$sock_gid" != "0" ]; then
+            grp="$(getent group "$sock_gid" | cut -d: -f1 || true)"
+            if [ -z "$grp" ]; then
+                groupadd -g "$sock_gid" dockersock 2>/dev/null || true
+                grp="$(getent group "$sock_gid" | cut -d: -f1 || true)"
+            fi
+            if [ -n "$grp" ]; then
+                usermod -aG "$grp" projectionist 2>/dev/null || true
+            fi
+        fi
+    fi
     exec gosu projectionist "$@"
 fi
 

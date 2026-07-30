@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.29.4] — 2026-07-29
+
+Live Channels managed Tunarr keeps working after CA Force Update: the app user can reach Unraid’s docker.sock without a one-off recreate.
+
+### Highlights
+- **Entrypoint joins the docker sock group.** When `/var/run/docker.sock` is mounted, the image entrypoint adds its GID to the `projectionist` user before dropping privileges — so mode `660` root:docker no longer means EACCES for uid 1000.
+- **Unraid rollout and CA keep group-add.** `rollout.sh` auto `--group-add`s the sock GID; CA ExtraParams include `--group-add 281` so Force Update / template recreates stay sock-capable even before relying on the entrypoint alone.
+- **Clearer BYO messaging.** Preflight treats a healthy Tunarr URL as OK when the socket is still inaccessible, and points owners at Propose starters instead of a dead-end Start engine.
+
+### Changed
+- `scripts/docker-entrypoint.sh` auto-adds the docker.sock group before `gosu`.
+- `scripts/unraid-rollout.sh` adds `--group-add` for the sock GID when `MOUNT_DOCKER_SOCK` is on.
+- Unraid CA / compose docs: ExtraParams `--group-add 281`; permission-denied copy mentions group-add.
+- Live Channels preflight: soft docker check OK when BYO Tunarr URL is set; permission-denied messages mention Propose starters.
+
+### Fixed
+- Non-root app user EACCES on Unraid docker.sock (GID 281) after container recreate / Force Update.
+
+### Verification
+- Backend `pytest` live-channels + version lockstep **51 passed** (1441 deselected); `test_version` + live suites green.
+- `test_version` lockstep holds at **1.29.4** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.29.3] — 2026-07-29
 
 Managed Tunarr on Unraid binds its config under appdata (not a bogus host `/config/tunarr`), socket permission failures are honest, and the Tunarr URL field hints at the reachable host gateway.

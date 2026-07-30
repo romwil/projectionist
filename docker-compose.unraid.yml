@@ -56,7 +56,10 @@ services:
       # OPTIONAL — Live Channels managed Tunarr (root-equivalent). Off by default.
       # Uncomment only if you want Projectionist to pull/start/stop a Tunarr sibling.
       # Same opt-in as Unraid CA template path "Docker Socket".
+      # App drops to uid 1000 — also add group_add for the sock GID (Unraid docker: 281)
+      # or rely on image entrypoint ≥ next hotfix which auto-adds the sock group.
       # - /var/run/docker.sock:/var/run/docker.sock
+      # group_add: ["281"]  # Unraid docker GID; needed until entrypoint auto-adds sock group
     extra_hosts:
       # Matches Unraid CA ExtraParams: --add-host=host.docker.internal:host-gateway
       - "host.docker.internal:host-gateway"
