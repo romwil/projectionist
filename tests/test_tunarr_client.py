@@ -47,7 +47,9 @@ class TunarrClientTests(unittest.TestCase):
             if method == "GET" and url.endswith("/channels"):
                 return [{"id": "ch-1", "number": 100, "name": "Chaos"}]
             if method == "POST" and url.endswith("/channels"):
-                self.assertEqual(body, {"type": "new", "channel": {"name": "Motif", "number": 101}})
+                self.assertEqual(body["type"], "new")
+                self.assertEqual(body["channel"]["name"], "Motif")
+                self.assertEqual(body["channel"]["number"], 101)
                 return {"id": "ch-2", "number": 101, "name": "Motif"}
             raise AssertionError(f"unexpected {method} {url}")
 
@@ -56,6 +58,55 @@ class TunarrClientTests(unittest.TestCase):
             self.assertEqual(listed[0]["name"], "Chaos")
             created = client.create_channel({"type": "new", "channel": {"name": "Motif", "number": 101}})
             self.assertEqual(created["id"], "ch-2")
+
+    def test_fetch_debug_logs_download(self) -> None:
+        client = TunarrClient("http://tunarr.test")
+        captured: dict[str, str] = {}
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self):
+                return b"line-1\nline-2\nline-3\n"
+
+        def fake_urlopen(request, timeout=30):
+            captured["url"] = request.full_url
+            captured["timeout"] = timeout
+            return FakeResponse()
+
+        with patch("projectionist.connectors.tunarr.urllib.request.urlopen", side_effect=fake_urlopen):
+            text = client.fetch_debug_logs(line_limit=2)
+        self.assertIn("download=true", captured["url"])
+        self.assertIn("lineLimit=2", captured["url"])
+        self.assertEqual(text, "line-2\nline-3")
+
+    def test_list_transcode_configs_and_default(self) -> None:
+        client = TunarrClient("http://tunarr.test")
+
+        def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):
+            del method, headers, body, timeout
+            if url.endswith("/transcode_configs"):
+                return [
+                    {"id": "tc-other", "name": "Other", "isDefault": False},
+                    {"id": "tc-default", "name": "Default", "isDefault": True},
+                ]
+            raise AssertionError(f"unexpected url {url}")
+
+        with patch("projectionist.connectors.tunarr.request_json", side_effect=fake_request_json):
+            configs = client.list_transcode_configs()
+            self.assertEqual(len(configs), 2)
+            self.assertEqual(client.default_transcode_config_id(), "tc-default")
+
+        with patch(
+            "projectionist.connectors.tunarr.request_json",
+            return_value=[],
+        ):
+            with self.assertRaises(RuntimeError):
+                client.default_transcode_config_id()
 
     def test_media_sources_and_programming(self) -> None:
         client = TunarrClient("http://tunarr.test")

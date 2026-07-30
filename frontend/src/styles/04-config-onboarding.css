@@ -1169,6 +1169,66 @@ button.ghost.inline-link {
   margin-top: var(--space-3);
 }
 
+.inline-alert-details {
+  margin: var(--space-2) 0 0;
+  padding-left: 1.15rem;
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.live-channels-logs {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--surface, transparent) 88%, var(--bg));
+}
+
+.live-channels-logs > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  list-style: none;
+  user-select: none;
+}
+
+.live-channels-logs > summary::-webkit-details-marker {
+  display: none;
+}
+
+.live-channels-logs > summary::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+
+.live-channels-logs[open] > summary::before {
+  content: "▾ ";
+}
+
+.live-channels-logs-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-top: var(--space-3);
+}
+
+.live-channels-logs-scroller {
+  margin: var(--space-3) 0 0;
+  max-height: 18rem;
+  overflow: auto;
+  padding: var(--space-3);
+  border-radius: var(--radius-sm, 6px);
+  background: color-mix(in srgb, #0b1020 92%, var(--bg));
+  color: #d7e0f0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 @keyframes live-channels-hero-in {
   from {
     opacity: 0;

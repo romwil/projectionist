@@ -15,6 +15,7 @@ import {
   getLiveChannelsPlexAttach,
   getLiveChannelsStarterPack,
   getLiveChannelsStatus,
+  getLiveChannelsTunarrLogs,
   getPersona,
   getSettings,
   getWizardStatus,
@@ -201,17 +202,40 @@ function SecretInput({
   );
 }
 
-function InlineAlert({ type, message, testId }) {
+function InlineAlert({ type, message, details, testId }) {
   if (!message || (type !== "success" && type !== "error")) return null;
+  const detailList = Array.isArray(details)
+    ? details.map((item) => String(item || "").trim()).filter(Boolean)
+    : [];
   return (
     <div
       className={`inline-alert inline-alert-${type}`}
       role="alert"
       data-testid={testId || `inline-alert-${type}`}
     >
-      {message}
+      <div className="inline-alert-message">{message}</div>
+      {detailList.length ? (
+        <ul className="inline-alert-details" data-testid={`${testId || `inline-alert-${type}`}-details`}>
+          {detailList.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
+}
+
+function formatPublishFeedback(result) {
+  const published = result?.count_published || 0;
+  const skipped = result?.count_skipped || 0;
+  const errors = result?.count_errors || 0;
+  const summary = `Published ${published}, skipped ${skipped}, errors ${errors}.`;
+  const details = (result?.errors || []).map((err) => {
+    const label = [err?.number, err?.name].filter((part) => part != null && part !== "").join(" · ");
+    return `${label || "Channel"}: ${err?.error || "unknown error"}`;
+  });
+  const type = errors > 0 || result?.ok === false ? "error" : "success";
+  return { summary, details, type };
 }
 
 function CertifiedBadge({ certified, testing, serviceId }) {
@@ -388,6 +412,9 @@ export default function ConfigPage() {
   const [liveAttach, setLiveAttach] = useState(null);
   const [liveBusy, setLiveBusy] = useState(null);
   const [selectedStarters, setSelectedStarters] = useState({});
+  const [tunarrLogsOpen, setTunarrLogsOpen] = useState(false);
+  const [tunarrLogs, setTunarrLogs] = useState(null);
+  const [tunarrLogsBusy, setTunarrLogsBusy] = useState(false);
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
 
@@ -824,9 +851,33 @@ export default function ConfigPage() {
     );
   }
 
-  function setActionFeedback(area, type, message) {
-    setActionAlert({ area, type, message });
-    setStatus(message);
+  function setActionFeedback(area, type, message, options = {}) {
+    const details = Array.isArray(options.details) ? options.details : null;
+    setActionAlert({ area, type, message, details });
+    // Areas that render their own InlineAlert should not also fill the page footer
+    // status line (that produced duplicate red bar + plain text).
+    if (area === "live-channels" || area === "tunarr" || options.skipStatus) {
+      setStatus("");
+    } else {
+      setStatus(message);
+    }
+  }
+
+  async function refreshTunarrLogs() {
+    setTunarrLogsBusy(true);
+    try {
+      const payload = await getLiveChannelsTunarrLogs(200);
+      setTunarrLogs(payload);
+    } catch (error) {
+      setTunarrLogs({
+        ok: false,
+        text: "",
+        source: "",
+        message: error.message || "Could not load broadcast engine logs.",
+      });
+    } finally {
+      setTunarrLogsBusy(false);
+    }
   }
 
   function clearActionFeedback(area) {
@@ -2471,14 +2522,18 @@ export default function ConfigPage() {
                             liveChannelsStatus.last_publish_at
                               ? `Last lineup publish ${liveChannelsStatus.last_publish_at}`
                               : "No lineup published yet",
-                            liveChannelsStatus.last_error
-                              ? `Issue: ${liveChannelsStatus.last_error}`
-                              : null,
                           ]
                             .filter(Boolean)
                             .join(" · ")
                         : "Status not loaded yet — hit Refresh after you connect."}
                     </p>
+                    {liveChannelsStatus?.last_error && actionAlert?.area !== "live-channels" ? (
+                      <InlineAlert
+                        type="error"
+                        message={liveChannelsStatus.last_error}
+                        testId="live-channels-last-error"
+                      />
+                    ) : null}
                     {liveChannelsStatus?.airing?.length ? (
                       <ul className="wizard-note" data-testid="live-channels-airing-progress">
                         {liveChannelsStatus.airing.slice(0, 6).map((row) => {
@@ -2517,7 +2572,10 @@ export default function ConfigPage() {
                       <button
                         type="button"
                         data-testid="verify-tunarr"
-                        onClick={() => runTest("tunarr")}
+                        onClick={async () => {
+                          clearActionFeedback("live-channels");
+                          await runTest("tunarr");
+                        }}
                         disabled={testing === "tunarr" || !settings?.tunarr?.url}
                       >
                         {testing === "tunarr" ? "Testing…" : "Test connection"}
@@ -2588,8 +2646,22 @@ export default function ConfigPage() {
                         </span>
                       </label>
                     </details>
-                    {testResults.tunarr?.message && actionAlert?.area !== "live-channels" ? (
-                      <InlineAlert type={testResults.tunarr.state} message={testResults.tunarr.message} />
+                    {testResults.tunarr?.message &&
+                    actionAlert?.area !== "live-channels" &&
+                    actionAlert?.area !== "tunarr" ? (
+                      <InlineAlert
+                        type={testResults.tunarr.state}
+                        message={testResults.tunarr.message}
+                        testId="live-channels-tunarr-test-alert"
+                      />
+                    ) : null}
+                    {actionAlert?.area === "tunarr" ? (
+                      <InlineAlert
+                        type={actionAlert.type}
+                        message={actionAlert.message}
+                        details={actionAlert.details}
+                        testId="live-channels-tunarr-action-alert"
+                      />
                     ) : null}
                   </div>
 
@@ -2610,10 +2682,14 @@ export default function ConfigPage() {
                               plex_pass_confirmed: Boolean(settings?.tunarr?.plex_pass_confirmed),
                             });
                             setLivePreflight(result);
+                            const hardFails = (result.checks || [])
+                              .filter((check) => !check.ok && !check.soft)
+                              .map((check) => `${check.label}: ${check.message}`);
                             setActionFeedback(
                               "live-channels",
                               result.ready ? "success" : "error",
                               result.summary || "Ready check finished.",
+                              { details: hardFails },
                             );
                           } catch (error) {
                             setActionFeedback("live-channels", "error", error.message);
@@ -2783,10 +2859,12 @@ export default function ConfigPage() {
                                   return selectedStarters[key];
                                 });
                                 const result = await publishLiveChannelsStarters({ recipes });
+                                const feedback = formatPublishFeedback(result);
                                 setActionFeedback(
                                   "live-channels",
-                                  result.ok || result.count_published ? "success" : "error",
-                                  `Published ${result.count_published || 0}, skipped ${result.count_skipped || 0}, errors ${result.count_errors || 0}.`,
+                                  feedback.type,
+                                  feedback.summary,
+                                  { details: feedback.details },
                                 );
                                 const status = await getLiveChannelsStatus();
                                 setLiveChannelsStatus(status);
@@ -2888,12 +2966,75 @@ export default function ConfigPage() {
                       </p>
                     )}
                   </div>
+
+                  <details
+                    className="live-channels-logs"
+                    data-testid="live-channels-tunarr-logs"
+                    open={tunarrLogsOpen}
+                    onToggle={(event) => {
+                      const open = event.currentTarget.open;
+                      setTunarrLogsOpen(open);
+                      if (open && !tunarrLogs && !tunarrLogsBusy) {
+                        refreshTunarrLogs();
+                      }
+                    }}
+                  >
+                    <summary data-testid="live-channels-tunarr-logs-summary">
+                      Broadcast engine logs
+                    </summary>
+                    <div className="live-channels-logs-toolbar">
+                      <p className="wizard-note">
+                        Recent Tunarr output (last 200 lines). Useful when Publish starters or Start
+                        engine fails.
+                      </p>
+                      <button
+                        type="button"
+                        className="ghost"
+                        data-testid="live-channels-tunarr-logs-refresh"
+                        disabled={tunarrLogsBusy}
+                        onClick={() => refreshTunarrLogs()}
+                      >
+                        {tunarrLogsBusy ? "Loading…" : "Refresh"}
+                      </button>
+                    </div>
+                    {tunarrLogsBusy && !tunarrLogs ? (
+                      <p className="wizard-note" data-testid="live-channels-tunarr-logs-loading">
+                        Loading logs…
+                      </p>
+                    ) : null}
+                    {tunarrLogs && !tunarrLogs.ok ? (
+                      <InlineAlert
+                        type="error"
+                        message={tunarrLogs.message || "Logs unavailable."}
+                        testId="live-channels-tunarr-logs-error"
+                      />
+                    ) : null}
+                    {tunarrLogs?.ok ? (
+                      <>
+                        <p className="wizard-note" data-testid="live-channels-tunarr-logs-source">
+                          Source: {tunarrLogs.source === "docker" ? "Docker container" : "Tunarr API"}
+                          {tunarrLogs.message ? ` — ${tunarrLogs.message}` : ""}
+                        </p>
+                        <pre
+                          className="live-channels-logs-scroller"
+                          data-testid="live-channels-tunarr-logs-text"
+                        >
+                          {tunarrLogs.text || "(empty)"}
+                        </pre>
+                      </>
+                    ) : null}
+                  </details>
                 </div>
               </>
             )}
 
             {actionAlert?.area === "live-channels" ? (
-              <InlineAlert type={actionAlert.type} message={actionAlert.message} />
+              <InlineAlert
+                type={actionAlert.type}
+                message={actionAlert.message}
+                details={actionAlert.details}
+                testId="live-channels-action-alert"
+              />
             ) : null}
           </section>
         ) : null}

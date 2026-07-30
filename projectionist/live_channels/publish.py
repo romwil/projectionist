@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence
 
@@ -11,6 +13,11 @@ from projectionist.live_channels.recipes import (
     ProgrammingMode,
     recipe_from_mapping,
 )
+
+# Tunarr 1.3.x ``createChannelV2`` requires these channel fields (OpenAPI).
+_DEFAULT_GROUP_TITLE = "Projectionist"
+_DEFAULT_GUIDE_MINIMUM_DURATION_MS = 30_000
+_DEFAULT_STREAM_MODE = "hls"
 
 
 def wire_plex_media_source(
@@ -57,38 +64,67 @@ def wire_plex_media_source(
     }
 
 
-def channel_create_body(recipe: ChannelRecipe) -> Dict[str, Any]:
-    """Tunarr ``POST /channels`` body for a new station."""
+def channel_create_body(
+    recipe: ChannelRecipe,
+    *,
+    transcode_config_id: str,
+    channel_id: Optional[str] = None,
+    start_time_ms: Optional[int] = None,
+    group_title: str = _DEFAULT_GROUP_TITLE,
+) -> Dict[str, Any]:
+    """Tunarr ``POST /api/channels`` body for ``createChannelV2``.
+
+    Tunarr 1.3.x rejects sparse bodies (HTTP 400). Required fields come from the
+    live OpenAPI ``oneOf`` ``type=new`` branch — including a client-generated
+    channel UUID and an existing ``transcodeConfigId``.
+    """
+    tcid = str(transcode_config_id or "").strip()
+    if not tcid:
+        raise ValueError("transcode_config_id is required to create a Tunarr channel")
     return {
         "type": "new",
         "channel": {
+            "id": str(channel_id or uuid.uuid4()),
             "name": recipe.name,
             "number": int(recipe.number),
             "stealth": False,
             "duration": 0,
+            "disableFillerOverlay": False,
+            "groupTitle": str(group_title or _DEFAULT_GROUP_TITLE),
+            "guideMinimumDuration": _DEFAULT_GUIDE_MINIMUM_DURATION_MS,
+            "icon": {
+                "path": "",
+                "width": 0,
+                "duration": 0,
+                "position": "bottom-right",
+            },
+            "offline": {"mode": "pic"},
+            "startTime": int(
+                start_time_ms if start_time_ms is not None else time.time() * 1000
+            ),
+            "streamMode": _DEFAULT_STREAM_MODE,
+            "transcodeConfigId": tcid,
+            "subtitlesEnabled": False,
         },
     }
 
 
 def programming_body_for_recipe(recipe: ChannelRecipe) -> Optional[Dict[str, Any]]:
-    """Best-effort programming payload.
+    """Best-effort programming payload for ``POST …/programming``.
 
-    Full lineup resolution needs Tunarr program IDs from a scanned media source.
-    When we only have recipe intent, return a minimal manual lineup shell so the
-    channel exists; owners can re-publish after library wire/scan.
+    Tunarr 1.3.x manual updates require ``lineup`` (array), not ``programs``.
+    Full content entries need Tunarr program IDs from a scanned media source;
+    until then we publish an empty (or flex-shell) lineup so create+set succeed.
     """
-    # Empty manual lineup — channel is created; programming filled later.
-    # Chaos/shuffle modes are noted in summary; schedule-slots land when OpenAPI
-    # program IDs are available from Tunarr's index.
+    # Flex shells are duration-only — OpenAPI has no ``title`` on flex items.
+    # Item hints stay in the recipe summary until real program IDs exist.
     if recipe.item_hints:
-        programs = [
-            {"type": "flex", "duration": 300_000, "title": hint}
-            for hint in recipe.item_hints[:50]
+        lineup = [
+            {"type": "flex", "duration": 300_000}
+            for _ in recipe.item_hints[:50]
         ]
-        return {"type": "manual", "programs": programs}
-    if recipe.programming_mode in {ProgrammingMode.CHAOS, ProgrammingMode.SHUFFLE}:
-        return {"type": "manual", "programs": []}
-    return {"type": "manual", "programs": []}
+        return {"type": "manual", "lineup": lineup}
+    return {"type": "manual", "lineup": []}
 
 
 def publish_recipes(
@@ -114,6 +150,27 @@ def publish_recipes(
     skipped: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
 
+    transcode_config_id = ""
+    try:
+        transcode_config_id = client.default_transcode_config_id()
+    except Exception as error:  # noqa: BLE001
+        return {
+            "ok": False,
+            "published": [],
+            "skipped": [],
+            "errors": [
+                {
+                    "name": "",
+                    "number": 0,
+                    "error": str(error)[:240],
+                }
+            ],
+            "count_published": 0,
+            "count_skipped": 0,
+            "count_errors": 1,
+            "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+
     for raw in recipes:
         recipe = raw if isinstance(raw, ChannelRecipe) else recipe_from_mapping(raw)
         key_name = recipe.name.strip().lower()
@@ -131,7 +188,9 @@ def publish_recipes(
             )
             continue
         try:
-            created = client.create_channel(channel_create_body(recipe))
+            created = client.create_channel(
+                channel_create_body(recipe, transcode_config_id=transcode_config_id)
+            )
             channel_id = str(created.get("id") or created.get("uuid") or "")
             prog_body = programming_body_for_recipe(recipe)
             programming: Mapping[str, Any] = {}

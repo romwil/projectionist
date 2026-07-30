@@ -542,6 +542,33 @@ class TunarrDockerLifecycle:
             image=self.image,
         )
 
+    def container_logs(self, *, tail: int = 200) -> str:
+        """Return recent stdout/stderr from the Tunarr container (Docker Engine API)."""
+        if not self.available():
+            raise RuntimeError(_socket_unavailable_message(self.socket_path))
+        limit = max(1, min(int(tail or 200), 2000))
+        name = quote(self.container_name, safe="")
+        path = (
+            f"/containers/{name}/logs"
+            f"?stdout=1&stderr=1&timestamps=1&tail={limit}"
+        )
+        status, body = self._engine_request(
+            "GET", path, expect_json=False, timeout=30.0, raw_text=True
+        )
+        if status == 404:
+            raise RuntimeError(
+                f"Container {self.container_name} not found — start the broadcast engine first."
+            )
+        if status >= 400:
+            raise RuntimeError(
+                f"Docker logs HTTP {status} for {self.container_name}"
+            )
+        if isinstance(body, (bytes, bytearray)):
+            text = _decode_docker_multiplexed_logs(bytes(body))
+        else:
+            text = str(body or "")
+        return text
+
     def _engine_request(
         self,
         method: str,
@@ -550,6 +577,7 @@ class TunarrDockerLifecycle:
         json_body: Optional[Dict[str, Any]] = None,
         expect_json: bool = True,
         timeout: float = 120.0,
+        raw_text: bool = False,
     ) -> Tuple[int, Any]:
         """HTTP call to Docker Engine via unix socket (httpx UDS transport)."""
         import httpx
@@ -566,12 +594,37 @@ class TunarrDockerLifecycle:
             headers["Content-Type"] = "application/json"
         with httpx.Client(transport=transport, timeout=timeout) as client:
             response = client.request(method, url, content=content, headers=headers)
+        if raw_text:
+            return response.status_code, response.content
         if not expect_json or not response.content:
             return response.status_code, None
         try:
             return response.status_code, response.json()
         except Exception:  # noqa: BLE001
             return response.status_code, None
+
+
+def _decode_docker_multiplexed_logs(payload: bytes) -> str:
+    """Strip Docker Engine multiplexed stream headers (8 bytes per frame)."""
+    if not payload:
+        return ""
+    # Heuristic: multiplexed frames start with stream type 1/2 and size in big-endian.
+    if len(payload) < 8 or payload[0] not in (0, 1, 2):
+        return payload.decode("utf-8", errors="replace")
+    out = bytearray()
+    offset = 0
+    while offset + 8 <= len(payload):
+        size = int.from_bytes(payload[offset + 4 : offset + 8], "big")
+        offset += 8
+        chunk = payload[offset : offset + size]
+        if len(chunk) < size:
+            out.extend(chunk)
+            break
+        out.extend(chunk)
+        offset += size
+    if not out:
+        return payload.decode("utf-8", errors="replace")
+    return out.decode("utf-8", errors="replace")
 
 
 def lifecycle_from_settings(
