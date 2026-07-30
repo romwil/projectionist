@@ -127,8 +127,9 @@ Default values (also in `config/settings.example.json`):
 | `PROJECTIONIST_TUNARR_URL` | Fills `tunarr.url` when the settings file leaves it empty |
 | `PROJECTIONIST_TUNARR_IMAGE` | When set, wins over `tunarr.image_tag` (deploy pin) |
 | `PROJECTIONIST_DOCKER_ORCHESTRATION` | When set (`1`/`true`/`yes`/`on`), wins over `tunarr.docker_orchestration` |
+| `PROJECTIONIST_HOST_DATA_DIR` (alias `HOST_DATA_DIR`) | Host path of the Config volume for managed Tunarr Docker binds (e.g. `/mnt/user/appdata/projectionist/config`). Required when docker.sock is mounted so Tunarr is not created at host `/config/tunarr` |
 
-**Unraid CA:** enable the optional **Docker Socket** path (`/var/run/docker.sock` → `/var/run/docker.sock`) for managed Tunarr. Off by default (root-equivalent); leave blank and use a BYO `tunarr.url` otherwise. Compose: commented sock volume in `docker-compose.unraid.yml`. Appdata `rollout.sh`: set `MOUNT_DOCKER_SOCK=1` (or `DOCKER_SOCK=/var/run/docker.sock`) in `.env`.
+**Unraid CA:** enable the optional **Docker Socket** path (`/var/run/docker.sock` → `/var/run/docker.sock`) for managed Tunarr. Off by default (root-equivalent); leave blank and use a BYO `tunarr.url` otherwise. When the socket is mounted, also set **Host data dir (Tunarr)** / `PROJECTIONIST_HOST_DATA_DIR` to the same host path as Config (default `/mnt/user/appdata/projectionist/config`) so Tunarr binds under appdata instead of host `/config/tunarr`. Compose: commented sock volume + `PROJECTIONIST_HOST_DATA_DIR` in `docker-compose.unraid.yml`. Appdata `rollout.sh`: set `MOUNT_DOCKER_SOCK=1` (or `DOCKER_SOCK=/var/run/docker.sock`) in `.env`; rollout injects `PROJECTIONIST_HOST_DATA_DIR` from the config bind path.
 
 **For most installs:** leave everything at the defaults. CuratorX behaves exactly as before — one implicit owner, no login, no Seerr calls.
 

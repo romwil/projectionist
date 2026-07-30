@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.29.3] — 2026-07-29
+
+Managed Tunarr on Unraid binds its config under appdata (not a bogus host `/config/tunarr`), socket permission failures are honest, and the Tunarr URL field hints at the reachable host gateway.
+
+### Highlights
+- **Managed Tunarr lands in appdata.** When the Docker socket is mounted, set Host data dir so Tunarr’s volume is created beside Projectionist config — not at host `/config/tunarr`.
+- **Clearer Docker socket errors.** If the socket exists but Projectionist cannot connect (permission denied), preflight and Start engine say so instead of “not found.”
+- **Tunarr URL placeholder matches Unraid.** The settings field suggests `http://host.docker.internal:8000` for sibling containers.
+
+### Added
+- `PROJECTIONIST_HOST_DATA_DIR` / `HOST_DATA_DIR` so `resolve_config_volume` emits host paths for Docker API binds; Unraid CA **Host data dir (Tunarr)** variable; compose/env/rollout inject the config host path.
+
+### Changed
+- Docker socket probe checks connectability (not path existence alone); preflight exposes `socket_present` / `socket_error` / `socket_path`.
+- Tunarr URL placeholder in Admin → `http://host.docker.internal:8000`.
+- `mkdir` on host-only Tunarr volume paths is best-effort (container cannot create host dirs).
+
+### Fixed
+- Managed Tunarr no longer recreates under host `/config/tunarr` when Projectionist’s in-container `DATA_DIR` is `/config`.
+
+### Verification
+- Backend `pytest` **1486 passed**, 6 skipped (29 subtests) at **77.83%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **509 passed**. ESLint **0 errors** (103 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.29.3** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.29.2] — 2026-07-29
 
 Fresh Live Channels installs get a Tunarr image tag that actually exists on Docker Hub, so Start engine works without a manual image override.

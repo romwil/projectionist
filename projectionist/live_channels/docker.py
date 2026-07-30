@@ -59,8 +59,69 @@ class DockerLifecycleResult:
 
 
 def docker_socket_available(socket_path: Optional[str] = None) -> bool:
-    """True when a Docker engine socket path exists on this host."""
-    return bool(resolve_docker_socket(socket_path))
+    """True when a Docker engine socket exists and is connectable.
+
+    Existence alone is not enough on Unraid when the process is non-root and
+    ``docker.sock`` is mode ``660`` root:docker — report that via
+    :func:`docker_socket_status` instead of a false "not found".
+    """
+    return docker_socket_status(socket_path).get("accessible") is True
+
+
+def docker_socket_status(socket_path: Optional[str] = None) -> Dict[str, Any]:
+    """Probe Docker socket presence + connect permission.
+
+    Returns ``{path, present, accessible, error}`` where ``error`` is one of
+    ``None``, ``"not_found"``, ``"permission_denied"``, or a short OSError text.
+    """
+    path = resolve_docker_socket(socket_path)
+    if not path:
+        return {
+            "path": None,
+            "present": False,
+            "accessible": False,
+            "error": "not_found",
+        }
+    try:
+        import socket as _socket
+
+        sock = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        try:
+            sock.connect(path)
+        finally:
+            sock.close()
+    except PermissionError:
+        return {
+            "path": path,
+            "present": True,
+            "accessible": False,
+            "error": "permission_denied",
+        }
+    except OSError as error:
+        err = str(error) or error.__class__.__name__
+        lowered = err.lower()
+        kind = "permission_denied" if "permission" in lowered else err[:120]
+        return {
+            "path": path,
+            "present": True,
+            "accessible": False,
+            "error": kind,
+        }
+    return {"path": path, "present": True, "accessible": True, "error": None}
+
+
+
+def _socket_unavailable_message(socket_path: Optional[str] = None) -> str:
+    status = docker_socket_status(socket_path)
+    if status.get("error") == "permission_denied":
+        return (
+            "Docker socket is present but not accessible (permission denied). "
+            "Run as root, add the docker group, or use a BYO Tunarr URL."
+        )
+    if status.get("present") and not status.get("accessible"):
+        detail = status.get("error") or "inaccessible"
+        return f"Docker socket present but {detail}; use a BYO Tunarr URL or fix socket access."
+    return "No Docker socket; use BYO Tunarr URL or mount the socket."
 
 
 def resolve_docker_socket(socket_path: Optional[str] = None) -> Optional[str]:
@@ -134,7 +195,7 @@ class TunarrDockerLifecycle:
                 ok=False,
                 action="status",
                 status="unavailable",
-                message="No Docker socket; use BYO Tunarr URL or mount the socket.",
+                message=_socket_unavailable_message(self.socket_path),
                 container_name=self.container_name,
                 image=self.image,
             )
@@ -247,7 +308,12 @@ class TunarrDockerLifecycle:
             return self._skip("start", "Docker orchestration unavailable; skip start.")
         volume = str(config_volume or "").strip()
         if volume:
-            Path(volume).mkdir(parents=True, exist_ok=True)
+            try:
+                Path(volume).mkdir(parents=True, exist_ok=True)
+            except OSError as error:
+                # Host-only paths (PROJECTIONIST_HOST_DATA_DIR) are not writable
+                # inside the Projectionist container; Docker creates the bind.
+                logger.debug("config_volume mkdir skipped for %s: %s", volume, error)
 
         existing = self.status()
         if existing.status == "running":
@@ -520,12 +586,34 @@ def lifecycle_from_settings(
 
 
 def resolve_config_volume(settings: Any, data_dir: Path | str) -> str:
-    """Absolute host path for Tunarr `/config` bind mount under DATA_DIR."""
+    """Absolute **host** path for Tunarr `/config` bind mount under DATA_DIR.
+
+    When Projectionist runs in Docker with the engine socket mounted, paths
+    passed to the Docker API are interpreted on the **host**. Set
+    ``PROJECTIONIST_HOST_DATA_DIR`` (or ``HOST_DATA_DIR``) to the host-side
+    path of the config volume (e.g. ``/mnt/user/appdata/projectionist/config``)
+    so sibling binds land under appdata instead of a bogus host ``/config/...``.
+    """
     tunarr = getattr(settings, "tunarr", None)
     rel = str(getattr(tunarr, "volume_path", "") or "tunarr").strip() or "tunarr"
-    # Reject absolute escapes; keep under data_dir.
+    # Reject absolute escapes; keep under data_dir / host data dir.
     safe = Path(rel).name if Path(rel).is_absolute() else Path(rel)
-    root = Path(data_dir)
+    host_root = (
+        os.environ.get("PROJECTIONIST_HOST_DATA_DIR")
+        or os.environ.get("HOST_DATA_DIR")
+        or ""
+    ).strip()
+    root = Path(host_root) if host_root else Path(data_dir)
+    # Host roots from env are already absolute; do not resolve() against the
+    # container cwd (which would invent a non-existent /app/... path).
+    if host_root:
+        path = (root / safe) if not root.is_absolute() else root / safe
+        path = Path(os.path.normpath(str(path)))
+        try:
+            path.relative_to(Path(os.path.normpath(str(root))))
+        except ValueError:
+            path = Path(os.path.normpath(str(root / "tunarr")))
+        return str(path)
     path = (root / safe).resolve()
     try:
         path.relative_to(root.resolve())

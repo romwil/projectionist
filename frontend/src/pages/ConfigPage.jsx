@@ -2534,7 +2534,7 @@ export default function ConfigPage() {
                           type="text"
                           data-testid="tunarr-url"
                           value={settings?.tunarr?.url ?? ""}
-                          placeholder="http://192.168.1.50:8000"
+                          placeholder="http://host.docker.internal:8000"
                           onChange={(event) => updateTunarrSettings({ url: event.target.value })}
                           onBlur={() =>
                             persistSettings({
