@@ -31,12 +31,13 @@ def run_preflight(
     orch = orchestration_enabled(settings)
     sock = docker_socket_status()
     socket_ok = bool(sock.get("accessible"))
+    # Soft: managed Docker is optional when a Tunarr URL is already healthy (BYO).
     docker_check = {
         "id": "docker_orchestration",
-        "ok": orch and socket_ok,
+        "ok": (orch and socket_ok) or bool(url),
         "soft": True,
         "label": "Docker orchestration",
-        "message": _docker_message(orch, sock),
+        "message": _docker_message(orch, sock, byo_url=bool(url)),
         "orchestration_enabled": orch,
         "socket_available": socket_ok,
         "socket_present": bool(sock.get("present")),
@@ -157,7 +158,7 @@ def run_preflight(
     }
 
 
-def _docker_message(orch: bool, sock: Dict[str, Any] | bool) -> str:
+def _docker_message(orch: bool, sock: Dict[str, Any] | bool, *, byo_url: bool = False) -> str:
     if isinstance(sock, bool):
         socket_ok = sock
         present = sock
@@ -168,6 +169,11 @@ def _docker_message(orch: bool, sock: Dict[str, Any] | bool) -> str:
         err = sock.get("error")
     if orch and socket_ok:
         return "Docker orchestration is on and a socket is available."
+    if byo_url and orch and not socket_ok:
+        return (
+            "Tunarr URL is set (BYO path OK). Managed Docker cannot use the socket "
+            "yet — skip Start engine, or fix socket group access (--group-add)."
+        )
     if socket_ok and not orch:
         return (
             "Docker socket is present, but orchestration is off. "
@@ -176,8 +182,9 @@ def _docker_message(orch: bool, sock: Dict[str, Any] | bool) -> str:
     if orch and present and err == "permission_denied":
         return (
             "Orchestration is on, but the Docker socket is not accessible "
-            "(permission denied). Run Projectionist as root, add the docker "
-            "group, or set a BYO Tunarr URL."
+            "(permission denied for the app user). Recreate with --group-add "
+            "matching the sock group (Unraid: 281), or use a BYO Tunarr URL "
+            "and skip Start engine — Propose starters still works when Tunarr is up."
         )
     if orch and present and not socket_ok:
         detail = err or "inaccessible"

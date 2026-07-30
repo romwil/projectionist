@@ -1,6 +1,40 @@
 {
-  "generated_at": "2026-07-30T00:12:53Z",
+  "generated_at": "2026-07-30T00:22:46Z",
   "releases": [
+    {
+      "version": "1.29.4",
+      "date": "2026-07-29",
+      "summary": "Live Channels managed Tunarr keeps working after CA Force Update: the app user can reach Unraid’s docker.sock without a one-off recreate.",
+      "highlights": [
+        "**Entrypoint joins the docker sock group.** When `/var/run/docker.sock` is mounted, the image entrypoint adds its GID to the `projectionist` user before dropping privileges — so mode `660` root:docker no longer means EACCES for uid 1000.",
+        "**Unraid rollout and CA keep group-add.** `rollout.sh` auto `--group-add`s the sock GID; CA ExtraParams include `--group-add 281` so Force Update / template recreates stay sock-capable even before relying on the entrypoint alone.",
+        "**Clearer BYO messaging.** Preflight treats a healthy Tunarr URL as OK when the socket is still inaccessible, and points owners at Propose starters instead of a dead-end Start engine."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "`scripts/docker-entrypoint.sh` auto-adds the docker.sock group before `gosu`.",
+            "`scripts/unraid-rollout.sh` adds `--group-add` for the sock GID when `MOUNT_DOCKER_SOCK` is on.",
+            "Unraid CA / compose docs: ExtraParams `--group-add 281`; permission-denied copy mentions group-add.",
+            "Live Channels preflight: soft docker check OK when BYO Tunarr URL is set; permission-denied messages mention Propose starters."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Non-root app user EACCES on Unraid docker.sock (GID 281) after container recreate / Force Update."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend `pytest` targeted live-channels + version lockstep (full suite optional at ship).",
+            "`test_version` lockstep holds at **1.29.4** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.3",
       "date": "2026-07-29",

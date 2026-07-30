@@ -131,6 +131,12 @@ run_plain_docker() {
     fi
     log "Mounting Docker socket $DOCKER_SOCK → /var/run/docker.sock (Live Channels orchestration)"
     run_args+=(-v "${DOCKER_SOCK}:/var/run/docker.sock")
+    # App drops to uid 1000; sock is usually 660 root:docker — grant that GID.
+    sock_gid="$(stat -c '%g' "$DOCKER_SOCK" 2>/dev/null || true)"
+    if [[ -n "$sock_gid" && "$sock_gid" != "0" ]]; then
+      log "Adding container group-add $sock_gid (docker.sock group) for non-root access"
+      run_args+=(--group-add "$sock_gid")
+    fi
   fi
 
   local key val
