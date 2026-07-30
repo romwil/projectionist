@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.29.16] — 2026-07-30
+
+Live Channels create-from-collection shows real Plex collections, stations keep labeled icons in the Plex guide, and publish warms streams so the first tune is less likely to race cold start.
+
+### Highlights
+- **Your Plex collections show up when crafting a station.** The Live Channels picker lists Plex collections (and published Projectionist lists) instead of staying empty when you have not published household lists.
+- **Channels keep clear labels in Plex Live TV.** Stations get a LAN Tunarr icon and a real name before the guide attaches, so the guide is less likely to show blank/generic channels.
+- **First play is more reliable.** Publishing warms the HLS playlist and Attach refreshes labels before reloading the guide.
+
+### Fixed
+- Craft / from-collection only loaded published Projectionist curated lists (`list_published_lists`) — owners with Plex collections but zero published lists saw an empty picker. `build_craft_options` now merges Plex movie/TV collections (skipping ephemeral CuratorX titles) with clear empty/error hints.
+- Collection publish ignored Plex membership — now loads collection children as `item_hints` and fills lineup in order when Tunarr has matching program IDs.
+- Tunarr channels were created with empty `icon.path`, so Plex often showed generic/unlabeled channel chrome; publish + Attach now set `http://<LAN>:port/images/tunarr.png`.
+- Cold HDHR tunes could hit “Stream not ready yet” before ffmpeg wrote `playlist.m3u8`; publish best-effort warms `.m3u8` for touched stations.
+
+### Changed
+- Admin Live Channels copy: “From a collection” covers Plex + published lists; HELP notes the picker sources.
+- Mail Apprise URLs label uses nullish coalescing when a saved URL count is present (`appriseUrlsLabel`).
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1519 passed, 6 skipped; coverage **77.0%** (≥74%).
+- `cd frontend && npm run test:unit` — 514 passed; `npm run lint` — 0 errors; `npm run build` — pass.
+- `pytest tests/test_version.py` — lockstep **1.29.16**.
+
 ## [1.29.15] — 2026-07-30
 
 Plex Live TV “session has ended” after guide titles: Tunarr now prefers direct library file reads when media binds exist, Attach cleans orphan dead tuners, and HELP covers the desktop Direct Stream quirk.

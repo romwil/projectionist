@@ -221,6 +221,45 @@ def ensure_media_libraries_enabled(
     }
 
 
+def channel_icon_body(icon_url: str = "") -> Dict[str, Any]:
+    """Tunarr channel icon object. Empty path → generic/blank in some Plex clients."""
+    path = str(icon_url or "").strip()
+    if not path:
+        return {
+            "path": "",
+            "width": 0,
+            "duration": 0,
+            "position": "bottom-right",
+        }
+    return {
+        "path": path,
+        "width": 256,
+        "duration": 0,
+        "position": "bottom-right",
+    }
+
+
+def resolve_channel_icon_url(settings: Any = None, *, tunarr_base: str = "") -> str:
+    """LAN-facing Tunarr logo URL for channel icons (Plex can fetch it)."""
+    base = str(tunarr_base or "").strip().rstrip("/")
+    if not base and settings is not None:
+        try:
+            from projectionist.live_channels.plex_attach import (
+                resolve_plex_facing_tunarr_base,
+            )
+
+            facing = resolve_plex_facing_tunarr_base(settings)
+            base = str(facing.get("base_url") or "").strip().rstrip("/")
+        except Exception:  # noqa: BLE001
+            base = ""
+        if not base:
+            tunarr = getattr(settings, "tunarr", None)
+            base = str(getattr(tunarr, "public_url", "") or "").strip().rstrip("/")
+    if not base:
+        return ""
+    return f"{base}/images/tunarr.png"
+
+
 def channel_create_body(
     recipe: ChannelRecipe,
     *,
@@ -228,6 +267,7 @@ def channel_create_body(
     channel_id: Optional[str] = None,
     start_time_ms: Optional[int] = None,
     group_title: str = _DEFAULT_GROUP_TITLE,
+    icon_url: str = "",
 ) -> Dict[str, Any]:
     """Tunarr ``POST /api/channels`` body for ``createChannelV2``.
 
@@ -238,23 +278,19 @@ def channel_create_body(
     tcid = str(transcode_config_id or "").strip()
     if not tcid:
         raise ValueError("transcode_config_id is required to create a Tunarr channel")
+    name = str(recipe.name or "").strip() or f"Channel {int(recipe.number)}"
     return {
         "type": "new",
         "channel": {
             "id": str(channel_id or uuid.uuid4()),
-            "name": recipe.name,
+            "name": name[:48],
             "number": int(recipe.number),
             "stealth": False,
             "duration": 0,
             "disableFillerOverlay": False,
             "groupTitle": str(group_title or _DEFAULT_GROUP_TITLE),
             "guideMinimumDuration": _DEFAULT_GUIDE_MINIMUM_DURATION_MS,
-            "icon": {
-                "path": "",
-                "width": 0,
-                "duration": 0,
-                "position": "bottom-right",
-            },
+            "icon": channel_icon_body(icon_url),
             "offline": {"mode": "pic"},
             "startTime": int(
                 start_time_ms if start_time_ms is not None else time.time() * 1000
@@ -264,6 +300,134 @@ def channel_create_body(
             "subtitlesEnabled": False,
         },
     }
+
+
+def ensure_channel_labels(
+    client: TunarrClient,
+    *,
+    icon_url: str = "",
+    channel_ids: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
+    """Ensure Tunarr stations have a non-empty name + LAN icon for Plex guide labels."""
+    wanted = {str(cid).strip() for cid in (channel_ids or ()) if str(cid).strip()}
+    updated: List[str] = []
+    errors: List[str] = []
+    icon = channel_icon_body(icon_url)
+    for ch in client.list_channels():
+        if not isinstance(ch, Mapping):
+            continue
+        cid = str(ch.get("id") or ch.get("uuid") or "").strip()
+        if not cid:
+            continue
+        if wanted and cid not in wanted:
+            continue
+        name = str(ch.get("name") or "").strip()
+        number = int(ch.get("number") or 0)
+        if not name:
+            name = f"Channel {number}" if number else "Station"
+        current_icon = ch.get("icon") if isinstance(ch.get("icon"), Mapping) else {}
+        current_path = str(current_icon.get("path") or "").strip()
+        needs_icon = bool(icon.get("path")) and (
+            not current_path
+            or current_path.startswith("http://127.0.0.1")
+            or current_path.startswith("http://localhost")
+        )
+        needs_name = not str(ch.get("name") or "").strip()
+        if not needs_icon and not needs_name:
+            continue
+        # Prefer a trimmed body — list payloads include sessions/programCount.
+        body: Dict[str, Any] = {
+            "id": cid,
+            "name": name[:48],
+            "number": number,
+            "stealth": bool(ch.get("stealth", False)),
+            "duration": int(ch.get("duration") or 0),
+            "disableFillerOverlay": bool(ch.get("disableFillerOverlay", False)),
+            "groupTitle": str(ch.get("groupTitle") or _DEFAULT_GROUP_TITLE),
+            "guideMinimumDuration": int(
+                ch.get("guideMinimumDuration") or _DEFAULT_GUIDE_MINIMUM_DURATION_MS
+            ),
+            "icon": dict(icon) if needs_icon else dict(current_icon or channel_icon_body("")),
+            "offline": dict(ch.get("offline") or {"mode": "pic"}),
+            "startTime": int(ch.get("startTime") or time.time() * 1000),
+            "streamMode": str(ch.get("streamMode") or _DEFAULT_STREAM_MODE),
+            "transcodeConfigId": str(ch.get("transcodeConfigId") or ""),
+            "subtitlesEnabled": bool(ch.get("subtitlesEnabled", False)),
+        }
+        if not body["transcodeConfigId"]:
+            errors.append(f"{cid}: missing transcodeConfigId")
+            continue
+        try:
+            client.update_channel(cid, body)
+            updated.append(cid)
+        except Exception as error:  # noqa: BLE001
+            errors.append(f"{cid}: {str(error)[:120]}")
+    return {
+        "ok": not errors,
+        "updated": updated,
+        "count_updated": len(updated),
+        "errors": errors,
+        "icon_url": str(icon.get("path") or ""),
+    }
+
+
+def warm_channel_stream(
+    client: TunarrClient,
+    channel_id: str,
+    *,
+    timeout: int = 12,
+) -> Dict[str, Any]:
+    """Best-effort HLS warm-up so the first Plex tune is less likely to race cold start."""
+    from urllib.request import Request, urlopen
+
+    cid = str(channel_id or "").strip()
+    if not cid:
+        return {"ok": False, "error": "channel_id required"}
+    url = f"{client.base_url.rstrip('/')}/stream/channels/{cid}.m3u8?mode=hls"
+    try:
+        request = Request(url, method="GET")
+        with urlopen(request, timeout=max(3, int(timeout or 12))) as response:
+            body = response.read(4096)
+        return {
+            "ok": bool(body),
+            "channel_id": cid,
+            "bytes": len(body or b""),
+            "message": "Stream playlist warmed.",
+        }
+    except Exception as error:  # noqa: BLE001
+        return {
+            "ok": False,
+            "channel_id": cid,
+            "error": str(error)[:200],
+            "message": "Warm-up skipped (tune may still work after a short wait).",
+        }
+
+
+def plex_collection_item_hints(
+    settings: Any,
+    collection_id: str,
+    *,
+    limit: int = 60,
+) -> List[str]:
+    """Title hints from a Plex collection rating key (empty when not a Plex id)."""
+    cid = str(collection_id or "").strip()
+    if not cid or not cid.isdigit():
+        return []
+    plex_url = str(getattr(settings, "plex_url", "") or "").strip()
+    plex_token = str(getattr(settings, "plex_token", "") or "").strip()
+    if not plex_url or not plex_token:
+        return []
+    try:
+        from projectionist.connectors.plex import PlexClient
+        from projectionist.connectors.plex_collections import list_collection_item_titles
+
+        return list_collection_item_titles(
+            PlexClient(plex_url, plex_token, timeout=20),
+            cid,
+            limit=limit,
+        )
+    except Exception:  # noqa: BLE001
+        return []
 
 
 def programming_body_for_recipe(
@@ -412,11 +576,61 @@ def collect_programs_for_recipe(
 
     terms = _recipe_search_terms(recipe)
     chaos = recipe.source == "chaos" or recipe.programming_mode == ProgrammingMode.CHAOS
+    sequential_collection = (
+        recipe.source == "collection"
+        or recipe.programming_mode == ProgrammingMode.SEQUENTIAL
+    ) and bool(recipe.item_hints)
 
     if chaos:
         candidates = list(pool)
         random.shuffle(candidates)
         return candidates[:target]
+
+    # Collection path: preserve item_hint order with exact/near-exact title matches.
+    if sequential_collection:
+        by_title = {
+            str(item.get("title") or "").strip().casefold(): item
+            for item in pool
+            if str(item.get("title") or "").strip()
+        }
+        ordered: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for hint in recipe.item_hints:
+            wanted = str(hint or "").strip()
+            if not wanted:
+                continue
+            match = by_title.get(wanted.casefold())
+            if match is None:
+                # Soft match: title contains hint or hint contains title.
+                want_l = wanted.casefold()
+                for title_l, item in by_title.items():
+                    if want_l in title_l or title_l in want_l:
+                        match = item
+                        break
+            if match is None:
+                try:
+                    payload = client.search_programs(wanted, limit=8)
+                except Exception:  # noqa: BLE001
+                    payload = {}
+                for hit in payload.get("results") or []:
+                    if not isinstance(hit, Mapping):
+                        continue
+                    pid = str(hit.get("uuid") or hit.get("id") or "")
+                    catalog_hit = next((p for p in pool if p["id"] == pid), None)
+                    if catalog_hit:
+                        match = catalog_hit
+                        break
+            if match and match["id"] not in seen_ids:
+                seen_ids.add(match["id"])
+                ordered.append(match)
+            if len(ordered) >= target:
+                break
+        if ordered:
+            if len(ordered) < min(8, target) and pool:
+                extras = [p for p in pool if p["id"] not in seen_ids]
+                random.shuffle(extras)
+                ordered.extend(extras[: max(0, target - len(ordered))])
+            return ordered[:target]
 
     scored: List[Tuple[int, Dict[str, Any]]] = []
     term_l = [t.lower() for t in terms]
@@ -489,6 +703,9 @@ def publish_recipes(
     *,
     skip_existing_numbers: bool = True,
     fill_programming: bool = True,
+    settings: Any = None,
+    icon_url: str = "",
+    warm_streams: bool = True,
 ) -> Dict[str, Any]:
     """Create channels (+ programming) for each recipe. Additive; does not wipe.
 
@@ -497,6 +714,7 @@ def publish_recipes(
     re-publish can recover empty flex-only stations.
     """
     libraries = ensure_media_libraries_enabled(client, scan=True)
+    resolved_icon = str(icon_url or "").strip() or resolve_channel_icon_url(settings)
 
     catalog: List[Mapping[str, Any]] = []
     msid = str(libraries.get("media_source_id") or "")
@@ -618,7 +836,11 @@ def publish_recipes(
             continue
         try:
             created = client.create_channel(
-                channel_create_body(recipe, transcode_config_id=transcode_config_id)
+                channel_create_body(
+                    recipe,
+                    transcode_config_id=transcode_config_id,
+                    icon_url=resolved_icon,
+                )
             )
             channel_id = str(created.get("id") or created.get("uuid") or "")
             programming: Mapping[str, Any] = {}
@@ -657,6 +879,19 @@ def publish_recipes(
                 }
             )
 
+    touched_ids = [
+        str(row.get("channel_id") or "")
+        for row in (*published, *programming_updated)
+        if str(row.get("channel_id") or "").strip()
+    ]
+    labels = ensure_channel_labels(
+        client, icon_url=resolved_icon, channel_ids=touched_ids or None
+    )
+    warmed: List[Dict[str, Any]] = []
+    if warm_streams:
+        for cid in touched_ids[:4]:
+            warmed.append(warm_channel_stream(client, cid))
+
     ok = bool(published) and not errors
     if published and errors:
         ok = False
@@ -677,6 +912,8 @@ def publish_recipes(
             "No Tunarr program IDs yet — libraries were enabled and a scan was started. "
             "Wait for the scan, then publish again with fill lineups."
         )
+    if labels.get("count_updated"):
+        note += f" Updated labels/icons on {labels['count_updated']} station(s)."
 
     return {
         "ok": ok or (bool(published) and not errors),
@@ -691,6 +928,8 @@ def publish_recipes(
         "count_content_filled": content_filled,
         "libraries": libraries,
         "catalog_size": len(catalog),
+        "labels": labels,
+        "warmed": warmed,
         "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "note": note,
     }
@@ -703,14 +942,20 @@ def publish_collection_channel(
     collection_title: str = "",
     channel_number: int = 0,
     name: str = "",
+    settings: Any = None,
 ) -> Dict[str, Any]:
-    """Create a sequential station from a published collection/list title."""
+    """Create a sequential station from a Plex/Projectionist collection title."""
     title = str(collection_title or name or "Collection").strip() or "Collection"
     number = int(channel_number or 0)
     if number <= 0:
         existing = client.list_channels()
         numbers = [int(ch.get("number") or 0) for ch in existing]
         number = max(numbers) + 1 if numbers else 100
+    hints: tuple[str, ...] = ()
+    if settings is not None:
+        hints = tuple(
+            plex_collection_item_hints(settings, collection_id, limit=60)
+        )
     recipe = ChannelRecipe(
         name=title[:48],
         number=number,
@@ -719,9 +964,16 @@ def publish_collection_channel(
         collection_id=str(collection_id or "").strip(),
         collection_title=title,
         summary=f"Sequential channel from collection “{title}”",
+        item_hints=hints,
     )
-    result = publish_recipes(client, [recipe], skip_existing_numbers=True)
+    result = publish_recipes(
+        client,
+        [recipe],
+        skip_existing_numbers=True,
+        settings=settings,
+    )
     result["recipe"] = recipe.to_dict()
+    result["item_hint_count"] = len(hints)
     return result
 
 
@@ -731,6 +983,7 @@ def publish_custom_channel(
     *,
     fill_programming: bool = True,
     channel_number_base: int = 100,
+    settings: Any = None,
 ) -> Dict[str, Any]:
     """Publish one craft-form recipe (additive; fills lineup when possible)."""
     from projectionist.live_channels.craft import (
@@ -762,11 +1015,36 @@ def publish_custom_channel(
             recipe_payload or {},
             default_number=default_number,
         )
+    # Enrich collection recipes with Plex children when hints are empty.
+    if (
+        settings is not None
+        and recipe.source == "collection"
+        and recipe.collection_id
+        and not recipe.item_hints
+    ):
+        hints = tuple(
+            plex_collection_item_hints(settings, recipe.collection_id, limit=60)
+        )
+        if hints:
+            recipe = ChannelRecipe(
+                name=recipe.name,
+                number=recipe.number,
+                source=recipe.source,
+                programming_mode=recipe.programming_mode,
+                cluster_tag=recipe.cluster_tag,
+                motif=recipe.motif,
+                collection_id=recipe.collection_id,
+                collection_title=recipe.collection_title,
+                youth_safe=recipe.youth_safe,
+                summary=recipe.summary,
+                item_hints=hints,
+            )
     result = publish_recipes(
         client,
         [recipe],
         skip_existing_numbers=True,
         fill_programming=fill_programming,
+        settings=settings,
     )
     result["recipe"] = recipe.to_dict()
     return result

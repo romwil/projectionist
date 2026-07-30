@@ -653,6 +653,52 @@ class CraftOptionsTests(unittest.TestCase):
         self.assertEqual(opts["next_channel_number"], 101)
         self.assertTrue(opts["sources"])
 
+    def test_includes_plex_collections_and_empty_hint(self) -> None:
+        from projectionist.connectors.plex_collections import PlexCollection
+        from projectionist.live_channels.craft import build_craft_options
+
+        settings = Settings(
+            plex_url="http://plex.test:32400",
+            plex_token="token",
+            plex_movie_section="1",
+            plex_tv_section="2",
+        )
+        with patch(
+            "projectionist.connectors.plex_collections.list_collections",
+            side_effect=lambda client, section_id: (
+                [
+                    PlexCollection(
+                        rating_key="99",
+                        title="Alien Timeline",
+                        section_id=str(section_id),
+                        media_type="movie",
+                    ),
+                    PlexCollection(
+                        rating_key="100",
+                        title="[CuratorX] Temp Night",
+                        section_id=str(section_id),
+                        media_type="movie",
+                    ),
+                ]
+                if str(section_id) == "1"
+                else []
+            ),
+        ), patch(
+            "projectionist.connectors.plex.PlexClient",
+            return_value=MagicMock(),
+        ):
+            opts = build_craft_options(None, settings=settings)
+        titles = [row["title"] for row in opts["collections"]]
+        self.assertIn("Alien Timeline", titles)
+        self.assertNotIn("[CuratorX] Temp Night", titles)
+        self.assertEqual(opts["collections"][0]["source"], "plex")
+        self.assertEqual(opts["collections_empty_reason"], "")
+
+        bare = build_craft_options(None, settings=Settings())
+        self.assertEqual(bare["collections"], [])
+        self.assertEqual(bare["collections_empty_reason"], "error")
+        self.assertTrue(bare["collections_empty_hint"])
+
 
 class OnNowGuideTests(unittest.TestCase):
     def test_program_airing_progress(self) -> None:
@@ -1210,6 +1256,16 @@ class PreflightAndPublishTests(unittest.TestCase):
             channel["icon"],
             {"path": "", "width": 0, "duration": 0, "position": "bottom-right"},
         )
+        with_icon = channel_create_body(
+            recipe,
+            transcode_config_id="ce5cfbdb-603d-47cd-85ff-6ddbe51f33c4",
+            icon_url="http://10.10.1.202:18765/images/tunarr.png",
+        )
+        self.assertEqual(
+            with_icon["channel"]["icon"]["path"],
+            "http://10.10.1.202:18765/images/tunarr.png",
+        )
+        self.assertEqual(with_icon["channel"]["icon"]["width"], 256)
         with self.assertRaises(ValueError):
             channel_create_body(recipe, transcode_config_id="")
 

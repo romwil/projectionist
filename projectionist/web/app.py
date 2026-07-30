@@ -1858,6 +1858,7 @@ def live_channels_publish_starters_endpoint(
             client,
             recipes,
             fill_programming=bool(payload.fill_programming),
+            settings=settings,
         )
     except Exception as error:  # noqa: BLE001
         tunarr = asdict(settings.tunarr)
@@ -1914,6 +1915,7 @@ def live_channels_from_collection_endpoint(
             collection_title=payload.collection_title,
             channel_number=payload.channel_number,
             name=payload.name,
+            settings=settings,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
@@ -2015,6 +2017,7 @@ def live_channels_publish_channel_endpoint(
             recipe_body,
             fill_programming=bool(payload.fill_programming),
             channel_number_base=int(getattr(settings.tunarr, "channel_number_base", 100) or 100),
+            settings=settings,
         )
     except Exception as error:  # noqa: BLE001
         tunarr = asdict(settings.tunarr)
@@ -2157,13 +2160,27 @@ def live_channels_plex_attach_guide_endpoint(
     """Attach Tunarr XMLTV to Plex via PMS API (separate DVR; OTA left alone)."""
     del user
     from projectionist.live_channels.plex_attach import attach_tunarr_xmltv_to_plex
+    from projectionist.live_channels.publish import (
+        ensure_channel_labels,
+        resolve_channel_icon_url,
+        tunarr_client_from_settings,
+    )
 
     settings = _settings()
     if not settings.features.live_channels_enabled:
         raise HTTPException(status_code=400, detail="Live Channels is not enabled")
     forwarded = str(request.headers.get("x-forwarded-host") or "").strip()
     request_host = forwarded or str(request.headers.get("host") or "").strip()
+    labels: Dict[str, Any] = {"ok": False, "skipped": True}
+    try:
+        labels = ensure_channel_labels(
+            tunarr_client_from_settings(settings),
+            icon_url=resolve_channel_icon_url(settings),
+        )
+    except Exception:  # noqa: BLE001 — attach can still proceed
+        labels = {"ok": False, "skipped": True}
     result = attach_tunarr_xmltv_to_plex(settings, request_host=request_host)
+    result["labels"] = labels
     tunarr = asdict(settings.tunarr)
     tunarr["last_guide_attach_at"] = datetime.now(timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%SZ"

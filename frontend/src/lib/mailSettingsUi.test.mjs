@@ -22,6 +22,14 @@ describe("mailSettingsUi helpers", () => {
       appriseUrlsLabel({ urls_set: true, url_count: 2 }),
       "Apprise URLs (2 saved — leave blank to keep)",
     );
+    assert.equal(
+      appriseUrlsLabel({ urls_set: true, url_count: 0 }),
+      "Apprise URLs (0 saved — leave blank to keep)",
+    );
+    assert.equal(
+      appriseUrlsLabel({ urls_set: true }),
+      "Apprise URLs (saved saved — leave blank to keep)",
+    );
   });
 
   it("summarizes test results", () => {
