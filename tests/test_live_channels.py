@@ -651,30 +651,106 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(xmltv_url("http://tunarr.test:8000/"), "http://tunarr.test:8000/api/xmltv.xml")
         self.assertEqual(attach["manual_address"], "tunarr.test:8000")
         self.assertEqual(host_port_for_plex("http://tunarr.test:8000/"), "tunarr.test:8000")
-        self.assertGreaterEqual(len(attach["steps"]), 5)
+        self.assertGreaterEqual(len(attach["steps"]), 4)
         joined = " ".join(f"{s['title']} {s['body']}" for s in attach["steps"]).lower()
         self.assertIn("tuner setup", joined)
-        self.assertIn("no xmltv option here", joined)
+        self.assertIn("no xmltv option", joined)
         self.assertIn("postal code", joined)
-        self.assertIn("epg location", joined)
         self.assertIn("temporary", joined)
-        self.assertIn("dvr settings", joined)
+        self.assertIn("attach tunarr guide in plex", joined)
+        self.assertIn("pms api", joined)
         self.assertIn("xmltv", joined)
         self.assertIn("don't see your hdhomerun", joined)
-        self.assertIn("verizon", joined)
         self.assertNotIn("wipe", joined)
-        # First screen must not claim XMLTV lives there.
+        # Must not claim a DVR Settings paste box.
+        self.assertNotIn("dvr settings → add", joined)
+        self.assertNotIn("paste the guide url below, then refresh", joined)
         first_tuner = next(s for s in attach["steps"] if "tuner setup" in s["title"].lower())
         self.assertIn("no xmltv", first_tuner["body"].lower())
-        epg_step = next(s for s in attach["steps"] if "epg location" in s["title"].lower())
-        self.assertIn("never offers xmltv", epg_step["body"].lower())
-        self.assertIn("channel-mapping", epg_step["body"].lower())
+        api_step = next(s for s in attach["steps"] if "projectionist" in s["title"].lower())
+        self.assertIn("attach tunarr guide", api_step["body"].lower())
         warning = attach["coexistence"]["guide_warning"].lower()
-        self.assertIn("never offers xmltv", warning)
-        self.assertIn("dvr settings", warning)
-        self.assertIn("temporary", warning)
+        self.assertIn("attach tunarr guide in plex", warning)
+        self.assertIn("pms api", warning)
+        self.assertTrue(attach["coexistence"].get("api_attach"))
         self.assertEqual(attach["coexistence"]["mode"], "additional_tuner")
         self.assertEqual(attach["existing_livetv"]["status"], "detected")
+
+
+    def test_attach_tunarr_xmltv_reuses_existing_xmltv_dvr(self) -> None:
+        from unittest.mock import MagicMock, patch
+        import xml.etree.ElementTree as ET
+        from projectionist.live_channels.plex_attach import attach_tunarr_xmltv_to_plex
+
+        devices = ET.fromstring(
+            """
+            <MediaContainer>
+              <Device key="11" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr"
+                uri="http://10.10.1.202:18765" deviceId="Tunarr" title="Projectionist"
+                make="Tunarr - Silicondust"/>
+            </MediaContainer>
+            """
+        )
+        dvrs = ET.fromstring(
+            """
+            <MediaContainer>
+              <Dvr key="8" lineup="lineup://tv.plex.providers.epg.cloud/abc#Local"
+                epgIdentifier="tv.plex.providers.epg.cloud:8">
+                <Device key="1" uuid="device://tv.plex.grabbers.hdhomerun/OTA" deviceId="OTA"/>
+              </Dvr>
+              <Dvr key="12"
+                lineup="lineup://tv.plex.providers.epg.xmltv/http://10.10.1.202:18765/api/xmltv.xml#Projectionist"
+                epgIdentifier="tv.plex.providers.epg.xmltv:12">
+                <Device key="11" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr" deviceId="Tunarr"/>
+              </Dvr>
+            </MediaContainer>
+            """
+        )
+        cmap = ET.fromstring(
+            """
+            <MediaContainer>
+              <ChannelMapping channelKey="C100.1" deviceIdentifier="100" lineupIdentifier="100"/>
+            </MediaContainer>
+            """
+        )
+        put_ok = ET.fromstring('<MediaContainer size="0" status="0"/>')
+        reload_ok = ET.fromstring('<MediaContainer size="0"/>')
+
+        def fake_xml(client, path, *, method="GET", timeout=None):
+            if path.startswith("/media/grabbers/devices") and method == "GET" and "channelmap" not in path:
+                return devices
+            if path.startswith("/livetv/dvrs") and method == "GET":
+                return dvrs
+            if path.startswith("/livetv/epg/channelmap"):
+                return cmap
+            if "channelmap" in path and method == "PUT":
+                return put_ok
+            if path.endswith("/reloadGuide") and method == "POST":
+                return reload_ok
+            raise AssertionError(f"unexpected {method} {path}")
+
+        settings = Settings(
+            plex_url="http://plex.test:32400",
+            plex_token="token",
+            tunarr=TunarrSettings(
+                url="http://host.docker.internal:18765",
+                public_url="http://10.10.1.202:18765",
+            ),
+        )
+        mock_client = MagicMock()
+        mock_client.base_url = "http://plex.test:32400"
+        mock_client.token = "token"
+        mock_client.timeout = 10
+        with patch(
+            "projectionist.live_channels.plex_attach._plex_xml", side_effect=fake_xml
+        ), patch(
+            "projectionist.connectors.http.request_empty"
+        ), patch("projectionist.connectors.plex.PlexClient", return_value=mock_client):
+            result = attach_tunarr_xmltv_to_plex(settings)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["dvr_key"], "12")
+        self.assertEqual(result["mapped"], 1)
+        self.assertIn("reused_xmltv_dvr", result["steps"])
 
     def test_plex_attach_prefers_public_url_over_docker_internal(self) -> None:
         from projectionist.live_channels.plex_attach import (
