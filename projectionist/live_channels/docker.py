@@ -19,15 +19,21 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Mapping, Optional, Tuple
 from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_CONTAINER_NAME = "projectionist-tunarr"
 DEFAULT_IMAGE = "chrisbenincasa/tunarr:1.3.9"
-DEFAULT_HOST_PORT = 8000
-DEFAULT_HDHR_PORT = 5004
+# Prefer obscure high ports — Unraid hosts often already bind classic 8000 / 5004.
+DEFAULT_HOST_PORT = 18765
+DEFAULT_HDHR_PORT = 15004
+# Tunarr container still listens on these internally; we remap host ports.
+TUNARR_CONTAINER_HTTP_PORT = 8000
+TUNARR_CONTAINER_HDHR_PORT = 5004
+HOST_PORT_PROBE_ATTEMPTS = 32
+HDHR_PORT_PROBE_ATTEMPTS = 16
 DEFAULT_SOCKET_PATHS = (
     "/var/run/docker.sock",
     "/run/docker.sock",
@@ -164,6 +170,58 @@ def _split_image(image: str) -> Tuple[str, str]:
     return cleaned, "latest"
 
 
+def _parse_host_port(value: Any) -> Optional[int]:
+    try:
+        port = int(str(value or "").strip())
+    except (TypeError, ValueError):
+        return None
+    if 1 <= port <= 65535:
+        return port
+    return None
+
+
+def collect_published_host_ports(containers: Any) -> set[int]:
+    """Extract published host TCP/UDP ports from Docker ``/containers/json``."""
+    used: set[int] = set()
+    if not isinstance(containers, list):
+        return used
+    for item in containers:
+        if not isinstance(item, dict):
+            continue
+        ports = item.get("Ports") or []
+        if isinstance(ports, list):
+            for entry in ports:
+                if not isinstance(entry, dict):
+                    continue
+                public = _parse_host_port(entry.get("PublicPort"))
+                if public:
+                    used.add(public)
+        # Some engine versions also embed NetworkSettings.Ports on inspect only;
+        # list endpoint uses Ports[] above.
+    return used
+
+
+def choose_free_port(
+    preferred: int,
+    used: set[int],
+    *,
+    attempts: int = HOST_PORT_PROBE_ATTEMPTS,
+    reserved: Optional[set[int]] = None,
+) -> Optional[int]:
+    """Return preferred if free, else preferred+1 … for ``attempts`` candidates."""
+    start = _parse_host_port(preferred) or DEFAULT_HOST_PORT
+    blocked = set(used)
+    if reserved:
+        blocked |= set(reserved)
+    for offset in range(max(1, int(attempts or 1))):
+        candidate = start + offset
+        if candidate > 65535:
+            break
+        if candidate not in blocked:
+            return candidate
+    return None
+
+
 class TunarrDockerLifecycle:
     """Pull / start / stop interface for the Tunarr sidecar."""
 
@@ -181,14 +239,73 @@ class TunarrDockerLifecycle:
         self.image = image
         self.socket_path = socket_path
         self.orchestration = bool(orchestration)
-        self.host_port = int(host_port)
-        self.hdhr_port = int(hdhr_port)
+        self.host_port = int(host_port or DEFAULT_HOST_PORT)
+        self.hdhr_port = int(hdhr_port or DEFAULT_HDHR_PORT)
 
     def available(self) -> bool:
         return docker_socket_available(self.socket_path)
 
     def can_orchestrate(self) -> bool:
         return self.orchestration and self.available()
+
+    def list_used_host_ports(self) -> set[int]:
+        """Host ports already published by any container (best-effort)."""
+        try:
+            code, body = self._engine_request("GET", "/containers/json?all=1")
+        except Exception as error:  # noqa: BLE001
+            logger.debug("list published ports failed: %s", error)
+            return set()
+        if code >= 400:
+            return set()
+        return collect_published_host_ports(body)
+
+    def allocate_host_ports(self) -> Tuple[int, int]:
+        """Pick free host ports for HTTP + HDHR before container create.
+
+        Raises RuntimeError when no free HTTP port is found. HDHR falls back with
+        a warning if the preferred range is exhausted (Plex attach uses HTTP URL).
+        """
+        used = self.list_used_host_ports()
+        http_port = choose_free_port(
+            self.host_port,
+            used,
+            attempts=HOST_PORT_PROBE_ATTEMPTS,
+        )
+        if http_port is None:
+            raise RuntimeError(
+                f"No free host port near {self.host_port} for Tunarr HTTP "
+                f"(tried {HOST_PORT_PROBE_ATTEMPTS} candidates). "
+                "Set tunarr.host_port / PROJECTIONIST_TUNARR_HOST_PORT to a free port."
+            )
+        hdhr_port = choose_free_port(
+            self.hdhr_port,
+            used,
+            attempts=HDHR_PORT_PROBE_ATTEMPTS,
+            reserved={http_port},
+        )
+        if hdhr_port is None:
+            raise RuntimeError(
+                f"No free host port near {self.hdhr_port} for Tunarr HDHR "
+                f"(tried {HDHR_PORT_PROBE_ATTEMPTS} candidates). "
+                "Free a port or set tunarr.hdhr_port / PROJECTIONIST_TUNARR_HDHR_PORT."
+            )
+        self.host_port = http_port
+        self.hdhr_port = hdhr_port
+        return http_port, hdhr_port
+
+    def _sync_ports_from_inspect(self, body: Mapping[str, Any]) -> None:
+        """Adopt published host ports from an existing container (do not recreate)."""
+        ports = ((body.get("NetworkSettings") or {}).get("Ports")) or {}
+        http_bindings = ports.get(f"{TUNARR_CONTAINER_HTTP_PORT}/tcp") or []
+        hdhr_bindings = ports.get(f"{TUNARR_CONTAINER_HDHR_PORT}/tcp") or []
+        if isinstance(http_bindings, list) and http_bindings:
+            parsed = _parse_host_port((http_bindings[0] or {}).get("HostPort"))
+            if parsed:
+                self.host_port = parsed
+        if isinstance(hdhr_bindings, list) and hdhr_bindings:
+            parsed = _parse_host_port((hdhr_bindings[0] or {}).get("HostPort"))
+            if parsed:
+                self.hdhr_port = parsed
 
     def status(self) -> DockerLifecycleResult:
         if not self.available():
@@ -242,6 +359,8 @@ class TunarrDockerLifecycle:
                 image=self.image,
                 detail={"http_status": code},
             )
+        if isinstance(body, dict):
+            self._sync_ports_from_inspect(body)
         state = (body or {}).get("State") or {}
         running = bool(state.get("Running"))
         return DockerLifecycleResult(
@@ -251,7 +370,12 @@ class TunarrDockerLifecycle:
             message="Tunarr container is running." if running else "Tunarr container is stopped.",
             container_name=self.container_name,
             image=self.image,
-            detail={"running": running, "status": state.get("Status")},
+            detail={
+                "running": running,
+                "status": state.get("Status"),
+                "host_port": self.host_port,
+                "hdhr_port": self.hdhr_port,
+            },
         )
 
     def pull(self) -> DockerLifecycleResult:
@@ -301,8 +425,56 @@ class TunarrDockerLifecycle:
         Sibling containers must not use 127.0.0.1 (that is the Projectionist
         container itself). host.docker.internal works with Unraid ExtraParams /
         compose extra_hosts host-gateway.
+
+        This is API-only — never paste into Plex. See ``_public_url_hint``.
         """
         return f"http://host.docker.internal:{self.host_port}"
+
+    def _published_host_ip(self) -> str:
+        """Best-effort HostIp from Tunarr container port bindings (non-0.0.0.0)."""
+        try:
+            code, body = self._engine_request(
+                "GET", f"/containers/{self.container_name}/json"
+            )
+        except Exception:  # noqa: BLE001
+            return ""
+        if code >= 400 or not isinstance(body, dict):
+            return ""
+        ports = ((body.get("NetworkSettings") or {}).get("Ports")) or {}
+        for key in (
+            f"{TUNARR_CONTAINER_HTTP_PORT}/tcp",
+            f"{self.host_port}/tcp",
+        ):
+            bindings = ports.get(key) or []
+            if not isinstance(bindings, list):
+                continue
+            for binding in bindings:
+                if not isinstance(binding, dict):
+                    continue
+                host_ip = str(binding.get("HostIp") or "").strip()
+                if host_ip and host_ip not in {"0.0.0.0", "::", ""}:
+                    return host_ip
+        return ""
+
+    def _public_url_hint(self) -> str:
+        """LAN-facing Tunarr base for Plex attach (never host.docker.internal)."""
+        from projectionist.live_channels.plex_attach import derive_managed_public_url
+
+        return derive_managed_public_url(
+            host_port=self.host_port,
+            published_host_ip=self._published_host_ip(),
+        )
+
+    def _url_hints_detail(self) -> Dict[str, Any]:
+        detail: Dict[str, Any] = {
+            "url_hint": self._reachable_url_hint(),
+            "host_port": self.host_port,
+            "hdhr_port": self.hdhr_port,
+        }
+        public = self._public_url_hint()
+        if public:
+            detail["public_url_hint"] = public
+        return detail
 
     def start(self, *, config_volume: str = "") -> DockerLifecycleResult:
         if not self.can_orchestrate():
@@ -318,6 +490,7 @@ class TunarrDockerLifecycle:
 
         existing = self.status()
         if existing.status == "running":
+            # status() already synced published ports from the living container.
             return DockerLifecycleResult(
                 ok=True,
                 action="start",
@@ -325,7 +498,7 @@ class TunarrDockerLifecycle:
                 message="Tunarr container already running.",
                 container_name=self.container_name,
                 image=self.image,
-                detail={"url_hint": self._reachable_url_hint()},
+                detail=self._url_hints_detail(),
             )
         if existing.status == "stopped":
             try:
@@ -359,22 +532,35 @@ class TunarrDockerLifecycle:
                 message="Started existing Tunarr container.",
                 container_name=self.container_name,
                 image=self.image,
-                detail={"url_hint": self._reachable_url_hint()},
+                detail=self._url_hints_detail(),
             )
 
-        # missing or unknown — create then start
+        # missing or unknown — probe free host ports, then create + start
+        try:
+            self.allocate_host_ports()
+        except RuntimeError as error:
+            return DockerLifecycleResult(
+                ok=False,
+                action="start",
+                status="error",
+                message=str(error)[:240],
+                container_name=self.container_name,
+                image=self.image,
+            )
         binds = [f"{volume}:/config"] if volume else []
+        http_key = f"{TUNARR_CONTAINER_HTTP_PORT}/tcp"
+        hdhr_key = f"{TUNARR_CONTAINER_HDHR_PORT}/tcp"
         body = {
             "Image": self.image,
             "ExposedPorts": {
-                "8000/tcp": {},
-                "5004/tcp": {},
+                http_key: {},
+                hdhr_key: {},
             },
             "HostConfig": {
                 "Binds": binds,
                 "PortBindings": {
-                    "8000/tcp": [{"HostPort": str(self.host_port)}],
-                    "5004/tcp": [{"HostPort": str(self.hdhr_port)}],
+                    http_key: [{"HostPort": str(self.host_port)}],
+                    hdhr_key: [{"HostPort": str(self.hdhr_port)}],
                 },
                 "RestartPolicy": {"Name": "unless-stopped"},
             },
@@ -445,7 +631,7 @@ class TunarrDockerLifecycle:
             message=f"Created and started Tunarr ({self.image}).",
             container_name=self.container_name,
             image=self.image,
-            detail={"url_hint": self._reachable_url_hint()},
+            detail=self._url_hints_detail(),
         )
 
     def ensure_running(self, *, config_volume: str = "") -> DockerLifecycleResult:
@@ -466,8 +652,18 @@ class TunarrDockerLifecycle:
         }
         start_detail = start_result.detail if isinstance(start_result.detail, dict) else {}
         url_hint = str(start_detail.get("url_hint") or "").strip()
+        public_hint = str(start_detail.get("public_url_hint") or "").strip()
         if start_result.ok and start_result.status == "running":
             detail["url_hint"] = url_hint or self._reachable_url_hint()
+            public_hint = public_hint or self._public_url_hint()
+            if public_hint:
+                detail["public_url_hint"] = public_hint
+            detail["host_port"] = int(
+                start_detail.get("host_port") or self.host_port or DEFAULT_HOST_PORT
+            )
+            detail["hdhr_port"] = int(
+                start_detail.get("hdhr_port") or self.hdhr_port or DEFAULT_HDHR_PORT
+            )
         return DockerLifecycleResult(
             ok=start_result.ok,
             action="ensure_running",
@@ -632,10 +828,15 @@ def lifecycle_from_settings(
     *,
     socket_path: Optional[str] = None,
 ) -> TunarrDockerLifecycle:
+    tunarr = getattr(settings, "tunarr", None)
+    preferred_http = _parse_host_port(getattr(tunarr, "host_port", None)) or DEFAULT_HOST_PORT
+    preferred_hdhr = _parse_host_port(getattr(tunarr, "hdhr_port", None)) or DEFAULT_HDHR_PORT
     return TunarrDockerLifecycle(
         image=resolve_image(settings),
         socket_path=socket_path,
         orchestration=orchestration_enabled(settings),
+        host_port=preferred_http,
+        hdhr_port=preferred_hdhr,
     )
 
 

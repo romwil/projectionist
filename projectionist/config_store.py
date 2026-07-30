@@ -536,8 +536,18 @@ class TunarrSettings:
 
     # Base URL of a running Tunarr instance (e.g. http://192.168.1.50:8000).
     # API calls use ``{url}/api/...``. Empty = not configured (orchestration may
-    # start a sibling later).
+    # start a sibling later). May be host.docker.internal for sibling containers.
     url: str = ""
+    # LAN-reachable Tunarr base for Plex Live TV attach paste URLs (never
+    # host.docker.internal). Example Automat: http://10.10.1.202:18765
+    # Env gap-fill: PROJECTIONIST_TUNARR_PUBLIC_URL.
+    public_url: str = ""
+    # Preferred host port for managed Tunarr HTTP (probed; defaults to 18765).
+    # 0 = use built-in default. Env: PROJECTIONIST_TUNARR_HOST_PORT.
+    host_port: int = 0
+    # Preferred host port for Tunarr HDHR remap (probed; defaults to 15004).
+    # Env: PROJECTIONIST_TUNARR_HDHR_PORT.
+    hdhr_port: int = 0
     # When true (or env PROJECTIONIST_DOCKER_ORCHESTRATION=1), Projectionist may
     # pull/start/stop a Tunarr container if a Docker socket is available.
     docker_orchestration: bool = False
@@ -836,6 +846,24 @@ def _apply_tunarr_env_overrides(
     url_env = branded_env("TUNARR_URL")
     if url_env and not str(file_tunarr.get("url") or "").strip():
         tunarr["url"] = url_env
+
+    public_env = branded_env("TUNARR_PUBLIC_URL")
+    if public_env and not str(file_tunarr.get("public_url") or "").strip():
+        tunarr["public_url"] = public_env
+
+    host_port_env = branded_env("TUNARR_HOST_PORT")
+    if host_port_env and not file_tunarr.get("host_port"):
+        try:
+            tunarr["host_port"] = int(str(host_port_env).strip())
+        except ValueError:
+            pass
+
+    hdhr_port_env = branded_env("TUNARR_HDHR_PORT")
+    if hdhr_port_env and not file_tunarr.get("hdhr_port"):
+        try:
+            tunarr["hdhr_port"] = int(str(hdhr_port_env).strip())
+        except ValueError:
+            pass
 
     # Image pin + docker orchestration: env wins when set (deploy/host capability).
     image_env = branded_env("TUNARR_IMAGE")

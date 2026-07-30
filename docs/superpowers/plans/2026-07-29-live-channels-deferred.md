@@ -230,9 +230,9 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 
 #### Full Tunarr programming still empty/manual until scanned program IDs
 
-- **Status:** `deferred`
-- **Why / note:** Publish creates channels and sets a minimal `manual` programming shell (`programming_body_for_recipe`); real lineup items need Tunarr program IDs from a scanned/wired media source. Until then, owners get empty or flex-hint shells and may need re-publish after scan.
-- **Suggested next phase:** After Plex media-source wire + Tunarr library index; confirm shapes on Automat.
+- **Status:** `deferred` (partial: `fill_programming` + media-source body fix in 1.29.6)
+- **Why / note:** Publish creates channels and sets a minimal `manual` programming shell (`programming_body_for_recipe`); real lineup items need Tunarr program IDs from a scanned/wired media source. Skip-only re-publish (`Published 0, skipped N`) does not thicken empty lineups. `fill_programming=true` re-applies flex/empty shells only. Plex media-source create now sends required `userId` / `username` / `pathReplacements`.
+- **Suggested next phase:** After Plex media-source wire + Tunarr library index; map scanned program IDs into lineups.
 - **Owner surface:** backend / publish
 
 #### HELP / CONFIGURATION / CHANGELOG Task 7 not fully shipped

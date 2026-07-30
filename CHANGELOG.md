@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [1.29.6] — 2026-07-30
+
+Plex Live TV attach gets LAN-reachable Tunarr URLs (never `host.docker.internal`), managed Tunarr picks obscure free host ports instead of assuming 8000, and wiring Plex as a Tunarr media source sends the fields Tunarr 1.3.x requires.
+
+### Highlights
+- **Plex paste URLs stay on your LAN.** “Show Plex steps” offers a household-reachable Tunarr address (for example `http://10.10.1.202:18765/`) instead of Docker-only sibling DNS that Plex cannot resolve.
+- **Managed Tunarr avoids busy ports.** New engine creates probe Docker published ports and bind near **18765** / **15004** instead of assuming classic 8000 / 5004 on Unraid.
+- **Media source wire succeeds.** Publishing starters can create the Plex media source in Tunarr with the required `userId`, `username`, and `pathReplacements` fields.
+
+### Fixed
+- Plex attach checklist wrongly reused `tunarr.url` (`host.docker.internal`) as the copy-paste tuner/guide URL.
+- `POST /api/media-sources` Plex body omitted required OpenAPI keys (`userId`, `username`, `pathReplacements`).
+
+### Added
+- `tunarr.public_url` + `PROJECTIONIST_TUNARR_PUBLIC_URL` / `PROJECTIONIST_HOST_IP` for Plex-facing Tunarr base.
+- `tunarr.host_port` / `tunarr.hdhr_port` + `PROJECTIONIST_TUNARR_HOST_PORT` / `PROJECTIONIST_TUNARR_HDHR_PORT` with free-port probing before create.
+- Managed lifecycle `public_url_hint`; persists into settings when empty.
+- Publish `fill_programming=true` to re-apply flex/empty shells on existing channels (still not real scanned program IDs).
+
+### Changed
+- Plex attach copy fields stay empty with a clear “set LAN address” message when no household-reachable URL is known.
+- Default managed Tunarr HTTP host port candidate is **18765** (not 8000); existing containers keep their published mapping.
+- `CONFIGURATION.md` documents LAN public URL + port probe behavior.
+
+### Verification
+- Backend live-channels suites cover media-source body, attach URL preference, docker-only paste refusal, and free-port probe/fallback.
+- `test_version` lockstep holds at **1.29.6**.
+- Live Automat: Projectionist **1.29.6** health; Tunarr left for owner Start engine.
+
 ## [1.29.5] — 2026-07-30
 
 Publish starters works against Tunarr 1.3.x, Admin Live Channels shows per-channel errors, and owners can expand recent broadcast-engine logs.
