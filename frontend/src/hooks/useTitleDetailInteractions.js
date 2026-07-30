@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   confirmAction,
   deleteLibraryItems,
@@ -24,12 +24,26 @@ import {
 } from "../lib/bulkLibraryDelete.js";
 import { canMarkTitleWatched, isTitleWatched } from "../lib/titleDetailExtras.js";
 
+function formatLibraryDeleteFailure(errorText) {
+  const message = String(errorText || "").trim();
+  if (!message) return "Could not fully remove this title.";
+  const lower = message.toLowerCase();
+  const notInArr =
+    lower.includes("not in sonarr") ||
+    lower.includes("not in radarr") ||
+    (lower.includes("could not find") &&
+      (lower.includes("sonarr") || lower.includes("radarr")));
+  if (!notInArr) return message;
+  return `${message} Files may already be gone. Choose Index only to clear the Projectionist row, or cancel and refresh Storage Intelligence.`;
+}
+
 /**
  * Shared add / watch / delete interactions for title detail surfaces.
  * `onDeleted` runs after a successful library delete (drawer closes, page navigates back).
  * Full removes with path/size detail show a summary first; dismiss then calls `onDeleted`.
+ * `onDeleteSuccess` runs as soon as the API succeeds (list refresh) even when a summary is pending.
  */
-export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
+export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDeleteSuccess }) {
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
   const [userRole, setUserRole] = useState("owner");
   const [requestPath, setRequestPath] = useState("arr");
@@ -42,6 +56,7 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
   const [pendingDeletedPayload, setPendingDeletedPayload] = useState(null);
   const [watchStatus, setWatchStatus] = useState(null);
   const [watchMessage, setWatchMessage] = useState("");
+  const deleteInFlightRef = useRef(false);
 
   useEffect(() => {
     getFeatures()
@@ -59,6 +74,9 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
   }, []);
 
   useEffect(() => {
+    // Do not clobber an in-flight delete when the drawer target briefly clears
+    // (Escape / remount) — the request may still complete and needs honest UI.
+    if (deleteInFlightRef.current) return;
     setAddStatus(null);
     setAddMessage("");
     setDeleteOpen(false);
@@ -113,22 +131,25 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
 
   function openLibraryDelete() {
     if (!canOwnerDeleteLibraryTitle(detail, { role: userRole, multiUserEnabled })) return;
+    if (deleteInFlightRef.current) return;
     setDeleteError("");
     setDeleteOpen(true);
   }
 
   async function handleLibraryDeleteConfirm({ mode } = {}) {
-    if (deleting) return;
+    if (deleteInFlightRef.current || deleting) return;
     if (!canOwnerDeleteLibraryTitle(detail, { role: userRole, multiUserEnabled })) return;
     const ratingKey = libraryItemRatingKey(detail);
     if (!ratingKey) return;
+    deleteInFlightRef.current = true;
     setDeleting(true);
     setDeleteError("");
     try {
       const result = await deleteLibraryItems([ratingKey], { mode });
       const errors = Array.isArray(result?.errors) ? result.errors : [];
       if (errors.length && !(Number(result?.deleted) > 0)) {
-        setDeleteError(String(errors[0]?.error || "Could not fully remove this title."));
+        setDeleteError(formatLibraryDeleteFailure(errors[0]?.error));
+        deleteInFlightRef.current = false;
         setDeleting(false);
         return;
       }
@@ -141,6 +162,10 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
       const payload = { notice, detail, result };
       setDeleteOpen(false);
       setDeleting(false);
+      deleteInFlightRef.current = false;
+      // Refresh lists immediately so Storage Intelligence / browse do not keep
+      // stale rows while the removal summary is still open.
+      onDeleteSuccess?.(payload);
       if (hasRemovalSummary(result)) {
         setRemovalSummary(result);
         setPendingDeletedPayload(payload);
@@ -148,7 +173,10 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted }) {
       }
       onDeleted?.(payload);
     } catch (err) {
-      setDeleteError(formatApiError(err) || "Could not delete this title from the library index.");
+      setDeleteError(
+        formatApiError(err) || "Could not delete this title from the library index.",
+      );
+      deleteInFlightRef.current = false;
       setDeleting(false);
     }
   }

@@ -31,8 +31,18 @@ import {
   formatBulkLibraryDeleteResultMessage,
   hasRemovalSummary,
 } from "../lib/bulkLibraryDelete.js";
-import { buildRuntimeBuckets, sortPurgeCandidates } from "../lib/dashboardCharts.js";
+import {
+  buildRuntimeBuckets,
+  filterPurgeCandidatesByMediaType,
+  sortPurgeCandidates,
+} from "../lib/dashboardCharts.js";
 import { titleDetailTargetFromPurgeCandidate } from "../lib/titleDetailDrawer.js";
+
+const PURGE_MEDIA_TABS = [
+  { id: "all", label: "All", mediaType: null },
+  { id: "movie", label: "Movies", mediaType: "movie" },
+  { id: "show", label: "TV", mediaType: "show" },
+];
 
 function useDashData(fetcher) {
   const [data, setData] = useState(null);
@@ -121,9 +131,11 @@ function PurgeTable({
   const [removalSummary, setRemovalSummary] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [drawerTarget, setDrawerTarget] = useState(null);
+  const [mediaTypeFilter, setMediaTypeFilter] = useState(null);
   const [enrichedByKey, setEnrichedByKey] = useState({});
   const titleTriggerRef = useRef(null);
-  const sorted = sortPurgeCandidates(candidates, sortKey, sortDir);
+  const filtered = filterPurgeCandidatesByMediaType(candidates, mediaTypeFilter);
+  const sorted = sortPurgeCandidates(filtered, sortKey, sortDir);
   const effectivePageSize = Math.max(1, Number(pageSize) || 20);
   const pageCount = Math.max(1, Math.ceil(sorted.length / effectivePageSize) || 1);
   const safePage = Math.min(page, pageCount - 1);
@@ -138,11 +150,13 @@ function PurgeTable({
   const selectedTitles = selectedItems.map(
     (c) => String(c?.title || "Untitled").trim() || "Untitled",
   );
+  const activeMediaTab =
+    PURGE_MEDIA_TABS.find((tab) => tab.mediaType === mediaTypeFilter)?.id || "all";
 
   useEffect(() => {
     setPage(0);
     setSelected(new Set());
-  }, [candidates]);
+  }, [candidates, mediaTypeFilter]);
 
   useEffect(() => {
     const keys = displayed
@@ -223,10 +237,19 @@ function PurgeTable({
     setPurgeError("");
     try {
       const result = await deletePurgeCandidates(keys, { mode });
-      update(progressId, keys.length);
-      finish(progressId, {
-        label: formatBulkLibraryDeleteResultMessage(result, { titles: selectedTitles }),
+      const errors = Array.isArray(result?.errors) ? result.errors : [];
+      const deleted = Number(result?.deleted) || 0;
+      const message = formatBulkLibraryDeleteResultMessage(result, {
+        titles: selectedTitles,
       });
+      update(progressId, keys.length);
+      if (errors.length && deleted <= 0) {
+        setPurgeError(message);
+        finish(progressId, { label: message, state: "error" });
+        onRefresh?.();
+        return;
+      }
+      finish(progressId, { label: message });
       setSelected(new Set());
       setPurgeDialogOpen(false);
       if (hasRemovalSummary(result)) setRemovalSummary(result);
@@ -269,6 +292,24 @@ function PurgeTable({
 
   const arrow = (key) => (sortKey === key ? (sortDir === "asc" ? " ↑" : " ↓") : "");
 
+  function handleDrawerDeleted(payload) {
+    // RemovalSummaryDialog lives on TitleDetailDrawer for this path — do not
+    // open a second copy here. Still refresh the grid immediately.
+    if (!hasRemovalSummary(payload?.result) && payload?.notice) {
+      const progressId = start({
+        label: payload.notice,
+        total: 1,
+        asynchronous: true,
+      });
+      finish(progressId, { label: payload.notice });
+    }
+    onRefresh?.();
+    onGroomingChanged?.();
+  }
+
+  const filterEmpty =
+    Boolean(candidates?.length) && !sorted.length && Boolean(mediaTypeFilter);
+
   return (
     <div className="dash-purge-container">
       <div className="dash-purge-toolbar">
@@ -276,9 +317,13 @@ function PurgeTable({
           {stale
             ? "Cache empty — run Refresh now to compute candidates."
             : generatedLabel
-              ? `Cached ${generatedLabel} · ${sorted.length}/${bufferTarget || 100} buffered`
-              : sorted.length
-                ? `Showing ${sorted.length} buffered candidates`
+              ? `Cached ${generatedLabel} · ${filtered.length}/${bufferTarget || 100} shown${
+                  mediaTypeFilter ? ` (${mediaTypeFilter === "show" ? "TV" : "movies"})` : " buffered"
+                }`
+              : filtered.length
+                ? `Showing ${filtered.length} candidates${
+                    mediaTypeFilter ? ` (${mediaTypeFilter === "show" ? "TV" : "movies"})` : ""
+                  }`
                 : "No purge candidates in cache."}
           {refilling ? " · Refilling…" : ""}
         </p>
@@ -293,11 +338,34 @@ function PurgeTable({
         </button>
       </div>
 
+      <div
+        className="explore-media-tabs dash-purge-media-tabs"
+        role="tablist"
+        aria-label="Filter purge candidates by media type"
+        data-testid="purge-media-tabs"
+      >
+        {PURGE_MEDIA_TABS.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={activeMediaTab === tab.id}
+            className={`explore-media-tab${activeMediaTab === tab.id ? " is-active" : ""}`}
+            data-testid={`purge-media-tab-${tab.id}`}
+            onClick={() => setMediaTypeFilter(tab.mediaType)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {!sorted.length ? (
         <p className="dash-empty" data-testid="purge-empty">
           {stale
             ? "Purge candidates have not been computed yet."
-            : "No purge candidates found."}
+            : filterEmpty
+              ? `No ${mediaTypeFilter === "show" ? "TV show" : "movie"} purge candidates in the current buffer.`
+              : "No purge candidates found."}
         </p>
       ) : null}
 
@@ -470,7 +538,9 @@ function PurgeTable({
         target={drawerTarget}
         returnFocusRef={titleTriggerRef}
         onClose={() => setDrawerTarget(null)}
-        onDeleted={() => onRefresh?.()}
+        onDeleted={handleDrawerDeleted}
+        deleteDefaultMode={LIBRARY_DELETE_MODE_FULL}
+        deleteSurface="purge"
       />
     </div>
   );
@@ -579,9 +649,6 @@ export default function DashboardPage() {
         <OnNowPanel />
       </div>
 
-      {/* ─── Purge candidate refresh + index-only undo ─── */}
-      <GroomingUndoPanel key={groomingEpoch} onChanged={purge.reload} />
-
       {/* ─── Panel 1: Library Composition ─── */}
       <div className="dash-grid">
         <Panel
@@ -689,9 +756,9 @@ export default function DashboardPage() {
         <SectionHelp label="About Storage Intelligence" testId="purge-section-help">
           <p>
             Purge candidates are titles that look stale or low-signal — good prune
-            targets when you need disk space. Select rows and purge: full remove deletes
-            files through Radarr/Sonarr; index-only only drops Projectionist&apos;s copy
-            (undoable from the maintenance panel above).
+            targets when you need disk space. Filter by Movies or TV, then select rows
+            and purge: full remove deletes files through Radarr/Sonarr; index-only only
+            drops Projectionist&apos;s copy (undoable from the maintenance panel below).
           </p>
         </SectionHelp>
       </div>
@@ -708,6 +775,9 @@ export default function DashboardPage() {
           onGroomingChanged={() => setGroomingEpoch((n) => n + 1)}
         />
       </Panel>
+
+      {/* ─── Purge candidate refresh + index-only undo (below the grid) ─── */}
+      <GroomingUndoPanel key={groomingEpoch} onChanged={purge.reload} />
 
       {/* ─── Panel 4: Taste Profile ─── */}
       <h2 className="dash-section-title">Taste Profile</h2>

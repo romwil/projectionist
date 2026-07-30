@@ -35,6 +35,30 @@ export function buildRuntimeBuckets(runtimeData) {
 }
 
 /**
+ * Normalize Storage Intelligence media-type filter tabs.
+ * ``null`` / ``"all"`` / blank → all types; otherwise ``"movie"`` or ``"show"``.
+ */
+export function normalizePurgeMediaTypeFilter(value) {
+  const raw = String(value || "").trim().toLowerCase();
+  if (!raw || raw === "all") return null;
+  if (raw === "show" || raw === "tv") return "show";
+  if (raw === "movie" || raw === "movies") return "movie";
+  return null;
+}
+
+/**
+ * Filter purge candidates by movie vs show. Pass null/all for no filter.
+ */
+export function filterPurgeCandidatesByMediaType(candidates, mediaType) {
+  if (!candidates?.length) return [];
+  const filter = normalizePurgeMediaTypeFilter(mediaType);
+  if (!filter) return [...candidates];
+  return candidates.filter(
+    (item) => String(item?.media_type || "").trim().toLowerCase() === filter,
+  );
+}
+
+/**
  * Sort purge candidates by any key, ascending or descending.
  * Returns a new array (does not mutate the original).
  */

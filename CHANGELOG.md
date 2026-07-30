@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.29.12] — 2026-07-30
+
+Storage Intelligence layout and delete feedback: maintenance panel under the grid, Movies/TV filter tabs, and honest progress after deleting a show from the title drawer.
+
+### Highlights
+- **Maintenance where it belongs.** Purge candidates & index undo now sits under the Storage Intelligence grid.
+- **Filter Movies or TV.** Clear All / Movies / TV tabs on the purge grid.
+- **Show deletes show results.** Full remove from a purge-row title drawer surfaces freed storage totals and refreshes the grid instead of failing silently.
+
+### Changed
+- Dashboard: move `GroomingUndoPanel` below the purge table; Storage Intelligence help copy points to the panel below.
+- Purge table: All / Movies / TV filter tabs (same pattern as Explore section media tabs).
+- Title drawer delete from Storage Intelligence defaults to full remove (`surface="purge"`).
+
+### Fixed
+- Title detail drawer never mounted `RemovalSummaryDialog`, so successful full removes with path/size detail closed the confirm dialog with no status, never called `onDeleted`, and left stale purge rows.
+- In-flight delete state could be reset if the drawer closed mid-request; Escape/close now blocked while deleting or while the summary is open.
+- “Not in Sonarr/Radarr” errors now tip owners toward Index only cleanup; bulk purge keeps the confirm dialog open with an error toast when nothing was deleted.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1507 passed, 6 skipped; coverage **77.2%** (≥74%).
+- `cd frontend && npm run test:unit` — 511 passed; `npm run lint` — 0 errors; `npm run build` — pass.
+- `pytest tests/test_version.py` — lockstep **1.29.12**.
+
 ## [1.29.11] — 2026-07-30
 
 Empty Plex Live TV guide + “This live TV session has ended” came from Tunarr stations with no real lineup (Plex libraries never enabled/scanned). Publish now fills titles; Admin shows guide/indexing status.

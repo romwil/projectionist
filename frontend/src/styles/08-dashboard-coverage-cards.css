@@ -396,6 +396,10 @@
   flex-wrap: wrap;
 }
 
+.dash-purge-media-tabs {
+  margin: 0;
+}
+
 .dash-purge-meta {
   margin: 0;
   font-size: var(--text-sm);
