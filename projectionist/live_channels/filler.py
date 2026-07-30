@@ -629,6 +629,25 @@ def repair_jumpstart_stations(
                 already_ok.append(cid)
             elif not result.get("ok"):
                 errors.append(f"{name}: {result.get('error') or 'attach failed'}"[:160])
+        else:
+            # Still set guide/offline identity even when filler paths are empty.
+            try:
+                from projectionist.live_channels.publish import _channel_put_body
+
+                continuity = continuity_channel_fields(
+                    filler_list_id="",
+                    station_name=name,
+                    icon_url=resolved_icon,
+                    attach=False,
+                )
+                needs = not str(ch.get("guideFlexTitle") or "").strip()
+                if needs or resolved_icon:
+                    body = _channel_put_body(ch, name=name)
+                    body.update(continuity)
+                    if body.get("transcodeConfigId"):
+                        client.update_channel(cid, body)
+            except Exception as error:  # noqa: BLE001
+                errors.append(f"{name}: guide/offline {error}"[:160])
 
         if refill_lineups:
             try:
