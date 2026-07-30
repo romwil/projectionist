@@ -230,10 +230,10 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 
 #### Full Tunarr programming still empty/manual until scanned program IDs
 
-- **Status:** `deferred` (partial: `fill_programming` + media-source body fix in 1.29.6)
-- **Why / note:** Publish creates channels and sets a minimal `manual` programming shell (`programming_body_for_recipe`); real lineup items need Tunarr program IDs from a scanned/wired media source. Skip-only re-publish (`Published 0, skipped N`) does not thicken empty lineups. `fill_programming=true` re-applies flex/empty shells only. Plex media-source create now sends required `userId` / `username` / `pathReplacements`.
-- **Suggested next phase:** After Plex media-source wire + Tunarr library index; map scanned program IDs into lineups.
-- **Owner surface:** backend / publish
+- **Status:** `done` (core path in **1.29.11**) / residual (richer taste→ID matching, TV-library wait)
+- **Why / note:** Automat root cause: wired Plex media source left libraries `enabled: false` → empty lineups → Plex “session has ended” + empty guide. **1.29.11** enables Movies/TV, kicks scan, fills `content` lineup rows from scanned program IDs (keyword/name fallback), defaults `fill_programming=true`, and surfaces `guide_index` in Admin status. Residual: TV scan may still be queued at first publish; taste/motif matching is keyword-heuristic not full Tunarr schedule-slots.
+- **Suggested next phase:** schedule-slots client + tighter motif/genre filters; wait-for-scan UX.
+- **Owner surface:** backend / publish / Admin status
 
 #### HELP / CONFIGURATION / CHANGELOG Task 7 not fully shipped
 
@@ -274,9 +274,9 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 
 #### Media-source library sync/scan progress not on public REST
 
-- **Status:** `deferred`
-- **Why / note:** Tunarr computes scan percent via internal `MediaSourceProgressService` and can trigger scans (`POST /media-sources/{id}/scan`, debug scan helpers). There is **no** stable documented poll endpoint for scan % for Projectionist to mirror into Admin. Do not fake it from health alone.
-- **Suggested next phase:** If Tunarr exposes scan progress on REST/events with a stable shape, wire owner-only Admin strip; until then leave gap.
+- **Status:** `done` (basic poll in **1.29.11**)
+- **Why / note:** Tunarr exposes `GET /media-sources/{ms}/{lib}/status` with `state` / `percentComplete`. Admin `guide_index.media_libraries` surfaces enabled count + scanning count; not a full progress bar UX yet.
+- **Suggested next phase:** Optional richer progress UI while Movies/TV scan.
 - **Owner surface:** backend / Admin only
 
 #### Channel lineup-cycle “consumption” (startTime % duration)

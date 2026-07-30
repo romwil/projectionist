@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [1.29.11] — 2026-07-30
+
+Empty Plex Live TV guide + “This live TV session has ended” came from Tunarr stations with no real lineup (Plex libraries never enabled/scanned). Publish now fills titles; Admin shows guide/indexing status.
+
+### Highlights
+- **Stations that actually play.** Publish enables Tunarr’s Plex libraries, scans them, and fills lineups with real titles — not empty flex placeholders.
+- **See guide indexing status.** Admin Live Channels shows library scan pulse, lineup emptiness, XMLTV programme counts, and the last Plex guide attach.
+- **Clearer create path.** Step “Create / publish channels” is the supported way to add stations (propose starters → publish).
+
+### Added
+- Tunarr client helpers for media libraries / scan status / program search.
+- `ensure_media_libraries_enabled` + content-aware `programming_body_for_recipe` / `collect_programs_for_recipe`.
+- Admin status `guide_index` (XMLTV counts, lineup health, library scan, last attach) + Config UI strip.
+- Tunarr settings: `last_guide_attach_*` persisted from `POST …/plex-attach-guide`.
+
+### Changed
+- Starter publish defaults `fill_programming=true` and refreshes empty existing stations.
+- Admin starters step copy/button: **Create / publish channels**.
+
+### Fixed
+- Root cause on Automat: Tunarr Plex libraries were all `enabled: false` → `totalPrograms: 0` → stream timeout / Plex “session has ended”; XMLTV was flex-only so the guide grid looked empty.
+
+### Verification
+- Live Automat: enabled Movies/TV libraries, filled Mystery/Sci-Fi/Chaos with 30–40 programs, MPEG-TS stream returned bytes; re-attached XMLTV on Plex DVR 12 (`mapped_3_channels`, `reload_guide`).
+- `pytest tests/test_live_channels.py tests/test_live_channels_api.py tests/test_tunarr_client.py` — 72 passed; `test_version` lockstep at **1.29.11**.
+
 ## [1.29.10] — 2026-07-30
 
 Plex UI has no XMLTV paste for Tunarr — Admin can now attach Tunarr’s guide via the Plex Media Server API without touching your OTA commercial DVR.

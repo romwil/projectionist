@@ -131,6 +131,17 @@ class LiveChannelsApiTests(unittest.TestCase):
         client = MagicMock()
         client.list_media_sources.return_value = []
         client.create_media_source.return_value = {"id": "ms-1", "type": "plex"}
+        client.list_media_source_libraries.return_value = [
+            {
+                "id": "lib-m",
+                "name": "Movies",
+                "mediaType": "movies",
+                "enabled": False,
+            }
+        ]
+        client.set_library_enabled.return_value = {"enabled": True}
+        client.scan_library.return_value = {}
+        client.list_library_programs.return_value = []
         client.list_channels.return_value = []
         client.default_transcode_config_id.return_value = "tc-default"
         client.create_channel.side_effect = lambda body: {

@@ -881,6 +881,16 @@ class PreflightAndPublishTests(unittest.TestCase):
         client = MagicMock()
         client.list_media_sources.return_value = []
         client.create_media_source.return_value = {"id": "ms-1", "type": "plex"}
+        client.list_media_source_libraries.return_value = [
+            {
+                "id": "lib-movies",
+                "name": "Movies",
+                "mediaType": "movies",
+                "enabled": False,
+            }
+        ]
+        client.set_library_enabled.return_value = {"id": "lib-movies", "enabled": True}
+        client.scan_library.return_value = {}
         with patch(
             "projectionist.live_channels.publish._plex_identity_hints",
             return_value=("mid", "Home"),
@@ -897,6 +907,8 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertIn("userId", body)
         self.assertIn("username", body)
         self.assertNotEqual(body.get("userId"), "tok")
+        client.set_library_enabled.assert_called()
+        self.assertTrue(result["libraries"]["enabled"])
 
     def test_probe_existing_livetv_unknown_without_plex(self) -> None:
         from projectionist.live_channels.plex_attach import probe_existing_plex_livetv
@@ -1000,11 +1012,21 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(len(hinted["lineup"]), 2)
         self.assertEqual(hinted["lineup"][0], {"type": "flex", "duration": 300_000})
         self.assertNotIn("programs", hinted)
+        content = programming_body_for_recipe(
+            recipe,
+            programs=[
+                {"id": "prog-1", "duration": 5_400_000, "title": "Heat"},
+                {"id": "prog-2", "duration": 7_200_000, "title": "Alien"},
+            ],
+        )
+        self.assertEqual(content["lineup"][0]["type"], "content")
+        self.assertEqual(content["lineup"][0]["id"], "prog-1")
 
     def test_publish_recipes_creates_channels(self) -> None:
         from projectionist.live_channels.publish import publish_recipes
 
         client = MagicMock()
+        client.list_media_sources.return_value = []
         client.list_channels.return_value = []
         client.default_transcode_config_id.return_value = "tc-default"
         client.create_channel.side_effect = lambda body: {
@@ -1030,14 +1052,85 @@ class PreflightAndPublishTests(unittest.TestCase):
         from projectionist.live_channels.publish import publish_recipes
 
         client = MagicMock()
+        client.list_media_sources.return_value = []
         client.list_channels.return_value = [{"id": "x", "name": "Chaos", "number": 100}]
         client.default_transcode_config_id.return_value = "tc-default"
+        client.set_channel_programming.return_value = {"totalPrograms": 0, "lineup": []}
+        # Default fill_programming=True refreshes existing empty stations.
         result = publish_recipes(
             client,
             [ChannelRecipe(name="Chaos", number=100, source="chaos")],
         )
-        self.assertEqual(result["count_skipped"], 1)
+        self.assertEqual(result["count_skipped"], 0)
+        self.assertEqual(result["count_programming_updated"], 1)
         client.create_channel.assert_not_called()
+        client.set_channel_programming.assert_called()
+
+        client2 = MagicMock()
+        client2.list_media_sources.return_value = []
+        client2.list_channels.return_value = [{"id": "x", "name": "Chaos", "number": 100}]
+        client2.default_transcode_config_id.return_value = "tc-default"
+        skipped = publish_recipes(
+            client2,
+            [ChannelRecipe(name="Chaos", number=100, source="chaos")],
+            fill_programming=False,
+        )
+        self.assertEqual(skipped["count_skipped"], 1)
+        client2.create_channel.assert_not_called()
+
+    def test_publish_fills_content_from_library_catalog(self) -> None:
+        from projectionist.live_channels.publish import publish_recipes
+
+        client = MagicMock()
+        client.list_media_sources.return_value = [
+            {"id": "ms-1", "type": "plex", "uri": "http://plex"}
+        ]
+        client.list_media_source_libraries.return_value = [
+            {
+                "id": "lib-m",
+                "name": "Movies",
+                "mediaType": "movies",
+                "enabled": False,
+            }
+        ]
+        client.set_library_enabled.return_value = {"enabled": True}
+        client.scan_library.return_value = {}
+        client.list_library_programs.return_value = [
+            {
+                "type": "content",
+                "id": "p1",
+                "duration": 5_400_000,
+                "program": {
+                    "uuid": "p1",
+                    "title": "Alien",
+                    "genres": ["Science Fiction"],
+                },
+            },
+            {
+                "type": "content",
+                "id": "p2",
+                "duration": 6_000_000,
+                "program": {"uuid": "p2", "title": "Heat", "genres": ["Crime"]},
+            },
+        ]
+        client.list_channels.return_value = []
+        client.default_transcode_config_id.return_value = "tc"
+        client.create_channel.side_effect = lambda body: {
+            "id": "ch-101",
+            "name": body["channel"]["name"],
+            "number": body["channel"]["number"],
+        }
+        client.set_channel_programming.return_value = {"totalPrograms": 1}
+
+        result = publish_recipes(
+            client,
+            [ChannelRecipe(name="Sci-Fi", number=101, source="motif")],
+        )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["count_content_filled"], 1)
+        body = client.set_channel_programming.call_args.args[1]
+        self.assertEqual(body["lineup"][0]["type"], "content")
+        self.assertEqual(body["lineup"][0]["id"], "p1")
 
 
 class SetupTunarrCertTests(unittest.TestCase):
