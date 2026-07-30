@@ -413,10 +413,11 @@ def build_plex_attach(
 
     coexist_note = (
         "Plex supports multiple tuners. Tunarr is an *additional* HDHomeRun-style "
-        "network tuner — leave any OTA / antenna DVR in place. Plex never offers "
-        "XMLTV in the Tuner Setup EPG Location dropdown (first screen or "
-        "channel-mapping). Finish the wizard with any temporary ZIP-code lineup, "
-        "then attach Tunarr’s XMLTV afterward under that DVR’s Settings."
+        "network tuner — leave any OTA / antenna DVR in place. The Plex UI has no "
+        "XMLTV field in Tuner Setup, Device Settings, or DVR Settings once a "
+        "commercial ZIP guide is on the server. After Tunarr is added as a tuner, "
+        "use Admin → Attach Tunarr guide in Plex (PMS API) to put Tunarr on its "
+        "own XMLTV DVR — OTA commercial guide stays untouched."
     )
 
     address_hint = manual_address or "host:port from the tuner URL below"
@@ -430,55 +431,41 @@ def build_plex_attach(
             ),
         },
         {
-            "title": "Tuner Setup (first screen) — select Tunarr only",
+            "title": "Tuner Setup — select Tunarr only",
             "body": (
-                "Start Set up Plex DVR / Add device. The first Tuner Setup screen is "
-                "tuner discovery only — there is no XMLTV option here. Select the "
-                f"discovered Tunarr card (for example {address_hint} / "
-                '"We found hardware we recognize!"). You do not need a custom IP when '
-                "it appears. Only if it is missing: open "
+                "Start Set up Plex DVR / Add device. Select the discovered Tunarr card "
+                f"(for example {address_hint}). There is no XMLTV option on this screen. "
+                "Only if it is missing: open "
                 '"Don\'t see your HDHomeRun device? Enter its network address manually" '
-                f"and paste {address_hint}. Leave any OTA tuner in place."
+                f"and paste {address_hint}."
             ),
         },
         {
-            "title": "Postal code — wizard gate for Next",
+            "title": "Postal code + temporary commercial EPG",
             "body": (
-                "Plex often shows Country / Cable / Postal code on this same first "
-                "screen and requires a postal code before Next is enabled. Enter any "
-                "valid US ZIP so Next unlocks — that ZIP is only a wizard gate, not "
-                "your Tunarr guide. Select Tunarr, enter a ZIP, then Next."
+                "Enter any US ZIP so Next unlocks (wizard gate only). EPG Location lists "
+                "commercial lineups only (Fios / DIRECTV / Local Broadcast) — pick any "
+                "temporary lineup so Plex finishes adding the tuner. Fake cable names on "
+                "Tunarr stations are expected until you attach the guide in Admin."
             ),
         },
         {
-            "title": "EPG Location — temporary commercial lineup (no XMLTV in wizard)",
+            "title": "Attach Tunarr XMLTV via Projectionist (not Plex UI)",
             "body": (
-                "The EPG Location dropdown lists commercial lineups only "
-                "(Verizon Fios, DIRECTV, Xfinity, Local Broadcast, and similar). "
-                "Plex never offers XMLTV here — not on the first Tuner Setup screen "
-                "and not on the later channel-mapping screen. Pick any temporary "
-                "ZIP-code lineup and Continue so Plex can finish creating the DVR. "
-                "Fake cable channel names are expected until you switch the guide."
-            ),
-        },
-        {
-            "title": "After the DVR exists — attach Tunarr XMLTV in DVR Settings",
-            "body": (
-                "When the Tunarr DVR exists, open Live TV & DVR → that Tunarr DVR → "
-                "DVR Settings → add or switch to XMLTV. Paste the guide URL below, "
-                "then refresh the guide. Until you do, channel names may still show "
-                "the temporary cable mappings — that is expected. Your existing OTA "
-                "guide can stay as it is."
+                "Plex Device Settings and DVR Settings do not offer an XMLTV URL. "
+                "Back in Admin → Live Channels, click Attach Tunarr guide in Plex. "
+                "Projectionist calls the PMS API: moves Tunarr onto its own DVR with "
+                f"Tunarr XMLTV ({xmltv or 'the guide URL below'}) and maps channels. "
+                "Your OTA DVR and commercial guide stay untouched. Then refresh / watch "
+                "in Plex Live TV."
             ),
         },
         {
             "title": "Scan channels; mind number ranges",
             "body": (
-                f"Let Plex scan the new Tunarr device. Starter stations use virtual "
-                f"channel numbers from {_VIRTUAL_CHANNEL_FLOOR}+ so they usually sit "
-                "above typical OTA majors — if a number collides, renumber in Tunarr "
-                "or Plex. Then watch from Plex Live TV (Projectionist does not play "
-                "channels in-app)."
+                f"Starter stations use virtual channel numbers from {_VIRTUAL_CHANNEL_FLOOR}+ "
+                "so they usually sit above typical OTA majors — if a number collides, "
+                "renumber in Tunarr or Plex. Projectionist does not play channels in-app."
             ),
         },
     ]
@@ -533,11 +520,13 @@ def build_plex_attach(
             "virtual_channel_floor": _VIRTUAL_CHANNEL_FLOOR,
             "existing_livetv": livetv,
             "guide_warning": (
-                "Plex never offers XMLTV in the Tuner Setup EPG Location dropdown "
-                "(first screen or channel-mapping). Finish the wizard with any "
-                "temporary ZIP-code lineup, then open that Tunarr DVR → DVR Settings "
-                "→ add/switch XMLTV. Fake cable names until then are expected."
+                "Plex UI has no XMLTV paste in Tuner Setup, Device Settings, or DVR "
+                "Settings when a commercial ZIP guide is already configured. After "
+                "the Tunarr tuner exists, use Admin → Attach Tunarr guide in Plex "
+                "(PMS API) — that creates a separate XMLTV DVR for Tunarr and leaves "
+                "OTA commercial guide alone."
             ),
+            "api_attach": True,
         },
         "existing_livetv": livetv,
         "discovery": {
@@ -552,6 +541,346 @@ def build_plex_attach(
         },
     }
 
+
+
+def xmltv_lineup_uri(xmltv: str, *, friendly_name: str = "Projectionist") -> str:
+    """Plex EPG lineup URI for an HTTP XMLTV guide URL."""
+    guide = normalize_tunarr_base(xmltv)
+    name = str(friendly_name or "Projectionist").strip() or "Projectionist"
+    # PMS accepts the raw URL in the lineup path (verified on Automat / PMS Pass).
+    return f"lineup://tv.plex.providers.epg.xmltv/{guide}#{name}"
+
+
+def _plex_xml(client: Any, path: str, *, method: str = "GET", timeout: Optional[int] = None):
+    from urllib.parse import quote
+
+    from projectionist.connectors.http import request_xml
+
+    separator = "&" if "?" in path else "?"
+    url = f"{client.base_url}{path}{separator}X-Plex-Token={quote(client.token)}"
+    return request_xml(
+        url,
+        method=method,
+        headers={"Accept": "application/xml"},
+        timeout=timeout or getattr(client, "timeout", 30),
+    )
+
+
+def _mc_error(root: Any) -> str:
+    if root is None:
+        return "empty Plex response"
+    status = str(root.attrib.get("status") or "").strip()
+    message = str(root.attrib.get("message") or "").strip()
+    if message and status == "-1":
+        return message
+    if status and status not in ("0", "200", "") and message:
+        return message
+    return ""
+
+
+def _iter_devices(root: Any) -> List[Any]:
+    if root is None:
+        return []
+    return list(root.iter("Device"))
+
+
+def _iter_dvrs(root: Any) -> List[Any]:
+    if root is None:
+        return []
+    return [n for n in root.iter("Dvr") if str(getattr(n, "tag", "")) == "Dvr"]
+
+
+def _device_matches_tunarr(device: Any, *, tunarr_base: str, manual_address: str) -> bool:
+    uri = str(device.attrib.get("uri") or "").strip().rstrip("/")
+    device_id = str(device.attrib.get("deviceId") or "").strip().lower()
+    title = str(device.attrib.get("title") or device.attrib.get("name") or "").strip().lower()
+    make = str(device.attrib.get("make") or "").strip().lower()
+    base = normalize_tunarr_base(tunarr_base)
+    hostport = str(manual_address or "").strip()
+    if device_id == "tunarr":
+        return True
+    if "tunarr" in make:
+        return True
+    if "projectionist" in title and ("tunarr" in title or "tunarr" in make):
+        return True
+    if base and uri.rstrip("/") == base.rstrip("/"):
+        return True
+    if hostport and hostport in uri:
+        return True
+    if base:
+        host = _hostname_from_url_or_host(base)
+        port = str(tunarr_port_from_url(base))
+        if host and host in uri and port in uri:
+            return True
+    return False
+
+
+def _lineup_matches_xmltv(lineup: str, xmltv: str) -> bool:
+    lu = str(lineup or "")
+    guide = normalize_tunarr_base(xmltv)
+    return "tv.plex.providers.epg.xmltv" in lu and bool(guide) and guide in lu
+
+
+def attach_tunarr_xmltv_to_plex(
+    settings: Any = None,
+    *,
+    tunarr_url: Optional[str] = None,
+    request_host: Optional[str] = None,
+    friendly_name: str = "Projectionist",
+    timeout: int = 60,
+) -> Dict[str, Any]:
+    """Move Tunarr onto its own Plex DVR with Tunarr XMLTV via PMS API.
+
+    Verified on Automat: Plex refuses to mix cloud EPG + XMLTV on one DVR
+    (``Lineup is from a different provider``). Safe path is:
+    register/find Tunarr device → remove it from any commercial-EPG DVR →
+    ``POST /livetv/dvrs`` with ``lineup://tv.plex.providers.epg.xmltv/<url>#Name`` →
+    channelmap → ``reloadGuide``. OTA devices on the cloud DVR are left alone.
+    """
+    from urllib.parse import quote, urlencode
+
+    from projectionist.connectors.plex import PlexClient
+
+    if settings is None:
+        return {"ok": False, "error": "Settings are required to reach Plex."}
+
+    plex_url = str(getattr(settings, "plex_url", "") or "").strip()
+    plex_token = str(getattr(settings, "plex_token", "") or "").strip()
+    if not plex_url or not plex_token:
+        return {"ok": False, "error": "Configure Plex URL and token first."}
+
+    facing = resolve_plex_facing_tunarr_base(
+        settings, tunarr_url=tunarr_url, request_host=request_host
+    )
+    base = str(facing.get("base_url") or "").strip()
+    if not base or bool(facing.get("docker_only")):
+        return {
+            "ok": False,
+            "error": (
+                "Set a LAN Tunarr address (tunarr.public_url / HOST_IP) before "
+                "attaching the guide — Plex cannot reach host.docker.internal."
+            ),
+        }
+
+    xmltv = xmltv_url(base)
+    manual = host_port_for_plex(base)
+    lineup = xmltv_lineup_uri(xmltv, friendly_name=friendly_name)
+    client = PlexClient(plex_url, plex_token, timeout=timeout)
+    steps_done: List[str] = []
+
+    devices_root = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
+    device = next(
+        (
+            d
+            for d in _iter_devices(devices_root)
+            if _device_matches_tunarr(d, tunarr_base=base, manual_address=manual)
+        ),
+        None,
+    )
+    if device is None:
+        reg = _plex_xml(
+            client,
+            "/media/grabbers/tv.plex.grabbers.hdhomerun/devices?"
+            + urlencode({"uri": base}),
+            method="POST",
+            timeout=timeout,
+        )
+        err = _mc_error(reg)
+        device = next(
+            (
+                d
+                for d in _iter_devices(reg)
+                if _device_matches_tunarr(d, tunarr_base=base, manual_address=manual)
+            ),
+            None,
+        )
+        if device is None:
+            devices_root = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
+            device = next(
+                (
+                    d
+                    for d in _iter_devices(devices_root)
+                    if _device_matches_tunarr(d, tunarr_base=base, manual_address=manual)
+                ),
+                None,
+            )
+        if device is None:
+            return {
+                "ok": False,
+                "error": err
+                or "Plex did not register the Tunarr HDHomeRun device. Add it in Tuner Setup first.",
+                "xmltv_url": xmltv,
+            }
+        steps_done.append("registered_device")
+
+    device_uuid = str(device.attrib.get("uuid") or "").strip()
+    device_key = str(device.attrib.get("key") or "").strip()
+    if not device_uuid:
+        return {"ok": False, "error": "Tunarr device has no Plex UUID.", "xmltv_url": xmltv}
+
+    dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
+    home_dvr = None
+    xmltv_dvr = None
+    for dvr in _iter_dvrs(dvrs_root):
+        lineup_attr = str(dvr.attrib.get("lineup") or "")
+        owns = any(
+            str(dev.attrib.get("uuid") or "") == device_uuid for dev in dvr.findall("Device")
+        )
+        if _lineup_matches_xmltv(lineup_attr, xmltv):
+            xmltv_dvr = dvr
+        if owns:
+            home_dvr = dvr
+
+    if home_dvr is not None:
+        home_key = str(home_dvr.attrib.get("key") or "")
+        home_lineup = str(home_dvr.attrib.get("lineup") or "")
+        if not _lineup_matches_xmltv(home_lineup, xmltv):
+            det = _plex_xml(
+                client,
+                f"/livetv/dvrs/{home_key}/devices/{device_key}",
+                method="DELETE",
+                timeout=timeout,
+            )
+            err = _mc_error(det)
+            if err:
+                return {
+                    "ok": False,
+                    "error": f"Could not detach Tunarr from commercial DVR: {err}",
+                    "xmltv_url": xmltv,
+                }
+            steps_done.append(f"detached_from_dvr_{home_key}")
+            home_dvr = None
+
+    dvr_key = ""
+    if home_dvr is not None and _lineup_matches_xmltv(
+        str(home_dvr.attrib.get("lineup") or ""), xmltv
+    ):
+        dvr_key = str(home_dvr.attrib.get("key") or "")
+        steps_done.append("reused_xmltv_dvr")
+    elif xmltv_dvr is not None and home_dvr is None:
+        dvr_key = str(xmltv_dvr.attrib.get("key") or "")
+        add = _plex_xml(
+            client,
+            f"/livetv/dvrs/{dvr_key}/devices/{device_key}",
+            method="PUT",
+            timeout=timeout,
+        )
+        if not _mc_error(add):
+            steps_done.append(f"added_device_to_dvr_{dvr_key}")
+        else:
+            dvr_key = ""
+
+    if not dvr_key:
+        created = _plex_xml(
+            client,
+            "/livetv/dvrs?"
+            + urlencode({"language": "eng", "device": device_uuid, "lineup": lineup}),
+            method="POST",
+            timeout=timeout,
+        )
+        err = _mc_error(created)
+        dvr_node = next(iter(_iter_dvrs(created)), None)
+        if dvr_node is None:
+            dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
+            for dvr in _iter_dvrs(dvrs_root):
+                if any(
+                    str(dev.attrib.get("uuid") or "") == device_uuid
+                    for dev in dvr.findall("Device")
+                ) and _lineup_matches_xmltv(str(dvr.attrib.get("lineup") or ""), xmltv):
+                    dvr_node = dvr
+                    break
+            if dvr_node is None:
+                return {
+                    "ok": False,
+                    "error": err or "Plex did not create an XMLTV DVR for Tunarr.",
+                    "xmltv_url": xmltv,
+                    "lineup": lineup,
+                    "steps": steps_done,
+                }
+        dvr_key = str(dvr_node.attrib.get("key") or "")
+        steps_done.append(f"created_dvr_{dvr_key}")
+        for dev in dvr_node.findall("Device"):
+            if str(dev.attrib.get("uuid") or "") == device_uuid:
+                device_key = str(dev.attrib.get("key") or device_key)
+
+    if not dvr_key or not device_key:
+        return {
+            "ok": False,
+            "error": "Missing DVR or device key after attach.",
+            "steps": steps_done,
+        }
+
+    cmap = _plex_xml(
+        client,
+        "/livetv/epg/channelmap?" + urlencode({"device": device_uuid, "lineup": lineup}),
+        timeout=timeout,
+    )
+    mappings = [
+        m
+        for m in cmap.iter("ChannelMapping")
+        if m.attrib.get("deviceIdentifier")
+        and m.attrib.get("channelKey")
+        and m.attrib.get("lineupIdentifier")
+    ]
+    if mappings:
+        enabled = [m.attrib["deviceIdentifier"] for m in mappings]
+        parts = ["channelsEnabled=" + ",".join(enabled)]
+        for m in mappings:
+            di = m.attrib["deviceIdentifier"]
+            parts.append(
+                f"channelMappingByKey[{quote(di, safe='')}]="
+                f"{quote(m.attrib['channelKey'], safe='')}"
+            )
+            parts.append(
+                f"channelMapping[{quote(di, safe='')}]="
+                f"{quote(m.attrib['lineupIdentifier'], safe='')}"
+            )
+        put = _plex_xml(
+            client,
+            f"/media/grabbers/devices/{device_key}/channelmap?" + "&".join(parts),
+            method="PUT",
+            timeout=timeout,
+        )
+        err = _mc_error(put)
+        if err:
+            return {
+                "ok": False,
+                "error": f"DVR created but channel mapping failed: {err}",
+                "dvr_key": dvr_key,
+                "xmltv_url": xmltv,
+                "mapped": 0,
+                "steps": steps_done,
+            }
+        steps_done.append(f"mapped_{len(mappings)}_channels")
+    else:
+        steps_done.append("no_channel_mappings")
+
+    # reloadGuide often returns an empty body (not XML) — use request_empty.
+    from urllib.parse import quote as _quote
+
+    from projectionist.connectors.http import request_empty
+
+    reload_path = f"/livetv/dvrs/{dvr_key}/reloadGuide"
+    reload_url = (
+        f"{client.base_url}{reload_path}?X-Plex-Token={_quote(client.token)}"
+    )
+    request_empty(reload_url, method="POST", timeout=timeout)
+    steps_done.append("reload_guide")
+
+    return {
+        "ok": True,
+        "dvr_key": dvr_key,
+        "device_key": device_key,
+        "device_uuid": device_uuid,
+        "xmltv_url": xmltv,
+        "lineup": lineup,
+        "mapped": len(mappings),
+        "steps": steps_done,
+        "message": (
+            f"Tunarr guide attached on Plex DVR {dvr_key} "
+            f"({len(mappings)} channel(s) mapped). OTA commercial DVR left in place."
+        ),
+    }
 
 def probe_tuner_discovery(tunarr_base: str, *, timeout: int = 5) -> Dict[str, Any]:
     """Best-effort GET of Tunarr device / discover endpoint."""

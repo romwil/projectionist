@@ -93,7 +93,7 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 ### OTA / existing Live TV coexistence (multi-tuner)
 
 - **Status:** `done` (attach copy + soft detect) / residual (number collisions)
-- **Why / note:** Plex supports multiple tuners. Attach checklist matches real Plex UI: Tuner Setup = discovery + ZIP gate; EPG Location never offers XMLTV (first screen or channel-mapping) — finish wizard with a temporary ZIP-code lineup, then attach Tunarr XMLTV in that DVR’s Settings (fake cable names expected until then). Soft probe via `/livetv/dvrs` and `/livetv/tuners` surfaces “Existing Live TV setup detected…” when PMS answers; failures stay `unknown`. Residual: channel-number collisions with OTA majors if owners override the 100+ floor.
+- **Why / note:** Plex supports multiple tuners. Attach checklist matches real Plex UI: Tuner Setup = discovery + ZIP gate; EPG Location never offers XMLTV (first screen or channel-mapping) — finish wizard with a temporary ZIP-code lineup. Tunarr streams work; guide titles stay wrong until XMLTV is attached via a working path. Automat-verified: Device Settings / DVR Settings / EPG dropdown have no XMLTV paste for HDHomeRun-style devices on this Plex build — do not claim DVR Settings → XMLTV. Soft probe via `/livetv/dvrs` and `/livetv/tuners` surfaces “Existing Live TV setup detected…” when PMS answers; failures stay `unknown`. Residual: channel-number collisions with OTA majors if owners override the 100+ floor. **API attach landed in 1.29.10** (`POST …/plex-attach-guide`).
 - **Suggested next phase:** Automat pilot with real OTA + Tunarr; optional smarter channel pick.
 - **Owner surface:** Admin → Live Channels → Plex attach
 
@@ -255,6 +255,13 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 - **Why / note:** `e2e/fixtures/api-mocks.ts` `FeatureFlags` still only types `multi_user_enabled` / `seerr_enabled` / `plex_collections_enabled`. Backend/frontend flag exists; mocked e2e helpers cannot type-safely default or override Live Channels without extending the type (+ defaults in `mockFeatures`).
 - **Suggested next phase:** When adding Live Channels e2e (on-now or wizard) or any shipping e2e touch.
 - **Owner surface:** e2e / frontend
+
+### 2026-07-29 — Plex UI has no XMLTV paste for HDHomeRun/Tunarr (Automat)
+
+- **Status:** `open` / `in progress` (API path sibling research)
+- **Why / note:** Owner screenshots on Automat confirm Device Settings, DVR Settings, and Tuner Setup EPG Location have **no** XMLTV URL field for the Tunarr HDHomeRun-style device — only commercial ZIP lineups in the wizard. 1.29.9 owner tip (“DVR Settings → add/switch XMLTV”) was false; 1.29.10 corrects attach/HELP/Config copy. Tunarr streams work; guide titles wrong until XMLTV attaches via a working path. **Landed 1.29.10:** Admin Attach Tunarr guide in Plex via PMS API (separate XMLTV DVR; OTA cloud DVR preserved). Verified on Automat (DVR 8 cloud + DVR 12 XMLTV).
+- **Suggested next phase:** Wire Admin “Attach guide” when a safe API path is verified (prefer separate Tunarr DVR / avoid clobbering OTA cloud EPG).
+- **Owner surface:** Admin → Live Channels → Plex attach / HELP
 
 ### 2026-07-29 — Tunarr airing / consumption progress
 

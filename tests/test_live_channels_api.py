@@ -253,6 +253,25 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertEqual(body["existing_livetv"]["status"], "detected")
         self.assertIn("another tuner", body["existing_livetv"]["message"].lower())
 
+
+    def test_plex_attach_guide(self) -> None:
+        self._enable(public_url="http://10.10.1.202:18765")
+        with patch(
+            "projectionist.live_channels.plex_attach.attach_tunarr_xmltv_to_plex",
+            return_value={
+                "ok": True,
+                "dvr_key": "12",
+                "mapped": 3,
+                "message": "Tunarr guide attached on Plex DVR 12 (3 channel(s) mapped).",
+                "steps": ["reused_xmltv_dvr"],
+            },
+        ):
+            resp = self.client.post("/api/admin/live-channels/plex-attach-guide")
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["dvr_key"], "12")
+
     def test_plex_attach_uses_public_url_not_docker_internal(self) -> None:
         self._enable(
             url="http://host.docker.internal:8000",

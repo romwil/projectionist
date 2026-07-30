@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.29.10] — 2026-07-30
+
+Plex UI has no XMLTV paste for Tunarr — Admin can now attach Tunarr’s guide via the Plex Media Server API without touching your OTA commercial DVR.
+
+### Highlights
+- **Attach Tunarr guide in Plex.** One Admin button wires Tunarr XMLTV through the PMS API after the tuner exists.
+- **OTA stays on commercial EPG.** Tunarr moves to its own XMLTV DVR; Local Broadcast / cable guide for the antenna is left alone.
+- **No missing paste box.** Device Settings and DVR Settings never offered XMLTV — we stopped pointing there and automated the real path.
+
+### Added
+- `POST /api/admin/live-channels/plex-attach-guide` → `attach_tunarr_xmltv_to_plex` (detach Tunarr from cloud DVR if needed → `POST /livetv/dvrs` with `lineup://tv.plex.providers.epg.xmltv/…` → channelmap → `reloadGuide`).
+- Admin Live Channels Step 4 button **Attach Tunarr guide in Plex**.
+
+### Changed
+- `plex_attach` checklist / HELP / ConfigPage: temporary commercial lineup in Tuner Setup, then Admin API attach (never DVR Settings paste).
+
+### Verification
+- Live Automat probe: Tunarr on DVR 12 with XMLTV; OTA remains DVR 8 cloud Local Broadcast; attach idempotent reuse + 3 channels mapped.
+- Backend live-channels attach unit/API tests green; `test_version` lockstep holds at **1.29.10**.
+
 ## [1.29.9] — 2026-07-30
 
 Plex never offers XMLTV in the Tuner Setup EPG Location dropdown — finish the DVR with a temporary ZIP-code lineup, then attach Tunarr XMLTV in that DVR’s Settings.

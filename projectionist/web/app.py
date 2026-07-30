@@ -1922,6 +1922,29 @@ def live_channels_plex_attach_endpoint(
     return attach
 
 
+@app.post("/api/admin/live-channels/plex-attach-guide")
+def live_channels_plex_attach_guide_endpoint(
+    request: Request,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Attach Tunarr XMLTV to Plex via PMS API (separate DVR; OTA left alone)."""
+    del user
+    from projectionist.live_channels.plex_attach import attach_tunarr_xmltv_to_plex
+
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    forwarded = str(request.headers.get("x-forwarded-host") or "").strip()
+    request_host = forwarded or str(request.headers.get("host") or "").strip()
+    result = attach_tunarr_xmltv_to_plex(settings, request_host=request_host)
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=400,
+            detail=str(result.get("error") or "Could not attach Tunarr guide in Plex"),
+        )
+    return result
+
+
 @app.get("/api/admin/live-channels/tunarr-logs")
 def live_channels_tunarr_logs_endpoint(
     lines: int = 200,

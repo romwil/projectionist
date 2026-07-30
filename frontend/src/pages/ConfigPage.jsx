@@ -14,6 +14,7 @@ import {
   getHealth,
   getLiveChannelsLifecycleStatus,
   getLiveChannelsPlexAttach,
+  postLiveChannelsPlexAttachGuide,
   getLiveChannelsStarterPack,
   getLiveChannelsStatus,
   getLiveChannelsTunarrLogs,
@@ -3131,24 +3132,59 @@ export default function ConfigPage() {
                         </p>
                         <h3>Add Tunarr beside your tuners in Plex</h3>
                       </div>
-                      <button
-                        type="button"
-                        className="ghost"
-                        data-testid="live-channels-load-attach"
-                        disabled={liveBusy === "attach"}
-                        onClick={async () => {
-                          setLiveBusy("attach");
-                          try {
-                            setLiveAttach(await getLiveChannelsPlexAttach());
-                          } catch (error) {
-                            setActionFeedback("live-channels", "error", error.message);
-                          } finally {
-                            setLiveBusy(null);
+                      <div className="service-card-actions">
+                        <button
+                          type="button"
+                          className="ghost"
+                          data-testid="live-channels-load-attach"
+                          disabled={liveBusy === "attach" || liveBusy === "attach-guide"}
+                          onClick={async () => {
+                            setLiveBusy("attach");
+                            try {
+                              setLiveAttach(await getLiveChannelsPlexAttach());
+                            } catch (error) {
+                              setActionFeedback("live-channels", "error", error.message);
+                            } finally {
+                              setLiveBusy(null);
+                            }
+                          }}
+                        >
+                          {liveBusy === "attach" ? "Loading…" : "Show Plex steps"}
+                        </button>
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="live-channels-attach-guide"
+                          disabled={
+                            liveBusy === "attach" ||
+                            liveBusy === "attach-guide" ||
+                            Boolean(liveAttach?.needs_lan_url)
                           }
-                        }}
-                      >
-                        {liveBusy === "attach" ? "Loading…" : "Show Plex steps"}
-                      </button>
+                          onClick={async () => {
+                            setLiveBusy("attach-guide");
+                            try {
+                              if (!liveAttach) {
+                                setLiveAttach(await getLiveChannelsPlexAttach());
+                              }
+                              const result = await postLiveChannelsPlexAttachGuide();
+                              setActionFeedback(
+                                "live-channels",
+                                "success",
+                                result.message ||
+                                  "Tunarr XMLTV guide attached in Plex (OTA left alone).",
+                              );
+                            } catch (error) {
+                              setActionFeedback("live-channels", "error", error.message);
+                            } finally {
+                              setLiveBusy(null);
+                            }
+                          }}
+                        >
+                          {liveBusy === "attach-guide"
+                            ? "Attaching guide…"
+                            : "Attach Tunarr guide in Plex"}
+                        </button>
+                      </div>
                     </div>
                     {liveAttach ? (
                       <>
@@ -3206,8 +3242,8 @@ export default function ConfigPage() {
                             </label>
                             <label>
                               <span>
-                                XMLTV guide URL (paste in DVR Settings after the DVR exists —
-                                never in Tuner Setup EPG Location)
+                                Tunarr XMLTV URL (used by Attach Tunarr guide in Plex — not a
+                                Plex UI paste field)
                               </span>
                               <input
                                 type="text"
@@ -3227,9 +3263,9 @@ export default function ConfigPage() {
                     ) : (
                       <p className="wizard-note">
                         On Tuner Setup, select discovered Tunarr and enter any ZIP so Next unlocks.
-                        EPG Location is commercial lineups only — Plex never offers XMLTV in that
-                        dropdown. Pick a temporary lineup to finish the DVR, then attach Tunarr XMLTV
-                        under that DVR’s Settings. Leave any OTA device in place.
+                        EPG Location is commercial lineups only. Then click Attach Tunarr guide in
+                        Plex — Projectionist wires Tunarr XMLTV via the PMS API (OTA stays on its
+                        commercial guide). Leave any OTA device in place.
                       </p>
                     )}
                   </div>
