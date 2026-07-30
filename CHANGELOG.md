@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.29.20] — 2026-07-30
+
+Live Channels: only expose Projectionist’s configured Plex libraries into Tunarr, fix media-source updates missing `id`, and stop scan stampedes that trip library locks.
+
+### Highlights
+- **Only your mapped libraries.** Tunarr no longer gets every Plex library enabled — just the movie / TV sections configured in Projectionist (side libraries like “Magical Media” stay off).
+- **Filler wiring is quieter.** Invalid media-source updates and redundant force-scans are gone, so Tunarr is less likely to fight itself during restarts.
+- **Restart noise is clearer.** Loopback Meilisearch errors during a Tunarr restart are Tunarr-internal — not a bad host path from Projectionist.
+
+### Fixed
+- `PUT /api/media-sources/{id}` bodies omitted required `id` (Tunarr Zod: `body/id expected string, received undefined`) when updating the local filler source; client now injects `id`, and ensure skips no-op updates.
+- Parallel `forceScan` on already-enabled libraries during publish/ensure — only scan when a library was just enabled, paths changed, or `force_scan` is set.
+- `ensure_media_libraries_enabled` / `wire_plex_media_source` enabled every Tunarr-discovered movies/shows library; now match Tunarr `externalKey` to `plex_movie_section` / `plex_tv_section` only (leave others disabled).
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1535 passed, 6 skipped; coverage **76.6%** (≥74%).
+- `cd frontend && npm run test:unit` — 514 passed.
+- Focused: media-source id inject, Magical Media skip, scan skip — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.20**.
+
 ## [1.29.19] — 2026-07-30
 
 Live Channels continuity: stations keep airing after a title ends. Configure filler folders, pick TV / Movies / Both, and repair jump-start stations in place — no Tunarr admin UI.

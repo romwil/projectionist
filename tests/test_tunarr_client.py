@@ -158,7 +158,27 @@ class TunarrClientTests(unittest.TestCase):
             self.assertIn("lineup", programming)
             self.assertEqual(client.get_channel_programming("ch-1")["programs"], [])
 
+    def test_update_media_source_injects_body_id(self) -> None:
+        client = TunarrClient("http://tunarr.test")
+        captured: dict = {}
+
+        def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):
+            del headers, timeout
+            captured["method"] = method
+            captured["url"] = url
+            captured["body"] = body
+            return {"id": "ms-1", **(body or {})}
+
+        with patch("projectionist.connectors.tunarr.request_json", side_effect=fake_request_json):
+            client.update_media_source("ms-1", {"name": "Fillers", "type": "local"})
+        self.assertEqual(captured["method"], "PUT")
+        self.assertTrue(captured["url"].endswith("/media-sources/ms-1"))
+        self.assertEqual(captured["body"]["id"], "ms-1")
+        with self.assertRaises(ValueError):
+            client.update_media_source("", {"name": "x"})
+
     def test_filler_lists(self) -> None:
+
         client = TunarrClient("http://tunarr.test")
 
         def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):

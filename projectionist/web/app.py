@@ -1880,6 +1880,7 @@ def live_channels_publish_starters_endpoint(
                 client,
                 plex_url=settings.plex_url,
                 plex_token=settings.plex_token,
+                settings=settings,
             )
         except Exception as error:  # noqa: BLE001
             wire = {"ok": False, "message": str(error)[:240]}
@@ -2032,6 +2033,7 @@ def live_channels_publish_channel_endpoint(
                 client,
                 plex_url=settings.plex_url,
                 plex_token=settings.plex_token,
+                settings=settings,
             )
         except Exception as error:  # noqa: BLE001
             wire = {"ok": False, "message": str(error)[:240]}

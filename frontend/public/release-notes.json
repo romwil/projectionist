@@ -1,6 +1,32 @@
 {
-  "generated_at": "2026-07-30T21:45:34Z",
+  "generated_at": "2026-07-30T23:52:26Z",
   "releases": [
+    {
+      "version": "1.29.20",
+      "date": "2026-07-30",
+      "summary": "Live Channels: only expose Projectionist’s configured Plex libraries into Tunarr, fix media-source updates missing `id`, and stop scan stampedes that trip library locks.",
+      "highlights": [
+        "**Only your mapped libraries.** Tunarr no longer gets every Plex library enabled — just the movie / TV sections configured in Projectionist (side libraries like “Magical Media” stay off).",
+        "**Filler wiring is quieter.** Invalid media-source updates and redundant force-scans are gone, so Tunarr is less likely to fight itself during restarts.",
+        "**Restart noise is clearer.** Loopback Meilisearch errors during a Tunarr restart are Tunarr-internal — not a bad host path from Projectionist."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`PUT /api/media-sources/{id}` bodies omitted required `id` (Tunarr Zod: `body/id expected string, received undefined`) when updating the local filler source; client now injects `id`, and ensure skips no-op updates.",
+            "Parallel `forceScan` on already-enabled libraries during publish/ensure — only scan when a library was just enabled, paths changed, or `force_scan` is set.",
+            "`ensure_media_libraries_enabled` / `wire_plex_media_source` enabled every Tunarr-discovered movies/shows library; now match Tunarr `externalKey` to `plex_movie_section` / `plex_tv_section` only (leave others disabled)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused live-channels + Tunarr client suites for id inject, scan skip, Magical Media skip — passed."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.19",
       "date": "2026-07-30",
