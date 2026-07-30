@@ -23,6 +23,7 @@ services:
     ports:
       - "${HOST_PORT:-8788}:8788"
     environment:
+      PROJECTIONIST_HOST_DATA_DIR: ${PROJECTIONIST_HOST_DATA_DIR:-${PWD}/config}
       DATA_DIR: /config
       PORT: "8788"
       TZ: ${TZ:-UTC}

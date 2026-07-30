@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — Projectionist 1.29.2 -->
+<!-- Unraid Community Applications template — Projectionist 1.29.3 -->
 <Container version="2">
   <Name>projectionist</Name>
   <Repository>romwil/projectionist:latest</Repository>
@@ -21,6 +21,10 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.29.3
+- Host data dir for managed Tunarr; clearer Docker socket permission message; Tunarr URL placeholder
+- Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
+
 ### 1.29.2
 - Default Tunarr image pin `chrisbenincasa/tunarr:1.3.9` (Hub tag fix)
 - Full notes: https://github.com/romwil/projectionist/blob/main/CHANGELOG.md
@@ -289,7 +293,7 @@
 Projectionist is cinema intelligence for your personal archive — chat with a companion that knows your Plex library. Connect Plex, Radarr, Sonarr, TMDB, and your preferred LLM provider (cloud API or Ollama).
 
 **Updating (important)**
-- Repository default: `romwil/projectionist:latest` (pin `:1.29` / `:1.29.2` if preferred). During the compatibility window the same digests are also published as `romwil/curatorx:*`.
+- Repository default: `romwil/projectionist:latest` (pin `:1.29` / `:1.29.3` if preferred). During the compatibility window the same digests are also published as `romwil/curatorx:*`.
 - If **Force Update** reports **TOTAL DATA PULLED: 0 B** and the app stays on an old version, Docker kept a stale local tag. SSH: `docker pull romwil/projectionist:latest` then Force Update / Apply, or `cd /mnt/user/appdata/projectionist && ./rollout.sh latest`. Do not wipe `/config`.
 - Full notes: https://github.com/romwil/projectionist/blob/main/docs/wiki/Unraid.md
 
@@ -312,13 +316,14 @@ Projectionist is cinema intelligence for your personal archive — chat with a c
 
 **Optional:** Tautulli for watch stats and purge suggestions; Fanart.tv for richer poster art. For Ollama on the Unraid host, set `LLM_PROVIDER=ollama` and `LLM_BASE_URL=http://host.docker.internal:11434/v1` (Extra Parameters already add `host.docker.internal`).
 
-**Live Channels (Tunarr):** BYO Tunarr URL works with no socket. For managed Tunarr (Projectionist pull/start/stop), enable the optional **Docker Socket** path under Show more settings / advanced — host `/var/run/docker.sock` → container `/var/run/docker.sock`. That mount is root-equivalent; leave it blank unless you want turnkey orchestration.
+**Live Channels (Tunarr):** BYO Tunarr URL works with no socket. For managed Tunarr (Projectionist pull/start/stop), enable the optional **Docker Socket** path under Show more settings / advanced — host `/var/run/docker.sock` → container `/var/run/docker.sock`. That mount is root-equivalent; leave it blank unless you want turnkey orchestration. When the socket is mounted, also set **Host data dir (Tunarr)** to the same host path as Config (default `/mnt/user/appdata/projectionist/config`) so Tunarr's volume is not created at a bogus host `/config/tunarr`.
 
 **Support:** [GitHub Issues](https://github.com/romwil/projectionist/issues) · [Unraid wiki](https://github.com/romwil/projectionist/blob/main/docs/wiki/Unraid.md)
   </Description>
   <Config Name="Web UI port" Target="8788" Default="8788" Mode="tcp" Description="Projectionist web interface (LAN only recommended)" Type="Port" Display="always" Required="true" Mask="false">8788</Config>
   <Config Name="Config" Target="/config" Default="/mnt/user/appdata/projectionist/config" Mode="rw" Description="settings.json, SQLite database, and auto-generated session secret" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/projectionist/config</Config>
   <Config Name="Docker Socket" Target="/var/run/docker.sock" Default="" Mode="rw" Description="OPTIONAL — off by default. Host path /var/run/docker.sock for Live Channels managed Tunarr (Projectionist starts a sibling container). Root-equivalent privilege: leave blank for BYO Tunarr URL only." Type="Path" Display="advanced" Required="false" Mask="false"/>
+  <Config Name="Host data dir (Tunarr)" Target="PROJECTIONIST_HOST_DATA_DIR" Default="/mnt/user/appdata/projectionist/config" Mode="" Description="Host path of the Config volume. Required for Live Channels managed Tunarr (docker.sock binds use host paths). Must match the Config host path above." Type="Variable" Display="advanced" Required="false" Mask="false">/mnt/user/appdata/projectionist/config</Config>
   <Config Name="TZ" Target="TZ" Default="UTC" Mode="" Description="Container timezone for preferred library sync hour (e.g. America/New_York)" Type="Variable" Display="advanced" Required="false" Mask="false">UTC</Config>
   <Config Name="PLEX_URL" Target="PLEX_URL" Default="" Mode="" Description="Optional seed: Plex server URL (e.g. http://192.168.1.10:32400)" Type="Variable" Display="advanced" Required="false" Mask="false"/>
   <Config Name="PLEX_TOKEN" Target="PLEX_TOKEN" Default="" Mode="" Description="Optional seed: Plex Media Server token for library access (not household Sign in with Plex)" Type="Variable" Display="advanced" Required="false" Mask="true"/>

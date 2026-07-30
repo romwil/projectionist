@@ -123,6 +123,7 @@ run_plain_docker() {
     --add-host=host.docker.internal:host-gateway
     -e DATA_DIR=/config
     -e PORT=8788
+    -e "PROJECTIONIST_HOST_DATA_DIR=${CONFIG_DIR}"
   )
   if [[ -n "$DOCKER_SOCK" ]]; then
     if [[ ! -S "$DOCKER_SOCK" && ! -e "$DOCKER_SOCK" ]]; then
@@ -240,6 +241,7 @@ if [[ -n "$DOCKER_SOCK" ]]; then
   log "Docker socket: ${DOCKER_SOCK} → /var/run/docker.sock"
 fi
 log "Config bind: $CONFIG_DIR → /config (preserved)"
+log "Host data dir (Tunarr binds): PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
 
 if ((${#COMPOSE[@]})); then
   run_compose

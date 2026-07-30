@@ -10,7 +10,12 @@ from unittest.mock import MagicMock, patch
 
 from projectionist.config_store import FeatureFlags, Settings, TunarrSettings, load_merged_settings, save_settings
 from projectionist.library.db import BOOTSTRAP_OWNER_ID, Database
-from projectionist.live_channels.docker import TunarrDockerLifecycle, docker_socket_available, orchestration_enabled
+from projectionist.live_channels.docker import (
+    TunarrDockerLifecycle,
+    docker_socket_available,
+    orchestration_enabled,
+    resolve_config_volume,
+)
 from projectionist.live_channels.guide import (
     apply_youth_filter_to_on_now,
     build_on_now_snapshot,
@@ -175,6 +180,9 @@ class DockerLifecycleTests(unittest.TestCase):
         with patch(
             "projectionist.live_channels.docker.resolve_docker_socket",
             return_value="/tmp/fake.sock",
+        ), patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
         ), patch.object(
             life,
             "_engine_request",
@@ -208,6 +216,9 @@ class DockerLifecycleTests(unittest.TestCase):
         with patch(
             "projectionist.live_channels.docker.resolve_docker_socket",
             return_value="/tmp/fake.sock",
+        ), patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
         ), patch.object(life, "_engine_request", side_effect=fake_request), patch(
             "pathlib.Path.mkdir"
         ):
@@ -216,6 +227,25 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual(result.status, "running")
         self.assertTrue(any("/images/create" in c for c in calls))
         self.assertTrue(any("/containers/create" in c for c in calls))
+
+    def test_resolve_config_volume_uses_host_data_dir(self) -> None:
+        settings = Settings(tunarr=TunarrSettings(volume_path="tunarr"))
+        with patch.dict(
+            os.environ,
+            {"PROJECTIONIST_HOST_DATA_DIR": "/mnt/user/appdata/projectionist/config"},
+            clear=False,
+        ):
+            path = resolve_config_volume(settings, "/config")
+        self.assertEqual(path, "/mnt/user/appdata/projectionist/config/tunarr")
+
+    def test_resolve_config_volume_falls_back_to_data_dir(self) -> None:
+        settings = Settings(tunarr=TunarrSettings(volume_path="tunarr"))
+        with patch.dict(os.environ, {}, clear=False):
+            os.environ.pop("PROJECTIONIST_HOST_DATA_DIR", None)
+            os.environ.pop("HOST_DATA_DIR", None)
+            path = resolve_config_volume(settings, Path("/tmp/proj-data"))
+        self.assertTrue(str(path).endswith("/tunarr"))
+        self.assertIn("proj-data", path)
 
 
 class StatusBuilderTests(unittest.TestCase):

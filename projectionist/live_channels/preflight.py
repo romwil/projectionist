@@ -7,7 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from projectionist.live_channels.docker import (
     disk_free_bytes,
-    docker_socket_available,
+    docker_socket_status,
     orchestration_enabled,
 )
 from projectionist.live_channels.plex_pass import check_plex_pass
@@ -29,15 +29,19 @@ def run_preflight(
     enabled = bool(getattr(features, "live_channels_enabled", False))
 
     orch = orchestration_enabled(settings)
-    socket_ok = docker_socket_available()
+    sock = docker_socket_status()
+    socket_ok = bool(sock.get("accessible"))
     docker_check = {
         "id": "docker_orchestration",
         "ok": orch and socket_ok,
         "soft": True,
         "label": "Docker orchestration",
-        "message": _docker_message(orch, socket_ok),
+        "message": _docker_message(orch, sock),
         "orchestration_enabled": orch,
         "socket_available": socket_ok,
+        "socket_present": bool(sock.get("present")),
+        "socket_error": sock.get("error"),
+        "socket_path": sock.get("path"),
     }
 
     free = disk_free_bytes(data_dir or Path.cwd())
@@ -153,13 +157,33 @@ def run_preflight(
     }
 
 
-def _docker_message(orch: bool, socket_ok: bool) -> str:
+def _docker_message(orch: bool, sock: Dict[str, Any] | bool) -> str:
+    if isinstance(sock, bool):
+        socket_ok = sock
+        present = sock
+        err = None if sock else "not_found"
+    else:
+        socket_ok = bool(sock.get("accessible"))
+        present = bool(sock.get("present"))
+        err = sock.get("error")
     if orch and socket_ok:
         return "Docker orchestration is on and a socket is available."
     if socket_ok and not orch:
         return (
             "Docker socket is present, but orchestration is off. "
             "Enable it in settings or set PROJECTIONIST_DOCKER_ORCHESTRATION=1."
+        )
+    if orch and present and err == "permission_denied":
+        return (
+            "Orchestration is on, but the Docker socket is not accessible "
+            "(permission denied). Run Projectionist as root, add the docker "
+            "group, or set a BYO Tunarr URL."
+        )
+    if orch and present and not socket_ok:
+        detail = err or "inaccessible"
+        return (
+            f"Orchestration is on, but the Docker socket is {detail} — "
+            "use a BYO Tunarr URL or fix socket access."
         )
     if orch and not socket_ok:
         return "Orchestration is on, but no Docker socket was found — use a BYO Tunarr URL."
