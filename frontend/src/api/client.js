@@ -1331,6 +1331,11 @@ export async function getLiveChannelsPlexAttach() {
   return api("/admin/live-channels/plex-attach");
 }
 
+export async function getLiveChannelsTunarrLogs(lines = 200) {
+  const limit = Math.max(1, Math.min(Number(lines) || 200, 2000));
+  return api(`/admin/live-channels/tunarr-logs?lines=${limit}`);
+}
+
 export async function listRequests(params = {}) {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {

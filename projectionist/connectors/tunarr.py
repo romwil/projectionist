@@ -26,11 +26,14 @@ Projectionist on the trusted host network.
 
 from __future__ import annotations
 
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 from typing import Any, List, Mapping, Optional, Union
 from urllib.parse import urlencode
 
 from projectionist.connectors.http import request_json
+from projectionist.logging_config import sanitize_url
 
 
 def _iso_utc(value: Union[datetime, float, int, str]) -> str:
@@ -119,6 +122,57 @@ class TunarrClient:
         if not isinstance(payload, list):
             return []
         return [item for item in payload if isinstance(item, Mapping)]
+
+    def list_transcode_configs(self) -> List[Mapping[str, Any]]:
+        """Return Tunarr transcode profiles (``GET /api/transcode_configs``)."""
+        payload = request_json(
+            self._api_url("/transcode_configs"), timeout=self.timeout
+        )
+        if not isinstance(payload, list):
+            return []
+        return [item for item in payload if isinstance(item, Mapping)]
+
+    def default_transcode_config_id(self) -> str:
+        """Prefer the profile marked ``isDefault``, else the first config id."""
+        configs = self.list_transcode_configs()
+        for item in configs:
+            if item.get("isDefault"):
+                cid = str(item.get("id") or "").strip()
+                if cid:
+                    return cid
+        for item in configs:
+            cid = str(item.get("id") or "").strip()
+            if cid:
+                return cid
+        raise RuntimeError(
+            "Tunarr has no transcode configs; cannot create channels until one exists"
+        )
+
+    def fetch_debug_logs(self, *, line_limit: int = 200) -> str:
+        """Download recent Tunarr logs (``GET /api/system/debug/logs?download=true``).
+
+        Without ``download=true`` Tunarr streams SSE indefinitely; the download
+        variant returns a finite ``text/plain`` attachment.
+        """
+        limit = max(1, min(int(line_limit or 200), 2000))
+        query = urlencode({"download": "true", "lineLimit": limit})
+        url = f"{self._api_url('/system/debug/logs')}?{query}"
+        safe_url = sanitize_url(url)
+        request = urllib.request.Request(url, method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                raw = response.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as error:
+            detail = error.read().decode("utf-8", errors="replace")[:240]
+            raise RuntimeError(
+                f"HTTP {error.code} from {safe_url}: {detail}"
+            ) from error
+        except Exception as error:  # noqa: BLE001
+            raise RuntimeError(f"Tunarr logs request failed: {error}") from error
+        lines = raw.splitlines()
+        if len(lines) > limit:
+            lines = lines[-limit:]
+        return "\n".join(lines)
 
     def create_channel(self, body: Mapping[str, Any]) -> Mapping[str, Any]:
         """Create a channel. Prefer ``{"type": "new", "channel": {...}}`` shape."""

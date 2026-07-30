@@ -94,6 +94,25 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertEqual(body["channel_count"], 1)
         self.assertIn("broadcast", body)
 
+    def test_tunarr_logs_endpoint(self) -> None:
+        self._enable()
+        with patch(
+            "projectionist.live_channels.logs.fetch_tunarr_logs",
+            return_value={
+                "ok": True,
+                "source": "tunarr_api",
+                "lines": 200,
+                "text": "log-line",
+                "message": "Recent Tunarr API logs.",
+            },
+        ):
+            resp = self.client.get("/api/admin/live-channels/tunarr-logs?lines=50")
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["text"], "log-line")
+        self.assertEqual(body["source"], "tunarr_api")
+
     def test_publish_requires_confirm(self) -> None:
         self._enable()
         resp = self.client.post(
@@ -108,6 +127,7 @@ class LiveChannelsApiTests(unittest.TestCase):
         client.list_media_sources.return_value = []
         client.create_media_source.return_value = {"id": "ms-1", "type": "plex"}
         client.list_channels.return_value = []
+        client.default_transcode_config_id.return_value = "tc-default"
         client.create_channel.side_effect = lambda body: {
             "id": "ch-new",
             "name": body["channel"]["name"],

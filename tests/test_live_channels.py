@@ -546,11 +546,108 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(result["status"], "unknown")
         self.assertIn("additional", result["message"].lower())
 
+    def test_fetch_tunarr_logs_prefers_api(self) -> None:
+        from projectionist.live_channels.logs import fetch_tunarr_logs
+
+        settings = Settings(tunarr=TunarrSettings(url="http://tunarr.test:8000"))
+        with patch(
+            "projectionist.live_channels.logs.TunarrClient.fetch_debug_logs",
+            return_value="api-log",
+        ):
+            result = fetch_tunarr_logs(settings, lines=50)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "tunarr_api")
+        self.assertEqual(result["text"], "api-log")
+
+    def test_fetch_tunarr_logs_falls_back_to_docker(self) -> None:
+        from projectionist.live_channels.logs import fetch_tunarr_logs
+
+        settings = Settings(tunarr=TunarrSettings(url="http://tunarr.test:8000"))
+        lifecycle = MagicMock()
+        lifecycle.available.return_value = True
+        lifecycle.container_name = "projectionist-tunarr"
+        lifecycle.container_logs.return_value = "docker-log"
+
+        with patch(
+            "projectionist.live_channels.logs.TunarrClient.fetch_debug_logs",
+            side_effect=RuntimeError("api down"),
+        ), patch(
+            "projectionist.live_channels.logs.lifecycle_from_settings",
+            return_value=lifecycle,
+        ):
+            result = fetch_tunarr_logs(settings, lines=20)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "docker")
+        self.assertEqual(result["text"], "docker-log")
+
+    def test_channel_create_body_matches_tunarr_required_fields(self) -> None:
+        from projectionist.live_channels.publish import (
+            channel_create_body,
+            programming_body_for_recipe,
+        )
+
+        recipe = ChannelRecipe(name="Mystery", number=100, source="motif")
+        body = channel_create_body(
+            recipe,
+            transcode_config_id="ce5cfbdb-603d-47cd-85ff-6ddbe51f33c4",
+            channel_id="97c2c8f0-2c1e-428a-a035-9d25b2c94ef6",
+            start_time_ms=1_700_000_000_000,
+        )
+        self.assertEqual(body["type"], "new")
+        channel = body["channel"]
+        required = {
+            "disableFillerOverlay",
+            "duration",
+            "groupTitle",
+            "guideMinimumDuration",
+            "icon",
+            "id",
+            "name",
+            "number",
+            "offline",
+            "startTime",
+            "stealth",
+            "streamMode",
+            "transcodeConfigId",
+            "subtitlesEnabled",
+        }
+        self.assertTrue(required.issubset(channel.keys()))
+        self.assertEqual(channel["name"], "Mystery")
+        self.assertEqual(channel["number"], 100)
+        self.assertEqual(channel["id"], "97c2c8f0-2c1e-428a-a035-9d25b2c94ef6")
+        self.assertEqual(
+            channel["transcodeConfigId"], "ce5cfbdb-603d-47cd-85ff-6ddbe51f33c4"
+        )
+        self.assertEqual(channel["streamMode"], "hls")
+        self.assertEqual(channel["offline"], {"mode": "pic"})
+        self.assertEqual(
+            channel["icon"],
+            {"path": "", "width": 0, "duration": 0, "position": "bottom-right"},
+        )
+        with self.assertRaises(ValueError):
+            channel_create_body(recipe, transcode_config_id="")
+
+        empty = programming_body_for_recipe(recipe)
+        self.assertEqual(empty, {"type": "manual", "lineup": []})
+        hinted = programming_body_for_recipe(
+            ChannelRecipe(
+                name="Hints",
+                number=103,
+                source="motif",
+                item_hints=("Heat", "Alien"),
+            )
+        )
+        self.assertEqual(hinted["type"], "manual")
+        self.assertEqual(len(hinted["lineup"]), 2)
+        self.assertEqual(hinted["lineup"][0], {"type": "flex", "duration": 300_000})
+        self.assertNotIn("programs", hinted)
+
     def test_publish_recipes_creates_channels(self) -> None:
         from projectionist.live_channels.publish import publish_recipes
 
         client = MagicMock()
         client.list_channels.return_value = []
+        client.default_transcode_config_id.return_value = "tc-default"
         client.create_channel.side_effect = lambda body: {
             "id": f"id-{body['channel']['number']}",
             "name": body["channel"]["name"],
@@ -565,12 +662,17 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(result["count_published"], 2)
         self.assertEqual(client.create_channel.call_count, 2)
         self.assertTrue(result["ok"])
+        first_body = client.create_channel.call_args_list[0].args[0]
+        self.assertEqual(first_body["channel"]["transcodeConfigId"], "tc-default")
+        self.assertIn("id", first_body["channel"])
+        self.assertEqual(first_body["channel"]["streamMode"], "hls")
 
     def test_publish_skips_existing(self) -> None:
         from projectionist.live_channels.publish import publish_recipes
 
         client = MagicMock()
         client.list_channels.return_value = [{"id": "x", "name": "Chaos", "number": 100}]
+        client.default_transcode_config_id.return_value = "tc-default"
         result = publish_recipes(
             client,
             [ChannelRecipe(name="Chaos", number=100, source="chaos")],

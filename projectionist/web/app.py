@@ -1822,6 +1822,21 @@ def live_channels_plex_attach_endpoint(
     return attach
 
 
+@app.get("/api/admin/live-channels/tunarr-logs")
+def live_channels_tunarr_logs_endpoint(
+    lines: int = 200,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Recent Tunarr / broadcast-engine logs for the Admin Live Channels panel."""
+    del user
+    from projectionist.live_channels.logs import fetch_tunarr_logs
+
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    return fetch_tunarr_logs(settings, lines=lines)
+
+
 @app.get("/api/live-channels/on-now")
 def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     """Household-readable guide snapshot (channel name + now/next). Empty-safe.

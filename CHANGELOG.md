@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.29.5] — 2026-07-30
+
+Publish starters works against Tunarr 1.3.x, Admin Live Channels shows per-channel errors, and owners can expand recent broadcast-engine logs.
+
+### Highlights
+- **Publish starters lands channels.** Owner “Publish starters” creates Tunarr stations with the full 1.3.x create payload (UUID, default transcode profile, icon/offline/stream mode) instead of failing with Bad Request.
+- **Clearer Live Channels errors.** Publish, ready check, and connection failures show actionable detail (per-channel errors) without a duplicate red banner + footer status line.
+- **Broadcast engine logs.** Expand “Broadcast engine logs” at the bottom of Live Channels to pull the last 200 Tunarr log lines (API first, Docker socket fallback).
+
+### Fixed
+- `POST /api/channels` sparse body (`name`/`number`/`stealth`/`duration` only) rejected by Tunarr `createChannelV2` required fields.
+- Manual programming body used `programs` instead of required `lineup` array.
+- Live Channels action feedback no longer duplicates into the page footer status line.
+
+### Changed
+- `TunarrClient.list_transcode_configs` / `default_transcode_config_id` resolve the Default profile for create.
+- `channel_create_body` emits the OpenAPI-required channel shape; `programming_body_for_recipe` emits `{type: manual, lineup: [...]}`.
+- Owner `GET /api/admin/live-channels/tunarr-logs` proxies Tunarr `system/debug/logs?download=true` (Docker logs fallback).
+
+### Verification
+- Backend `pytest` Tunarr client + live-channels suites green (payload shape, logs API, publish path).
+- Live Tunarr 1.3.9 on Automat: create Mystery/Sci-Fi/Chaos succeeded with fixed payload; sparse body still returns HTTP 400.
+- `test_version` lockstep holds at **1.29.5** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+
 ## [1.29.4] — 2026-07-29
 
 Live Channels managed Tunarr keeps working after CA Force Update: the app user can reach Unraid’s docker.sock without a one-off recreate.
