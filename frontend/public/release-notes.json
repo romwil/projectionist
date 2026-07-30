@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-30T00:22:46Z",
+  "generated_at": "2026-07-30T00:23:04Z",
   "releases": [
     {
       "version": "1.29.4",
@@ -29,7 +29,7 @@
         {
           "title": "Verification",
           "bullets": [
-            "Backend `pytest` targeted live-channels + version lockstep (full suite optional at ship).",
+            "Backend `pytest` live-channels + version lockstep **51 passed** (1441 deselected); `test_version` + live suites green.",
             "`test_version` lockstep holds at **1.29.4** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`."
           ]
         }
