@@ -699,6 +699,37 @@ class CraftOptionsTests(unittest.TestCase):
         self.assertEqual(bare["collections_empty_reason"], "error")
         self.assertTrue(bare["collections_empty_hint"])
 
+    def test_returns_all_plex_collections_no_hard_cap(self) -> None:
+        from projectionist.connectors.plex_collections import PlexCollection
+        from projectionist.live_channels.craft import build_craft_options
+
+        settings = Settings(
+            plex_url="http://plex.test:32400",
+            plex_token="token",
+            plex_movie_section="1",
+            plex_tv_section="",
+        )
+        many = [
+            PlexCollection(
+                rating_key=str(i),
+                title=f"Collection {i:03d}",
+                section_id="1",
+                media_type="movie",
+            )
+            for i in range(1, 183)
+        ]
+        with patch(
+            "projectionist.connectors.plex_collections.list_collections",
+            return_value=many,
+        ), patch(
+            "projectionist.connectors.plex.PlexClient",
+            return_value=MagicMock(),
+        ):
+            opts = build_craft_options(None, settings=settings)
+        self.assertEqual(opts["collections_total"], 182)
+        self.assertEqual(len(opts["collections"]), 182)
+        self.assertEqual(opts["collections"][-1]["title"], "Collection 182")
+
 
 class OnNowGuideTests(unittest.TestCase):
     def test_program_airing_progress(self) -> None:

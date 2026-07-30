@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.29.17] — 2026-07-30
+
+Live Channels Admin after launch is maintenance-first: every Plex collection is selectable, craft fields share one grid, and setup moves under Installation with consistent green ready states.
+
+### Highlights
+- **Pick any collection for a station.** The craft picker loads every Plex / published collection (no more “Showing 40 of 182”) and lets you search by name.
+- **Maintenance after launch.** Once Tunarr is healthy with stations on the air, Admin opens on Stations — craft, refill, delete, and system pulse — instead of the STEP 1/2/3 setup journey forever.
+- **Installation is still one click away.** Engine start, Plex attach, Docker / ports, and advanced settings live under an Installation tab for revisit without crowding day-to-day maintenance.
+
+### Fixed
+- `build_craft_options` hard-capped collections at 40 — now returns the full list; Admin filters client-side with a search field.
+- Collection `<select>` blew the craft row width on long titles — craft fields use a consistent 2-column grid with `minmax(0, 1fr)` and ellipsis on the control.
+
+### Changed
+- Post-launch Live Channels UI: **Stations** (default) vs **Installation** tabs; first-time setup still shows the linear journey until the engine is up with at least one station.
+- Ready / success states (engine, API health, preflight, attach, discovery, health strip) share `LiveStatusCheck` / `LiveReadyBadge` green styling.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1520 passed, 6 skipped; coverage **77.0%** (≥74%).
+- `cd frontend && npm run test:unit` — 514 passed; `npm run lint` — 0 errors; `npm run build` — pass.
+- `pytest tests/test_version.py` — lockstep **1.29.17**.
+
 ## [1.29.16] — 2026-07-30
 
 Live Channels create-from-collection shows real Plex collections, stations keep labeled icons in the Plex guide, and publish warms streams so the first tune is less likely to race cold start.

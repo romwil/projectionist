@@ -251,7 +251,6 @@ def build_craft_options(
             youth_max = "PG-13"
 
     collections_total = len(collections)
-    capped = collections[:40]
     if not collections:
         if collections_error:
             empty_reason = "error"
@@ -271,7 +270,8 @@ def build_craft_options(
         "programming_modes": list(_MODES),
         "motifs": motifs[:24],
         "taste_clusters": clusters[:16],
-        "collections": capped,
+        # Full list — Admin filters client-side; do not hard-cap (owners often have 100+).
+        "collections": collections,
         "collections_total": collections_total,
         "collections_published_count": published_count,
         "collections_plex_count": plex_count,
