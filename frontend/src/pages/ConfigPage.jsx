@@ -2931,28 +2931,35 @@ export default function ConfigPage() {
                             </li>
                           ))}
                         </ol>
-                        <div className="service-fields">
-                          <label>
-                            <span>Tuner URL (copy into Plex)</span>
-                            <input
-                              type="text"
-                              readOnly
-                              data-testid="live-channels-tuner-url"
-                              value={liveAttach.tuner_url || ""}
-                              onFocus={(event) => event.target.select()}
-                            />
-                          </label>
-                          <label>
-                            <span>Guide URL (copy into Plex)</span>
-                            <input
-                              type="text"
-                              readOnly
-                              data-testid="live-channels-guide-url"
-                              value={liveAttach.guide_url || ""}
-                              onFocus={(event) => event.target.select()}
-                            />
-                          </label>
-                        </div>
+                        {liveAttach.needs_lan_url || !liveAttach.tuner_url ? (
+                          <p className="wizard-note" data-testid="live-channels-attach-warning">
+                            {liveAttach.warning ||
+                              "Set a LAN Tunarr address before pasting into Plex. Projectionist uses host.docker.internal only for its own connection to Tunarr — Plex cannot resolve that name."}
+                          </p>
+                        ) : (
+                          <div className="service-fields">
+                            <label>
+                              <span>Tuner URL (copy into Plex)</span>
+                              <input
+                                type="text"
+                                readOnly
+                                data-testid="live-channels-tuner-url"
+                                value={liveAttach.tuner_url || ""}
+                                onFocus={(event) => event.target.select()}
+                              />
+                            </label>
+                            <label>
+                              <span>Guide URL (copy into Plex)</span>
+                              <input
+                                type="text"
+                                readOnly
+                                data-testid="live-channels-guide-url"
+                                value={liveAttach.guide_url || ""}
+                                onFocus={(event) => event.target.select()}
+                              />
+                            </label>
+                          </div>
+                        )}
                         <p className="wizard-note">
                           {liveAttach.discovery?.ok ? "✓" : "○"}{" "}
                           {liveAttach.discovery?.message || "Discovery not checked."}

@@ -20,12 +20,57 @@ _DEFAULT_GUIDE_MINIMUM_DURATION_MS = 30_000
 _DEFAULT_STREAM_MODE = "hls"
 
 
+def plex_media_source_body(
+    *,
+    plex_url: str,
+    plex_token: str,
+    name: str = "Plex",
+    user_id: Optional[str] = None,
+    username: Optional[str] = None,
+    path_replacements: Optional[Sequence[Mapping[str, str]]] = None,
+) -> Dict[str, Any]:
+    """Build Tunarr ``POST /api/media-sources`` body for ``type=plex``.
+
+    Tunarr 1.3.x OpenAPI requires ``userId``, ``username``, and
+    ``pathReplacements`` keys (null / empty string / ``[]`` are valid for Plex
+    token auth). Do not put the Plex token in ``userId``.
+    """
+    return {
+        "name": str(name or "Plex").strip() or "Plex",
+        "type": "plex",
+        "uri": str(plex_url or "").strip().rstrip("/"),
+        "accessToken": str(plex_token or "").strip(),
+        "userId": user_id,
+        "username": username,
+        "pathReplacements": [dict(item) for item in (path_replacements or [])],
+    }
+
+
+def _plex_identity_hints(
+    plex_url: str, plex_token: str
+) -> tuple[Optional[str], Optional[str]]:
+    """Best-effort (userId, username) from Plex server identity for Tunarr wire."""
+    try:
+        from projectionist.connectors.plex import PlexClient
+
+        machine_id, friendly = PlexClient(
+            plex_url, plex_token, timeout=5
+        ).server_identity()
+    except Exception:  # noqa: BLE001
+        return None, None
+    user_id = str(machine_id or "").strip() or None
+    username = str(friendly or "").strip() or None
+    return user_id, username
+
+
 def wire_plex_media_source(
     client: TunarrClient,
     *,
     plex_url: str,
     plex_token: str,
     name: str = "Plex",
+    user_id: Optional[str] = None,
+    username: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Ensure a Plex media source exists in Tunarr (idempotent best-effort)."""
     url = str(plex_url or "").strip().rstrip("/")
@@ -48,12 +93,17 @@ def wire_plex_media_source(
                 "message": "Plex media source already present in Tunarr.",
                 "source": dict(source),
             }
-    body = {
-        "name": name,
-        "type": "plex",
-        "uri": url,
-        "accessToken": token,
-    }
+    resolved_user_id = user_id
+    resolved_username = username
+    if resolved_user_id is None and resolved_username is None:
+        resolved_user_id, resolved_username = _plex_identity_hints(url, token)
+    body = plex_media_source_body(
+        plex_url=url,
+        plex_token=token,
+        name=name,
+        user_id=resolved_user_id,
+        username=resolved_username,
+    )
     created = client.create_media_source(body)
     return {
         "ok": True,
@@ -61,6 +111,7 @@ def wire_plex_media_source(
         "id": created.get("id") or created.get("uuid"),
         "message": "Wired Plex as a Tunarr media source.",
         "source": dict(created),
+        "request_body_keys": sorted(body.keys()),
     }
 
 
@@ -132,8 +183,15 @@ def publish_recipes(
     recipes: Sequence[ChannelRecipe | Mapping[str, Any]],
     *,
     skip_existing_numbers: bool = True,
+    fill_programming: bool = False,
 ) -> Dict[str, Any]:
-    """Create channels (+ programming) for each recipe. Additive; does not wipe."""
+    """Create channels (+ programming) for each recipe. Additive; does not wipe.
+
+    When ``fill_programming`` is true, existing channels (normally skipped) get a
+    programming update via ``programming_body_for_recipe``. That body is still a
+    flex/empty shell until Tunarr has scanned program IDs from a wired media
+    source — skip-only publish will not thicken empty lineups.
+    """
     existing = client.list_channels()
     by_number = {
         int(ch.get("number") or 0): ch
@@ -149,6 +207,7 @@ def publish_recipes(
     published: List[Dict[str, Any]] = []
     skipped: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
+    programming_updated: List[Dict[str, Any]] = []
 
     transcode_config_id = ""
     try:
@@ -158,6 +217,7 @@ def publish_recipes(
             "ok": False,
             "published": [],
             "skipped": [],
+            "programming_updated": [],
             "errors": [
                 {
                     "name": "",
@@ -167,8 +227,13 @@ def publish_recipes(
             ],
             "count_published": 0,
             "count_skipped": 0,
+            "count_programming_updated": 0,
             "count_errors": 1,
             "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "note": (
+                "Skipped channels keep thin/empty lineups until programming is "
+                "set with real Tunarr program IDs (after media-source scan)."
+            ),
         }
 
     for raw in recipes:
@@ -178,14 +243,44 @@ def publish_recipes(
             recipe.number in by_number or key_name in by_name
         ):
             match = by_number.get(recipe.number) or by_name.get(key_name) or {}
-            skipped.append(
-                {
-                    "name": recipe.name,
-                    "number": recipe.number,
-                    "reason": "already_exists",
-                    "channel_id": match.get("id") or match.get("uuid"),
-                }
-            )
+            channel_id = str(match.get("id") or match.get("uuid") or "")
+            if fill_programming and channel_id:
+                prog_body = programming_body_for_recipe(recipe)
+                try:
+                    programming = (
+                        client.set_channel_programming(channel_id, prog_body)
+                        if prog_body is not None
+                        else {}
+                    )
+                    programming_updated.append(
+                        {
+                            "name": recipe.name,
+                            "number": recipe.number,
+                            "channel_id": channel_id,
+                            "programming": dict(programming) if programming else {},
+                        }
+                    )
+                except Exception as prog_error:  # noqa: BLE001
+                    errors.append(
+                        {
+                            "name": recipe.name,
+                            "number": recipe.number,
+                            "error": f"fill_programming: {str(prog_error)[:220]}",
+                        }
+                    )
+            else:
+                skipped.append(
+                    {
+                        "name": recipe.name,
+                        "number": recipe.number,
+                        "reason": "already_exists",
+                        "channel_id": channel_id or None,
+                        "note": (
+                            "Lineup not updated; re-publish with fill_programming=true "
+                            "for a flex/empty shell, or wait for scanned program IDs."
+                        ),
+                    }
+                )
             continue
         try:
             created = client.create_channel(
@@ -225,18 +320,25 @@ def publish_recipes(
     ok = bool(published) and not errors
     if published and errors:
         ok = False
-    if not published and not errors and skipped:
-        ok = True  # idempotent re-publish
+    if not published and not errors and (skipped or programming_updated):
+        ok = True  # idempotent re-publish / fill
 
     return {
         "ok": ok or (bool(published) and not errors),
         "published": published,
         "skipped": skipped,
+        "programming_updated": programming_updated,
         "errors": errors,
         "count_published": len(published),
         "count_skipped": len(skipped),
+        "count_programming_updated": len(programming_updated),
         "count_errors": len(errors),
         "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "note": (
+            "Skipped channels keep thin/empty lineups until programming is set "
+            "with real Tunarr program IDs (after media-source scan). "
+            "fill_programming only applies flex/empty shells."
+        ),
     }
 
 

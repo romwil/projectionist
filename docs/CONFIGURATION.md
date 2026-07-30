@@ -113,7 +113,10 @@ Default values (also in `config/settings.example.json`):
 | `features.ephemeral_collection_gc_dry_run` | `false` | Log what `collection_gc` would delete without calling Plex DELETE |
 | `features.seerr_enabled` | `false` | Activates Seerr connector for household discovery and requests |
 | `features.live_channels_enabled` | `false` | Tunarr-backed Live Channels (additional Plex Live TV tuner alongside OTA); owner toggle in Admin → Live Channels |
-| `tunarr.url` | `""` | BYO Tunarr base URL (`http://host:8000`); API at `{url}/api` |
+| `tunarr.url` | `""` | BYO Tunarr base URL for Projectionist→Tunarr API; may be `host.docker.internal` for sibling containers |
+| `tunarr.public_url` | `""` | LAN-reachable Tunarr base for **Plex** Live TV attach paste URLs (never `host.docker.internal`). Example: `http://10.10.1.202:18765` |
+| `tunarr.host_port` | `0` | Preferred host port for managed Tunarr HTTP (default candidate **18765**; probed for freeness). `0` = built-in default |
+| `tunarr.hdhr_port` | `0` | Preferred host port for Tunarr HDHR remap (default candidate **15004**; probed). Container still listens on 5004 internally |
 | `tunarr.docker_orchestration` | `false` | Allow pull/start/stop of a Tunarr sibling when a Docker socket is present |
 | `tunarr.image_tag` | `chrisbenincasa/tunarr:1.3.9` | Pinned image for orchestrated installs |
 | `auth.mode` | `disabled` | Set to `plex`, `oidc`, or `local` when multi-user is on |
@@ -125,9 +128,19 @@ Default values (also in `config/settings.example.json`):
 | Env var | Behavior |
 |---------|----------|
 | `PROJECTIONIST_TUNARR_URL` | Fills `tunarr.url` when the settings file leaves it empty |
+| `PROJECTIONIST_TUNARR_PUBLIC_URL` | Fills `tunarr.public_url` when the settings file leaves it empty (Plex-facing attach base) |
+| `PROJECTIONIST_TUNARR_HOST_PORT` | Preferred managed Tunarr HTTP host port (probed; default start **18765**) |
+| `PROJECTIONIST_TUNARR_HDHR_PORT` | Preferred managed Tunarr HDHR host port (probed; default start **15004**) |
 | `PROJECTIONIST_TUNARR_IMAGE` | When set, wins over `tunarr.image_tag` (deploy pin) |
 | `PROJECTIONIST_DOCKER_ORCHESTRATION` | When set (`1`/`true`/`yes`/`on`), wins over `tunarr.docker_orchestration` |
 | `PROJECTIONIST_HOST_DATA_DIR` (alias `HOST_DATA_DIR`) | Host path of the Config volume for managed Tunarr Docker binds (e.g. `/mnt/user/appdata/projectionist/config`). Required when docker.sock is mounted so Tunarr is not created at host `/config/tunarr` |
+| `PROJECTIONIST_HOST_IP` / `HOST_IP` | Optional LAN IP used to derive Plex attach URLs when `tunarr.public_url` is unset and Admin is opened via a Docker-only host |
+
+**Managed Tunarr ports:** new creates do **not** assume host `8000` (heavily reused on Unraid). Projectionist starts candidates at **18765** (HTTP) and **15004** (HDHR remap), checks Docker published ports, and walks upward until free. Existing containers keep their published mapping (e.g. an Automat Tunarr already on `8000` is left alone). Plex attach uses the **actual** published HTTP port in `public_url`.
+
+**Plex attach URLs:** the Admin checklist prefers `tunarr.public_url`, then a LAN-safe `tunarr.url`, then the browser `Host` / `PROJECTIONIST_PUBLIC_URL` / host IP with Tunarr’s **published** port. Projectionist may keep `http://host.docker.internal:<port>` for its own API calls; that hostname must never be pasted into Plex. Example LAN paste: `http://10.10.1.202:18765/` (tuner) and `…/api/xmltv.xml` (guide) — or whatever port was allocated.
+
+**Publish note:** re-publishing starters skips channels that already exist (`Published 0, skipped N`). Those channels keep thin/empty lineups until programming is set with real Tunarr program IDs after a Plex media-source scan. Pass `fill_programming=true` on `POST …/starters/publish` to re-apply flex/empty shells only — it does not invent scanned program IDs.
 
 **Unraid CA:** enable the optional **Docker Socket** path (`/var/run/docker.sock` → `/var/run/docker.sock`) for managed Tunarr. Off by default (root-equivalent); leave blank and use a BYO `tunarr.url` otherwise. When the socket is mounted, also set **Host data dir (Tunarr)** / `PROJECTIONIST_HOST_DATA_DIR` to the same host path as Config (default `/mnt/user/appdata/projectionist/config`) so Tunarr binds under appdata instead of host `/config/tunarr`. Compose: commented sock volume + `PROJECTIONIST_HOST_DATA_DIR` in `docker-compose.unraid.yml`. Appdata `rollout.sh`: set `MOUNT_DOCKER_SOCK=1` (or `DOCKER_SOCK=/var/run/docker.sock`) in `.env`; rollout injects `PROJECTIONIST_HOST_DATA_DIR` from the config bind path. When the socket is mounted, the container also needs the docker sock group (Unraid: `--group-add 281` in ExtraParams / rollout auto-detects GID) because the entrypoint drops to uid 1000 — a mount alone is not enough for mode `660`.
 

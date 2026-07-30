@@ -158,6 +158,11 @@ class LiveChannelsApiTests(unittest.TestCase):
         body = resp.json()
         self.assertEqual(body["count_published"], 1)
         self.assertTrue(body["media_source"]["ok"])
+        create_body = client.create_media_source.call_args.args[0]
+        self.assertEqual(create_body["type"], "plex")
+        self.assertIn("userId", create_body)
+        self.assertIn("username", create_body)
+        self.assertEqual(create_body["pathReplacements"], [])
 
     def test_lifecycle_noop_without_orchestration(self) -> None:
         self._enable(docker_orchestration=False)
@@ -192,6 +197,31 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertEqual(body["coexistence"]["mode"], "additional_tuner")
         self.assertEqual(body["existing_livetv"]["status"], "detected")
         self.assertIn("another tuner", body["existing_livetv"]["message"].lower())
+
+    def test_plex_attach_uses_public_url_not_docker_internal(self) -> None:
+        self._enable(
+            url="http://host.docker.internal:8000",
+            public_url="http://10.10.1.202:8000",
+        )
+        with patch(
+            "projectionist.live_channels.plex_attach.probe_tuner_discovery",
+            return_value={"ok": True, "message": "ok"},
+        ), patch(
+            "projectionist.live_channels.plex_attach.probe_existing_plex_livetv",
+            return_value={
+                "status": "none",
+                "ok": True,
+                "device_count": 0,
+                "message": "No existing tuners.",
+            },
+        ):
+            resp = self.client.get("/api/admin/live-channels/plex-attach")
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertEqual(body["tuner_url"], "http://10.10.1.202:8000/")
+        self.assertEqual(body["guide_url"], "http://10.10.1.202:8000/api/xmltv.xml")
+        self.assertNotIn("host.docker.internal", body["tuner_url"])
+        self.assertFalse(body.get("docker_only_url"))
 
 
 if __name__ == "__main__":

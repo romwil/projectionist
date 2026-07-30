@@ -205,6 +205,8 @@ class DockerLifecycleTests(unittest.TestCase):
             calls.append(f"{method} {path}")
             if method == "POST" and path.startswith("/images/create"):
                 return 200, None
+            if method == "GET" and path.startswith("/containers/json"):
+                return 200, []  # no published ports — prefer default 18765/15004
             if method == "GET" and path.endswith("/json"):
                 return 404, None
             if method == "POST" and path.startswith("/containers/create"):
@@ -222,11 +224,80 @@ class DockerLifecycleTests(unittest.TestCase):
         ), patch.object(life, "_engine_request", side_effect=fake_request), patch(
             "pathlib.Path.mkdir"
         ):
-            result = life.ensure_running(config_volume="/tmp/tunarr-vol")
+            with patch.dict(
+                os.environ, {"PROJECTIONIST_HOST_IP": "10.10.1.202"}, clear=False
+            ):
+                result = life.ensure_running(config_volume="/tmp/tunarr-vol")
         self.assertTrue(result.ok)
         self.assertEqual(result.status, "running")
         self.assertTrue(any("/images/create" in c for c in calls))
         self.assertTrue(any("/containers/create" in c for c in calls))
+        self.assertTrue(any("/containers/json" in c for c in calls))
+        self.assertEqual(
+            (result.detail or {}).get("url_hint"),
+            "http://host.docker.internal:18765",
+        )
+        self.assertEqual(
+            (result.detail or {}).get("public_url_hint"),
+            "http://10.10.1.202:18765",
+        )
+        self.assertEqual((result.detail or {}).get("host_port"), 18765)
+
+    def test_choose_free_port_skips_used(self) -> None:
+        from projectionist.live_channels.docker import (
+            choose_free_port,
+            collect_published_host_ports,
+        )
+
+        used = collect_published_host_ports(
+            [
+                {
+                    "Ports": [
+                        {"PublicPort": 18765, "PrivatePort": 8000, "Type": "tcp"},
+                        {"PublicPort": 18766, "PrivatePort": 8000, "Type": "tcp"},
+                    ]
+                }
+            ]
+        )
+        self.assertEqual(used, {18765, 18766})
+        self.assertEqual(choose_free_port(18765, used, attempts=8), 18767)
+        self.assertIsNone(choose_free_port(18765, {18765, 18766, 18767}, attempts=3))
+
+    def test_allocate_host_ports_probes_and_avoids_collision(self) -> None:
+        from projectionist.live_channels.docker import TunarrDockerLifecycle
+
+        life = TunarrDockerLifecycle(
+            socket_path="/tmp/fake.sock",
+            orchestration=True,
+            host_port=18765,
+            hdhr_port=15004,
+        )
+
+        def fake_request(method, path, **kwargs):
+            del kwargs
+            if method == "GET" and path.startswith("/containers/json"):
+                return 200, [
+                    {
+                        "Ports": [
+                            {"PublicPort": 18765, "Type": "tcp"},
+                            {"PublicPort": 15004, "Type": "tcp"},
+                        ]
+                    }
+                ]
+            raise AssertionError(f"unexpected {method} {path}")
+
+        with patch(
+            "projectionist.live_channels.docker.resolve_docker_socket",
+            return_value="/tmp/fake.sock",
+        ), patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
+        ), patch.object(life, "_engine_request", side_effect=fake_request):
+            http_port, hdhr_port = life.allocate_host_ports()
+        self.assertEqual(http_port, 18766)
+        self.assertEqual(hdhr_port, 15005)
+        self.assertEqual(life.host_port, 18766)
+        self.assertEqual(life.hdhr_port, 15005)
 
     def test_resolve_config_volume_uses_host_data_dir(self) -> None:
         settings = Settings(tunarr=TunarrSettings(volume_path="tunarr"))
@@ -538,6 +609,151 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertNotIn("wipe", joined)
         self.assertEqual(attach["coexistence"]["mode"], "additional_tuner")
         self.assertEqual(attach["existing_livetv"]["status"], "detected")
+
+    def test_plex_attach_prefers_public_url_over_docker_internal(self) -> None:
+        from projectionist.live_channels.plex_attach import (
+            build_plex_attach,
+            resolve_plex_facing_tunarr_base,
+        )
+
+        settings = Settings(
+            tunarr=TunarrSettings(
+                url="http://host.docker.internal:8000",
+                public_url="http://10.10.1.202:8000",
+            )
+        )
+        facing = resolve_plex_facing_tunarr_base(settings)
+        self.assertEqual(facing["base_url"], "http://10.10.1.202:8000")
+        self.assertEqual(facing["source"], "settings.public_url")
+        self.assertFalse(facing["docker_only"])
+
+        attach = build_plex_attach(
+            settings,
+            existing_livetv={"status": "none", "ok": True, "device_count": 0, "message": ""},
+        )
+        self.assertEqual(attach["tuner_url"], "http://10.10.1.202:8000/")
+        self.assertEqual(attach["guide_url"], "http://10.10.1.202:8000/api/xmltv.xml")
+        self.assertNotIn("host.docker.internal", attach["tuner_url"])
+        self.assertEqual(attach["tunarr_api_url"], "http://host.docker.internal:8000")
+        self.assertFalse(attach["needs_lan_url"])
+
+    def test_plex_attach_never_copies_docker_internal(self) -> None:
+        from projectionist.live_channels.plex_attach import (
+            build_plex_attach,
+            resolve_plex_facing_tunarr_base,
+        )
+
+        settings = Settings(
+            tunarr=TunarrSettings(url="http://host.docker.internal:8000")
+        )
+        facing = resolve_plex_facing_tunarr_base(
+            settings, request_host="localhost:8788", environ={}
+        )
+        self.assertEqual(facing["base_url"], "")
+        self.assertTrue(facing["docker_only"])
+
+        # Without HOST_IP / public_url, copy fields must stay empty (not docker DNS).
+        with patch.dict(os.environ, {}, clear=False):
+            for key in (
+                "PROJECTIONIST_HOST_IP",
+                "HOST_IP",
+                "PROJECTIONIST_TUNARR_PUBLIC_URL",
+                "PROJECTIONIST_PUBLIC_URL",
+                "CURATORX_HOST_IP",
+                "CURATORX_TUNARR_PUBLIC_URL",
+                "CURATORX_PUBLIC_URL",
+            ):
+                os.environ.pop(key, None)
+            attach = build_plex_attach(
+                settings,
+                request_host="localhost:8788",
+                existing_livetv={"status": "none", "ok": True, "device_count": 0, "message": ""},
+            )
+        self.assertEqual(attach["tuner_url"], "")
+        self.assertEqual(attach["guide_url"], "")
+        self.assertTrue(attach["needs_lan_url"])
+        self.assertNotIn("host.docker.internal", attach.get("tuner_url") or "")
+        self.assertIn("LAN", attach["warning"])
+
+    def test_plex_attach_derives_lan_from_request_host(self) -> None:
+        from projectionist.live_channels.plex_attach import resolve_plex_facing_tunarr_base
+
+        settings = Settings(
+            tunarr=TunarrSettings(url="http://host.docker.internal:8000")
+        )
+        facing = resolve_plex_facing_tunarr_base(
+            settings,
+            request_host="10.10.1.202:8788",
+            environ={},
+        )
+        self.assertEqual(facing["base_url"], "http://10.10.1.202:8000")
+        self.assertEqual(facing["source"], "derived_lan_host")
+        self.assertFalse(facing["docker_only"])
+
+    def test_derive_managed_public_url_from_host_ip(self) -> None:
+        from projectionist.live_channels.plex_attach import derive_managed_public_url
+
+        url = derive_managed_public_url(
+            host_port=8000,
+            environ={"PROJECTIONIST_HOST_IP": "10.10.1.202"},
+        )
+        self.assertEqual(url, "http://10.10.1.202:8000")
+        self.assertEqual(
+            derive_managed_public_url(
+                host_port=8000,
+                environ={"PROJECTIONIST_HOST_IP": "host.docker.internal"},
+            ),
+            "",
+        )
+
+    def test_plex_media_source_body_has_tunarr_required_fields(self) -> None:
+        from projectionist.live_channels.publish import plex_media_source_body
+
+        body = plex_media_source_body(
+            plex_url="http://10.10.1.200:32400/",
+            plex_token="tok",
+            username="HomePlex",
+            user_id="machine-1",
+        )
+        self.assertEqual(body["type"], "plex")
+        self.assertEqual(body["uri"], "http://10.10.1.200:32400")
+        self.assertEqual(body["accessToken"], "tok")
+        self.assertEqual(body["userId"], "machine-1")
+        self.assertEqual(body["username"], "HomePlex")
+        self.assertEqual(body["pathReplacements"], [])
+        for key in (
+            "name",
+            "uri",
+            "accessToken",
+            "userId",
+            "username",
+            "pathReplacements",
+            "type",
+        ):
+            self.assertIn(key, body)
+
+    def test_wire_plex_media_source_posts_required_keys(self) -> None:
+        from projectionist.live_channels.publish import wire_plex_media_source
+
+        client = MagicMock()
+        client.list_media_sources.return_value = []
+        client.create_media_source.return_value = {"id": "ms-1", "type": "plex"}
+        with patch(
+            "projectionist.live_channels.publish._plex_identity_hints",
+            return_value=("mid", "Home"),
+        ):
+            result = wire_plex_media_source(
+                client,
+                plex_url="http://plex.test:32400",
+                plex_token="tok",
+            )
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["created"])
+        body = client.create_media_source.call_args.args[0]
+        self.assertEqual(body["pathReplacements"], [])
+        self.assertIn("userId", body)
+        self.assertIn("username", body)
+        self.assertNotEqual(body.get("userId"), "tok")
 
     def test_probe_existing_livetv_unknown_without_plex(self) -> None:
         from projectionist.live_channels.plex_attach import probe_existing_plex_livetv

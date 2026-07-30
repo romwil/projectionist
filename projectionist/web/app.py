@@ -635,6 +635,9 @@ class SeerrSettingsPayload(BaseModel):
 
 class TunarrSettingsPayload(BaseModel):
     url: str = ""
+    public_url: str = ""
+    host_port: int = 0
+    hdhr_port: int = 0
     docker_orchestration: bool = False
     image_tag: str = "chrisbenincasa/tunarr:1.3.9"
     volume_path: str = "tunarr"
@@ -1593,6 +1596,9 @@ class LiveChannelsLifecyclePayload(BaseModel):
 class LiveChannelsPublishStartersPayload(BaseModel):
     recipes: List[Dict[str, Any]] = Field(default_factory=list)
     wire_plex: bool = True
+    # When true, existing channels get programming_body_for_recipe applied
+    # (flex/empty shells until Tunarr has scanned program IDs).
+    fill_programming: bool = False
     confirm: bool = False
 
 
@@ -1655,26 +1661,82 @@ def live_channels_lifecycle_endpoint(
 
     detail = result.detail or {}
     url_hint = str(detail.get("url_hint") or "").strip()
-    if not url_hint:
+    public_url_hint = str(detail.get("public_url_hint") or "").strip()
+    if not url_hint or not public_url_hint:
         start_payload = detail.get("start") if isinstance(detail.get("start"), dict) else {}
         start_detail = (
             start_payload.get("detail") if isinstance(start_payload.get("detail"), dict) else {}
         )
-        url_hint = str(start_detail.get("url_hint") or "").strip()
-    if (
-        result.ok
-        and result.status == "running"
-        and url_hint
-        and not str(settings.tunarr.url or "").strip()
-    ):
+        if not url_hint:
+            url_hint = str(start_detail.get("url_hint") or "").strip()
+        if not public_url_hint:
+            public_url_hint = str(start_detail.get("public_url_hint") or "").strip()
+
+    if result.ok and result.status == "running":
         tunarr = asdict(settings.tunarr)
-        tunarr["url"] = url_hint
-        updated = Settings.from_mapping({**asdict(settings), "tunarr": tunarr})
-        save_settings(DATA_DIR, updated)
-        settings = updated
+        changed = False
+        # API URL: sibling DNS for Projectionist→Tunarr (may be host.docker.internal).
+        if url_hint and not str(tunarr.get("url") or "").strip():
+            tunarr["url"] = url_hint
+            changed = True
+        # Always refresh API URL port when we know the published host port.
+        detail_host_port = detail.get("host_port")
+        if detail_host_port is None and isinstance(detail.get("start"), dict):
+            start_detail = detail.get("start", {}).get("detail") or {}
+            if isinstance(start_detail, dict):
+                detail_host_port = start_detail.get("host_port")
+        if detail_host_port and url_hint:
+            # Keep sibling host; rewrite port to the actual published mapping.
+            from urllib.parse import urlparse, urlunparse
+
+            parsed = urlparse(url_hint if "://" in url_hint else f"http://{url_hint}")
+            replaced = parsed._replace(netloc=f"{parsed.hostname}:{int(detail_host_port)}")
+            rewritten = urlunparse(replaced).rstrip("/")
+            if rewritten and rewritten != str(tunarr.get("url") or "").rstrip("/"):
+                # Only auto-rewrite when current url is empty or docker sibling.
+                current = str(tunarr.get("url") or "")
+                if (not current) or "host.docker.internal" in current or current.rstrip("/") == url_hint.rstrip("/"):
+                    tunarr["url"] = rewritten
+                    changed = True
+        if detail_host_port:
+            try:
+                port_i = int(detail_host_port)
+            except (TypeError, ValueError):
+                port_i = 0
+            if port_i and int(tunarr.get("host_port") or 0) != port_i:
+                tunarr["host_port"] = port_i
+                changed = True
+        detail_hdhr = detail.get("hdhr_port")
+        if detail_hdhr is None and isinstance(detail.get("start"), dict):
+            start_detail = detail.get("start", {}).get("detail") or {}
+            if isinstance(start_detail, dict):
+                detail_hdhr = start_detail.get("hdhr_port")
+        if detail_hdhr:
+            try:
+                hdhr_i = int(detail_hdhr)
+            except (TypeError, ValueError):
+                hdhr_i = 0
+            if hdhr_i and int(tunarr.get("hdhr_port") or 0) != hdhr_i:
+                tunarr["hdhr_port"] = hdhr_i
+                changed = True
+        # Plex-facing LAN URL — never host.docker.internal; fill when empty.
+        if public_url_hint and not str(tunarr.get("public_url") or "").strip():
+            from projectionist.live_channels.plex_attach import is_docker_only_host
+
+            host = public_url_hint.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+            if not is_docker_only_host(host):
+                tunarr["public_url"] = public_url_hint.rstrip("/")
+                changed = True
+        if changed:
+            updated = Settings.from_mapping({**asdict(settings), "tunarr": tunarr})
+            save_settings(DATA_DIR, updated)
+            settings = updated
 
     payload_out = result.to_dict()
     payload_out["tunarr_url"] = str(settings.tunarr.url or "")
+    payload_out["tunarr_public_url"] = str(settings.tunarr.public_url or "")
+    payload_out["host_port"] = int(getattr(settings.tunarr, "host_port", 0) or 0)
+    payload_out["hdhr_port"] = int(getattr(settings.tunarr, "hdhr_port", 0) or 0)
     payload_out["config_volume"] = volume
     return payload_out
 
@@ -1726,7 +1788,11 @@ def live_channels_publish_starters_endpoint(
         recipes = list(pack.get("proposals") or [])
 
     try:
-        result = publish_recipes(client, recipes)
+        result = publish_recipes(
+            client,
+            recipes,
+            fill_programming=bool(payload.fill_programming),
+        )
     except Exception as error:  # noqa: BLE001
         tunarr = asdict(settings.tunarr)
         tunarr["last_error"] = str(error)[:240]
@@ -1740,7 +1806,11 @@ def live_channels_publish_starters_endpoint(
         ) from error
 
     tunarr = asdict(settings.tunarr)
-    if result.get("ok") or result.get("count_published"):
+    if (
+        result.get("ok")
+        or result.get("count_published")
+        or result.get("count_programming_updated")
+    ):
         tunarr["last_publish_at"] = str(result.get("published_at") or "")
         tunarr["last_error"] = ""
     elif result.get("errors"):
@@ -1797,6 +1867,7 @@ def live_channels_from_collection_endpoint(
 
 @app.get("/api/admin/live-channels/plex-attach")
 def live_channels_plex_attach_endpoint(
+    request: Request,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
     """Plex Live TV attach checklist — add Tunarr as an *additional* tuner."""
@@ -1808,16 +1879,22 @@ def live_channels_plex_attach_endpoint(
     )
 
     settings = _settings()
-    discovery = probe_tuner_discovery(str(settings.tunarr.url or ""))
+    api_url = str(settings.tunarr.url or "")
+    discovery = probe_tuner_discovery(api_url)
     existing = probe_existing_plex_livetv(settings)
+    forwarded = str(request.headers.get("x-forwarded-host") or "").strip()
+    request_host = forwarded or str(request.headers.get("host") or "").strip()
     attach = build_plex_attach(
         settings,
+        request_host=request_host,
         discovery_ok=bool(discovery.get("ok")) if discovery else None,
         existing_livetv=existing,
+        discovery_base_url=api_url,
     )
     attach["discovery"] = {
         "ok": discovery.get("ok"),
         "message": discovery.get("message") or "",
+        "probed_base": api_url,
     }
     return attach
 
