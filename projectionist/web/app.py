@@ -1634,6 +1634,17 @@ def live_channels_preflight_endpoint(
     )
 
 
+@app.get("/api/admin/live-channels/lifecycle-status")
+def live_channels_lifecycle_status_endpoint(
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner progress + ready probe for Step 2 (Start the broadcast engine)."""
+    del user
+    from projectionist.live_channels.lifecycle_progress import build_lifecycle_status
+
+    return build_lifecycle_status(_settings())
+
+
 @app.post("/api/admin/live-channels/lifecycle")
 def live_channels_lifecycle_endpoint(
     payload: LiveChannelsLifecyclePayload,
@@ -1645,19 +1656,31 @@ def live_channels_lifecycle_endpoint(
         lifecycle_from_settings,
         resolve_config_volume,
     )
+    from projectionist.live_channels.lifecycle_progress import (
+        make_phase_callback,
+        mark_waiting_after_lifecycle,
+        progress_store,
+    )
 
     settings = _settings()
     life = lifecycle_from_settings(settings)
     volume = resolve_config_volume(settings, DATA_DIR)
     action = str(payload.action or "ensure_running").strip().lower()
+    on_phase = None
+    if action in {"ensure_running", "start", "pull"}:
+        store = progress_store()
+        store.begin(container_name=life.container_name)
+        on_phase = make_phase_callback(store)
     if action == "pull":
-        result = life.pull()
+        result = life.pull(on_phase=on_phase)
     elif action == "stop":
         result = life.stop(keep_volume=True)
     elif action == "start":
-        result = life.start(config_volume=volume)
+        result = life.start(config_volume=volume, on_phase=on_phase)
     else:
-        result = life.ensure_running(config_volume=volume)
+        result = life.ensure_running(config_volume=volume, on_phase=on_phase)
+    if action in {"ensure_running", "start", "pull"}:
+        mark_waiting_after_lifecycle(result.to_dict())
 
     detail = result.detail or {}
     url_hint = str(detail.get("url_hint") or "").strip()

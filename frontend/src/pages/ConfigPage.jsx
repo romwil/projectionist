@@ -12,6 +12,7 @@ import {
   getAuthMe,
   getFeatures,
   getHealth,
+  getLiveChannelsLifecycleStatus,
   getLiveChannelsPlexAttach,
   getLiveChannelsStarterPack,
   getLiveChannelsStatus,
@@ -411,12 +412,15 @@ export default function ConfigPage() {
   const [liveStarters, setLiveStarters] = useState(null);
   const [liveAttach, setLiveAttach] = useState(null);
   const [liveBusy, setLiveBusy] = useState(null);
+  const [liveEngineProgress, setLiveEngineProgress] = useState(null);
+  const [liveEngineError, setLiveEngineError] = useState("");
   const [selectedStarters, setSelectedStarters] = useState({});
   const [tunarrLogsOpen, setTunarrLogsOpen] = useState(false);
   const [tunarrLogs, setTunarrLogs] = useState(null);
   const [tunarrLogsBusy, setTunarrLogsBusy] = useState(false);
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
+  const enginePollRef = useRef(null);
 
   useEffect(() => {
     if (typeof setWizardMode === "function") {
@@ -532,7 +536,21 @@ export default function ConfigPage() {
     getLiveChannelsStatus()
       .then(setLiveChannelsStatus)
       .catch(() => setLiveChannelsStatus(null));
-  }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url]);
+    if (settings?.tunarr?.docker_orchestration) {
+      getLiveChannelsLifecycleStatus()
+        .then(setLiveEngineProgress)
+        .catch(() => {});
+    }
+  }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url, settings?.tunarr?.docker_orchestration]);
+
+  useEffect(() => {
+    return () => {
+      if (enginePollRef.current) {
+        clearInterval(enginePollRef.current);
+        enginePollRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!settings || autoCertifyDone || autoCertifying) return;
@@ -1029,10 +1047,143 @@ export default function ConfigPage() {
         setLivePreflight(null);
         setLiveStarters(null);
         setLiveAttach(null);
+        setLiveEngineProgress(null);
+        setLiveEngineError("");
+        stopEngineProgressPoll();
       }
     } catch (error) {
       updateFeatureFlags({ live_channels_enabled: !enabled });
       setActionFeedback("live-channels", "error", error.message);
+    } finally {
+      setLiveBusy(null);
+    }
+  }
+
+  function stopEngineProgressPoll() {
+    if (enginePollRef.current) {
+      clearInterval(enginePollRef.current);
+      enginePollRef.current = null;
+    }
+  }
+
+  async function pollEngineProgressOnce() {
+    try {
+      const progress = await getLiveChannelsLifecycleStatus();
+      setLiveEngineProgress(progress);
+      if (progress?.ready) {
+        setLiveEngineError("");
+      } else if (progress?.phase === "error" && progress?.error) {
+        setLiveEngineError(progress.error);
+      }
+      return progress;
+    } catch {
+      return null;
+    }
+  }
+
+  async function startBroadcastEngine() {
+    clearActionFeedback("live-channels");
+    setLiveEngineError("");
+    setLiveBusy("lifecycle");
+    setLiveEngineProgress({
+      phase: "pulling",
+      percent: 15,
+      message: "Pulling image",
+      ready: false,
+      busy: true,
+      ok: true,
+      determinate: true,
+    });
+    stopEngineProgressPoll();
+    const startedAt = Date.now();
+    const timeoutMs = 5 * 60 * 1000;
+    enginePollRef.current = setInterval(() => {
+      pollEngineProgressOnce().then((progress) => {
+        if (!progress) return;
+        if (progress.ready || progress.phase === "error" || Date.now() - startedAt > timeoutMs) {
+          stopEngineProgressPoll();
+        }
+      });
+    }, 1500);
+
+    try {
+      const result = await postLiveChannelsLifecycle("ensure_running");
+      if (result.tunarr_url) {
+        updateTunarrSettings({ url: result.tunarr_url });
+      }
+      if (!result.ok) {
+        const message = result.message || "Broadcast engine failed to start.";
+        setLiveEngineError(message);
+        setLiveEngineProgress((prev) => ({
+          ...(prev || {}),
+          phase: "error",
+          percent: 0,
+          message,
+          ready: false,
+          busy: false,
+          ok: false,
+          error: message,
+        }));
+        setActionFeedback("live-channels", "error", message);
+        stopEngineProgressPoll();
+        setLiveBusy(null);
+        return;
+      }
+      // Keep polling until Tunarr reports ready (logs marker or HTTP), up to ~5 min.
+      const deadline = Date.now() + timeoutMs;
+      let progress = await pollEngineProgressOnce();
+      while (Date.now() < deadline) {
+        if (progress?.ready) break;
+        if (progress?.phase === "error") break;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        progress = await pollEngineProgressOnce();
+      }
+      stopEngineProgressPoll();
+      if (progress?.ready) {
+        setActionFeedback(
+          "live-channels",
+          "success",
+          progress.message || "Tunarr is ready!",
+        );
+      } else if (progress?.phase === "error") {
+        setLiveEngineError(progress.error || progress.message || "Broadcast engine failed.");
+        setActionFeedback("live-channels", "error", progress.error || progress.message);
+      } else {
+        const timeoutMsg =
+          "Timed out waiting for Tunarr to become ready. Check Broadcast engine logs below.";
+        setLiveEngineError(timeoutMsg);
+        setLiveEngineProgress((prev) => ({
+          ...(prev || {}),
+          phase: "error",
+          percent: prev?.percent || 80,
+          message: timeoutMsg,
+          ready: false,
+          busy: false,
+          ok: false,
+          error: timeoutMsg,
+        }));
+        setActionFeedback("live-channels", "error", timeoutMsg);
+      }
+      const status = await getLiveChannelsStatus();
+      setLiveChannelsStatus(status);
+      if (result.tunarr_url) {
+        await getSettings().then(setSettings).catch(() => {});
+      }
+    } catch (error) {
+      stopEngineProgressPoll();
+      const message = error.message || "Broadcast engine failed to start.";
+      setLiveEngineError(message);
+      setLiveEngineProgress((prev) => ({
+        ...(prev || {}),
+        phase: "error",
+        percent: 0,
+        message,
+        ready: false,
+        busy: false,
+        ok: false,
+        error: message,
+      }));
+      setActionFeedback("live-channels", "error", message);
     } finally {
       setLiveBusy(null);
     }
@@ -2740,42 +2891,127 @@ export default function ConfigPage() {
                         <div className="service-card-title">
                           <p className="live-channels-step-label">Step 2</p>
                           <h3>Start the broadcast engine</h3>
+                          {liveEngineProgress?.ready ? (
+                            <span
+                              className="certified-badge certified-badge-ok"
+                              data-testid="live-channels-engine-ready"
+                            >
+                              ✓ Tunarr is ready
+                            </span>
+                          ) : null}
                         </div>
                         <button
                           type="button"
                           data-testid="live-channels-ensure-running"
                           disabled={liveBusy === "lifecycle"}
-                          onClick={async () => {
-                            setLiveBusy("lifecycle");
-                            try {
-                              const result = await postLiveChannelsLifecycle("ensure_running");
-                              if (result.tunarr_url) {
-                                updateTunarrSettings({ url: result.tunarr_url });
-                              }
-                              setActionFeedback(
-                                "live-channels",
-                                result.ok ? "success" : "error",
-                                result.message || "Broadcast engine update finished.",
-                              );
-                              const status = await getLiveChannelsStatus();
-                              setLiveChannelsStatus(status);
-                              if (result.tunarr_url) {
-                                await getSettings().then(setSettings).catch(() => {});
-                              }
-                            } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message);
-                            } finally {
-                              setLiveBusy(null);
-                            }
+                          onClick={() => {
+                            startBroadcastEngine().catch(() => {});
                           }}
                         >
-                          {liveBusy === "lifecycle" ? "Working…" : "Start engine"}
+                          {liveBusy === "lifecycle"
+                            ? "Starting…"
+                            : liveEngineProgress?.ready
+                              ? "Restart engine"
+                              : "Start engine"}
                         </button>
                       </div>
                       <p className="wizard-note">
                         Pulls the pinned Docker image and starts Tunarr with a config volume under your data
                         directory. Turning Live Channels off later stops the container but keeps that volume.
                       </p>
+                      {liveBusy === "lifecycle" ||
+                      (liveEngineProgress &&
+                        liveEngineProgress.phase &&
+                        liveEngineProgress.phase !== "idle" &&
+                        !liveEngineProgress.ready) ||
+                      liveEngineProgress?.ready ? (
+                        <div
+                          className="live-channels-engine-progress"
+                          data-testid="live-channels-engine-progress"
+                        >
+                          {liveEngineProgress?.ready ? (
+                            <ul
+                              className="wizard-note live-channels-engine-checks"
+                              data-testid="live-channels-engine-ready-list"
+                            >
+                              <li>✓ Broadcast engine: Tunarr is ready</li>
+                              {liveEngineProgress.http_ready ? (
+                                <li>✓ API health: responding</li>
+                              ) : null}
+                              {liveEngineProgress.logs_ready ? (
+                                <li>✓ Startup log: “Tunarr is ready!”</li>
+                              ) : null}
+                            </ul>
+                          ) : (
+                            <>
+                              <p className="live-channels-engine-progress-headline">
+                                {liveEngineProgress?.message ||
+                                  (liveBusy === "lifecycle" ? "Starting broadcast engine…" : "Working…")}
+                              </p>
+                              <div
+                                className={`live-channels-engine-progress-bar${
+                                  liveBusy === "lifecycle" &&
+                                  !(liveEngineProgress?.percent > 0)
+                                    ? " is-indeterminate"
+                                    : ""
+                                }`}
+                                role="progressbar"
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-valuenow={
+                                  Number.isFinite(liveEngineProgress?.percent)
+                                    ? liveEngineProgress.percent
+                                    : undefined
+                                }
+                                aria-label="Broadcast engine start progress"
+                              >
+                                <span
+                                  className="live-channels-engine-progress-fill"
+                                  style={{
+                                    width: `${Math.max(
+                                      8,
+                                      Math.min(100, Number(liveEngineProgress?.percent) || 15),
+                                    )}%`,
+                                  }}
+                                />
+                              </div>
+                              <p className="wizard-note live-channels-engine-phase">
+                                {liveEngineProgress?.phase === "pulling"
+                                  ? "Pulling image"
+                                  : liveEngineProgress?.phase === "creating"
+                                    ? "Creating container"
+                                    : liveEngineProgress?.phase === "starting"
+                                      ? "Starting"
+                                      : liveEngineProgress?.phase === "waiting_ready"
+                                        ? "Waiting for Tunarr ready"
+                                        : liveEngineProgress?.phase === "error"
+                                          ? "Failed"
+                                          : "Working…"}
+                                {Number.isFinite(liveEngineProgress?.percent)
+                                  ? ` · ${liveEngineProgress.percent}%`
+                                  : ""}
+                              </p>
+                            </>
+                          )}
+                          {liveEngineError ? (
+                            <div
+                              className="inline-alert inline-alert-error"
+                              data-testid="live-channels-engine-error"
+                              role="alert"
+                            >
+                              <span className="inline-alert-message">{liveEngineError}</span>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : liveEngineError ? (
+                        <div
+                          className="inline-alert inline-alert-error"
+                          data-testid="live-channels-engine-error"
+                          role="alert"
+                        >
+                          <span className="inline-alert-message">{liveEngineError}</span>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
 

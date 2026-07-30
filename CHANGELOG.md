@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.29.7] — 2026-07-30
+
+Live Channels Step 2 shows broadcast-engine progress in the step itself — phases, a progress bar, and a green ready state when Tunarr is up — instead of relying only on the bottom logs.
+
+### Highlights
+- **See Start engine progress where you clicked.** Step 2 shows Pulling image → Creating container → Starting → Waiting for Tunarr ready with a progress bar while Docker works.
+- **Green when Tunarr is ready.** The same ready-check language as Step 1 once logs show “Tunarr is ready!” or the Tunarr API answers.
+- **Failures stay in the step.** If the engine can’t start, a red inline error appears under Step 2 (footer logs remain as a detail view).
+
+### Added
+- `GET /api/admin/live-channels/lifecycle-status` — phase, percent, ready, message, container_id for Step 2 polling.
+- In-process lifecycle progress updates during `ensure_running` / start / pull (`lifecycle_progress.py`).
+- Admin Step 2 UI: progress bar, phase labels, `live-channels-engine-ready` / `live-channels-engine-progress` test ids.
+
+### Changed
+- Ready detection accepts Docker log marker `Tunarr is ready!` or successful Tunarr `/api/version` (health fallback).
+- Start engine keeps polling up to ~5 minutes for image pull + Tunarr boot.
+
+### Verification
+- Backend `pytest tests/` **1504 passed**, 6 skipped; coverage **77.5%** (≥74%).
+- Live-channels suites cover phase callbacks, log-marker ready, and lifecycle-status HTTP/logs paths.
+- Frontend lint **0 errors**; unit **509 passed**; `npm run build` green.
+- `test_version` lockstep holds at **1.29.7**.
+
 ## [1.29.6] — 2026-07-30
 
 Plex Live TV attach gets LAN-reachable Tunarr URLs (never `host.docker.internal`), managed Tunarr picks obscure free host ports instead of assuming 8000, and wiring Plex as a Tunarr media source sends the fields Tunarr 1.3.x requires.

@@ -19,8 +19,10 @@ import os
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 from urllib.parse import quote
+
+PhaseCallback = Callable[[str, str], None]
 
 logger = logging.getLogger(__name__)
 
@@ -378,12 +380,14 @@ class TunarrDockerLifecycle:
             },
         )
 
-    def pull(self) -> DockerLifecycleResult:
+    def pull(self, *, on_phase: Optional[PhaseCallback] = None) -> DockerLifecycleResult:
         if not self.can_orchestrate():
             return self._skip(
                 "pull",
                 "Docker orchestration unavailable; skip pull.",
             )
+        if on_phase:
+            on_phase("pulling", f"Pulling image {self.image}")
         repo, tag = _split_image(self.image)
         try:
             code, _body = self._engine_request(
@@ -476,7 +480,12 @@ class TunarrDockerLifecycle:
             detail["public_url_hint"] = public
         return detail
 
-    def start(self, *, config_volume: str = "") -> DockerLifecycleResult:
+    def start(
+        self,
+        *,
+        config_volume: str = "",
+        on_phase: Optional[PhaseCallback] = None,
+    ) -> DockerLifecycleResult:
         if not self.can_orchestrate():
             return self._skip("start", "Docker orchestration unavailable; skip start.")
         volume = str(config_volume or "").strip()
@@ -491,6 +500,8 @@ class TunarrDockerLifecycle:
         existing = self.status()
         if existing.status == "running":
             # status() already synced published ports from the living container.
+            if on_phase:
+                on_phase("starting", "Tunarr container already running.")
             return DockerLifecycleResult(
                 ok=True,
                 action="start",
@@ -501,6 +512,8 @@ class TunarrDockerLifecycle:
                 detail=self._url_hints_detail(),
             )
         if existing.status == "stopped":
+            if on_phase:
+                on_phase("starting", "Starting existing Tunarr container")
             try:
                 code, _ = self._engine_request(
                     "POST",
@@ -536,6 +549,8 @@ class TunarrDockerLifecycle:
             )
 
         # missing or unknown — probe free host ports, then create + start
+        if on_phase:
+            on_phase("creating", "Creating Tunarr container")
         try:
             self.allocate_host_ports()
         except RuntimeError as error:
@@ -582,7 +597,7 @@ class TunarrDockerLifecycle:
             )
         if code == 409:
             # Name conflict — try start of existing
-            return self.start(config_volume=volume)
+            return self.start(config_volume=volume, on_phase=on_phase)
         if code >= 400:
             return DockerLifecycleResult(
                 ok=False,
@@ -594,6 +609,8 @@ class TunarrDockerLifecycle:
                 detail={"response": created} if created else None,
             )
         cid = str((created or {}).get("Id") or self.container_name)
+        if on_phase:
+            on_phase("starting", "Starting Tunarr container")
         try:
             start_code, _ = self._engine_request(
                 "POST",
@@ -624,6 +641,8 @@ class TunarrDockerLifecycle:
             self.image,
             volume or "(none)",
         )
+        detail = self._url_hints_detail()
+        detail["container_id"] = cid[:12] if cid else ""
         return DockerLifecycleResult(
             ok=True,
             action="start",
@@ -631,21 +650,26 @@ class TunarrDockerLifecycle:
             message=f"Created and started Tunarr ({self.image}).",
             container_name=self.container_name,
             image=self.image,
-            detail=self._url_hints_detail(),
+            detail=detail,
         )
 
-    def ensure_running(self, *, config_volume: str = "") -> DockerLifecycleResult:
+    def ensure_running(
+        self,
+        *,
+        config_volume: str = "",
+        on_phase: Optional[PhaseCallback] = None,
+    ) -> DockerLifecycleResult:
         """Pull pinned image (best-effort) then start/create the container."""
         if not self.can_orchestrate():
             return self._skip(
                 "ensure_running",
                 "Docker orchestration unavailable; skip ensure_running.",
             )
-        pull_result = self.pull()
+        pull_result = self.pull(on_phase=on_phase)
         if not pull_result.ok:
             # Still try start if image may already be local
             logger.warning("Tunarr pull soft-failed: %s", pull_result.message)
-        start_result = self.start(config_volume=config_volume)
+        start_result = self.start(config_volume=config_volume, on_phase=on_phase)
         detail: Dict[str, Any] = {
             "pull": pull_result.to_dict(),
             "start": start_result.to_dict(),
@@ -664,6 +688,10 @@ class TunarrDockerLifecycle:
             detail["hdhr_port"] = int(
                 start_detail.get("hdhr_port") or self.hdhr_port or DEFAULT_HDHR_PORT
             )
+            if start_detail.get("container_id"):
+                detail["container_id"] = start_detail.get("container_id")
+            if on_phase:
+                on_phase("waiting_ready", "Waiting for Tunarr ready")
         return DockerLifecycleResult(
             ok=start_result.ok,
             action="ensure_running",
