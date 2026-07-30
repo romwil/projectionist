@@ -1316,6 +1316,10 @@ export async function postLiveChannelsLifecycle(action = "ensure_running") {
   });
 }
 
+export async function getLiveChannelsLifecycleStatus() {
+  return api("/admin/live-channels/lifecycle-status");
+}
+
 export async function getLiveChannelsStarterPack() {
   return api("/admin/live-channels/starter-pack");
 }

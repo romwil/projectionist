@@ -21,6 +21,9 @@ class LiveChannelsApiTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
+        from projectionist.live_channels.lifecycle_progress import reset_progress_for_tests
+
+        reset_progress_for_tests()
         import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
@@ -29,8 +32,10 @@ class LiveChannelsApiTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs
+        from projectionist.live_channels.lifecycle_progress import reset_progress_for_tests
 
         jobs._manager = None
+        reset_progress_for_tests()
         for key in ("CURATORX_SKIP_DOTENV", "PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER"):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
@@ -174,6 +179,56 @@ class LiveChannelsApiTests(unittest.TestCase):
         body = resp.json()
         self.assertFalse(body["ok"])
         self.assertEqual(body["status"], "unavailable")
+
+    def test_lifecycle_status_ready_via_http(self) -> None:
+        self._enable(docker_orchestration=True, url="http://tunarr.test:18765")
+        with patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
+        ), patch(
+            "projectionist.live_channels.lifecycle_progress.probe_tunarr_http_ready",
+            return_value=True,
+        ), patch(
+            "projectionist.live_channels.lifecycle_progress.probe_ready_from_docker",
+            return_value={
+                "container_running": True,
+                "container_id": "abc123def456",
+                "logs_ready": False,
+                "log_snippet": "",
+            },
+        ):
+            resp = self.client.get("/api/admin/live-channels/lifecycle-status")
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body["ready"])
+        self.assertEqual(body["phase"], "ready")
+        self.assertEqual(body["percent"], 100)
+        self.assertTrue(body["http_ready"])
+        self.assertEqual(body["container_id"], "abc123def456")
+
+    def test_lifecycle_status_ready_via_logs_marker(self) -> None:
+        self._enable(docker_orchestration=True, url="")
+        with patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
+        ), patch(
+            "projectionist.live_channels.lifecycle_progress.probe_tunarr_http_ready",
+            return_value=False,
+        ), patch(
+            "projectionist.live_channels.lifecycle_progress.probe_ready_from_docker",
+            return_value={
+                "container_running": True,
+                "container_id": "deadbeef0001",
+                "logs_ready": True,
+                "log_snippet": "Tunarr is ready!",
+            },
+        ):
+            resp = self.client.get("/api/admin/live-channels/lifecycle-status")
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body["ready"])
+        self.assertTrue(body["logs_ready"])
+        self.assertEqual(body["phase"], "ready")
 
     def test_plex_attach(self) -> None:
         self._enable()

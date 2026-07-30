@@ -199,6 +199,7 @@ class DockerLifecycleTests(unittest.TestCase):
             image="chrisbenincasa/tunarr:1.3.5",
         )
         calls: list[str] = []
+        phases: list[str] = []
 
         def fake_request(method, path, **kwargs):
             del kwargs
@@ -227,7 +228,10 @@ class DockerLifecycleTests(unittest.TestCase):
             with patch.dict(
                 os.environ, {"PROJECTIONIST_HOST_IP": "10.10.1.202"}, clear=False
             ):
-                result = life.ensure_running(config_volume="/tmp/tunarr-vol")
+                result = life.ensure_running(
+                    config_volume="/tmp/tunarr-vol",
+                    on_phase=lambda phase, _msg="": phases.append(phase),
+                )
         self.assertTrue(result.ok)
         self.assertEqual(result.status, "running")
         self.assertTrue(any("/images/create" in c for c in calls))
@@ -242,6 +246,44 @@ class DockerLifecycleTests(unittest.TestCase):
             "http://10.10.1.202:18765",
         )
         self.assertEqual((result.detail or {}).get("host_port"), 18765)
+        self.assertIn("pulling", phases)
+        self.assertIn("creating", phases)
+        self.assertIn("starting", phases)
+        self.assertIn("waiting_ready", phases)
+
+    def test_lifecycle_progress_ready_from_logs_marker(self) -> None:
+        from projectionist.live_channels.lifecycle_progress import (
+            build_lifecycle_status,
+            logs_indicate_ready,
+            reset_progress_for_tests,
+        )
+
+        reset_progress_for_tests()
+        self.assertTrue(logs_indicate_ready("boot…\nTunarr is ready!\n"))
+        self.assertFalse(logs_indicate_ready("still starting"))
+        settings = Settings(
+            tunarr=TunarrSettings(url="", docker_orchestration=True),
+        )
+        with patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
+        ), patch(
+            "projectionist.live_channels.lifecycle_progress.probe_tunarr_http_ready",
+            return_value=False,
+        ), patch(
+            "projectionist.live_channels.lifecycle_progress.probe_ready_from_docker",
+            return_value={
+                "container_running": True,
+                "container_id": "cid12",
+                "logs_ready": True,
+                "log_snippet": "Tunarr is ready!",
+            },
+        ):
+            status = build_lifecycle_status(settings)
+        self.assertTrue(status["ready"])
+        self.assertEqual(status["phase"], "ready")
+        self.assertEqual(status["percent"], 100)
+        reset_progress_for_tests()
 
     def test_choose_free_port_skips_used(self) -> None:
         from projectionist.live_channels.docker import (

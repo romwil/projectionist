@@ -1132,6 +1132,72 @@ button.ghost.inline-link {
   color: var(--muted);
 }
 
+.live-channels-engine-progress {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md, 8px);
+  background: color-mix(in srgb, var(--surface, transparent) 88%, var(--bg));
+  display: grid;
+  gap: 8px;
+}
+
+.live-channels-engine-progress-headline {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.live-channels-engine-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-2, color-mix(in srgb, var(--border) 55%, transparent));
+  overflow: hidden;
+}
+
+.live-channels-engine-progress-fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width 0.35s ease;
+}
+
+.live-channels-engine-progress-bar.is-indeterminate .live-channels-engine-progress-fill {
+  width: 35% !important;
+  animation: live-channels-engine-indeterminate 1.2s ease-in-out infinite;
+}
+
+.live-channels-engine-phase {
+  margin: 0;
+  font-size: var(--text-xs);
+}
+
+.live-channels-engine-checks {
+  margin: 0;
+  color: var(--success);
+}
+
+.live-channels-engine-checks li {
+  margin: 0.15rem 0;
+}
+
+@keyframes live-channels-engine-indeterminate {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-channels-engine-progress-bar.is-indeterminate .live-channels-engine-progress-fill {
+    animation: none;
+    width: 50% !important;
+  }
+}
+
 .live-channels-advanced {
   margin-top: var(--space-3);
   padding-top: var(--space-2);
