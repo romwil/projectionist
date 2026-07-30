@@ -621,6 +621,94 @@ def _lineup_matches_xmltv(lineup: str, xmltv: str) -> bool:
     return "tv.plex.providers.epg.xmltv" in lu and bool(guide) and guide in lu
 
 
+def _is_safe_dead_grabber(device: Any, *, tunarr_base: str, manual_address: str) -> bool:
+    """True for orphan dead tuners safe to delete (never OTA / Tunarr / alive)."""
+    if device is None:
+        return False
+    status = str(device.attrib.get("status") or "").strip().lower()
+    if status != "dead":
+        return False
+    if _device_matches_tunarr(device, tunarr_base=tunarr_base, manual_address=manual_address):
+        return False
+    device_id = str(device.attrib.get("deviceId") or "").strip()
+    make = str(device.attrib.get("make") or "").strip().lower()
+    uri = str(device.attrib.get("uri") or "").strip().lower()
+    # Real Silicondust OTA boxes keep a hardware deviceId even when briefly dead.
+    if device_id and make in {"silicondust", "hdhomerun"}:
+        return False
+    if "silicondust" in make and device_id:
+        return False
+    # Empty deviceId + unknown make (Automat: stale :7007 M3U) is the common junk.
+    if not device_id and (make in {"", "unknown"} or "channels.m3u" in uri):
+        return True
+    return False
+
+
+def prune_dead_grabber_devices(
+    settings: Any = None,
+    *,
+    tunarr_url: Optional[str] = None,
+    request_host: Optional[str] = None,
+    timeout: int = 30,
+) -> Dict[str, Any]:
+    """Delete orphan dead HDHomeRun grabbers that are not OTA or Tunarr.
+
+    Safe filter: ``status=dead``, not matching Tunarr, and either empty
+    ``deviceId`` with Unknown make or a leftover ``channels.m3u`` URI. Never
+    deletes alive devices or Silicondust hardware tuners.
+    """
+    if settings is None:
+        return {"ok": False, "deleted": [], "message": "Settings required."}
+    plex_url = str(getattr(settings, "plex_url", "") or "").strip()
+    plex_token = str(getattr(settings, "plex_token", "") or "").strip()
+    if not plex_url or not plex_token:
+        return {"ok": False, "deleted": [], "message": "Plex not configured."}
+
+    from projectionist.connectors.plex import PlexClient
+
+    facing = resolve_plex_facing_tunarr_base(
+        settings, tunarr_url=tunarr_url, request_host=request_host
+    )
+    base = str(facing.get("base_url") or "").strip()
+    manual = host_port_for_plex(base)
+    client = PlexClient(plex_url, plex_token, timeout=timeout)
+    root = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
+    deleted: List[Dict[str, str]] = []
+    for device in _iter_devices(root):
+        if not _is_safe_dead_grabber(
+            device, tunarr_base=base, manual_address=manual
+        ):
+            continue
+        key = str(device.attrib.get("key") or "").strip()
+        if not key:
+            continue
+        det = _plex_xml(
+            client,
+            f"/media/grabbers/devices/{key}",
+            method="DELETE",
+            timeout=timeout,
+        )
+        err = _mc_error(det)
+        if err:
+            continue
+        deleted.append(
+            {
+                "key": key,
+                "uri": str(device.attrib.get("uri") or ""),
+                "title": str(device.attrib.get("title") or ""),
+            }
+        )
+    return {
+        "ok": True,
+        "deleted": deleted,
+        "message": (
+            f"Removed {len(deleted)} dead leftover tuner(s)."
+            if deleted
+            else "No orphan dead tuners to remove."
+        ),
+    }
+
+
 def attach_tunarr_xmltv_to_plex(
     settings: Any = None,
     *,
@@ -667,6 +755,15 @@ def attach_tunarr_xmltv_to_plex(
     lineup = xmltv_lineup_uri(xmltv, friendly_name=friendly_name)
     client = PlexClient(plex_url, plex_token, timeout=timeout)
     steps_done: List[str] = []
+
+    pruned = prune_dead_grabber_devices(
+        settings,
+        tunarr_url=tunarr_url,
+        request_host=request_host,
+        timeout=min(timeout, 30),
+    )
+    if pruned.get("deleted"):
+        steps_done.append(f"pruned_dead_grabbers_{len(pruned['deleted'])}")
 
     devices_root = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
     device = next(

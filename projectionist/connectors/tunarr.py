@@ -426,6 +426,59 @@ class TunarrClient:
             return {}
         return payload
 
+    def get_plex_settings(self) -> Mapping[str, Any]:
+        """Plex stream access settings (``GET /api/plex-settings``)."""
+        payload = request_json(self._api_url("/plex-settings"), timeout=self.timeout)
+        return payload if isinstance(payload, dict) else {}
+
+    def put_plex_settings(self, body: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Update Plex stream settings (``PUT /api/plex-settings``)."""
+        payload = request_json(
+            self._api_url("/plex-settings"),
+            method="PUT",
+            body=dict(body),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr PUT plex-settings")
+        return payload
+
+    def ensure_plex_stream_path_direct(self) -> Mapping[str, Any]:
+        """Prefer filesystem reads when Tunarr can see library mounts.
+
+        Tunarr 1.3.x ``streamPath`` is ``network`` | ``direct``. With media binds
+        present, ``direct`` avoids mid-program HTTP seeks through Plex that stall
+        cold HDHR tunes. Idempotent; never raises — returns ``ok`` / message.
+        """
+        try:
+            current = dict(self.get_plex_settings())
+        except Exception as error:  # noqa: BLE001
+            return {"ok": False, "changed": False, "error": str(error)[:200]}
+        if str(current.get("streamPath") or "").strip().lower() == "direct":
+            return {
+                "ok": True,
+                "changed": False,
+                "streamPath": "direct",
+                "message": "Tunarr already reads library files directly.",
+            }
+        body = {
+            "streamPath": "direct",
+            "updatePlayStatus": bool(current.get("updatePlayStatus", False)),
+            "pathReplace": str(current.get("pathReplace") or ""),
+            "pathReplaceWith": str(current.get("pathReplaceWith") or ""),
+        }
+        try:
+            updated = self.put_plex_settings(body)
+        except Exception as error:  # noqa: BLE001
+            return {"ok": False, "changed": False, "error": str(error)[:200]}
+        return {
+            "ok": True,
+            "changed": True,
+            "streamPath": str(updated.get("streamPath") or "direct"),
+            "message": "Tunarr plex streamPath set to direct (local media mounts).",
+            "settings": dict(updated),
+        }
+
 
 def tunarr_reachable(base_url: str, *, timeout: int = 8) -> dict[str, Any]:
     """Best-effort reachability check; never raises."""

@@ -839,6 +839,51 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(attach["coexistence"]["mode"], "additional_tuner")
         self.assertEqual(attach["existing_livetv"]["status"], "detected")
 
+    def test_prune_dead_grabber_devices_skips_ota_and_tunarr(self) -> None:
+        import xml.etree.ElementTree as ET
+
+        from projectionist.live_channels.plex_attach import prune_dead_grabber_devices
+
+        devices = ET.fromstring(
+            """
+            <MediaContainer size="3">
+              <Device key="1" uuid="device://tv.plex.grabbers.hdhomerun/106010D2"
+                uri="http://10.10.3.164:80" deviceId="106010D2" status="alive"
+                make="Silicondust" title="OTA"/>
+              <Device key="10" uuid="device://tv.plex.grabbers.hdhomerun/"
+                uri="http://10.10.1.202:7007/api/channels.m3u" deviceId=""
+                status="dead" make="Unknown" title=""/>
+              <Device key="11" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr"
+                uri="http://10.10.1.202:18765" deviceId="Tunarr" status="alive"
+                make="Tunarr - Silicondust" title="Projectionist"/>
+            </MediaContainer>
+            """
+        )
+        deleted_paths: list[str] = []
+
+        def fake_xml(client, path, *, method="GET", timeout=None):
+            del client, timeout
+            if path.startswith("/media/grabbers/devices/") and method == "DELETE":
+                deleted_paths.append(path)
+                return ET.fromstring('<MediaContainer size="0" status="0"/>')
+            if path.startswith("/media/grabbers/devices"):
+                return devices
+            raise AssertionError(f"unexpected {method} {path}")
+
+        settings = Settings(
+            plex_url="http://plex.test:32400",
+            plex_token="tok",
+            tunarr=TunarrSettings(public_url="http://10.10.1.202:18765"),
+        )
+        with patch(
+            "projectionist.live_channels.plex_attach._plex_xml",
+            side_effect=fake_xml,
+        ):
+            result = prune_dead_grabber_devices(settings)
+        self.assertTrue(result["ok"])
+        self.assertEqual(len(result["deleted"]), 1)
+        self.assertEqual(result["deleted"][0]["key"], "10")
+        self.assertEqual(deleted_paths, ["/media/grabbers/devices/10"])
 
     def test_attach_tunarr_xmltv_reuses_existing_xmltv_dvr(self) -> None:
         from unittest.mock import MagicMock, patch
@@ -1054,6 +1099,11 @@ class PreflightAndPublishTests(unittest.TestCase):
         ]
         client.set_library_enabled.return_value = {"id": "lib-movies", "enabled": True}
         client.scan_library.return_value = {}
+        client.ensure_plex_stream_path_direct.return_value = {
+            "ok": True,
+            "changed": True,
+            "streamPath": "direct",
+        }
         with patch(
             "projectionist.live_channels.publish._plex_identity_hints",
             return_value=("mid", "Home"),
@@ -1065,6 +1115,8 @@ class PreflightAndPublishTests(unittest.TestCase):
             )
         self.assertTrue(result["ok"])
         self.assertTrue(result["created"])
+        client.ensure_plex_stream_path_direct.assert_called_once()
+        self.assertEqual(result["plex_stream"]["streamPath"], "direct")
         body = client.create_media_source.call_args.args[0]
         self.assertEqual(body["pathReplacements"], [])
         self.assertIn("userId", body)
