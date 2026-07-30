@@ -413,11 +413,10 @@ def build_plex_attach(
 
     coexist_note = (
         "Plex supports multiple tuners. Tunarr is an *additional* HDHomeRun-style "
-        "network tuner — leave any OTA / antenna DVR in place. The first Tuner Setup "
-        "screen is discovery only (plus a postal-code gate for Next). Tunarr’s XMLTV "
-        "guide is attached later — not on that first screen. Do not finish "
-        "“Add another EPG data lineup” with Verizon Fios / DIRECTV / Xfinity as the "
-        "guide for Tunarr virtual stations."
+        "network tuner — leave any OTA / antenna DVR in place. Plex never offers "
+        "XMLTV in the Tuner Setup EPG Location dropdown (first screen or "
+        "channel-mapping). Finish the wizard with any temporary ZIP-code lineup, "
+        "then attach Tunarr’s XMLTV afterward under that DVR’s Settings."
     )
 
     address_hint = manual_address or "host:port from the tuner URL below"
@@ -446,22 +445,30 @@ def build_plex_attach(
             "title": "Postal code — wizard gate for Next",
             "body": (
                 "Plex often shows Country / Cable / Postal code on this same first "
-                "screen and requires a postal code before Next is enabled. For Tunarr "
-                "(IPTV-style virtual channels), enter any valid US ZIP to proceed — "
-                "it does not mean you must use that region’s cable EPG for Tunarr. "
-                "Select Tunarr, enter a ZIP, then Next."
+                "screen and requires a postal code before Next is enabled. Enter any "
+                "valid US ZIP so Next unlocks — that ZIP is only a wizard gate, not "
+                "your Tunarr guide. Select Tunarr, enter a ZIP, then Next."
             ),
         },
         {
-            "title": "Later — attach Tunarr XMLTV (not a cable lineup)",
+            "title": "EPG Location — temporary commercial lineup (no XMLTV in wizard)",
             "body": (
-                "XMLTV appears after Next — during later channel-scan / guide setup "
-                "steps, or under Live TV & DVR → set up / add an XMLTV guide for that "
-                "DVR. Paste the guide URL below. Do not complete "
-                "“Add another EPG data lineup” with Verizon Fios, DIRECTV, Xfinity, "
-                "or another ZIP-code cable provider as the guide for Tunarr stations — "
-                "that duplicates commercial guides and will not match library content. "
-                "Your existing OTA guide can stay as it is."
+                "The EPG Location dropdown lists commercial lineups only "
+                "(Verizon Fios, DIRECTV, Xfinity, Local Broadcast, and similar). "
+                "Plex never offers XMLTV here — not on the first Tuner Setup screen "
+                "and not on the later channel-mapping screen. Pick any temporary "
+                "ZIP-code lineup and Continue so Plex can finish creating the DVR. "
+                "Fake cable channel names are expected until you switch the guide."
+            ),
+        },
+        {
+            "title": "After the DVR exists — attach Tunarr XMLTV in DVR Settings",
+            "body": (
+                "When the Tunarr DVR exists, open Live TV & DVR → that Tunarr DVR → "
+                "DVR Settings → add or switch to XMLTV. Paste the guide URL below, "
+                "then refresh the guide. Until you do, channel names may still show "
+                "the temporary cable mappings — that is expected. Your existing OTA "
+                "guide can stay as it is."
             ),
         },
         {
@@ -526,9 +533,10 @@ def build_plex_attach(
             "virtual_channel_floor": _VIRTUAL_CHANNEL_FLOOR,
             "existing_livetv": livetv,
             "guide_warning": (
-                "Postal code on Tuner Setup only unlocks Next — it is not your Tunarr "
-                "guide. Attach Tunarr XMLTV later; do not finish "
-                "“Add another EPG data lineup” with Verizon Fios / cable for these stations."
+                "Plex never offers XMLTV in the Tuner Setup EPG Location dropdown "
+                "(first screen or channel-mapping). Finish the wizard with any "
+                "temporary ZIP-code lineup, then open that Tunarr DVR → DVR Settings "
+                "→ add/switch XMLTV. Fake cable names until then are expected."
             ),
         },
         "existing_livetv": livetv,
