@@ -185,6 +185,7 @@ from projectionist.web.auth import (
     try_get_current_user,
 )
 from projectionist.web.rate_limit import enforce_rate_limit
+from projectionist.live_channels.stream_warm import get_stream_warm_scheduler
 from projectionist.web.jobs import get_job_manager, get_sync_scheduler
 from projectionist.scheduler import IdleScheduler
 from projectionist.scheduler.tasks import register_all as register_scheduler_tasks
@@ -328,6 +329,10 @@ async def lifespan(_app: FastAPI):
     get_sync_scheduler().start()
     logger.info("Job manager and sync scheduler ready")
 
+    logger.info("Startup: starting Live Channels stream-warm scheduler…")
+    get_stream_warm_scheduler().start()
+    logger.info("Live Channels stream-warm scheduler ready")
+
     logger.info("Startup: initializing idle task scheduler…")
     idle_scheduler = IdleScheduler(manager.db, DATA_DIR)
     register_scheduler_tasks(idle_scheduler)
@@ -337,6 +342,7 @@ async def lifespan(_app: FastAPI):
 
     yield
     idle_scheduler.stop()
+    get_stream_warm_scheduler().stop()
     get_sync_scheduler().stop()
     try:
         manager.db.close()
@@ -1804,6 +1810,23 @@ def live_channels_lifecycle_endpoint(
                 ).ensure_plex_stream_path_direct()
             except Exception:  # noqa: BLE001 — best-effort; lifecycle still succeeded
                 pass
+        # Start-over deep playheads + warm HLS so the first Plex tune does not
+        # race "Stream not ready yet" / 0-byte MPEG-TS.
+        if api_url and settings.features.live_channels_enabled:
+            try:
+                from projectionist.live_channels.publish import (
+                    prepare_channels_for_playback,
+                    resolve_channel_icon_url,
+                    tunarr_client_from_settings,
+                )
+
+                payload_out["playback_prepare"] = prepare_channels_for_playback(
+                    tunarr_client_from_settings(settings),
+                    settings=settings,
+                    icon_url=resolve_channel_icon_url(settings),
+                )
+            except Exception:  # noqa: BLE001 — lifecycle still succeeded
+                pass
     return payload_out
 
 
@@ -2161,7 +2184,7 @@ def live_channels_plex_attach_guide_endpoint(
     del user
     from projectionist.live_channels.plex_attach import attach_tunarr_xmltv_to_plex
     from projectionist.live_channels.publish import (
-        ensure_channel_labels,
+        prepare_channels_for_playback,
         resolve_channel_icon_url,
         tunarr_client_from_settings,
     )
@@ -2171,16 +2194,18 @@ def live_channels_plex_attach_guide_endpoint(
         raise HTTPException(status_code=400, detail="Live Channels is not enabled")
     forwarded = str(request.headers.get("x-forwarded-host") or "").strip()
     request_host = forwarded or str(request.headers.get("host") or "").strip()
-    labels: Dict[str, Any] = {"ok": False, "skipped": True}
+    prepare: Dict[str, Any] = {"ok": False, "skipped": True}
     try:
-        labels = ensure_channel_labels(
+        prepare = prepare_channels_for_playback(
             tunarr_client_from_settings(settings),
+            settings=settings,
             icon_url=resolve_channel_icon_url(settings),
         )
     except Exception:  # noqa: BLE001 — attach can still proceed
-        labels = {"ok": False, "skipped": True}
+        prepare = {"ok": False, "skipped": True}
     result = attach_tunarr_xmltv_to_plex(settings, request_host=request_host)
-    result["labels"] = labels
+    result["labels"] = prepare.get("labels") or {}
+    result["prepare"] = prepare
     tunarr = asdict(settings.tunarr)
     tunarr["last_guide_attach_at"] = datetime.now(timezone.utc).strftime(
         "%Y-%m-%dT%H:%M:%SZ"
@@ -2199,6 +2224,39 @@ def live_channels_plex_attach_guide_endpoint(
             status_code=400,
             detail=str(result.get("error") or "Could not attach Tunarr guide in Plex"),
         )
+    return result
+
+
+@app.post("/api/admin/live-channels/prepare-playback")
+def live_channels_prepare_playback_endpoint(
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Start-over deep playheads + warm HLS/MPEG-TS so Plex Live TV can tune."""
+    del user
+    from projectionist.live_channels.publish import (
+        prepare_channels_for_playback,
+        resolve_channel_icon_url,
+        tunarr_client_from_settings,
+    )
+
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    try:
+        client = tunarr_client_from_settings(settings)
+        result = prepare_channels_for_playback(
+            client,
+            settings=settings,
+            icon_url=resolve_channel_icon_url(settings),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not prepare Live Channels playback"),
+        ) from error
+    result["scheduler"] = get_stream_warm_scheduler().last_status()
     return result
 
 

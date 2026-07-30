@@ -1,6 +1,41 @@
 {
-  "generated_at": "2026-07-30T19:53:12Z",
+  "generated_at": "2026-07-30T20:10:12Z",
   "releases": [
+    {
+      "version": "1.29.18",
+      "date": "2026-07-30",
+      "summary": "Live Channels playback: start-over deep playheads and aggressive HLS warm so Plex Live TV tunes instead of dying with “This live TV session has ended.”",
+      "highlights": [
+        "**Live TV actually starts.** Projectionist snaps stations that are deep into (or past) the current program back to the start, then warms MPEG-TS until segments exist — the cold-start race that closed Plex sessions is gone.",
+        "**Streams stay warm.** A background keepalive re-prepares stations every few minutes while Live Channels is on, so the next tune is not a cold ffmpeg race.",
+        "**One owner action if needed.** Admin can call Prepare playback (or re-publish / re-attach guide) to align + warm immediately."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Automat root cause (Plex container + Tunarr logs): cold HDHR `.ts` returned 0 bytes when ffmpeg sought deep mid-program (Chaos was **267 minutes** into Bonhoeffer — past EOF) → Tunarr `Stream not ready yet` / `No master playlist` → Plex `[TranscodeOutputStream] Session appears to have died` / “This live TV session has ended.”",
+            "Publish warm only fetched the master `.m3u8` once (often without `#EXTINF`); now polls the media playlist and pulls MPEG-TS bytes.",
+            "Channel playheads left mid-program after long idle made every first tune a slow `-ss` seek; prepare/publish/attach/lifecycle now start-over when cold + deep (or past EOF)."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "`prepare_channels_for_playback` runs on publish, lifecycle (running), and plex-attach-guide; new `POST /api/admin/live-channels/prepare-playback`.",
+            "`StreamWarmScheduler` daemon (~3 min) while `live_channels_enabled`."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`.venv/bin/python -m pytest tests/` — 1524 passed, 6 skipped; coverage **76.9%** (≥74%).",
+            "Automat: after align+warm, Plex container curl of ch 100–103 `.ts` → HTTP 200 ~2.5 MB / 10s each; elapsed into programs ~2m (was 36m / 57m / 267m / 65m).",
+            "Tunarr log evidence pre-fix: `Stream not ready yet. Retry` + `No master playlist` on Chaos/Mystery during owner failure window; Plex log: `Grabber/C10x…` then `Session appears to have died from under us`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.17",
       "date": "2026-07-30",
