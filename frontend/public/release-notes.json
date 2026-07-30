@@ -1,6 +1,38 @@
 {
-  "generated_at": "2026-07-30T02:08:04Z",
+  "generated_at": "2026-07-30T02:11:37Z",
   "releases": [
+    {
+      "version": "1.29.13",
+      "date": "2026-07-30",
+      "summary": "Admin **Mail & alerts** is easier to scan and safer to operate: clearer sections, advanced options tucked away, and save/test feedback next to each action.",
+      "highlights": [
+        "**Mail & alerts easier to scan.** Outbound email, installation Apprise, and weekly newsletter are separate sections instead of one long wall of form fields.",
+        "**Advanced options stay out of the way.** Email template, Apprise YAML/tag, and test URL overrides live under progressive disclosure.",
+        "**You can tell what worked.** Save, email test, Apprise test, and newsletter each show their own dismissible status next to the button that ran them."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "Admin Mail page title matches the nav label (**Mail & alerts**); shorter helper copy; sticky Save for email + Apprise together.",
+            "Interactive UI QA checklist `admin.mail-notify-surface` updated for the Outbound email panel."
+          ]
+        },
+        {
+          "title": "Added",
+          "bullets": [
+            "`frontend/src/lib/mailSettingsUi.js` helpers (+ unit tests) for field labels and test result copy."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`cd frontend && npm run test:unit` — 514 passed (incl. `mailSettingsUi`); `npm run lint` — 0 errors; `npm run build` — pass.",
+            "`pytest tests/test_version.py` — lockstep **1.29.13**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.12",
       "date": "2026-07-30",
