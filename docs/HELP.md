@@ -623,7 +623,7 @@ When Live Channels is on, Projectionist can publish library-aware stations throu
 
 **Craft and publish (Admin → Live Channels):**
 1. Turn Live Channels on, run preflight, and start the broadcast engine (when Docker management is available).
-2. Under **Create / publish channels**, either **Craft a custom station** (name, number, motif / taste cluster / collection / Chaos / youth-safe), publish a **collection**, or **Propose starters** and publish the pack.
+2. Under **Create / publish channels**, either **Craft a custom station** (name, number, motif / taste cluster / Plex or published collection / Chaos / youth-safe), publish a **collection**, or **Propose starters** and publish the pack. The collection picker lists your Plex collections (and any published Projectionist lists). If it is empty, create a collection in Plex or publish a list under Collections — an error note appears when Plex cannot be reached.
 3. Check **Your stations** for lineup depth — use **Refill** if a station is empty after a library scan, or **Delete** to remove it from the tuner.
 4. Add Tunarr beside your other tuners in Plex (below), then **Attach Tunarr guide in Plex**.
 

@@ -3302,10 +3302,28 @@ export default function ConfigPage() {
                               {(liveCraftOptions?.collections || []).map((row) => (
                                 <option key={row.id || row.title} value={row.id}>
                                   {row.label}
+                                  {row.source === "plex" ? " · Plex" : ""}
+                                  {row.source === "published" ? " · Published" : ""}
                                   {row.item_count ? ` (${row.item_count})` : ""}
                                 </option>
                               ))}
                             </select>
+                            {!(liveCraftOptions?.collections || []).length ? (
+                              <p
+                                className="wizard-note"
+                                data-testid="live-channels-craft-collections-empty"
+                              >
+                                {liveCraftOptions?.collections_empty_hint ||
+                                  liveCraftOptions?.collections_error ||
+                                  "No collections loaded. Create one in Plex, or publish a Projectionist list."}
+                              </p>
+                            ) : liveCraftOptions?.collections_total >
+                              (liveCraftOptions?.collections || []).length ? (
+                              <p className="wizard-note">
+                                Showing {(liveCraftOptions?.collections || []).length} of{" "}
+                                {liveCraftOptions.collections_total} collections.
+                              </p>
+                            ) : null}
                           </label>
                         ) : null}
                       </div>
@@ -3372,11 +3390,28 @@ export default function ConfigPage() {
                       className="live-channels-craft-block"
                       data-testid="live-channels-from-collection"
                     >
-                      <h4>From a published collection</h4>
+                      <h4>From a collection</h4>
                       <p className="wizard-note">
-                        One-tap sequential station from a household collection (same as choosing
-                        Collection in the craft form).
+                        One-tap sequential station from a Plex collection or published
+                        Projectionist list (same as choosing Collection in the craft form).
                       </p>
+                      {liveCraftOptions?.collections_error ? (
+                        <p
+                          className="wizard-note"
+                          data-testid="live-channels-collections-error"
+                        >
+                          {liveCraftOptions.collections_error}
+                        </p>
+                      ) : null}
+                      {!(liveCraftOptions?.collections || []).length ? (
+                        <p
+                          className="wizard-note"
+                          data-testid="live-channels-collections-empty"
+                        >
+                          {liveCraftOptions?.collections_empty_hint ||
+                            "No collections available yet. Create one in Plex, or publish a list under Collections."}
+                        </p>
+                      ) : null}
                       <div className="wizard-actions">
                         <button
                           type="button"
@@ -3437,7 +3472,7 @@ export default function ConfigPage() {
                                     liveCraftOptions.collections[0]
                                   )?.title
                                 }”`
-                              : "No published collections yet"}
+                              : "No collections available"}
                         </button>
                       </div>
                     </div>

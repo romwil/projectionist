@@ -17,7 +17,7 @@ export function savedSecretLabel(label, isSet) {
  */
 export function appriseUrlsLabel(apprise = {}) {
   if (!apprise.urls_set) return "Apprise URLs";
-  const count = apprise.url_count || "saved";
+  const count = apprise.url_count ?? "saved";
   return `Apprise URLs (${count} saved — leave blank to keep)`;
 }
 

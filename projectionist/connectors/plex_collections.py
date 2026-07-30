@@ -82,6 +82,29 @@ def find_collection_by_title(
     return None
 
 
+def list_collection_item_titles(
+    client: PlexClient,
+    collection_rating_key: str,
+    *,
+    limit: int = 80,
+) -> List[str]:
+    """Return title strings for items in a Plex collection (movies/shows)."""
+    key = str(collection_rating_key or "").strip()
+    if not key:
+        raise ValueError("collection_rating_key is required")
+    cap = max(1, min(int(limit or 80), 200))
+    root = client._request_xml(f"/library/collections/{key}/children")
+    titles: List[str] = []
+    for element in list(root):
+        title = str(element.attrib.get("title") or "").strip()
+        if not title:
+            continue
+        titles.append(title)
+        if len(titles) >= cap:
+            break
+    return titles
+
+
 def create_collection(
     client: PlexClient,
     *,
