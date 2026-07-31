@@ -9,7 +9,7 @@ REST API under ``{base}/api``:
 | Library / media server wire | ``GET/POST /media-sources`` |
 | Station / channel | ``GET/POST /channels``, ``PUT/DELETE /channels/{id}`` |
 | Lineup / programming | ``GET/POST /channels/{id}/programming`` |
-| Shuffle / Chaos schedule | ``POST /channels/{id}/schedule-slots`` |
+| Shuffle schedule | ``POST /channels/{id}/schedule-slots`` |
 | Gap fillers / commercials | ``GET/POST /filler-lists`` |
 | Now playing / guide | ``GET /channels/{id}/now_playing``, ``GET /guide/channels`` |
 | Stream sessions | ``GET /sessions``, ``GET /channels/{id}/sessions`` |

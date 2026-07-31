@@ -4151,7 +4151,7 @@ export default function ConfigPage() {
                       <h4>Craft a custom station</h4>
                       <p className="wizard-note">
                         {liveCraftOptions?.hint ||
-                          "Name the station, pick a motif / taste cluster / collection / Chaos, then publish to the tuner."}
+                          "Name the station, pick a motif / taste cluster / collection / youth-safe recipe, then publish to the tuner."}
                       </p>
                       <div className="service-fields live-channels-craft-fields">
                         <label>
@@ -4189,11 +4189,7 @@ export default function ConfigPage() {
                                 ...prev,
                                 source,
                                 programming_mode:
-                                  source === "collection"
-                                    ? "sequential"
-                                    : source === "chaos"
-                                      ? "chaos"
-                                      : "shuffle",
+                                  source === "collection" ? "sequential" : "shuffle",
                                 youth_safe: source === "youth",
                               }));
                             }}
@@ -4202,7 +4198,6 @@ export default function ConfigPage() {
                               { id: "motif", label: "Plot motif" },
                               { id: "taste_cluster", label: "Taste cluster" },
                               { id: "collection", label: "Collection / list" },
-                              { id: "chaos", label: "Chaos" },
                               { id: "youth", label: "Youth-safe" },
                             ]).map((src) => (
                               <option key={src.id} value={src.id}>
@@ -4226,7 +4221,6 @@ export default function ConfigPage() {
                             {(liveCraftOptions?.programming_modes || [
                               { id: "shuffle", label: "Shuffle" },
                               { id: "sequential", label: "Sequential" },
-                              { id: "chaos", label: "Chaos" },
                             ]).map((mode) => (
                               <option key={mode.id} value={mode.id}>
                                 {mode.label}
@@ -4576,8 +4570,8 @@ export default function ConfigPage() {
                       <h4>From a collection</h4>
                       <p className="wizard-note">
                         One-tap station from a Plex collection or published Projectionist
-                        list. Sequential keeps collection order; Shuffle randomizes that
-                        pool; Chaos draws wider from your TV/Movies libraries.
+                        list. Sequential keeps collection order; Shuffle randomizes the
+                        full resolved pool (all episodes for a show collection).
                       </p>
                       {liveCraftOptions?.collections_error ? (
                         <p
@@ -4609,8 +4603,7 @@ export default function ConfigPage() {
                           }
                         >
                           <option value="sequential">Sequential — collection order</option>
-                          <option value="shuffle">Shuffle — randomize this collection</option>
-                          <option value="chaos">Chaos — wider random in TV/Movies</option>
+                          <option value="shuffle">Shuffle — full pool of this collection</option>
                         </select>
                       </label>
                       <div className="wizard-actions">
@@ -4631,13 +4624,12 @@ export default function ConfigPage() {
                                   (row) => row.id === liveCraft.collection_id,
                                 )) ||
                               first;
-                            const mode = liveCraft.programming_mode || "sequential";
+                            const mode =
+                              liveCraft.programming_mode === "shuffle"
+                                ? "shuffle"
+                                : "sequential";
                             const modeLabel =
-                              mode === "shuffle"
-                                ? "Shuffle"
-                                : mode === "chaos"
-                                  ? "Chaos"
-                                  : "Sequential";
+                              mode === "shuffle" ? "Shuffle" : "Sequential";
                             if (
                               !window.confirm(
                                 `Publish “${picked.title}” as a ${modeLabel} Live Channel station?`,
@@ -4685,7 +4677,7 @@ export default function ConfigPage() {
                     <div className="live-channels-craft-block">
                       <h4>Starter pack</h4>
                       <p className="wizard-note">
-                        Propose 2–4 library-aware stations (taste, motifs, collections, Chaos /
+                        Propose 2–4 library-aware stations (taste, motifs, collections,
                         youth-safe), then publish the ones you want. Re-running is additive —
                         existing channel numbers keep their stations; only missing numbers are created.
                       </p>

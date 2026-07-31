@@ -1,7 +1,7 @@
 """Library-aware starter channel proposals (2–4 stations).
 
 Uses taste clusters, motifs, and published collections when available.
-Gracefully returns an empty / chaos-only pack when the DB has no signal.
+Gracefully returns an empty / youth-only pack when the DB has no signal.
 """
 
 from __future__ import annotations
@@ -20,16 +20,18 @@ def propose_starter_pack(
     taste_clusters: Optional[Sequence[Mapping[str, Any]]] = None,
     motifs: Optional[Sequence[Mapping[str, Any]]] = None,
     collections: Optional[Sequence[Mapping[str, Any]]] = None,
-    include_chaos: bool = True,
     include_youth_safe: bool = True,
     max_channels: int = 4,
     youth_max_rating: str = "PG-13",
+    include_chaos: bool = False,  # deprecated; ignored (Chaos removed as a feature)
 ) -> Dict[str, Any]:
     """Propose 2–4 starter recipes from library signals.
 
     All inputs are optional plain mappings so callers (API, tests) stay free of
-    DB coupling. Empty inputs → empty proposals (plus optional Chaos).
+    DB coupling. Empty inputs → empty proposals (plus optional Youth Safe).
+    ``include_chaos`` is accepted for API compatibility and ignored.
     """
+    del include_chaos  # Chaos is no longer a programming mode / starter source.
     capped = max(1, min(int(max_channels), 6))
     recipes: List[ChannelRecipe] = []
     used_names: set[str] = set()
@@ -64,7 +66,7 @@ def propose_starter_pack(
             break
 
     for motif_row in _sorted_motifs(motifs or ()):
-        if len(recipes) >= capped - (1 if include_chaos else 0) - (1 if include_youth_safe else 0):
+        if len(recipes) >= capped - (1 if include_youth_safe else 0):
             break
         value = str(motif_row.get("value") or motif_row.get("motif") or "").strip()
         if not value:
@@ -84,7 +86,7 @@ def propose_starter_pack(
         )
 
     for collection in collections or ():
-        if len(recipes) >= capped - (1 if include_chaos else 0):
+        if len(recipes) >= capped - (1 if include_youth_safe else 0):
             break
         title = str(
             collection.get("title")
@@ -105,18 +107,6 @@ def propose_starter_pack(
                 collection_id=cid,
                 collection_title=title,
                 summary=f"Sequential channel from published collection “{title}”",
-            )
-        )
-
-    if include_chaos and len(recipes) < capped:
-        _add(
-            ChannelRecipe(
-                name="Chaos",
-                number=_BASE_CHANNEL_NUMBER + len(recipes),
-                source="chaos",
-                programming_mode=ProgrammingMode.CHAOS,
-                media_scope=MediaScope.BOTH.value,
-                summary="Random shuffle across the library — the Chaos channel.",
             )
         )
 

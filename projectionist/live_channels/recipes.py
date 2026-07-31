@@ -34,18 +34,21 @@ class ProgrammingMode(str, Enum):
 
 def normalize_programming_mode(value: Any, *, default: ProgrammingMode = ProgrammingMode.SHUFFLE) -> ProgrammingMode:
     """Normalize API / station_meta mode strings; Chaos → Shuffle."""
-    raw = str(value or "").strip().lower()
-    if not raw:
+    if isinstance(value, ProgrammingMode):
+        return ProgrammingMode.SHUFFLE if value == ProgrammingMode.CHAOS else value
+    if value is None or value == "":
         return default
-    if raw == ProgrammingMode.CHAOS.value:
+    raw = str(getattr(value, "value", value) or "").strip().lower()
+    # Guard against str(EnumMember) → "ProgrammingMode.SEQUENTIAL".
+    if "." in raw:
+        raw = raw.rsplit(".", 1)[-1]
+    if raw in {ProgrammingMode.CHAOS.value, "chaos"}:
         return ProgrammingMode.SHUFFLE
-    try:
-        mode = ProgrammingMode(raw)
-    except ValueError:
-        return default
-    if mode == ProgrammingMode.CHAOS:
+    if raw in {ProgrammingMode.SEQUENTIAL.value, "sequential", "seq", "ordered"}:
+        return ProgrammingMode.SEQUENTIAL
+    if raw in {ProgrammingMode.SHUFFLE.value, "shuffle", "random"}:
         return ProgrammingMode.SHUFFLE
-    return mode
+    return default
 
 
 class MediaScope(str, Enum):

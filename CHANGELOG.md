@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.29.31] — 2026-07-31
+
+Live Channels: Chaos removed as an owner-facing mode; collection/show stations fill the full ID-resolved pool (full-run Shuffle), not a ~30-title loop.
+
+### Highlights
+- **Full-show Shuffle.** A show or collection station (e.g. Gilligan’s Island) fills every resolved episode — Sequential keeps order; Shuffle randomizes the whole pool.
+- **Chaos is gone from Admin.** Craft, collection publish, and starters offer Sequential and Shuffle only. Shuffle on refill is enough.
+- **Honest preview.** Match counts and lineups reflect the true pool size for collection/show stations (safety cap 1000).
+
+### Changed
+- Owner craft / collection publish / starters: Sequential + Shuffle only; no Chaos option or starter proposal.
+- Legacy `chaos` station_meta / wire values normalize to Shuffle for refill (one-release alias).
+- Continuity repair / refill no longer default underdefined stations to Chaos; name-hint Shuffle for show stations, pool Shuffle only when no recipe is stored.
+- Collection/show fill uses full-run target (cap 1000); motif/taste keep a softer default sample.
+- HELP + roadmap updated — no Chaos marketing; full-run Shuffle documented.
+
+### Residual
+- Motif / taste / filtered craft may still sample below a soft cap (~30–80); collection/show full-run is the priority path.
+- Tunarr random slots still need movies and/or per-show `showId`s for cyclic reshuffle.
+
+### Verification
+- Focused: show-expand / full-run fill (>30) / no Chaos in craft options / Chaos→Shuffle normalize — passed.
+- `.venv/bin/python -m pytest tests/` — 1575 passed, 6 skipped; coverage **75.9%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.31**.
+
 ## [1.29.30] — 2026-07-31
 
 Live Channels craft finish: additive genre ∩ decade ∩ theme filters with preview, NoLive exclusion, Tunarr random-slot Shuffle/Chaos, pad knob, additive starters, and post-sync station refresh.
