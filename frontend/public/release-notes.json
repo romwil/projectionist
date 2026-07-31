@@ -1,6 +1,54 @@
 {
-  "generated_at": "2026-07-31T00:18:49Z",
+  "generated_at": "2026-07-31T01:00:16Z",
   "releases": [
+    {
+      "version": "1.29.24",
+      "date": "2026-07-31",
+      "summary": "Live Channels: Repair continuity no longer times out behind the reverse proxy — it runs as a background job with on-screen stage progress and Admin Log stage lines.",
+      "highlights": [
+        "**Repair continuity finishes.** Remount, filler scan, attach, refill, and stream warm run in the background so the gateway no longer returns “server temporarily unavailable.”",
+        "**Watch the stages.** Admin shows a progress bar (remount → ready → scan → attach → refill → warm) while Repair continuity or Rescan filler runs.",
+        "**Feedback stays on the card.** Success and errors for Repair, Rescan, Start engine, publish, and Plex attach appear inline in that section — not only at the bottom of the long Admin page.",
+        "**Attached means attached.** Station status fetches each channel’s `fillerCollections` when the list summary omits them, so Continuity-ready stations show as attached."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "`GET /api/admin/live-channels/continuity/status` progress poll; `POST …/continuity/repair` accepts a background job by default (`sync=true` for tests).",
+            "`projectionist/live_channels/continuity_progress.py` — stage store, worker, structured `live_channels.continuity` logs.",
+            "`TunarrClient.get_channel` + `enrich_channels_with_filler_collections` for accurate attachment checks."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Repair / Rescan UI polls continuity status (same progress chrome as Start engine).",
+            "Live Channels Admin success/error is inline per card (engine, filler, stations, craft/publish, attach, …); the page-bottom banner is no longer the primary signal.",
+            "Confirm copy on Repair continuity and Rescan filler notes Tunarr remount may briefly drop active Live TV sessions (SIGKILL `expected?=true` is normal)."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Sync Repair exceeded proxy/uvicorn client timeouts → generic 502/503 redbar while work was still running (or aborted mid-attach → 0/4 stations).",
+            "Status could report “continuity needed” when Tunarr’s channel list omitted `fillerCollections`.",
+            "Sync `continuity/repair` unexpected exceptions left `busy=True` forever → later repairs stuck on 409; now `set_error` clears busy (async already had a catch-all)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: continuity async accept, sync path, sync unexpected-exception clears busy, enrich/attach status, progress store — passed.",
+            "`.venv/bin/python -m pytest tests/` — 1545 passed, 6 skipped (1 flaky scheduled-tasks case passed on retry); coverage **76.6%** (≥74%).",
+            "`cd frontend && npm run test:unit` — 516 passed.",
+            "`cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).",
+            "`cd frontend && npm run build` — passed.",
+            "`pytest tests/test_version.py` — lockstep **1.29.24**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.23",
       "date": "2026-07-30",

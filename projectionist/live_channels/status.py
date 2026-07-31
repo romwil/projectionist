@@ -301,14 +301,28 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                 listed = client.list_channels()
                 listed_raw = [ch for ch in listed if isinstance(ch, Mapping)]
                 channel_count = len(listed_raw)
-                from projectionist.live_channels.filler import channel_has_continuity
+                from projectionist.live_channels.filler import (
+                    channel_has_continuity,
+                    enrich_channels_with_filler_collections,
+                    find_continuity_filler_list,
+                )
                 from projectionist.live_channels.publish import resolve_media_scope
 
                 continuity_fid = str(
                     getattr(tunarr, "continuity_filler_list_id", "") or ""
                 )
+                enriched = enrich_channels_with_filler_collections(
+                    client, listed_raw[:40]
+                )
+                # Prefer live Continuity list id over a stale settings cache.
+                try:
+                    live_list = find_continuity_filler_list(client)
+                    if live_list and live_list.get("id"):
+                        continuity_fid = str(live_list.get("id") or continuity_fid)
+                except Exception:  # noqa: BLE001
+                    pass
                 channels = []
-                for ch in listed_raw[:40]:
+                for ch in enriched:
                     cid = str(ch.get("id") or ch.get("uuid") or "")
                     cols = ch.get("fillerCollections") or []
                     channels.append(

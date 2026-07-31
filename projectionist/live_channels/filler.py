@@ -13,7 +13,7 @@ import random
 import re
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from projectionist.connectors.tunarr import TunarrClient
 
@@ -172,6 +172,40 @@ def channel_has_continuity(ch: Mapping[str, Any], *, filler_list_id: str = "") -
         if isinstance(col, Mapping) and str(col.get("id") or "") == fid:
             return True
     return False
+
+
+def enrich_channels_with_filler_collections(
+    client: TunarrClient,
+    channels: Sequence[Mapping[str, Any]],
+) -> List[Mapping[str, Any]]:
+    """Ensure each channel carries ``fillerCollections`` (list summaries often omit it)."""
+    out: List[Mapping[str, Any]] = []
+    for ch in channels:
+        if not isinstance(ch, Mapping):
+            continue
+        cols = ch.get("fillerCollections")
+        if isinstance(cols, list):
+            out.append(ch)
+            continue
+        cid = str(ch.get("id") or ch.get("uuid") or "").strip()
+        if not cid or not hasattr(client, "get_channel"):
+            out.append(ch)
+            continue
+        try:
+            full = client.get_channel(cid)
+            if isinstance(full, Mapping):
+                merged = dict(ch)
+                merged["fillerCollections"] = list(full.get("fillerCollections") or [])
+                if full.get("guideFlexTitle") is not None:
+                    merged["guideFlexTitle"] = full.get("guideFlexTitle")
+                if isinstance(full.get("offline"), Mapping):
+                    merged["offline"] = full.get("offline")
+                out.append(merged)
+                continue
+        except Exception as error:  # noqa: BLE001
+            logger.debug("enrich channel %s fillerCollections: %s", cid, error)
+        out.append(ch)
+    return out
 
 
 def _program_row_for_filler(item: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
@@ -692,7 +726,10 @@ def repair_jumpstart_stations(
     refill_lineups: bool = True,
     pad_lineups: bool = True,
     prepare: bool = True,
+    ensure_filler: bool = True,
+    filler_list_id: str = "",
     channel_ids: Optional[Sequence[str]] = None,
+    on_phase: Optional[Callable[[str, str], None]] = None,
 ) -> Dict[str, Any]:
     """Attach continuity + pad/refill under-defined stations (idempotent).
 
@@ -700,7 +737,6 @@ def repair_jumpstart_stations(
     """
     from projectionist.live_channels.publish import (
         prepare_channels_for_playback,
-        programming_body_for_recipe,
         refill_channel_lineup,
         resolve_channel_icon_url,
         resolve_media_scope,
@@ -708,12 +744,26 @@ def repair_jumpstart_stations(
     )
     from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
 
-    filler = ensure_continuity_filler_list(client, settings, shuffle=True, scan=True)
-    fid = str(filler.get("filler_list_id") or "")
+    def _phase(phase: str, message: str = "") -> None:
+        if on_phase is not None:
+            try:
+                on_phase(phase, message)
+            except Exception:  # noqa: BLE001
+                pass
+        logger.info("live_channels.repair phase=%s message=%s", phase, message or phase)
+
+    filler: Dict[str, Any] = {}
+    fid = str(filler_list_id or "").strip()
+    if ensure_filler or not fid:
+        _phase("scanning_filler", "Ensuring continuity filler list")
+        filler = ensure_continuity_filler_list(client, settings, shuffle=True, scan=True)
+        fid = str(filler.get("filler_list_id") or fid)
+    else:
+        filler = {"ok": True, "ready": True, "filler_list_id": fid, "skipped_ensure": True}
     resolved_icon = str(icon_url or "").strip() or resolve_channel_icon_url(settings)
 
     wanted = {str(c).strip() for c in (channel_ids or ()) if str(c).strip()}
-    channels = [
+    listed = [
         ch
         for ch in client.list_channels()
         if isinstance(ch, Mapping)
@@ -722,6 +772,7 @@ def repair_jumpstart_stations(
             or str(ch.get("id") or ch.get("uuid") or "").strip() in wanted
         )
     ]
+    channels = enrich_channels_with_filler_collections(client, listed)
 
     attached: List[Dict[str, Any]] = []
     padded: List[Dict[str, Any]] = []
@@ -730,11 +781,13 @@ def repair_jumpstart_stations(
     errors: List[str] = []
     already_ok: List[str] = []
 
-    for ch in channels:
+    total = max(1, len(channels))
+    for index, ch in enumerate(channels, start=1):
         cid = str(ch.get("id") or ch.get("uuid") or "").strip()
         if not cid:
             continue
         name = str(ch.get("name") or "").strip() or f"Channel {ch.get('number')}"
+        _phase("attaching", f"Attaching continuity ({index}/{total}): {name}")
         # Persist default media scope for legacy jump-starts.
         try:
             scope = resolve_media_scope(settings, channel_id=cid, default="both")
@@ -775,6 +828,7 @@ def repair_jumpstart_stations(
                 errors.append(f"{name}: guide/offline {error}"[:160])
 
         if refill_lineups:
+            _phase("refilling", f"Refilling lineup ({index}/{total}): {name}")
             try:
                 recipe = ChannelRecipe(
                     name=name[:48],
@@ -807,6 +861,7 @@ def repair_jumpstart_stations(
 
     prepare_result: Dict[str, Any] = {}
     if prepare:
+        _phase("warming", f"Warming streams for {len(channels)} station(s)")
         try:
             prepare_result = prepare_channels_for_playback(
                 client,
@@ -873,7 +928,8 @@ def continuity_installation_status(
             if existing:
                 filler_list_id = str(existing.get("id") or "")
                 program_count = int(existing.get("contentCount") or 0)
-            channels = client.list_channels()
+            listed = [ch for ch in client.list_channels() if isinstance(ch, Mapping)]
+            channels = enrich_channels_with_filler_collections(client, listed)
             station_count = len(channels)
             for ch in channels:
                 if channel_has_continuity(ch, filler_list_id=filler_list_id):

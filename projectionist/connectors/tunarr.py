@@ -372,6 +372,19 @@ class TunarrClient:
             raise RuntimeError("Unexpected response from Tunarr update channel")
         return payload
 
+    def get_channel(self, channel_id: str) -> Mapping[str, Any]:
+        """Fetch one channel (``GET /api/channels/{id}``) — includes fillerCollections."""
+        cid = str(channel_id or "").strip()
+        if not cid:
+            raise ValueError("channel_id is required")
+        payload = request_json(
+            self._api_url(f"/channels/{cid}"),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr get channel")
+        return payload
+
     def delete_channel(self, channel_id: str) -> None:
         """Delete a channel (``DELETE /api/channels/{id}``). Empty 200 body is OK."""
         cid = str(channel_id or "").strip()
