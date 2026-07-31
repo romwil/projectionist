@@ -101,8 +101,13 @@ test("token confirm copy uses generic actions for mixed tokens", () => {
 
 test("token confirm copy for single removal and plex-only batches", () => {
   const oneRemoval = [{ token: "a", action: "remove_arr" }];
-  assert.equal(tokenConfirmPrompt(1, oneRemoval), "Confirm all 1 proposed removal?");
+  assert.equal(tokenConfirmPrompt(1, oneRemoval), "Confirm this proposed removal?");
+  assert.equal(tokenConfirmButtonLabel(1, oneRemoval), "Confirm removal");
   assert.equal(tokenConfirmSuccessMessage(1, oneRemoval), "Confirmed 1 removal.");
+
+  const onePlex = [{ token: "a", action: "create_plex_collection" }];
+  assert.equal(tokenConfirmPrompt(1, onePlex), "Confirm this proposed Plex action?");
+  assert.equal(tokenConfirmButtonLabel(1, onePlex), "Confirm Plex action");
 
   const plexOnly = [
     { token: "a", action: "create_plex_collection" },

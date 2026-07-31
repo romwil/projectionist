@@ -1,9 +1,12 @@
 import { tokenConfirmButtonLabel } from "../lib/addActions";
 
 export default function ConfirmAllButton({ count, target, onClick, disabled = false, variant, tokenActions = [] }) {
-  if (count < 2) return null;
-
   const resolvedVariant = variant || (target ? target : "tokens");
+  // Token confirms (agent propose → confirm) support a single pending action;
+  // title-card "Confirm all" batches still require 2+ addable items.
+  const minCount = resolvedVariant === "tokens" ? 1 : 2;
+  if (count < minCount) return null;
+
   const label =
     resolvedVariant === "tokens"
       ? tokenConfirmButtonLabel(count, tokenActions)

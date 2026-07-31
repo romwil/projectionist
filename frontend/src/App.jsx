@@ -969,7 +969,7 @@ export default function App() {
           );
           speakAssistantMessage(assistantMessage);
           setPendingTokens(normalizePendingTokens(data.pending_tokens));
-          if (Array.isArray(data.pending_tokens) && data.pending_tokens.length >= 2) {
+          if (Array.isArray(data.pending_tokens) && data.pending_tokens.length >= 1) {
             setPendingBulk(null);
             setPendingAdd(null);
           }
@@ -1128,7 +1128,7 @@ export default function App() {
   }
 
   function handleConfirmAllTokens() {
-    if (pendingTokens.length < 2 || addInProgress) return;
+    if (pendingTokens.length < 1 || addInProgress) return;
     setAddFeedback(null);
     setPendingAdd(null);
     setPendingBulk(null);
@@ -1290,7 +1290,7 @@ export default function App() {
       await executeBulkAdd(pendingBulk.items, pendingBulk.target);
       return;
     }
-    if (pendingTokens.length >= 2) {
+    if (pendingTokens.length >= 1) {
       await executeConfirmAllTokens();
       return;
     }
@@ -1302,7 +1302,7 @@ export default function App() {
       cancelPendingBulk();
       return;
     }
-    if (pendingTokens.length >= 2) {
+    if (pendingTokens.length >= 1) {
       cancelPendingTokens();
       return;
     }
@@ -1562,7 +1562,7 @@ export default function App() {
             pendingAdd={pendingAdd}
             pendingBulk={pendingBulk}
             pendingTokens={
-              pendingTokens.length >= 2 && !lastAssistantHasTitleCards(messages)
+              pendingTokens.length >= 1 && !lastAssistantHasTitleCards(messages)
                 ? pendingTokens
                 : null
             }

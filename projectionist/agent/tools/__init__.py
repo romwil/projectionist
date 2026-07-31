@@ -86,6 +86,12 @@ logger = logging.getLogger(__name__)
 UNTRUSTED_DATA_OPEN = "<<<BEGIN_UNTRUSTED_MEMORY_DATA>>>"
 UNTRUSTED_DATA_CLOSE = "<<<END_UNTRUSTED_MEMORY_DATA>>>"
 
+# Appended to propose-tool messages so the model redeems tokens on user assent.
+_PENDING_CONFIRM_HINT = (
+    "When the user affirms (yes / go ahead / confirm), call confirm_pending_action "
+    "with this confirmation_token — do not ask again or claim you cannot redeem it."
+)
+
 # Tool results whose payloads embed stored/retrieved content that another user
 # (or an external source) may have influenced. Their output is wrapped as
 # untrusted DATA where it is appended to the model conversation.
@@ -573,6 +579,7 @@ class ToolRegistry:
             "remove_from_arr",
             "create_plex_collection",
             "add_to_plex_collection",
+            "confirm_pending_action",
         }
         if self.user_role == "guest" and name in guest_denied:
             return json.dumps({"error": "Guests cannot request or modify media"})
@@ -1292,7 +1299,12 @@ class ToolRegistry:
         }
         self.db.save_pending_action(token, "add_radarr", payload, user_id=self.user_id)
         self._register_pending_token(token, "add_radarr")
-        return json.dumps({"confirmation_token": token, "message": "Awaiting user confirmation to add to Radarr"})
+        return json.dumps(
+            {
+                "confirmation_token": token,
+                "message": f"Awaiting user confirmation to add to Radarr. {_PENDING_CONFIRM_HINT}",
+            }
+        )
 
     async def _tool_add_to_sonarr(self, args: Mapping[str, Any]) -> str:
         config_error = sonarr_add_configuration_error(self.settings)
@@ -1323,7 +1335,12 @@ class ToolRegistry:
         }
         self.db.save_pending_action(token, "add_sonarr", payload, user_id=self.user_id)
         self._register_pending_token(token, "add_sonarr")
-        return json.dumps({"confirmation_token": token, "message": "Awaiting user confirmation to add to Sonarr"})
+        return json.dumps(
+            {
+                "confirmation_token": token,
+                "message": f"Awaiting user confirmation to add to Sonarr. {_PENDING_CONFIRM_HINT}",
+            }
+        )
 
     async def _tool_request_via_seerr(self, args: Mapping[str, Any]) -> str:
         config_error = seerr_configuration_error(self.settings)
@@ -1354,7 +1371,7 @@ class ToolRegistry:
         return json.dumps(
             {
                 "confirmation_token": token,
-                "message": "Awaiting user confirmation to request in Seerr",
+                "message": f"Awaiting user confirmation to request in Seerr. {_PENDING_CONFIRM_HINT}",
             }
         )
 
@@ -1473,7 +1490,7 @@ class ToolRegistry:
         return json.dumps(
             {
                 "confirmation_token": token,
-                "message": "Awaiting user confirmation to remove",
+                "message": f"Awaiting user confirmation to remove. {_PENDING_CONFIRM_HINT}",
                 "arr_id": resolved["arr_id"],
             }
         )
@@ -1864,7 +1881,10 @@ class ToolRegistry:
         return json.dumps(
             {
                 "confirmation_token": token,
-                "message": f"Awaiting user confirmation to create Plex collection '{title}'",
+                "message": (
+                    f"Awaiting user confirmation to create Plex collection '{title}'. "
+                    f"{_PENDING_CONFIRM_HINT}"
+                ),
             }
         )
 
@@ -1905,9 +1925,45 @@ class ToolRegistry:
         return json.dumps(
             {
                 "confirmation_token": token,
-                "message": f"Awaiting user confirmation to add items to Plex collection '{label}'",
+                "message": (
+                    f"Awaiting user confirmation to add items to Plex collection '{label}'. "
+                    f"{_PENDING_CONFIRM_HINT}"
+                ),
             }
         )
+
+    async def _tool_confirm_pending_action(self, args: Mapping[str, Any]) -> str:
+        """Redeem or cancel a pending confirmation token after the user affirms."""
+        token = str(
+            args.get("confirmation_token") or args.get("token") or args.get("pending_token") or ""
+        ).strip()
+        if not token:
+            return json.dumps(
+                {
+                    "error": (
+                        "confirmation_token is required. Use the token returned by the "
+                        "propose tool (add_to_radarr, create_plex_collection, etc.)."
+                    )
+                }
+            )
+        confirmed = args.get("confirmed", True)
+        if isinstance(confirmed, str):
+            confirmed = confirmed.strip().lower() not in {"0", "false", "no", "cancel"}
+        else:
+            confirmed = bool(confirmed)
+        if not confirmed:
+            try:
+                popped = self.db.pop_pending_action(token, user_id=self.user_id)
+            except Exception as error:  # noqa: BLE001
+                return json.dumps({"error": str(error)})
+            return json.dumps({"cancelled": True, "found": popped is not None})
+        try:
+            result = await execute_confirmed_action(
+                self.db, self.settings, token, user_id=self.user_id
+            )
+            return json.dumps({"ok": True, **result})
+        except Exception as error:  # noqa: BLE001
+            return json.dumps({"error": str(error), "ok": False})
 
     async def _tool_suggest_titles_to_rate(self, args: Mapping[str, Any]) -> str:
         limit = int(args.get("limit") or 10)
@@ -3024,6 +3080,11 @@ def build_system_prompt(
         "and what to purge to save drive space. Use tools to ground recommendations in their actual library. "
         "Never add or remove titles without confirmation tokens. "
         "Plex collection create/add actions also require confirmation tokens. "
+        "When a propose tool returns confirmation_token and the user affirms "
+        "(yes, go for it, confirm, do it, etc.), immediately call confirm_pending_action "
+        "with that exact confirmation_token. Do not ask for another verbal confirmation, "
+        "do not claim you cannot redeem a backend token, and do not tell the user to "
+        "finish the write manually in Plex/*arr unless confirm_pending_action returns an error. "
         "When proposing adds, always use the exact tmdb_id or tvdb_id from tool item responses — never guess or invent external IDs. "
         "For titles to add, use find_collection_gaps, recommend_hidden_gems, search_tmdb, or explore_genre(include_missing=true) — "
         "never query_library or search_library (those only return owned titles). "

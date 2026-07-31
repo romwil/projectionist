@@ -197,6 +197,18 @@ export function summarizePendingTokenActions(entries = []) {
 
 export function tokenConfirmPrompt(count, entries = []) {
   const summary = summarizePendingTokenActions(entries);
+  if (count === 1) {
+    if (summary.remove === 1 && summary.add === 0 && summary.plex === 0) {
+      return "Confirm this proposed removal?";
+    }
+    if (summary.add === 1 && summary.remove === 0 && summary.plex === 0) {
+      return "Confirm this proposed add?";
+    }
+    if (summary.plex === 1 && summary.add === 0 && summary.remove === 0) {
+      return "Confirm this proposed Plex action?";
+    }
+    return "Confirm this proposed action?";
+  }
   if (summary.remove > 0 && summary.add === 0 && summary.plex === 0) {
     const noun = summary.remove === 1 ? "removal" : "removals";
     return `Confirm all ${count} proposed ${noun}?`;
@@ -214,6 +226,18 @@ export function tokenConfirmPrompt(count, entries = []) {
 
 export function tokenConfirmButtonLabel(count, entries = []) {
   const summary = summarizePendingTokenActions(entries);
+  if (count === 1) {
+    if (summary.remove === 1 && summary.add === 0 && summary.plex === 0) {
+      return "Confirm removal";
+    }
+    if (summary.add === 1 && summary.remove === 0 && summary.plex === 0) {
+      return "Confirm add";
+    }
+    if (summary.plex === 1 && summary.add === 0 && summary.remove === 0) {
+      return "Confirm Plex action";
+    }
+    return "Confirm";
+  }
   if (summary.remove > 0 && summary.add === 0 && summary.plex === 0) {
     return `Confirm all ${count} removals`;
   }

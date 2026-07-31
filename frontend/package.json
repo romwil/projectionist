@@ -1,7 +1,7 @@
 {
   "name": "projectionist-frontend",
   "private": true,
-  "version": "1.29.33",
+  "version": "1.29.34",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [1.29.34] — 2026-07-31
+
+Saying “yes” after the curator proposes a Plex collection (or other confirm-gated write) now executes the pending action instead of looping for more verbal confirmation — and a one-click Confirm control appears for a single pending token.
+
+### Highlights
+- **Yes means go.** Affirm a proposed collection / add / remove once and the curator redeems the confirmation token — no more “I can’t redeem a backend token” dead ends.
+- **One-click Confirm for a single action.** A lone pending Plex (or *arr) proposal shows a Confirm control in chat and the status dock, with the token already bound.
+
+### Fixed
+- Chat agent had no `confirm_pending_action` tool; propose tools returned tokens the model could not redeem after natural-language assent. Added the tool, system/persona/tool-description guidance, and propose-message hints.
+- Status dock / in-chat token confirm UI only appeared for **2+** pending tokens (`ConfirmAllButton` also hard-gated `count < 2`), so a single `create_plex_collection` proposal never showed Confirm. Single-token confirms now surface with singular copy.
+
+### Changed
+- `docs/CONFIGURATION.md` — collections confirm can be one-click or NL assent via `confirm_pending_action`.
+
+### Verification
+- Focused: propose→confirm / cancel / guest deny / system-prompt assent — 5 passed (`ToolRegistryTests`).
+- `.venv/bin/python -m pytest tests/` — 1583 passed, 6 skipped; coverage **75.9%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.34**.
+
 ## [1.29.33] — 2026-07-31
 
 Projectionist `/live` masters no longer leave Tunarr `AUDIO=` on `#EXT-X-STREAM-INF` when it is the first attribute — the proxy strips it whether first or mid-list so hls.js stays on plain muxed variants.
