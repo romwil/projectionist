@@ -321,6 +321,33 @@ class JobManager:
         try:
             result = asyncio.run(sync_library(self.db, settings, progress=progress))
             refresh_library_overview_cache(self.db)
+            live_refresh: Dict[str, Any] = {}
+            try:
+                features = getattr(settings, "features", None)
+                tunarr = getattr(settings, "tunarr", None)
+                if (
+                    bool(getattr(features, "live_channels_enabled", False))
+                    and str(getattr(tunarr, "url", "") or "").strip()
+                    and bool(getattr(tunarr, "auto_refresh_stations_after_sync", True))
+                ):
+                    from projectionist.live_channels.publish import (
+                        refresh_stations_with_stored_recipes,
+                        tunarr_client_from_settings,
+                    )
+
+                    progress("live_refresh", 0, 1, "Refreshing Live Channels stations…")
+                    live_refresh = refresh_stations_with_stored_recipes(
+                        tunarr_client_from_settings(settings),
+                        settings=settings,
+                    )
+                    if live_refresh:
+                        result = {**result, "live_channels_refresh": live_refresh}
+            except Exception as refresh_error:  # noqa: BLE001
+                logger.warning(
+                    "Live Channels post-sync refresh skipped: %s", refresh_error
+                )
+                live_refresh = {"ok": False, "error": str(refresh_error)[:200]}
+                result = {**result, "live_channels_refresh": live_refresh}
             elapsed = time.time() - (job.started_at or time.time())
             with self._lock:
                 job.status = "completed"
@@ -331,12 +358,13 @@ class JobManager:
             self._progress_log_at.pop(job_id, None)
             self._progress_log_phase.pop(job_id, None)
             logger.info(
-                "Library sync completed job_id=%s elapsed=%.1fs items=%s movies=%s shows=%s",
+                "Library sync completed job_id=%s elapsed=%.1fs items=%s movies=%s shows=%s live_refresh=%s",
                 job_id,
                 elapsed,
                 result.get("items_synced"),
                 result.get("movies"),
                 result.get("shows"),
+                live_refresh.get("count_refreshed") if live_refresh else None,
             )
         except Exception as error:  # noqa: BLE001
             logger.exception("Library sync failed job_id=%s: %s", job_id, error)

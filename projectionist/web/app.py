@@ -651,6 +651,9 @@ class TunarrSettingsPayload(BaseModel):
     filler_binds: List[str] = Field(default_factory=list)
     continuity_filler_list_id: str = ""
     pad_flex_max_minutes: int = 15
+    exclusion_collection_name: str = "NoLive"
+    exclusion_collection_id: str = ""
+    auto_refresh_stations_after_sync: bool = True
     station_meta: Dict[str, Any] = Field(default_factory=dict)
     channel_number_base: int = 100
     plex_pass_confirmed: bool = False
@@ -1635,6 +1638,8 @@ class LiveChannelsFromCollectionPayload(BaseModel):
     channel_number: int = 0
     name: str = ""
     programming_mode: str = "sequential"
+    media_scope: str = "both"
+    craft_filters: Dict[str, Any] = Field(default_factory=dict)
     confirm: bool = False
     # sync=true only for tests / diagnostics (default = background job).
     sync: bool = False
@@ -1655,10 +1660,26 @@ class LiveChannelsPublishChannelPayload(BaseModel):
     collection_title: str = ""
     youth_safe: bool = False
     summary: str = ""
+    craft_filters: Dict[str, Any] = Field(default_factory=dict)
     wire_plex: bool = True
     fill_programming: bool = True
     confirm: bool = False
     sync: bool = False
+
+
+class LiveChannelsCraftPreviewPayload(BaseModel):
+    media_scope: str = "both"
+    collection_id: str = ""
+    craft_filters: Dict[str, Any] = Field(default_factory=dict)
+    filters: Dict[str, Any] = Field(default_factory=dict)
+
+
+class LiveChannelsEngineSettingsPayload(BaseModel):
+    pad_flex_max_minutes: Optional[int] = None
+    exclusion_collection_name: Optional[str] = None
+    exclusion_collection_id: Optional[str] = None
+    auto_refresh_stations_after_sync: Optional[bool] = None
+    confirm: bool = False
 
 
 class LiveChannelsRefillChannelPayload(BaseModel):
@@ -2061,6 +2082,8 @@ def live_channels_from_collection_endpoint(
             channel_number=payload.channel_number,
             name=payload.name,
             programming_mode=payload.programming_mode,
+            craft_filters=payload.craft_filters or {},
+            media_scope=payload.media_scope or "both",
             settings=settings_obj,
         )
         on_phase("warming", "Preparing streams…")
@@ -2113,6 +2136,68 @@ def live_channels_from_collection_endpoint(
         "message": accepted.get("message")
         or "Publish started — progress updates below.",
         "mode": "collection",
+    }
+
+
+@app.post("/api/admin/live-channels/craft-preview")
+def live_channels_craft_preview_endpoint(
+    payload: LiveChannelsCraftPreviewPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Preview match count for additive craft filters before publish."""
+    del user
+    from projectionist.live_channels.filters import preview_craft_match_count
+
+    filters = payload.craft_filters or payload.filters or {}
+    return preview_craft_match_count(
+        _db(),
+        filters=filters,
+        media_scope=payload.media_scope or "both",
+        collection_id=payload.collection_id or "",
+        settings=_settings(),
+    )
+
+
+@app.patch("/api/admin/live-channels/engine-settings")
+def live_channels_engine_settings_endpoint(
+    payload: LiveChannelsEngineSettingsPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner pad / exclusion / auto-refresh settings for Live Channels."""
+    del user
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Updating Live Channels engine settings requires confirm=true",
+        )
+    settings = _settings()
+    tunarr = asdict(settings.tunarr)
+    if payload.pad_flex_max_minutes is not None:
+        try:
+            minutes = int(payload.pad_flex_max_minutes)
+        except (TypeError, ValueError) as error:
+            raise HTTPException(status_code=400, detail="pad_flex_max_minutes must be an integer") from error
+        tunarr["pad_flex_max_minutes"] = max(0, min(minutes, 30))
+    if payload.exclusion_collection_name is not None:
+        tunarr["exclusion_collection_name"] = str(
+            payload.exclusion_collection_name or "NoLive"
+        ).strip() or "NoLive"
+    if payload.exclusion_collection_id is not None:
+        tunarr["exclusion_collection_id"] = str(payload.exclusion_collection_id or "").strip()
+    if payload.auto_refresh_stations_after_sync is not None:
+        tunarr["auto_refresh_stations_after_sync"] = bool(
+            payload.auto_refresh_stations_after_sync
+        )
+    updated = Settings.from_mapping({**asdict(settings), "tunarr": tunarr})
+    save_settings(DATA_DIR, updated)
+    return {
+        "ok": True,
+        "pad_flex_max_minutes": int(updated.tunarr.pad_flex_max_minutes),
+        "exclusion_collection_name": str(updated.tunarr.exclusion_collection_name or "NoLive"),
+        "exclusion_collection_id": str(updated.tunarr.exclusion_collection_id or ""),
+        "auto_refresh_stations_after_sync": bool(
+            updated.tunarr.auto_refresh_stations_after_sync
+        ),
     }
 
 
@@ -2182,9 +2267,12 @@ def live_channels_publish_channel_endpoint(
             "collection_title": payload.collection_title,
             "youth_safe": payload.youth_safe,
             "summary": payload.summary,
+            "craft_filters": payload.craft_filters or {},
         }
     elif payload.media_scope and not recipe_body.get("media_scope"):
         recipe_body["media_scope"] = payload.media_scope
+    if payload.craft_filters and not recipe_body.get("craft_filters"):
+        recipe_body["craft_filters"] = payload.craft_filters
 
     def _run(settings_obj: Settings, on_phase: Any) -> Dict[str, Any]:
         client = tunarr_client_from_settings(settings_obj)

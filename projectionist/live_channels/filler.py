@@ -830,18 +830,45 @@ def repair_jumpstart_stations(
         if refill_lineups:
             _phase("refilling", f"Refilling lineup ({index}/{total}): {name}")
             try:
-                recipe = ChannelRecipe(
-                    name=name[:48],
+                # Prefer station_meta (collection / motif / sequential). Never force
+                # Chaos over an existing curated lineup — that wiped show stations
+                # (Gilligan's Island ← random TV including Samurai Jack).
+                from projectionist.live_channels.publish import recipe_from_station_meta
+
+                stored = recipe_from_station_meta(
+                    settings,
+                    cid,
+                    name=name,
                     number=int(ch.get("number") or 0) or 100,
-                    source="chaos",
-                    programming_mode=ProgrammingMode.CHAOS,
-                    media_scope=resolve_media_scope(settings, channel_id=cid, default="both"),
-                    summary=f"Repair refill for “{name}”",
                 )
+                try:
+                    program_count = int(ch.get("programCount") or 0)
+                except (TypeError, ValueError):
+                    program_count = 0
+                try:
+                    duration_ms = int(ch.get("duration") or 0)
+                except (TypeError, ValueError):
+                    duration_ms = 0
+                underdefined = program_count < 3 or duration_ms < 60_000
+                recipe_payload = None
+                if stored is None and underdefined:
+                    recipe_payload = ChannelRecipe(
+                        name=name[:48],
+                        number=int(ch.get("number") or 0) or 100,
+                        source="chaos",
+                        programming_mode=ProgrammingMode.CHAOS,
+                        media_scope=resolve_media_scope(
+                            settings, channel_id=cid, default="both"
+                        ),
+                        summary=f"Repair refill for “{name}”",
+                    ).to_dict()
+                elif stored is None and not underdefined:
+                    # Keep the Tunarr lineup; only continuity attach above.
+                    continue
                 refill = refill_channel_lineup(
                     client,
                     cid,
-                    recipe_payload=recipe.to_dict(),
+                    recipe_payload=recipe_payload,
                     settings=settings,
                     pad_lineups=pad_lineups,
                     attach_continuity=bool(fid),

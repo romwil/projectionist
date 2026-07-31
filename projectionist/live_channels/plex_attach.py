@@ -1394,6 +1394,19 @@ def refresh_plex_live_tv_channels(
             )
             attached["attach_needed"] = not bool(attached.get("ok"))
             return attached
+        return {
+            "ok": False,
+            "attach_needed": True,
+            "mapped": 0,
+            "expected": expected,
+            "device_present": True,
+            "device_status": "dead",
+            "xmltv_url": xmltv,
+            "message": (
+                "Tunarr device is dead in Plex Channel Sources — "
+                "run Repair Plex tuner/guide."
+            ),
+        }
 
     dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
     dvr_key = ""

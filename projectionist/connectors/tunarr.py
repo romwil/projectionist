@@ -288,6 +288,37 @@ class TunarrClient:
         )
         return payload if isinstance(payload, dict) else {"results": [], "totalHits": 0}
 
+    def list_program_descendants(self, program_id: str) -> List[Mapping[str, Any]]:
+        """Leaf content under a show/season (``GET /programs/{id}/descendants``).
+
+        Tunarr returns ``{type: content, id, duration, program: {...}}`` rows for
+        episodes under a show — used when a Plex collection child is a *show*
+        ratingKey rather than individual episode keys.
+        """
+        pid = str(program_id or "").strip()
+        if not pid:
+            raise ValueError("program_id is required")
+        payload = request_json(
+            self._api_url(f"/programs/{pid}/descendants"),
+            timeout=max(self.timeout, 60),
+        )
+        if not isinstance(payload, list):
+            return []
+        return [item for item in payload if isinstance(item, Mapping)]
+
+    def get_program(self, program_id: str) -> Mapping[str, Any]:
+        """Fetch one program (``GET /programs/{id}``)."""
+        pid = str(program_id or "").strip()
+        if not pid:
+            raise ValueError("program_id is required")
+        payload = request_json(
+            self._api_url(f"/programs/{pid}"),
+            timeout=self.timeout,
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr get program")
+        return payload
+
     def list_channels(self) -> List[Mapping[str, Any]]:
         payload = request_json(self._api_url("/channels"), timeout=self.timeout)
         if not isinstance(payload, list):
@@ -423,6 +454,33 @@ class TunarrClient:
         )
         if not isinstance(payload, dict):
             raise RuntimeError("Unexpected response from Tunarr set programming")
+        return payload
+
+    def schedule_slots(
+        self,
+        channel_id: str,
+        schedule: Mapping[str, Any],
+    ) -> Mapping[str, Any]:
+        """Generate a random-slot lineup (``POST /channels/{id}/schedule-slots``).
+
+        Tunarr 1.3.x computes a finite ``maxDays`` window from the channel's
+        program pool + ``RandomSlotSchedule``. Callers typically persist via
+        ``set_channel_programming`` with ``type=random`` (preferred) or apply
+        the returned lineup as ``type=manual``.
+        """
+        cid = str(channel_id or "").strip()
+        if not cid:
+            raise ValueError("channel_id is required")
+        if not isinstance(schedule, Mapping) or not schedule:
+            raise ValueError("schedule is required")
+        payload = request_json(
+            self._api_url(f"/channels/{cid}/schedule-slots"),
+            method="POST",
+            body={"schedule": dict(schedule)},
+            timeout=max(self.timeout, 60),
+        )
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr schedule-slots")
         return payload
 
     def list_filler_lists(self) -> List[Mapping[str, Any]]:

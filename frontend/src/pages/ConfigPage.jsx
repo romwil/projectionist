@@ -30,12 +30,14 @@ import {
   listJobs,
   deleteUser,
   listUsers,
+  patchLiveChannelsEngineSettings,
   patchLiveChannelsStationSettings,
   patchUserDisabled,
   patchUserYouthMode,
   postLiveChannelsContinuityRepair,
   postLiveChannelsLifecycle,
   postLiveChannelsPreflight,
+  previewLiveChannelsCraft,
   publishLiveChannelsChannel,
   publishLiveChannelsFromCollection,
   publishLiveChannelsStarters,
@@ -295,6 +297,25 @@ function CertifiedBadge({ certified, testing, serviceId }) {
 }
 
 /** Engine up + at least one station → maintenance-first UI (not the setup journey). */
+function buildCraftFiltersPayload(craft) {
+  const genres = Array.isArray(craft?.genres)
+    ? craft.genres.filter(Boolean)
+    : craft?.genre
+      ? [craft.genre]
+      : [];
+  const decadeRaw = craft?.decade;
+  const decade =
+    decadeRaw === "" || decadeRaw == null ? undefined : Number(decadeRaw);
+  const theme = String(craft?.theme || "").trim();
+  const rating = String(craft?.content_rating || "").trim();
+  const payload = {};
+  if (genres.length) payload.genres = genres;
+  if (Number.isFinite(decade)) payload.decade = decade;
+  if (theme) payload.themes = [theme];
+  if (rating) payload.content_ratings = [rating];
+  return payload;
+}
+
 function isLiveChannelsLaunched(status, engineProgress) {
   const engineUp = Boolean(
     status?.broadcast?.sidecar_up || engineProgress?.ready || engineProgress?.http_ready,
@@ -488,8 +509,16 @@ export default function ConfigPage() {
     collection_id: "",
     collection_title: "",
     youth_safe: false,
+    genres: [],
+    decade: "",
+    theme: "",
+    content_rating: "",
   });
+  const [liveCraftPreview, setLiveCraftPreview] = useState(null);
+  const [liveCraftPreviewBusy, setLiveCraftPreviewBusy] = useState(false);
   const [fillerPathDraft, setFillerPathDraft] = useState("");
+  const [padFlexDraft, setPadFlexDraft] = useState("");
+  const [exclusionNameDraft, setExclusionNameDraft] = useState("");
   const [stationSettingsOpen, setStationSettingsOpen] = useState(null);
   const [liveAttach, setLiveAttach] = useState(null);
   const [liveBusy, setLiveBusy] = useState(null);
@@ -678,6 +707,12 @@ export default function ConfigPage() {
           collection_id: prev.collection_id || opts.collections?.[0]?.id || "",
           collection_title: prev.collection_title || opts.collections?.[0]?.title || "",
         }));
+        if (opts?.pad_flex_max_minutes != null) {
+          setPadFlexDraft((prev) => (prev === "" ? String(opts.pad_flex_max_minutes) : prev));
+        }
+        if (opts?.exclusion_collection_name) {
+          setExclusionNameDraft((prev) => (prev === "" ? opts.exclusion_collection_name : prev));
+        }
       })
       .catch(() => setLiveCraftOptions(null));
     if (settings?.tunarr?.docker_orchestration) {
@@ -3981,6 +4016,90 @@ export default function ConfigPage() {
                     </div>
                   </div>
 
+                  <div className="service-card" data-testid="live-channels-schedule-settings">
+                    <div className="service-card-header">
+                      <div className="service-card-title">
+                        <h3>Schedule pad &amp; exclusion</h3>
+                      </div>
+                    </div>
+                    <p className="wizard-note">
+                      Pad flex caps commercial-cut gaps toward :00/:30 (0 = back-to-back). Exclusion
+                      skips a named Plex collection (default NoLive) during recipe fill and starters.
+                      After library sync, stations with stored recipes refill automatically when enabled.
+                    </p>
+                    <div className="service-fields">
+                      <label>
+                        Pad flex max (minutes)
+                        <input
+                          type="number"
+                          min={0}
+                          max={30}
+                          data-testid="live-channels-pad-flex"
+                          value={padFlexDraft}
+                          placeholder={String(
+                            liveCraftOptions?.pad_flex_max_minutes ??
+                              settings?.tunarr?.pad_flex_max_minutes ??
+                              15,
+                          )}
+                          onChange={(event) => setPadFlexDraft(event.target.value)}
+                        />
+                      </label>
+                      <label>
+                        Exclusion collection name
+                        <input
+                          type="text"
+                          data-testid="live-channels-exclusion-name"
+                          value={exclusionNameDraft}
+                          placeholder="NoLive"
+                          onChange={(event) => setExclusionNameDraft(event.target.value)}
+                        />
+                      </label>
+                    </div>
+                    <div className="wizard-actions">
+                      <button
+                        type="button"
+                        className="ghost"
+                        data-testid="live-channels-save-schedule-settings"
+                        disabled={liveBusy === "engine-settings"}
+                        onClick={async () => {
+                          setLiveBusy("engine-settings");
+                          try {
+                            const minutes = Number(padFlexDraft);
+                            const result = await patchLiveChannelsEngineSettings({
+                              pad_flex_max_minutes: Number.isFinite(minutes) ? minutes : 15,
+                              exclusion_collection_name: exclusionNameDraft || "NoLive",
+                              auto_refresh_stations_after_sync: true,
+                            });
+                            setPadFlexDraft(String(result.pad_flex_max_minutes ?? minutes));
+                            setExclusionNameDraft(
+                              result.exclusion_collection_name || exclusionNameDraft || "NoLive",
+                            );
+                            updateTunarrSettings({
+                              pad_flex_max_minutes: result.pad_flex_max_minutes,
+                              exclusion_collection_name: result.exclusion_collection_name,
+                              auto_refresh_stations_after_sync:
+                                result.auto_refresh_stations_after_sync,
+                            });
+                            setActionFeedback(
+                              "live-channels",
+                              "success",
+                              `Saved pad ${result.pad_flex_max_minutes}m · exclusion “${result.exclusion_collection_name}”.`,
+                              { block: "filler" },
+                            );
+                          } catch (error) {
+                            setActionFeedback("live-channels", "error", error.message, {
+                              block: "filler",
+                            });
+                          } finally {
+                            setLiveBusy(null);
+                          }
+                        }}
+                      >
+                        {liveBusy === "engine-settings" ? "Saving…" : "Save pad & exclusion"}
+                      </button>
+                    </div>
+                  </div>
+
                   </>
                   ) : null}
 
@@ -4251,6 +4370,145 @@ export default function ConfigPage() {
                             )}
                           </label>
                         ) : null}
+                        <div
+                          className="live-channels-craft-filters"
+                          data-testid="live-channels-craft-filters"
+                        >
+                          <p className="wizard-note">
+                            Additive filters (AND) — e.g. 1970s ∩ Action ∩ martial-arts theme ∩ Movies.
+                            Titles in the “{liveCraftOptions?.exclusion_collection_name || "NoLive"}”
+                            Plex collection are skipped.
+                          </p>
+                          <label>
+                            Genre
+                            <select
+                              data-testid="live-channels-craft-genre"
+                              value={liveCraft.genres?.[0] || ""}
+                              onChange={(event) =>
+                                setLiveCraft((prev) => ({
+                                  ...prev,
+                                  genres: event.target.value ? [event.target.value] : [],
+                                }))
+                              }
+                            >
+                              <option value="">Any genre</option>
+                              {(liveCraftOptions?.filter_options?.genres || []).map((row) => (
+                                <option key={row.value} value={row.value}>
+                                  {row.label}
+                                  {row.count ? ` (${row.count})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Decade
+                            <select
+                              data-testid="live-channels-craft-decade"
+                              value={liveCraft.decade === "" || liveCraft.decade == null ? "" : String(liveCraft.decade)}
+                              onChange={(event) =>
+                                setLiveCraft((prev) => ({
+                                  ...prev,
+                                  decade: event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Any decade</option>
+                              {(liveCraftOptions?.filter_options?.decades || []).map((row) => (
+                                <option key={row.value} value={String(row.value)}>
+                                  {row.label}
+                                  {row.count ? ` (${row.count})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Theme
+                            <select
+                              data-testid="live-channels-craft-theme"
+                              value={liveCraft.theme || ""}
+                              onChange={(event) =>
+                                setLiveCraft((prev) => ({
+                                  ...prev,
+                                  theme: event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Any theme</option>
+                              {(liveCraftOptions?.filter_options?.themes || []).map((row) => (
+                                <option key={row.value} value={row.value}>
+                                  {row.label}
+                                  {row.count ? ` (${row.count})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label>
+                            Rating
+                            <select
+                              data-testid="live-channels-craft-rating"
+                              value={liveCraft.content_rating || ""}
+                              onChange={(event) =>
+                                setLiveCraft((prev) => ({
+                                  ...prev,
+                                  content_rating: event.target.value,
+                                }))
+                              }
+                            >
+                              <option value="">Any rating</option>
+                              {(liveCraftOptions?.filter_options?.content_ratings || []).map(
+                                (row) => (
+                                  <option key={row.value} value={row.value}>
+                                    {row.label}
+                                    {row.count ? ` (${row.count})` : ""}
+                                  </option>
+                                ),
+                              )}
+                            </select>
+                          </label>
+                          <div className="wizard-actions">
+                            <button
+                              type="button"
+                              className="ghost"
+                              data-testid="live-channels-craft-preview"
+                              disabled={liveCraftPreviewBusy}
+                              onClick={async () => {
+                                setLiveCraftPreviewBusy(true);
+                                try {
+                                  const result = await previewLiveChannelsCraft({
+                                    media_scope: liveCraft.media_scope || "both",
+                                    collection_id:
+                                      liveCraft.source === "collection"
+                                        ? liveCraft.collection_id
+                                        : "",
+                                    craft_filters: buildCraftFiltersPayload(liveCraft),
+                                  });
+                                  setLiveCraftPreview(result);
+                                } catch (error) {
+                                  setLiveCraftPreview({
+                                    matched: 0,
+                                    note: error.message || "Preview failed.",
+                                  });
+                                } finally {
+                                  setLiveCraftPreviewBusy(false);
+                                }
+                              }}
+                            >
+                              {liveCraftPreviewBusy ? "Counting…" : "Preview match count"}
+                            </button>
+                            {liveCraftPreview ? (
+                              <p
+                                className="wizard-note"
+                                data-testid="live-channels-craft-preview-result"
+                              >
+                                {liveCraftPreview.note ||
+                                  `Matched ${liveCraftPreview.matched ?? 0}` +
+                                    (liveCraftPreview.match_total
+                                      ? ` / ${liveCraftPreview.match_total}`
+                                      : "")}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
                       </div>
                       <div className="wizard-actions">
                         <button
@@ -4267,6 +4525,7 @@ export default function ConfigPage() {
                               return;
                             }
                             const number = Number(liveCraft.number);
+                            const craftFilters = buildCraftFiltersPayload(liveCraft);
                             await runPublishJob(
                               () =>
                                 publishLiveChannelsChannel({
@@ -4281,6 +4540,7 @@ export default function ConfigPage() {
                                   collection_title: liveCraft.collection_title,
                                   youth_safe:
                                     liveCraft.youth_safe || liveCraft.source === "youth",
+                                  craft_filters: craftFilters,
                                   fill_programming: true,
                                 }),
                               {
@@ -4392,6 +4652,8 @@ export default function ConfigPage() {
                                   collection_title: picked.title,
                                   name: picked.title,
                                   programming_mode: mode,
+                                  media_scope: liveCraft.media_scope || "both",
+                                  craft_filters: buildCraftFiltersPayload(liveCraft),
                                 }),
                               {
                                 busyKey: "collection",
@@ -4424,7 +4686,8 @@ export default function ConfigPage() {
                       <h4>Starter pack</h4>
                       <p className="wizard-note">
                         Propose 2–4 library-aware stations (taste, motifs, collections, Chaos /
-                        youth-safe), then publish the ones you want.
+                        youth-safe), then publish the ones you want. Re-running is additive —
+                        existing channel numbers keep their stations; only missing numbers are created.
                       </p>
                     {liveStarters?.proposals?.length ? (
                       <>

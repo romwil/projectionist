@@ -2,6 +2,43 @@
 
 ## [Unreleased]
 
+## [1.29.30] — 2026-07-31
+
+Live Channels craft finish: additive genre ∩ decade ∩ theme filters with preview, NoLive exclusion, Tunarr random-slot Shuffle/Chaos, pad knob, additive starters, and post-sync station refresh.
+
+### Highlights
+- **Stack filters like Explore.** Craft a station with Movies ∩ 1970s ∩ Action ∩ a martial-arts theme — preview the match count, then publish. Filters stick for Refill.
+- **Keep junk off the air.** Titles in a Plex **NoLive** collection (name configurable) are skipped during fill and starters.
+- **Shuffle that doesn’t loop the same 30.** Shuffle/Chaos prefer Tunarr random-slot programming so the pool reshuffles across days when the API allows.
+- **Pad, starters, sync.** Set pad flex to 0 for back-to-back; re-run starters without wiping stations; library sync refreshes stations that have stored recipes.
+
+### Added
+- Additive craft filters on recipes + `station_meta` (genres, decade/year, motifs/themes, content ratings); collection subfilter; `POST /api/admin/live-channels/craft-preview`.
+- Exclusion collection (`exclusion_collection_name` default `NoLive`) skipped in `collect_programs_for_recipe` / starters fill.
+- `TunarrClient.schedule_slots`; Shuffle/Chaos publish uses Tunarr `type=random` programming when the pool supports movie/show slots.
+- Admin **Schedule pad & exclusion** (`PATCH /api/admin/live-channels/engine-settings`); `pad_flex_max_minutes` 0 = back-to-back.
+- Post-sync `refresh_stations_with_stored_recipes` when `auto_refresh_stations_after_sync` is on.
+- HELP + roadmap scorecard for craft filters / exclusion / schedule fidelity / pad.
+
+### Changed
+- Starter pack copy clarifies additive re-run (existing numbers kept).
+- Craft options expose filter facet catalogs from the library index.
+
+### Fixed
+- Continuity Repair no longer force-fills curated stations with Chaos (kept Gilligan’s Island / collection stations from picking unrelated titles like Samurai Jack).
+- Plex refresh surfaces a dead Tunarr HDHR device as attach-needed with a clear Repair prompt.
+
+### Residual
+- Tunarr random slots need movies and/or per-show `showId`s; otherwise Shuffle/Chaos fall back to a shuffled manual lineup until Refill.
+
+### Verification
+- Focused: `CraftFiltersTests`, `StationRefreshTests`, `tests/test_live_channels.py` — 102 passed.
+- `.venv/bin/python -m pytest tests/` — 1573 passed, 6 skipped; coverage **75.9%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.30**.
+
 ## [1.29.29] — 2026-07-31
 
 Live Channels Repair hardening on top of 1.29.28: timeout-tolerant Tunarr DVR delete so Repair cannot wedge PMS, plus honest status while `/livetv/dvrs` is briefly busy.

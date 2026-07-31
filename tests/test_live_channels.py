@@ -1434,6 +1434,57 @@ class PreflightAndPublishTests(unittest.TestCase):
         attach.assert_called_once()
         self.assertTrue(attach.call_args.kwargs.get("force_recreate"))
 
+    def test_refresh_dead_device_without_attach_returns_error(self) -> None:
+        """Dead Tunarr + allow_attach=False must error, not attempt channelmap."""
+        from unittest.mock import MagicMock, patch
+        import xml.etree.ElementTree as ET
+        from projectionist.live_channels.plex_attach import refresh_plex_live_tv_channels
+
+        devices = ET.fromstring(
+            """
+            <MediaContainer>
+              <Device key="11" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr"
+                uri="http://10.10.1.202:18765" deviceId="Tunarr" title="Projectionist"
+                make="Tunarr - Silicondust" status="dead" state="enabled"/>
+            </MediaContainer>
+            """
+        )
+        settings = Settings(
+            plex_url="http://plex.test:32400",
+            plex_token="token",
+            tunarr=TunarrSettings(public_url="http://10.10.1.202:18765"),
+        )
+        mock_client = MagicMock()
+        mock_client.base_url = "http://plex.test:32400"
+        mock_client.token = "token"
+        mock_client.timeout = 10
+        put_channelmap = MagicMock()
+        with patch(
+            "projectionist.live_channels.plex_attach.count_tunarr_hdhr_channels",
+            return_value=6,
+        ), patch(
+            "projectionist.live_channels.plex_attach._plex_xml",
+            return_value=devices,
+        ), patch(
+            "projectionist.live_channels.plex_attach.attach_tunarr_xmltv_to_plex",
+        ) as attach, patch(
+            "projectionist.live_channels.plex_attach._put_device_channelmap",
+            put_channelmap,
+        ), patch(
+            "projectionist.live_channels.plex_attach.scan_plex_device_channels",
+        ) as scan, patch("projectionist.connectors.plex.PlexClient", return_value=mock_client):
+            result = refresh_plex_live_tv_channels(settings, allow_attach=False)
+        self.assertFalse(result["ok"])
+        self.assertTrue(result["attach_needed"])
+        self.assertEqual(result["mapped"], 0)
+        self.assertEqual(result["expected"], 6)
+        self.assertTrue(result["device_present"])
+        self.assertEqual(result["device_status"], "dead")
+        self.assertIn("dead", result["message"].lower())
+        attach.assert_not_called()
+        put_channelmap.assert_not_called()
+        scan.assert_not_called()
+
     def test_plex_attach_prefers_public_url_over_docker_internal(self) -> None:
         from projectionist.live_channels.plex_attach import (
             build_plex_attach,
@@ -1929,10 +1980,13 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["count_content_filled"], 1)
         body = client.set_channel_programming.call_args.args[1]
-        content_ids = [
-            row["id"] for row in body["lineup"] if row.get("type") == "content"
-        ]
-        # Sci-Fi motif matches Alien (p1); Heat may pad. Shuffle mode may reorder.
+        if body.get("type") == "random":
+            content_ids = list(body.get("programs") or [])
+        else:
+            content_ids = [
+                row["id"] for row in body.get("lineup") or [] if row.get("type") == "content"
+            ]
+        # Sci-Fi motif matches Alien (p1); Heat may pad. Shuffle may use random slots.
         self.assertIn("p1", content_ids)
 
 
@@ -2777,6 +2831,293 @@ class CollectionIdMatchTests(unittest.TestCase):
         self.assertEqual(recipe.source, "collection")
         self.assertEqual(recipe.collection_id, "55")
         self.assertEqual(recipe.programming_mode, ProgrammingMode.SHUFFLE)
+
+    def test_repair_skips_chaos_wipe_when_lineup_already_filled(self) -> None:
+        """Continuity repair must not Chaos-refill a station that already has programs."""
+        from projectionist.config_store import Settings, TunarrSettings
+        from projectionist.live_channels.filler import repair_jumpstart_stations
+
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {
+                "id": "ch-gilligan",
+                "name": "Gilligan's Island",
+                "number": 105,
+                "programCount": 30,
+                "duration": 80_000_000,
+                "transcodeConfigId": "tc-1",
+                "startTime": 1,
+                "offline": {"mode": "pic"},
+                "icon": {"path": "", "width": 0, "duration": 0, "position": "bottom-right"},
+            }
+        ]
+        client.update_channel.return_value = {"id": "ch-gilligan"}
+        settings = Settings(tunarr=TunarrSettings())
+        with patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value={
+                "ok": True,
+                "ready": True,
+                "filler_list_id": "fl-1",
+                "program_count": 3,
+                "message": "ready",
+            },
+        ), patch(
+            "projectionist.live_channels.publish.refill_channel_lineup",
+        ) as refill_mock, patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={"ok": True},
+        ):
+            repair_jumpstart_stations(client, settings, refill_lineups=True)
+        refill_mock.assert_not_called()
+
+    def test_collect_expands_show_rating_key_via_descendants(self) -> None:
+        """Plex show collection children must expand to Tunarr episode descendants."""
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+        from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+
+        client = MagicMock()
+        client.list_library_programs.return_value = []
+        client.search_programs.return_value = {
+            "results": [
+                {
+                    "type": "show",
+                    "title": "Gilligan's Island",
+                    "uuid": "show-uuid-1",
+                    "externalKey": "185565",
+                    "identifiers": [
+                        {"type": "plex", "id": "185565", "sourceId": "src"}
+                    ],
+                }
+            ]
+        }
+        client.list_program_descendants.return_value = [
+            {
+                "type": "content",
+                "id": "ep-1",
+                "duration": 1_500_000,
+                "program": {
+                    "uuid": "ep-1",
+                    "type": "episode",
+                    "title": "Two on a Raft",
+                    "identifiers": [{"type": "plex", "id": "185567", "sourceId": "src"}],
+                },
+            },
+            {
+                "type": "content",
+                "id": "ep-2",
+                "duration": 1_500_000,
+                "program": {
+                    "uuid": "ep-2",
+                    "type": "episode",
+                    "title": "Home Sweet Hut",
+                    "identifiers": [{"type": "plex", "id": "185568", "sourceId": "src"}],
+                },
+            },
+        ]
+        recipe = ChannelRecipe(
+            name="Gilligan's Island",
+            number=105,
+            source="collection",
+            programming_mode=ProgrammingMode.SEQUENTIAL,
+            collection_id="99",
+            collection_title="Gilligan's Island",
+            item_hints=("Gilligan's Island",),
+            item_rating_keys=("185565",),
+        )
+        picked = collect_programs_for_recipe(client, recipe, catalog=[], media_scope="tv")
+        self.assertEqual([p["id"] for p in picked], ["ep-1", "ep-2"])
+        client.list_program_descendants.assert_called_with("show-uuid-1")
+
+    def test_collect_does_not_random_pad_collection_recipes(self) -> None:
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+        from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+
+        client = MagicMock()
+        catalog = [
+            {
+                "id": f"x{i}",
+                "duration": 3_600_000,
+                "title": f"Unrelated {i}",
+                "type": "movie",
+                "genres": [],
+            }
+            for i in range(20)
+        ]
+        recipe = ChannelRecipe(
+            name="Gilligan's Island",
+            number=105,
+            source="collection",
+            programming_mode=ProgrammingMode.SEQUENTIAL,
+            collection_id="99",
+            collection_title="Gilligan's Island",
+            item_hints=("Gilligan's Island",),
+            item_rating_keys=(),
+        )
+        client.search_programs.return_value = {"results": []}
+        picked = collect_programs_for_recipe(
+            client, recipe, catalog=catalog, media_scope="both"
+        )
+        # Without a resolvable show, return empty — never pad with Unrelated movies.
+        self.assertEqual(picked, [])
+
+
+class CraftFiltersTests(unittest.TestCase):
+    def test_normalize_decade_and_and_stack(self) -> None:
+        from projectionist.live_channels.filters import (
+            apply_craft_filters_to_pool,
+            normalize_craft_filters,
+        )
+
+        craft = normalize_craft_filters(
+            {"genres": ["Action"], "decade": "1970s", "themes": ["martial arts"]}
+        )
+        self.assertEqual(craft.year_from, 1970)
+        self.assertEqual(craft.year_to, 1979)
+        self.assertEqual(craft.genres, ("Action",))
+        pool = [
+            {
+                "id": "1",
+                "duration": 5_000_000,
+                "title": "Enter the Dragon",
+                "type": "movie",
+                "genres": ["Action"],
+                "year": 1973,
+                "plex_keys": ["100"],
+            },
+            {
+                "id": "2",
+                "duration": 5_000_000,
+                "title": "Drama Night",
+                "type": "movie",
+                "genres": ["Drama"],
+                "year": 1975,
+                "plex_keys": ["101"],
+            },
+        ]
+        # Theme requires library ratingKeys — without them Tunarr-side match fails.
+        filtered = apply_craft_filters_to_pool(pool, craft)
+        self.assertEqual(filtered, [])
+        with_keys = apply_craft_filters_to_pool(
+            pool, craft, allowed_rating_keys={"100"}
+        )
+        self.assertEqual([p["id"] for p in with_keys], ["1"])
+
+    def test_exclusion_skips_rating_keys(self) -> None:
+        from projectionist.live_channels.filters import (
+            CraftFilters,
+            apply_craft_filters_to_pool,
+        )
+
+        pool = [
+            {
+                "id": "1",
+                "duration": 5_000_000,
+                "title": "Keep",
+                "plex_keys": ["10"],
+            },
+            {
+                "id": "2",
+                "duration": 5_000_000,
+                "title": "Skip",
+                "plex_keys": ["99"],
+            },
+        ]
+        out = apply_craft_filters_to_pool(
+            pool, CraftFilters(), excluded_rating_keys={"99"}
+        )
+        self.assertEqual([p["id"] for p in out], ["1"])
+
+    def test_shuffle_programming_uses_random_slots(self) -> None:
+        from projectionist.live_channels.publish import programming_body_for_recipe
+        from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+
+        recipe = ChannelRecipe(
+            name="70s Action",
+            number=120,
+            source="chaos",
+            programming_mode=ProgrammingMode.SHUFFLE,
+        )
+        body = programming_body_for_recipe(
+            recipe,
+            programs=[
+                {
+                    "id": "m1",
+                    "duration": 5_400_000,
+                    "title": "Heat",
+                    "type": "movie",
+                },
+                {
+                    "id": "m2",
+                    "duration": 7_200_000,
+                    "title": "Alien",
+                    "type": "movie",
+                },
+            ],
+            pad_lineups=True,
+            max_flex_ms=0,
+        )
+        self.assertEqual(body["type"], "random")
+        self.assertEqual(body["programs"], ["m1", "m2"])
+        self.assertEqual(body["schedule"]["type"], "random")
+        self.assertTrue(
+            any(slot.get("type") == "movie" for slot in body["schedule"]["slots"])
+        )
+
+    def test_recipe_persists_craft_filters(self) -> None:
+        from projectionist.live_channels.recipes import recipe_from_mapping
+
+        recipe = recipe_from_mapping(
+            {
+                "name": "Martial Arts 70s",
+                "number": 121,
+                "source": "motif",
+                "motif": "martial arts",
+                "media_scope": "movies",
+                "craft_filters": {
+                    "genres": ["Action"],
+                    "decade": 1970,
+                    "themes": ["martial arts"],
+                },
+            }
+        )
+        payload = recipe.to_dict()
+        self.assertEqual(payload["craft_filters"]["genres"], ["Action"])
+        self.assertEqual(payload["craft_filters"]["year_from"], 1970)
+        self.assertIn("martial arts", payload["craft_filters"]["motifs"])
+
+    def test_schedule_slots_client(self) -> None:
+        from projectionist.connectors.tunarr import TunarrClient
+
+        client = TunarrClient("http://tunarr.test:8000")
+        with patch(
+            "projectionist.connectors.tunarr.request_json",
+            return_value={"lineup": [], "seed": [1], "discardCount": 0, "startTime": 1},
+        ) as req:
+            result = client.schedule_slots(
+                "ch-1",
+                {
+                    "type": "random",
+                    "flexPreference": "end",
+                    "maxDays": 1,
+                    "padMs": 0,
+                    "padStyle": "slot",
+                    "randomDistribution": "uniform",
+                    "lockWeights": False,
+                    "slots": [],
+                },
+            )
+        self.assertEqual(result["seed"], [1])
+        self.assertIn("/channels/ch-1/schedule-slots", req.call_args.args[0])
+
+
+class StationRefreshTests(unittest.TestCase):
+    def test_refresh_skips_when_disabled(self) -> None:
+        from projectionist.live_channels.publish import refresh_stations_with_stored_recipes
+
+        settings = Settings(features=FeatureFlags(live_channels_enabled=False))
+        result = refresh_stations_with_stored_recipes(MagicMock(), settings=settings)
+        self.assertTrue(result.get("skipped"))
 
 
 if __name__ == "__main__":

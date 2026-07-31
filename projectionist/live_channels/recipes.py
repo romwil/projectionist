@@ -7,7 +7,7 @@ no HTTP here.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
 
@@ -22,14 +22,30 @@ class ProgrammingMode(str, Enum):
 
     - sequential → preserve collection / hint order
     - shuffle → randomize within this station's resolved pool
-    - chaos → wider random within media_scope (whole library types)
 
-    Maps toward Tunarr programming / schedule-slots for continuous reshuffle later.
+    ``chaos`` remains a deprecated wire value for one release; callers should
+    use :func:`normalize_programming_mode`, which maps it to ``shuffle``.
     """
 
     SEQUENTIAL = "sequential"
     SHUFFLE = "shuffle"
-    CHAOS = "chaos"
+    CHAOS = "chaos"  # deprecated alias of SHUFFLE
+
+
+def normalize_programming_mode(value: Any, *, default: ProgrammingMode = ProgrammingMode.SHUFFLE) -> ProgrammingMode:
+    """Normalize API / station_meta mode strings; Chaos → Shuffle."""
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return default
+    if raw == ProgrammingMode.CHAOS.value:
+        return ProgrammingMode.SHUFFLE
+    try:
+        mode = ProgrammingMode(raw)
+    except ValueError:
+        return default
+    if mode == ProgrammingMode.CHAOS:
+        return ProgrammingMode.SHUFFLE
+    return mode
 
 
 class MediaScope(str, Enum):
@@ -97,7 +113,7 @@ class ChannelRecipe:
 
     name: str
     number: int
-    source: str  # taste_cluster | motif | collection | chaos | youth
+    source: str  # taste_cluster | motif | collection | youth | chaos (legacy)
     programming_mode: ProgrammingMode = ProgrammingMode.SHUFFLE
     media_scope: str = MediaScope.BOTH.value
     cluster_tag: str = ""
@@ -109,6 +125,8 @@ class ChannelRecipe:
     item_hints: tuple[str, ...] = ()
     # Plex ratingKeys for collection children (preferred over title hints).
     item_rating_keys: tuple[str, ...] = ()
+    # Additive AND filters (genres ∩ decade ∩ motif/theme ∩ rating).
+    craft_filters: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)
@@ -116,6 +134,7 @@ class ChannelRecipe:
         payload["media_scope"] = normalize_media_scope(self.media_scope)
         payload["item_hints"] = list(self.item_hints)
         payload["item_rating_keys"] = list(self.item_rating_keys)
+        payload["craft_filters"] = dict(self.craft_filters or {})
         return payload
 
 
@@ -138,13 +157,18 @@ def apply_youth_gate_to_items(
     return filter_items_for_youth(items, max_rating=ceiling, rating_key=rating_key)
 
 
+def replace_recipe(recipe: "ChannelRecipe", **updates: Any) -> "ChannelRecipe":
+    """Return a new recipe with selected fields replaced."""
+    payload = recipe.to_dict()
+    payload.update(updates)
+    return recipe_from_mapping(payload)
+
+
 def recipe_from_mapping(data: Mapping[str, Any]) -> ChannelRecipe:
     """Build a recipe from a plain dict (API / tests)."""
-    mode_raw = str(data.get("programming_mode") or ProgrammingMode.SHUFFLE.value).lower()
-    try:
-        mode = ProgrammingMode(mode_raw)
-    except ValueError:
-        mode = ProgrammingMode.SHUFFLE
+    mode = normalize_programming_mode(
+        data.get("programming_mode"), default=ProgrammingMode.SHUFFLE
+    )
     hints = data.get("item_hints") or ()
     if isinstance(hints, str):
         hint_tuple = (hints,)
@@ -155,10 +179,22 @@ def recipe_from_mapping(data: Mapping[str, Any]) -> ChannelRecipe:
         key_tuple = (keys,) if keys.strip() else ()
     else:
         key_tuple = tuple(str(k) for k in keys if str(k).strip())
+    from projectionist.live_channels.filters import normalize_craft_filters
+
+    craft_filters = normalize_craft_filters(
+        data.get("craft_filters") or data.get("filters")
+    ).to_dict()
+    # Source motif also feeds the additive motif stack when filters omit it.
+    if not craft_filters.get("motifs") and str(data.get("motif") or "").strip():
+        craft_filters["motifs"] = [str(data.get("motif")).strip()]
+    source = str(data.get("source") or "motif").strip().lower() or "motif"
+    # Legacy Chaos stations refill as Shuffle of the media_scope pool.
+    if source == "chaos" and mode == ProgrammingMode.CHAOS:
+        mode = ProgrammingMode.SHUFFLE
     return ChannelRecipe(
         name=str(data.get("name") or "Untitled").strip() or "Untitled",
         number=int(data.get("number") or 0),
-        source=str(data.get("source") or "chaos").strip() or "chaos",
+        source=source,
         programming_mode=mode,
         media_scope=normalize_media_scope(data.get("media_scope")),
         cluster_tag=str(data.get("cluster_tag") or "").strip(),
@@ -169,4 +205,5 @@ def recipe_from_mapping(data: Mapping[str, Any]) -> ChannelRecipe:
         summary=str(data.get("summary") or "").strip(),
         item_hints=hint_tuple,
         item_rating_keys=key_tuple,
+        craft_filters=craft_filters,
     )
