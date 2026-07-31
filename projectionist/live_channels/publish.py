@@ -361,8 +361,20 @@ def channel_icon_body(icon_url: str = "") -> Dict[str, Any]:
     }
 
 
-def resolve_channel_icon_url(settings: Any = None, *, tunarr_base: str = "") -> str:
-    """LAN-facing Tunarr logo URL for channel icons (Plex can fetch it)."""
+def resolve_channel_icon_url(
+    settings: Any = None,
+    *,
+    tunarr_base: str = "",
+    preferred_url: str = "",
+) -> str:
+    """LAN-facing icon URL for channel logos (Plex must be able to fetch it).
+
+    Prefer ``preferred_url`` (collection / title art) when set; otherwise the
+    shared Tunarr mark at ``{plex_facing_base}/images/tunarr.png``.
+    """
+    preferred = str(preferred_url or "").strip()
+    if preferred:
+        return preferred
     base = str(tunarr_base or "").strip().rstrip("/")
     if not base and settings is not None:
         try:
@@ -382,6 +394,24 @@ def resolve_channel_icon_url(settings: Any = None, *, tunarr_base: str = "") -> 
     return f"{base}/images/tunarr.png"
 
 
+def probe_icon_url(url: str, *, timeout: int = 5) -> Dict[str, Any]:
+    """Best-effort GET of a channel icon URL (reachable from Projectionist)."""
+    target = str(url or "").strip()
+    if not target:
+        return {"ok": False, "url": "", "message": "No icon URL configured."}
+    try:
+        from projectionist.connectors.http import request_empty
+
+        request_empty(target, method="GET", timeout=timeout)
+        return {"ok": True, "url": target, "message": "Icon URL reachable."}
+    except Exception as error:  # noqa: BLE001
+        return {
+            "ok": False,
+            "url": target,
+            "message": str(error)[:200] or "Icon probe failed.",
+        }
+
+
 def resolve_media_scope(
     settings: Any = None,
     *,
@@ -394,24 +424,39 @@ def resolve_media_scope(
         scope = normalize_media_scope(getattr(recipe, "media_scope", None), default="")
         if scope:
             return scope
-    cid = str(channel_id or "").strip()
-    tunarr = getattr(settings, "tunarr", None) if settings is not None else None
-    meta = getattr(tunarr, "station_meta", None) if tunarr is not None else None
-    if cid and isinstance(meta, Mapping):
-        row = meta.get(cid)
-        if isinstance(row, Mapping):
-            scope = normalize_media_scope(row.get("media_scope"), default="")
-            if scope:
-                return scope
+    row = station_meta_row(settings, channel_id)
+    if row:
+        scope = normalize_media_scope(row.get("media_scope"), default="")
+        if scope:
+            return scope
     return normalize_media_scope(default)
 
 
-def set_station_media_scope(
+def station_meta_row(settings: Any, channel_id: str) -> Dict[str, Any]:
+    """Return a copy of ``tunarr.station_meta[channel_id]`` or ``{}``."""
+    cid = str(channel_id or "").strip()
+    if not cid or settings is None:
+        return {}
+    tunarr = getattr(settings, "tunarr", None)
+    meta = getattr(tunarr, "station_meta", None) if tunarr is not None else None
+    if not isinstance(meta, Mapping):
+        return {}
+    row = meta.get(cid)
+    return dict(row) if isinstance(row, Mapping) else {}
+
+
+def set_station_meta(
     settings: Any,
     channel_id: str,
-    scope: str,
+    *,
+    media_scope: str = "",
+    collection_id: str = "",
+    programming_mode: str = "",
+    collection_title: str = "",
+    icon_url: str = "",
+    source: str = "",
 ) -> None:
-    """Persist media_scope on settings.tunarr.station_meta[channel_id] (in-memory)."""
+    """Persist station recipe fields on ``settings.tunarr.station_meta`` (in-memory)."""
     cid = str(channel_id or "").strip()
     if not cid or settings is None:
         return
@@ -426,8 +471,68 @@ def set_station_media_scope(
         except Exception:  # noqa: BLE001
             return
     row = dict(meta.get(cid) or {}) if isinstance(meta.get(cid), Mapping) else {}
-    row["media_scope"] = normalize_media_scope(scope)
+    if media_scope:
+        row["media_scope"] = normalize_media_scope(media_scope)
+    if collection_id:
+        row["collection_id"] = str(collection_id).strip()
+    if collection_title:
+        row["collection_title"] = str(collection_title).strip()
+    if programming_mode:
+        row["programming_mode"] = str(programming_mode).strip().lower()
+    if icon_url:
+        row["icon_url"] = str(icon_url).strip()
+    if source:
+        row["source"] = str(source).strip()
     meta[cid] = row
+
+
+def set_station_media_scope(
+    settings: Any,
+    channel_id: str,
+    scope: str,
+) -> None:
+    """Persist media_scope on settings.tunarr.station_meta[channel_id] (in-memory)."""
+    set_station_meta(settings, channel_id, media_scope=scope)
+
+
+def recipe_from_station_meta(
+    settings: Any,
+    channel_id: str,
+    *,
+    name: str = "",
+    number: int = 0,
+) -> Optional[ChannelRecipe]:
+    """Rebuild a ChannelRecipe from persisted station_meta when possible."""
+    row = station_meta_row(settings, channel_id)
+    if not row:
+        return None
+    collection_id = str(row.get("collection_id") or "").strip()
+    mode_raw = str(row.get("programming_mode") or "").strip().lower()
+    source = str(row.get("source") or "").strip()
+    if collection_id:
+        source = source or "collection"
+    if not source and not mode_raw:
+        return None
+    try:
+        mode = ProgrammingMode(mode_raw) if mode_raw else (
+            ProgrammingMode.SEQUENTIAL
+            if source == "collection"
+            else ProgrammingMode.SHUFFLE
+        )
+    except ValueError:
+        mode = ProgrammingMode.SHUFFLE
+    return ChannelRecipe(
+        name=(str(name or row.get("collection_title") or "Station").strip() or "Station")[
+            :48
+        ],
+        number=int(number or 0) or 100,
+        source=source or "chaos",
+        programming_mode=mode,
+        media_scope=normalize_media_scope(row.get("media_scope")),
+        collection_id=collection_id,
+        collection_title=str(row.get("collection_title") or "").strip(),
+        summary=f"Refill from stored recipe ({mode.value})",
+    )
 
 
 def pad_flex_max_ms(settings: Any = None) -> int:
@@ -849,13 +954,13 @@ def prepare_channels_for_playback(
     }
 
 
-def plex_collection_item_hints(
+def plex_collection_children(
     settings: Any,
     collection_id: str,
     *,
     limit: int = 60,
-) -> List[str]:
-    """Title hints from a Plex collection rating key (empty when not a Plex id)."""
+) -> List[Dict[str, str]]:
+    """Plex collection children as ``{rating_key, title, thumb}`` (empty when unavailable)."""
     cid = str(collection_id or "").strip()
     if not cid or not cid.isdigit():
         return []
@@ -865,15 +970,135 @@ def plex_collection_item_hints(
         return []
     try:
         from projectionist.connectors.plex import PlexClient
-        from projectionist.connectors.plex_collections import list_collection_item_titles
+        from projectionist.connectors.plex_collections import list_collection_items
 
-        return list_collection_item_titles(
+        items = list_collection_items(
             PlexClient(plex_url, plex_token, timeout=20),
             cid,
             limit=limit,
         )
+        return [
+            {
+                "rating_key": item.rating_key,
+                "title": item.title,
+                "thumb": item.thumb,
+                "media_type": item.media_type,
+            }
+            for item in items
+        ]
     except Exception:  # noqa: BLE001
         return []
+
+
+def plex_collection_item_hints(
+    settings: Any,
+    collection_id: str,
+    *,
+    limit: int = 60,
+) -> List[str]:
+    """Title hints from a Plex collection rating key (empty when not a Plex id)."""
+    return [
+        row["title"]
+        for row in plex_collection_children(settings, collection_id, limit=limit)
+        if row.get("title")
+    ]
+
+
+def plex_collection_rating_keys(
+    settings: Any,
+    collection_id: str,
+    *,
+    limit: int = 60,
+) -> List[str]:
+    """Plex ratingKeys for collection children (preferred match path)."""
+    return [
+        row["rating_key"]
+        for row in plex_collection_children(settings, collection_id, limit=limit)
+        if row.get("rating_key")
+    ]
+
+
+def resolve_collection_icon_url(
+    settings: Any,
+    collection_id: str,
+    *,
+    children: Optional[Sequence[Mapping[str, Any]]] = None,
+) -> str:
+    """Prefer collection art, then first child thumb, else empty (caller uses Tunarr mark)."""
+    cid = str(collection_id or "").strip()
+    plex_url = str(getattr(settings, "plex_url", "") or "").strip() if settings else ""
+    plex_token = str(getattr(settings, "plex_token", "") or "").strip() if settings else ""
+    if cid and cid.isdigit() and plex_url and plex_token:
+        try:
+            from projectionist.connectors.plex import PlexClient
+            from projectionist.connectors.plex_collections import collection_art_url
+
+            art = collection_art_url(PlexClient(plex_url, plex_token, timeout=10), cid)
+            if art:
+                return art
+        except Exception:  # noqa: BLE001
+            pass
+    for row in children or ():
+        thumb = str(row.get("thumb") or "").strip()
+        if not thumb:
+            continue
+        if thumb.startswith("http://") or thumb.startswith("https://"):
+            return thumb
+        if plex_url and plex_token:
+            from projectionist.connectors.plex_collections import _auth_url
+            from projectionist.connectors.plex import PlexClient
+
+            path = thumb if thumb.startswith("/") else f"/{thumb}"
+            try:
+                return _auth_url(PlexClient(plex_url, plex_token, timeout=5), path)
+            except Exception:  # noqa: BLE001
+                continue
+    return ""
+
+
+def _extract_plex_rating_keys(item: Mapping[str, Any]) -> List[str]:
+    """Collect Plex ratingKey forms from a Tunarr library-program / program row."""
+    prog = item.get("program") if isinstance(item.get("program"), Mapping) else item
+    if not isinstance(prog, Mapping):
+        prog = item
+    keys: List[str] = []
+    for raw in (
+        prog.get("externalKey"),
+        item.get("externalKey"),
+        prog.get("plexRatingKey"),
+        item.get("plexRatingKey"),
+        prog.get("ratingKey"),
+        item.get("ratingKey"),
+    ):
+        text = str(raw or "").strip()
+        if not text:
+            continue
+        keys.append(text)
+        # Tunarr often stores ``plex|{sourceId}|{ratingKey}``.
+        if "|" in text:
+            tail = text.rsplit("|", 1)[-1].strip()
+            if tail and tail not in keys:
+                keys.append(tail)
+        # Bare digit also matches ``plex|*|{key}`` tails.
+    return keys
+
+
+def match_feedback_note(
+    *,
+    matched: int = 0,
+    match_total: int = 0,
+    program_count: int = 0,
+    stations_filled: int = 0,
+) -> str:
+    """Honest owner-facing publish note (matched titles, not 'real titles N stations')."""
+    if match_total > 0:
+        return (
+            f"Matched {matched}/{match_total} collection titles · "
+            f"lineup {program_count} program(s)."
+        )
+    if program_count > 0:
+        return f"Lineup {program_count} program(s) across {stations_filled or 1} station(s)."
+    return ""
 
 
 def programming_body_for_recipe(
@@ -980,13 +1205,28 @@ def _normalize_program_row(
     genres = prog.get("genres") or prog.get("tags") or []
     if not isinstance(genres, list):
         genres = []
+    plex_keys = _extract_plex_rating_keys(item)
     return {
         "id": pid,
         "duration": duration,
         "title": title,
         "type": ptype,
         "genres": [str(g) for g in genres if str(g).strip()],
+        "plex_keys": plex_keys,
     }
+
+
+def _index_pool_by_plex_key(pool: Sequence[Mapping[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    """Map Plex ratingKey / externalKey forms → normalized program rows."""
+    by_key: Dict[str, Dict[str, Any]] = {}
+    for item in pool:
+        if not isinstance(item, Mapping):
+            continue
+        for key in item.get("plex_keys") or ():
+            text = str(key or "").strip()
+            if text and text not in by_key:
+                by_key[text] = dict(item)
+    return by_key
 
 
 def collect_programs_for_recipe(
@@ -997,8 +1237,14 @@ def collect_programs_for_recipe(
     catalog: Optional[Sequence[Mapping[str, Any]]] = None,
     media_scope: str = "",
     settings: Any = None,
+    match_stats: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
-    """Pick Tunarr program IDs for a recipe from an indexed catalog / search."""
+    """Pick Tunarr program IDs for a recipe from an indexed catalog / search.
+
+    Collection recipes prefer Plex ``ratingKey`` → Tunarr ``externalKey`` /
+    ``plex|{source}|{key}``. Title soft-match is last-resort for unscanned items.
+    When ID matches succeed, do **not** pad with random whole-library titles.
+    """
     scope = normalize_media_scope(media_scope or getattr(recipe, "media_scope", None))
     target = max(1, min(int(limit or _DEFAULT_FILL_LIMIT), 80))
     pool: List[Dict[str, Any]] = []
@@ -1022,12 +1268,14 @@ def collect_programs_for_recipe(
             ptype = str(row.get("type") or "").strip().lower()
             if ptype and not program_type_matches_scope(ptype, scope):
                 return
+            plex_keys = list(row.get("plex_keys") or _extract_plex_rating_keys(row))
             normalized = {
                 "id": str(row["id"]),
                 "duration": duration,
                 "title": str(row.get("title") or ""),
                 "type": ptype,
                 "genres": list(row.get("genres") or []),
+                "plex_keys": plex_keys,
             }
         if not normalized or normalized["id"] in seen:
             return
@@ -1063,38 +1311,95 @@ def collect_programs_for_recipe(
             pass
 
     terms = _recipe_search_terms(recipe)
-    chaos = recipe.source == "chaos" or recipe.programming_mode == ProgrammingMode.CHAOS
-    sequential_collection = (
-        recipe.source == "collection"
-        or recipe.programming_mode == ProgrammingMode.SEQUENTIAL
-    ) and bool(recipe.item_hints)
+    mode = recipe.programming_mode
+    rating_keys = [
+        str(k).strip() for k in (recipe.item_rating_keys or ()) if str(k).strip()
+    ]
+    is_collection = recipe.source == "collection" or bool(
+        recipe.collection_id or rating_keys or recipe.item_hints
+    )
 
-    if chaos:
+    def _record_stats(matched: int, total: int, programs: Sequence[Mapping[str, Any]]) -> None:
+        if match_stats is None:
+            return
+        match_stats["matched"] = int(matched)
+        match_stats["match_total"] = int(total)
+        match_stats["program_count"] = len(programs)
+
+    # Chaos: wider random within media_scope (not limited to collection IDs).
+    if mode == ProgrammingMode.CHAOS or recipe.source == "chaos":
         candidates = list(pool)
         random.shuffle(candidates)
-        return candidates[:target]
+        picked = candidates[:target]
+        _record_stats(0, 0, picked)
+        return picked
 
-    # Collection path: preserve item_hint order with exact/near-exact title matches.
-    if sequential_collection:
+    # ID-first collection / keyed pool.
+    if rating_keys:
+        by_key = _index_pool_by_plex_key(pool)
+        ordered: List[Dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        matched = 0
+        for key in rating_keys:
+            match = by_key.get(key)
+            if match is None:
+                # Also try bare key against any plex|*|key form already indexed.
+                continue
+            if match["id"] in seen_ids:
+                continue
+            seen_ids.add(match["id"])
+            ordered.append(match)
+            matched += 1
+            if len(ordered) >= target:
+                break
+
+        # Last-resort title match only for unresolved keys (unscanned items).
+        if len(ordered) < len(rating_keys) and recipe.item_hints:
+            by_title = {
+                str(item.get("title") or "").strip().casefold(): item
+                for item in pool
+                if str(item.get("title") or "").strip()
+            }
+            for hint in recipe.item_hints:
+                if len(ordered) >= target:
+                    break
+                wanted = str(hint or "").strip()
+                if not wanted:
+                    continue
+                match = by_title.get(wanted.casefold())
+                if match is None:
+                    continue
+                if match["id"] in seen_ids:
+                    continue
+                seen_ids.add(match["id"])
+                ordered.append(match)
+                matched += 1
+
+        if mode == ProgrammingMode.SHUFFLE and ordered:
+            random.shuffle(ordered)
+        # Sequential = collection order (already). No whole-library pad when IDs resolve.
+        if ordered:
+            picked = ordered[:target]
+            _record_stats(matched, len(rating_keys), picked)
+            return picked
+        _record_stats(0, len(rating_keys), [])
+        # Fall through only when zero ID matches — keyword/search path below.
+
+    # Title-hint ordered path (Projectionist lists without Plex ratingKeys).
+    if is_collection and recipe.item_hints and not rating_keys:
         by_title = {
             str(item.get("title") or "").strip().casefold(): item
             for item in pool
             if str(item.get("title") or "").strip()
         }
-        ordered: List[Dict[str, Any]] = []
-        seen_ids: set[str] = set()
+        ordered = []
+        seen_ids = set()
+        matched = 0
         for hint in recipe.item_hints:
             wanted = str(hint or "").strip()
             if not wanted:
                 continue
             match = by_title.get(wanted.casefold())
-            if match is None:
-                # Soft match: title contains hint or hint contains title.
-                want_l = wanted.casefold()
-                for title_l, item in by_title.items():
-                    if want_l in title_l or title_l in want_l:
-                        match = item
-                        break
             if match is None:
                 try:
                     payload = client.search_programs(wanted, limit=8)
@@ -1111,14 +1416,15 @@ def collect_programs_for_recipe(
             if match and match["id"] not in seen_ids:
                 seen_ids.add(match["id"])
                 ordered.append(match)
+                matched += 1
             if len(ordered) >= target:
                 break
         if ordered:
-            if len(ordered) < min(8, target) and pool:
-                extras = [p for p in pool if p["id"] not in seen_ids]
-                random.shuffle(extras)
-                ordered.extend(extras[: max(0, target - len(ordered))])
-            return ordered[:target]
+            if mode == ProgrammingMode.SHUFFLE:
+                random.shuffle(ordered)
+            picked = ordered[:target]
+            _record_stats(matched, len(recipe.item_hints), picked)
+            return picked
 
     scored: List[Tuple[int, Dict[str, Any]]] = []
     term_l = [t.lower() for t in terms]
@@ -1161,6 +1467,7 @@ def collect_programs_for_recipe(
                             "duration": dur,
                             "title": hit.get("title") or "",
                             "genres": hit.get("genres") or hit.get("tags") or [],
+                            "plex_keys": _extract_plex_rating_keys(hit),
                         }
                     )
             # Rebuild picks after search supplements.
@@ -1177,11 +1484,14 @@ def collect_programs_for_recipe(
             if len(picked) >= target:
                 break
 
-    if len(picked) < 8 and pool:
-        # Honest fallback: fill with random catalog titles so the station streams.
+    if len(picked) < 8 and pool and not rating_keys:
+        # Non-collection fallback: fill with random catalog titles so the station streams.
         extras = [p for p in pool if p["id"] not in {x["id"] for x in picked}]
         random.shuffle(extras)
         picked.extend(extras[: max(0, target - len(picked))])
+    if mode == ProgrammingMode.SHUFFLE and picked:
+        random.shuffle(picked)
+    _record_stats(len(picked), 0, picked)
     return picked[:target]
 
 
@@ -1246,6 +1556,9 @@ def publish_recipes(
     errors: List[Dict[str, Any]] = []
     programming_updated: List[Dict[str, Any]] = []
     content_filled = 0
+    total_programs = 0
+    total_matched = 0
+    total_match_pool = 0
 
     transcode_config_id = ""
     try:
@@ -1268,6 +1581,9 @@ def publish_recipes(
             "count_programming_updated": 0,
             "count_errors": 1,
             "count_content_filled": 0,
+            "matched": 0,
+            "match_total": 0,
+            "lineup_programs": 0,
             "libraries": libraries,
             "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "note": (
@@ -1290,15 +1606,31 @@ def publish_recipes(
                 out.append(item)
         return out
 
+    def _persist_recipe(channel_id: str, recipe: ChannelRecipe, *, icon: str = "") -> None:
+        if not channel_id or settings is None:
+            return
+        set_station_meta(
+            settings,
+            channel_id,
+            media_scope=normalize_media_scope(getattr(recipe, "media_scope", None)),
+            collection_id=str(recipe.collection_id or ""),
+            collection_title=str(recipe.collection_title or ""),
+            programming_mode=recipe.programming_mode.value,
+            icon_url=icon,
+            source=str(recipe.source or ""),
+        )
+
     def _apply_programming(channel_id: str, recipe: ChannelRecipe) -> Dict[str, Any]:
-        nonlocal content_filled
+        nonlocal content_filled, total_programs, total_matched, total_match_pool
         scope = normalize_media_scope(getattr(recipe, "media_scope", None))
+        stats: Dict[str, Any] = {}
         programs = collect_programs_for_recipe(
             client,
             recipe,
             catalog=_scoped_catalog(scope),
             media_scope=scope,
             settings=settings,
+            match_stats=stats,
         )
         prog_body = programming_body_for_recipe(
             recipe,
@@ -1313,6 +1645,9 @@ def publish_recipes(
         )
         if programs:
             content_filled += 1
+        total_programs += len(programs)
+        total_matched += int(stats.get("matched") or 0)
+        total_match_pool += int(stats.get("match_total") or 0)
         flex_count = sum(
             1
             for row in (prog_body or {}).get("lineup") or []
@@ -1325,6 +1660,8 @@ def publish_recipes(
             "media_scope": scope,
             "flex_pads": flex_count,
             "padded": flex_count > 0,
+            "matched": int(stats.get("matched") or 0),
+            "match_total": int(stats.get("match_total") or 0),
         }
 
     for raw in recipes:
@@ -1335,19 +1672,20 @@ def publish_recipes(
         ):
             match = by_number.get(recipe.number) or by_name.get(key_name) or {}
             channel_id = str(match.get("id") or match.get("uuid") or "")
-            if channel_id and settings is not None:
-                set_station_media_scope(
-                    settings,
-                    channel_id,
-                    normalize_media_scope(getattr(recipe, "media_scope", None)),
+            station_icon = resolved_icon
+            if recipe.collection_id:
+                station_icon = (
+                    resolve_collection_icon_url(settings, recipe.collection_id)
+                    or resolved_icon
                 )
+            _persist_recipe(channel_id, recipe, icon=station_icon)
             if filler_list_id and channel_id and isinstance(match, Mapping):
                 try:
                     attach_continuity_to_channel(
                         client,
                         match,
                         filler_list_id=filler_list_id,
-                        icon_url=resolved_icon,
+                        icon_url=station_icon,
                     )
                 except Exception:  # noqa: BLE001
                     pass
@@ -1385,30 +1723,35 @@ def publish_recipes(
                 )
             continue
         try:
+            station_icon = resolved_icon
+            if recipe.collection_id:
+                station_icon = (
+                    resolve_collection_icon_url(settings, recipe.collection_id)
+                    or resolved_icon
+                )
             created = client.create_channel(
                 channel_create_body(
                     recipe,
                     transcode_config_id=transcode_config_id,
-                    icon_url=resolved_icon,
+                    icon_url=station_icon,
                     filler_list_id=filler_list_id,
                 )
             )
             channel_id = str(created.get("id") or created.get("uuid") or "")
-            if channel_id and settings is not None:
-                set_station_media_scope(
-                    settings,
-                    channel_id,
-                    normalize_media_scope(getattr(recipe, "media_scope", None)),
-                )
+            _persist_recipe(channel_id, recipe, icon=station_icon)
             programming: Mapping[str, Any] = {}
             program_count = 0
             titles: List[Any] = []
+            matched = 0
+            match_total = 0
             if channel_id:
                 try:
                     applied = _apply_programming(channel_id, recipe)
                     programming = applied.get("programming") or {}
                     program_count = int(applied.get("program_count") or 0)
                     titles = list(applied.get("titles") or [])
+                    matched = int(applied.get("matched") or 0)
+                    match_total = int(applied.get("match_total") or 0)
                 except Exception as prog_error:  # noqa: BLE001
                     programming = {"error": str(prog_error)[:200]}
             published.append(
@@ -1424,6 +1767,9 @@ def publish_recipes(
                     "programming": dict(programming) if programming else {},
                     "program_count": program_count,
                     "titles": titles,
+                    "matched": matched,
+                    "match_total": match_total,
+                    "icon_url": station_icon,
                 }
             )
             if recipe.number:
@@ -1463,14 +1809,22 @@ def publish_recipes(
     if not published and not errors and (skipped or programming_updated):
         ok = True  # idempotent re-publish / fill
 
+    match_note = match_feedback_note(
+        matched=total_matched,
+        match_total=total_match_pool,
+        program_count=total_programs,
+        stations_filled=content_filled,
+    )
     note = (
-        "Stations use real Tunarr program IDs when Plex libraries are enabled and "
+        "Stations use Tunarr program IDs when Plex libraries are enabled and "
         "scanned; otherwise lineups stay flex/empty and Plex playback ends immediately."
     )
-    if content_filled:
+    if match_note:
+        note = match_note
+    elif content_filled:
         note = (
-            f"Filled {content_filled} station lineup(s) with scanned library titles. "
-            "Re-attach / reload the Plex guide if the grid still looks empty."
+            f"Filled {content_filled} station lineup(s) · "
+            f"{total_programs} program(s) scheduled."
         )
     elif not catalog:
         note = (
@@ -1491,6 +1845,12 @@ def publish_recipes(
     elif filler_state.get("message"):
         note += f" Continuity: {filler_state.get('message')}"
 
+    icon_probe = probe_icon_url(resolved_icon) if resolved_icon else {
+        "ok": False,
+        "url": "",
+        "message": "No plex-facing Tunarr icon base configured.",
+    }
+
     return {
         "ok": ok or (bool(published) and not errors),
         "published": published,
@@ -1502,12 +1862,16 @@ def publish_recipes(
         "count_programming_updated": len(programming_updated),
         "count_errors": len(errors),
         "count_content_filled": content_filled,
+        "matched": total_matched,
+        "match_total": total_match_pool,
+        "lineup_programs": total_programs,
         "libraries": libraries,
         "catalog_size": len(catalog),
         "labels": labels,
         "warmed": warmed,
         "prepare": prepare,
         "filler": filler_state,
+        "icon_probe": icon_probe,
         "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "note": note,
     }
@@ -1520,30 +1884,45 @@ def publish_collection_channel(
     collection_title: str = "",
     channel_number: int = 0,
     name: str = "",
+    programming_mode: str = "",
     settings: Any = None,
 ) -> Dict[str, Any]:
-    """Create a sequential station from a Plex/Projectionist collection title."""
+    """Create a station from a Plex/Projectionist collection (seq / shuffle / chaos)."""
     title = str(collection_title or name or "Collection").strip() or "Collection"
     number = int(channel_number or 0)
     if number <= 0:
         existing = client.list_channels()
         numbers = [int(ch.get("number") or 0) for ch in existing]
         number = max(numbers) + 1 if numbers else 100
+    mode_raw = str(programming_mode or ProgrammingMode.SEQUENTIAL.value).strip().lower()
+    try:
+        mode = ProgrammingMode(mode_raw)
+    except ValueError:
+        mode = ProgrammingMode.SEQUENTIAL
     hints: tuple[str, ...] = ()
+    rating_keys: tuple[str, ...] = ()
     if settings is not None:
-        hints = tuple(
-            plex_collection_item_hints(settings, collection_id, limit=60)
+        children = plex_collection_children(settings, collection_id, limit=60)
+        hints = tuple(row["title"] for row in children if row.get("title"))
+        rating_keys = tuple(
+            row["rating_key"] for row in children if row.get("rating_key")
         )
+    mode_label = {
+        ProgrammingMode.SEQUENTIAL: "Sequential",
+        ProgrammingMode.SHUFFLE: "Shuffle",
+        ProgrammingMode.CHAOS: "Chaos",
+    }.get(mode, mode.value)
     recipe = ChannelRecipe(
         name=title[:48],
         number=number,
         source="collection",
-        programming_mode=ProgrammingMode.SEQUENTIAL,
+        programming_mode=mode,
         media_scope=MediaScope.BOTH.value,
         collection_id=str(collection_id or "").strip(),
         collection_title=title,
-        summary=f"Sequential channel from collection “{title}”",
+        summary=f"{mode_label} channel from collection “{title}”",
         item_hints=hints,
+        item_rating_keys=rating_keys,
     )
     result = publish_recipes(
         client,
@@ -1553,6 +1932,7 @@ def publish_collection_channel(
     )
     result["recipe"] = recipe.to_dict()
     result["item_hint_count"] = len(hints)
+    result["item_rating_key_count"] = len(rating_keys)
     return result
 
 
@@ -1589,23 +1969,24 @@ def publish_custom_channel(
                 youth_safe=recipe.youth_safe,
                 summary=recipe.summary,
                 item_hints=recipe.item_hints,
+                item_rating_keys=recipe.item_rating_keys,
             )
     else:
         recipe = recipe_from_craft_payload(
             recipe_payload or {},
             default_number=default_number,
         )
-    # Enrich collection recipes with Plex children when hints are empty.
+    # Enrich collection recipes with Plex children (ratingKeys first).
     if (
         settings is not None
         and recipe.source == "collection"
         and recipe.collection_id
-        and not recipe.item_hints
+        and not recipe.item_rating_keys
     ):
-        hints = tuple(
-            plex_collection_item_hints(settings, recipe.collection_id, limit=60)
-        )
-        if hints:
+        children = plex_collection_children(settings, recipe.collection_id, limit=60)
+        hints = tuple(row["title"] for row in children if row.get("title"))
+        keys = tuple(row["rating_key"] for row in children if row.get("rating_key"))
+        if hints or keys:
             recipe = ChannelRecipe(
                 name=recipe.name,
                 number=recipe.number,
@@ -1618,7 +1999,8 @@ def publish_custom_channel(
                 collection_title=recipe.collection_title,
                 youth_safe=recipe.youth_safe,
                 summary=recipe.summary,
-                item_hints=hints,
+                item_hints=hints or recipe.item_hints,
+                item_rating_keys=keys,
             )
     result = publish_recipes(
         client,
@@ -1676,7 +2058,11 @@ def refill_channel_lineup(
             default_number=number or 100,
         )
     else:
-        recipe = ChannelRecipe(
+        # Prefer persisted collection_id + programming_mode over Chaos default.
+        stored = recipe_from_station_meta(
+            settings, cid, name=name, number=number or 100
+        )
+        recipe = stored or ChannelRecipe(
             name=name[:48],
             number=number or 100,
             source="chaos",
@@ -1685,9 +2071,44 @@ def refill_channel_lineup(
             summary=f"Refill lineup for “{name}”",
         )
 
+    # Re-load collection ratingKeys so Shuffle/Chaos reshuffle the same ID pool.
+    if (
+        settings is not None
+        and recipe.source == "collection"
+        and recipe.collection_id
+        and not recipe.item_rating_keys
+    ):
+        children = plex_collection_children(settings, recipe.collection_id, limit=60)
+        hints = tuple(row["title"] for row in children if row.get("title"))
+        keys = tuple(row["rating_key"] for row in children if row.get("rating_key"))
+        if hints or keys:
+            recipe = ChannelRecipe(
+                name=recipe.name,
+                number=recipe.number,
+                source=recipe.source,
+                programming_mode=recipe.programming_mode,
+                media_scope=normalize_media_scope(getattr(recipe, "media_scope", None)),
+                cluster_tag=recipe.cluster_tag,
+                motif=recipe.motif,
+                collection_id=recipe.collection_id,
+                collection_title=recipe.collection_title or name,
+                youth_safe=recipe.youth_safe,
+                summary=recipe.summary or f"Refill lineup for “{name}”",
+                item_hints=hints or recipe.item_hints,
+                item_rating_keys=keys,
+            )
+
     scope = normalize_media_scope(getattr(recipe, "media_scope", None) or stored_scope)
     if settings is not None:
-        set_station_media_scope(settings, cid, scope)
+        set_station_meta(
+            settings,
+            cid,
+            media_scope=scope,
+            collection_id=str(recipe.collection_id or ""),
+            collection_title=str(recipe.collection_title or ""),
+            programming_mode=recipe.programming_mode.value,
+            source=str(recipe.source or ""),
+        )
 
     media_types = (
         ("shows",)
@@ -1711,8 +2132,14 @@ def refill_channel_lineup(
         except Exception:  # noqa: BLE001
             continue
 
+    stats: Dict[str, Any] = {}
     programs = collect_programs_for_recipe(
-        client, recipe, catalog=catalog, media_scope=scope, settings=settings
+        client,
+        recipe,
+        catalog=catalog,
+        media_scope=scope,
+        settings=settings,
+        match_stats=stats,
     )
     prog_body = programming_body_for_recipe(
         recipe,
@@ -1744,12 +2171,35 @@ def refill_channel_lineup(
         except Exception as error:  # noqa: BLE001
             filler_state = {"ok": False, "message": str(error)[:200]}
 
+    matched = int(stats.get("matched") or 0)
+    match_total = int(stats.get("match_total") or 0)
+    note = match_feedback_note(
+        matched=matched,
+        match_total=match_total,
+        program_count=len(programs),
+    )
+    if not note:
+        note = (
+            f"Filled {len(programs)} titles into {name}"
+            + (f" ({flex_count} flex pad(s))" if flex_count else "")
+            + "."
+            if programs
+            else (
+                "No Tunarr program IDs yet — wait for the library scan, then refill again."
+            )
+        )
+    if recipe.programming_mode in {ProgrammingMode.SHUFFLE, ProgrammingMode.CHAOS}:
+        note += f" Reshuffled ({recipe.programming_mode.value})."
+
     return {
         "ok": bool(programs),
         "channel_id": cid,
         "name": name,
         "number": number,
         "program_count": len(programs),
+        "matched": matched,
+        "match_total": match_total,
+        "lineup_programs": len(programs),
         "titles": [p.get("title") for p in programs[:8]],
         "programming": dict(programming) if programming else {},
         "libraries": libraries,
@@ -1759,15 +2209,7 @@ def refill_channel_lineup(
         "flex_pads": flex_count,
         "padded": flex_count > 0,
         "filler": filler_state,
-        "note": (
-            f"Filled {len(programs)} titles into {name}"
-            + (f" ({flex_count} flex pad(s))" if flex_count else "")
-            + "."
-            if programs
-            else (
-                "No Tunarr program IDs yet — wait for the library scan, then refill again."
-            )
-        ),
+        "note": note,
     }
 
 

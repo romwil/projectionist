@@ -20,9 +20,11 @@ from projectionist.youth.rating_gate import (
 class ProgrammingMode(str, Enum):
     """How titles are ordered on the station.
 
-    Maps toward Tunarr programming / schedule-slots:
-    - sequential → ordered lineup
-    - shuffle / chaos → random slot schedule
+    - sequential → preserve collection / hint order
+    - shuffle → randomize within this station's resolved pool
+    - chaos → wider random within media_scope (whole library types)
+
+    Maps toward Tunarr programming / schedule-slots for continuous reshuffle later.
     """
 
     SEQUENTIAL = "sequential"
@@ -105,12 +107,15 @@ class ChannelRecipe:
     youth_safe: bool = False
     summary: str = ""
     item_hints: tuple[str, ...] = ()
+    # Plex ratingKeys for collection children (preferred over title hints).
+    item_rating_keys: tuple[str, ...] = ()
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)
         payload["programming_mode"] = self.programming_mode.value
         payload["media_scope"] = normalize_media_scope(self.media_scope)
         payload["item_hints"] = list(self.item_hints)
+        payload["item_rating_keys"] = list(self.item_rating_keys)
         return payload
 
 
@@ -145,6 +150,11 @@ def recipe_from_mapping(data: Mapping[str, Any]) -> ChannelRecipe:
         hint_tuple = (hints,)
     else:
         hint_tuple = tuple(str(h) for h in hints if str(h).strip())
+    keys = data.get("item_rating_keys") or ()
+    if isinstance(keys, str):
+        key_tuple = (keys,) if keys.strip() else ()
+    else:
+        key_tuple = tuple(str(k) for k in keys if str(k).strip())
     return ChannelRecipe(
         name=str(data.get("name") or "Untitled").strip() or "Untitled",
         number=int(data.get("number") or 0),
@@ -158,4 +168,5 @@ def recipe_from_mapping(data: Mapping[str, Any]) -> ChannelRecipe:
         youth_safe=bool(data.get("youth_safe")),
         summary=str(data.get("summary") or "").strip(),
         item_hints=hint_tuple,
+        item_rating_keys=key_tuple,
     )

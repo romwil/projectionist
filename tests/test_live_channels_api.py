@@ -27,9 +27,13 @@ class LiveChannelsApiTests(unittest.TestCase):
             reset_progress_for_tests as reset_continuity_progress,
         )
         from projectionist.live_channels.lifecycle_progress import reset_progress_for_tests
+        from projectionist.live_channels.publish_progress import (
+            reset_progress_for_tests as reset_publish_progress,
+        )
 
         reset_progress_for_tests()
         reset_continuity_progress()
+        reset_publish_progress()
         import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
@@ -42,10 +46,14 @@ class LiveChannelsApiTests(unittest.TestCase):
             reset_progress_for_tests as reset_continuity_progress,
         )
         from projectionist.live_channels.lifecycle_progress import reset_progress_for_tests
+        from projectionist.live_channels.publish_progress import (
+            reset_progress_for_tests as reset_publish_progress,
+        )
 
         jobs._manager = None
         reset_progress_for_tests()
         reset_continuity_progress()
+        reset_publish_progress()
         for key in ("CURATORX_SKIP_DOTENV", "PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER"):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
@@ -469,6 +477,7 @@ class LiveChannelsApiTests(unittest.TestCase):
         client.list_media_source_libraries.return_value = []
         client.list_library_programs.return_value = []
         client.list_channels.return_value = []
+        client.list_sessions.return_value = {}
         client.default_transcode_config_id.return_value = "tc-default"
         client.create_channel.side_effect = lambda body: {
             "id": "ch-craft",
@@ -480,11 +489,38 @@ class LiveChannelsApiTests(unittest.TestCase):
         with patch(
             "projectionist.live_channels.publish.TunarrClient",
             return_value=client,
+        ), patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={
+                "ok": True,
+                "labels": {},
+                "warmed": [],
+                "count_aligned": 0,
+                "count_warmed_ok": 0,
+            },
+        ), patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value={
+                "ok": False,
+                "ready": False,
+                "filler_list_id": "",
+                "program_count": 0,
+                "message": "no filler",
+            },
+        ), patch(
+            "projectionist.live_channels.plex_attach.refresh_plex_live_tv_channels",
+            return_value={
+                "ok": True,
+                "mapped": 1,
+                "attach_needed": False,
+                "message": "Mapped 1 channel(s) in Plex · guide reloading.",
+            },
         ):
             resp = self.client.post(
                 "/api/admin/live-channels/channels/publish",
                 json={
                     "confirm": True,
+                    "sync": True,
                     "wire_plex": True,
                     "name": "Noir Night",
                     "number": 107,
@@ -498,8 +534,40 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertEqual(body["count_published"], 1)
         self.assertEqual(body["recipe"]["name"], "Noir Night")
         self.assertEqual(body["recipe"]["motif"], "noir")
+        self.assertIn("Mapped 1 channel", body.get("note") or "")
+        self.assertTrue(body.get("plex_sync", {}).get("ok"))
         create_channel = client.create_channel.call_args.args[0]
         self.assertEqual(create_channel["channel"]["number"], 107)
+
+    def test_from_collection_async_accepts_job(self) -> None:
+        self._enable()
+        with patch(
+            "projectionist.web.app._finalize_live_channels_publish",
+            return_value={"ok": True, "note": "done", "count_published": 1},
+        ), patch(
+            "projectionist.live_channels.publish.publish_collection_channel",
+            return_value={"ok": True, "count_published": 1, "note": "matched"},
+        ), patch(
+            "projectionist.live_channels.publish.tunarr_client_from_settings",
+            return_value=MagicMock(),
+        ):
+            resp = self.client.post(
+                "/api/admin/live-channels/channels/from-collection",
+                json={
+                    "confirm": True,
+                    "collection_id": "99",
+                    "collection_title": "Martial Arts",
+                    "programming_mode": "shuffle",
+                },
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body.get("accepted"))
+        self.assertTrue(body.get("async"))
+        status = self.client.get("/api/admin/live-channels/publish/status")
+        self.assertEqual(status.status_code, 200)
+        # Job may already be done (fast mock) or still busy.
+        self.assertIn(status.json().get("phase"), {"queued", "matching", "publishing", "plex_sync", "warming", "done", "error", "idle"})
 
     def test_publish_custom_requires_confirm(self) -> None:
         self._enable()

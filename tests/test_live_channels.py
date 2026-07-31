@@ -1587,8 +1587,11 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         self.assertEqual(result["count_content_filled"], 1)
         body = client.set_channel_programming.call_args.args[1]
-        self.assertEqual(body["lineup"][0]["type"], "content")
-        self.assertEqual(body["lineup"][0]["id"], "p1")
+        content_ids = [
+            row["id"] for row in body["lineup"] if row.get("type") == "content"
+        ]
+        # Sci-Fi motif matches Alien (p1); Heat may pad. Shuffle mode may reorder.
+        self.assertIn("p1", content_ids)
 
 
 class SetupTunarrCertTests(unittest.TestCase):
@@ -2302,6 +2305,136 @@ class ContinuityFillerTests(unittest.TestCase):
         binds = (create_bodies[0].get("HostConfig") or {}).get("Binds") or []
         self.assertIn("/mnt/user/data/media:/data/media:ro", binds)
         self.assertIn("/mnt/user/bumpers:/data/filler/bumpers:ro", binds)
+
+
+class CollectionIdMatchTests(unittest.TestCase):
+    """ratingKey → Tunarr externalKey matching + honest publish feedback."""
+
+    def _catalog(self) -> list[dict]:
+        return [
+            {
+                "id": "u1",
+                "duration": 5_400_000,
+                "program": {
+                    "uuid": "u1",
+                    "title": "Enter the Dragon",
+                    "type": "movie",
+                    "externalKey": "plex|ms1|1001",
+                },
+            },
+            {
+                "id": "u2",
+                "duration": 6_000_000,
+                "program": {
+                    "uuid": "u2",
+                    "title": "The Matrix",
+                    "type": "movie",
+                    "externalKey": "1002",
+                },
+            },
+            {
+                "id": "u3",
+                "duration": 7_000_000,
+                "program": {
+                    "uuid": "u3",
+                    "title": "Random Pad",
+                    "type": "movie",
+                    "externalKey": "9999",
+                },
+            },
+        ]
+
+    def test_id_first_match_no_library_pad(self) -> None:
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+        from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+
+        client = MagicMock()
+        recipe = ChannelRecipe(
+            name="Martial Arts",
+            number=105,
+            source="collection",
+            programming_mode=ProgrammingMode.SEQUENTIAL,
+            collection_id="55",
+            item_hints=("Enter the Dragon", "The Matrix"),
+            item_rating_keys=("1001", "1002"),
+        )
+        stats: dict = {}
+        picked = collect_programs_for_recipe(
+            client, recipe, catalog=self._catalog(), match_stats=stats
+        )
+        self.assertEqual([p["title"] for p in picked], ["Enter the Dragon", "The Matrix"])
+        self.assertEqual(stats["matched"], 2)
+        self.assertEqual(stats["match_total"], 2)
+        # Must not pad with Random Pad when IDs resolve.
+        self.assertNotIn("Random Pad", [p["title"] for p in picked])
+
+    def test_shuffle_randomizes_id_pool(self) -> None:
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+        from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+
+        client = MagicMock()
+        # Larger pool so shuffle is observable across many seeds.
+        catalog = []
+        keys = []
+        for i in range(12):
+            kid = str(2000 + i)
+            keys.append(kid)
+            catalog.append(
+                {
+                    "id": f"p{i}",
+                    "duration": 5_000_000 + i,
+                    "program": {
+                        "uuid": f"p{i}",
+                        "title": f"Title {i}",
+                        "type": "movie",
+                        "externalKey": kid,
+                    },
+                }
+            )
+        recipe = ChannelRecipe(
+            name="Pool",
+            number=106,
+            source="collection",
+            programming_mode=ProgrammingMode.SHUFFLE,
+            item_rating_keys=tuple(keys),
+        )
+        orders = set()
+        for _ in range(20):
+            picked = collect_programs_for_recipe(client, recipe, catalog=catalog)
+            orders.add(tuple(p["id"] for p in picked))
+        self.assertGreater(len(orders), 1)
+
+    def test_match_feedback_note_copy(self) -> None:
+        from projectionist.live_channels.publish import match_feedback_note
+
+        note = match_feedback_note(matched=12, match_total=14, program_count=12)
+        self.assertIn("Matched 12/14", note)
+        self.assertIn("lineup 12 program", note)
+        self.assertNotIn("real titles", note)
+
+    def test_refill_uses_stored_collection_recipe(self) -> None:
+        from projectionist.config_store import Settings, TunarrSettings
+        from projectionist.live_channels.publish import (
+            recipe_from_station_meta,
+            set_station_meta,
+        )
+        from projectionist.live_channels.recipes import ProgrammingMode
+
+        settings = Settings(tunarr=TunarrSettings())
+        set_station_meta(
+            settings,
+            "ch-1",
+            media_scope="movies",
+            collection_id="55",
+            collection_title="Martial Arts",
+            programming_mode="shuffle",
+            source="collection",
+        )
+        recipe = recipe_from_station_meta(settings, "ch-1", name="Martial Arts", number=105)
+        assert recipe is not None
+        self.assertEqual(recipe.source, "collection")
+        self.assertEqual(recipe.collection_id, "55")
+        self.assertEqual(recipe.programming_mode, ProgrammingMode.SHUFFLE)
 
 
 if __name__ == "__main__":

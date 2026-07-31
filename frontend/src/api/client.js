@@ -1362,6 +1362,10 @@ export async function publishLiveChannelsFromCollection(body = {}) {
   });
 }
 
+export async function getLiveChannelsPublishStatus() {
+  return api("/admin/live-channels/publish/status");
+}
+
 export async function refillLiveChannelsChannel(channelId, body = {}) {
   return api(`/admin/live-channels/channels/${encodeURIComponent(channelId)}/refill`, {
     method: "POST",

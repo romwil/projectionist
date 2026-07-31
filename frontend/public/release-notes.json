@@ -1,6 +1,60 @@
 {
-  "generated_at": "2026-07-31T01:00:16Z",
+  "generated_at": "2026-07-31T02:12:23Z",
   "releases": [
+    {
+      "version": "1.29.25",
+      "date": "2026-07-31",
+      "summary": "Live Channels hot fix: collection → channel uses Plex ratingKeys (not fuzzy titles), honest matched N/M feedback, Sequential / Shuffle / Chaos before publish, async progress, Plex channel remap after publish, and reachability-aware station logos.",
+      "highlights": [
+        "**Collection stations match the right titles.** Publish resolves Plex collection children by rating key into Tunarr’s program IDs — no more soft title guessing as the primary path.",
+        "**Honest publish feedback.** Success copy shows matched N/M · lineup K programs (not “real titles 1” meaning stations).",
+        "**Pick Sequential, Shuffle, or Chaos first.** One-click collection publish (and craft) remembers the mode for Refill; Shuffle reshuffles that collection pool, Chaos draws wider from TV/Movies.",
+        "**New channels show up in Plex.** After publish, Projectionist remaps the Tunarr HDHR channel map and reloads the guide — no manual Repair just to see channel 105.",
+        "**Publish doesn’t hang the Admin page.** Collection and craft publish run in the background with an in-block progress bar (same idea as Repair continuity)."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "`list_collection_items` / ratingKey-first fill; `item_rating_keys` on `ChannelRecipe`.",
+            "`GET /api/admin/live-channels/publish/status` + async `from-collection` / craft publish (default); `sync=true` for tests.",
+            "`refresh_plex_live_tv_channels` — channelmap + `reloadGuide` without full Tunarr remount.",
+            "`station_meta` persists `collection_id` + `programming_mode` (+ scope/source) for Refill.",
+            "Living roadmap: `docs/superpowers/plans/2026-07-30-live-channels-roadmap.md`.",
+            "Status `icon_probe` for plex-facing logo reachability."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Dual-watch product intent in HELP + Live Channels spec (Projectionist `/live` and Plex Live TV).",
+            "Collection one-click UI: Programming select + async progress chrome.",
+            "Refill prefers stored collection recipe (no longer defaults collection stations to Chaos).",
+            "Starters / craft / collection publish finalize with best-effort Plex remap."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Title-only / soft-match primary path for collection fill (wrong titles + random library pad).",
+            "“with real titles N” feedback counting stations filled, not programs.",
+            "New Tunarr channels invisible in Plex until Repair / re-attach (publish skipped channelmap).",
+            "Generic / unreachable channel icons — prefer collection/title art when available; probe LAN Tunarr mark."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: `CollectionIdMatchTests`, publish sync + async accept, live-channels + tunarr client suites — 116 passed.",
+            "`.venv/bin/python -m pytest tests/` — 1551 passed, 6 skipped; coverage **76.4%** (≥74%).",
+            "`cd frontend && npm run test:unit` — 516 passed.",
+            "`cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).",
+            "`cd frontend && npm run build` — passed.",
+            "`pytest tests/test_version.py` — lockstep **1.29.25**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.24",
       "date": "2026-07-31",

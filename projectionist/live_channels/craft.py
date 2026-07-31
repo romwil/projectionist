@@ -405,5 +405,6 @@ def recipe_from_craft_payload(
             "youth_safe": youth_safe,
             "summary": summary,
             "item_hints": payload.get("item_hints") or (),
+            "item_rating_keys": payload.get("item_rating_keys") or (),
         }
     )

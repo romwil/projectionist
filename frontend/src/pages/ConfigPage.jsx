@@ -16,6 +16,7 @@ import {
   getLiveChannelsCraftOptions,
   getLiveChannelsContinuityStatus,
   getLiveChannelsLifecycleStatus,
+  getLiveChannelsPublishStatus,
   getLiveChannelsPlexAttach,
   postLiveChannelsPlexAttachGuide,
   getLiveChannelsStarterPack,
@@ -240,11 +241,18 @@ function formatPublishFeedback(result) {
   const published = result?.count_published || 0;
   const skipped = result?.count_skipped || 0;
   const errors = result?.count_errors || 0;
-  const filled = result?.count_content_filled || 0;
   const updated = result?.count_programming_updated || 0;
+  const matched = result?.matched;
+  const matchTotal = result?.match_total;
+  const lineup = result?.lineup_programs ?? result?.program_count;
   const parts = [`Published ${published}`, `skipped ${skipped}`, `errors ${errors}`];
   if (updated) parts.push(`lineups refreshed ${updated}`);
-  if (filled) parts.push(`with real titles ${filled}`);
+  if (matchTotal > 0) {
+    parts.push(`matched ${matched ?? 0}/${matchTotal}`);
+  }
+  if (lineup != null && lineup !== "") {
+    parts.push(`lineup ${lineup} programs`);
+  }
   const summary = `${parts.join(", ")}.${result?.note ? ` ${result.note}` : ""}`;
   const details = (result?.errors || []).map((err) => {
     const label = [err?.number, err?.name].filter((part) => part != null && part !== "").join(" · ");
@@ -478,6 +486,7 @@ export default function ConfigPage() {
   const [liveEngineProgress, setLiveEngineProgress] = useState(null);
   const [liveEngineError, setLiveEngineError] = useState("");
   const [liveContinuityProgress, setLiveContinuityProgress] = useState(null);
+  const [livePublishProgress, setLivePublishProgress] = useState(null);
   /** Per-card success/error for Live Channels (not the page-bottom banner). */
   const [liveBlockFeedback, setLiveBlockFeedback] = useState({});
   const [selectedStarters, setSelectedStarters] = useState({});
@@ -490,6 +499,7 @@ export default function ConfigPage() {
   const syncWasRunningRef = useRef(false);
   const enginePollRef = useRef(null);
   const continuityPollRef = useRef(null);
+  const publishPollRef = useRef(null);
 
   useEffect(() => {
     if (typeof setWizardMode === "function") {
@@ -676,6 +686,10 @@ export default function ConfigPage() {
       if (continuityPollRef.current) {
         clearInterval(continuityPollRef.current);
         continuityPollRef.current = null;
+      }
+      if (publishPollRef.current) {
+        clearInterval(publishPollRef.current);
+        publishPollRef.current = null;
       }
     };
   }, []);
@@ -1400,6 +1414,228 @@ export default function ConfigPage() {
       stopContinuityProgressPoll();
       setLiveBusy(null);
     }
+  }
+
+  function stopPublishProgressPoll() {
+    if (publishPollRef.current) {
+      clearInterval(publishPollRef.current);
+      publishPollRef.current = null;
+    }
+  }
+
+  async function pollPublishProgressOnce() {
+    try {
+      const progress = await getLiveChannelsPublishStatus();
+      setLivePublishProgress(progress);
+      return progress;
+    } catch {
+      return null;
+    }
+  }
+
+  function publishPhaseLabel(phase) {
+    switch (phase) {
+      case "queued":
+        return "Queued";
+      case "wiring":
+        return "Wiring media source";
+      case "matching":
+        return "Matching titles";
+      case "publishing":
+        return "Publishing station";
+      case "plex_sync":
+        return "Refreshing Plex channels";
+      case "warming":
+        return "Warming streams";
+      case "done":
+        return "Finished";
+      case "error":
+        return "Failed";
+      default:
+        return "Working…";
+    }
+  }
+
+  async function runPublishJob(startFn, { busyKey = "publish", block = "collection", successFallback = "Publish finished." } = {}) {
+    clearLiveFeedback(block);
+    clearActionFeedback("live-channels");
+    setLiveBusy(busyKey);
+    setLivePublishProgress({
+      phase: "queued",
+      percent: 5,
+      message: "Starting publish…",
+      busy: true,
+      ok: true,
+      determinate: true,
+    });
+    stopPublishProgressPoll();
+    const startedAt = Date.now();
+    const timeoutMs = 12 * 60 * 1000;
+    publishPollRef.current = setInterval(() => {
+      pollPublishProgressOnce().then((progress) => {
+        if (!progress) return;
+        if (
+          progress.phase === "done" ||
+          progress.phase === "error" ||
+          (!progress.busy && progress.phase !== "queued") ||
+          Date.now() - startedAt > timeoutMs
+        ) {
+          stopPublishProgressPoll();
+        }
+      });
+    }, 1500);
+
+    try {
+      const accepted = await startFn();
+      if (accepted?.async === false && accepted?.ok != null) {
+        stopPublishProgressPoll();
+        const feedback = formatPublishFeedback(accepted);
+        setLivePublishProgress({
+          phase: accepted.ok !== false && !accepted.count_errors ? "done" : "error",
+          percent: 100,
+          message: feedback.summary,
+          busy: false,
+          ok: feedback.type !== "error",
+          error: feedback.type === "error" ? feedback.summary : "",
+          result: accepted,
+        });
+        setActionFeedback("live-channels", feedback.type, feedback.summary, {
+          block,
+          details: feedback.details,
+        });
+        setLiveChannelsStatus(await getLiveChannelsStatus());
+        setLiveCraftOptions(await getLiveChannelsCraftOptions());
+        return accepted;
+      }
+
+      const deadline = Date.now() + timeoutMs;
+      let progress = await pollPublishProgressOnce();
+      while (Date.now() < deadline) {
+        if (progress?.phase === "done" || progress?.phase === "error") break;
+        if (progress && !progress.busy && progress.phase !== "queued") break;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        progress = await pollPublishProgressOnce();
+      }
+      stopPublishProgressPoll();
+      if (progress?.phase === "done") {
+        const result = progress.result || {};
+        const feedback = formatPublishFeedback({
+          ...result,
+          note: progress.message || result.note,
+          ok: true,
+        });
+        setActionFeedback("live-channels", "success", feedback.summary, {
+          block,
+          details: feedback.details,
+        });
+        setLiveChannelsStatus(await getLiveChannelsStatus());
+        setLiveCraftOptions(await getLiveChannelsCraftOptions());
+      } else if (progress?.phase === "error") {
+        setActionFeedback("live-channels", "error", progress.error || progress.message || "Publish failed.", {
+          block,
+        });
+      } else {
+        setActionFeedback("live-channels", "error", "Timed out waiting for publish. Check Admin Logs for live_channels.publish stages.", {
+          block,
+        });
+      }
+      return progress;
+    } catch (error) {
+      stopPublishProgressPoll();
+      setLivePublishProgress((prev) => ({
+        ...(prev || {}),
+        phase: "error",
+        percent: 0,
+        busy: false,
+        ok: false,
+        error: error.message,
+        message: error.message,
+      }));
+      setActionFeedback("live-channels", "error", error.message, { block });
+      throw error;
+    } finally {
+      stopPublishProgressPoll();
+      setLiveBusy(null);
+    }
+  }
+
+  function renderPublishProgress(block) {
+    const busyMatch =
+      (block === "collection" && liveBusy === "collection") ||
+      (block === "craft" && liveBusy === "craft") ||
+      (block === "publish" && (liveBusy === "collection" || liveBusy === "craft"));
+    if (
+      !(
+        busyMatch ||
+        (livePublishProgress &&
+          livePublishProgress.phase &&
+          livePublishProgress.phase !== "idle" &&
+          (liveBusy === "collection" || liveBusy === "craft" || livePublishProgress.mode === block))
+      )
+    ) {
+      return null;
+    }
+    const done = livePublishProgress?.phase === "done";
+    const failed = livePublishProgress?.phase === "error";
+    return (
+      <div
+        className="live-channels-engine-progress"
+        data-testid={`live-channels-publish-progress-${block}`}
+      >
+        {done ? (
+          <InlineAlert
+            type="success"
+            message={livePublishProgress?.message || "Publish finished"}
+            testId={`live-channels-publish-success-${block}`}
+          />
+        ) : (
+          <>
+            <p className="live-channels-engine-progress-headline">
+              {livePublishProgress?.message || "Publishing…"}
+            </p>
+            <div
+              className="live-channels-engine-progress-bar"
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={
+                Number.isFinite(livePublishProgress?.percent)
+                  ? livePublishProgress.percent
+                  : undefined
+              }
+              aria-label="Publish progress"
+            >
+              <span
+                className="live-channels-engine-progress-fill"
+                style={{
+                  width: `${Math.max(
+                    8,
+                    Math.min(100, Number(livePublishProgress?.percent) || 15),
+                  )}%`,
+                }}
+              />
+            </div>
+            <p className="wizard-note live-channels-engine-phase">
+              {publishPhaseLabel(livePublishProgress?.phase)}
+              {Number.isFinite(livePublishProgress?.percent)
+                ? ` · ${livePublishProgress.percent}%`
+                : ""}
+            </p>
+          </>
+        )}
+        {failed ? (
+          <div
+            className="inline-alert inline-alert-error"
+            data-testid={`live-channels-publish-error-${block}`}
+            role="alert"
+          >
+            <span className="inline-alert-message">
+              {livePublishProgress?.error || livePublishProgress?.message}
+            </span>
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   function renderContinuityProgress() {
@@ -3992,53 +4228,51 @@ export default function ConfigPage() {
                           onClick={async () => {
                             if (
                               !window.confirm(
-                                "Publish this station to Tunarr? It will appear on the HDHomeRun tuner / Plex Live TV after guide attach.",
+                                "Publish this station to Tunarr? New channel numbers are remapped into Plex Live TV after publish.",
                               )
                             ) {
                               return;
                             }
-                            setLiveBusy("craft");
+                            const number = Number(liveCraft.number);
+                            await runPublishJob(
+                              () =>
+                                publishLiveChannelsChannel({
+                                  name: liveCraft.name,
+                                  number: Number.isFinite(number) ? number : 0,
+                                  source: liveCraft.source,
+                                  programming_mode: liveCraft.programming_mode,
+                                  media_scope: liveCraft.media_scope || "both",
+                                  motif: liveCraft.motif,
+                                  cluster_tag: liveCraft.cluster_tag,
+                                  collection_id: liveCraft.collection_id,
+                                  collection_title: liveCraft.collection_title,
+                                  youth_safe:
+                                    liveCraft.youth_safe || liveCraft.source === "youth",
+                                  fill_programming: true,
+                                }),
+                              {
+                                busyKey: "craft",
+                                block: "craft",
+                                successFallback: "Station published.",
+                              },
+                            );
                             try {
-                              const number = Number(liveCraft.number);
-                              const result = await publishLiveChannelsChannel({
-                                name: liveCraft.name,
-                                number: Number.isFinite(number) ? number : 0,
-                                source: liveCraft.source,
-                                programming_mode: liveCraft.programming_mode,
-                                media_scope: liveCraft.media_scope || "both",
-                                motif: liveCraft.motif,
-                                cluster_tag: liveCraft.cluster_tag,
-                                collection_id: liveCraft.collection_id,
-                                collection_title: liveCraft.collection_title,
-                                youth_safe: liveCraft.youth_safe || liveCraft.source === "youth",
-                                fill_programming: true,
-                              });
-                              const feedback = formatPublishFeedback(result);
-                              setActionFeedback("live-channels",
-                                feedback.type,
-                                feedback.summary, { block: "craft",  details: feedback.details },
-                              );
-                              const [status, opts] = await Promise.all([
-                                getLiveChannelsStatus(),
-                                getLiveChannelsCraftOptions(),
-                              ]);
-                              setLiveChannelsStatus(status);
+                              const opts = await getLiveChannelsCraftOptions();
                               setLiveCraftOptions(opts);
                               setLiveCraft((prev) => ({
                                 ...prev,
                                 name: "",
                                 number: String(opts.next_channel_number || 100),
                               }));
-                            } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message, { block: "craft" });
-                            } finally {
-                              setLiveBusy(null);
+                            } catch {
+                              /* ignore */
                             }
                           }}
                         >
                           {liveBusy === "craft" ? "Publishing…" : "Publish station"}
                         </button>
                       </div>
+                      {renderPublishProgress("craft")}
                       {renderLiveBlockAlert("craft")}
                     </div>
 
@@ -4048,8 +4282,9 @@ export default function ConfigPage() {
                     >
                       <h4>From a collection</h4>
                       <p className="wizard-note">
-                        One-tap sequential station from a Plex collection or published
-                        Projectionist list (same as choosing Collection in the craft form).
+                        One-tap station from a Plex collection or published Projectionist
+                        list. Sequential keeps collection order; Shuffle randomizes that
+                        pool; Chaos draws wider from your TV/Movies libraries.
                       </p>
                       {liveCraftOptions?.collections_error ? (
                         <p
@@ -4068,6 +4303,23 @@ export default function ConfigPage() {
                             "No collections available yet. Create one in Plex, or publish a list under Collections."}
                         </p>
                       ) : null}
+                      <label className="field">
+                        <span>Programming</span>
+                        <select
+                          data-testid="live-channels-collection-mode"
+                          value={liveCraft.programming_mode || "sequential"}
+                          onChange={(event) =>
+                            setLiveCraft((prev) => ({
+                              ...prev,
+                              programming_mode: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="sequential">Sequential — collection order</option>
+                          <option value="shuffle">Shuffle — randomize this collection</option>
+                          <option value="chaos">Chaos — wider random in TV/Movies</option>
+                        </select>
+                      </label>
                       <div className="wizard-actions">
                         <button
                           type="button"
@@ -4086,32 +4338,34 @@ export default function ConfigPage() {
                                   (row) => row.id === liveCraft.collection_id,
                                 )) ||
                               first;
+                            const mode = liveCraft.programming_mode || "sequential";
+                            const modeLabel =
+                              mode === "shuffle"
+                                ? "Shuffle"
+                                : mode === "chaos"
+                                  ? "Chaos"
+                                  : "Sequential";
                             if (
                               !window.confirm(
-                                `Publish “${picked.title}” as a sequential Live Channel station?`,
+                                `Publish “${picked.title}” as a ${modeLabel} Live Channel station?`,
                               )
                             ) {
                               return;
                             }
-                            setLiveBusy("collection");
-                            try {
-                              const result = await publishLiveChannelsFromCollection({
-                                collection_id: picked.id,
-                                collection_title: picked.title,
-                                name: picked.title,
-                              });
-                              const feedback = formatPublishFeedback(result);
-                              setActionFeedback("live-channels",
-                                feedback.type,
-                                feedback.summary, { block: "collection",  details: feedback.details },
-                              );
-                              setLiveChannelsStatus(await getLiveChannelsStatus());
-                              setLiveCraftOptions(await getLiveChannelsCraftOptions());
-                            } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message, { block: "collection" });
-                            } finally {
-                              setLiveBusy(null);
-                            }
+                            await runPublishJob(
+                              () =>
+                                publishLiveChannelsFromCollection({
+                                  collection_id: picked.id,
+                                  collection_title: picked.title,
+                                  name: picked.title,
+                                  programming_mode: mode,
+                                }),
+                              {
+                                busyKey: "collection",
+                                block: "collection",
+                                successFallback: `Published “${picked.title}”.`,
+                              },
+                            );
                           }}
                         >
                           {liveBusy === "collection"
@@ -4129,6 +4383,7 @@ export default function ConfigPage() {
                               : "No collections available"}
                         </button>
                       </div>
+                      {renderPublishProgress("collection")}
                       {renderLiveBlockAlert("collection")}
                     </div>
 

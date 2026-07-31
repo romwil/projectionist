@@ -40,7 +40,7 @@ Prefer this section + task checkboxes over older chat claims. Residual gaps live
 
 ## Global constraints
 
-- Watch surface is **Plex Live TV only** — no Projectionist player / Coax clone / full EPG.
+- Watch surfaces are **dual** — Projectionist `/live` and Plex Live TV (see living roadmap `2026-07-30-live-channels-roadmap.md`).
 - **Zero Tunarr UI** — API gaps are Projectionist work, not a UI escape hatch.
 - Disable stops the container and **keeps** `/config/tunarr` volume.
 - Pin Tunarr image to `chrisbenincasa/tunarr:1.3.9` (exact tag at implement time after pilot).

@@ -1622,7 +1622,10 @@ class LiveChannelsFromCollectionPayload(BaseModel):
     collection_title: str = ""
     channel_number: int = 0
     name: str = ""
+    programming_mode: str = "sequential"
     confirm: bool = False
+    # sync=true only for tests / diagnostics (default = background job).
+    sync: bool = False
 
 
 class LiveChannelsPublishChannelPayload(BaseModel):
@@ -1643,6 +1646,7 @@ class LiveChannelsPublishChannelPayload(BaseModel):
     wire_plex: bool = True
     fill_programming: bool = True
     confirm: bool = False
+    sync: bool = False
 
 
 class LiveChannelsRefillChannelPayload(BaseModel):
@@ -1914,19 +1918,74 @@ def live_channels_publish_starters_endpoint(
             detail=_safe_error_detail(error, "Could not publish starters to Tunarr"),
         ) from error
 
+    result["media_source"] = wire
+    return _finalize_live_channels_publish(settings, result)
+
+
+def _finalize_live_channels_publish(
+    settings: Settings,
+    result: Dict[str, Any],
+    *,
+    on_phase: Any = None,
+) -> Dict[str, Any]:
+    """Persist publish timestamps, refresh Plex channel map, append note."""
+    from projectionist.live_channels.plex_attach import refresh_plex_live_tv_channels
+
+    def _phase(phase: str, message: str = "") -> None:
+        if on_phase is not None:
+            try:
+                on_phase(phase, message)
+            except Exception:  # noqa: BLE001
+                pass
+
     tunarr = asdict(settings.tunarr)
-    if (
-        result.get("ok")
-        or result.get("count_published")
-        or result.get("count_programming_updated")
-    ):
+    if result.get("ok") or result.get("count_published") or result.get("count_programming_updated"):
         tunarr["last_publish_at"] = str(result.get("published_at") or "")
         tunarr["last_error"] = ""
     elif result.get("errors"):
-        tunarr["last_error"] = str(result["errors"][0].get("error") or "publish failed")[:240]
+        first = result["errors"][0] if result["errors"] else {}
+        tunarr["last_error"] = str(
+            (first.get("error") if isinstance(first, dict) else "") or "publish failed"
+        )[:240]
+
+    plex_sync: Dict[str, Any] = {"ok": False, "skipped": True}
+    if result.get("ok") or result.get("count_published") or result.get("count_programming_updated"):
+        _phase("plex_sync", "Refreshing Plex Live TV channel map…")
+        try:
+            plex_sync = refresh_plex_live_tv_channels(settings)
+        except Exception as error:  # noqa: BLE001
+            plex_sync = {
+                "ok": False,
+                "attach_needed": True,
+                "mapped": 0,
+                "message": str(error)[:200],
+            }
+        note = str(result.get("note") or "").rstrip()
+        sync_msg = str(plex_sync.get("message") or "")
+        if plex_sync.get("ok") and sync_msg:
+            result["note"] = f"{note} {sync_msg}".strip() if note else sync_msg
+        elif plex_sync.get("attach_needed"):
+            hint = sync_msg or "Run Attach Tunarr guide once so new channels appear in Plex."
+            result["note"] = f"{note} {hint}".strip() if note else hint
+        elif sync_msg:
+            result["note"] = f"{note} Plex sync: {sync_msg}".strip() if note else sync_msg
+
+    # Persist station_meta (collection_id / programming_mode) written during publish.
+    tunarr["station_meta"] = dict(getattr(settings.tunarr, "station_meta", None) or {})
     save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
-    result["media_source"] = wire
+    result["plex_sync"] = plex_sync
     return result
+
+
+@app.get("/api/admin/live-channels/publish/status")
+def live_channels_publish_status_endpoint(
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner progress poll for collection / craft publish jobs."""
+    del user
+    from projectionist.live_channels.publish_progress import build_publish_job_status
+
+    return build_publish_job_status()
 
 
 @app.post("/api/admin/live-channels/channels/from-collection")
@@ -1934,7 +1993,7 @@ def live_channels_from_collection_endpoint(
     payload: LiveChannelsFromCollectionPayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Publish a collection/list as a Tunarr channel (owner confirm-gated)."""
+    """Publish a collection/list as a Tunarr channel (async by default)."""
     del user
     if not payload.confirm:
         raise HTTPException(
@@ -1948,31 +2007,76 @@ def live_channels_from_collection_endpoint(
         publish_collection_channel,
         tunarr_client_from_settings,
     )
+    from projectionist.live_channels.publish_progress import (
+        make_phase_callback,
+        progress_store,
+        start_publish_job,
+    )
 
-    try:
-        client = tunarr_client_from_settings(settings)
+    def _run(settings_obj: Settings, on_phase: Any) -> Dict[str, Any]:
+        on_phase("matching", "Loading collection rating keys…")
+        client = tunarr_client_from_settings(settings_obj)
+        on_phase("publishing", "Publishing collection station…")
         result = publish_collection_channel(
             client,
             collection_id=payload.collection_id,
             collection_title=payload.collection_title,
             channel_number=payload.channel_number,
             name=payload.name,
-            settings=settings,
+            programming_mode=payload.programming_mode,
+            settings=settings_obj,
         )
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    except Exception as error:  # noqa: BLE001
-        raise HTTPException(
-            status_code=502,
-            detail=_safe_error_detail(error, "Could not create channel from collection"),
-        ) from error
+        on_phase("warming", "Preparing streams…")
+        return _finalize_live_channels_publish(settings_obj, result, on_phase=on_phase)
 
-    tunarr = asdict(settings.tunarr)
-    if result.get("ok") or result.get("count_published"):
-        tunarr["last_publish_at"] = str(result.get("published_at") or "")
-        tunarr["last_error"] = ""
-    save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
-    return result
+    if payload.sync:
+        store = progress_store()
+        if not store.begin(mode="collection"):
+            raise HTTPException(status_code=409, detail="Publish already running.")
+        on_phase = make_phase_callback(store)
+        try:
+            result = _run(settings, on_phase)
+        except ValueError as error:
+            store.set_error(str(error))
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        except Exception as error:  # noqa: BLE001
+            store.set_error(str(error)[:400])
+            raise HTTPException(
+                status_code=502,
+                detail=_safe_error_detail(error, "Could not create channel from collection"),
+            ) from error
+        store.set_done(str(result.get("note") or "Publish finished."), result=result)
+        return {**result, "accepted": True, "async": False}
+
+    settings_snapshot = Settings.from_mapping(asdict(settings))
+
+    def _runner() -> None:
+        store = progress_store()
+        on_phase = make_phase_callback(store)
+        try:
+            result = _run(settings_snapshot, on_phase)
+        except Exception as error:  # noqa: BLE001
+            store.set_error(str(error)[:400] or "Publish failed.")
+            return
+        store.set_done(str(result.get("note") or "Publish finished."), result=result)
+
+    accepted = start_publish_job(_runner, mode="collection")
+    if not accepted.get("accepted"):
+        raise HTTPException(
+            status_code=409,
+            detail=str(accepted.get("message") or "Publish already running."),
+        )
+    return {
+        "ok": True,
+        "accepted": True,
+        "async": True,
+        "busy": True,
+        "phase": accepted.get("phase"),
+        "percent": accepted.get("percent"),
+        "message": accepted.get("message")
+        or "Publish started — progress updates below.",
+        "mode": "collection",
+    }
 
 
 @app.get("/api/admin/live-channels/craft-options")
@@ -2006,7 +2110,7 @@ def live_channels_publish_channel_endpoint(
     payload: LiveChannelsPublishChannelPayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Craft + publish one custom station to Tunarr (owner confirm-gated)."""
+    """Craft + publish one custom station to Tunarr (async by default)."""
     del user
     if not payload.confirm:
         raise HTTPException(
@@ -2021,23 +2125,11 @@ def live_channels_publish_channel_endpoint(
         tunarr_client_from_settings,
         wire_plex_media_source,
     )
-
-    try:
-        client = tunarr_client_from_settings(settings)
-    except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-
-    wire: Dict[str, Any] = {"ok": False, "skipped": True}
-    if payload.wire_plex and settings.plex_url and settings.plex_token:
-        try:
-            wire = wire_plex_media_source(
-                client,
-                plex_url=settings.plex_url,
-                plex_token=settings.plex_token,
-                settings=settings,
-            )
-        except Exception as error:  # noqa: BLE001
-            wire = {"ok": False, "message": str(error)[:240]}
+    from projectionist.live_channels.publish_progress import (
+        make_phase_callback,
+        progress_store,
+        start_publish_job,
+    )
 
     recipe_body = dict(payload.recipe or {})
     if not recipe_body:
@@ -2057,39 +2149,89 @@ def live_channels_publish_channel_endpoint(
     elif payload.media_scope and not recipe_body.get("media_scope"):
         recipe_body["media_scope"] = payload.media_scope
 
-    try:
+    def _run(settings_obj: Settings, on_phase: Any) -> Dict[str, Any]:
+        client = tunarr_client_from_settings(settings_obj)
+        wire: Dict[str, Any] = {"ok": False, "skipped": True}
+        if payload.wire_plex and settings_obj.plex_url and settings_obj.plex_token:
+            on_phase("wiring", "Wiring Plex media source…")
+            try:
+                wire = wire_plex_media_source(
+                    client,
+                    plex_url=settings_obj.plex_url,
+                    plex_token=settings_obj.plex_token,
+                    settings=settings_obj,
+                )
+            except Exception as error:  # noqa: BLE001
+                wire = {"ok": False, "message": str(error)[:240]}
+        on_phase("publishing", "Publishing station…")
         result = publish_custom_channel(
             client,
             recipe_body,
             fill_programming=bool(payload.fill_programming),
-            channel_number_base=int(getattr(settings.tunarr, "channel_number_base", 100) or 100),
-            settings=settings,
+            channel_number_base=int(
+                getattr(settings_obj.tunarr, "channel_number_base", 100) or 100
+            ),
+            settings=settings_obj,
         )
-    except Exception as error:  # noqa: BLE001
-        tunarr = asdict(settings.tunarr)
-        tunarr["last_error"] = str(error)[:240]
-        save_settings(
-            DATA_DIR,
-            Settings.from_mapping({**asdict(settings), "tunarr": tunarr}),
-        )
-        raise HTTPException(
-            status_code=502,
-            detail=_safe_error_detail(error, "Could not publish channel to Tunarr"),
-        ) from error
+        result["media_source"] = wire
+        on_phase("warming", "Preparing streams…")
+        return _finalize_live_channels_publish(settings_obj, result, on_phase=on_phase)
 
-    tunarr = asdict(settings.tunarr)
-    if (
-        result.get("ok")
-        or result.get("count_published")
-        or result.get("count_programming_updated")
-    ):
-        tunarr["last_publish_at"] = str(result.get("published_at") or "")
-        tunarr["last_error"] = ""
-    elif result.get("errors"):
-        tunarr["last_error"] = str(result["errors"][0].get("error") or "publish failed")[:240]
-    save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
-    result["media_source"] = wire
-    return result
+    if payload.sync:
+        try:
+            tunarr_client_from_settings(settings)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        store = progress_store()
+        if not store.begin(mode="craft"):
+            raise HTTPException(status_code=409, detail="Publish already running.")
+        on_phase = make_phase_callback(store)
+        try:
+            result = _run(settings, on_phase)
+        except Exception as error:  # noqa: BLE001
+            store.set_error(str(error)[:400])
+            tunarr = asdict(settings.tunarr)
+            tunarr["last_error"] = str(error)[:240]
+            save_settings(
+                DATA_DIR,
+                Settings.from_mapping({**asdict(settings), "tunarr": tunarr}),
+            )
+            raise HTTPException(
+                status_code=502,
+                detail=_safe_error_detail(error, "Could not publish channel to Tunarr"),
+            ) from error
+        store.set_done(str(result.get("note") or "Publish finished."), result=result)
+        return {**result, "accepted": True, "async": False}
+
+    settings_snapshot = Settings.from_mapping(asdict(settings))
+
+    def _runner() -> None:
+        store = progress_store()
+        on_phase = make_phase_callback(store)
+        try:
+            result = _run(settings_snapshot, on_phase)
+        except Exception as error:  # noqa: BLE001
+            store.set_error(str(error)[:400] or "Publish failed.")
+            return
+        store.set_done(str(result.get("note") or "Publish finished."), result=result)
+
+    accepted = start_publish_job(_runner, mode="craft")
+    if not accepted.get("accepted"):
+        raise HTTPException(
+            status_code=409,
+            detail=str(accepted.get("message") or "Publish already running."),
+        )
+    return {
+        "ok": True,
+        "accepted": True,
+        "async": True,
+        "busy": True,
+        "phase": accepted.get("phase"),
+        "percent": accepted.get("percent"),
+        "message": accepted.get("message")
+        or "Publish started — progress updates below.",
+        "mode": "craft",
+    }
 
 
 @app.post("/api/admin/live-channels/channels/{channel_id}/refill")

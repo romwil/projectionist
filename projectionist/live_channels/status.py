@@ -435,6 +435,22 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
     except Exception as error:  # noqa: BLE001
         continuity = {"ok": False, "error": str(error)[:200], "checks": []}
 
+    icon_probe: Dict[str, Any] = {"ok": False, "url": "", "message": ""}
+    try:
+        from projectionist.live_channels.publish import (
+            probe_icon_url,
+            resolve_channel_icon_url,
+        )
+
+        icon_url = resolve_channel_icon_url(settings)
+        icon_probe = probe_icon_url(icon_url) if icon_url else {
+            "ok": False,
+            "url": "",
+            "message": "No plex-facing Tunarr icon base (set tunarr.public_url / HOST_IP).",
+        }
+    except Exception as error:  # noqa: BLE001
+        icon_probe = {"ok": False, "url": "", "message": str(error)[:200]}
+
     return {
         "live_channels_enabled": enabled,
         "broadcast": {
@@ -481,5 +497,6 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
             "last_guide_attach_message": last_guide_attach_message,
             "last_guide_attach_dvr_key": last_guide_attach_dvr_key or None,
         },
+        "icon_probe": icon_probe,
         "plex_pass": plex_pass,
     }
