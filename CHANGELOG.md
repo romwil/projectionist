@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [1.29.27] — 2026-07-31
+
+Live Channels Plex remap honesty: force HDHR scan, Mapped N/N or hard error, and one-click Repair when Tunarr vanishes from Channel Sources or sticks on a stale 4-channel map.
+
+### Highlights
+- **New Tunarr channels actually show up in Plex.** Attach / post-publish refresh scans the Tunarr HDHomeRun device before channelmap, then remaps **all** stations — not a silent reuse of a stale 4-channel map.
+- **Mapped N/N or a hard error.** Admin and publish feedback show `Mapped 6/6` (or fail with `4/6`) instead of a green success that left channels missing.
+- **Repair Plex tuner/guide.** One click recreates the Tunarr device + XMLTV DVR (OTA left alone), rescans, and remaps when Channel Sources lost Tunarr or the guide is stuck.
+
+### Added
+- `scan_plex_device_channels`, `probe_plex_tunarr_mapping`, `repair_plex_tunarr_livetv`.
+- `POST /api/admin/live-channels/plex-repair` + Admin **Repair Plex tuner/guide**.
+- Status `guide_index.plex_livetv` Mapped N/N, HDHR reachability, device present/status; icon probe row.
+- Publish finalize persists `last_plex_mapped` / `last_plex_expected` and sets `plex_sync_failed` when incomplete.
+
+### Fixed
+- Attach/refresh treated short channelmaps as success (no Tunarr lineup count check; no device scan).
+- Missing Tunarr device returned soft `attach_needed` from post-publish refresh without re-registering.
+- Channel icons stayed on the shared Tunarr mark when station/collection art was available.
+
+### Verification
+- Focused: refresh short-map recreate + missing-device attach + API short-map 400 / repair — passed.
+- `.venv/bin/python -m pytest tests/` — 1560 passed, 6 skipped; coverage **76.2%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.27**.
+
+
 ## [1.29.26] — 2026-07-31
 
 Projectionist `/live` — gasp-worthy living-room watch and newspaper guide, with dual-surface honesty alongside Plex Live TV.

@@ -8,7 +8,8 @@ existing Live TV hardware.
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Mapping, Optional
+import time
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import urlparse
 
 # Starter channels publish from 100+ (see starter_pack._BASE_CHANNEL_NUMBER).
@@ -621,6 +622,223 @@ def _lineup_matches_xmltv(lineup: str, xmltv: str) -> bool:
     return "tv.plex.providers.epg.xmltv" in lu and bool(guide) and guide in lu
 
 
+def count_tunarr_hdhr_channels(tunarr_base: str, *, timeout: int = 8) -> int:
+    """How many stations Tunarr advertises on its HDHomeRun lineup (truth for Plex)."""
+    base = normalize_tunarr_base(tunarr_base)
+    if not base:
+        return 0
+    from projectionist.connectors.http import request_json
+
+    try:
+        payload = request_json(f"{base}/lineup.json", timeout=timeout)
+    except Exception:  # noqa: BLE001
+        return 0
+    if isinstance(payload, list):
+        return len(payload)
+    return 0
+
+
+def count_plex_device_channels(client: Any, device_key: str, *, timeout: int = 20) -> int:
+    """Channels Plex currently knows on a grabber device (post-scan cache)."""
+    key = str(device_key or "").strip()
+    if not key:
+        return 0
+    root = _plex_xml(client, f"/media/grabbers/devices/{key}/channels", timeout=timeout)
+    if root is None:
+        return 0
+    return len(list(root.iter("DeviceChannel")))
+
+
+def scan_plex_device_channels(
+    client: Any,
+    device_key: str,
+    *,
+    expected: int = 0,
+    timeout: int = 45,
+) -> Dict[str, Any]:
+    """POST device scan and poll until DeviceChannel count reaches ``expected``."""
+    key = str(device_key or "").strip()
+    if not key:
+        return {"ok": False, "count": 0, "message": "Missing device key for scan."}
+    # Best-effort scan kick; some PMS builds return empty bodies.
+    try:
+        from urllib.parse import quote
+
+        from projectionist.connectors.http import request_empty
+
+        scan_url = (
+            f"{client.base_url}/media/grabbers/devices/{key}/scan"
+            f"?X-Plex-Token={quote(client.token)}"
+        )
+        request_empty(scan_url, method="POST", timeout=min(timeout, 20))
+    except Exception:  # noqa: BLE001
+        # Fall through — channel list GET still refreshes some builds.
+        _plex_xml(
+            client,
+            f"/media/grabbers/devices/{key}/channels",
+            method="GET",
+            timeout=min(timeout, 20),
+        )
+
+    deadline = time.time() + max(5, int(timeout))
+    last = 0
+    stable = 0
+    while time.time() < deadline:
+        last = count_plex_device_channels(client, key, timeout=min(15, timeout))
+        if expected > 0 and last >= expected:
+            return {
+                "ok": True,
+                "count": last,
+                "message": f"Plex device sees {last} Tunarr channel(s).",
+            }
+        if expected <= 0 and last > 0:
+            stable += 1
+            if stable >= 2:
+                return {
+                    "ok": True,
+                    "count": last,
+                    "message": f"Plex device sees {last} Tunarr channel(s).",
+                }
+        else:
+            stable = 0
+        time.sleep(1.0)
+    return {
+        "ok": bool(last) and (expected <= 0 or last >= expected),
+        "count": last,
+        "message": (
+            f"Plex device scan timed out with {last} channel(s)"
+            + (f" (expected {expected})." if expected else ".")
+        ),
+    }
+
+
+def _put_device_channelmap(
+    client: Any,
+    *,
+    device_key: str,
+    device_uuid: str,
+    lineup: str,
+    timeout: int = 45,
+) -> Tuple[List[Any], Optional[str]]:
+    """Fetch EPG channelmap and PUT full mapping. Returns (mappings, error)."""
+    from urllib.parse import quote, urlencode
+
+    cmap = _plex_xml(
+        client,
+        "/livetv/epg/channelmap?" + urlencode({"device": device_uuid, "lineup": lineup}),
+        timeout=timeout,
+    )
+    mappings = [
+        m
+        for m in (cmap.iter("ChannelMapping") if cmap is not None else [])
+        if m.attrib.get("deviceIdentifier")
+        and m.attrib.get("channelKey")
+        and m.attrib.get("lineupIdentifier")
+    ]
+    if not mappings:
+        return [], None
+    enabled = [m.attrib["deviceIdentifier"] for m in mappings]
+    parts = ["channelsEnabled=" + ",".join(enabled)]
+    for m in mappings:
+        di = m.attrib["deviceIdentifier"]
+        parts.append(
+            f"channelMappingByKey[{quote(di, safe='')}]="
+            f"{quote(m.attrib['channelKey'], safe='')}"
+        )
+        parts.append(
+            f"channelMapping[{quote(di, safe='')}]="
+            f"{quote(m.attrib['lineupIdentifier'], safe='')}"
+        )
+    put = _plex_xml(
+        client,
+        f"/media/grabbers/devices/{device_key}/channelmap?" + "&".join(parts),
+        method="PUT",
+        timeout=timeout,
+    )
+    err = _mc_error(put)
+    return mappings, (err or None)
+
+
+def _reload_dvr_guide(client: Any, dvr_key: str, *, timeout: int = 45) -> None:
+    from urllib.parse import quote
+
+    from projectionist.connectors.http import request_empty
+
+    reload_url = (
+        f"{client.base_url}/livetv/dvrs/{dvr_key}/reloadGuide"
+        f"?X-Plex-Token={quote(client.token)}"
+    )
+    request_empty(reload_url, method="POST", timeout=timeout)
+
+
+def _mapping_complete(mapped: int, expected: int) -> bool:
+    """True when Plex mapped at least every Tunarr HDHR station."""
+    if expected <= 0:
+        return mapped > 0
+    return mapped >= expected
+
+
+def _find_tunarr_device(
+    devices_root: Any, *, tunarr_base: str, manual_address: str
+) -> Any:
+    return next(
+        (
+            d
+            for d in _iter_devices(devices_root)
+            if _device_matches_tunarr(d, tunarr_base=tunarr_base, manual_address=manual_address)
+        ),
+        None,
+    )
+
+
+def _delete_tunarr_xmltv_stack(
+    client: Any,
+    *,
+    device_key: str,
+    device_uuid: str,
+    xmltv: str,
+    timeout: int = 45,
+) -> List[str]:
+    """Remove Tunarr grabber + its XMLTV DVR only (never OTA cloud DVR)."""
+    steps: List[str] = []
+    dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
+    for dvr in _iter_dvrs(dvrs_root):
+        lineup_attr = str(dvr.attrib.get("lineup") or "")
+        dvr_key = str(dvr.attrib.get("key") or "").strip()
+        owns = any(
+            str(dev.attrib.get("uuid") or "") == device_uuid for dev in dvr.findall("Device")
+        )
+        if not dvr_key:
+            continue
+        if _lineup_matches_xmltv(lineup_attr, xmltv) or (
+            owns and "tv.plex.providers.epg.xmltv" in lineup_attr
+        ):
+            # Detach device first when present, then drop the XMLTV DVR.
+            if owns and device_key:
+                _plex_xml(
+                    client,
+                    f"/livetv/dvrs/{dvr_key}/devices/{device_key}",
+                    method="DELETE",
+                    timeout=timeout,
+                )
+            _plex_xml(
+                client,
+                f"/livetv/dvrs/{dvr_key}",
+                method="DELETE",
+                timeout=timeout,
+            )
+            steps.append(f"deleted_xmltv_dvr_{dvr_key}")
+    if device_key:
+        _plex_xml(
+            client,
+            f"/media/grabbers/devices/{device_key}",
+            method="DELETE",
+            timeout=timeout,
+        )
+        steps.append(f"deleted_device_{device_key}")
+    return steps
+
+
 def _is_safe_dead_grabber(device: Any, *, tunarr_base: str, manual_address: str) -> bool:
     """True for orphan dead tuners safe to delete (never OTA / Tunarr / alive)."""
     if device is None:
@@ -715,7 +933,9 @@ def attach_tunarr_xmltv_to_plex(
     tunarr_url: Optional[str] = None,
     request_host: Optional[str] = None,
     friendly_name: str = "Projectionist",
-    timeout: int = 60,
+    timeout: int = 90,
+    force_recreate: bool = False,
+    _recreate_attempted: bool = False,
 ) -> Dict[str, Any]:
     """Move Tunarr onto its own Plex DVR with Tunarr XMLTV via PMS API.
 
@@ -723,9 +943,13 @@ def attach_tunarr_xmltv_to_plex(
     (``Lineup is from a different provider``). Safe path is:
     register/find Tunarr device → remove it from any commercial-EPG DVR →
     ``POST /livetv/dvrs`` with ``lineup://tv.plex.providers.epg.xmltv/<url>#Name`` →
-    channelmap → ``reloadGuide``. OTA devices on the cloud DVR are left alone.
+    device scan → channelmap → ``reloadGuide``. OTA devices on the cloud DVR
+    are left alone.
+
+    Success requires mapped count ≥ Tunarr HDHR lineup count (Mapped N/N).
+    Stale short maps trigger one automatic Tunarr-only recreate.
     """
-    from urllib.parse import quote, urlencode
+    from urllib.parse import urlencode
 
     from projectionist.connectors.plex import PlexClient
 
@@ -753,6 +977,7 @@ def attach_tunarr_xmltv_to_plex(
     xmltv = xmltv_url(base)
     manual = host_port_for_plex(base)
     lineup = xmltv_lineup_uri(xmltv, friendly_name=friendly_name)
+    expected = count_tunarr_hdhr_channels(base, timeout=min(timeout, 10))
     client = PlexClient(plex_url, plex_token, timeout=timeout)
     steps_done: List[str] = []
 
@@ -766,14 +991,23 @@ def attach_tunarr_xmltv_to_plex(
         steps_done.append(f"pruned_dead_grabbers_{len(pruned['deleted'])}")
 
     devices_root = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
-    device = next(
-        (
-            d
-            for d in _iter_devices(devices_root)
-            if _device_matches_tunarr(d, tunarr_base=base, manual_address=manual)
-        ),
-        None,
+    device = _find_tunarr_device(
+        devices_root, tunarr_base=base, manual_address=manual
     )
+
+    if force_recreate and device is not None and not _recreate_attempted:
+        steps_done.extend(
+            _delete_tunarr_xmltv_stack(
+                client,
+                device_key=str(device.attrib.get("key") or ""),
+                device_uuid=str(device.attrib.get("uuid") or ""),
+                xmltv=xmltv,
+                timeout=timeout,
+            )
+        )
+        device = None
+        steps_done.append("force_recreate")
+
     if device is None:
         reg = _plex_xml(
             client,
@@ -783,23 +1017,11 @@ def attach_tunarr_xmltv_to_plex(
             timeout=timeout,
         )
         err = _mc_error(reg)
-        device = next(
-            (
-                d
-                for d in _iter_devices(reg)
-                if _device_matches_tunarr(d, tunarr_base=base, manual_address=manual)
-            ),
-            None,
-        )
+        device = _find_tunarr_device(reg, tunarr_base=base, manual_address=manual)
         if device is None:
             devices_root = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
-            device = next(
-                (
-                    d
-                    for d in _iter_devices(devices_root)
-                    if _device_matches_tunarr(d, tunarr_base=base, manual_address=manual)
-                ),
-                None,
+            device = _find_tunarr_device(
+                devices_root, tunarr_base=base, manual_address=manual
             )
         if device is None:
             return {
@@ -807,13 +1029,35 @@ def attach_tunarr_xmltv_to_plex(
                 "error": err
                 or "Plex did not register the Tunarr HDHomeRun device. Add it in Tuner Setup first.",
                 "xmltv_url": xmltv,
+                "expected": expected,
+                "mapped": 0,
+                "steps": steps_done,
             }
         steps_done.append("registered_device")
 
     device_uuid = str(device.attrib.get("uuid") or "").strip()
     device_key = str(device.attrib.get("key") or "").strip()
     if not device_uuid:
-        return {"ok": False, "error": "Tunarr device has no Plex UUID.", "xmltv_url": xmltv}
+        return {
+            "ok": False,
+            "error": "Tunarr device has no Plex UUID.",
+            "xmltv_url": xmltv,
+            "expected": expected,
+            "mapped": 0,
+        }
+
+    # Enable device if Plex left it disabled/dead in Channel Sources.
+    status = str(device.attrib.get("status") or "").strip().lower()
+    state = str(device.attrib.get("state") or "").strip().lower()
+    if status == "dead" or state in {"disabled", "off"}:
+        en = _plex_xml(
+            client,
+            f"/media/grabbers/devices/{device_key}?enabled=1",
+            method="PUT",
+            timeout=timeout,
+        )
+        if not _mc_error(en):
+            steps_done.append("enabled_device")
 
     dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
     home_dvr = None
@@ -844,6 +1088,8 @@ def attach_tunarr_xmltv_to_plex(
                     "ok": False,
                     "error": f"Could not detach Tunarr from commercial DVR: {err}",
                     "xmltv_url": xmltv,
+                    "expected": expected,
+                    "mapped": 0,
                 }
             steps_done.append(f"detached_from_dvr_{home_key}")
             home_dvr = None
@@ -892,6 +1138,8 @@ def attach_tunarr_xmltv_to_plex(
                     "error": err or "Plex did not create an XMLTV DVR for Tunarr.",
                     "xmltv_url": xmltv,
                     "lineup": lineup,
+                    "expected": expected,
+                    "mapped": 0,
                     "steps": steps_done,
                 }
         dvr_key = str(dvr_node.attrib.get("key") or "")
@@ -904,80 +1152,102 @@ def attach_tunarr_xmltv_to_plex(
         return {
             "ok": False,
             "error": "Missing DVR or device key after attach.",
+            "expected": expected,
+            "mapped": 0,
             "steps": steps_done,
         }
 
-    cmap = _plex_xml(
+    scan = scan_plex_device_channels(
         client,
-        "/livetv/epg/channelmap?" + urlencode({"device": device_uuid, "lineup": lineup}),
+        device_key,
+        expected=expected,
+        timeout=min(timeout, 60),
+    )
+    steps_done.append(f"scanned_device_{scan.get('count', 0)}")
+    device_channel_count = int(scan.get("count") or 0)
+
+    mappings, map_err = _put_device_channelmap(
+        client,
+        device_key=device_key,
+        device_uuid=device_uuid,
+        lineup=lineup,
         timeout=timeout,
     )
-    mappings = [
-        m
-        for m in cmap.iter("ChannelMapping")
-        if m.attrib.get("deviceIdentifier")
-        and m.attrib.get("channelKey")
-        and m.attrib.get("lineupIdentifier")
-    ]
+    if map_err:
+        return {
+            "ok": False,
+            "error": f"DVR created but channel mapping failed: {map_err}",
+            "dvr_key": dvr_key,
+            "xmltv_url": xmltv,
+            "mapped": 0,
+            "expected": expected,
+            "device_channels": device_channel_count,
+            "steps": steps_done,
+        }
     if mappings:
-        enabled = [m.attrib["deviceIdentifier"] for m in mappings]
-        parts = ["channelsEnabled=" + ",".join(enabled)]
-        for m in mappings:
-            di = m.attrib["deviceIdentifier"]
-            parts.append(
-                f"channelMappingByKey[{quote(di, safe='')}]="
-                f"{quote(m.attrib['channelKey'], safe='')}"
-            )
-            parts.append(
-                f"channelMapping[{quote(di, safe='')}]="
-                f"{quote(m.attrib['lineupIdentifier'], safe='')}"
-            )
-        put = _plex_xml(
-            client,
-            f"/media/grabbers/devices/{device_key}/channelmap?" + "&".join(parts),
-            method="PUT",
-            timeout=timeout,
-        )
-        err = _mc_error(put)
-        if err:
-            return {
-                "ok": False,
-                "error": f"DVR created but channel mapping failed: {err}",
-                "dvr_key": dvr_key,
-                "xmltv_url": xmltv,
-                "mapped": 0,
-                "steps": steps_done,
-            }
         steps_done.append(f"mapped_{len(mappings)}_channels")
     else:
         steps_done.append("no_channel_mappings")
 
-    # reloadGuide often returns an empty body (not XML) — use request_empty.
-    from urllib.parse import quote as _quote
-
-    from projectionist.connectors.http import request_empty
-
-    reload_path = f"/livetv/dvrs/{dvr_key}/reloadGuide"
-    reload_url = (
-        f"{client.base_url}{reload_path}?X-Plex-Token={_quote(client.token)}"
-    )
-    request_empty(reload_url, method="POST", timeout=timeout)
+    _reload_dvr_guide(client, dvr_key, timeout=timeout)
     steps_done.append("reload_guide")
 
+    mapped = len(mappings)
+    complete = _mapping_complete(mapped, expected)
+
+    # Stale HDHR cache / orphan XMLTV DVR: recreate Tunarr stack once.
+    if not complete and not _recreate_attempted:
+        steps_done.extend(
+            _delete_tunarr_xmltv_stack(
+                client,
+                device_key=device_key,
+                device_uuid=device_uuid,
+                xmltv=xmltv,
+                timeout=timeout,
+            )
+        )
+        retry = attach_tunarr_xmltv_to_plex(
+            settings,
+            tunarr_url=tunarr_url,
+            request_host=request_host,
+            friendly_name=friendly_name,
+            timeout=timeout,
+            force_recreate=False,
+            _recreate_attempted=True,
+        )
+        retry_steps = list(retry.get("steps") or [])
+        retry["steps"] = steps_done + ["recreate_after_short_map"] + retry_steps
+        return retry
+
+    message = (
+        f"Mapped {mapped}/{expected or mapped} Tunarr channel(s) on Plex DVR {dvr_key}."
+        if expected
+        else f"Mapped {mapped} Tunarr channel(s) on Plex DVR {dvr_key}."
+    )
+    if complete:
+        message += " OTA commercial DVR left in place."
+    else:
+        message = (
+            f"Plex still maps only {mapped}/{expected} Tunarr channels after attach. "
+            "Open Admin → Repair Plex tuner/guide, or re-add the tuner in Plex Channel Sources."
+        )
+
     return {
-        "ok": True,
+        "ok": complete,
         "dvr_key": dvr_key,
         "device_key": device_key,
         "device_uuid": device_uuid,
         "xmltv_url": xmltv,
         "lineup": lineup,
-        "mapped": len(mappings),
+        "mapped": mapped,
+        "expected": expected,
+        "device_channels": device_channel_count,
+        "device_present": True,
         "steps": steps_done,
-        "message": (
-            f"Tunarr guide attached on Plex DVR {dvr_key} "
-            f"({len(mappings)} channel(s) mapped). OTA commercial DVR left in place."
-        ),
+        "error": None if complete else message,
+        "message": message,
     }
+
 
 def refresh_plex_live_tv_channels(
     settings: Any = None,
@@ -985,17 +1255,15 @@ def refresh_plex_live_tv_channels(
     tunarr_url: Optional[str] = None,
     request_host: Optional[str] = None,
     friendly_name: str = "Projectionist",
-    timeout: int = 45,
+    timeout: int = 90,
+    allow_attach: bool = True,
 ) -> Dict[str, Any]:
-    """Remap Tunarr HDHR channels + reloadGuide without a full Docker remount.
+    """Scan Tunarr HDHR → remap all channels → reloadGuide.
 
-    Call after publishing new channel numbers so Plex Live TV picks them up.
-    When no Tunarr XMLTV DVR exists yet, returns ``attach_needed=True`` so the
-    owner UI can prompt a one-time Attach.
+    After publish: always force a device scan so new channel numbers appear.
+    When the Tunarr device or XMLTV DVR is missing, runs the full attach path
+    (never a silent no-op). Returns ``ok`` only when Mapped N/N.
     """
-    from urllib.parse import quote, urlencode
-
-    from projectionist.connectors.http import request_empty
     from projectionist.connectors.plex import PlexClient
 
     if settings is None:
@@ -1003,6 +1271,7 @@ def refresh_plex_live_tv_channels(
             "ok": False,
             "attach_needed": True,
             "mapped": 0,
+            "expected": 0,
             "message": "Settings required to refresh Plex channels.",
         }
     plex_url = str(getattr(settings, "plex_url", "") or "").strip()
@@ -1012,6 +1281,7 @@ def refresh_plex_live_tv_channels(
             "ok": False,
             "attach_needed": True,
             "mapped": 0,
+            "expected": 0,
             "message": "Configure Plex URL and token first.",
         }
 
@@ -1024,6 +1294,7 @@ def refresh_plex_live_tv_channels(
             "ok": False,
             "attach_needed": True,
             "mapped": 0,
+            "expected": 0,
             "message": (
                 "Set a LAN Tunarr address (tunarr.public_url / HOST_IP) before "
                 "Plex can map new channels."
@@ -1033,36 +1304,75 @@ def refresh_plex_live_tv_channels(
     xmltv = xmltv_url(base)
     manual = host_port_for_plex(base)
     lineup = xmltv_lineup_uri(xmltv, friendly_name=friendly_name)
+    expected = count_tunarr_hdhr_channels(base, timeout=min(timeout, 10))
     client = PlexClient(plex_url, plex_token, timeout=timeout)
     steps_done: List[str] = []
 
     devices_root = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
-    device = next(
-        (
-            d
-            for d in _iter_devices(devices_root)
-            if _device_matches_tunarr(d, tunarr_base=base, manual_address=manual)
-        ),
-        None,
+    device = _find_tunarr_device(
+        devices_root, tunarr_base=base, manual_address=manual
     )
     if device is None:
-        return {
-            "ok": False,
-            "attach_needed": True,
-            "mapped": 0,
-            "xmltv_url": xmltv,
-            "message": "Tunarr is not attached in Plex yet — run Attach Tunarr guide once.",
-        }
+        if not allow_attach:
+            return {
+                "ok": False,
+                "attach_needed": True,
+                "mapped": 0,
+                "expected": expected,
+                "device_present": False,
+                "xmltv_url": xmltv,
+                "message": (
+                    f"Tunarr device missing from Plex Channel Sources "
+                    f"(Tunarr has {expected} channel(s)). Run Repair Plex tuner/guide."
+                ),
+            }
+        attached = attach_tunarr_xmltv_to_plex(
+            settings,
+            tunarr_url=tunarr_url,
+            request_host=request_host,
+            friendly_name=friendly_name,
+            timeout=timeout,
+            force_recreate=True,
+        )
+        attached["attach_needed"] = not bool(attached.get("ok"))
+        attached.setdefault("expected", expected)
+        attached.setdefault("device_present", bool(attached.get("ok")))
+        return attached
 
     device_uuid = str(device.attrib.get("uuid") or "").strip()
     device_key = str(device.attrib.get("key") or "").strip()
     if not device_uuid or not device_key:
+        if allow_attach:
+            return attach_tunarr_xmltv_to_plex(
+                settings,
+                tunarr_url=tunarr_url,
+                request_host=request_host,
+                friendly_name=friendly_name,
+                timeout=timeout,
+                force_recreate=True,
+            )
         return {
             "ok": False,
             "attach_needed": True,
             "mapped": 0,
-            "message": "Tunarr grabber is missing Plex keys — re-run Attach Tunarr guide.",
+            "expected": expected,
+            "device_present": False,
+            "message": "Tunarr grabber is missing Plex keys — run Repair Plex tuner/guide.",
         }
+
+    status = str(device.attrib.get("status") or "").strip().lower()
+    if status == "dead":
+        if allow_attach:
+            attached = attach_tunarr_xmltv_to_plex(
+                settings,
+                tunarr_url=tunarr_url,
+                request_host=request_host,
+                friendly_name=friendly_name,
+                timeout=timeout,
+                force_recreate=True,
+            )
+            attached["attach_needed"] = not bool(attached.get("ok"))
+            return attached
 
     dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
     dvr_key = ""
@@ -1077,83 +1387,260 @@ def refresh_plex_live_tv_channels(
             dvr_key = str(dvr.attrib.get("key") or "")
 
     if not dvr_key:
+        if allow_attach:
+            attached = attach_tunarr_xmltv_to_plex(
+                settings,
+                tunarr_url=tunarr_url,
+                request_host=request_host,
+                friendly_name=friendly_name,
+                timeout=timeout,
+            )
+            attached["attach_needed"] = not bool(attached.get("ok"))
+            return attached
         return {
             "ok": False,
             "attach_needed": True,
             "mapped": 0,
+            "expected": expected,
+            "device_present": True,
             "xmltv_url": xmltv,
-            "message": "No Tunarr XMLTV DVR found — run Attach Tunarr guide once.",
+            "message": "No Tunarr XMLTV DVR found — run Attach / Repair Plex tuner/guide.",
         }
 
-    cmap = _plex_xml(
+    scan = scan_plex_device_channels(
         client,
-        "/livetv/epg/channelmap?" + urlencode({"device": device_uuid, "lineup": lineup}),
+        device_key,
+        expected=expected,
+        timeout=min(timeout, 60),
+    )
+    steps_done.append(f"scanned_device_{scan.get('count', 0)}")
+    device_channel_count = int(scan.get("count") or 0)
+
+    # Plex still only sees the old 4 → recreate Tunarr stack.
+    if expected > 0 and device_channel_count < expected and allow_attach:
+        attached = attach_tunarr_xmltv_to_plex(
+            settings,
+            tunarr_url=tunarr_url,
+            request_host=request_host,
+            friendly_name=friendly_name,
+            timeout=timeout,
+            force_recreate=True,
+        )
+        attached["attach_needed"] = not bool(attached.get("ok"))
+        attached.setdefault("steps", [])
+        attached["steps"] = steps_done + ["recreate_stale_device_channels"] + list(
+            attached.get("steps") or []
+        )
+        return attached
+
+    mappings, map_err = _put_device_channelmap(
+        client,
+        device_key=device_key,
+        device_uuid=device_uuid,
+        lineup=lineup,
         timeout=timeout,
     )
-    mappings = [
-        m
-        for m in cmap.iter("ChannelMapping")
-        if m.attrib.get("deviceIdentifier")
-        and m.attrib.get("channelKey")
-        and m.attrib.get("lineupIdentifier")
-    ]
+    if map_err:
+        return {
+            "ok": False,
+            "attach_needed": False,
+            "mapped": 0,
+            "expected": expected,
+            "device_present": True,
+            "device_channels": device_channel_count,
+            "dvr_key": dvr_key,
+            "error": f"Channel mapping failed: {map_err}",
+            "message": f"Channel mapping failed: {map_err}",
+            "steps": steps_done,
+        }
     if mappings:
-        enabled = [m.attrib["deviceIdentifier"] for m in mappings]
-        parts = ["channelsEnabled=" + ",".join(enabled)]
-        for m in mappings:
-            di = m.attrib["deviceIdentifier"]
-            parts.append(
-                f"channelMappingByKey[{quote(di, safe='')}]="
-                f"{quote(m.attrib['channelKey'], safe='')}"
-            )
-            parts.append(
-                f"channelMapping[{quote(di, safe='')}]="
-                f"{quote(m.attrib['lineupIdentifier'], safe='')}"
-            )
-        put = _plex_xml(
-            client,
-            f"/media/grabbers/devices/{device_key}/channelmap?" + "&".join(parts),
-            method="PUT",
-            timeout=timeout,
-        )
-        err = _mc_error(put)
-        if err:
-            return {
-                "ok": False,
-                "attach_needed": False,
-                "mapped": 0,
-                "dvr_key": dvr_key,
-                "error": f"Channel mapping failed: {err}",
-                "message": f"Channel mapping failed: {err}",
-                "steps": steps_done,
-            }
         steps_done.append(f"mapped_{len(mappings)}_channels")
     else:
         steps_done.append("no_channel_mappings")
 
-    reload_path = f"/livetv/dvrs/{dvr_key}/reloadGuide"
-    reload_url = (
-        f"{client.base_url}{reload_path}?X-Plex-Token={quote(client.token)}"
-    )
-    request_empty(reload_url, method="POST", timeout=timeout)
+    _reload_dvr_guide(client, dvr_key, timeout=timeout)
     steps_done.append("reload_guide")
 
     mapped = len(mappings)
+    complete = _mapping_complete(mapped, expected)
+    if not complete and allow_attach:
+        attached = attach_tunarr_xmltv_to_plex(
+            settings,
+            tunarr_url=tunarr_url,
+            request_host=request_host,
+            friendly_name=friendly_name,
+            timeout=timeout,
+            force_recreate=True,
+        )
+        attached["attach_needed"] = not bool(attached.get("ok"))
+        attached.setdefault("steps", [])
+        attached["steps"] = steps_done + ["recreate_short_channelmap"] + list(
+            attached.get("steps") or []
+        )
+        return attached
+
+    if complete:
+        message = (
+            f"Mapped {mapped}/{expected} Tunarr channel(s) in Plex · guide reloading."
+            if expected
+            else f"Mapped {mapped} channel(s) in Plex · guide reloading."
+        )
+    else:
+        message = (
+            f"Plex mapped only {mapped}/{expected} Tunarr channels — "
+            "run Repair Plex tuner/guide."
+        )
+
     return {
-        "ok": True,
-        "attach_needed": False,
+        "ok": complete,
+        "attach_needed": not complete,
         "mapped": mapped,
+        "expected": expected,
+        "device_present": True,
+        "device_channels": device_channel_count,
         "dvr_key": dvr_key,
         "device_key": device_key,
         "device_uuid": device_uuid,
         "xmltv_url": xmltv,
         "steps": steps_done,
+        "error": None if complete else message,
+        "message": message,
+    }
+
+
+def probe_plex_tunarr_mapping(
+    settings: Any = None,
+    *,
+    tunarr_url: Optional[str] = None,
+    request_host: Optional[str] = None,
+    timeout: int = 20,
+) -> Dict[str, Any]:
+    """Honest Admin status: HDHR reachable? device present? Mapped N/N?"""
+    facing = resolve_plex_facing_tunarr_base(
+        settings, tunarr_url=tunarr_url, request_host=request_host
+    )
+    base = str(facing.get("base_url") or "").strip()
+    hdhr_ok = False
+    expected = 0
+    if base and not facing.get("docker_only"):
+        expected = count_tunarr_hdhr_channels(base, timeout=min(timeout, 8))
+        hdhr_ok = expected > 0 or bool(probe_tuner_discovery(base, timeout=5).get("ok"))
+
+    plex_url = str(getattr(settings, "plex_url", "") or "").strip() if settings else ""
+    plex_token = str(getattr(settings, "plex_token", "") or "").strip() if settings else ""
+    if not plex_url or not plex_token or not base:
+        return {
+            "ok": False,
+            "hdhr_ok": hdhr_ok,
+            "device_present": False,
+            "mapped": 0,
+            "expected": expected,
+            "message": (
+                f"Tunarr HDHR {'reachable' if hdhr_ok else 'unreachable'}; "
+                "Plex not configured for mapping probe."
+            ),
+        }
+
+    from projectionist.connectors.plex import PlexClient
+
+    xmltv = xmltv_url(base)
+    manual = host_port_for_plex(base)
+    client = PlexClient(plex_url, plex_token, timeout=timeout)
+    try:
+        devices_root = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
+    except Exception as error:  # noqa: BLE001
+        return {
+            "ok": False,
+            "hdhr_ok": hdhr_ok,
+            "device_present": False,
+            "mapped": 0,
+            "expected": expected,
+            "message": f"Could not list Plex devices ({str(error)[:120]}).",
+        }
+    device = _find_tunarr_device(
+        devices_root, tunarr_base=base, manual_address=manual
+    )
+    if device is None:
+        return {
+            "ok": False,
+            "hdhr_ok": hdhr_ok,
+            "device_present": False,
+            "mapped": 0,
+            "expected": expected,
+            "message": (
+                f"Tunarr HDHR {'up' if hdhr_ok else 'down'} with {expected} channel(s); "
+                "Plex Channel Sources has no Tunarr/Projectionist device — "
+                "run Repair Plex tuner/guide."
+            ),
+        }
+
+    device_key = str(device.attrib.get("key") or "")
+    device_uuid = str(device.attrib.get("uuid") or "")
+    device_status = str(device.attrib.get("status") or "")
+    device_channels = count_plex_device_channels(client, device_key, timeout=timeout)
+    mapped = 0
+    dvr_key = ""
+    dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
+    for dvr in _iter_dvrs(dvrs_root):
+        if not _lineup_matches_xmltv(str(dvr.attrib.get("lineup") or ""), xmltv):
+            continue
+        dvr_key = str(dvr.attrib.get("key") or "")
+        mapped = len(
+            [
+                m
+                for m in dvr.iter("ChannelMapping")
+                if str(m.attrib.get("enabled") or "1") not in {"0", "false", "False"}
+                and m.attrib.get("deviceIdentifier")
+            ]
+        )
+        if mapped == 0:
+            # ChannelMapping nodes may omit enabled; count all.
+            mapped = len(list(dvr.iter("ChannelMapping")))
+        break
+
+    complete = (
+        bool(device)
+        and device_status.lower() != "dead"
+        and _mapping_complete(mapped, expected)
+    )
+    return {
+        "ok": complete,
+        "hdhr_ok": hdhr_ok,
+        "device_present": True,
+        "device_key": device_key,
+        "device_uuid": device_uuid,
+        "device_status": device_status,
+        "device_title": str(device.attrib.get("title") or ""),
+        "device_channels": device_channels,
+        "dvr_key": dvr_key or None,
+        "mapped": mapped,
+        "expected": expected,
         "message": (
-            f"Mapped {mapped} channel(s) in Plex · guide reloading."
-            if mapped
-            else "Plex guide reload requested (no new channel mappings found)."
+            f"Mapped {mapped}/{expected or mapped} · "
+            f"Tunarr HDHR {'ok' if hdhr_ok else 'down'} · "
+            f"Plex device {device_status or 'present'}"
+            + (f" · DVR {dvr_key}" if dvr_key else "")
         ),
     }
+
+
+def repair_plex_tunarr_livetv(
+    settings: Any = None,
+    *,
+    tunarr_url: Optional[str] = None,
+    request_host: Optional[str] = None,
+    friendly_name: str = "Projectionist",
+    timeout: int = 120,
+) -> Dict[str, Any]:
+    """One-click: recreate Tunarr device + XMLTV DVR + full channel map."""
+    return attach_tunarr_xmltv_to_plex(
+        settings,
+        tunarr_url=tunarr_url,
+        request_host=request_host,
+        friendly_name=friendly_name,
+        timeout=timeout,
+        force_recreate=True,
+    )
 
 
 def probe_tuner_discovery(tunarr_base: str, *, timeout: int = 5) -> Dict[str, Any]:

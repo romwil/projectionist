@@ -587,6 +587,11 @@ class TunarrSettings:
     last_guide_attach_ok: bool = False
     last_guide_attach_message: str = ""
     last_guide_attach_dvr_key: str = ""
+    # Last Plex channel-map snapshot (Mapped N/N honesty for Admin).
+    last_plex_mapped: int = 0
+    last_plex_expected: int = 0
+    last_plex_sync_ok: bool = False
+    last_plex_sync_message: str = ""
 
 
 @dataclass

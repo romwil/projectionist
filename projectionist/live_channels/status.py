@@ -15,6 +15,7 @@ from projectionist.live_channels.docker import (
 from projectionist.live_channels.guide import build_on_now_snapshot
 from projectionist.live_channels.plex_attach import (
     probe_existing_plex_livetv,
+    probe_plex_tunarr_mapping,
     resolve_plex_facing_tunarr_base,
     xmltv_url,
 )
@@ -379,6 +380,18 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
     guide_url = xmltv_url(str(facing.get("base_url") or ""))
     xmltv = _xmltv_programme_stats(guide_url)
     existing_livetv = probe_existing_plex_livetv(settings)
+    plex_mapping: Dict[str, Any] = {
+        "ok": False,
+        "hdhr_ok": False,
+        "device_present": False,
+        "mapped": int(getattr(tunarr, "last_plex_mapped", 0) or 0) if tunarr else 0,
+        "expected": int(getattr(tunarr, "last_plex_expected", 0) or 0) if tunarr else 0,
+        "message": str(getattr(tunarr, "last_plex_sync_message", "") or "") if tunarr else "",
+    }
+    try:
+        plex_mapping = probe_plex_tunarr_mapping(settings)
+    except Exception as error:  # noqa: BLE001
+        plex_mapping["message"] = str(error)[:200]
 
     guide_index = {
         "xmltv_url": guide_url,
@@ -390,12 +403,22 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
             "status": existing_livetv.get("status"),
             "message": existing_livetv.get("message") or "",
             "device_count": existing_livetv.get("device_count"),
+            "hdhr_ok": plex_mapping.get("hdhr_ok"),
+            "device_present": plex_mapping.get("device_present"),
+            "mapped": plex_mapping.get("mapped"),
+            "expected": plex_mapping.get("expected"),
+            "device_status": plex_mapping.get("device_status"),
+            "device_title": plex_mapping.get("device_title"),
+            "mapping_ok": plex_mapping.get("ok"),
+            "mapping_message": plex_mapping.get("message") or "",
         },
         "last_attach": {
             "at": last_guide_attach_at or None,
             "ok": last_guide_attach_ok,
             "message": last_guide_attach_message,
             "dvr_key": last_guide_attach_dvr_key or None,
+            "mapped": plex_mapping.get("mapped"),
+            "expected": plex_mapping.get("expected"),
         },
         "ready_for_plex": bool(
             lineup_health.get("playable")

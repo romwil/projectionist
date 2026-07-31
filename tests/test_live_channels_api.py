@@ -483,7 +483,8 @@ class LiveChannelsApiTests(unittest.TestCase):
                 "ok": True,
                 "dvr_key": "12",
                 "mapped": 3,
-                "message": "Tunarr guide attached on Plex DVR 12 (3 channel(s) mapped).",
+                "expected": 3,
+                "message": "Mapped 3/3 Tunarr channel(s) on Plex DVR 12.",
                 "steps": ["reused_xmltv_dvr"],
             },
         ):
@@ -492,6 +493,44 @@ class LiveChannelsApiTests(unittest.TestCase):
         body = resp.json()
         self.assertTrue(body["ok"])
         self.assertEqual(body["dvr_key"], "12")
+
+    def test_plex_attach_guide_fails_on_short_map(self) -> None:
+        self._enable(public_url="http://10.10.1.202:18765")
+        with patch(
+            "projectionist.live_channels.plex_attach.attach_tunarr_xmltv_to_plex",
+            return_value={
+                "ok": False,
+                "dvr_key": "12",
+                "mapped": 4,
+                "expected": 6,
+                "error": "Plex still maps only 4/6 Tunarr channels after attach.",
+                "message": "Plex still maps only 4/6 Tunarr channels after attach.",
+                "steps": ["mapped_4_channels"],
+            },
+        ):
+            resp = self.client.post("/api/admin/live-channels/plex-attach-guide")
+        self.assertEqual(resp.status_code, 400, resp.text)
+        self.assertIn("4/6", resp.json()["detail"])
+
+    def test_plex_repair(self) -> None:
+        self._enable(public_url="http://10.10.1.202:18765")
+        with patch(
+            "projectionist.live_channels.plex_attach.repair_plex_tunarr_livetv",
+            return_value={
+                "ok": True,
+                "dvr_key": "12",
+                "mapped": 6,
+                "expected": 6,
+                "message": "Mapped 6/6 Tunarr channel(s) on Plex DVR 12.",
+                "steps": ["force_recreate", "mapped_6_channels"],
+            },
+        ):
+            resp = self.client.post("/api/admin/live-channels/plex-repair")
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["mapped"], 6)
+        self.assertEqual(body["expected"], 6)
 
     def test_plex_attach_uses_public_url_not_docker_internal(self) -> None:
         self._enable(

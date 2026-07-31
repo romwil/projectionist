@@ -19,6 +19,7 @@ import {
   getLiveChannelsPublishStatus,
   getLiveChannelsPlexAttach,
   postLiveChannelsPlexAttachGuide,
+  postLiveChannelsPlexRepair,
   getLiveChannelsStarterPack,
   getLiveChannelsStatus,
   getLiveChannelsTunarrLogs,
@@ -245,6 +246,7 @@ function formatPublishFeedback(result) {
   const matched = result?.matched;
   const matchTotal = result?.match_total;
   const lineup = result?.lineup_programs ?? result?.program_count;
+  const plexSync = result?.plex_sync;
   const parts = [`Published ${published}`, `skipped ${skipped}`, `errors ${errors}`];
   if (updated) parts.push(`lineups refreshed ${updated}`);
   if (matchTotal > 0) {
@@ -253,12 +255,20 @@ function formatPublishFeedback(result) {
   if (lineup != null && lineup !== "") {
     parts.push(`lineup ${lineup} programs`);
   }
+  if (plexSync && plexSync.skipped !== true) {
+    const mapped = plexSync.mapped;
+    const expected = plexSync.expected;
+    if (expected != null && mapped != null) {
+      parts.push(`Plex mapped ${mapped}/${expected}`);
+    }
+  }
   const summary = `${parts.join(", ")}.${result?.note ? ` ${result.note}` : ""}`;
   const details = (result?.errors || []).map((err) => {
     const label = [err?.number, err?.name].filter((part) => part != null && part !== "").join(" · ");
     return `${label || "Channel"}: ${err?.error || "unknown error"}`;
   });
-  const type = errors > 0 || result?.ok === false ? "error" : "success";
+  const plexFailed = result?.plex_sync_failed || plexSync?.ok === false;
+  const type = errors > 0 || result?.ok === false || plexFailed ? "error" : "success";
   return { summary, details, type };
 }
 
@@ -3432,6 +3442,29 @@ export default function ConfigPage() {
                                 }`
                               : "not run yet — use Attach Tunarr guide in Plex below"}
                           </li>
+                          <li data-testid="live-channels-plex-mapped">
+                            Plex Tunarr map:{" "}
+                            {liveChannelsStatus.guide_index.plex_livetv?.expected != null
+                              ? `${liveChannelsStatus.guide_index.plex_livetv?.mapped ?? 0}/${liveChannelsStatus.guide_index.plex_livetv.expected}`
+                              : "—"}
+                            {liveChannelsStatus.guide_index.plex_livetv?.device_present
+                              ? ` · device ${liveChannelsStatus.guide_index.plex_livetv.device_status || "present"}`
+                              : " · device missing"}
+                            {liveChannelsStatus.guide_index.plex_livetv?.hdhr_ok === false
+                              ? " · Tunarr HDHR unreachable"
+                              : ""}
+                            {liveChannelsStatus.guide_index.plex_livetv?.mapping_message
+                              ? ` — ${liveChannelsStatus.guide_index.plex_livetv.mapping_message}`
+                              : ""}
+                          </li>
+                          {liveChannelsStatus.icon_probe ? (
+                            <li data-testid="live-channels-icon-probe">
+                              Channel icon probe:{" "}
+                              {liveChannelsStatus.icon_probe.ok
+                                ? `ok · ${liveChannelsStatus.icon_probe.url || ""}`
+                                : liveChannelsStatus.icon_probe.message || "unreachable"}
+                            </li>
+                          ) : null}
                         </ul>
                       </div>
                     ) : null}
@@ -4778,6 +4811,7 @@ export default function ConfigPage() {
                           disabled={
                             liveBusy === "attach" ||
                             liveBusy === "attach-guide" ||
+                            liveBusy === "plex-repair" ||
                             Boolean(liveAttach?.needs_lan_url)
                           }
                           onClick={async () => {
@@ -4787,13 +4821,21 @@ export default function ConfigPage() {
                                 setLiveAttach(await getLiveChannelsPlexAttach());
                               }
                               const result = await postLiveChannelsPlexAttachGuide();
+                              const mappedNote =
+                                result.expected != null
+                                  ? ` Mapped ${result.mapped ?? 0}/${result.expected}.`
+                                  : "";
                               setActionFeedback(
                                 "live-channels",
                                 "success",
-                                result.message ||
-                                  "Tunarr XMLTV guide attached in Plex (OTA left alone).",
+                                `${result.message || "Tunarr XMLTV guide attached in Plex (OTA left alone)."}${mappedNote}`,
                                 { block: "attach" },
                               );
+                              try {
+                                setLiveChannelsStatus(await getLiveChannelsStatus());
+                              } catch {
+                                /* status refresh best-effort */
+                              }
                             } catch (error) {
                               setActionFeedback("live-channels", "error", error.message, { block: "attach" });
                             } finally {
@@ -4804,6 +4846,51 @@ export default function ConfigPage() {
                           {liveBusy === "attach-guide"
                             ? "Attaching guide…"
                             : "Attach Tunarr guide in Plex"}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          data-testid="live-channels-plex-repair"
+                          disabled={
+                            liveBusy === "attach" ||
+                            liveBusy === "attach-guide" ||
+                            liveBusy === "plex-repair" ||
+                            Boolean(liveAttach?.needs_lan_url)
+                          }
+                          onClick={async () => {
+                            if (
+                              !window.confirm(
+                                "Repair Plex tuner/guide? This recreates the Tunarr device and XMLTV DVR in Plex (OTA stays), rescans all channels, and remaps the guide. Active Live TV sessions on Tunarr channels may drop briefly.",
+                              )
+                            ) {
+                              return;
+                            }
+                            setLiveBusy("plex-repair");
+                            try {
+                              const result = await postLiveChannelsPlexRepair();
+                              const mappedNote =
+                                result.expected != null
+                                  ? ` Mapped ${result.mapped ?? 0}/${result.expected}.`
+                                  : "";
+                              setActionFeedback(
+                                "live-channels",
+                                "success",
+                                `${result.message || "Plex Tunarr tuner/guide repaired."}${mappedNote}`,
+                                { block: "attach" },
+                              );
+                              try {
+                                setLiveChannelsStatus(await getLiveChannelsStatus());
+                              } catch {
+                                /* status refresh best-effort */
+                              }
+                            } catch (error) {
+                              setActionFeedback("live-channels", "error", error.message, { block: "attach" });
+                            } finally {
+                              setLiveBusy(null);
+                            }
+                          }}
+                        >
+                          {liveBusy === "plex-repair" ? "Repairing…" : "Repair Plex tuner/guide"}
                         </button>
                       </div>
                     </div>
