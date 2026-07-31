@@ -102,6 +102,10 @@ export default function LivePlayer({
         enableWorker: true,
         lowLatencyMode: false,
         backBufferLength: 30,
+        // Auth’d stream proxy needs the session cookie on every playlist/segment.
+        xhrSetup: (xhr) => {
+          xhr.withCredentials = true;
+        },
       });
       hlsRef.current = hls;
       hls.loadSource(url);

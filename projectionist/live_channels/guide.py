@@ -46,36 +46,83 @@ def _empty_snapshot(
     }
 
 
+_GUIDE_FLEX_SUFFIX = " · Up next"
+
+
+def _nested_program(program: Mapping[str, Any]) -> Mapping[str, Any]:
+    """Tunarr TvGuideProgram often nests the real title under ``program``."""
+    nested = program.get("program")
+    return nested if isinstance(nested, Mapping) else {}
+
+
+def _nested_show(program: Mapping[str, Any]) -> Mapping[str, Any]:
+    nested = _nested_program(program)
+    show = nested.get("show")
+    if isinstance(show, Mapping):
+        return show
+    show = program.get("show")
+    return show if isinstance(show, Mapping) else {}
+
+
+def _is_guide_flex_placeholder(title: str) -> bool:
+    text = str(title or "").strip()
+    if not text:
+        return False
+    return text.endswith(_GUIDE_FLEX_SUFFIX) or text.lower() in {"flex", "filler", "continuity"}
+
+
 def _program_title(program: Mapping[str, Any]) -> str:
-    # Prefer show/movie title; episode title is a separate subtitle field.
-    for key in ("title", "showTitle", "name"):
-        value = str(program.get(key) or "").strip()
-        if value:
-            return value
-    episode = str(program.get("episodeTitle") or "").strip()
+    """Prefer show/movie title; Tunarr content slots nest titles under ``program``."""
+    nested = _nested_program(program)
+    show = _nested_show(program)
+    nested_type = str(nested.get("type") or program.get("type") or "").strip().lower()
+
+    # Episodes: show title is the guide headline; episode name is the subtitle.
+    if nested_type == "episode" or show:
+        show_title = str(show.get("title") or nested.get("showTitle") or program.get("showTitle") or "").strip()
+        if show_title:
+            return show_title
+
+    for source in (program, nested):
+        for key in ("title", "showTitle", "name"):
+            value = str(source.get(key) or "").strip()
+            if value:
+                return value
+    episode = str(
+        program.get("episodeTitle") or nested.get("episodeTitle") or nested.get("title") or ""
+    ).strip()
     return episode
 
 
 def _program_episode(program: Mapping[str, Any]) -> str:
-    for key in ("episodeTitle", "episode_title", "subtitle", "secondaryTitle"):
-        value = str(program.get(key) or "").strip()
-        if value:
-            # Avoid duplicating the primary title when Tunarr only has one field.
-            primary = _program_title(program)
-            if value == primary:
-                continue
-            return value
+    nested = _nested_program(program)
+    primary = _program_title(program)
+    for source in (program, nested):
+        for key in ("episodeTitle", "episode_title", "subtitle", "secondaryTitle"):
+            value = str(source.get(key) or "").strip()
+            if value and value != primary:
+                return value
+    # Nested episode/movie ``title`` becomes the subtitle when the headline is the show.
+    show = _nested_show(program)
+    nested_type = str(nested.get("type") or "").strip().lower()
+    if show or nested_type == "episode":
+        ep = str(nested.get("title") or "").strip()
+        if ep and ep != primary:
+            return ep
     return ""
 
 
 def _program_rating(program: Mapping[str, Any]) -> str:
-    for key in ("contentRating", "content_rating", "rating", "ageRating"):
-        raw = program.get(key)
-        if raw is None:
-            continue
-        text = str(raw).strip()
-        if text:
-            return text
+    nested = _nested_program(program)
+    show = _nested_show(program)
+    for source in (program, nested, show):
+        for key in ("contentRating", "content_rating", "rating", "ageRating"):
+            raw = source.get(key)
+            if raw is None:
+                continue
+            text = str(raw).strip()
+            if text:
+                return text
     return ""
 
 
@@ -97,8 +144,63 @@ def _program_is_flex(program: Mapping[str, Any]) -> bool:
         value = str(program.get(key) or "").strip().lower()
         if value in {"flex", "filler", "continuity", "commercial"}:
             return True
+    # Top-level guideFlexTitle placeholders (even before nested title resolution).
+    top_title = str(program.get("title") or "").strip()
+    if _is_guide_flex_placeholder(top_title):
+        return True
     title = _program_title(program).lower()
     return title in {"flex", "filler", "continuity"}
+
+
+def _prefer_real_titles_over_flex(
+    slots: Mapping[str, Optional[Dict[str, Any]]],
+) -> Dict[str, Optional[Dict[str, Any]]]:
+    """When 'now' is a guideFlexTitle pad, surface the next real program title."""
+    now = slots.get("now") if isinstance(slots.get("now"), Mapping) else None
+    nxt = slots.get("next") if isinstance(slots.get("next"), Mapping) else None
+    out: Dict[str, Optional[Dict[str, Any]]] = {
+        "now": dict(now) if now else None,
+        "next": dict(nxt) if nxt else None,
+    }
+    current = out["now"]
+    following = out["next"]
+    if (
+        current
+        and current.get("is_flex")
+        and _is_guide_flex_placeholder(str(current.get("title") or ""))
+        and following
+        and not following.get("is_flex")
+        and str(following.get("title") or "").strip()
+    ):
+        current["title"] = str(following["title"]).strip()
+        if following.get("episode_title"):
+            current["episode_title"] = following.get("episode_title")
+        if following.get("content_rating"):
+            current["content_rating"] = following.get("content_rating")
+    return out
+
+
+def _relabel_flex_program_placeholders(programs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Replace guideFlexTitle bands with the following real content title when present."""
+    out = [dict(p) for p in programs]
+    for index, program in enumerate(out):
+        if not program.get("is_flex"):
+            continue
+        if not _is_guide_flex_placeholder(str(program.get("title") or "")):
+            continue
+        for later in out[index + 1 :]:
+            if later.get("is_flex"):
+                continue
+            title = str(later.get("title") or "").strip()
+            if not title:
+                continue
+            program["title"] = title
+            if later.get("episode_title"):
+                program["episode_title"] = later.get("episode_title")
+            if later.get("content_rating"):
+                program["content_rating"] = later.get("content_rating")
+            break
+    return out
 
 
 def _to_epoch_seconds(value: Any) -> Optional[float]:
@@ -398,7 +500,7 @@ def _channel_row_from_guide(
             item = _normalize_program(program)
             if item:
                 normalized.append(item)
-        row["programs"] = normalized
+        row["programs"] = _relabel_flex_program_placeholders(normalized)
     return row
 
 
@@ -482,6 +584,25 @@ def build_on_now_snapshot(
                 playing = None
             if playing:
                 slots = {"now": _normalize_program(playing, now=ts), "next": None}
+        # Nested Tunarr content + now_playing often beats an empty guide parse;
+        # also prefer real titles over guideFlexTitle pads for OSD / on-now.
+        if slots["now"] is None or (
+            slots["now"].get("is_flex")
+            and _is_guide_flex_placeholder(str(slots["now"].get("title") or ""))
+        ):
+            try:
+                playing = tunarr_client.get_now_playing(cid)
+            except Exception:  # noqa: BLE001
+                playing = None
+            playing_norm = _normalize_program(playing, now=ts) if playing else None
+            if playing_norm and not playing_norm.get("is_flex"):
+                next_slot = slots.get("next")
+                slots = {"now": playing_norm, "next": next_slot}
+                if next_slot is None:
+                    guide_next = pick_now_and_next(programs, now=ts).get("next")
+                    if guide_next and not guide_next.get("is_flex"):
+                        slots["next"] = guide_next
+        slots = _prefer_real_titles_over_flex(slots)
         channels.append(
             _channel_row_from_guide(
                 cid,

@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [1.29.28] — 2026-07-31
+
+Projectionist `/live` actually plays and shows real guide titles: nested Tunarr program parsing, root-relative HLS rewrite, and flex “Up next” placeholders that prefer the next real show.
+
+### Highlights
+- **Watch Live plays video again.** The auth’d HLS proxy correctly rewrites Tunarr’s `/stream/channels/…` playlist paths so segments stay on Projectionist (no more broken double paths / silent tune failure).
+- **Guide rows show real programs.** Channels 100–103 fill with show/movie titles from Tunarr’s nested `program` objects instead of empty bands.
+- **“· Up next” pads name the real title.** Flex guideFlexTitle slots (and the OSD) prefer the upcoming content title — e.g. Seven Samurai — instead of the station placeholder.
+
+### Fixed
+- `rewrite_hls_playlist` treated root-relative Tunarr URIs as playlist-relative, producing `/api/…/stream/channels/{id}/stream/channels/{id}/…` upstream 502s.
+- Guide `_program_title` ignored nested Tunarr `program` / `show` titles (Automat `TvGuideProgram` shape), dropping all content bands.
+- Flex `guideFlexTitle` (“{Station} · Up next”) was shown as the on-air title even when the next slot was real content.
+- HLS.js now sends session cookies (`xhrSetup` `withCredentials`) on playlist/segment fetches.
+
+### Verification
+- Focused: nested guide titles + flex prefer-next + root-relative playlist rewrite — `OnNowGuideTests`, `StreamProxyTests` — passed.
+- `.venv/bin/python -m pytest tests/` — 1563 passed, 6 skipped; coverage **76.3%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.28**.
+
 ## [1.29.27] — 2026-07-31
 
 Live Channels Plex remap honesty: force HDHR scan, Mapped N/N or hard error, and one-click Repair when Tunarr vanishes from Channel Sources or sticks on a stale 4-channel map.

@@ -939,6 +939,100 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(len(snap["channels"][0]["programs"]), 2)
         self.assertEqual(snap["channels"][0]["now"]["episode_title"], "Night one")
 
+    def test_guide_reads_nested_tunarr_program_titles(self) -> None:
+        """Tunarr TvGuideProgram nests titles under ``program`` (top-level title null)."""
+        settings = Settings(
+            features=FeatureFlags(live_channels_enabled=True),
+            tunarr=TunarrSettings(url="http://tunarr.test"),
+        )
+        now = 1_700_000_100.0
+        now_ms = int(now * 1000)
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "ch-1", "name": "Mystery", "number": 100},
+        ]
+        client.get_all_channel_guides.return_value = {
+            "ch-1": {
+                "programs": [
+                    {
+                        "type": "content",
+                        "title": None,
+                        "start": now_ms - 60_000,
+                        "stop": now_ms + 3_600_000,
+                        "duration": 3_660_000,
+                        "program": {
+                            "type": "episode",
+                            "title": "Hostage (1)",
+                            "show": {"title": "Homicide: Life on the Street", "rating": "TV-14"},
+                        },
+                    },
+                    {
+                        "type": "content",
+                        "title": None,
+                        "start": now_ms + 3_600_000,
+                        "stop": now_ms + 7_200_000,
+                        "duration": 3_600_000,
+                        "program": {"type": "movie", "title": "Heat", "rating": "R"},
+                    },
+                ]
+            },
+        }
+        client.get_now_playing.return_value = None
+        snap = build_guide_snapshot(settings, client=client, now=now, hours=6)
+        row = snap["channels"][0]
+        self.assertEqual(len(row["programs"]), 2)
+        self.assertEqual(row["now"]["title"], "Homicide: Life on the Street")
+        self.assertEqual(row["now"]["episode_title"], "Hostage (1)")
+        self.assertEqual(row["now"]["content_rating"], "TV-14")
+        self.assertEqual(row["next"]["title"], "Heat")
+        self.assertEqual(row["programs"][0]["title"], "Homicide: Life on the Street")
+
+    def test_guide_flex_placeholder_prefers_next_real_title(self) -> None:
+        settings = Settings(
+            features=FeatureFlags(live_channels_enabled=True),
+            tunarr=TunarrSettings(url="http://tunarr.test"),
+        )
+        now = 1_700_000_100.0
+        now_ms = int(now * 1000)
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "ch-4", "name": "Kung Fu Theater", "number": 104},
+        ]
+        client.get_all_channel_guides.return_value = {
+            "ch-4": {
+                "programs": [
+                    {
+                        "type": "flex",
+                        "title": "Kung Fu Theater · Up next",
+                        "start": now_ms - 60_000,
+                        "stop": now_ms + 3_600_000,
+                        "duration": 3_660_000,
+                    },
+                    {
+                        "type": "content",
+                        "title": None,
+                        "start": now_ms + 3_600_000,
+                        "stop": now_ms + 7_200_000,
+                        "duration": 3_600_000,
+                        "program": {"type": "movie", "title": "Seven Samurai"},
+                    },
+                ]
+            },
+        }
+        client.get_now_playing.return_value = {
+            "type": "flex",
+            "title": "Kung Fu Theater · Up next",
+            "start": now_ms - 60_000,
+            "stop": now_ms + 3_600_000,
+        }
+        snap = build_guide_snapshot(settings, client=client, now=now, hours=6)
+        row = snap["channels"][0]
+        self.assertTrue(row["now"]["is_flex"])
+        self.assertEqual(row["now"]["title"], "Seven Samurai")
+        self.assertEqual(row["next"]["title"], "Seven Samurai")
+        self.assertEqual(row["programs"][0]["title"], "Seven Samurai")
+        self.assertTrue(row["programs"][0]["is_flex"])
+
 
 class StreamProxyTests(unittest.TestCase):
     def test_validate_rejects_traversal(self) -> None:
@@ -957,6 +1051,40 @@ class StreamProxyTests(unittest.TestCase):
         self.assertIn("/api/live-channels/stream/abc/hls/stream.m3u8", out)
         self.assertNotIn("tunarr.lan", out)
         self.assertTrue(tunarr_master_url("http://t", "abc").endswith(".m3u8?mode=hls"))
+
+    def test_rewrite_root_relative_tunarr_paths(self) -> None:
+        """Tunarr master/media playlists use /stream/channels/{id}/… paths."""
+        cid = "0bac6317-d1d0-44f2-844f-197d155eb3e5"
+        body = (
+            "#EXTM3U\n"
+            f'#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",URI="/stream/channels/{cid}/hls/stream.m3u8"\n'
+            "#EXT-X-STREAM-INF:BANDWIDTH=1\n"
+            f"/stream/channels/{cid}/hls/stream.m3u8\n"
+        )
+        out = rewrite_hls_playlist(
+            body,
+            channel_id=cid,
+            tunarr_base="http://host.docker.internal:18765",
+            playlist_path="index.m3u8",
+        )
+        self.assertIn(f"/api/live-channels/stream/{cid}/hls/stream.m3u8", out)
+        self.assertNotIn(f"/stream/channels/{cid}/stream/channels/", out)
+        self.assertNotIn("host.docker.internal", out)
+
+        media = (
+            "#EXTM3U\n#EXTINF:4.0,\n"
+            f"/stream/channels/{cid}/hls/data000000.ts\n"
+        )
+        media_out = rewrite_hls_playlist(
+            media,
+            channel_id=cid,
+            tunarr_base="http://host.docker.internal:18765",
+            playlist_path="hls/stream.m3u8",
+        )
+        self.assertEqual(
+            media_out.strip().splitlines()[-1],
+            f"/api/live-channels/stream/{cid}/hls/data000000.ts",
+        )
 
 
 class PreflightAndPublishTests(unittest.TestCase):
