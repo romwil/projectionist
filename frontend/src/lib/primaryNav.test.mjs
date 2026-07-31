@@ -10,15 +10,24 @@ import {
 } from "./primaryNav.js";
 
 describe("primaryNav", () => {
-  it("orders peers Search → Chat → Explore → Inbox → Admin → My Journey → Settings", () => {
+  it("orders peers Search → Chat → Explore → Live → Inbox → Admin → My Journey → Settings", () => {
     assert.deepEqual(
       PRIMARY_NAV_ITEMS.map((item) => item.id),
-      ["search", "chat", "explore", "inbox", "admin", "my-journey", "settings"],
+      ["search", "chat", "explore", "live", "inbox", "admin", "my-journey", "settings"],
     );
     const owner = buildPrimaryNavItems({ role: "owner", isOwner: true });
     assert.deepEqual(
       owner.map((item) => item.id),
       ["search", "chat", "explore", "inbox", "admin", "my-journey", "settings"],
+    );
+    const withLive = buildPrimaryNavItems({
+      role: "owner",
+      isOwner: true,
+      liveChannelsReady: true,
+    });
+    assert.deepEqual(
+      withLive.map((item) => item.id),
+      ["search", "chat", "explore", "live", "inbox", "admin", "my-journey", "settings"],
     );
     assert.equal(owner.at(-2).id, "my-journey");
     assert.equal(owner.at(-1).id, "settings");

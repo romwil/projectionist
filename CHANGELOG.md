@@ -2,6 +2,36 @@
 
 ## [Unreleased]
 
+## [1.29.26] — 2026-07-31
+
+Projectionist `/live` — gasp-worthy living-room watch and newspaper guide, with dual-surface honesty alongside Plex Live TV.
+
+### Highlights
+- **Watch Live in Projectionist.** Fullscreen HLS through an auth’d proxy — Tunarr stays on the LAN; the browser never sees it.
+- **Cable-box OSD.** Move the mouse (or focus) to reveal channel, now title, episode, progress, next up, and rating; it fades on idle.
+- **Guide ↔ Watch.** A newspaper channel × time grid with keyboard navigation; click a cell to tune. Pop out a dedicated TV window that resizes cleanly.
+- **Subtitles when the stream has them.** CC picker in the OSD (and **C**); honest empty state when the encode has none.
+- **On now points home first.** Primary CTA is Watch in Projectionist; Open in Plex Live TV stays secondary.
+
+### Added
+- Household `GET /api/live-channels/guide`, `POST /api/live-channels/tune`, auth’d `GET /api/live-channels/stream/{id}/…` HLS proxy with playlist rewrite.
+- `projectionist/live_channels/stream_proxy.py`; wider guide window + program fields (`episode_title`, `icon_url`, flex flag).
+- Frontend `/live` + `/live/watch` (pop-out): HLS.js player, OSD, CC picker, newspaper EPG, Guide ↔ Watch toggle.
+- Top-level **Live** nav when `live_channels_ready` (feature on + Tunarr URL).
+- Features payload `live_channels_ready`.
+
+### Changed
+- On-now / guide copy: dual-watch hint (Projectionist `/live` + Plex Live TV) — no “does not play” CTA.
+- On-now panel primary CTA → Watch in Projectionist; rows deep-link to `/live`.
+
+### Verification
+- Focused: guide + stream proxy unit/API — `OnNowGuideTests`, `StreamProxyTests`, `test_guide_tune_and_stream_proxy`.
+- `.venv/bin/python -m pytest tests/` — 1556 passed, 6 skipped; coverage **76.2%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.26**.
+
 ## [1.29.25] — 2026-07-31
 
 Live Channels hot fix: collection → channel uses Plex ratingKeys (not fuzzy titles), honest matched N/M feedback, Sequential / Shuffle / Chaos before publish, async progress, Plex channel remap after publish, and reachability-aware station logos.

@@ -20,6 +20,8 @@ import ListsSettingsPage from "./pages/settings/ListsSettingsPage";
 import TasteSettingsPage from "./pages/settings/TasteSettingsPage";
 import NotificationsSettingsPage from "./pages/settings/NotificationsSettingsPage";
 import WatchlistPage from "./pages/WatchlistPage";
+import LivePage from "./pages/LivePage";
+import LiveWatchPage from "./pages/LiveWatchPage";
 import ExplorePage from "./pages/ExplorePage";
 import ExploreSectionPage from "./pages/ExploreSectionPage";
 import MyJourneyPage from "./pages/MyJourneyPage";
@@ -62,6 +64,9 @@ createRoot(document.getElementById("root")).render(
           <Route path="/explore/engagement" element={<Navigate to="/my-journey" replace />} />
           <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />
           <Route path="/watchlist" element={<WatchlistPage />} />
+          <Route path="/live" element={<LivePage />} />
+          <Route path="/live/watch" element={<LiveWatchPage />} />
+          <Route path="/live/popout" element={<LiveWatchPage />} />
           <Route path="/library" element={<LibraryPage />} />
           <Route path="/library/:pageId" element={<LibraryPage />} />
           <Route path="/lists" element={<ListsPage />} />

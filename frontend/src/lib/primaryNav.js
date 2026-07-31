@@ -41,6 +41,14 @@ export const PRIMARY_NAV_ITEMS = [
     testId: "topbar-explore-link",
   },
   {
+    id: "live",
+    to: ROUTES.live,
+    label: "Live",
+    icon: "live_tv",
+    testId: "topbar-live-link",
+    requiresLiveChannels: true,
+  },
+  {
     id: "inbox",
     to: ROUTES.inbox,
     label: "Inbox",
@@ -87,6 +95,7 @@ export function primaryNavVisibleIds({
   isYouth = false,
   multiUserEnabled = true,
   authReady = true,
+  liveChannelsReady = false,
 } = {}) {
   if (!authReady) {
     return [];
@@ -96,6 +105,11 @@ export function primaryNavVisibleIds({
     return ["search", "chat", "explore"];
   }
   const ids = ["search", "chat", "explore", "inbox", "my-journey", "settings"];
+  if (liveChannelsReady) {
+    // Live sits after Explore — living-room peer, not Admin utility.
+    const exploreIdx = ids.indexOf("explore");
+    ids.splice(exploreIdx + 1, 0, "live");
+  }
   const showAdmin = isOwner || (!multiUserEnabled && normalized === "owner");
   if (showAdmin && !isYouth) {
     // Insert Admin immediately before My Journey (left of Settings cluster).
@@ -115,9 +129,17 @@ export function buildPrimaryNavItems({
   isYouth = false,
   multiUserEnabled = true,
   authReady = true,
+  liveChannelsReady = false,
 } = {}) {
   const visible = new Set(
-    primaryNavVisibleIds({ role, isOwner, isYouth, multiUserEnabled, authReady }),
+    primaryNavVisibleIds({
+      role,
+      isOwner,
+      isYouth,
+      multiUserEnabled,
+      authReady,
+      liveChannelsReady,
+    }),
   );
   return PRIMARY_NAV_ITEMS.filter((item) => visible.has(item.id)).map((item) => {
     let label = item.label;
@@ -157,6 +179,9 @@ export function isPrimaryNavActive(item, pathname) {
   if (item.id === "chat") return isChatPath(path);
   if (item.id === "explore") {
     return path === ROUTES.explore || path.startsWith(`${ROUTES.explore}/`);
+  }
+  if (item.id === "live") {
+    return path === ROUTES.live || path.startsWith(`${ROUTES.live}/`);
   }
   if (item.id === "search") {
     return path === ROUTES.search || path.startsWith(`${ROUTES.search}?`);

@@ -155,7 +155,14 @@ function appendPerfectPickAck(message) {
 }
 
 export default function App() {
-  const { authReady, multiUserEnabled, isOwner, role: userRole, isYouth } = useAuthGate();
+  const {
+    authReady,
+    multiUserEnabled,
+    isOwner,
+    role: userRole,
+    isYouth,
+    liveChannelsReady,
+  } = useAuthGate();
   const { start: startBulkProgress, update: updateBulkProgress, finish: finishBulkProgress } = useBulkActionProgress();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -1447,6 +1454,7 @@ export default function App() {
         role={userRole}
         multiUserEnabled={multiUserEnabled}
         authReady={authReady}
+        liveChannelsReady={liveChannelsReady}
         navOpen={appNavOpen}
         onNavOpenChange={setAppNavOpen}
         brandPulse={agentPulse}

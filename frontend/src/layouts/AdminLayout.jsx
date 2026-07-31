@@ -18,6 +18,7 @@ export default function AdminLayout() {
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
+  const [liveChannelsReady, setLiveChannelsReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +27,10 @@ export default function AdminLayout() {
       try {
         const features = await getFeatures();
         const multiUser = Boolean(features?.features?.multi_user_enabled);
-        if (!cancelled) setMultiUserEnabled(multiUser);
+        if (!cancelled) {
+          setMultiUserEnabled(multiUser);
+          setLiveChannelsReady(Boolean(features?.features?.live_channels_ready));
+        }
         if (!multiUser) {
           if (!cancelled) {
             setAllowed(true);
@@ -115,6 +119,8 @@ export default function AdminLayout() {
             isOwner
             role="owner"
             multiUserEnabled={multiUserEnabled}
+            authReady
+            liveChannelsReady={liveChannelsReady}
             navOpen={appNavOpen}
             onNavOpenChange={setAppNavOpen}
             inboxUnreadCount={inboxUnreadCount}

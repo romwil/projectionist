@@ -138,6 +138,68 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertEqual(body["text"], "log-line")
         self.assertEqual(body["source"], "tunarr_api")
 
+    def test_guide_tune_and_stream_proxy(self) -> None:
+        self._enable()
+        features = self.client.get("/api/features")
+        self.assertEqual(features.status_code, 200)
+        self.assertTrue(features.json()["features"]["live_channels_ready"])
+
+        guide_payload = {
+            "enabled": True,
+            "ready": True,
+            "channels": [
+                {
+                    "id": "ch-1",
+                    "name": "Chaos",
+                    "number": 100,
+                    "now": {"title": "Heat", "content_rating": "R"},
+                    "next": None,
+                    "programs": [{"title": "Heat", "start": 1, "stop": 2}],
+                }
+            ],
+            "count": 1,
+            "hours": 6.0,
+            "plex_hint": "Watch in Projectionist",
+            "watch_hint": "Watch in Projectionist",
+        }
+        with patch(
+            "projectionist.live_channels.guide.build_guide_snapshot",
+            return_value=guide_payload,
+        ):
+            guide = self.client.get("/api/live-channels/guide?hours=6")
+        self.assertEqual(guide.status_code, 200, guide.text)
+        self.assertEqual(guide.json()["channels"][0]["id"], "ch-1")
+
+        with patch(
+            "projectionist.live_channels.publish.tunarr_client_from_settings",
+            return_value=MagicMock(),
+        ), patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={"ok": True, "count_warmed_ok": 1},
+        ), patch(
+            "projectionist.live_channels.publish.resolve_channel_icon_url",
+            return_value="",
+        ):
+            tune = self.client.post(
+                "/api/live-channels/tune",
+                json={"channel_id": "ch-1"},
+            )
+        self.assertEqual(tune.status_code, 200, tune.text)
+        self.assertIn("/api/live-channels/stream/ch-1/", tune.json()["stream_url"])
+
+        with patch(
+            "projectionist.live_channels.stream_proxy.proxy_channel_stream",
+            return_value={
+                "body": b"#EXTM3U\n",
+                "media_type": "application/vnd.apple.mpegurl",
+                "status": 200,
+                "path": "index.m3u8",
+            },
+        ):
+            stream = self.client.get("/api/live-channels/stream/ch-1/index.m3u8")
+        self.assertEqual(stream.status_code, 200, stream.text)
+        self.assertIn("mpegurl", stream.headers.get("content-type", ""))
+
     def test_publish_requires_confirm(self) -> None:
         self._enable()
         resp = self.client.post(
