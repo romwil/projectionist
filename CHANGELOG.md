@@ -2,6 +2,24 @@
 
 ## [Unreleased]
 
+## [1.29.23] — 2026-07-30
+
+Live Channels: still-starting Tunarr feedback is a soft success (not an error), and an empty primary libraries list is accepted without a nested fallback.
+
+### Highlights
+- **Still starting isn’t a failure.** When Tunarr’s container is up but HTTP isn’t ready yet, Admin shows a soft notice instead of a red error.
+- **Empty libraries means empty.** A successful `[]` from Tunarr’s libraries API is trusted — Projectionist no longer digs into nested source docs for nothing.
+
+### Fixed
+- `setActionFeedback` used a pointless `"error"/"error"` ternary on Start-engine timeout; `stillStarting` now uses success feedback and clears the engine error.
+- `TunarrClient.list_media_source_libraries` required a non-empty primary list before returning, so HTTP 200 `[]` fell through to nested fallback.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1541 passed, 6 skipped; coverage **76.5%** (≥74%).
+- `cd frontend && npm run test:unit` — 516 passed.
+- Focused: empty primary libraries list + `liveChannelsStartTimeoutAlertType` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.23**.
+
 ## [1.29.22] — 2026-07-30
 
 Live Channels: Tunarr restart readiness is HTTP-true, and Admin Rescan filler remounts binds, waits for ready, force-scans the local filler source, and returns honest errors.

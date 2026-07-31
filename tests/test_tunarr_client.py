@@ -196,6 +196,24 @@ class TunarrClientTests(unittest.TestCase):
             libs = client.list_media_source_libraries("ms-local")
         self.assertEqual(libs[0]["id"], "lib-f")
 
+    def test_list_media_source_libraries_returns_empty_primary_list(self) -> None:
+        """HTTP 200 with [] must not fall back to nested source libraries."""
+        client = TunarrClient("http://tunarr.test")
+        calls: list[str] = []
+
+        def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):
+            del method, headers, body, timeout
+            calls.append(url)
+            if url.endswith("/media-sources/ms-empty/libraries"):
+                return []
+            raise AssertionError(f"unexpected nested fallback url {url}")
+
+        with patch("projectionist.connectors.tunarr.request_json", side_effect=fake_request_json):
+            libs = client.list_media_source_libraries("ms-empty")
+        self.assertEqual(libs, [])
+        self.assertEqual(len(calls), 1)
+        self.assertTrue(calls[0].endswith("/media-sources/ms-empty/libraries"))
+
     def test_filler_lists(self) -> None:
 
         client = TunarrClient("http://tunarr.test")
