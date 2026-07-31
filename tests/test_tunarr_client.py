@@ -177,6 +177,25 @@ class TunarrClientTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             client.update_media_source("", {"name": "x"})
 
+    def test_list_media_source_libraries_falls_back_to_nested(self) -> None:
+        client = TunarrClient("http://tunarr.test")
+
+        def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):
+            del method, headers, body, timeout
+            if url.endswith("/media-sources/ms-local/libraries"):
+                raise RuntimeError("HTTP 400 from …/libraries")
+            if url.endswith("/media-sources/ms-local"):
+                return {
+                    "id": "ms-local",
+                    "type": "local",
+                    "libraries": [{"id": "lib-f", "name": "/data/filler/a", "enabled": True}],
+                }
+            raise AssertionError(f"unexpected url {url}")
+
+        with patch("projectionist.connectors.tunarr.request_json", side_effect=fake_request_json):
+            libs = client.list_media_source_libraries("ms-local")
+        self.assertEqual(libs[0]["id"], "lib-f")
+
     def test_filler_lists(self) -> None:
 
         client = TunarrClient("http://tunarr.test")

@@ -2199,7 +2199,12 @@ def live_channels_continuity_repair_endpoint(
     payload: Optional[LiveChannelsContinuityPayload] = None,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Rescan filler union + repair continuity on all stations (confirm-gated)."""
+    """Rescan filler union + repair continuity on all stations (confirm-gated).
+
+    When ``rescan`` is set: recreate Tunarr if filler/media binds drifted, wait
+    until HTTP is ready, disable out-of-scope Plex libs, then force-scan the
+    local filler source and rebuild the continuity list.
+    """
     del user
     body = payload or LiveChannelsContinuityPayload()
     if not body.confirm:
@@ -2210,29 +2215,106 @@ def live_channels_continuity_repair_endpoint(
     settings = _settings()
     if not settings.features.live_channels_enabled:
         raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.docker import (
+        lifecycle_from_settings,
+        resolve_config_volume,
+    )
     from projectionist.live_channels.filler import (
         ensure_continuity_filler_list,
         repair_jumpstart_stations,
     )
+    from projectionist.live_channels.lifecycle_progress import wait_for_tunarr_ready
     from projectionist.live_channels.publish import (
+        ensure_media_libraries_enabled,
         resolve_channel_icon_url,
         tunarr_client_from_settings,
     )
+
+    docker_state: Dict[str, Any] = {"skipped": True}
+    ready_state: Dict[str, Any] = {"skipped": True}
+    libraries_state: Dict[str, Any] = {"skipped": True}
+
+    if body.rescan:
+        life = lifecycle_from_settings(settings)
+        if life.can_orchestrate():
+            volume = resolve_config_volume(settings, DATA_DIR)
+            # Recreate when filler/media binds drifted (e.g. path fixed in settings
+            # but Tunarr still mounts an empty folder).
+            start_result = life.start(config_volume=volume)
+            docker_state = start_result.to_dict()
+            if not start_result.ok:
+                raise HTTPException(
+                    status_code=502,
+                    detail=start_result.message
+                    or "Could not (re)start Tunarr with current filler mounts",
+                )
+            detail = start_result.detail if isinstance(start_result.detail, dict) else {}
+            url_hint = str(detail.get("url_hint") or "").strip()
+            tunarr_url = (
+                url_hint
+                or str(getattr(settings.tunarr, "url", "") or "").strip()
+            )
+            if url_hint and url_hint != str(getattr(settings.tunarr, "url", "") or ""):
+                settings.tunarr.url = url_hint
+            ready_state = wait_for_tunarr_ready(
+                tunarr_url,
+                timeout_s=90.0,
+                interval_s=2.0,
+                lifecycle=life,
+            )
+            if not ready_state.get("ready"):
+                # Honest still-starting vs hard fail — do not proceed to scan.
+                raise HTTPException(
+                    status_code=503 if ready_state.get("still_starting") else 502,
+                    detail=str(
+                        ready_state.get("message")
+                        or "Tunarr is not ready yet after recreate"
+                    ),
+                )
 
     try:
         client = tunarr_client_from_settings(settings)
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
 
+    if body.rescan or body.repair:
+        # Keep Magical Media / other unmapped libs disabled; never force-scan them.
+        try:
+            libraries_state = ensure_media_libraries_enabled(
+                client, scan=False, force_scan=False, settings=settings
+            )
+        except Exception as error:  # noqa: BLE001
+            libraries_state = {
+                "ok": False,
+                "message": f"Could not scope Tunarr libraries: {error}"[:240],
+            }
+
     filler: Dict[str, Any] = {}
     if body.rescan:
         try:
-            filler = ensure_continuity_filler_list(client, settings, shuffle=True, scan=True)
+            filler = ensure_continuity_filler_list(
+                client,
+                settings,
+                shuffle=True,
+                scan=True,
+                force_scan=True,
+                wait_for_programs=True,
+                wait_timeout_s=60.0,
+            )
         except Exception as error:  # noqa: BLE001
             raise HTTPException(
                 status_code=502,
                 detail=_safe_error_detail(error, "Could not rebuild continuity filler list"),
             ) from error
+        if filler.get("ok") is False and not filler.get("ready"):
+            # Surface empty folder / mount / Tunarr 400 as a clear Admin error.
+            raise HTTPException(
+                status_code=409,
+                detail=str(
+                    filler.get("message")
+                    or "Filler rescan finished without indexed shorts"
+                )[:400],
+            )
 
     repair: Dict[str, Any] = {"ok": True, "skipped": True}
     if body.repair:
@@ -2255,11 +2337,30 @@ def live_channels_continuity_repair_endpoint(
     if repair.get("ok") or filler.get("ok"):
         tunarr["last_error"] = ""
     save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
+    message = (
+        repair.get("message")
+        or filler.get("message")
+        or "Continuity update finished."
+    )
+    skipped_libs = (
+        libraries_state.get("skipped") if isinstance(libraries_state, dict) else None
+    )
+    if isinstance(skipped_libs, list) and skipped_libs:
+        names = ", ".join(
+            str(row.get("name") or "")
+            for row in skipped_libs[:4]
+            if isinstance(row, dict)
+        )
+        if names:
+            message = f"{message} Disabled out-of-scope libs: {names}."
     return {
         "ok": bool(repair.get("ok") or filler.get("ready")),
         "filler": filler,
         "repair": repair,
-        "message": repair.get("message") or filler.get("message") or "Continuity update finished.",
+        "docker": docker_state,
+        "ready": ready_state,
+        "libraries": libraries_state,
+        "message": message,
     }
 
 

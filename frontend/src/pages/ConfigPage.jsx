@@ -1249,10 +1249,11 @@ export default function ConfigPage() {
         setLiveBusy(null);
         return;
       }
-      // Keep polling until Tunarr reports ready (logs marker or HTTP), up to ~5 min.
+      // Keep polling until Tunarr HTTP is ready (log banner alone is not enough), up to ~5 min.
       const deadline = Date.now() + timeoutMs;
       let progress = await pollEngineProgressOnce();
       while (Date.now() < deadline) {
+        if (progress?.ready && progress?.http_ready) break;
         if (progress?.ready) break;
         if (progress?.phase === "error") break;
         await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -1269,20 +1270,23 @@ export default function ConfigPage() {
         setLiveEngineError(progress.error || progress.message || "Broadcast engine failed.");
         setActionFeedback("live-channels", "error", progress.error || progress.message);
       } else {
-        const timeoutMsg =
-          "Timed out waiting for Tunarr to become ready. Check Broadcast engine logs below.";
+        const stillStarting = Boolean(progress?.still_starting || progress?.container_running);
+        const timeoutMsg = stillStarting
+          ? "Tunarr is still starting — HTTP not ready yet. Meili/scan noise during boot is normal; try again shortly."
+          : "Timed out waiting for Tunarr to become ready. Check Broadcast engine logs below.";
         setLiveEngineError(timeoutMsg);
         setLiveEngineProgress((prev) => ({
           ...(prev || {}),
-          phase: "error",
+          phase: stillStarting ? "waiting_ready" : "error",
           percent: prev?.percent || 80,
           message: timeoutMsg,
           ready: false,
           busy: false,
-          ok: false,
-          error: timeoutMsg,
+          ok: stillStarting,
+          error: stillStarting ? "" : timeoutMsg,
+          still_starting: stillStarting,
         }));
-        setActionFeedback("live-channels", "error", timeoutMsg);
+        setActionFeedback("live-channels", stillStarting ? "error" : "error", timeoutMsg);
       }
       const status = await getLiveChannelsStatus();
       setLiveChannelsStatus(status);

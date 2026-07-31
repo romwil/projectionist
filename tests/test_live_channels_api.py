@@ -220,8 +220,8 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertTrue(body["http_ready"])
         self.assertEqual(body["container_id"], "abc123def456")
 
-    def test_lifecycle_status_ready_via_logs_marker(self) -> None:
-        self._enable(docker_orchestration=True, url="")
+    def test_lifecycle_status_logs_alone_still_starting(self) -> None:
+        self._enable(docker_orchestration=True, url="http://tunarr.test:18765")
         with patch(
             "projectionist.live_channels.docker.docker_socket_available",
             return_value=True,
@@ -235,14 +235,16 @@ class LiveChannelsApiTests(unittest.TestCase):
                 "container_id": "deadbeef0001",
                 "logs_ready": True,
                 "log_snippet": "Tunarr is ready!",
+                "transient_noise": False,
             },
         ):
             resp = self.client.get("/api/admin/live-channels/lifecycle-status")
         self.assertEqual(resp.status_code, 200, resp.text)
         body = resp.json()
-        self.assertTrue(body["ready"])
+        self.assertFalse(body["ready"])
         self.assertTrue(body["logs_ready"])
-        self.assertEqual(body["phase"], "ready")
+        self.assertTrue(body["still_starting"])
+        self.assertEqual(body["phase"], "waiting_ready")
 
     def test_plex_attach(self) -> None:
         self._enable()

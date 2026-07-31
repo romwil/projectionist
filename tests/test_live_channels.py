@@ -251,18 +251,20 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertIn("starting", phases)
         self.assertIn("waiting_ready", phases)
 
-    def test_lifecycle_progress_ready_from_logs_marker(self) -> None:
+    def test_lifecycle_progress_logs_alone_not_ready(self) -> None:
         from projectionist.live_channels.lifecycle_progress import (
             build_lifecycle_status,
             logs_indicate_ready,
+            logs_look_transient,
             reset_progress_for_tests,
         )
 
         reset_progress_for_tests()
         self.assertTrue(logs_indicate_ready("boot…\nTunarr is ready!\n"))
         self.assertFalse(logs_indicate_ready("still starting"))
+        self.assertTrue(logs_look_transient("Meilisearch ECONNREFUSED during boot"))
         settings = Settings(
-            tunarr=TunarrSettings(url="", docker_orchestration=True),
+            tunarr=TunarrSettings(url="http://tunarr.test:18765", docker_orchestration=True),
         )
         with patch(
             "projectionist.live_channels.docker.docker_socket_available",
@@ -277,13 +279,64 @@ class DockerLifecycleTests(unittest.TestCase):
                 "container_id": "cid12",
                 "logs_ready": True,
                 "log_snippet": "Tunarr is ready!",
+                "transient_noise": False,
+            },
+        ):
+            status = build_lifecycle_status(settings)
+        # Log banner is soft — HTTP must respond before ready.
+        self.assertFalse(status["ready"])
+        self.assertTrue(status["still_starting"])
+        self.assertEqual(status["phase"], "waiting_ready")
+        self.assertIn("HTTP", status["message"])
+        reset_progress_for_tests()
+
+    def test_lifecycle_progress_ready_requires_http(self) -> None:
+        from projectionist.live_channels.lifecycle_progress import (
+            build_lifecycle_status,
+            reset_progress_for_tests,
+        )
+
+        reset_progress_for_tests()
+        settings = Settings(
+            tunarr=TunarrSettings(url="http://tunarr.test:18765", docker_orchestration=True),
+        )
+        with patch(
+            "projectionist.live_channels.docker.docker_socket_available",
+            return_value=True,
+        ), patch(
+            "projectionist.live_channels.lifecycle_progress.probe_tunarr_http_ready",
+            return_value=True,
+        ), patch(
+            "projectionist.live_channels.lifecycle_progress.probe_ready_from_docker",
+            return_value={
+                "container_running": True,
+                "container_id": "cid12",
+                "logs_ready": False,
+                "log_snippet": "",
             },
         ):
             status = build_lifecycle_status(settings)
         self.assertTrue(status["ready"])
+        self.assertTrue(status["http_ready"])
         self.assertEqual(status["phase"], "ready")
         self.assertEqual(status["percent"], 100)
         reset_progress_for_tests()
+
+    def test_wait_for_tunarr_ready_still_starting(self) -> None:
+        from projectionist.live_channels.lifecycle_progress import wait_for_tunarr_ready
+
+        with patch(
+            "projectionist.live_channels.lifecycle_progress.probe_tunarr_http_ready",
+            return_value=False,
+        ):
+            result = wait_for_tunarr_ready(
+                "http://tunarr.test:18765",
+                timeout_s=0.05,
+                interval_s=0.01,
+            )
+        self.assertFalse(result["ready"])
+        self.assertTrue(result["still_starting"])
+        self.assertIn("still starting", result["message"].lower())
 
     def test_choose_free_port_skips_used(self) -> None:
         from projectionist.live_channels.docker import (
@@ -1772,6 +1825,31 @@ class ContinuityFillerTests(unittest.TestCase):
         self.assertTrue(result["ok"])
         client.update_media_source.assert_not_called()
         client.scan_library.assert_not_called()
+
+    def test_ensure_local_filler_source_force_scan(self) -> None:
+        from projectionist.live_channels.filler import ensure_local_filler_source
+
+        client = MagicMock()
+        client.list_media_sources.return_value = [
+            {
+                "id": "local-1",
+                "type": "local",
+                "name": "Projectionist Fillers",
+                "paths": ["/data/filler/a"],
+            }
+        ]
+        client.list_media_source_libraries.return_value = [
+            {"id": "lib-f", "name": "Fillers", "enabled": True}
+        ]
+        result = ensure_local_filler_source(
+            client,
+            container_paths=["/data/filler/a"],
+            scan=True,
+            force_scan=True,
+        )
+        self.assertTrue(result["ok"])
+        client.update_media_source.assert_not_called()
+        client.scan_library.assert_called_once_with("local-1", "lib-f", force=True)
 
     def test_ensure_local_filler_source_update_includes_id(self) -> None:
         from projectionist.live_channels.filler import ensure_local_filler_source
