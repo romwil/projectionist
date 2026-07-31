@@ -57,6 +57,14 @@ def validate_stream_path(relative_path: str) -> str:
     return cleaned
 
 
+def _split_query(uri: str) -> Tuple[str, str]:
+    text = str(uri or "")
+    if "?" not in text:
+        return text, ""
+    path, query = text.split("?", 1)
+    return path, f"?{query}"
+
+
 def _proxy_uri_for_tunarr(
     uri: str,
     *,
@@ -70,34 +78,51 @@ def _proxy_uri_for_tunarr(
         return text
     proxy_root = stream_proxy_base(channel_id)
     tunarr_root = str(tunarr_base or "").strip().rstrip("/")
-    channel_prefix = f"/stream/channels/{str(channel_id).strip()}/"
+    cid = str(channel_id).strip()
+    channel_prefix = f"/stream/channels/{cid}/"
+    master_suffix = f"/stream/channels/{cid}.m3u8"
+
+    def _from_tunarr_path(path: str, query: str) -> Optional[str]:
+        """Return proxy URI when ``path`` is under this channel's Tunarr stream tree."""
+        if channel_prefix in path:
+            rel = path.split(channel_prefix, 1)[1].lstrip("/")
+            return f"{proxy_root}/{rel}{query}" if rel else f"{proxy_root}/index.m3u8{query}"
+        if path.rstrip("/").endswith(master_suffix):
+            return f"{proxy_root}/index.m3u8{query}"
+        return None
 
     if text.startswith(("http://", "https://")):
         parsed = urlparse(text)
         path = parsed.path or ""
-        if channel_prefix in path:
-            rel = path.split(channel_prefix, 1)[1]
-            query = f"?{parsed.query}" if parsed.query else ""
-            return f"{proxy_root}/{rel}{query}"
-        # Master playlist often points at …/channels/{id}.m3u8 — map to index.
-        if path.rstrip("/").endswith(f"/stream/channels/{str(channel_id).strip()}.m3u8"):
-            query = f"?{parsed.query}" if parsed.query else ""
-            return f"{proxy_root}/index.m3u8{query}"
+        query = f"?{parsed.query}" if parsed.query else ""
+        proxied = _from_tunarr_path(path, query)
+        if proxied is not None:
+            return proxied
         # Unknown absolute host — keep opaque (should not happen for Tunarr HLS).
+        return text
+
+    # Tunarr emits root-relative stream paths (/stream/channels/{id}/hls/…).
+    # Treat those like absolute Tunarr URLs — do NOT join onto playlist_dir
+    # (that produced …/stream/channels/{id}/stream/channels/{id}/… and 502'd).
+    if text.startswith("/"):
+        path, query = _split_query(text)
+        proxied = _from_tunarr_path(path, query)
+        if proxied is not None:
+            return proxied
+        # Non-stream root path on the Projectionist host would 404; keep opaque.
         return text
 
     # Relative to the playlist's directory on Tunarr.
     playlist_dir = str(playlist_path or "").rsplit("/", 1)[0] if "/" in playlist_path else ""
     joined = urljoin(f"{playlist_dir}/" if playlist_dir else "", text)
-    joined = joined.lstrip("/")
-    if joined.startswith("http"):
+    if joined.startswith(("http://", "https://", "/")):
         return _proxy_uri_for_tunarr(
             joined,
             channel_id=channel_id,
             tunarr_base=tunarr_root,
             playlist_path=playlist_path,
         )
-    return f"{proxy_root}/{joined}"
+    return f"{proxy_root}/{joined.lstrip('/')}"
 
 
 def rewrite_hls_playlist(
