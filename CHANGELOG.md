@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.29.35] — 2026-07-31
+
+Projectionist `/live` Watch shows picture again: Content-Security-Policy now allows hls.js MediaSource `blob:` URLs on `<video>`, which `default-src 'self'` had been blocking after playlists and `.ts` segments loaded successfully.
+
+### Highlights
+- **Picture is back on Watch Live.** Stations no longer stay on a black frame after a successful tune — the browser can attach the MSE blob the player already built.
+- **Same secure defaults elsewhere.** CSP still defaults to same-origin; only `media-src` / `worker-src` gain explicit `blob:` for HLS playback.
+
+### Fixed
+- CSP lacked `media-src` (and `worker-src`), so `default-src 'self'` blocked `blob:http://…` Object URLs that hls.js assigns to `<video src>` → black screen despite healthy proxied masters/media/`.ts` (H.264 High + AAC).
+
+### Verification
+- Focused: `SecurityHeadersTests` (incl. `media-src 'self' blob:`) — passed.
+- `.venv/bin/python -m pytest tests/` — 1584 passed, 6 skipped; coverage **75.9%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.35**.
+- Automat LAN (`http://10.10.1.202:8788`): `/live` Watch shows non-zero `videoWidth` after hard-refresh.
+
 ## [1.29.34] — 2026-07-31
 
 Saying “yes” after the curator proposes a Plex collection (or other confirm-gated write) now executes the pending action instead of looping for more verbal confirmation — and a one-click Confirm control appears for a single pending token.

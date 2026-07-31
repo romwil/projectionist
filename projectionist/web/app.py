@@ -389,6 +389,10 @@ _SECURITY_HEADERS = {
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; "
         "connect-src 'self'; "
+        # hls.js MSE attaches a blob: Object URL to <video src>; without media-src,
+        # default-src 'self' blocks it → /live black screen despite healthy .ts fetches.
+        "media-src 'self' blob:; "
+        "worker-src 'self' blob:; "
         "frame-src https://www.youtube.com https://www.youtube-nocookie.com; "
         "frame-ancestors 'none'"
     ),
