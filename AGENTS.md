@@ -12,7 +12,11 @@ are **not** required to boot, run, or test the app (it starts in single-owner mo
 - Python venv at `.venv` (created with `python3.12 -m venv`; needs the `python3.12-venv` apt package,
   which the VM image provides). Package installed editable with `.[web,dev,mcp]` extras.
 - Frontend deps installed in `frontend/`. The SPA must be **built** (`frontend/dist`) before the
-  backend can serve the UI and before e2e runs — the update script does this.
+ backend can serve the UI and before e2e runs — the update script does this.
+- **MCP pin:** the `mcp` extra is constrained to `mcp<2` (currently resolves to `1.29.x`). `mcp>=2`
+ dropped `mcp.server.fastmcp`, which `projectionist/mcp/server.py` imports — so the MCP server and
+ `tests/test_mcp_library.py` / the MCP affinity test break under 2.x. The update script pins this;
+ if you reinstall Python deps manually, install `mcp<2` too.
 
 ### Run the dev server (single service)
 ```bash
