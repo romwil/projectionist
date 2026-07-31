@@ -15,7 +15,7 @@ Projectionist fully manages a [Tunarr](https://github.com/chrisbenincasa/tunarr)
 
 | Decision | Choice |
 |----------|--------|
-| **Watch surface** | Plex Live TV only — no Projectionist player, no Coax-style app |
+| **Watch surfaces** | **Both first-class** — Projectionist `/live` (auth’d Tunarr HLS) **and** Plex Live TV (HDHR/XMLTV) |
 | **Broadcast engine** | Tunarr sibling (HDHomeRun + XMLTV → Plex) |
 | **Projectionist role** | Sole management plane + delight layer (onboarding, recipes, household awareness) |
 | **[Coax](https://coaxtheapp.com/#what-is-it)** | Config vocabulary reference only — not a UX to copy |

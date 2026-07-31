@@ -82,6 +82,49 @@ def find_collection_by_title(
     return None
 
 
+@dataclass
+class PlexCollectionItem:
+    """One child of a Plex collection (movie/show) with stable ratingKey."""
+
+    rating_key: str
+    title: str
+    thumb: str = ""
+    media_type: str = ""
+
+
+def list_collection_items(
+    client: PlexClient,
+    collection_rating_key: str,
+    *,
+    limit: int = 80,
+) -> List[PlexCollectionItem]:
+    """Return ratingKey + title (+ thumb) for items in a Plex collection."""
+    key = str(collection_rating_key or "").strip()
+    if not key:
+        raise ValueError("collection_rating_key is required")
+    cap = max(1, min(int(limit or 80), 200))
+    root = client._request_xml(f"/library/collections/{key}/children")
+    items: List[PlexCollectionItem] = []
+    for element in list(root):
+        rating_key = str(element.attrib.get("ratingKey") or "").strip()
+        title = str(element.attrib.get("title") or "").strip()
+        if not rating_key and not title:
+            continue
+        subtype = str(element.attrib.get("type") or element.attrib.get("subtype") or "")
+        media_type = "show" if subtype in {"show", "2", "episode"} else "movie"
+        items.append(
+            PlexCollectionItem(
+                rating_key=rating_key,
+                title=title,
+                thumb=str(element.attrib.get("thumb") or "").strip(),
+                media_type=media_type,
+            )
+        )
+        if len(items) >= cap:
+            break
+    return items
+
+
 def list_collection_item_titles(
     client: PlexClient,
     collection_rating_key: str,
@@ -89,20 +132,37 @@ def list_collection_item_titles(
     limit: int = 80,
 ) -> List[str]:
     """Return title strings for items in a Plex collection (movies/shows)."""
+    return [
+        item.title
+        for item in list_collection_items(
+            client, collection_rating_key, limit=limit
+        )
+        if item.title
+    ]
+
+
+def collection_art_url(
+    client: PlexClient,
+    collection_rating_key: str,
+) -> str:
+    """Best-effort absolute thumb URL for a Plex collection (PMS-reachable)."""
     key = str(collection_rating_key or "").strip()
     if not key:
-        raise ValueError("collection_rating_key is required")
-    cap = max(1, min(int(limit or 80), 200))
-    root = client._request_xml(f"/library/collections/{key}/children")
-    titles: List[str] = []
-    for element in list(root):
-        title = str(element.attrib.get("title") or "").strip()
-        if not title:
-            continue
-        titles.append(title)
-        if len(titles) >= cap:
-            break
-    return titles
+        return ""
+    try:
+        root = client._request_xml(f"/library/collections/{key}")
+    except Exception:  # noqa: BLE001
+        return ""
+    element = root.find(".//Directory") or root.find(".//Collection") or root
+    thumb = ""
+    if element is not None:
+        thumb = str(element.attrib.get("thumb") or element.attrib.get("art") or "").strip()
+    if not thumb:
+        return ""
+    if thumb.startswith("http://") or thumb.startswith("https://"):
+        return thumb
+    path = thumb if thumb.startswith("/") else f"/{thumb}"
+    return _auth_url(client, path)
 
 
 def create_collection(
