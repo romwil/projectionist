@@ -241,12 +241,13 @@ def ensure_local_filler_source(
     *,
     container_paths: Sequence[str],
     scan: bool = True,
+    force_scan: bool = False,
 ) -> Dict[str, Any]:
     """Ensure a Tunarr ``local`` media source covering filler container paths.
 
     Never PUT/POST a media source without a string ``id``. Skip no-op updates
-    and only force-scan when the source was created, paths changed, or a library
-    was just enabled — avoids Tunarr library-lock stampedes on every ensure.
+    and only force-scan when the source was created, paths changed, a library
+    was just enabled, or ``force_scan`` is set (Admin Rescan filler).
     """
     paths = [str(p).strip() for p in container_paths if str(p).strip()]
     if not paths:
@@ -304,7 +305,18 @@ def ensure_local_filler_source(
                 client.update_media_source(msid, update_body)
                 paths_changed = True
             except Exception as error:  # noqa: BLE001
+                err = str(error)
                 logger.warning("update_media_source %s failed: %s", msid, error)
+                if "400" in err or "body/id" in err or "Invalid input" in err:
+                    return {
+                        "ok": False,
+                        "created": False,
+                        "media_source_id": msid,
+                        "library_ids": [],
+                        "message": (
+                            f"Tunarr rejected media-source update (400): {error}"[:240]
+                        ),
+                    }
 
     if not msid:
         return {
@@ -338,11 +350,18 @@ def ensure_local_filler_source(
                 client.set_library_enabled(msid, lid, enabled=True)
                 just_enabled = True
             # Scan only when needed — parallel forceScan stamps out library locks.
-            if scan and (created or paths_changed or just_enabled):
+            # Explicit Rescan (force_scan) always kicks the local filler library.
+            if scan and (created or paths_changed or just_enabled or force_scan):
                 client.scan_library(msid, lid, force=True)
                 scanned.append(lid)
         except Exception as error:  # noqa: BLE001
-            errors.append(str(error)[:120])
+            err = str(error)
+            if "lock" in err.lower() or "acquire" in err.lower():
+                errors.append(
+                    f"Library lock busy — Tunarr is still scanning; retry Rescan filler shortly ({err})"[:160]
+                )
+            else:
+                errors.append(err[:120])
 
     return {
         "ok": bool(library_ids) and not errors,
@@ -355,8 +374,12 @@ def ensure_local_filler_source(
         "errors": errors,
         "message": (
             f"Local filler source ready ({len(library_ids)} library(ies))."
-            if library_ids
-            else "Local filler source has no libraries yet — wait for Tunarr to index paths."
+            if library_ids and not errors
+            else (
+                "; ".join(errors)
+                if errors
+                else "Local filler source has no libraries yet — wait for Tunarr to index paths."
+            )
         ),
     }
 
@@ -370,6 +393,22 @@ def find_continuity_filler_list(
     return None
 
 
+def _wait_for_filler_programs(
+    client: TunarrClient,
+    library_ids: Sequence[str],
+    *,
+    timeout_s: float = 45.0,
+    interval_s: float = 2.5,
+) -> List[Dict[str, Any]]:
+    """Poll local filler libraries until shorts appear or timeout."""
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    programs = collect_short_programs(client, library_ids=library_ids)
+    while not programs and time.monotonic() < deadline:
+        time.sleep(max(0.2, float(interval_s)))
+        programs = collect_short_programs(client, library_ids=library_ids)
+    return programs
+
+
 def ensure_continuity_filler_list(
     client: TunarrClient,
     settings: Any = None,
@@ -377,6 +416,9 @@ def ensure_continuity_filler_list(
     shuffle: bool = True,
     rng: Optional[random.Random] = None,
     scan: bool = True,
+    force_scan: bool = False,
+    wait_for_programs: bool = False,
+    wait_timeout_s: float = 45.0,
 ) -> Dict[str, Any]:
     """Build/update the shared continuity filler list (union of all filler paths).
 
@@ -403,10 +445,40 @@ def ensure_continuity_filler_list(
         }
 
     source_state = ensure_local_filler_source(
-        client, container_paths=container_paths, scan=scan
+        client,
+        container_paths=container_paths,
+        scan=scan,
+        force_scan=force_scan,
     )
+    if source_state.get("ok") is False and not source_state.get("library_ids"):
+        # Surface Tunarr 400 / missing libs before pretending the list is fine.
+        existing = find_continuity_filler_list(client)
+        return {
+            "ok": False,
+            "ready": False,
+            "filler_list_id": str((existing or {}).get("id") or ""),
+            "program_count": int((existing or {}).get("contentCount") or 0),
+            "total_duration_ms": 0,
+            "thin_pool": True,
+            "binds": binds,
+            "paths": container_paths,
+            "source": source_state,
+            "message": str(source_state.get("message") or "Local filler source failed.")[:240],
+        }
+
     library_ids = list(source_state.get("library_ids") or [])
     programs = collect_short_programs(client, library_ids=library_ids)
+    waited = False
+    if (
+        wait_for_programs
+        and not programs
+        and library_ids
+        and (force_scan or source_state.get("scanned") or source_state.get("created"))
+    ):
+        waited = True
+        programs = _wait_for_filler_programs(
+            client, library_ids, timeout_s=wait_timeout_s
+        )
     if shuffle and programs:
         (rng or random).shuffle(programs)
 
@@ -443,20 +515,31 @@ def ensure_continuity_filler_list(
         }
 
     ready = bool(filler_list_id) and bool(programs)
-    message = (
-        f"{action.capitalize()} continuity filler list with {len(programs)} short(s) "
-        f"from {len(container_paths)} path(s)."
-        if ready
-        else (
-            "Filler paths are mounted but no short clips are indexed yet. "
-            "Wait for the local library scan, then Rescan filler."
+    if ready:
+        message = (
+            f"{action.capitalize()} continuity filler list with {len(programs)} short(s) "
+            f"from {len(container_paths)} path(s)."
         )
-    )
+    elif not library_ids:
+        message = (
+            "Filler local source has no Tunarr libraries yet. Confirm the host folder "
+            f"is mounted into Tunarr at {', '.join(container_paths)} (Restart broadcast "
+            "engine / Rescan filler after changing paths)."
+        )
+    else:
+        message = (
+            "Filler paths are configured but no short clips (≤15 min) are indexed yet. "
+            "Check that the host folder is non-empty and mounted into Tunarr"
+            f" ({', '.join(container_paths)}), then Rescan filler"
+            + (" after the scan finishes." if waited else ".")
+        )
     if ready and thin_pool:
         message += (
             " Combined filler pool is thin for commercial-cut gaps (often up to 15 "
             "minutes between episodes) — add more bumpers/trailers to avoid repeats."
         )
+    if source_state.get("errors"):
+        message = f"{message} Source: {source_state.get('message')}"[:240]
 
     # Cache id on settings when provided (caller persists).
     if settings is not None and filler_list_id:
@@ -478,6 +561,7 @@ def ensure_continuity_filler_list(
         "binds": binds,
         "paths": container_paths,
         "source": source_state,
+        "waited": waited,
         "message": message,
     }
 

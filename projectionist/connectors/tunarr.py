@@ -26,6 +26,7 @@ Projectionist on the trusted host network.
 
 from __future__ import annotations
 
+import logging
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -34,6 +35,8 @@ from urllib.parse import urlencode
 
 from projectionist.connectors.http import request_json
 from projectionist.logging_config import sanitize_url
+
+logger = logging.getLogger(__name__)
 
 
 def _iso_utc(value: Union[datetime, float, int, str]) -> str:
@@ -141,18 +144,56 @@ class TunarrClient:
             raise RuntimeError("Unexpected response from Tunarr update media-source")
         return payload
 
-    def list_media_source_libraries(self, media_source_id: str) -> List[Mapping[str, Any]]:
-        """List libraries for a media source (``GET /media-sources/{id}/libraries``)."""
+    def get_media_source(self, media_source_id: str) -> Mapping[str, Any]:
+        """Fetch one media source (``GET /api/media-sources/{id}``)."""
         msid = str(media_source_id or "").strip()
         if not msid:
             raise ValueError("media_source_id is required")
         payload = request_json(
-            self._api_url(f"/media-sources/{msid}/libraries"),
+            self._api_url(f"/media-sources/{msid}"),
             timeout=self.timeout,
         )
-        if not isinstance(payload, list):
-            return []
-        return [item for item in payload if isinstance(item, Mapping)]
+        if not isinstance(payload, dict):
+            raise RuntimeError("Unexpected response from Tunarr get media-source")
+        return payload
+
+    def list_media_source_libraries(self, media_source_id: str) -> List[Mapping[str, Any]]:
+        """List libraries for a media source.
+
+        Prefer ``GET /media-sources/{id}/libraries``. Tunarr 1.3.x can 400 that
+        route for local sources while the source document nests ``libraries`` —
+        fall back to ``GET /media-sources/{id}`` (then list) so filler ensure
+        still finds library ids.
+        """
+        msid = str(media_source_id or "").strip()
+        if not msid:
+            raise ValueError("media_source_id is required")
+        try:
+            payload = request_json(
+                self._api_url(f"/media-sources/{msid}/libraries"),
+                timeout=self.timeout,
+            )
+            if isinstance(payload, list) and payload:
+                return [item for item in payload if isinstance(item, Mapping)]
+        except Exception as error:  # noqa: BLE001
+            logger.debug(
+                "list_media_source_libraries %s failed (%s); trying nested libraries",
+                msid,
+                error,
+            )
+
+        source: Mapping[str, Any] = {}
+        try:
+            source = self.get_media_source(msid)
+        except Exception:  # noqa: BLE001
+            for item in self.list_media_sources():
+                if str(item.get("id") or item.get("uuid") or "").strip() == msid:
+                    source = item
+                    break
+        nested = source.get("libraries") if isinstance(source, Mapping) else None
+        if isinstance(nested, list):
+            return [item for item in nested if isinstance(item, Mapping)]
+        return []
 
     def set_library_enabled(
         self, media_source_id: str, library_id: str, *, enabled: bool = True

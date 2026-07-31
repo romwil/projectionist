@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.29.22] — 2026-07-30
+
+Live Channels: Tunarr restart readiness is HTTP-true, and Admin Rescan filler remounts binds, waits for ready, force-scans the local filler source, and returns honest errors.
+
+### Highlights
+- **Restart success means the API answers.** Projectionist no longer treats the Tunarr log line alone as “ready” — Meili / mid-scan / SIGTERM noise during recreate stays “still starting” until `/api/version` responds.
+- **Rescan filler actually rescans.** It recreates Tunarr when filler mounts drifted, waits for HTTP, force-scans only the local filler library, builds the shuffled continuity list, and keeps Magical Media / other unmapped libs disabled.
+- **Clear Admin errors.** Empty folders, missing mounts, Tunarr 400s, and library-lock busy states surface in the Rescan filler feedback instead of a quiet green.
+
+### Fixed
+- Lifecycle ready used `http_ready || logs_ready`, so recreate could declare success before Tunarr served HTTP.
+- `GET /media-sources/{id}/libraries` 400 for local sources left filler ensure with zero library ids; client now falls back to nested `libraries` on the source document.
+- Admin Rescan skipped force-scan when paths were unchanged, and did not remount drifted filler binds or wait for Tunarr after recreate.
+- Empty / unmounted filler paths returned a soft “wait then rescan” note instead of a hard Admin error.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1540 passed, 6 skipped; coverage **76.5%** (≥74%).
+- `cd frontend && npm run test:unit` — 514 passed.
+- Focused: lifecycle HTTP-ready, filler force-scan, libraries nested fallback — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.22**.
+
 ## [1.29.21] — 2026-07-30
 
 Live Channels: turn off Tunarr libraries that sit outside Projectionist’s configured Plex sections (e.g. Magical Media), not only skip enabling them.
