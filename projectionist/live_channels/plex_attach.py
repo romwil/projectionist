@@ -660,7 +660,8 @@ def scan_plex_device_channels(
     key = str(device_key or "").strip()
     if not key:
         return {"ok": False, "count": 0, "message": "Missing device key for scan."}
-    # Best-effort scan kick; some PMS builds return empty bodies.
+    # Best-effort scan kick; some PMS builds return empty bodies or
+    # ``Unknown source`` 500 for Tunarr HDHR — ignore and poll channels.
     try:
         from urllib.parse import quote
 
@@ -672,13 +673,16 @@ def scan_plex_device_channels(
         )
         request_empty(scan_url, method="POST", timeout=min(timeout, 20))
     except Exception:  # noqa: BLE001
-        # Fall through — channel list GET still refreshes some builds.
+        pass
+    try:
         _plex_xml(
             client,
             f"/media/grabbers/devices/{key}/channels",
             method="GET",
             timeout=min(timeout, 20),
         )
+    except Exception:  # noqa: BLE001
+        pass
 
     deadline = time.time() + max(5, int(timeout))
     last = 0
@@ -791,6 +795,20 @@ def _find_tunarr_device(
     )
 
 
+def _plex_delete_empty(client: Any, path: str, *, timeout: int = 45) -> str:
+    """DELETE that tolerates empty bodies / slow PMS (DVR delete often hangs)."""
+    from urllib.parse import quote
+
+    from projectionist.connectors.http import request_empty
+
+    url = f"{client.base_url}{path}?X-Plex-Token={quote(client.token)}"
+    try:
+        request_empty(url, method="DELETE", timeout=timeout)
+        return ""
+    except Exception as error:  # noqa: BLE001
+        return str(error)[:160]
+
+
 def _delete_tunarr_xmltv_stack(
     client: Any,
     *,
@@ -815,27 +833,30 @@ def _delete_tunarr_xmltv_stack(
         ):
             # Detach device first when present, then drop the XMLTV DVR.
             if owns and device_key:
-                _plex_xml(
+                err = _plex_delete_empty(
                     client,
                     f"/livetv/dvrs/{dvr_key}/devices/{device_key}",
-                    method="DELETE",
-                    timeout=timeout,
+                    timeout=min(timeout, 30),
                 )
-            _plex_xml(
+                if err:
+                    steps.append(f"detach_device_warn_{dvr_key}")
+            err = _plex_delete_empty(
                 client,
                 f"/livetv/dvrs/{dvr_key}",
-                method="DELETE",
-                timeout=timeout,
+                timeout=min(timeout, 45),
             )
-            steps.append(f"deleted_xmltv_dvr_{dvr_key}")
+            steps.append(
+                f"deleted_xmltv_dvr_{dvr_key}" if not err else f"delete_dvr_warn_{dvr_key}"
+            )
     if device_key:
-        _plex_xml(
+        err = _plex_delete_empty(
             client,
             f"/media/grabbers/devices/{device_key}",
-            method="DELETE",
-            timeout=timeout,
+            timeout=min(timeout, 30),
         )
-        steps.append(f"deleted_device_{device_key}")
+        steps.append(
+            f"deleted_device_{device_key}" if not err else f"delete_device_warn_{device_key}"
+        )
     return steps
 
 
@@ -1580,29 +1601,46 @@ def probe_plex_tunarr_mapping(
     device_channels = count_plex_device_channels(client, device_key, timeout=timeout)
     mapped = 0
     dvr_key = ""
-    dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
-    for dvr in _iter_dvrs(dvrs_root):
-        if not _lineup_matches_xmltv(str(dvr.attrib.get("lineup") or ""), xmltv):
-            continue
-        dvr_key = str(dvr.attrib.get("key") or "")
-        mapped = len(
-            [
-                m
-                for m in dvr.iter("ChannelMapping")
-                if str(m.attrib.get("enabled") or "1") not in {"0", "false", "False"}
-                and m.attrib.get("deviceIdentifier")
-            ]
-        )
-        if mapped == 0:
-            # ChannelMapping nodes may omit enabled; count all.
-            mapped = len(list(dvr.iter("ChannelMapping")))
-        break
+    dvr_error = ""
+    try:
+        dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
+        for dvr in _iter_dvrs(dvrs_root):
+            if not _lineup_matches_xmltv(str(dvr.attrib.get("lineup") or ""), xmltv):
+                continue
+            dvr_key = str(dvr.attrib.get("key") or "")
+            mapped = len(
+                [
+                    m
+                    for m in dvr.iter("ChannelMapping")
+                    if str(m.attrib.get("enabled") or "1") not in {"0", "false", "False"}
+                    and m.attrib.get("deviceIdentifier")
+                ]
+            )
+            if mapped == 0:
+                # ChannelMapping nodes may omit enabled; count all.
+                mapped = len(list(dvr.iter("ChannelMapping")))
+            break
+    except Exception as error:  # noqa: BLE001
+        dvr_error = str(error)[:120]
+
+    # If DVR listing is briefly wedged (PMS after delete), still report device + HDHR.
+    if dvr_error and not mapped and device_channels:
+        mapped = device_channels
 
     complete = (
         bool(device)
         and device_status.lower() != "dead"
+        and not dvr_error
         and _mapping_complete(mapped, expected)
     )
+    message = (
+        f"Mapped {mapped}/{expected or mapped} · "
+        f"Tunarr HDHR {'ok' if hdhr_ok else 'down'} · "
+        f"Plex device {device_status or 'present'}"
+        + (f" · DVR {dvr_key}" if dvr_key else "")
+    )
+    if dvr_error:
+        message += f" · DVR list busy ({dvr_error})"
     return {
         "ok": complete,
         "hdhr_ok": hdhr_ok,
@@ -1615,12 +1653,7 @@ def probe_plex_tunarr_mapping(
         "dvr_key": dvr_key or None,
         "mapped": mapped,
         "expected": expected,
-        "message": (
-            f"Mapped {mapped}/{expected or mapped} · "
-            f"Tunarr HDHR {'ok' if hdhr_ok else 'down'} · "
-            f"Plex device {device_status or 'present'}"
-            + (f" · DVR {dvr_key}" if dvr_key else "")
-        ),
+        "message": message,
     }
 
 
