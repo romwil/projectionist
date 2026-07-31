@@ -129,6 +129,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             "list_plex_collections",
             "create_plex_collection",
             "add_to_plex_collection",
+            "confirm_pending_action",
             "get_user_reviews",
             "save_user_review",
             "suggest_titles_to_rate",
@@ -1211,6 +1212,122 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             ):
                 with self.assertRaises(ArrTitleNotFoundError):
                     await execute_confirmed_action(db, settings, token)
+
+    async def test_create_plex_collection_propose_then_confirm_pending_action(self) -> None:
+        """NL assent path: propose returns a token; confirm_pending_action redeems it."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            settings = Settings(
+                plex_url="http://plex.test",
+                plex_token="token",
+                plex_tv_section="2",
+                features=FeatureFlags(plex_collections_enabled=True),
+            )
+            registry = ToolRegistry(db, settings, DEFAULT_LENS_ID, user_id="owner-1")
+            propose = json.loads(
+                await registry.execute(
+                    "create_plex_collection",
+                    {
+                        "title": "Gilligan's Island Collection",
+                        "media_type": "show",
+                        "rating_keys": ["185560"],
+                    },
+                )
+            )
+            self.assertIn("confirmation_token", propose)
+            self.assertIn("confirm_pending_action", propose["message"])
+            token = propose["confirmation_token"]
+            self.assertEqual(
+                registry.pending_tokens,
+                [{"token": token, "action": "create_plex_collection"}],
+            )
+
+            from projectionist.connectors.plex_collections import PlexCollection
+
+            fake = PlexCollection(
+                rating_key="col-1",
+                title="[CuratorX] Gilligan's Island Collection",
+                section_id="2",
+                media_type="show",
+            )
+            with patch(
+                "projectionist.connectors.plex_collections.create_collection",
+                return_value=fake,
+            ) as mock_create:
+                confirmed = json.loads(
+                    await registry.execute(
+                        "confirm_pending_action",
+                        {"confirmation_token": token, "confirmed": True},
+                    )
+                )
+            self.assertTrue(confirmed.get("ok"))
+            self.assertEqual(confirmed.get("action"), "create_plex_collection")
+            self.assertEqual(confirmed["result"]["rating_key"], "col-1")
+            mock_create.assert_called_once()
+            # Token is consumed — second confirm fails cleanly.
+            again = json.loads(
+                await registry.execute(
+                    "confirm_pending_action",
+                    {"confirmation_token": token},
+                )
+            )
+            self.assertIn("error", again)
+            self.assertFalse(again.get("ok", True))
+
+    async def test_confirm_pending_action_can_cancel(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            settings = Settings(
+                plex_url="http://plex.test",
+                plex_token="token",
+                plex_movie_section="1",
+                features=FeatureFlags(plex_collections_enabled=True),
+            )
+            registry = ToolRegistry(db, settings, DEFAULT_LENS_ID, user_id="owner-1")
+            propose = json.loads(
+                await registry.execute(
+                    "create_plex_collection",
+                    {"title": "Cancel Me", "media_type": "movie"},
+                )
+            )
+            token = propose["confirmation_token"]
+            cancelled = json.loads(
+                await registry.execute(
+                    "confirm_pending_action",
+                    {"confirmation_token": token, "confirmed": False},
+                )
+            )
+            self.assertTrue(cancelled.get("cancelled"))
+            self.assertTrue(cancelled.get("found"))
+            missing = json.loads(
+                await registry.execute(
+                    "confirm_pending_action",
+                    {"confirmation_token": token, "confirmed": True},
+                )
+            )
+            self.assertIn("error", missing)
+
+    async def test_confirm_pending_action_denied_for_guests(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(
+                db, Settings(), DEFAULT_LENS_ID, user_id="guest-1", user_role="guest"
+            )
+            result = json.loads(
+                await registry.execute(
+                    "confirm_pending_action",
+                    {"confirmation_token": "anything"},
+                )
+            )
+            self.assertIn("error", result)
+            self.assertIn("Guests", result["error"])
+
+    def test_system_prompt_instructs_confirm_pending_action_on_assent(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            prompt = build_system_prompt(db, lens_id=DEFAULT_LENS_ID)
+            self.assertIn("confirm_pending_action", prompt)
+            self.assertIn("confirmation_token", prompt)
 
 
     @patch("projectionist.agent.tools.TMDBClient")

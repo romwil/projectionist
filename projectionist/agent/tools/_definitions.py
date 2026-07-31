@@ -299,7 +299,10 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "add_to_radarr",
-            "description": "Propose adding a movie to Radarr. Returns a confirmation token.",
+            "description": (
+                "Propose adding a movie to Radarr. Returns a confirmation_token. "
+                "After the user affirms, call confirm_pending_action with that token."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"tmdb_id": {"type": "integer"}, "title": {"type": "string"}},
@@ -311,7 +314,10 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "add_to_sonarr",
-            "description": "Propose adding a TV show to Sonarr. Returns a confirmation token.",
+            "description": (
+                "Propose adding a TV show to Sonarr. Returns a confirmation_token. "
+                "After the user affirms, call confirm_pending_action with that token."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {"tvdb_id": {"type": "integer"}, "title": {"type": "string"}},
@@ -325,7 +331,8 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "request_via_seerr",
             "description": (
                 "Queue a movie or TV show request in Seerr for household members. "
-                "Always returns a confirmation token; the user must confirm before submit."
+                "Always returns a confirmation_token; after the user affirms, call "
+                "confirm_pending_action with that token before anything is submitted."
             ),
             "parameters": {
                 "type": "object",
@@ -407,7 +414,8 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "remove_from_arr",
             "description": (
-                "Propose removing a title from Radarr/Sonarr. Returns a confirmation token. "
+                "Propose removing a title from Radarr/Sonarr. Returns a confirmation_token. "
+                "After the user affirms, call confirm_pending_action with that token. "
                 "Prefer tmdb_id for movies and tvdb_id for shows so the correct Radarr/Sonarr id is resolved."
             ),
             "parameters": {
@@ -1157,7 +1165,9 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "create_plex_collection",
             "description": (
                 "Propose creating a Plex collection in the user's library. "
-                "Returns a confirmation token before any Plex write."
+                "Returns a confirmation_token before any Plex write. "
+                "After the user affirms (yes / go for it / confirm), call "
+                "confirm_pending_action with that exact token — do not ask again."
             ),
             "parameters": {
                 "type": "object",
@@ -1180,7 +1190,8 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "add_to_plex_collection",
             "description": (
                 "Propose adding owned titles to an existing Plex collection. "
-                "Returns a confirmation token before any Plex write."
+                "Returns a confirmation_token before any Plex write. "
+                "After the user affirms, call confirm_pending_action with that token."
             ),
             "parameters": {
                 "type": "object",
@@ -1201,6 +1212,34 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     },
                 },
                 "required": ["media_type", "rating_keys"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "confirm_pending_action",
+            "description": (
+                "Confirm (execute) or cancel a pending confirmation_token from a prior "
+                "propose tool (add_to_radarr, add_to_sonarr, request_via_seerr, "
+                "remove_from_arr, create_plex_collection, add_to_plex_collection). "
+                "REQUIRED when the user affirms a pending proposal — pass the exact "
+                "confirmation_token from that tool result. Set confirmed=false to cancel. "
+                "Never invent a token; never ask for another verbal yes without calling this."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "confirmation_token": {
+                        "type": "string",
+                        "description": "Token returned by the propose tool",
+                    },
+                    "confirmed": {
+                        "type": "boolean",
+                        "description": "True to execute (default); false to cancel",
+                    },
+                },
+                "required": ["confirmation_token"],
             },
         },
     },

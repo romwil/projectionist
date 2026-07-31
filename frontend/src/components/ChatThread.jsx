@@ -20,7 +20,7 @@ function renderBulkConfirmActions(message, handlers, showTokenConfirm, viewportB
   });
   const actions = [];
 
-  if (showTokenConfirm && handlers.pendingTokenCount >= 2) {
+  if (showTokenConfirm && handlers.pendingTokenCount >= 1) {
     actions.push(
       <ConfirmAllButton
         key="tokens"
@@ -153,7 +153,7 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks, streami
           ))}
         </div>
         {role === "assistant" && isLastTitleCards
-          ? renderBulkConfirmActions(message, handlers, handlers.pendingTokenCount >= 2, nextViewport)
+          ? renderBulkConfirmActions(message, handlers, handlers.pendingTokenCount >= 1, nextViewport)
           : null}
       </>
     );
@@ -336,6 +336,26 @@ export default function ChatThread({
                   )}
                 </div>
               ))}
+              {isAssistant &&
+              message.id === lastAssistantId &&
+              pendingTokenCount >= 1 &&
+              !message.blocks.some((block) => block.type === "title_cards")
+                ? renderBulkConfirmActions(
+                    message,
+                    {
+                      onConfirmAllItems,
+                      onConfirmAllTokens,
+                      pendingTokenCount,
+                      pendingTokenActions,
+                      actionsDisabled,
+                      requestPath,
+                      userRole,
+                      multiUserEnabled,
+                    },
+                    true,
+                    null,
+                  )
+                : null}
               {isAssistant ? (
                 <div className="message-response-actions">
                   <MessageReactions

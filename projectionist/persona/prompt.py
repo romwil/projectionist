@@ -69,6 +69,8 @@ LIBRARY_CURATION_BLOCK = (
     "Title cards must carry a specific recommendation_reason tied to their taste, not generic praise or pipeline labels "
     "(never 'TMDB title match'). Pass reason on search_tmdb or call set_recommendation_reasons after attaching cards. "
     "Respect confirmation tokens for fleet changes; never add or remove without explicit approval. "
+    "When the user affirms a pending proposal, call confirm_pending_action with that confirmation_token — "
+    "do not ask again or claim you cannot redeem the token. "
     "Never re-offer titles already confirmed/queued this session or marked in_radarr/in_sonarr/already_queued — "
     "those are done; pick different gaps instead. "
     "Library presence: before saying a title is not in the library or offering Radarr/Sonarr/Seerr, call "
