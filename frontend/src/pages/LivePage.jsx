@@ -4,7 +4,6 @@ import {
   getFeatures,
   getLiveChannelsGuide,
   getPlexMachineId,
-  tuneLiveChannel,
 } from "../api/client";
 import LiveGuide from "../components/live/LiveGuide";
 import LivePlayer from "../components/live/LivePlayer";
@@ -29,7 +28,6 @@ export default function LivePage({ popout = false }) {
   const [guide, setGuide] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
-  const [tuning, setTuning] = useState(false);
   const [mode, setMode] = useState(() => {
     if (popout) return "watch";
     if (modeParam === "watch" || channelParam) return "watch";
@@ -87,9 +85,10 @@ export default function LivePage({ popout = false }) {
     [channels, activeChannelId],
   );
 
-  async function handleTune(channelId) {
+  function handleTune(channelId) {
     const id = String(channelId || "").trim();
     if (!id) return;
+    // LivePlayer warms Tunarr before loadSource — do not race tune here.
     setActiveChannelId(id);
     setMode("watch");
     setSearchParams(
@@ -101,14 +100,6 @@ export default function LivePage({ popout = false }) {
       },
       { replace: true },
     );
-    setTuning(true);
-    try {
-      await tuneLiveChannel(id);
-    } catch {
-      // Player still attempts the stream; warm is best-effort.
-    } finally {
-      setTuning(false);
-    }
   }
 
   function handleChannelChange(channelId) {
@@ -248,11 +239,6 @@ export default function LivePage({ popout = false }) {
       </header>
 
       {error ? <p className="live-page-error">{error}</p> : null}
-      {tuning ? (
-        <p className="live-page-status live-page-status--inline" data-testid="live-tuning">
-          Warming stream…
-        </p>
-      ) : null}
 
       {mode === "guide" && !popout ? (
         <LiveGuide

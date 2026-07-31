@@ -1630,12 +1630,15 @@ def collect_programs_for_recipe(
             lib = library_items_matching_filters(
                 db, craft, media_scope=scope, limit=_FULL_RUN_FILL_CAP
             )
+            # Empty set means “no library titles match” — do NOT coerce to None
+            # (None falls back to Tunarr-side filters against the full pool).
             allowed_keys = {str(k) for k in (lib.get("rating_keys") or []) if str(k)}
-        # When library index cannot resolve motif/theme, keep Tunarr-side genre/year filter.
+        # When library index is unavailable (allowed_keys is None), keep Tunarr-side
+        # genre/year filter. An empty allowed set stays empty.
         pool = apply_craft_filters_to_pool(
             pool,
             craft,
-            allowed_rating_keys=allowed_keys if allowed_keys else None,
+            allowed_rating_keys=allowed_keys,
             excluded_rating_keys=excluded,
         )
         if match_stats is not None:

@@ -1,6 +1,37 @@
 {
-  "generated_at": "2026-07-31T03:32:00Z",
+  "generated_at": "2026-07-31T03:42:13Z",
   "releases": [
+    {
+      "version": "1.29.32",
+      "date": "2026-07-31",
+      "summary": "Projectionist `/live` Watch plays video again: strip Tunarr alternate-audio HLS tags that stalled hls.js, warm the station before the first playlist load, and show honest stream errors instead of a silent black screen.",
+      "highlights": [
+        "**Watch Live plays with sound.** Stations 100–105 load real H.264/AAC segments through the auth’d proxy instead of hanging on a black frame.",
+        "**Honest failures.** If a playlist or segment can’t load, the OSD shows a clear message (auth, upstream starting, or retry) — not a silent black screen.",
+        "**Stable tune.** The player warms Tunarr before starting HLS so start-over/warm can’t reset the stream under the first fetch."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Tunarr master playlists advertise `#EXT-X-MEDIA:TYPE=AUDIO` groups (often URI-less / pointing at the muxed video playlist); hls.js entered alt-audio/level-load paths and never fetched `.ts` segments. Proxy now sanitizes masters to plain muxed variants.",
+            "`/live` raced `POST /tune` (align + warm) against the player’s first `loadSource`, resetting cold HLS sessions mid-tune (`levelLoadError` / `manifestLoadError`).",
+            "Fatal HLS errors only showed raw `details` codes; UI now maps common network failures to member-readable copy and limits infinite `startLoad` retries.",
+            "Empty library craft matches no longer fall back to the unfiltered Tunarr pool (full-run fill honesty)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: `StreamProxyTests` (incl. alt-audio sanitize) + craft zero-match pool — passed.",
+            "`.venv/bin/python -m pytest tests/` — see ship log.",
+            "`cd frontend && npm run test:unit` / `lint` / `build` — see ship log.",
+            "`pytest tests/test_version.py` — lockstep **1.29.32**.",
+            "Automat: `/live` Watch on channels 100–105 shows picture + audio after deploy."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.31",
       "date": "2026-07-31",

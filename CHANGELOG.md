@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.29.32] — 2026-07-31
+
+Projectionist `/live` Watch plays video again: strip Tunarr alternate-audio HLS tags that stalled hls.js, warm the station before the first playlist load, and show honest stream errors instead of a silent black screen.
+
+### Highlights
+- **Watch Live plays with sound.** Stations 100–105 load real H.264/AAC segments through the auth’d proxy instead of hanging on a black frame.
+- **Honest failures.** If a playlist or segment can’t load, the OSD shows a clear message (auth, upstream starting, or retry) — not a silent black screen.
+- **Stable tune.** The player warms Tunarr before starting HLS so start-over/warm can’t reset the stream under the first fetch.
+
+### Fixed
+- Tunarr master playlists advertise `#EXT-X-MEDIA:TYPE=AUDIO` groups (often URI-less / pointing at the muxed video playlist); hls.js entered alt-audio/level-load paths and never fetched `.ts` segments. Proxy now sanitizes masters to plain muxed variants.
+- `/live` raced `POST /tune` (align + warm) against the player’s first `loadSource`, resetting cold HLS sessions mid-tune (`levelLoadError` / `manifestLoadError`).
+- Fatal HLS errors only showed raw `details` codes; UI now maps common network failures to member-readable copy and limits infinite `startLoad` retries.
+- Empty library craft matches no longer fall back to the unfiltered Tunarr pool (full-run fill honesty).
+
+### Verification
+- Focused: `StreamProxyTests` (incl. alt-audio sanitize) + craft zero-match pool — passed.
+- `.venv/bin/python -m pytest tests/` — 1577 passed, 6 skipped; coverage **75.9%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.32**.
+- Automat LAN (`http://10.10.1.202:8788`): `/live` Watch on channels 100–105 shows picture + audio after deploy.
+
 ## [1.29.31] — 2026-07-31
 
 Live Channels: Chaos removed as an owner-facing mode; collection/show stations fill the full ID-resolved pool (full-run Shuffle), not a ~30-title loop.

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import Hls from "hls.js";
+import { tuneLiveChannel } from "../../api/client";
 import {
   buildOsdModel,
   formatClock,
@@ -8,6 +9,27 @@ import {
 } from "../../lib/liveChannels.js";
 
 const OSD_IDLE_MS = 3500;
+
+function formatHlsError(data) {
+  const detail = String(data?.details || "Stream error");
+  const code = data?.response?.code;
+  if (code === 401 || code === 403) {
+    return "Sign in again to watch Live Channels.";
+  }
+  if (code === 502 || code === 503 || code === 504) {
+    return "Broadcast engine is still starting — try again in a few seconds.";
+  }
+  if (code && code >= 400) {
+    return `Stream unavailable (${detail}, HTTP ${code}).`;
+  }
+  if (detail === "manifestLoadError" || detail === "levelLoadError") {
+    return "Could not load this channel’s stream. Warming may still be in progress — try Watch again.";
+  }
+  if (detail === "fragLoadError") {
+    return "Video segments failed to load. Try another channel or Watch again.";
+  }
+  return detail;
+}
 
 /**
  * Fullscreen-capable HLS player with cable-box OSD + subtitle picker.
@@ -82,6 +104,7 @@ export default function LivePlayer({
     setActiveTrack(-1);
 
     let destroyed = false;
+    let networkRetries = 0;
     const syncTracks = () => {
       if (destroyed || !video) return;
       const list = [];
@@ -97,67 +120,88 @@ export default function LivePlayer({
       setTextTracks(list);
     };
 
-    if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: false,
-        backBufferLength: 30,
-        // Auth’d stream proxy needs the session cookie on every playlist/segment.
-        xhrSetup: (xhr) => {
-          xhr.withCredentials = true;
-        },
-      });
-      hlsRef.current = hls;
-      hls.loadSource(url);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        if (destroyed) return;
-        setStatus("playing");
-        video.play().catch(() => setStatus("ready"));
-        syncTracks();
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (destroyed || !data?.fatal) return;
-        setStatus("error");
-        setError(data?.details || "Stream error");
-        if (data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-          hls.startLoad();
-        } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-          hls.recoverMediaError();
-        }
-      });
-      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
-        // Prefer native textTracks once demuxed; also surface HLS subtitle tracks.
-        const subs = hls.subtitleTracks || [];
-        if (subs.length) {
-          setTextTracks(
-            subs.map((track, index) => ({
-              index,
-              label: track.name || track.lang || `CC ${index + 1}`,
-              language: track.lang || "",
-              viaHls: true,
-            })),
-          );
-        } else {
-          syncTracks();
-        }
-      });
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = url;
-      video.addEventListener("loadedmetadata", () => {
-        if (destroyed) return;
-        setStatus("playing");
-        video.play().catch(() => setStatus("ready"));
-        syncTracks();
-      });
-    } else {
-      setStatus("error");
-      setError("HLS playback is not supported in this browser.");
-    }
+    const startPlayback = () => {
+      if (destroyed || !video) return;
 
-    if (autoFullscreen && rootRef.current?.requestFullscreen) {
-      rootRef.current.requestFullscreen().catch(() => {});
-    }
+      if (Hls.isSupported()) {
+        const hls = new Hls({
+          // Main-thread XHR keeps session cookies reliable on the auth’d proxy.
+          enableWorker: false,
+          lowLatencyMode: false,
+          backBufferLength: 30,
+          manifestLoadingTimeOut: 20000,
+          levelLoadingTimeOut: 20000,
+          fragLoadingTimeOut: 30000,
+          // Auth’d stream proxy needs the session cookie on every playlist/segment.
+          xhrSetup: (xhr) => {
+            xhr.withCredentials = true;
+          },
+        });
+        hlsRef.current = hls;
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          if (destroyed) return;
+          setStatus("playing");
+          video.play().catch(() => setStatus("ready"));
+          syncTracks();
+        });
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (destroyed || !data?.fatal) return;
+          setStatus("error");
+          setError(formatHlsError(data));
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 2) {
+            networkRetries += 1;
+            hls.startLoad();
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+            hls.recoverMediaError();
+          }
+        });
+        hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
+          // Prefer native textTracks once demuxed; also surface HLS subtitle tracks.
+          const subs = hls.subtitleTracks || [];
+          if (subs.length) {
+            setTextTracks(
+              subs.map((track, index) => ({
+                index,
+                label: track.name || track.lang || `CC ${index + 1}`,
+                language: track.lang || "",
+                viaHls: true,
+              })),
+            );
+          } else {
+            syncTracks();
+          }
+        });
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        video.src = url;
+        video.addEventListener("loadedmetadata", () => {
+          if (destroyed) return;
+          setStatus("playing");
+          video.play().catch(() => setStatus("ready"));
+          syncTracks();
+        });
+      } else {
+        setStatus("error");
+        setError("HLS playback is not supported in this browser.");
+      }
+
+      if (autoFullscreen && rootRef.current?.requestFullscreen) {
+        rootRef.current.requestFullscreen().catch(() => {});
+      }
+    };
+
+    // Warm + start-over BEFORE loadSource so tune cannot reset the HLS session
+    // out from under the first playlist/segment fetches.
+    (async () => {
+      try {
+        await tuneLiveChannel(channelId);
+      } catch {
+        // Best-effort — player still attempts the stream; errors surface via hls.js.
+      }
+      if (destroyed) return;
+      startPlayback();
+    })();
 
     return () => {
       destroyed = true;
