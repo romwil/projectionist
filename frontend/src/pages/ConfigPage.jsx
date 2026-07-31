@@ -53,6 +53,7 @@ import {
   formatLastSyncRelative,
   formatSyncJobDetails,
 } from "../lib/jobProgress.js";
+import { liveChannelsStartTimeoutAlertType } from "../lib/liveChannelsEngineFeedback.js";
 import { formatRemaining } from "../lib/onNow.js";
 import {
   canToggleSecretVisibility,
@@ -1274,7 +1275,8 @@ export default function ConfigPage() {
         const timeoutMsg = stillStarting
           ? "Tunarr is still starting — HTTP not ready yet. Meili/scan noise during boot is normal; try again shortly."
           : "Timed out waiting for Tunarr to become ready. Check Broadcast engine logs below.";
-        setLiveEngineError(timeoutMsg);
+        // stillStarting: container up, HTTP not ready — soft notice (ok:true), not a failure.
+        setLiveEngineError(stillStarting ? "" : timeoutMsg);
         setLiveEngineProgress((prev) => ({
           ...(prev || {}),
           phase: stillStarting ? "waiting_ready" : "error",
@@ -1286,7 +1288,11 @@ export default function ConfigPage() {
           error: stillStarting ? "" : timeoutMsg,
           still_starting: stillStarting,
         }));
-        setActionFeedback("live-channels", stillStarting ? "error" : "error", timeoutMsg);
+        setActionFeedback(
+          "live-channels",
+          liveChannelsStartTimeoutAlertType(stillStarting),
+          timeoutMsg,
+        );
       }
       const status = await getLiveChannelsStatus();
       setLiveChannelsStatus(status);

@@ -173,7 +173,8 @@ class TunarrClient:
                 self._api_url(f"/media-sources/{msid}/libraries"),
                 timeout=self.timeout,
             )
-            if isinstance(payload, list) and payload:
+            # Empty list is a valid primary response — do not fall through to nested.
+            if isinstance(payload, list):
                 return [item for item in payload if isinstance(item, Mapping)]
         except Exception as error:  # noqa: BLE001
             logger.debug(
