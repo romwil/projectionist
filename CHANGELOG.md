@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.29.21] — 2026-07-30
+
+Live Channels: turn off Tunarr libraries that sit outside Projectionist’s configured Plex sections (e.g. Magical Media), not only skip enabling them.
+
+### Highlights
+- **Side libraries stay off.** If Tunarr already had Magical Media or other unmapped libraries enabled, Projectionist disables them on the next wire/publish — only your mapped movie / TV sections remain on.
+
+### Fixed
+- Out-of-scope Tunarr libraries that were previously enabled stayed on; `ensure_media_libraries_enabled` now sets `enabled=false` for libraries whose `externalKey` is not `plex_movie_section` / `plex_tv_section`.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1536 passed, 6 skipped; coverage **76.6%** (≥74%).
+- Focused ContinuityFillerTests for skip + disable unconfigured sections — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.21**.
+
+
 ## [1.29.20] — 2026-07-30
 
 Live Channels: only expose Projectionist’s configured Plex libraries into Tunarr, fix media-source updates missing `id`, and stop scan stampedes that trip library locks.

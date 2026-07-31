@@ -299,6 +299,13 @@ def ensure_media_libraries_enabled(
                     "reason": "not_in_projectionist_plex_sections",
                 }
             )
+            # Leave out-of-scope libraries disabled (do not delete). If a prior
+            # wire already enabled them, turn them back off.
+            if bool(lib.get("enabled")):
+                try:
+                    client.set_library_enabled(msid, lid, enabled=False)
+                except Exception as error:  # noqa: BLE001
+                    errors.append(f"{name} (disable): {error}"[:160])
             continue
         try:
             just_enabled = False
