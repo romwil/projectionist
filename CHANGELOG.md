@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.29.33] — 2026-07-31
+
+Projectionist `/live` masters no longer leave Tunarr `AUDIO=` on `#EXT-X-STREAM-INF` when it is the first attribute — the proxy strips it whether first or mid-list so hls.js stays on plain muxed variants.
+
+### Highlights
+- **Watch Live stays on picture.** Masters that list `AUDIO=` first no longer defeat the black-screen sanitizer.
+- **Cleaner playlists.** Leftover commas after stripping `AUDIO=` are tidied so STREAM-INF lines stay valid.
+
+### Fixed
+- `sanitize_browser_hls_master` used `_AUDIO_ATTR = /,AUDIO="…"/`, which missed `#EXT-X-STREAM-INF:AUDIO="audio",…` (first attribute). Regex now strips first- or mid-list `AUDIO=` and cleans orphan commas.
+
+### Verification
+- Focused: `StreamProxyTests` (first-attr + mid-attr AUDIO strip) — 6 passed.
+- `.venv/bin/python -m pytest tests/` — 1579 passed, 6 skipped; coverage **75.9%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.33**.
+- Automat LAN (`http://10.10.1.202:8788`): `/live` proxy masters have no `AUDIO=` after deploy.
+
 ## [1.29.32] — 2026-07-31
 
 Projectionist `/live` Watch plays video again: strip Tunarr alternate-audio HLS tags that stalled hls.js, warm the station before the first playlist load, and show honest stream errors instead of a silent black screen.
