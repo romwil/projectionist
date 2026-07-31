@@ -1137,6 +1137,44 @@ class StreamProxyTests(unittest.TestCase):
         self.assertNotIn('AUDIO="audio"', out)
         self.assertIn(f"/api/live-channels/stream/{cid}/hls/stream.m3u8", out)
 
+    def test_sanitize_strips_audio_attr_when_first_on_stream_inf(self) -> None:
+        """AUDIO= as the first STREAM-INF attribute must still be removed."""
+        from projectionist.live_channels.stream_proxy import sanitize_browser_hls_master
+
+        body = (
+            "#EXTM3U\n"
+            '#EXT-X-STREAM-INF:AUDIO="audio",BANDWIDTH=2411200,RESOLUTION=1920x1080,'
+            'CODECS="avc1.640028,mp4a.40.2"\n'
+            "hls/stream.m3u8\n"
+        )
+        sanitized = sanitize_browser_hls_master(body)
+        self.assertNotIn("AUDIO=", sanitized)
+        self.assertNotIn(",,", sanitized)
+        self.assertIn(
+            '#EXT-X-STREAM-INF:BANDWIDTH=2411200,RESOLUTION=1920x1080,'
+            'CODECS="avc1.640028,mp4a.40.2"',
+            sanitized,
+        )
+
+    def test_sanitize_strips_audio_attr_mid_stream_inf(self) -> None:
+        """AUDIO= between other STREAM-INF attributes must leave clean commas."""
+        from projectionist.live_channels.stream_proxy import sanitize_browser_hls_master
+
+        body = (
+            "#EXTM3U\n"
+            '#EXT-X-STREAM-INF:BANDWIDTH=2411200,AUDIO="audio",RESOLUTION=1920x1080,'
+            'CODECS="avc1.640028,mp4a.40.2"\n'
+            "hls/stream.m3u8\n"
+        )
+        sanitized = sanitize_browser_hls_master(body)
+        self.assertNotIn("AUDIO=", sanitized)
+        self.assertNotIn(",,", sanitized)
+        self.assertIn(
+            "#EXT-X-STREAM-INF:BANDWIDTH=2411200,RESOLUTION=1920x1080,"
+            'CODECS="avc1.640028,mp4a.40.2"',
+            sanitized,
+        )
+
 
 class PreflightAndPublishTests(unittest.TestCase):
     def test_preflight_requires_plex(self) -> None:

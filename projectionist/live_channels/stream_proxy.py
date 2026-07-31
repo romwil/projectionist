@@ -18,7 +18,8 @@ logger = logging.getLogger(__name__)
 
 _URI_LINE = re.compile(r'URI="([^"]+)"')
 _SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9._~:@!$&'()*+,;=\-/%]+$")
-_AUDIO_ATTR = re.compile(r',AUDIO="[^"]*"', re.IGNORECASE)
+# Leading comma optional: Tunarr sometimes emits AUDIO= as the first STREAM-INF attr.
+_AUDIO_ATTR = re.compile(r'(?:,AUDIO="[^"]*"|AUDIO="[^"]*",?)', re.IGNORECASE)
 _EXT_X_MEDIA_AUDIO = re.compile(r"^#EXT-X-MEDIA:.*TYPE=AUDIO", re.IGNORECASE)
 
 
@@ -148,6 +149,7 @@ def sanitize_browser_hls_master(body: str) -> str:
         if stripped.upper().startswith("#EXT-X-STREAM-INF:"):
             cleaned = _AUDIO_ATTR.sub("", line)
             cleaned = re.sub(r",,", ",", cleaned)
+            cleaned = re.sub(r"(#EXT-X-STREAM-INF:)\s*,+", r"\1", cleaned, flags=re.IGNORECASE)
             cleaned = re.sub(r",\s*$", "", cleaned)
             out_lines.append(cleaned)
             continue
