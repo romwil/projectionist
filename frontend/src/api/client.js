@@ -1431,6 +1431,10 @@ export async function postLiveChannelsPlexAttachGuide() {
   return api("/admin/live-channels/plex-attach-guide", { method: "POST", body: "{}" });
 }
 
+export async function postLiveChannelsPlexRepair() {
+  return api("/admin/live-channels/plex-repair", { method: "POST", body: "{}" });
+}
+
 export async function getLiveChannelsTunarrLogs(lines = 200) {
   const limit = Math.max(1, Math.min(Number(lines) || 200, 2000));
   return api(`/admin/live-channels/tunarr-logs?lines=${limit}`);

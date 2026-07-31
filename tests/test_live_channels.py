@@ -1088,7 +1088,7 @@ class PreflightAndPublishTests(unittest.TestCase):
             <MediaContainer>
               <Device key="11" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr"
                 uri="http://10.10.1.202:18765" deviceId="Tunarr" title="Projectionist"
-                make="Tunarr - Silicondust"/>
+                make="Tunarr - Silicondust" status="alive" state="enabled"/>
             </MediaContainer>
             """
         )
@@ -1111,6 +1111,7 @@ class PreflightAndPublishTests(unittest.TestCase):
             """
             <MediaContainer>
               <ChannelMapping channelKey="C100.1" deviceIdentifier="100" lineupIdentifier="100"/>
+              <ChannelMapping channelKey="C101.1" deviceIdentifier="101" lineupIdentifier="101"/>
             </MediaContainer>
             """
         )
@@ -1145,13 +1146,165 @@ class PreflightAndPublishTests(unittest.TestCase):
         with patch(
             "projectionist.live_channels.plex_attach._plex_xml", side_effect=fake_xml
         ), patch(
+            "projectionist.live_channels.plex_attach.count_tunarr_hdhr_channels",
+            return_value=2,
+        ), patch(
+            "projectionist.live_channels.plex_attach.scan_plex_device_channels",
+            return_value={"ok": True, "count": 2, "message": "ok"},
+        ), patch(
+            "projectionist.live_channels.plex_attach.prune_dead_grabber_devices",
+            return_value={"ok": True, "deleted": []},
+        ), patch(
             "projectionist.connectors.http.request_empty"
         ), patch("projectionist.connectors.plex.PlexClient", return_value=mock_client):
             result = attach_tunarr_xmltv_to_plex(settings)
         self.assertTrue(result["ok"], result)
         self.assertEqual(result["dvr_key"], "12")
-        self.assertEqual(result["mapped"], 1)
+        self.assertEqual(result["mapped"], 2)
+        self.assertEqual(result["expected"], 2)
         self.assertIn("reused_xmltv_dvr", result["steps"])
+
+    def test_refresh_surfaces_short_map_and_reattaches(self) -> None:
+        """Post-publish refresh must not claim success when Plex still has a stale short map."""
+        from unittest.mock import MagicMock, patch
+        import xml.etree.ElementTree as ET
+        from projectionist.live_channels.plex_attach import refresh_plex_live_tv_channels
+
+        devices = ET.fromstring(
+            """
+            <MediaContainer>
+              <Device key="11" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr"
+                uri="http://10.10.1.202:18765" deviceId="Tunarr" title="Projectionist"
+                make="Tunarr - Silicondust" status="alive" state="enabled"/>
+            </MediaContainer>
+            """
+        )
+        dvrs = ET.fromstring(
+            """
+            <MediaContainer>
+              <Dvr key="12"
+                lineup="lineup://tv.plex.providers.epg.xmltv/http://10.10.1.202:18765/api/xmltv.xml#Projectionist">
+                <Device key="11" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr"/>
+                <ChannelMapping channelKey="C100.1" deviceIdentifier="100" lineupIdentifier="100" enabled="1"/>
+                <ChannelMapping channelKey="C101.1" deviceIdentifier="101" lineupIdentifier="101" enabled="1"/>
+                <ChannelMapping channelKey="C102.1" deviceIdentifier="102" lineupIdentifier="102" enabled="1"/>
+                <ChannelMapping channelKey="C103.1" deviceIdentifier="103" lineupIdentifier="103" enabled="1"/>
+              </Dvr>
+            </MediaContainer>
+            """
+        )
+        short_cmap = ET.fromstring(
+            """
+            <MediaContainer>
+              <ChannelMapping channelKey="C100.1" deviceIdentifier="100" lineupIdentifier="100"/>
+              <ChannelMapping channelKey="C101.1" deviceIdentifier="101" lineupIdentifier="101"/>
+              <ChannelMapping channelKey="C102.1" deviceIdentifier="102" lineupIdentifier="102"/>
+              <ChannelMapping channelKey="C103.1" deviceIdentifier="103" lineupIdentifier="103"/>
+            </MediaContainer>
+            """
+        )
+        full_cmap = ET.fromstring(
+            """
+            <MediaContainer>
+              <ChannelMapping channelKey="C100.1" deviceIdentifier="100" lineupIdentifier="100"/>
+              <ChannelMapping channelKey="C101.1" deviceIdentifier="101" lineupIdentifier="101"/>
+              <ChannelMapping channelKey="C102.1" deviceIdentifier="102" lineupIdentifier="102"/>
+              <ChannelMapping channelKey="C103.1" deviceIdentifier="103" lineupIdentifier="103"/>
+              <ChannelMapping channelKey="C104.1" deviceIdentifier="104" lineupIdentifier="104"/>
+              <ChannelMapping channelKey="C105.1" deviceIdentifier="105" lineupIdentifier="105"/>
+            </MediaContainer>
+            """
+        )
+        put_ok = ET.fromstring('<MediaContainer size="0" status="0"/>')
+        state = {"phase": "short"}
+
+        def fake_xml(client, path, *, method="GET", timeout=None):
+            if method == "DELETE":
+                return put_ok
+            if path.startswith("/media/grabbers/tv.plex.grabbers.hdhomerun/devices") and method == "POST":
+                return devices
+            if path.startswith("/media/grabbers/devices") and method == "GET" and "channelmap" not in path:
+                return devices
+            if path.startswith("/livetv/dvrs") and method == "GET":
+                return dvrs
+            if path.startswith("/livetv/dvrs") and method == "POST":
+                return dvrs
+            if path.startswith("/livetv/epg/channelmap"):
+                return full_cmap if state["phase"] == "full" else short_cmap
+            if "channelmap" in path and method == "PUT":
+                return put_ok
+            raise AssertionError(f"unexpected {method} {path}")
+
+        def fake_scan(client, device_key, *, expected=0, timeout=45):
+            if state["phase"] == "short":
+                # First refresh sees stale 4 → triggers recreate.
+                state["phase"] = "full"
+                return {"ok": False, "count": 4, "message": "stale"}
+            return {"ok": True, "count": 6, "message": "ok"}
+
+        settings = Settings(
+            plex_url="http://plex.test:32400",
+            plex_token="token",
+            tunarr=TunarrSettings(public_url="http://10.10.1.202:18765"),
+        )
+        mock_client = MagicMock()
+        mock_client.base_url = "http://plex.test:32400"
+        mock_client.token = "token"
+        mock_client.timeout = 10
+        with patch(
+            "projectionist.live_channels.plex_attach._plex_xml", side_effect=fake_xml
+        ), patch(
+            "projectionist.live_channels.plex_attach.count_tunarr_hdhr_channels",
+            return_value=6,
+        ), patch(
+            "projectionist.live_channels.plex_attach.scan_plex_device_channels",
+            side_effect=fake_scan,
+        ), patch(
+            "projectionist.live_channels.plex_attach.prune_dead_grabber_devices",
+            return_value={"ok": True, "deleted": []},
+        ), patch(
+            "projectionist.connectors.http.request_empty"
+        ), patch("projectionist.connectors.plex.PlexClient", return_value=mock_client):
+            result = refresh_plex_live_tv_channels(settings)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["mapped"], 6)
+        self.assertEqual(result["expected"], 6)
+        self.assertIn("recreate_stale_device_channels", result.get("steps") or [])
+
+    def test_refresh_missing_device_runs_full_attach(self) -> None:
+        from unittest.mock import patch
+        import xml.etree.ElementTree as ET
+        from projectionist.live_channels.plex_attach import refresh_plex_live_tv_channels
+
+        settings = Settings(
+            plex_url="http://plex.test:32400",
+            plex_token="token",
+            tunarr=TunarrSettings(public_url="http://10.10.1.202:18765"),
+        )
+        empty = ET.fromstring("<MediaContainer/>")
+        with patch(
+            "projectionist.live_channels.plex_attach.count_tunarr_hdhr_channels",
+            return_value=6,
+        ), patch(
+            "projectionist.live_channels.plex_attach._plex_xml",
+            return_value=empty,
+        ), patch(
+            "projectionist.live_channels.plex_attach.attach_tunarr_xmltv_to_plex",
+            return_value={
+                "ok": True,
+                "mapped": 6,
+                "expected": 6,
+                "message": "Mapped 6/6",
+                "steps": ["registered_device"],
+            },
+        ) as attach, patch(
+            "projectionist.connectors.plex.PlexClient"
+        ):
+            result = refresh_plex_live_tv_channels(settings)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["mapped"], 6)
+        attach.assert_called_once()
+        self.assertTrue(attach.call_args.kwargs.get("force_recreate"))
 
     def test_plex_attach_prefers_public_url_over_docker_internal(self) -> None:
         from projectionist.live_channels.plex_attach import (

@@ -669,10 +669,16 @@ def ensure_channel_labels(
             name = f"Channel {number}" if number else "Station"
         current_icon = ch.get("icon") if isinstance(ch.get("icon"), Mapping) else {}
         current_path = str(current_icon.get("path") or "").strip()
+        # Upgrade empty / loopback / generic Tunarr mark when a better LAN path is known.
+        generic_mark = current_path.endswith("/images/tunarr.png")
+        better = bool(icon.get("path")) and icon.get("path") != current_path and not str(
+            icon.get("path") or ""
+        ).endswith("/images/tunarr.png")
         needs_icon = bool(icon.get("path")) and (
             not current_path
             or current_path.startswith("http://127.0.0.1")
             or current_path.startswith("http://localhost")
+            or (generic_mark and better)
         )
         needs_name = not str(ch.get("name") or "").strip()
         if not needs_icon and not needs_name:
@@ -890,6 +896,70 @@ def warm_channel_stream(
     }
 
 
+def apply_station_icons(
+    client: TunarrClient,
+    settings: Any = None,
+    *,
+    channel_ids: Optional[Sequence[str]] = None,
+    fallback_icon: str = "",
+) -> Dict[str, Any]:
+    """Prefer per-station art (station_meta / collection) over the shared Tunarr mark."""
+    wanted = {str(cid).strip() for cid in (channel_ids or ()) if str(cid).strip()}
+    fallback = str(fallback_icon or "").strip() or resolve_channel_icon_url(settings)
+    meta = {}
+    if settings is not None:
+        tunarr = getattr(settings, "tunarr", None)
+        meta = dict(getattr(tunarr, "station_meta", None) or {})
+    updated: List[str] = []
+    errors: List[str] = []
+    for ch in client.list_channels():
+        if not isinstance(ch, Mapping):
+            continue
+        cid = str(ch.get("id") or ch.get("uuid") or "").strip()
+        if not cid or (wanted and cid not in wanted):
+            continue
+        row = meta.get(cid) if isinstance(meta.get(cid), Mapping) else {}
+        preferred = str((row or {}).get("icon_url") or "").strip()
+        collection_id = str((row or {}).get("collection_id") or "").strip()
+        if not preferred and collection_id:
+            preferred = resolve_collection_icon_url(settings, collection_id)
+        target = preferred or fallback
+        if not target:
+            continue
+        current = ch.get("icon") if isinstance(ch.get("icon"), Mapping) else {}
+        current_path = str((current or {}).get("path") or "").strip()
+        if current_path == target:
+            continue
+        # Don't overwrite a non-generic custom icon with the Tunarr mark.
+        if (
+            target.endswith("/images/tunarr.png")
+            and current_path
+            and not current_path.endswith("/images/tunarr.png")
+            and not current_path.startswith("http://127.0.0.1")
+            and not current_path.startswith("http://localhost")
+        ):
+            continue
+        body = _channel_put_body(
+            ch,
+            name=str(ch.get("name") or "").strip(),
+            icon=channel_icon_body(target),
+        )
+        if not body.get("transcodeConfigId"):
+            errors.append(f"{cid}: missing transcodeConfigId")
+            continue
+        try:
+            client.update_channel(cid, body)
+            updated.append(cid)
+        except Exception as error:  # noqa: BLE001
+            errors.append(f"{cid}: {str(error)[:120]}")
+    return {
+        "ok": not errors,
+        "updated": updated,
+        "count_updated": len(updated),
+        "errors": errors,
+    }
+
+
 def prepare_channels_for_playback(
     client: TunarrClient,
     *,
@@ -906,6 +976,22 @@ def prepare_channels_for_playback(
     labels = ensure_channel_labels(
         client, icon_url=resolved_icon, channel_ids=list(wanted) if wanted else None
     )
+    try:
+        station_icons = apply_station_icons(
+            client,
+            settings,
+            channel_ids=list(wanted) if wanted else None,
+            fallback_icon=resolved_icon,
+        )
+        if station_icons.get("count_updated"):
+            labels = {
+                **labels,
+                "count_updated": int(labels.get("count_updated") or 0)
+                + int(station_icons.get("count_updated") or 0),
+                "station_icons": station_icons,
+            }
+    except Exception:  # noqa: BLE001
+        pass
     sessions = _sessions_by_channel(client)
     channels = [ch for ch in client.list_channels() if isinstance(ch, Mapping)]
     if wanted:

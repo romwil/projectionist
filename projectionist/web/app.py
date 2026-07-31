@@ -1970,17 +1970,42 @@ def _finalize_live_channels_publish(
                 "ok": False,
                 "attach_needed": True,
                 "mapped": 0,
+                "expected": 0,
                 "message": str(error)[:200],
+                "error": str(error)[:200],
             }
         note = str(result.get("note") or "").rstrip()
-        sync_msg = str(plex_sync.get("message") or "")
+        sync_msg = str(plex_sync.get("message") or plex_sync.get("error") or "")
+        mapped = int(plex_sync.get("mapped") or 0)
+        expected = int(plex_sync.get("expected") or 0)
         if plex_sync.get("ok") and sync_msg:
             result["note"] = f"{note} {sync_msg}".strip() if note else sync_msg
-        elif plex_sync.get("attach_needed"):
-            hint = sync_msg or "Run Attach Tunarr guide once so new channels appear in Plex."
+        elif not plex_sync.get("ok"):
+            # Never silent: incomplete map or missing device is a hard publish warning.
+            if expected and mapped < expected:
+                hint = (
+                    sync_msg
+                    or f"Plex mapped only {mapped}/{expected} Tunarr channels — "
+                    "use Repair Plex tuner/guide."
+                )
+            else:
+                hint = (
+                    sync_msg
+                    or "Plex Live TV sync failed — use Repair Plex tuner/guide."
+                )
             result["note"] = f"{note} {hint}".strip() if note else hint
+            result["plex_sync_failed"] = True
         elif sync_msg:
             result["note"] = f"{note} Plex sync: {sync_msg}".strip() if note else sync_msg
+
+        # Persist last mapping snapshot for Admin status even when publish succeeds.
+        if plex_sync.get("mapped") is not None or plex_sync.get("expected") is not None:
+            tunarr["last_plex_mapped"] = int(plex_sync.get("mapped") or 0)
+            tunarr["last_plex_expected"] = int(plex_sync.get("expected") or 0)
+            tunarr["last_plex_sync_ok"] = bool(plex_sync.get("ok"))
+            tunarr["last_plex_sync_message"] = str(
+                plex_sync.get("message") or plex_sync.get("error") or ""
+            )[:240]
 
     # Persist station_meta (collection_id / programming_mode) written during publish.
     tunarr["station_meta"] = dict(getattr(settings.tunarr, "station_meta", None) or {})
@@ -2532,6 +2557,26 @@ def live_channels_plex_attach_endpoint(
     return attach
 
 
+def _persist_plex_guide_attach(settings: Settings, result: Dict[str, Any]) -> None:
+    tunarr = asdict(settings.tunarr)
+    tunarr["last_guide_attach_at"] = datetime.now(timezone.utc).strftime(
+        "%Y-%m-%dT%H:%M:%SZ"
+    )
+    tunarr["last_guide_attach_ok"] = bool(result.get("ok"))
+    tunarr["last_guide_attach_message"] = str(
+        result.get("message") or result.get("error") or ""
+    )[:240]
+    tunarr["last_guide_attach_dvr_key"] = str(result.get("dvr_key") or "")
+    tunarr["last_plex_mapped"] = int(result.get("mapped") or 0)
+    tunarr["last_plex_expected"] = int(result.get("expected") or 0)
+    tunarr["last_plex_sync_ok"] = bool(result.get("ok"))
+    tunarr["last_plex_sync_message"] = tunarr["last_guide_attach_message"]
+    save_settings(
+        DATA_DIR,
+        Settings.from_mapping({**asdict(settings), "tunarr": tunarr}),
+    )
+
+
 @app.post("/api/admin/live-channels/plex-attach-guide")
 def live_channels_plex_attach_guide_endpoint(
     request: Request,
@@ -2563,24 +2608,61 @@ def live_channels_plex_attach_guide_endpoint(
     result = attach_tunarr_xmltv_to_plex(settings, request_host=request_host)
     result["labels"] = prepare.get("labels") or {}
     result["prepare"] = prepare
-    tunarr = asdict(settings.tunarr)
-    tunarr["last_guide_attach_at"] = datetime.now(timezone.utc).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
-    tunarr["last_guide_attach_ok"] = bool(result.get("ok"))
-    tunarr["last_guide_attach_message"] = str(
-        result.get("message") or result.get("error") or ""
-    )[:240]
-    tunarr["last_guide_attach_dvr_key"] = str(result.get("dvr_key") or "")
-    save_settings(
-        DATA_DIR,
-        Settings.from_mapping({**asdict(settings), "tunarr": tunarr}),
-    )
+    _persist_plex_guide_attach(settings, result)
     if not result.get("ok"):
-        raise HTTPException(
-            status_code=400,
-            detail=str(result.get("error") or "Could not attach Tunarr guide in Plex"),
+        detail = str(
+            result.get("error")
+            or result.get("message")
+            or "Could not attach Tunarr guide in Plex"
         )
+        mapped = result.get("mapped")
+        expected = result.get("expected")
+        if expected and mapped is not None:
+            detail = f"{detail} (Mapped {mapped}/{expected})"
+        raise HTTPException(status_code=400, detail=detail)
+    return result
+
+
+@app.post("/api/admin/live-channels/plex-repair")
+def live_channels_plex_repair_endpoint(
+    request: Request,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Recreate Tunarr HDHR device + XMLTV DVR and force full channel remap."""
+    del user
+    from projectionist.live_channels.plex_attach import repair_plex_tunarr_livetv
+    from projectionist.live_channels.publish import (
+        prepare_channels_for_playback,
+        resolve_channel_icon_url,
+        tunarr_client_from_settings,
+    )
+
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    forwarded = str(request.headers.get("x-forwarded-host") or "").strip()
+    request_host = forwarded or str(request.headers.get("host") or "").strip()
+    try:
+        prepare_channels_for_playback(
+            tunarr_client_from_settings(settings),
+            settings=settings,
+            icon_url=resolve_channel_icon_url(settings),
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    result = repair_plex_tunarr_livetv(settings, request_host=request_host)
+    _persist_plex_guide_attach(settings, result)
+    if not result.get("ok"):
+        detail = str(
+            result.get("error")
+            or result.get("message")
+            or "Could not repair Tunarr in Plex"
+        )
+        mapped = result.get("mapped")
+        expected = result.get("expected")
+        if expected and mapped is not None:
+            detail = f"{detail} (Mapped {mapped}/{expected})"
+        raise HTTPException(status_code=400, detail=detail)
     return result
 
 
