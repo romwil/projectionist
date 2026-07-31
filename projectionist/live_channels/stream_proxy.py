@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 
 _URI_LINE = re.compile(r'URI="([^"]+)"')
 _SAFE_SEGMENT = re.compile(r"^[A-Za-z0-9._~:@!$&'()*+,;=\-/%]+$")
+_AUDIO_ATTR = re.compile(r',AUDIO="[^"]*"', re.IGNORECASE)
+_EXT_X_MEDIA_AUDIO = re.compile(r"^#EXT-X-MEDIA:.*TYPE=AUDIO", re.IGNORECASE)
 
 
 def stream_proxy_base(channel_id: str) -> str:
@@ -125,6 +127,35 @@ def _proxy_uri_for_tunarr(
     return f"{proxy_root}/{joined.lstrip('/')}"
 
 
+def sanitize_browser_hls_master(body: str) -> str:
+    """Strip Tunarr alternate-audio scaffolding that stalls browser hls.js.
+
+    Masters often include ``#EXT-X-MEDIA:TYPE=AUDIO`` groups (URI-less defaults
+    and/or URIs that point back at the muxed video playlist) while ``CODECS``
+    already advertise AAC in the variant. hls.js then enters alt-audio /
+    level-load paths and never fetches ``.ts`` segments — black screen with
+    ``levelLoadError`` / ``manifestLoadError``. Segments themselves are
+    H.264+AAC; plain muxed variants play fine.
+    """
+    text = str(body or "")
+    if "#EXT-X-STREAM-INF" not in text:
+        return text
+    out_lines: list[str] = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if _EXT_X_MEDIA_AUDIO.match(stripped):
+            continue
+        if stripped.upper().startswith("#EXT-X-STREAM-INF:"):
+            cleaned = _AUDIO_ATTR.sub("", line)
+            cleaned = re.sub(r",,", ",", cleaned)
+            cleaned = re.sub(r",\s*$", "", cleaned)
+            out_lines.append(cleaned)
+            continue
+        out_lines.append(line)
+    ending = "\n" if text.endswith("\n") else ""
+    return "\n".join(out_lines) + ending
+
+
 def rewrite_hls_playlist(
     body: str,
     *,
@@ -133,8 +164,9 @@ def rewrite_hls_playlist(
     playlist_path: str,
 ) -> str:
     """Rewrite #EXTINF / URI= / bare URL lines to Projectionist proxy paths."""
+    source = sanitize_browser_hls_master(str(body or ""))
     out_lines = []
-    for line in str(body or "").splitlines():
+    for line in source.splitlines():
         stripped = line.strip()
         if not stripped:
             out_lines.append(line)
@@ -164,7 +196,7 @@ def rewrite_hls_playlist(
         )
         out_lines.append(proxied)
     # Preserve trailing newline if present.
-    ending = "\n" if body.endswith("\n") else ""
+    ending = "\n" if source.endswith("\n") else ""
     return "\n".join(out_lines) + ending
 
 

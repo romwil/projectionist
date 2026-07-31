@@ -1106,6 +1106,37 @@ class StreamProxyTests(unittest.TestCase):
             f"/api/live-channels/stream/{cid}/hls/data000000.ts",
         )
 
+    def test_rewrite_strips_alternate_audio_media_tags(self) -> None:
+        """Tunarr AUDIO groups (often URI-less) stall hls.js — proxy serves muxed only."""
+        from projectionist.live_channels.stream_proxy import sanitize_browser_hls_master
+
+        cid = "59bc2df4-eca9-4ab8-9012-c42ffec358be"
+        body = (
+            "#EXTM3U\n"
+            "#EXT-X-VERSION:6\n"
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="eng",'
+            'NAME="English (AC3 Mono)",DEFAULT=YES,AUTOSELECT=YES,CHANNELS="1"\n'
+            '#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="audio",LANGUAGE="eng",'
+            f'NAME="English",URI="/stream/channels/{cid}/hls/stream.m3u8"\n'
+            '#EXT-X-STREAM-INF:BANDWIDTH=2411200,RESOLUTION=1920x1080,'
+            'CODECS="avc1.640028,mp4a.40.2",AUDIO="audio"\n'
+            f"/stream/channels/{cid}/hls/stream.m3u8\n"
+        )
+        sanitized = sanitize_browser_hls_master(body)
+        self.assertNotIn("EXT-X-MEDIA", sanitized)
+        self.assertNotIn('AUDIO="audio"', sanitized)
+        self.assertIn("EXT-X-STREAM-INF", sanitized)
+
+        out = rewrite_hls_playlist(
+            body,
+            channel_id=cid,
+            tunarr_base="http://host.docker.internal:18765",
+            playlist_path="index.m3u8",
+        )
+        self.assertNotIn("EXT-X-MEDIA", out)
+        self.assertNotIn('AUDIO="audio"', out)
+        self.assertIn(f"/api/live-channels/stream/{cid}/hls/stream.m3u8", out)
+
 
 class PreflightAndPublishTests(unittest.TestCase):
     def test_preflight_requires_plex(self) -> None:
@@ -3107,6 +3138,68 @@ class CraftFiltersTests(unittest.TestCase):
             pool, CraftFilters(), excluded_rating_keys={"99"}
         )
         self.assertEqual([p["id"] for p in out], ["1"])
+
+    def test_zero_library_craft_matches_yield_empty_pool(self) -> None:
+        """Library craft match of 0 must not fall back to the unfiltered Tunarr pool."""
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+        from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+
+        client = MagicMock()
+        # Tunarr-side genre/year would keep "Enter the Dragon" — that is the leak.
+        catalog = [
+            {
+                "id": "1",
+                "duration": 5_000_000,
+                "program": {
+                    "uuid": "1",
+                    "title": "Enter the Dragon",
+                    "type": "movie",
+                    "genres": ["Action"],
+                    "year": 1973,
+                    "externalKey": "100",
+                },
+            },
+            {
+                "id": "2",
+                "duration": 5_000_000,
+                "program": {
+                    "uuid": "2",
+                    "title": "Heat",
+                    "type": "movie",
+                    "genres": ["Action"],
+                    "year": 1995,
+                    "externalKey": "101",
+                },
+            },
+        ]
+        recipe = ChannelRecipe(
+            name="No Library Hits",
+            number=130,
+            source="chaos",
+            programming_mode=ProgrammingMode.SHUFFLE,
+            media_scope="movies",
+            craft_filters={"genres": ["Action"], "year_from": 1970, "year_to": 1979},
+        )
+        mock_jm = MagicMock()
+        mock_jm.db = object()
+        with (
+            patch(
+                "projectionist.web.jobs.get_job_manager",
+                return_value=mock_jm,
+            ),
+            patch(
+                "projectionist.live_channels.filters.library_items_matching_filters",
+                return_value={"total_matched": 0, "items": [], "rating_keys": []},
+            ),
+            patch(
+                "projectionist.live_channels.filters.exclusion_rating_keys",
+                return_value=set(),
+            ),
+        ):
+            picked = collect_programs_for_recipe(
+                client, recipe, catalog=catalog, media_scope="movies"
+            )
+        self.assertEqual(picked, [])
 
     def test_shuffle_programming_uses_random_slots(self) -> None:
         from projectionist.live_channels.publish import programming_body_for_recipe
