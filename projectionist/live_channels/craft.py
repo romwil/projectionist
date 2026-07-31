@@ -271,6 +271,14 @@ def build_craft_options(
         except Exception:  # noqa: BLE001
             youth_max = "PG-13"
 
+    from projectionist.live_channels.filters import (
+        craft_filter_options,
+        exclusion_collection_name,
+    )
+
+    filter_opts = craft_filter_options(db)
+    exclusion_name = exclusion_collection_name(settings)
+
     collections_total = len(collections)
     if not collections:
         if collections_error:
@@ -285,6 +293,13 @@ def build_craft_options(
     else:
         empty_reason = ""
         empty_hint = ""
+
+    pad_minutes = 15
+    if tunarr is not None:
+        try:
+            pad_minutes = max(0, min(int(getattr(tunarr, "pad_flex_max_minutes", 15) or 0), 30))
+        except (TypeError, ValueError):
+            pad_minutes = 15
 
     return {
         "sources": list(_SOURCES),
@@ -303,11 +318,15 @@ def build_craft_options(
         "channel_number_base": base,
         "next_channel_number": next_channel_number(existing_channel_numbers, base=base),
         "youth_max_rating": youth_max,
+        "filter_options": filter_opts,
+        "exclusion_collection_name": exclusion_name,
+        "pad_flex_max_minutes": pad_minutes,
         "empty_library": not bool(motifs or clusters or collections),
         "hint": (
             "Pick TV, Movies, or Both, then a motif, taste cluster, collection, Chaos, "
-            "or youth-safe recipe. Publish creates the station on Tunarr and fills the "
-            "lineup from matching libraries."
+            "or youth-safe recipe. Stack additive filters (genre ∩ decade ∩ theme) before "
+            "publish — preview shows the match count. Titles in the "
+            f"“{exclusion_name}” Plex collection are skipped."
         ),
     }
 
@@ -406,5 +425,6 @@ def recipe_from_craft_payload(
             "summary": summary,
             "item_hints": payload.get("item_hints") or (),
             "item_rating_keys": payload.get("item_rating_keys") or (),
+            "craft_filters": payload.get("craft_filters") or payload.get("filters") or {},
         }
     )

@@ -1354,6 +1354,23 @@ export async function getLiveChannelsCraftOptions() {
   return api("/admin/live-channels/craft-options");
 }
 
+export async function previewLiveChannelsCraft(body = {}) {
+  return api("/admin/live-channels/craft-preview", {
+    method: "POST",
+    body: JSON.stringify(body || {}),
+  });
+}
+
+export async function patchLiveChannelsEngineSettings(body = {}) {
+  return api("/admin/live-channels/engine-settings", {
+    method: "PATCH",
+    body: JSON.stringify({
+      confirm: true,
+      ...body,
+    }),
+  });
+}
+
 export async function publishLiveChannelsChannel(body = {}) {
   return api("/admin/live-channels/channels/publish", {
     method: "POST",

@@ -571,9 +571,15 @@ class TunarrSettings:
     # Cached Tunarr id for the shared ``Projectionist Continuity`` filler list.
     continuity_filler_list_id: str = ""
     # Max flex pad per gap toward :00/:30 (commercial-cut default 15 minutes).
+    # 0 = back-to-back (no pad-to-boundary flex).
     pad_flex_max_minutes: int = 15
+    # Plex collection whose titles are skipped during recipe fill + starters.
+    exclusion_collection_name: str = "NoLive"
+    exclusion_collection_id: str = ""
+    # After library sync / arrivals, refill stations that have stored recipes.
+    auto_refresh_stations_after_sync: bool = True
     # Per-station Projectionist metadata keyed by Tunarr channel id
-    # (media_scope, continuity toggles, etc.). Tunarr has no first-class scope.
+    # (media_scope, continuity toggles, craft_filters, etc.). Tunarr has no first-class scope.
     station_meta: Dict[str, Any] = field(default_factory=dict)
     # Virtual channel number base (coexist with OTA HDHomeRun).
     channel_number_base: int = 100

@@ -17,6 +17,7 @@ from projectionist.live_channels.recipes import (
     normalize_media_scope,
     program_type_matches_scope,
     recipe_from_mapping,
+    replace_recipe,
 )
 
 # Prefer these Plex library mediaTypes when enabling Tunarr libraries for fill.
@@ -455,6 +456,9 @@ def set_station_meta(
     collection_title: str = "",
     icon_url: str = "",
     source: str = "",
+    craft_filters: Optional[Mapping[str, Any]] = None,
+    motif: str = "",
+    cluster_tag: str = "",
 ) -> None:
     """Persist station recipe fields on ``settings.tunarr.station_meta`` (in-memory)."""
     cid = str(channel_id or "").strip()
@@ -483,6 +487,14 @@ def set_station_meta(
         row["icon_url"] = str(icon_url).strip()
     if source:
         row["source"] = str(source).strip()
+    if motif:
+        row["motif"] = str(motif).strip()
+    if cluster_tag:
+        row["cluster_tag"] = str(cluster_tag).strip()
+    if craft_filters is not None:
+        from projectionist.live_channels.filters import normalize_craft_filters
+
+        row["craft_filters"] = normalize_craft_filters(craft_filters).to_dict()
     meta[cid] = row
 
 
@@ -521,6 +533,9 @@ def recipe_from_station_meta(
         )
     except ValueError:
         mode = ProgrammingMode.SHUFFLE
+    from projectionist.live_channels.filters import normalize_craft_filters
+
+    craft_filters = normalize_craft_filters(row.get("craft_filters")).to_dict()
     return ChannelRecipe(
         name=(str(name or row.get("collection_title") or "Station").strip() or "Station")[
             :48
@@ -529,9 +544,12 @@ def recipe_from_station_meta(
         source=source or "chaos",
         programming_mode=mode,
         media_scope=normalize_media_scope(row.get("media_scope")),
+        cluster_tag=str(row.get("cluster_tag") or "").strip(),
+        motif=str(row.get("motif") or "").strip(),
         collection_id=collection_id,
         collection_title=str(row.get("collection_title") or "").strip(),
         summary=f"Refill from stored recipe ({mode.value})",
+        craft_filters=craft_filters,
     )
 
 
@@ -1187,6 +1205,86 @@ def match_feedback_note(
     return ""
 
 
+def random_slot_schedule_for_programs(
+    programs: Sequence[Mapping[str, Any]],
+    *,
+    max_flex_ms: int = 0,
+    max_days: int = 7,
+    programming_mode: ProgrammingMode = ProgrammingMode.SHUFFLE,
+) -> Dict[str, Any]:
+    """Build a Tunarr ``RandomSlotSchedule`` from a resolved program pool.
+
+    Movie-heavy pools get a movie slot; TV episodes get per-show slots (capped).
+    Residual: Tunarr has no generic “shuffle this UUID list” slot — show slots
+    need ``showId``. When neither movies nor showIds resolve, callers fall back
+    to a shuffled manual lineup.
+    """
+    has_movie = False
+    show_ids: List[str] = []
+    seen_shows: set[str] = set()
+    for raw in programs or ():
+        if not isinstance(raw, Mapping):
+            continue
+        ptype = str(raw.get("type") or "").strip().lower()
+        if ptype == "movie":
+            has_movie = True
+        sid = str(raw.get("show_id") or "").strip()
+        if sid and sid not in seen_shows:
+            seen_shows.add(sid)
+            show_ids.append(sid)
+        if len(show_ids) >= 24:
+            break
+
+    order = (
+        "shuffle"
+        if programming_mode
+        in {ProgrammingMode.SHUFFLE, ProgrammingMode.CHAOS}
+        else "next"
+    )
+    slots: List[Dict[str, Any]] = []
+    if has_movie:
+        slots.append(
+            {
+                "id": str(uuid.uuid4()),
+                "type": "movie",
+                "order": order,
+                "direction": "asc",
+                "cooldownMs": 0,
+                "weight": 1,
+                "durationSpec": {"type": "dynamic", "programCount": 1},
+            }
+        )
+    for sid in show_ids:
+        slots.append(
+            {
+                "id": str(uuid.uuid4()),
+                "type": "show",
+                "showId": sid,
+                "seasonFilter": [],
+                "seasonExcludeFilter": [],
+                "order": order,
+                "direction": "asc",
+                "cooldownMs": 0,
+                "weight": 1,
+                "durationSpec": {"type": "dynamic", "programCount": 1},
+            }
+        )
+    if not slots:
+        return {}
+    pad_ms = max(0, int(max_flex_ms or 0))
+    return {
+        "type": "random",
+        "flexPreference": "distribute" if pad_ms else "end",
+        "maxDays": max(1, min(int(max_days or 7), 14)),
+        "padMs": pad_ms,
+        "padStyle": "slot",
+        "randomDistribution": "uniform",
+        "lockWeights": False,
+        "slots": slots,
+        "timeZoneOffset": 0,
+    }
+
+
 def programming_body_for_recipe(
     recipe: ChannelRecipe,
     *,
@@ -1198,13 +1296,16 @@ def programming_body_for_recipe(
     """Best-effort programming payload for ``POST …/programming``.
 
     Tunarr 1.3.x manual updates require ``lineup`` (array), not ``programs``.
-    Prefer real ``content`` rows (Tunarr program UUIDs + duration). Fall back to
-    flex/empty shells so create+set still succeed before a media-source scan.
-    When ``pad_lineups`` is true, insert flex (≤ ``max_flex_ms``) toward :00/:30.
+    Shuffle/Chaos prefer ``type=random`` (RandomSlotSchedule) for continuous
+    reshuffle within the resolved pool when Tunarr can schedule the pool;
+    otherwise fall back to a shuffled manual lineup.
+    When ``pad_lineups`` is true, insert flex (≤ ``max_flex_ms``) toward :00/:30
+    on manual lineups (``padMs`` on random schedules).
     """
     from projectionist.live_channels.filler import pad_lineup_with_flex
 
     content_lineup: List[Dict[str, Any]] = []
+    program_ids: List[str] = []
     for raw in programs or ():
         if not isinstance(raw, Mapping):
             continue
@@ -1216,6 +1317,23 @@ def programming_body_for_recipe(
         if not pid or duration < _MIN_PROGRAM_DURATION_MS:
             continue
         content_lineup.append({"type": "content", "id": pid, "duration": duration})
+        program_ids.append(pid)
+
+    mode = recipe.programming_mode
+    use_random = mode in {ProgrammingMode.SHUFFLE, ProgrammingMode.CHAOS} and program_ids
+    if use_random:
+        schedule = random_slot_schedule_for_programs(
+            programs or (),
+            max_flex_ms=max_flex_ms if pad_lineups else 0,
+            programming_mode=mode,
+        )
+        if schedule:
+            return {
+                "type": "random",
+                "programs": program_ids,
+                "schedule": schedule,
+            }
+
     if content_lineup:
         lineup = (
             pad_lineup_with_flex(
@@ -1292,6 +1410,47 @@ def _normalize_program_row(
     if not isinstance(genres, list):
         genres = []
     plex_keys = _extract_plex_rating_keys(item)
+    year = prog.get("year") or item.get("year") or prog.get("releaseYear")
+    try:
+        year_i = int(year) if year is not None and str(year).strip() else None
+    except (TypeError, ValueError):
+        year_i = None
+    content_rating = str(
+        prog.get("contentRating")
+        or prog.get("content_rating")
+        or item.get("contentRating")
+        or item.get("content_rating")
+        or ""
+    ).strip()
+    show_id = str(
+        prog.get("showId")
+        or item.get("showId")
+        or prog.get("grandparentId")
+        or item.get("grandparentId")
+        or ""
+    ).strip()
+    show_obj = prog.get("show") if isinstance(prog.get("show"), Mapping) else None
+    if show_obj is None and isinstance(item.get("show"), Mapping):
+        show_obj = item.get("show")
+    show_title = ""
+    if isinstance(show_obj, Mapping):
+        show_title = str(show_obj.get("title") or show_obj.get("name") or "").strip()
+        if not show_id:
+            show_id = str(show_obj.get("uuid") or show_obj.get("id") or "").strip()
+        # Index show-level Plex keys so collection children that are *shows* match.
+        plex_keys = list(plex_keys) + [
+            k
+            for k in _extract_plex_rating_keys(show_obj)
+            if k and k not in plex_keys
+        ]
+    if not show_title:
+        show_title = str(
+            prog.get("grandparentTitle")
+            or item.get("grandparentTitle")
+            or prog.get("showTitle")
+            or item.get("showTitle")
+            or ""
+        ).strip()
     return {
         "id": pid,
         "duration": duration,
@@ -1299,6 +1458,10 @@ def _normalize_program_row(
         "type": ptype,
         "genres": [str(g) for g in genres if str(g).strip()],
         "plex_keys": plex_keys,
+        "year": year_i,
+        "content_rating": content_rating,
+        "show_id": show_id,
+        "show_title": show_title,
     }
 
 
@@ -1412,13 +1575,149 @@ def collect_programs_for_recipe(
         match_stats["match_total"] = int(total)
         match_stats["program_count"] = len(programs)
 
+    # Additive craft filters + exclusion collection (NoLive).
+    from projectionist.live_channels.filters import (
+        apply_craft_filters_to_pool,
+        exclusion_rating_keys,
+        library_items_matching_filters,
+        normalize_craft_filters,
+    )
+
+    craft = normalize_craft_filters(getattr(recipe, "craft_filters", None))
+    excluded = exclusion_rating_keys(settings)
+    allowed_keys: Optional[set[str]] = None
+    if not craft.is_empty():
+        db = None
+        try:
+            from projectionist.web.jobs import get_job_manager
+
+            db = get_job_manager().db
+        except Exception:  # noqa: BLE001
+            db = None
+        if db is not None:
+            lib = library_items_matching_filters(
+                db, craft, media_scope=scope, limit=500
+            )
+            allowed_keys = {str(k) for k in (lib.get("rating_keys") or []) if str(k)}
+        # When library index cannot resolve motif/theme, keep Tunarr-side genre/year filter.
+        pool = apply_craft_filters_to_pool(
+            pool,
+            craft,
+            allowed_rating_keys=allowed_keys if allowed_keys else None,
+            excluded_rating_keys=excluded,
+        )
+        if match_stats is not None:
+            match_stats["filter_matched"] = len(pool)
+            match_stats["filters"] = craft.to_dict()
+    elif excluded:
+        pool = apply_craft_filters_to_pool(
+            pool,
+            craft,
+            excluded_rating_keys=excluded,
+        )
+
+    # Larger pool for Tunarr random-slot schedules (Shuffle/Chaos).
+    if mode in {ProgrammingMode.SHUFFLE, ProgrammingMode.CHAOS}:
+        target = max(target, min(80, max(30, len(pool))))
+
+    # Collection subfilter: intersect ratingKeys with craft filters + exclusion.
+    if rating_keys:
+        filtered_keys = [
+            k for k in rating_keys if k not in excluded and (allowed_keys is None or k in allowed_keys)
+        ]
+        if allowed_keys is not None or excluded:
+            rating_keys = filtered_keys
+
     # Chaos: wider random within media_scope (not limited to collection IDs).
     if mode == ProgrammingMode.CHAOS or recipe.source == "chaos":
         candidates = list(pool)
         random.shuffle(candidates)
         picked = candidates[:target]
-        _record_stats(0, 0, picked)
+        _record_stats(len(picked), len(pool) if not craft.is_empty() else 0, picked)
         return picked
+
+    def _expand_show_descendants(show_uuid: str) -> List[Dict[str, Any]]:
+        """Resolve Tunarr show → episode content rows (collection child was a show)."""
+        sid = str(show_uuid or "").strip()
+        if not sid:
+            return []
+        out: List[Dict[str, Any]] = []
+        try:
+            descendants = client.list_program_descendants(sid)
+        except Exception:  # noqa: BLE001
+            return []
+        for row in descendants:
+            if not isinstance(row, Mapping):
+                continue
+            _add(row)
+            normalized = _normalize_program_row(row, media_scope=scope)
+            if normalized is None and row.get("id") and row.get("duration"):
+                try:
+                    duration = int(row["duration"])
+                except (TypeError, ValueError):
+                    continue
+                if duration < _MIN_PROGRAM_DURATION_MS:
+                    continue
+                prog = (
+                    row.get("program") if isinstance(row.get("program"), Mapping) else {}
+                )
+                normalized = {
+                    "id": str(row.get("id") or prog.get("uuid") or ""),
+                    "duration": duration,
+                    "title": str((prog or {}).get("title") or row.get("title") or ""),
+                    "type": str((prog or {}).get("type") or row.get("type") or ""),
+                    "genres": [],
+                    "plex_keys": _extract_plex_rating_keys(row),
+                    "show_id": sid,
+                    "show_title": "",
+                }
+            if normalized and normalized["id"]:
+                out.append(normalized)
+            if len(out) >= target:
+                break
+        return out
+
+    def _resolve_show_uuid_for_key_or_title(*, key: str = "", title: str = "") -> str:
+        """Find a Tunarr show uuid from a Plex ratingKey or show title."""
+        wanted_key = str(key or "").strip()
+        wanted_title = str(title or "").strip().casefold()
+        # Episodes already in the pool may carry show_id + show plex keys.
+        for item in pool:
+            if wanted_key and wanted_key in (item.get("plex_keys") or ()):
+                sid = str(item.get("show_id") or "").strip()
+                if sid:
+                    return sid
+            if wanted_title and str(item.get("show_title") or "").casefold() == wanted_title:
+                sid = str(item.get("show_id") or "").strip()
+                if sid:
+                    return sid
+        query = title or key
+        if not query:
+            return ""
+        try:
+            payload = client.search_programs(str(query), limit=20)
+        except Exception:  # noqa: BLE001
+            return ""
+        for hit in payload.get("results") or []:
+            if not isinstance(hit, Mapping):
+                continue
+            hit_type = str(hit.get("type") or "").strip().lower()
+            hit_title = str(hit.get("title") or "").strip()
+            hit_keys = _extract_plex_rating_keys(hit)
+            if hit_type == "show":
+                if wanted_key and wanted_key in hit_keys:
+                    return str(hit.get("uuid") or hit.get("id") or "").strip()
+                if wanted_title and hit_title.casefold() == wanted_title:
+                    return str(hit.get("uuid") or hit.get("id") or "").strip()
+            show = hit.get("show") if isinstance(hit.get("show"), Mapping) else None
+            if show is not None:
+                show_keys = _extract_plex_rating_keys(show)
+                show_title = str(show.get("title") or "").strip()
+                if wanted_key and wanted_key in show_keys:
+                    return str(show.get("uuid") or show.get("id") or "").strip()
+                if wanted_title and show_title.casefold() == wanted_title:
+                    return str(show.get("uuid") or show.get("id") or "").strip()
+        return ""
 
     # ID-first collection / keyed pool.
     if rating_keys:
@@ -1426,11 +1725,27 @@ def collect_programs_for_recipe(
         ordered: List[Dict[str, Any]] = []
         seen_ids: set[str] = set()
         matched = 0
+        unresolved_keys: List[str] = []
         for key in rating_keys:
             match = by_key.get(key)
             if match is None:
-                # Also try bare key against any plex|*|key form already indexed.
+                unresolved_keys.append(key)
                 continue
+            # Show-level catalog rows: expand to episodes instead of scheduling the show shell.
+            if str(match.get("type") or "").lower() == "show":
+                expanded = _expand_show_descendants(str(match.get("id") or ""))
+                if expanded:
+                    matched += 1
+                    for ep in expanded:
+                        if ep["id"] in seen_ids:
+                            continue
+                        seen_ids.add(ep["id"])
+                        ordered.append(ep)
+                        if len(ordered) >= target:
+                            break
+                    if len(ordered) >= target:
+                        break
+                    continue
             if match["id"] in seen_ids:
                 continue
             seen_ids.add(match["id"])
@@ -1439,13 +1754,46 @@ def collect_programs_for_recipe(
             if len(ordered) >= target:
                 break
 
-        # Last-resort title match only for unresolved keys (unscanned items).
-        if len(ordered) < len(rating_keys) and recipe.item_hints:
+        # Show ratingKeys often miss episode pools — expand via Tunarr descendants.
+        if len(ordered) < target and unresolved_keys:
+            for key in unresolved_keys:
+                if len(ordered) >= target:
+                    break
+                hint = ""
+                if recipe.item_hints:
+                    # Pair by index when lengths align; else try any unused hint later.
+                    try:
+                        idx = rating_keys.index(key)
+                        hint = str(recipe.item_hints[idx]) if idx < len(recipe.item_hints) else ""
+                    except ValueError:
+                        hint = ""
+                show_uuid = _resolve_show_uuid_for_key_or_title(key=key, title=hint)
+                if not show_uuid:
+                    continue
+                expanded = _expand_show_descendants(show_uuid)
+                if not expanded:
+                    continue
+                matched += 1
+                for ep in expanded:
+                    if ep["id"] in seen_ids:
+                        continue
+                    seen_ids.add(ep["id"])
+                    ordered.append(ep)
+                    if len(ordered) >= target:
+                        break
+
+        # Last-resort title / show-title match for unresolved keys (unscanned items).
+        if len(ordered) < len(rating_keys) and recipe.item_hints and len(ordered) < target:
             by_title = {
                 str(item.get("title") or "").strip().casefold(): item
                 for item in pool
                 if str(item.get("title") or "").strip()
             }
+            by_show = {}
+            for item in pool:
+                st = str(item.get("show_title") or "").strip().casefold()
+                if st and st not in by_show:
+                    by_show[st] = item
             for hint in recipe.item_hints:
                 if len(ordered) >= target:
                     break
@@ -1453,6 +1801,20 @@ def collect_programs_for_recipe(
                 if not wanted:
                     continue
                 match = by_title.get(wanted.casefold())
+                if match is None and wanted.casefold() in by_show:
+                    # Expand the show rather than scheduling one random episode.
+                    show_uuid = str(by_show[wanted.casefold()].get("show_id") or "")
+                    expanded = _expand_show_descendants(show_uuid) if show_uuid else []
+                    if expanded:
+                        matched += 1
+                        for ep in expanded:
+                            if ep["id"] in seen_ids:
+                                continue
+                            seen_ids.add(ep["id"])
+                            ordered.append(ep)
+                            if len(ordered) >= target:
+                                break
+                        continue
                 if match is None:
                     continue
                 if match["id"] in seen_ids:
@@ -1487,6 +1849,21 @@ def collect_programs_for_recipe(
                 continue
             match = by_title.get(wanted.casefold())
             if match is None:
+                show_uuid = _resolve_show_uuid_for_key_or_title(title=wanted)
+                if show_uuid:
+                    expanded = _expand_show_descendants(show_uuid)
+                    if expanded:
+                        matched += 1
+                        for ep in expanded:
+                            if ep["id"] in seen_ids:
+                                continue
+                            seen_ids.add(ep["id"])
+                            ordered.append(ep)
+                            if len(ordered) >= target:
+                                break
+                        if len(ordered) >= target:
+                            break
+                        continue
                 try:
                     payload = client.search_programs(wanted, limit=8)
                 except Exception:  # noqa: BLE001
@@ -1512,11 +1889,36 @@ def collect_programs_for_recipe(
             _record_stats(matched, len(recipe.item_hints), picked)
             return picked
 
+    # Named station / show-title path: expand “Gilligan's Island” → episodes before
+    # keyword scoring (episode titles rarely contain the show name).
+    show_terms = [
+        t
+        for t in (recipe.collection_title, recipe.name, *recipe.item_hints)
+        if str(t or "").strip()
+    ]
+    if show_terms and mode != ProgrammingMode.CHAOS and recipe.source != "chaos":
+        for term in show_terms:
+            show_uuid = _resolve_show_uuid_for_key_or_title(title=str(term))
+            if not show_uuid:
+                continue
+            expanded = _expand_show_descendants(show_uuid)
+            if not expanded:
+                continue
+            if mode == ProgrammingMode.SHUFFLE:
+                random.shuffle(expanded)
+            picked = expanded[:target]
+            _record_stats(len(picked), 1, picked)
+            return picked
+
     scored: List[Tuple[int, Dict[str, Any]]] = []
     term_l = [t.lower() for t in terms]
     for item in pool:
         blob = " ".join(
-            [item.get("title") or "", " ".join(item.get("genres") or [])]
+            [
+                item.get("title") or "",
+                item.get("show_title") or "",
+                " ".join(item.get("genres") or []),
+            ]
         ).lower()
         score = sum(1 for t in term_l if t and t in blob)
         if score:
@@ -1554,13 +1956,19 @@ def collect_programs_for_recipe(
                             "title": hit.get("title") or "",
                             "genres": hit.get("genres") or hit.get("tags") or [],
                             "plex_keys": _extract_plex_rating_keys(hit),
+                            "show": hit.get("show"),
+                            "type": hit.get("type"),
                         }
                     )
             # Rebuild picks after search supplements.
             scored = []
             for item in pool:
                 blob = " ".join(
-                    [item.get("title") or "", " ".join(item.get("genres") or [])]
+                    [
+                        item.get("title") or "",
+                        item.get("show_title") or "",
+                        " ".join(item.get("genres") or []),
+                    ]
                 ).lower()
                 score = sum(1 for t in term_l if t and t in blob)
                 if score:
@@ -1570,8 +1978,9 @@ def collect_programs_for_recipe(
             if len(picked) >= target:
                 break
 
-    if len(picked) < 8 and pool and not rating_keys:
-        # Non-collection fallback: fill with random catalog titles so the station streams.
+    if len(picked) < 8 and pool and not rating_keys and not is_collection:
+        # Non-collection fallback only — never pad collection/show stations with
+        # off-collection random titles (Gilligan ← Samurai Jack class of bug).
         extras = [p for p in pool if p["id"] not in {x["id"] for x in picked}]
         random.shuffle(extras)
         picked.extend(extras[: max(0, target - len(picked))])
@@ -1704,6 +2113,9 @@ def publish_recipes(
             programming_mode=recipe.programming_mode.value,
             icon_url=icon,
             source=str(recipe.source or ""),
+            craft_filters=getattr(recipe, "craft_filters", None) or {},
+            motif=str(recipe.motif or ""),
+            cluster_tag=str(recipe.cluster_tag or ""),
         )
 
     def _apply_programming(channel_id: str, recipe: ChannelRecipe) -> Dict[str, Any]:
@@ -1971,9 +2383,13 @@ def publish_collection_channel(
     channel_number: int = 0,
     name: str = "",
     programming_mode: str = "",
+    craft_filters: Optional[Mapping[str, Any]] = None,
+    media_scope: str = "",
     settings: Any = None,
 ) -> Dict[str, Any]:
     """Create a station from a Plex/Projectionist collection (seq / shuffle / chaos)."""
+    from projectionist.live_channels.filters import normalize_craft_filters
+
     title = str(collection_title or name or "Collection").strip() or "Collection"
     number = int(channel_number or 0)
     if number <= 0:
@@ -2003,12 +2419,13 @@ def publish_collection_channel(
         number=number,
         source="collection",
         programming_mode=mode,
-        media_scope=MediaScope.BOTH.value,
+        media_scope=normalize_media_scope(media_scope or MediaScope.BOTH.value),
         collection_id=str(collection_id or "").strip(),
         collection_title=title,
         summary=f"{mode_label} channel from collection “{title}”",
         item_hints=hints,
         item_rating_keys=rating_keys,
+        craft_filters=normalize_craft_filters(craft_filters).to_dict(),
     )
     result = publish_recipes(
         client,
@@ -2042,21 +2459,7 @@ def publish_custom_channel(
     if isinstance(recipe_payload, ChannelRecipe):
         recipe = recipe_payload
         if recipe.number <= 0:
-            recipe = ChannelRecipe(
-                name=recipe.name,
-                number=default_number,
-                source=recipe.source,
-                programming_mode=recipe.programming_mode,
-                media_scope=normalize_media_scope(getattr(recipe, "media_scope", None)),
-                cluster_tag=recipe.cluster_tag,
-                motif=recipe.motif,
-                collection_id=recipe.collection_id,
-                collection_title=recipe.collection_title,
-                youth_safe=recipe.youth_safe,
-                summary=recipe.summary,
-                item_hints=recipe.item_hints,
-                item_rating_keys=recipe.item_rating_keys,
-            )
+            recipe = replace_recipe(recipe, number=default_number)
     else:
         recipe = recipe_from_craft_payload(
             recipe_payload or {},
@@ -2073,20 +2476,10 @@ def publish_custom_channel(
         hints = tuple(row["title"] for row in children if row.get("title"))
         keys = tuple(row["rating_key"] for row in children if row.get("rating_key"))
         if hints or keys:
-            recipe = ChannelRecipe(
-                name=recipe.name,
-                number=recipe.number,
-                source=recipe.source,
-                programming_mode=recipe.programming_mode,
-                media_scope=normalize_media_scope(getattr(recipe, "media_scope", None)),
-                cluster_tag=recipe.cluster_tag,
-                motif=recipe.motif,
-                collection_id=recipe.collection_id,
-                collection_title=recipe.collection_title,
-                youth_safe=recipe.youth_safe,
-                summary=recipe.summary,
-                item_hints=hints or recipe.item_hints,
-                item_rating_keys=keys,
+            recipe = replace_recipe(
+                recipe,
+                item_hints=list(hints or recipe.item_hints),
+                item_rating_keys=list(keys),
             )
     result = publish_recipes(
         client,
@@ -2168,20 +2561,12 @@ def refill_channel_lineup(
         hints = tuple(row["title"] for row in children if row.get("title"))
         keys = tuple(row["rating_key"] for row in children if row.get("rating_key"))
         if hints or keys:
-            recipe = ChannelRecipe(
-                name=recipe.name,
-                number=recipe.number,
-                source=recipe.source,
-                programming_mode=recipe.programming_mode,
-                media_scope=normalize_media_scope(getattr(recipe, "media_scope", None)),
-                cluster_tag=recipe.cluster_tag,
-                motif=recipe.motif,
-                collection_id=recipe.collection_id,
+            recipe = replace_recipe(
+                recipe,
                 collection_title=recipe.collection_title or name,
-                youth_safe=recipe.youth_safe,
                 summary=recipe.summary or f"Refill lineup for “{name}”",
-                item_hints=hints or recipe.item_hints,
-                item_rating_keys=keys,
+                item_hints=list(hints or recipe.item_hints),
+                item_rating_keys=list(keys),
             )
 
     scope = normalize_media_scope(getattr(recipe, "media_scope", None) or stored_scope)
@@ -2194,6 +2579,9 @@ def refill_channel_lineup(
             collection_title=str(recipe.collection_title or ""),
             programming_mode=recipe.programming_mode.value,
             source=str(recipe.source or ""),
+            craft_filters=getattr(recipe, "craft_filters", None) or {},
+            motif=str(recipe.motif or ""),
+            cluster_tag=str(recipe.cluster_tag or ""),
         )
 
     media_types = (
@@ -2306,6 +2694,83 @@ def delete_published_channel(client: TunarrClient, channel_id: str) -> Dict[str,
         raise ValueError("channel_id is required")
     client.delete_channel(cid)
     return {"ok": True, "channel_id": cid, "deleted": True}
+
+
+def refresh_stations_with_stored_recipes(
+    client: TunarrClient,
+    *,
+    settings: Any = None,
+    limit: int = 40,
+) -> Dict[str, Any]:
+    """Refill stations that have a persisted recipe (post-sync / arrivals).
+
+    Additive — does not delete or create stations. Skips when Live Channels /
+    Tunarr URL are unset. Best-effort; individual station errors are collected.
+    """
+    if settings is None:
+        return {"ok": False, "refreshed": [], "errors": [], "note": "No settings."}
+    features = getattr(settings, "features", None)
+    if not bool(getattr(features, "live_channels_enabled", False)):
+        return {"ok": True, "refreshed": [], "errors": [], "skipped": True, "note": "Live Channels off."}
+    tunarr = getattr(settings, "tunarr", None)
+    if not bool(getattr(tunarr, "auto_refresh_stations_after_sync", True)):
+        return {
+            "ok": True,
+            "refreshed": [],
+            "errors": [],
+            "skipped": True,
+            "note": "Auto-refresh after sync is off.",
+        }
+    meta = getattr(tunarr, "station_meta", None) if tunarr is not None else None
+    if not isinstance(meta, Mapping) or not meta:
+        return {"ok": True, "refreshed": [], "errors": [], "note": "No stored station recipes."}
+
+    refreshed: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    for channel_id in list(meta.keys())[: max(1, min(int(limit or 40), 80))]:
+        cid = str(channel_id or "").strip()
+        if not cid:
+            continue
+        row = meta.get(cid)
+        if not isinstance(row, Mapping):
+            continue
+        if not (
+            row.get("collection_id")
+            or row.get("programming_mode")
+            or row.get("source")
+            or row.get("craft_filters")
+        ):
+            continue
+        try:
+            result = refill_channel_lineup(
+                client,
+                cid,
+                settings=settings,
+                pad_lineups=True,
+                attach_continuity=False,
+            )
+            refreshed.append(
+                {
+                    "channel_id": cid,
+                    "ok": bool(result.get("ok")),
+                    "program_count": int(result.get("program_count") or 0),
+                    "note": str(result.get("note") or "")[:160],
+                }
+            )
+        except Exception as error:  # noqa: BLE001
+            errors.append({"channel_id": cid, "error": str(error)[:200]})
+    return {
+        "ok": not errors or bool(refreshed),
+        "refreshed": refreshed,
+        "errors": errors,
+        "count_refreshed": len(refreshed),
+        "count_errors": len(errors),
+        "note": (
+            f"Refreshed {len(refreshed)} station(s) from stored recipes"
+            + (f" · {len(errors)} error(s)" if errors else "")
+            + "."
+        ),
+    }
 
 
 def tunarr_client_from_settings(settings: Any) -> TunarrClient:

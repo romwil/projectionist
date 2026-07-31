@@ -1,6 +1,54 @@
 {
-  "generated_at": "2026-07-31T02:51:14Z",
+  "generated_at": "2026-07-31T03:22:26Z",
   "releases": [
+    {
+      "version": "1.29.30",
+      "date": "2026-07-31",
+      "summary": "Live Channels craft finish: additive genre ∩ decade ∩ theme filters with preview, NoLive exclusion, Tunarr random-slot Shuffle/Chaos, pad knob, additive starters, and post-sync station refresh.",
+      "highlights": [
+        "**Stack filters like Explore.** Craft a station with Movies ∩ 1970s ∩ Action ∩ a martial-arts theme — preview the match count, then publish. Filters stick for Refill.",
+        "**Keep junk off the air.** Titles in a Plex **NoLive** collection (name configurable) are skipped during fill and starters.",
+        "**Shuffle that doesn’t loop the same 30.** Shuffle/Chaos prefer Tunarr random-slot programming so the pool reshuffles across days when the API allows.",
+        "**Pad, starters, sync.** Set pad flex to 0 for back-to-back; re-run starters without wiping stations; library sync refreshes stations that have stored recipes."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Additive craft filters on recipes + `station_meta` (genres, decade/year, motifs/themes, content ratings); collection subfilter; `POST /api/admin/live-channels/craft-preview`.",
+            "Exclusion collection (`exclusion_collection_name` default `NoLive`) skipped in `collect_programs_for_recipe` / starters fill.",
+            "`TunarrClient.schedule_slots`; Shuffle/Chaos publish uses Tunarr `type=random` programming when the pool supports movie/show slots.",
+            "Admin **Schedule pad & exclusion** (`PATCH /api/admin/live-channels/engine-settings`); `pad_flex_max_minutes` 0 = back-to-back.",
+            "Post-sync `refresh_stations_with_stored_recipes` when `auto_refresh_stations_after_sync` is on.",
+            "HELP + roadmap scorecard for craft filters / exclusion / schedule fidelity / pad."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Starter pack copy clarifies additive re-run (existing numbers kept).",
+            "Craft options expose filter facet catalogs from the library index."
+          ]
+        },
+        {
+          "title": "Residual",
+          "bullets": [
+            "Tunarr random slots need movies and/or per-show `showId`s; otherwise Shuffle/Chaos fall back to a shuffled manual lineup until Refill."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: `CraftFiltersTests`, `StationRefreshTests`, `tests/test_live_channels.py` — 102 passed.",
+            "`.venv/bin/python -m pytest tests/` — 1573 passed, 6 skipped; coverage **75.9%** (≥74%).",
+            "`cd frontend && npm run test:unit` — 520 passed.",
+            "`cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).",
+            "`cd frontend && npm run build` — passed.",
+            "`pytest tests/test_version.py` — lockstep **1.29.30**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.29",
       "date": "2026-07-31",

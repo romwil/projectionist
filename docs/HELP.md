@@ -623,9 +623,15 @@ When Live Channels is on, Projectionist can publish library-aware stations throu
 
 **Craft and publish (Admin → Live Channels):**
 1. Turn Live Channels on, run preflight, and start the broadcast engine (when Docker management is available).
-2. Under **Create / publish channels**, either **Craft a custom station** (name, number, motif / taste cluster / Plex or published collection / Chaos / youth-safe), publish a **collection**, or **Propose starters** and publish the pack. The collection picker lists your Plex collections (and any published Projectionist lists). If it is empty, create a collection in Plex or publish a list under Collections — an error note appears when Plex cannot be reached.
-3. Check **Your stations** for lineup depth — use **Refill** if a station is empty after a library scan, or **Delete** to remove it from the tuner.
+2. Under **Create / publish channels**, either **Craft a custom station** (name, number, motif / taste cluster / Plex or published collection / Chaos / youth-safe), publish a **collection**, or **Propose starters** and publish the pack. Stack **additive filters** (genre ∩ decade ∩ theme ∩ rating) on any recipe — use **Preview match count** before publish. The same filters can subfilter a collection. Filters persist on the station for Refill.
+3. Check **Your stations** for lineup depth — use **Refill** if a station is empty after a library scan, or **Delete** to remove it from the tuner. Re-running **Propose starters** / publish is additive: existing channel numbers keep their stations.
 4. Add Tunarr beside your other tuners in Plex (below), then **Attach Tunarr guide in Plex**.
+
+**Exclusion list:** Create a Plex collection named **NoLive** (or change the name under **Schedule pad & exclusion**). Titles in that collection are skipped when Projectionist fills recipes and starter packs.
+
+**Pad flex:** Under **Schedule pad & exclusion**, set pad minutes toward :00/:30 commercial cuts. **0** means back-to-back (no pad). After a library sync, stations with stored recipes refill automatically when auto-refresh is on.
+
+**Shuffle / Chaos scheduling:** Shuffle and Chaos prefer Tunarr’s random-slot programming so the station reshuffles within its resolved pool across days, instead of looping a fixed ~30-title list. Sequential still uses an ordered manual lineup. Residual limit: Tunarr random slots schedule movies and per-show episode pools; if a pool has neither movies nor show IDs, Projectionist falls back to a shuffled manual lineup until Refill.
 
 If you already have an OTA antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. On **Tuner Setup** select the discovered Tunarr device (use the Tunarr web port from Admin, e.g. `host:18765` — not a leftover M3U / old dizqueTV address) and enter any US ZIP so Next unlocks (gate only). The **EPG Location** dropdown is commercial lineups only — pick any temporary lineup so Plex finishes adding the tuner. Device Settings and DVR Settings do **not** offer an XMLTV paste field. After the tuner exists, click **Attach Tunarr guide in Plex** — Projectionist uses the PMS API to put Tunarr on its own XMLTV DVR and map channels, leaving your OTA commercial guide alone. Virtual stations use channel numbers from 100+. Watch in **Plex Live TV** or in Projectionist’s **/live** guide (when enabled) — both are first-class.
 
