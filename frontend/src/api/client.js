@@ -1395,6 +1395,10 @@ export async function postLiveChannelsContinuityRepair(body = {}) {
   });
 }
 
+export async function getLiveChannelsContinuityStatus() {
+  return api("/admin/live-channels/continuity/status");
+}
+
 export async function deleteLiveChannelsChannel(channelId) {
   return api(`/admin/live-channels/channels/${encodeURIComponent(channelId)}`, {
     method: "DELETE",

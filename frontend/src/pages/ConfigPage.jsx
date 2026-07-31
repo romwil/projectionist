@@ -14,6 +14,7 @@ import {
   getHealth,
   deleteLiveChannelsChannel,
   getLiveChannelsCraftOptions,
+  getLiveChannelsContinuityStatus,
   getLiveChannelsLifecycleStatus,
   getLiveChannelsPlexAttach,
   postLiveChannelsPlexAttachGuide,
@@ -476,6 +477,9 @@ export default function ConfigPage() {
   const [liveBusy, setLiveBusy] = useState(null);
   const [liveEngineProgress, setLiveEngineProgress] = useState(null);
   const [liveEngineError, setLiveEngineError] = useState("");
+  const [liveContinuityProgress, setLiveContinuityProgress] = useState(null);
+  /** Per-card success/error for Live Channels (not the page-bottom banner). */
+  const [liveBlockFeedback, setLiveBlockFeedback] = useState({});
   const [selectedStarters, setSelectedStarters] = useState({});
   const [tunarrLogsOpen, setTunarrLogsOpen] = useState(false);
   const [tunarrLogs, setTunarrLogs] = useState(null);
@@ -485,6 +489,7 @@ export default function ConfigPage() {
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
   const enginePollRef = useRef(null);
+  const continuityPollRef = useRef(null);
 
   useEffect(() => {
     if (typeof setWizardMode === "function") {
@@ -667,6 +672,10 @@ export default function ConfigPage() {
       if (enginePollRef.current) {
         clearInterval(enginePollRef.current);
         enginePollRef.current = null;
+      }
+      if (continuityPollRef.current) {
+        clearInterval(continuityPollRef.current);
+        continuityPollRef.current = null;
       }
     };
   }, []);
@@ -988,12 +997,55 @@ export default function ConfigPage() {
     );
   }
 
+  function setLiveFeedback(block, type, message, options = {}) {
+    const key = String(block || "general").trim() || "general";
+    const details = Array.isArray(options.details) ? options.details : null;
+    setLiveBlockFeedback((prev) => ({
+      ...prev,
+      [key]: { type, message, details },
+    }));
+    // Live Channels feedback is inline on the card — never the page-bottom banner.
+    setActionAlert((prev) => (prev?.area === "live-channels" ? null : prev));
+    setStatus("");
+  }
+
+  function clearLiveFeedback(block) {
+    if (!block) {
+      setLiveBlockFeedback({});
+      return;
+    }
+    setLiveBlockFeedback((prev) => {
+      if (!prev[block]) return prev;
+      const next = { ...prev };
+      delete next[block];
+      return next;
+    });
+  }
+
+  function renderLiveBlockAlert(block) {
+    const fb = liveBlockFeedback[block];
+    if (!fb?.message) return null;
+    return (
+      <InlineAlert
+        type={fb.type}
+        message={fb.message}
+        details={fb.details}
+        testId={`live-channels-${block}-alert`}
+      />
+    );
+  }
+
   function setActionFeedback(area, type, message, options = {}) {
     const details = Array.isArray(options.details) ? options.details : null;
+    // Live Channels: route to the card block (options.block). Do not park at page bottom.
+    if (area === "live-channels") {
+      setLiveFeedback(options.block || "general", type, message, { details });
+      return;
+    }
     setActionAlert({ area, type, message, details });
     // Areas that render their own InlineAlert should not also fill the page footer
     // status line (that produced duplicate red bar + plain text).
-    if (area === "live-channels" || area === "tunarr" || options.skipStatus) {
+    if (area === "tunarr" || options.skipStatus) {
       setStatus("");
     } else {
       setStatus(message);
@@ -1018,6 +1070,9 @@ export default function ConfigPage() {
   }
 
   function clearActionFeedback(area) {
+    if (area === "live-channels") {
+      clearLiveFeedback();
+    }
     setActionAlert((prev) => (prev?.area === area ? null : prev));
   }
 
@@ -1174,7 +1229,7 @@ export default function ConfigPage() {
       }
     } catch (error) {
       updateFeatureFlags({ live_channels_enabled: !enabled });
-      setActionFeedback("live-channels", "error", error.message);
+      setActionFeedback("live-channels", "error", error.message, { block: "hero" });
     } finally {
       setLiveBusy(null);
     }
@@ -1200,6 +1255,230 @@ export default function ConfigPage() {
     } catch {
       return null;
     }
+  }
+
+  function stopContinuityProgressPoll() {
+    if (continuityPollRef.current) {
+      clearInterval(continuityPollRef.current);
+      continuityPollRef.current = null;
+    }
+  }
+
+  async function pollContinuityProgressOnce() {
+    try {
+      const progress = await getLiveChannelsContinuityStatus();
+      setLiveContinuityProgress(progress);
+      return progress;
+    } catch {
+      return null;
+    }
+  }
+
+  function continuityPhaseLabel(phase) {
+    switch (phase) {
+      case "queued":
+        return "Queued";
+      case "remounting":
+        return "Remounting Tunarr";
+      case "waiting_ready":
+        return "Waiting for Tunarr ready";
+      case "scoping_libraries":
+        return "Scoping libraries";
+      case "scanning_filler":
+        return "Scanning filler";
+      case "attaching":
+        return "Attaching continuity";
+      case "refilling":
+        return "Refilling lineups";
+      case "warming":
+        return "Warming streams";
+      case "done":
+        return "Finished";
+      case "error":
+        return "Failed";
+      default:
+        return "Working…";
+    }
+  }
+
+  async function runContinuityJob(body = {}, { successFallback = "Continuity update finished.", block = "stations" } = {}) {
+    clearLiveFeedback(block);
+    clearActionFeedback("live-channels");
+    setLiveBusy("continuity-repair");
+    setLiveContinuityProgress({
+      phase: "queued",
+      percent: 5,
+      message: "Starting continuity job…",
+      busy: true,
+      ok: true,
+      determinate: true,
+    });
+    stopContinuityProgressPoll();
+    const startedAt = Date.now();
+    const timeoutMs = 12 * 60 * 1000;
+    continuityPollRef.current = setInterval(() => {
+      pollContinuityProgressOnce().then((progress) => {
+        if (!progress) return;
+        if (
+          progress.phase === "done" ||
+          progress.phase === "error" ||
+          (!progress.busy && progress.phase !== "queued") ||
+          Date.now() - startedAt > timeoutMs
+        ) {
+          stopContinuityProgressPoll();
+        }
+      });
+    }, 1500);
+
+    try {
+      const accepted = await postLiveChannelsContinuityRepair(body);
+      if (accepted?.async === false && accepted?.ok != null) {
+        // Sync diagnostic path — finish immediately.
+        stopContinuityProgressPoll();
+        setLiveContinuityProgress({
+          phase: accepted.ok ? "done" : "error",
+          percent: accepted.ok ? 100 : 0,
+          message: accepted.message || successFallback,
+          busy: false,
+          ok: Boolean(accepted.ok),
+          error: accepted.ok ? "" : accepted.message,
+          result: accepted,
+        });
+        setActionFeedback("live-channels",
+          accepted.ok ? "success" : "error",
+          accepted.message || successFallback,
+          { block },
+        );
+        setLiveChannelsStatus(await getLiveChannelsStatus());
+        return accepted;
+      }
+
+      const deadline = Date.now() + timeoutMs;
+      let progress = await pollContinuityProgressOnce();
+      while (Date.now() < deadline) {
+        if (progress?.phase === "done" || progress?.phase === "error") break;
+        if (progress && !progress.busy && progress.phase !== "queued") break;
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        progress = await pollContinuityProgressOnce();
+      }
+      stopContinuityProgressPoll();
+      if (progress?.phase === "done") {
+        setActionFeedback("live-channels",
+          "success",
+          progress.message || progress.result?.message || successFallback,
+          { block },
+        );
+        setLiveChannelsStatus(await getLiveChannelsStatus());
+      } else if (progress?.phase === "error") {
+        setActionFeedback("live-channels",
+          "error",
+          progress.error || progress.message || "Continuity repair failed.",
+          { block },
+        );
+      } else {
+        setActionFeedback("live-channels",
+          "error",
+          "Timed out waiting for continuity repair. Check Admin Logs for live_channels.continuity stages.",
+          { block },
+        );
+      }
+      return progress;
+    } catch (error) {
+      stopContinuityProgressPoll();
+      setLiveContinuityProgress((prev) => ({
+        ...(prev || {}),
+        phase: "error",
+        percent: 0,
+        busy: false,
+        ok: false,
+        error: error.message,
+        message: error.message,
+      }));
+      setActionFeedback("live-channels", "error", error.message, { block });
+      throw error;
+    } finally {
+      stopContinuityProgressPoll();
+      setLiveBusy(null);
+    }
+  }
+
+  function renderContinuityProgress() {
+    if (
+      !(
+        liveBusy === "continuity-repair" ||
+        (liveContinuityProgress &&
+          liveContinuityProgress.phase &&
+          liveContinuityProgress.phase !== "idle")
+      )
+    ) {
+      return null;
+    }
+    const done = liveContinuityProgress?.phase === "done";
+    const failed = liveContinuityProgress?.phase === "error";
+    return (
+      <div
+        className="live-channels-engine-progress"
+        data-testid="live-channels-continuity-progress"
+      >
+        {done ? (
+          <InlineAlert
+            type="success"
+            message={liveContinuityProgress?.message || "Continuity repair finished"}
+            testId="live-channels-continuity-success"
+          />
+        ) : (
+          <>
+            <p className="live-channels-engine-progress-headline">
+              {liveContinuityProgress?.message ||
+                (liveBusy === "continuity-repair" ? "Repairing continuity…" : "Working…")}
+            </p>
+            <div
+              className={`live-channels-engine-progress-bar${
+                liveBusy === "continuity-repair" && !(liveContinuityProgress?.percent > 0)
+                  ? " is-indeterminate"
+                  : ""
+              }`}
+              role="progressbar"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={
+                Number.isFinite(liveContinuityProgress?.percent)
+                  ? liveContinuityProgress.percent
+                  : undefined
+              }
+              aria-label="Continuity repair progress"
+            >
+              <span
+                className="live-channels-engine-progress-fill"
+                style={{
+                  width: `${Math.max(
+                    8,
+                    Math.min(100, Number(liveContinuityProgress?.percent) || 15),
+                  )}%`,
+                }}
+              />
+            </div>
+            <p className="wizard-note live-channels-engine-phase">
+              {continuityPhaseLabel(liveContinuityProgress?.phase)}
+              {Number.isFinite(liveContinuityProgress?.percent)
+                ? ` · ${liveContinuityProgress.percent}%`
+                : ""}
+            </p>
+          </>
+        )}
+        {failed ? (
+          <div
+            className="inline-alert inline-alert-error"
+            data-testid="live-channels-continuity-error"
+            role="alert"
+          >
+            <span className="inline-alert-message">
+              {liveContinuityProgress?.error || liveContinuityProgress?.message}
+            </span>
+          </div>
+        ) : null}
+      </div>
+    );
   }
 
   async function startBroadcastEngine() {
@@ -1245,7 +1524,7 @@ export default function ConfigPage() {
           ok: false,
           error: message,
         }));
-        setActionFeedback("live-channels", "error", message);
+        setActionFeedback("live-channels", "error", message, { block: "engine" });
         stopEngineProgressPoll();
         setLiveBusy(null);
         return;
@@ -1262,14 +1541,14 @@ export default function ConfigPage() {
       }
       stopEngineProgressPoll();
       if (progress?.ready) {
-        setActionFeedback(
-          "live-channels",
+        setActionFeedback("live-channels",
           "success",
           progress.message || "Tunarr is ready!",
+          { block: "engine" },
         );
       } else if (progress?.phase === "error") {
         setLiveEngineError(progress.error || progress.message || "Broadcast engine failed.");
-        setActionFeedback("live-channels", "error", progress.error || progress.message);
+        setActionFeedback("live-channels", "error", progress.error || progress.message, { block: "engine" });
       } else {
         const stillStarting = Boolean(progress?.still_starting || progress?.container_running);
         const timeoutMsg = stillStarting
@@ -1292,6 +1571,7 @@ export default function ConfigPage() {
           "live-channels",
           liveChannelsStartTimeoutAlertType(stillStarting),
           timeoutMsg,
+          { block: "engine" },
         );
       }
       const status = await getLiveChannelsStatus();
@@ -1313,7 +1593,7 @@ export default function ConfigPage() {
         ok: false,
         error: message,
       }));
-      setActionFeedback("live-channels", "error", message);
+      setActionFeedback("live-channels", "error", message, { block: "engine" });
     } finally {
       setLiveBusy(null);
     }
@@ -2733,6 +3013,7 @@ export default function ConfigPage() {
                     {liveBusy === "enable" ? "Turning on…" : "Let's go"}
                   </button>
                 </div>
+                {renderLiveBlockAlert("hero")}
               </div>
             ) : (
               <>
@@ -2762,6 +3043,7 @@ export default function ConfigPage() {
                     {liveBusy === "disable" ? "Turning off…" : "Turn off"}
                   </button>
                 </div>
+                {renderLiveBlockAlert("hero")}
 
                 {liveLaunched ? (
                   <div
@@ -2830,7 +3112,7 @@ export default function ConfigPage() {
                           setLiveBusy("status");
                           getLiveChannelsStatus()
                             .then(setLiveChannelsStatus)
-                            .catch((error) => setActionFeedback("live-channels", "error", error.message))
+                            .catch((error) => setActionFeedback("live-channels", "error", error.message, { block: "health" }))
                             .finally(() => setLiveBusy(null));
                         }}
                       >
@@ -2870,6 +3152,7 @@ export default function ConfigPage() {
                             .join(" · ")
                         : "Status not loaded yet — hit Refresh after you connect."}
                     </p>
+                    {renderLiveBlockAlert("health")}
                     {liveChannelsStatus?.guide_index ? (
                       <div
                         className="wizard-note"
@@ -3009,7 +3292,7 @@ export default function ConfigPage() {
                           onBlur={() =>
                             persistSettings({
                               tunarr: { ...(settings.tunarr || {}), url: settings?.tunarr?.url ?? "" },
-                            }).catch((error) => setActionFeedback("live-channels", "error", error.message))
+                            }).catch((error) => setActionFeedback("live-channels", "error", error.message, { block: "connection" }))
                           }
                         />
                       </label>
@@ -3032,7 +3315,7 @@ export default function ConfigPage() {
                                     settings?.tunarr?.image_tag ?? "chrisbenincasa/tunarr:1.3.9",
                                 },
                               }).catch((error) =>
-                                setActionFeedback("live-channels", "error", error.message),
+                                setActionFeedback("live-channels", "error", error.message, { block: "connection" }),
                               )
                             }
                           />
@@ -3048,7 +3331,7 @@ export default function ConfigPage() {
                             persistSettings({
                               tunarr: { ...(settings.tunarr || {}), docker_orchestration: orchEnabled },
                             }).catch((error) =>
-                              setActionFeedback("live-channels", "error", error.message),
+                              setActionFeedback("live-channels", "error", error.message, { block: "connection" }),
                             );
                           }}
                         />
@@ -3075,6 +3358,7 @@ export default function ConfigPage() {
                         testId="live-channels-tunarr-action-alert"
                       />
                     ) : null}
+                    {renderLiveBlockAlert("connection")}
                   </div>
 
                   <div
@@ -3107,14 +3391,12 @@ export default function ConfigPage() {
                             const hardFails = (result.checks || [])
                               .filter((check) => !check.ok && !check.soft)
                               .map((check) => `${check.label}: ${check.message}`);
-                            setActionFeedback(
-                              "live-channels",
+                            setActionFeedback("live-channels",
                               result.ready ? "success" : "error",
-                              result.summary || "Ready check finished.",
-                              { details: hardFails },
+                              result.summary || "Ready check finished.", { block: "preflight",  details: hardFails },
                             );
                           } catch (error) {
-                            setActionFeedback("live-channels", "error", error.message);
+                            setActionFeedback("live-channels", "error", error.message, { block: "preflight" });
                           } finally {
                             setLiveBusy(null);
                           }
@@ -3123,6 +3405,7 @@ export default function ConfigPage() {
                         {liveBusy === "preflight" ? "Checking…" : "Run ready check"}
                       </button>
                     </div>
+                    {renderLiveBlockAlert("preflight")}
                     <label className="config-toggle" data-testid="live-channels-plex-pass-confirm">
                       <input
                         type="checkbox"
@@ -3132,7 +3415,7 @@ export default function ConfigPage() {
                           updateTunarrSettings({ plex_pass_confirmed: confirmed });
                           persistSettings({
                             tunarr: { ...(settings.tunarr || {}), plex_pass_confirmed: confirmed },
-                          }).catch((error) => setActionFeedback("live-channels", "error", error.message));
+                          }).catch((error) => setActionFeedback("live-channels", "error", error.message, { block: "preflight" }));
                         }}
                       />
                       <span>
@@ -3289,6 +3572,7 @@ export default function ConfigPage() {
                           <span className="inline-alert-message">{liveEngineError}</span>
                         </div>
                       ) : null}
+                      {renderLiveBlockAlert("engine")}
                     </div>
                   ) : null}
 
@@ -3313,23 +3597,24 @@ export default function ConfigPage() {
                         data-testid="live-channels-rescan-filler"
                         disabled={liveBusy === "continuity-repair"}
                         onClick={async () => {
-                          setLiveBusy("continuity-repair");
+                          if (
+                            !window.confirm(
+                              "Rescan filler and repair continuity? This remounts filler paths if needed, force-scans the local filler library, attaches the shared list, and warms streams. Active Live TV sessions may briefly drop while Tunarr restarts.",
+                            )
+                          ) {
+                            return;
+                          }
                           try {
-                            const result = await postLiveChannelsContinuityRepair({
-                              rescan: true,
-                              repair: true,
-                              refill_lineups: true,
-                            });
-                            setActionFeedback(
-                              "live-channels",
-                              result.ok ? "success" : "error",
-                              result.message || "Filler rescan finished.",
+                            await runContinuityJob(
+                              {
+                                rescan: true,
+                                repair: true,
+                                refill_lineups: true,
+                              },
+                              { successFallback: "Filler rescan finished.", block: "filler" },
                             );
-                            setLiveChannelsStatus(await getLiveChannelsStatus());
-                          } catch (error) {
-                            setActionFeedback("live-channels", "error", error.message);
-                          } finally {
-                            setLiveBusy(null);
+                          } catch {
+                            /* feedback already set */
                           }
                         }}
                       >
@@ -3342,6 +3627,10 @@ export default function ConfigPage() {
                       mounts each path into Tunarr and builds one randomized continuity list for
                       every station. Empty or thin pools show as continuity degraded rather than green.
                     </p>
+                    {!liveLaunched || effectiveLiveTab === "setup"
+                      ? renderContinuityProgress()
+                      : null}
+                    {renderLiveBlockAlert("filler")}
                     <ul
                       className="live-channels-check-list"
                       data-testid="live-channels-continuity-checks"
@@ -3375,7 +3664,7 @@ export default function ConfigPage() {
                               persistSettings({
                                 tunarr: { ...(settings.tunarr || {}), filler_binds: next },
                               }).catch((error) =>
-                                setActionFeedback("live-channels", "error", error.message),
+                                setActionFeedback("live-channels", "error", error.message, { block: "filler" }),
                               );
                             }}
                           >
@@ -3407,14 +3696,14 @@ export default function ConfigPage() {
                             tunarr: { ...(settings.tunarr || {}), filler_binds: next },
                           })
                             .then(() =>
-                              setActionFeedback(
-                                "live-channels",
+                              setActionFeedback("live-channels",
                                 "success",
                                 "Filler path saved. Restart the broadcast engine if it is already running so Tunarr picks up the new mount, then Rescan filler.",
+                              { block: "filler" },
                               ),
                             )
                             .catch((error) =>
-                              setActionFeedback("live-channels", "error", error.message),
+                              setActionFeedback("live-channels", "error", error.message, { block: "filler" }),
                             );
                         }}
                       >
@@ -3454,7 +3743,7 @@ export default function ConfigPage() {
                             }
                             setSelectedStarters(next);
                           } catch (error) {
-                            setActionFeedback("live-channels", "error", error.message);
+                            setActionFeedback("live-channels", "error", error.message, { block: "connection" });
                           } finally {
                             setLiveBusy(null);
                           }
@@ -3468,6 +3757,7 @@ export default function ConfigPage() {
                       Tunarr’s Plex libraries, fills lineups with real titles, and skips numbers that
                       already exist (re-publish / Refill refreshes empty lineups).
                     </p>
+                    {renderLiveBlockAlert("starters")}
 
                     <div className="live-channels-craft-block" data-testid="live-channels-craft">
                       <h4>Craft a custom station</h4>
@@ -3724,11 +4014,9 @@ export default function ConfigPage() {
                                 fill_programming: true,
                               });
                               const feedback = formatPublishFeedback(result);
-                              setActionFeedback(
-                                "live-channels",
+                              setActionFeedback("live-channels",
                                 feedback.type,
-                                feedback.summary,
-                                { details: feedback.details },
+                                feedback.summary, { block: "craft",  details: feedback.details },
                               );
                               const [status, opts] = await Promise.all([
                                 getLiveChannelsStatus(),
@@ -3742,7 +4030,7 @@ export default function ConfigPage() {
                                 number: String(opts.next_channel_number || 100),
                               }));
                             } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message);
+                              setActionFeedback("live-channels", "error", error.message, { block: "craft" });
                             } finally {
                               setLiveBusy(null);
                             }
@@ -3751,6 +4039,7 @@ export default function ConfigPage() {
                           {liveBusy === "craft" ? "Publishing…" : "Publish station"}
                         </button>
                       </div>
+                      {renderLiveBlockAlert("craft")}
                     </div>
 
                     <div
@@ -3812,16 +4101,14 @@ export default function ConfigPage() {
                                 name: picked.title,
                               });
                               const feedback = formatPublishFeedback(result);
-                              setActionFeedback(
-                                "live-channels",
+                              setActionFeedback("live-channels",
                                 feedback.type,
-                                feedback.summary,
-                                { details: feedback.details },
+                                feedback.summary, { block: "collection",  details: feedback.details },
                               );
                               setLiveChannelsStatus(await getLiveChannelsStatus());
                               setLiveCraftOptions(await getLiveChannelsCraftOptions());
                             } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message);
+                              setActionFeedback("live-channels", "error", error.message, { block: "collection" });
                             } finally {
                               setLiveBusy(null);
                             }
@@ -3842,6 +4129,7 @@ export default function ConfigPage() {
                               : "No collections available"}
                         </button>
                       </div>
+                      {renderLiveBlockAlert("collection")}
                     </div>
 
                     <div className="live-channels-craft-block">
@@ -3901,16 +4189,14 @@ export default function ConfigPage() {
                                   fill_programming: true,
                                 });
                                 const feedback = formatPublishFeedback(result);
-                                setActionFeedback(
-                                  "live-channels",
+                                setActionFeedback("live-channels",
                                   feedback.type,
-                                  feedback.summary,
-                                  { details: feedback.details },
+                                  feedback.summary, { block: "publish",  details: feedback.details },
                                 );
                                 const status = await getLiveChannelsStatus();
                                 setLiveChannelsStatus(status);
                               } catch (error) {
-                                setActionFeedback("live-channels", "error", error.message);
+                                setActionFeedback("live-channels", "error", error.message, { block: "publish" });
                               } finally {
                                 setLiveBusy(null);
                               }
@@ -3919,6 +4205,7 @@ export default function ConfigPage() {
                             {liveBusy === "publish" ? "Publishing…" : "Publish selected starters"}
                           </button>
                         </div>
+                        {renderLiveBlockAlert("publish")}
                       </>
                     ) : (
                       <p className="wizard-note">
@@ -3942,24 +4229,22 @@ export default function ConfigPage() {
                           onClick={async () => {
                             if (
                               !window.confirm(
-                                "Repair continuity on all stations? This attaches the shared filler list, pads commercial-cut gaps (up to 15 minutes), and warms streams.",
+                                "Repair continuity on all stations? This remounts filler paths if needed, attaches the shared filler list, pads commercial-cut gaps (up to 15 minutes), and warms streams. Active Live TV sessions may briefly drop while Tunarr restarts.",
                               )
                             ) {
                               return;
                             }
-                            setLiveBusy("continuity-repair");
                             try {
-                              const result = await postLiveChannelsContinuityRepair();
-                              setActionFeedback(
-                                "live-channels",
-                                result.ok ? "success" : "error",
-                                result.message || "Continuity repair finished.",
+                              await runContinuityJob(
+                                {
+                                  rescan: true,
+                                  repair: true,
+                                  refill_lineups: true,
+                                },
+                                { successFallback: "Continuity repair finished.", block: "stations" },
                               );
-                              setLiveChannelsStatus(await getLiveChannelsStatus());
-                            } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message);
-                            } finally {
-                              setLiveBusy(null);
+                            } catch {
+                              /* feedback already set */
                             }
                           }}
                         >
@@ -3977,7 +4262,7 @@ export default function ConfigPage() {
                             try {
                               setLiveChannelsStatus(await getLiveChannelsStatus());
                             } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message);
+                              setActionFeedback("live-channels", "error", error.message, { block: "stations" });
                             } finally {
                               setLiveBusy(null);
                             }
@@ -3992,6 +4277,10 @@ export default function ConfigPage() {
                       Settings sets TV / Movies / Both; Repair continuity fixes jump-start stations
                       in place.
                     </p>
+                    {liveLaunched && effectiveLiveTab === "stations"
+                      ? renderContinuityProgress()
+                      : null}
+                    {renderLiveBlockAlert("stations")}
                     {(liveChannelsStatus?.continuity?.checks || []).length ? (
                       <ul
                         className="live-channels-check-list"
@@ -4070,14 +4359,14 @@ export default function ConfigPage() {
                                         const result = await refillLiveChannelsChannel(id, {
                                           recipe: { media_scope: mediaScope },
                                         });
-                                        setActionFeedback(
-                                          "live-channels",
+                                        setActionFeedback("live-channels",
                                           result.ok ? "success" : "error",
                                           result.note || "Refill finished.",
+                                          { block: "stations" },
                                         );
                                         setLiveChannelsStatus(await getLiveChannelsStatus());
                                       } catch (error) {
-                                        setActionFeedback("live-channels", "error", error.message);
+                                        setActionFeedback("live-channels", "error", error.message, { block: "stations" });
                                       } finally {
                                         setLiveBusy(null);
                                       }
@@ -4102,15 +4391,15 @@ export default function ConfigPage() {
                                       setLiveBusy(`delete-${id}`);
                                       try {
                                         await deleteLiveChannelsChannel(id);
-                                        setActionFeedback(
-                                          "live-channels",
+                                        setActionFeedback("live-channels",
                                           "success",
                                           `Deleted ${ch.name}.`,
+                                          { block: "stations" },
                                         );
                                         setLiveChannelsStatus(await getLiveChannelsStatus());
                                         setLiveCraftOptions(await getLiveChannelsCraftOptions());
                                       } catch (error) {
-                                        setActionFeedback("live-channels", "error", error.message);
+                                        setActionFeedback("live-channels", "error", error.message, { block: "stations" });
                                       } finally {
                                         setLiveBusy(null);
                                       }
@@ -4138,18 +4427,18 @@ export default function ConfigPage() {
                                             id,
                                             { media_scope: next },
                                           );
-                                          setActionFeedback(
-                                            "live-channels",
+                                          setActionFeedback("live-channels",
                                             "success",
                                             result.message || "Station settings saved.",
-                                          );
+                                            { block: "stations" },
+                                        );
                                           setLiveChannelsStatus(await getLiveChannelsStatus());
                                         } catch (error) {
-                                          setActionFeedback(
-                                            "live-channels",
+                                          setActionFeedback("live-channels",
                                             "error",
                                             error.message,
-                                          );
+                                            { block: "stations" },
+                                        );
                                         } finally {
                                           setLiveBusy(null);
                                         }
@@ -4219,7 +4508,7 @@ export default function ConfigPage() {
                             try {
                               setLiveAttach(await getLiveChannelsPlexAttach());
                             } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message);
+                              setActionFeedback("live-channels", "error", error.message, { block: "connection" });
                             } finally {
                               setLiveBusy(null);
                             }
@@ -4248,9 +4537,10 @@ export default function ConfigPage() {
                                 "success",
                                 result.message ||
                                   "Tunarr XMLTV guide attached in Plex (OTA left alone).",
+                                { block: "attach" },
                               );
                             } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message);
+                              setActionFeedback("live-channels", "error", error.message, { block: "attach" });
                             } finally {
                               setLiveBusy(null);
                             }
@@ -4262,6 +4552,7 @@ export default function ConfigPage() {
                         </button>
                       </div>
                     </div>
+                    {renderLiveBlockAlert("attach")}
                     {liveAttach ? (
                       <>
                         <p
@@ -4418,14 +4709,7 @@ export default function ConfigPage() {
               </>
             )}
 
-            {actionAlert?.area === "live-channels" ? (
-              <InlineAlert
-                type={actionAlert.type}
-                message={actionAlert.message}
-                details={actionAlert.details}
-                testId="live-channels-action-alert"
-              />
-            ) : null}
+            {/* Live Channels feedback is inline per card via liveBlockFeedback. */}
           </section>
         ) : null}
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import os
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -21,9 +23,13 @@ class LiveChannelsApiTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
+        from projectionist.live_channels.continuity_progress import (
+            reset_progress_for_tests as reset_continuity_progress,
+        )
         from projectionist.live_channels.lifecycle_progress import reset_progress_for_tests
 
         reset_progress_for_tests()
+        reset_continuity_progress()
         import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
@@ -32,10 +38,14 @@ class LiveChannelsApiTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs
+        from projectionist.live_channels.continuity_progress import (
+            reset_progress_for_tests as reset_continuity_progress,
+        )
         from projectionist.live_channels.lifecycle_progress import reset_progress_for_tests
 
         jobs._manager = None
         reset_progress_for_tests()
+        reset_continuity_progress()
         for key in ("CURATORX_SKIP_DOTENV", "PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER"):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
@@ -245,6 +255,131 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertTrue(body["logs_ready"])
         self.assertTrue(body["still_starting"])
         self.assertEqual(body["phase"], "waiting_ready")
+
+    def test_continuity_repair_accepts_async_job(self) -> None:
+        self._enable()
+        started = threading.Event()
+
+        def fake_execute(*_args, **_kwargs):
+            from projectionist.live_channels.continuity_progress import progress_store
+
+            started.wait(timeout=2)
+            progress_store().set_phase("attaching", "Attaching continuity")
+            return {
+                "ok": True,
+                "message": "Attached continuity to 4 station(s).",
+                "filler": {"filler_list_id": "fl-1", "ready": True},
+                "repair": {"ok": True, "count_attached": 4},
+                "docker": {"skipped": True},
+                "ready": {"skipped": True},
+                "libraries": {"skipped": True},
+            }
+
+        with patch(
+            "projectionist.live_channels.continuity_progress.execute_continuity_repair",
+            side_effect=fake_execute,
+        ):
+            resp = self.client.post(
+                "/api/admin/live-channels/continuity/repair",
+                json={"confirm": True, "rescan": True, "repair": True},
+            )
+            self.assertEqual(resp.status_code, 200, resp.text)
+            body = resp.json()
+            self.assertTrue(body["accepted"])
+            self.assertTrue(body["async"])
+            self.assertTrue(body["busy"])
+            status = self.client.get("/api/admin/live-channels/continuity/status")
+            self.assertEqual(status.status_code, 200)
+            self.assertTrue(status.json()["busy"])
+            started.set()
+            deadline = time.time() + 3
+            final = status.json()
+            while time.time() < deadline:
+                final = self.client.get(
+                    "/api/admin/live-channels/continuity/status"
+                ).json()
+                if final.get("phase") in {"done", "error"}:
+                    break
+                time.sleep(0.05)
+            self.assertEqual(final.get("phase"), "done", final)
+            self.assertFalse(final.get("busy"))
+
+    def test_continuity_repair_sync_path(self) -> None:
+        self._enable()
+        with patch(
+            "projectionist.live_channels.continuity_progress.execute_continuity_repair",
+            return_value={
+                "ok": True,
+                "message": "Repair finished.",
+                "filler": {"filler_list_id": "fl-1", "ready": True, "ok": True},
+                "repair": {"ok": True},
+                "docker": {"skipped": True},
+                "ready": {"skipped": True},
+                "libraries": {"skipped": True},
+            },
+        ):
+            resp = self.client.post(
+                "/api/admin/live-channels/continuity/repair",
+                json={
+                    "confirm": True,
+                    "rescan": False,
+                    "repair": True,
+                    "refill_lineups": False,
+                    "sync": True,
+                },
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body["ok"])
+        self.assertFalse(body["async"])
+        self.assertIn("Repair finished", body["message"])
+
+    def test_continuity_repair_sync_unexpected_exception_clears_busy(self) -> None:
+        """Sync path must clear busy on unexpected errors (not only ContinuityRepairError)."""
+        self._enable()
+        with patch(
+            "projectionist.live_channels.continuity_progress.execute_continuity_repair",
+            side_effect=RuntimeError("boom unexpected"),
+        ):
+            resp = self.client.post(
+                "/api/admin/live-channels/continuity/repair",
+                json={
+                    "confirm": True,
+                    "rescan": False,
+                    "repair": True,
+                    "refill_lineups": False,
+                    "sync": True,
+                },
+            )
+        self.assertEqual(resp.status_code, 500, resp.text)
+        status = self.client.get("/api/admin/live-channels/continuity/status").json()
+        self.assertEqual(status.get("phase"), "error", status)
+        self.assertFalse(status.get("busy"), status)
+        # A later repair must not stick on 409 "already running".
+        with patch(
+            "projectionist.live_channels.continuity_progress.execute_continuity_repair",
+            return_value={
+                "ok": True,
+                "message": "Repair finished.",
+                "filler": {},
+                "repair": {"ok": True},
+                "docker": {"skipped": True},
+                "ready": {"skipped": True},
+                "libraries": {"skipped": True},
+            },
+        ):
+            retry = self.client.post(
+                "/api/admin/live-channels/continuity/repair",
+                json={
+                    "confirm": True,
+                    "rescan": False,
+                    "repair": True,
+                    "refill_lineups": False,
+                    "sync": True,
+                },
+            )
+        self.assertEqual(retry.status_code, 200, retry.text)
+        self.assertTrue(retry.json().get("ok"))
 
     def test_plex_attach(self) -> None:
         self._enable()

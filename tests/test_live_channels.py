@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -2175,6 +2177,95 @@ class ContinuityFillerTests(unittest.TestCase):
             again = repair_jumpstart_stations(client, settings, refill_lineups=False)
         self.assertIn("ch-m", again["already_ok"])
         client.update_channel.assert_not_called()
+
+    def test_enrich_channels_fetches_filler_collections(self) -> None:
+        from projectionist.live_channels.filler import (
+            continuity_installation_status,
+            enrich_channels_with_filler_collections,
+        )
+
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "ch-1", "name": "Mystery", "number": 100},
+            {
+                "id": "ch-2",
+                "name": "Chaos",
+                "number": 102,
+                "fillerCollections": [{"id": "fl-1", "weight": 100}],
+            },
+        ]
+        client.get_channel.return_value = {
+            "id": "ch-1",
+            "fillerCollections": [{"id": "fl-1", "weight": 100}],
+            "guideFlexTitle": "Mystery · Up next",
+        }
+        client.list_filler_lists.return_value = [
+            {"id": "fl-1", "name": "Projectionist Continuity", "contentCount": 80}
+        ]
+        client.get_filler_list_programs.return_value = [
+            {"duration": 60_000},
+            {"duration": 60_000},
+        ]
+        enriched = enrich_channels_with_filler_collections(
+            client, client.list_channels.return_value
+        )
+        self.assertEqual(len(enriched[0]["fillerCollections"]), 1)
+        client.get_channel.assert_called_once_with("ch-1")
+
+        status = continuity_installation_status(client, Settings(tunarr=TunarrSettings()))
+        self.assertEqual(status["attached_count"], 2)
+        self.assertEqual(status["station_count"], 2)
+        self.assertTrue(status["ok"])
+
+    def test_continuity_progress_store_phases(self) -> None:
+        from projectionist.live_channels.continuity_progress import (
+            build_continuity_job_status,
+            progress_store,
+            reset_progress_for_tests,
+            start_continuity_repair_job,
+        )
+
+        reset_progress_for_tests()
+        store = progress_store()
+        self.assertTrue(store.begin(mode="repair"))
+        self.assertFalse(store.begin(mode="repair"))
+        store.set_phase("scanning_filler", "Scanning")
+        snap = build_continuity_job_status()
+        self.assertEqual(snap["phase"], "scanning_filler")
+        self.assertTrue(snap["busy"])
+        store.set_done("All good", result={"ok": True})
+        snap = build_continuity_job_status()
+        self.assertEqual(snap["phase"], "done")
+        self.assertFalse(snap["busy"])
+        reset_progress_for_tests()
+        done = threading.Event()
+
+        def runner() -> None:
+            progress_store().set_done("ok", result={"ok": True})
+            done.set()
+
+        accepted = start_continuity_repair_job(runner, mode="rescan")
+        self.assertTrue(accepted["accepted"])
+        self.assertTrue(done.wait(timeout=2))
+        reset_progress_for_tests()
+
+        failed = threading.Event()
+
+        def boom() -> None:
+            failed.set()
+            raise RuntimeError("async boom")
+
+        accepted = start_continuity_repair_job(boom, mode="repair")
+        self.assertTrue(accepted["accepted"])
+        self.assertTrue(failed.wait(timeout=2))
+        deadline = time.time() + 2
+        snap = progress_store().snapshot()
+        while time.time() < deadline and snap.get("busy"):
+            time.sleep(0.02)
+            snap = progress_store().snapshot()
+        self.assertEqual(snap.get("phase"), "error", snap)
+        self.assertFalse(snap.get("busy"), snap)
+        reset_progress_for_tests()
 
     def test_docker_includes_filler_binds_without_dropping_media(self) -> None:
         life = TunarrDockerLifecycle(
