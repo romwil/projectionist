@@ -1,6 +1,31 @@
 {
-  "generated_at": "2026-07-31T02:50:53Z",
+  "generated_at": "2026-07-31T02:51:14Z",
   "releases": [
+    {
+      "version": "1.29.29",
+      "date": "2026-07-31",
+      "summary": "Live Channels Repair hardening on top of 1.29.28: timeout-tolerant Tunarr DVR delete so Repair cannot wedge PMS, plus honest status while `/livetv/dvrs` is briefly busy.",
+      "highlights": [
+        "**Repair won’t hang Plex.** Stale Tunarr XMLTV DVR delete uses a timeout-tolerant path (Automat: DELETE no longer blocks Admin for 120s).",
+        "**Status stays readable.** If PMS is briefly busy listing DVRs, Admin still shows Tunarr HDHR + device presence."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Force-recreate Repair could wedge `/livetv/dvrs` after a slow DELETE.",
+            "Device `scan` `Unknown source` 500 treated as hard failure noise."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused remap/attach/repair suites — passed.",
+            "`pytest tests/test_version.py` — lockstep **1.29.29**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.28",
       "date": "2026-07-31",
