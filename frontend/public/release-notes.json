@@ -1,6 +1,35 @@
 {
-  "generated_at": "2026-07-31T04:09:59Z",
+  "generated_at": "2026-07-31T04:22:59Z",
   "releases": [
+    {
+      "version": "1.29.35",
+      "date": "2026-07-31",
+      "summary": "Projectionist `/live` Watch shows picture again: Content-Security-Policy now allows hls.js MediaSource `blob:` URLs on `<video>`, which `default-src 'self'` had been blocking after playlists and `.ts` segments loaded successfully.",
+      "highlights": [
+        "**Picture is back on Watch Live.** Stations no longer stay on a black frame after a successful tune — the browser can attach the MSE blob the player already built.",
+        "**Same secure defaults elsewhere.** CSP still defaults to same-origin; only `media-src` / `worker-src` gain explicit `blob:` for HLS playback."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "CSP lacked `media-src` (and `worker-src`), so `default-src 'self'` blocked `blob:http://…` Object URLs that hls.js assigns to `<video src>` → black screen despite healthy proxied masters/media/`.ts` (H.264 High + AAC)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: `SecurityHeadersTests` (incl. `media-src 'self' blob:`) — passed.",
+            "`.venv/bin/python -m pytest tests/` — 1584 passed, 6 skipped; coverage **75.9%** (≥74%).",
+            "`cd frontend && npm run test:unit` — 520 passed.",
+            "`cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).",
+            "`cd frontend && npm run build` — passed.",
+            "`pytest tests/test_version.py` — lockstep **1.29.35**.",
+            "Automat LAN (`http://10.10.1.202:8788`): `/live` Watch shows non-zero `videoWidth` after hard-refresh."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.34",
       "date": "2026-07-31",

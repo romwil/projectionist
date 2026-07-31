@@ -57,6 +57,13 @@ class SecurityHeadersTests(unittest.TestCase):
         self.assertIn("img-src", csp)
         self.assertIn("image.tmdb.org", csp)
 
+    def test_content_security_policy_allows_hls_mse_blob_media(self) -> None:
+        """hls.js plays via MediaSource blob: URLs on <video> — CSP must allow them."""
+        headers = self._get_health_headers()
+        csp = headers.get("content-security-policy", "")
+        self.assertIn("media-src 'self' blob:", csp)
+        self.assertIn("worker-src 'self' blob:", csp)
+
     def test_content_security_policy_allows_youtube_trailer_frames(self) -> None:
         headers = self._get_health_headers()
         csp = headers.get("content-security-policy", "")
