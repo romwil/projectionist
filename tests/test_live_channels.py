@@ -19,10 +19,17 @@ from projectionist.live_channels.docker import (
     resolve_config_volume,
 )
 from projectionist.live_channels.guide import (
+    DUAL_WATCH_HINT,
     apply_youth_filter_to_on_now,
+    build_guide_snapshot,
     build_on_now_snapshot,
     pick_now_and_next,
     program_airing_progress,
+)
+from projectionist.live_channels.stream_proxy import (
+    rewrite_hls_playlist,
+    tunarr_master_url,
+    validate_stream_path,
 )
 from projectionist.live_channels.nudges import RELATED_ID, maybe_deliver_live_channels_ready_nudge
 from projectionist.live_channels.plex_pass import check_plex_pass
@@ -896,6 +903,60 @@ class OnNowGuideTests(unittest.TestCase):
         ]
         filtered = apply_youth_filter_to_on_now(channels, max_rating="PG-13")
         self.assertEqual([c["id"] for c in filtered], ["1"])
+
+    def test_dual_watch_hint_on_snapshot(self) -> None:
+        snap = build_on_now_snapshot(Settings())
+        self.assertIn("Projectionist", snap["plex_hint"])
+        self.assertEqual(snap["watch_hint"], DUAL_WATCH_HINT)
+
+    def test_guide_snapshot_includes_programs(self) -> None:
+        settings = Settings(
+            features=FeatureFlags(live_channels_enabled=True),
+            tunarr=TunarrSettings(url="http://tunarr.test"),
+        )
+        now = 1_700_000_100.0
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "ch-1", "name": "Chaos Night", "number": 100, "icon": {"path": "http://x/a.png"}},
+        ]
+        client.get_all_channel_guides.return_value = {
+            "ch-1": {
+                "programs": [
+                    {
+                        "title": "Heat",
+                        "episodeTitle": "Night one",
+                        "start": now - 60,
+                        "stop": now + 3600,
+                        "contentRating": "R",
+                    },
+                    {"title": "Ronin", "start": now + 3600, "stop": now + 7200},
+                ]
+            },
+        }
+        snap = build_guide_snapshot(settings, client=client, now=now, hours=6)
+        self.assertTrue(snap["ready"])
+        self.assertEqual(snap["channels"][0]["icon_url"], "http://x/a.png")
+        self.assertEqual(len(snap["channels"][0]["programs"]), 2)
+        self.assertEqual(snap["channels"][0]["now"]["episode_title"], "Night one")
+
+
+class StreamProxyTests(unittest.TestCase):
+    def test_validate_rejects_traversal(self) -> None:
+        with self.assertRaises(ValueError):
+            validate_stream_path("../secret")
+        self.assertEqual(validate_stream_path("hls/stream.m3u8"), "hls/stream.m3u8")
+
+    def test_rewrite_playlist_stays_on_proxy(self) -> None:
+        body = "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nhls/stream.m3u8\n"
+        out = rewrite_hls_playlist(
+            body,
+            channel_id="abc",
+            tunarr_base="http://tunarr.lan:8000",
+            playlist_path="index.m3u8",
+        )
+        self.assertIn("/api/live-channels/stream/abc/hls/stream.m3u8", out)
+        self.assertNotIn("tunarr.lan", out)
+        self.assertTrue(tunarr_master_url("http://t", "abc").endswith(".m3u8?mode=hls"))
 
 
 class PreflightAndPublishTests(unittest.TestCase):

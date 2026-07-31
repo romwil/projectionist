@@ -1,14 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getFeatures, getLiveChannelsOnNow, getPlexMachineId } from "../api/client";
 import {
   formatChannelLabel,
   formatOnNowLine,
   normalizeOnNow,
 } from "../lib/onNow.js";
+import { liveWatchHref } from "../lib/liveChannels.js";
 import { plexLiveTvUrl } from "../lib/titleLinks.js";
 
-
-/** Read-only Live Channels “On now” card. CTA opens Plex — never in-app playback. */
 export default function OnNowPanel({ compact = false }) {
   const [model, setModel] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -53,6 +53,7 @@ export default function OnNowPanel({ compact = false }) {
 
   const channels = model?.channels?.slice(0, compact ? 4 : 8) || [];
   const showEmpty = !loading && featureOn && (!model || !model.ready);
+  const firstChannelId = channels[0]?.id || "";
 
   return (
     <section
@@ -65,18 +66,27 @@ export default function OnNowPanel({ compact = false }) {
           <h3 className="dash-panel-title">On now</h3>
           <p className="on-now-panel-meta">
             {model?.plexHint ||
-              "Open Plex → Live TV to watch. Projectionist does not play Live Channels."}
+              "Watch in Projectionist or open Plex → Live TV — both are first-class."}
           </p>
         </div>
-        <a
-          className="ghost on-now-plex-cta"
-          data-testid="on-now-plex-cta"
-          href={plexUrl}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Open in Plex
-        </a>
+        <div className="on-now-cta-row">
+          <Link
+            className="btn on-now-watch-cta"
+            data-testid="on-now-watch-cta"
+            to={liveWatchHref(firstChannelId)}
+          >
+            Watch in Projectionist
+          </Link>
+          <a
+            className="ghost on-now-plex-cta"
+            data-testid="on-now-plex-cta"
+            href={plexUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open in Plex Live TV
+          </a>
+        </div>
       </div>
 
       {error ? <p className="dash-panel-error">{error}</p> : null}
@@ -92,29 +102,35 @@ export default function OnNowPanel({ compact = false }) {
         <ul className="on-now-list" data-testid="on-now-list">
           {channels.map((channel) => (
             <li key={channel.id} className="on-now-row" data-testid="on-now-row">
-              <span className="on-now-channel">{formatChannelLabel(channel)}</span>
-              <span className="on-now-titles">{formatOnNowLine(channel)}</span>
-              {channel.progressHint ? (
-                <span className="on-now-progress-meta" data-testid="on-now-progress-meta">
-                  {channel.progressHint}
-                </span>
-              ) : null}
-              {channel.percent != null ? (
-                <div
-                  className="on-now-progress-bar"
-                  role="progressbar"
-                  aria-label={`${channel.nowTitle || "Program"} progress`}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-valuenow={Math.round(channel.percent)}
-                  data-testid="on-now-progress-bar"
-                >
-                  <span
-                    className="on-now-progress-fill"
-                    style={{ width: `${Math.max(0, Math.min(100, channel.percent))}%` }}
-                  />
-                </div>
-              ) : null}
+              <Link
+                className="on-now-row-link"
+                to={liveWatchHref(channel.id)}
+                data-testid="on-now-row-link"
+              >
+                <span className="on-now-channel">{formatChannelLabel(channel)}</span>
+                <span className="on-now-titles">{formatOnNowLine(channel)}</span>
+                {channel.progressHint ? (
+                  <span className="on-now-progress-meta" data-testid="on-now-progress-meta">
+                    {channel.progressHint}
+                  </span>
+                ) : null}
+                {channel.percent != null ? (
+                  <div
+                    className="on-now-progress-bar"
+                    role="progressbar"
+                    aria-label={`${channel.nowTitle || "Program"} progress`}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(channel.percent)}
+                    data-testid="on-now-progress-bar"
+                  >
+                    <span
+                      className="on-now-progress-fill"
+                      style={{ width: `${Math.max(0, Math.min(100, channel.percent))}%` }}
+                    />
+                  </div>
+                ) : null}
+              </Link>
             </li>
           ))}
         </ul>

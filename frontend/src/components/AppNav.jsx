@@ -14,6 +14,7 @@ export default function AppNav({
   role = "owner",
   multiUserEnabled = true,
   authReady = true,
+  liveChannelsReady = false,
   adminBadges = null,
 }) {
   const location = useLocation();
@@ -35,6 +36,7 @@ export default function AppNav({
     pathname: location.pathname,
     multiUserEnabled,
     authReady,
+    liveChannelsReady,
   });
   const badgeValue = adminBadges || {};
 

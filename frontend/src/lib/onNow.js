@@ -120,8 +120,9 @@ export function normalizeOnNow(snapshot) {
     ready: Boolean(snapshot.ready) && channels.length > 0,
     reason: String(snapshot.reason || "").trim(),
     plexHint: String(
-      snapshot.plex_hint ||
-        "Open Plex → Live TV to watch. Projectionist does not play Live Channels.",
+      snapshot.watch_hint ||
+        snapshot.plex_hint ||
+        "Watch in Projectionist (/live) or open Plex → Live TV — both are first-class.",
     ),
     channels,
   };

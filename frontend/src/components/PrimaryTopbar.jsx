@@ -27,6 +27,7 @@ export default function PrimaryTopbar({
   role = "owner",
   multiUserEnabled = false,
   authReady = true,
+  liveChannelsReady = false,
   navOpen = false,
   onNavOpenChange,
   brandPulse = "idle",
@@ -47,6 +48,7 @@ export default function PrimaryTopbar({
     isYouth,
     multiUserEnabled,
     authReady,
+    liveChannelsReady,
   });
 
   async function handleThemeClick() {
@@ -72,6 +74,7 @@ export default function PrimaryTopbar({
           role={role}
           multiUserEnabled={multiUserEnabled}
           authReady={authReady}
+          liveChannelsReady={liveChannelsReady}
           adminBadges={adminBadges}
         />
       ) : null}

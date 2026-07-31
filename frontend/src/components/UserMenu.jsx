@@ -82,6 +82,7 @@ export function useAuthGate({ redirect = true } = {}) {
   const [role, setRole] = useState("owner");
   const [isYouth, setIsYouth] = useState(false);
   const [authenticated, setAuthenticated] = useState(false);
+  const [liveChannelsReady, setLiveChannelsReady] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +94,7 @@ export function useAuthGate({ redirect = true } = {}) {
         enabled = Boolean(features?.features?.multi_user_enabled);
         if (cancelled) return;
         setMultiUserEnabled(enabled);
+        setLiveChannelsReady(Boolean(features?.features?.live_channels_ready));
         if (!enabled) {
           setIsOwner(true);
           setRole("owner");
@@ -165,5 +167,13 @@ export function useAuthGate({ redirect = true } = {}) {
     };
   }, [navigate, redirect]);
 
-  return { authReady, multiUserEnabled, isOwner, role, isYouth, authenticated };
+  return {
+    authReady,
+    multiUserEnabled,
+    isOwner,
+    role,
+    isYouth,
+    authenticated,
+    liveChannelsReady,
+  };
 }

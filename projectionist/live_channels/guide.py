@@ -1,7 +1,7 @@
-"""Read-only Tunarr guide snapshot for household “On now” delight.
+"""Read-only Tunarr guide snapshots for household “On now” and `/live` EPG.
 
-Projectionist never plays media — this is awareness only. Empty-safe when the
-feature is off or Tunarr is unreachable.
+Empty-safe when the feature is off or Tunarr is unreachable. Playback itself
+goes through the auth’d stream proxy — this module only shapes guide data.
 """
 
 from __future__ import annotations
@@ -15,9 +15,15 @@ from projectionist.youth.rating_gate import content_rating_allowed, normalize_co
 
 logger = logging.getLogger(__name__)
 
-# Keep the guide window short — enough for now + next without a full EPG pull.
+# On-now: short window (now + next). EPG grid uses a wider default.
 GUIDE_WINDOW_SECONDS = 3 * 3600
+GUIDE_GRID_WINDOW_SECONDS = 6 * 3600
 MAX_CHANNELS = 24
+MAX_GUIDE_CHANNELS = 48
+
+DUAL_WATCH_HINT = (
+    "Watch in Projectionist (/live) or open Plex → Live TV — both are first-class."
+)
 
 
 def _empty_snapshot(
@@ -35,14 +41,29 @@ def _empty_snapshot(
         "generated_at": time.time(),
         "reason": reason,
         "error": error,
-        "plex_hint": "Open Plex → Live TV to watch. Projectionist does not play Live Channels.",
+        "plex_hint": DUAL_WATCH_HINT,
+        "watch_hint": DUAL_WATCH_HINT,
     }
 
 
 def _program_title(program: Mapping[str, Any]) -> str:
-    for key in ("title", "showTitle", "episodeTitle", "name"):
+    # Prefer show/movie title; episode title is a separate subtitle field.
+    for key in ("title", "showTitle", "name"):
         value = str(program.get(key) or "").strip()
         if value:
+            return value
+    episode = str(program.get("episodeTitle") or "").strip()
+    return episode
+
+
+def _program_episode(program: Mapping[str, Any]) -> str:
+    for key in ("episodeTitle", "episode_title", "subtitle", "secondaryTitle"):
+        value = str(program.get(key) or "").strip()
+        if value:
+            # Avoid duplicating the primary title when Tunarr only has one field.
+            primary = _program_title(program)
+            if value == primary:
+                continue
             return value
     return ""
 
@@ -56,6 +77,28 @@ def _program_rating(program: Mapping[str, Any]) -> str:
         if text:
             return text
     return ""
+
+
+def _channel_icon_url(meta: Mapping[str, Any]) -> str:
+    icon = meta.get("icon")
+    if isinstance(icon, Mapping):
+        path = str(icon.get("path") or icon.get("url") or "").strip()
+        if path:
+            return path
+    for key in ("icon_url", "iconUrl", "logo"):
+        value = str(meta.get(key) or "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _program_is_flex(program: Mapping[str, Any]) -> bool:
+    for key in ("type", "programType", "kind"):
+        value = str(program.get(key) or "").strip().lower()
+        if value in {"flex", "filler", "continuity", "commercial"}:
+            return True
+    title = _program_title(program).lower()
+    return title in {"flex", "filler", "continuity"}
 
 
 def _to_epoch_seconds(value: Any) -> Optional[float]:
@@ -178,8 +221,10 @@ def _normalize_program(
         time_remaining=program.get("timeRemaining") or program.get("time_remaining"),
         is_paused=is_paused,
     )
+    episode = _program_episode(program)
     return {
         "title": title,
+        "episode_title": episode or None,
         "start": start,
         "stop": stop,
         "started_at": progress["started_at"],
@@ -189,6 +234,7 @@ def _normalize_program(
         "percent": progress["percent"],
         "is_paused": progress["is_paused"],
         "content_rating": rating or None,
+        "is_flex": _program_is_flex(program),
     }
 
 
@@ -278,8 +324,33 @@ def apply_youth_filter_to_on_now(
             continue
         if nxt and not _youth_allows_program(nxt, max_rating=ceiling):
             row["next"] = None
+        programs = row.get("programs")
+        if isinstance(programs, list):
+            row["programs"] = [
+                p
+                for p in programs
+                if isinstance(p, Mapping) and _youth_allows_program(p, max_rating=ceiling)
+            ]
         out.append(row)
     return out
+
+
+def youth_allows_channel_now(
+    channel: Mapping[str, Any],
+    *,
+    max_rating: str,
+) -> bool:
+    """True when the channel's current (or next) rated program is within the ceiling."""
+    ceiling = str(max_rating or "").strip()
+    if not ceiling:
+        return True
+    now = channel.get("now") if isinstance(channel.get("now"), Mapping) else None
+    nxt = channel.get("next") if isinstance(channel.get("next"), Mapping) else None
+    if now:
+        return _youth_allows_program(now, max_rating=ceiling)
+    if nxt:
+        return _youth_allows_program(nxt, max_rating=ceiling)
+    return True
 
 
 def _lineup_programs(lineup: Mapping[str, Any]) -> List[Any]:
@@ -290,12 +361,67 @@ def _lineup_programs(lineup: Mapping[str, Any]) -> List[Any]:
     return []
 
 
+def _channel_row_from_guide(
+    cid: str,
+    *,
+    meta: Mapping[str, Any],
+    lineup: Any,
+    programs: Sequence[Any],
+    slots: Mapping[str, Optional[Dict[str, Any]]],
+    include_programs: bool = False,
+) -> Dict[str, Any]:
+    name = str(
+        meta.get("name")
+        or meta.get("channelName")
+        or (lineup.get("name") if isinstance(lineup, Mapping) else "")
+        or f"Channel {meta.get('number') or ''}".strip()
+        or "Channel"
+    ).strip()
+    number_raw = meta.get("number")
+    if number_raw is None and isinstance(lineup, Mapping):
+        number_raw = lineup.get("number")
+    try:
+        number = int(number_raw) if number_raw is not None else None
+    except (TypeError, ValueError):
+        number = None
+    row: Dict[str, Any] = {
+        "id": cid,
+        "name": name or "Channel",
+        "number": number,
+        "icon_url": _channel_icon_url(meta) or None,
+        "now": slots.get("now"),
+        "next": slots.get("next"),
+    }
+    if include_programs:
+        normalized: List[Dict[str, Any]] = []
+        for program in _sorted_programs(programs):
+            item = _normalize_program(program)
+            if item:
+                normalized.append(item)
+        row["programs"] = normalized
+    return row
+
+
+def _sort_channels(channels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    channels.sort(
+        key=lambda c: (
+            c["number"] is None,
+            c["number"] if c["number"] is not None else 0,
+            str(c.get("name") or "").lower(),
+        )
+    )
+    return channels
+
+
 def build_on_now_snapshot(
     settings: Any,
     *,
     youth_max_rating: Optional[str] = None,
     now: Optional[float] = None,
     client: Optional[TunarrClient] = None,
+    window_seconds: int = GUIDE_WINDOW_SECONDS,
+    max_channels: int = MAX_CHANNELS,
+    include_programs: bool = False,
 ) -> Dict[str, Any]:
     """Build a household-readable guide snapshot (never raises)."""
     features = getattr(settings, "features", None)
@@ -309,10 +435,12 @@ def build_on_now_snapshot(
         return _empty_snapshot(enabled=True, reason="tunarr_url_missing")
 
     ts = time.time() if now is None else float(now)
+    window = max(GUIDE_WINDOW_SECONDS, int(window_seconds or GUIDE_WINDOW_SECONDS))
+    limit = max(1, min(int(max_channels or MAX_CHANNELS), 100))
     try:
         tunarr_client = client or TunarrClient(url, timeout=8)
         channels_meta = tunarr_client.list_channels()
-        guide_by_id = tunarr_client.get_all_channel_guides(ts, ts + GUIDE_WINDOW_SECONDS)
+        guide_by_id = tunarr_client.get_all_channel_guides(ts, ts + window)
     except Exception as error:  # noqa: BLE001
         logger.debug("Live Channels on-now unavailable: %s", error)
         return _empty_snapshot(
@@ -325,7 +453,7 @@ def build_on_now_snapshot(
     for item in channels_meta or []:
         if not isinstance(item, Mapping):
             continue
-        cid = str(item.get("id") or "").strip()
+        cid = str(item.get("id") or item.get("uuid") or "").strip()
         if cid:
             meta_by_id[cid] = item
 
@@ -337,7 +465,7 @@ def build_on_now_snapshot(
         channel_ids = list(meta_by_id.keys())
 
     channels: List[Dict[str, Any]] = []
-    for cid in channel_ids[:MAX_CHANNELS]:
+    for cid in channel_ids[:limit]:
         meta = meta_by_id.get(cid) or {}
         lineup = guide_by_id.get(cid) if isinstance(guide_by_id, dict) else None
         programs: List[Any] = []
@@ -354,38 +482,18 @@ def build_on_now_snapshot(
                 playing = None
             if playing:
                 slots = {"now": _normalize_program(playing, now=ts), "next": None}
-        name = str(
-            meta.get("name")
-            or meta.get("channelName")
-            or (lineup.get("name") if isinstance(lineup, Mapping) else "")
-            or f"Channel {meta.get('number') or ''}".strip()
-            or "Channel"
-        ).strip()
-        number_raw = meta.get("number")
-        if number_raw is None and isinstance(lineup, Mapping):
-            number_raw = lineup.get("number")
-        try:
-            number = int(number_raw) if number_raw is not None else None
-        except (TypeError, ValueError):
-            number = None
         channels.append(
-            {
-                "id": cid,
-                "name": name or "Channel",
-                "number": number,
-                "now": slots["now"],
-                "next": slots["next"],
-            }
+            _channel_row_from_guide(
+                cid,
+                meta=meta,
+                lineup=lineup,
+                programs=programs,
+                slots=slots,
+                include_programs=include_programs,
+            )
         )
 
-    # Stable order by channel number then name.
-    channels.sort(
-        key=lambda c: (
-            c["number"] is None,
-            c["number"] if c["number"] is not None else 0,
-            str(c.get("name") or "").lower(),
-        )
-    )
+    _sort_channels(channels)
 
     ceiling = str(youth_max_rating or "").strip()
     if ceiling:
@@ -398,7 +506,33 @@ def build_on_now_snapshot(
         "channels": channels,
         "count": len(channels),
         "generated_at": ts,
+        "window_seconds": window,
         "reason": "" if ready else "no_channels",
         "error": "",
-        "plex_hint": "Open Plex → Live TV to watch. Projectionist does not play Live Channels.",
+        "plex_hint": DUAL_WATCH_HINT,
+        "watch_hint": DUAL_WATCH_HINT,
     }
+
+
+def build_guide_snapshot(
+    settings: Any,
+    *,
+    youth_max_rating: Optional[str] = None,
+    now: Optional[float] = None,
+    client: Optional[TunarrClient] = None,
+    hours: float = 6.0,
+) -> Dict[str, Any]:
+    """Wider channel × time guide for the `/live` newspaper EPG."""
+    hours_clamped = max(1.0, min(float(hours or 6.0), 12.0))
+    window = int(hours_clamped * 3600)
+    snap = build_on_now_snapshot(
+        settings,
+        youth_max_rating=youth_max_rating,
+        now=now,
+        client=client,
+        window_seconds=max(window, GUIDE_GRID_WINDOW_SECONDS),
+        max_channels=MAX_GUIDE_CHANNELS,
+        include_programs=True,
+    )
+    snap["hours"] = hours_clamped
+    return snap

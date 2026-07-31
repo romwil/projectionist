@@ -23,6 +23,7 @@ export default function SettingsLayout() {
   const [role, setRole] = useState("owner");
   const [isYouth, setIsYouth] = useState(false);
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
+  const [liveChannelsReady, setLiveChannelsReady] = useState(false);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
 
@@ -33,6 +34,7 @@ export default function SettingsLayout() {
       try {
         const features = await getFeatures();
         const multiUser = Boolean(features?.features?.multi_user_enabled);
+        const liveReady = Boolean(features?.features?.live_channels_ready);
         const me = await getAuthMe().catch(() => null);
         if (me?.user?.ui_font_size || me?.user?.ui_theme) {
           const { applyUiFontSize, applyUiTheme: applyTheme } = await import("../lib/uiPrefs.js");
@@ -44,6 +46,7 @@ export default function SettingsLayout() {
             setIsOwner(true);
             setRole("owner");
             setMultiUserEnabled(false);
+            setLiveChannelsReady(liveReady);
             setReady(true);
           }
           return;
@@ -57,6 +60,7 @@ export default function SettingsLayout() {
         setRole(String(me.user.role || "member"));
         setIsYouth(Boolean(me.user.is_youth));
         setMultiUserEnabled(true);
+        setLiveChannelsReady(liveReady);
         setReady(true);
       } catch {
         if (!cancelled) {
@@ -110,6 +114,7 @@ export default function SettingsLayout() {
         role={role}
         multiUserEnabled={multiUserEnabled}
         authReady
+        liveChannelsReady={liveChannelsReady}
         navOpen={appNavOpen}
         onNavOpenChange={setAppNavOpen}
         inboxUnreadCount={inboxUnreadCount}

@@ -21,6 +21,8 @@ export const ROUTES = {
   libraryBrowse: "/explore/browse",
   /** @deprecated Prefer ROUTES.myJourney — legacy engagement path redirects. */
   engagement: "/explore/engagement",
+  live: "/live",
+  liveWatch: "/live/watch",
   watchlist: "/watchlist",
   library: "/library",
   tour: "/tour",

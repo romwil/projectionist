@@ -1677,9 +1677,29 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   margin: 0.25rem 0 0;
   max-width: 36rem;
 }
+.on-now-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+.on-now-watch-cta {
+  text-decoration: none;
+  white-space: nowrap;
+}
 .on-now-plex-cta {
   text-decoration: none;
   white-space: nowrap;
+}
+.on-now-row-link {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  color: inherit;
+  text-decoration: none;
+}
+.on-now-row-link:hover .on-now-channel {
+  color: var(--accent);
 }
 .on-now-list {
   list-style: none;

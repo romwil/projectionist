@@ -737,6 +737,20 @@ export async function getLiveChannelsOnNow() {
   return api("/live-channels/on-now");
 }
 
+/** Household: wider channel × time guide for `/live` EPG (1–12 hours). */
+export async function getLiveChannelsGuide({ hours = 6 } = {}) {
+  const params = new URLSearchParams({ hours: String(hours) });
+  return api(`/live-channels/guide?${params}`);
+}
+
+/** Household: warm + start-over a station before Projectionist playback. */
+export async function tuneLiveChannel(channelId) {
+  return api("/live-channels/tune", {
+    method: "POST",
+    body: JSON.stringify({ channel_id: String(channelId || "") }),
+  });
+}
+
 /** Owner-only: assemble and store the digest for the current week on demand. */
 export async function generateWeeklyDigest() {
   return api("/admin/weekly-digest/generate", { method: "POST" });

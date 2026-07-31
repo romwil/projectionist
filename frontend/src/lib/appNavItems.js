@@ -58,7 +58,7 @@ function secondaryNavItems({ isYouth, role }) {
  * **Admin** (owner section links, only while on `/admin/*` — added alongside
  * Navigate, never instead of it), then **More** (secondary destinations).
  * My Journey lives in Navigate only; it is never repeated under More.
- * @param {{ isOwner?: boolean, showSettings?: boolean, isYouth?: boolean, role?: string, pathname?: string, multiUserEnabled?: boolean, authReady?: boolean }} [opts]
+ * @param {{ isOwner?: boolean, showSettings?: boolean, isYouth?: boolean, role?: string, pathname?: string, multiUserEnabled?: boolean, authReady?: boolean, liveChannelsReady?: boolean }} [opts]
  */
 export function buildAppNavItems({
   isOwner = false,
@@ -68,6 +68,7 @@ export function buildAppNavItems({
   pathname = "",
   multiUserEnabled = true,
   authReady = true,
+  liveChannelsReady = false,
 } = {}) {
   void showSettings;
   const primary = buildPrimaryDrawerItems({
@@ -76,6 +77,7 @@ export function buildAppNavItems({
     isYouth,
     multiUserEnabled,
     authReady,
+    liveChannelsReady,
   });
   const secondary = secondaryNavItems({ isYouth, role });
 

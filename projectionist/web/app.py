@@ -967,6 +967,11 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
             "live_channels_enabled": bool(
                 getattr(settings.features, "live_channels_enabled", False)
             ),
+            # Ready for /live nav: feature on + Tunarr URL configured (page probes guide).
+            "live_channels_ready": bool(
+                getattr(settings.features, "live_channels_enabled", False)
+                and str(getattr(settings.tunarr, "url", "") or "").strip()
+            ),
         },
         "auth": {
             "mode": settings.auth.mode,
@@ -1071,6 +1076,13 @@ def explore_page(section_id: str = "") -> HTMLResponse:
 
 @app.get("/watchlist", response_class=HTMLResponse)
 def watchlist_page() -> HTMLResponse:
+    return _serve_index()
+
+
+@app.get("/live", response_class=HTMLResponse)
+@app.get("/live/watch", response_class=HTMLResponse)
+@app.get("/live/popout", response_class=HTMLResponse)
+def live_page() -> HTMLResponse:
     return _serve_index()
 
 
@@ -2625,8 +2637,8 @@ def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[st
     """Household-readable guide snapshot (channel name + now/next). Empty-safe.
 
     Owners and members may call this. Youth accounts filter rated titles via the
-    existing rating gate when Tunarr programs carry content ratings. CTA is always
-    Plex Live TV — never in-app playback.
+    existing rating gate when Tunarr programs carry content ratings. Dual-watch
+    CTA: Projectionist /live primary, Plex Live TV secondary.
     """
     from projectionist.live_channels.guide import build_on_now_snapshot
     from projectionist.live_channels.nudges import maybe_deliver_live_channels_ready_nudge
@@ -2648,6 +2660,169 @@ def live_channels_on_now_endpoint(user=Depends(get_current_user_dep)) -> Dict[st
     except Exception:  # noqa: BLE001
         logger.debug("Live Channels ready nudge skipped", exc_info=True)
     return snapshot
+
+
+@app.get("/api/live-channels/guide")
+def live_channels_guide_endpoint(
+    hours: float = 6.0,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Wider channel × time guide for the Projectionist `/live` EPG (1–12 hours)."""
+    from projectionist.live_channels.guide import build_guide_snapshot
+    from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
+
+    settings = _settings()
+    youth_ceiling = None
+    if youth_gate_active(user):
+        youth_ceiling = resolve_youth_max_rating(settings)
+    return build_guide_snapshot(
+        settings,
+        youth_max_rating=youth_ceiling,
+        hours=hours,
+    )
+
+
+class LiveChannelsTunePayload(BaseModel):
+    channel_id: str = ""
+
+
+@app.post("/api/live-channels/tune")
+def live_channels_tune_endpoint(
+    payload: LiveChannelsTunePayload,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Warm + start-over a single station before Projectionist `/live` playback."""
+    from projectionist.live_channels.guide import (
+        build_on_now_snapshot,
+        youth_allows_channel_now,
+    )
+    from projectionist.live_channels.publish import (
+        prepare_channels_for_playback,
+        resolve_channel_icon_url,
+        tunarr_client_from_settings,
+    )
+    from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
+
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    channel_id = str(payload.channel_id or "").strip()
+    if not channel_id:
+        raise HTTPException(status_code=400, detail="channel_id is required")
+
+    youth_ceiling = None
+    if youth_gate_active(user):
+        youth_ceiling = resolve_youth_max_rating(settings)
+        snap = build_on_now_snapshot(settings, youth_max_rating=None)
+        target = next(
+            (c for c in snap.get("channels") or [] if str(c.get("id")) == channel_id),
+            None,
+        )
+        if target and not youth_allows_channel_now(target, max_rating=youth_ceiling or ""):
+            raise HTTPException(
+                status_code=403,
+                detail="This channel’s current program is above your youth rating limit.",
+            )
+
+    try:
+        client = tunarr_client_from_settings(settings)
+        result = prepare_channels_for_playback(
+            client,
+            settings=settings,
+            channel_ids=[channel_id],
+            icon_url=resolve_channel_icon_url(settings),
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not tune Live Channel"),
+        ) from error
+    result["channel_id"] = channel_id
+    result["stream_url"] = f"/api/live-channels/stream/{channel_id}/index.m3u8"
+    return result
+
+
+@app.get("/api/live-channels/stream/{channel_id}/index.m3u8")
+@app.get("/api/live-channels/stream/{channel_id}/master.m3u8")
+def live_channels_stream_master(
+    channel_id: str,
+    user=Depends(get_current_user_dep),
+) -> Response:
+    """Auth’d HLS master playlist proxy (session required; no Tunarr LAN leak)."""
+    return _live_channels_stream_response(channel_id, "index.m3u8", user=user)
+
+
+@app.get("/api/live-channels/stream/{channel_id}/{path:path}")
+def live_channels_stream_path(
+    channel_id: str,
+    path: str,
+    user=Depends(get_current_user_dep),
+) -> Response:
+    """Auth’d HLS media playlist / segment proxy under a channel."""
+    return _live_channels_stream_response(channel_id, path, user=user)
+
+
+def _live_channels_stream_response(
+    channel_id: str,
+    relative_path: str,
+    *,
+    user,
+) -> Response:
+    from projectionist.live_channels.guide import (
+        build_on_now_snapshot,
+        youth_allows_channel_now,
+    )
+    from projectionist.live_channels.stream_proxy import (
+        iter_chunked,
+        proxy_channel_stream,
+    )
+    from projectionist.youth.rating_gate import resolve_youth_max_rating, youth_gate_active
+
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    cid = str(channel_id or "").strip()
+    if not cid:
+        raise HTTPException(status_code=400, detail="channel_id is required")
+
+    if youth_gate_active(user):
+        ceiling = resolve_youth_max_rating(settings)
+        # Only gate the master/media playlist entry — segment fetches reuse the same
+        # session after the viewer passed the program check.
+        if str(relative_path or "").endswith(".m3u8"):
+            snap = build_on_now_snapshot(settings, youth_max_rating=None)
+            target = next(
+                (c for c in snap.get("channels") or [] if str(c.get("id")) == cid),
+                None,
+            )
+            if target and not youth_allows_channel_now(target, max_rating=ceiling or ""):
+                raise HTTPException(
+                    status_code=403,
+                    detail="This channel’s current program is above your youth rating limit.",
+                )
+
+    try:
+        asset = proxy_channel_stream(settings, cid, relative_path)
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Live stream unavailable"),
+        ) from error
+
+    headers = {
+        "Cache-Control": "no-store",
+        "Access-Control-Expose-Headers": "Content-Type",
+    }
+    return StreamingResponse(
+        iter_chunked(asset["body"]),
+        media_type=str(asset.get("media_type") or "application/octet-stream"),
+        status_code=int(asset.get("status") or 200),
+        headers=headers,
+    )
 
 
 @app.get("/api/admin/access-requests")

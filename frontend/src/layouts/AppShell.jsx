@@ -36,7 +36,15 @@ export default function AppShell({
   showPrimaryNav,
   inboxUnreadCount = 0,
 }) {
-  const { authReady, isOwner, role, isYouth, multiUserEnabled, authenticated } = useAuthGate({
+  const {
+    authReady,
+    isOwner,
+    role,
+    isYouth,
+    multiUserEnabled,
+    authenticated,
+    liveChannelsReady,
+  } = useAuthGate({
     redirect: requireAuth,
   });
   const location = useLocation();
@@ -100,6 +108,7 @@ export default function AppShell({
             role={role}
             multiUserEnabled={multiUserEnabled}
             authReady={authReady}
+            liveChannelsReady={liveChannelsReady}
             navOpen={navOpen}
             onNavOpenChange={setNavOpen}
             inboxUnreadCount={inboxUnreadCount}
