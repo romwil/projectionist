@@ -1,7 +1,7 @@
 """Additive craft filters + exclusion for Live Channels recipe fill.
 
 AND-stack genres, decade/year, motif/theme, and optional content rating on a
-base pool (media_scope / collection / taste / chaos). Exclusion collection
+base pool (media_scope / collection / taste). Exclusion collection
 titles (default Plex name ``NoLive``) are skipped during fill and starters.
 """
 
@@ -208,7 +208,7 @@ def preview_craft_match_count(
     media_scope: str = MediaScope.BOTH.value,
     collection_id: str = "",
     settings: Any = None,
-    limit: int = 500,
+    limit: int = 1000,
 ) -> Dict[str, Any]:
     """Preview how many library titles match filters (+ optional collection ∩)."""
     craft = (

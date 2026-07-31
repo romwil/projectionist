@@ -1651,7 +1651,7 @@ class LiveChannelsPublishChannelPayload(BaseModel):
     recipe: Dict[str, Any] = Field(default_factory=dict)
     name: str = ""
     number: int = 0
-    source: str = "chaos"
+    source: str = "motif"
     programming_mode: str = ""
     media_scope: str = "both"
     motif: str = ""

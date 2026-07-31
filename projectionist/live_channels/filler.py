@@ -831,8 +831,8 @@ def repair_jumpstart_stations(
             _phase("refilling", f"Refilling lineup ({index}/{total}): {name}")
             try:
                 # Prefer station_meta (collection / motif / sequential). Never force
-                # Chaos over an existing curated lineup — that wiped show stations
-                # (Gilligan's Island ← random TV including Samurai Jack).
+                # a whole-library wipe over an existing curated lineup — that wiped
+                # show stations (Gilligan's Island ← random TV including Samurai Jack).
                 from projectionist.live_channels.publish import recipe_from_station_meta
 
                 stored = recipe_from_station_meta(
@@ -852,14 +852,16 @@ def repair_jumpstart_stations(
                 underdefined = program_count < 3 or duration_ms < 60_000
                 recipe_payload = None
                 if stored is None and underdefined:
+                    # Name-hint Shuffle so show stations expand via descendants.
                     recipe_payload = ChannelRecipe(
                         name=name[:48],
                         number=int(ch.get("number") or 0) or 100,
-                        source="chaos",
-                        programming_mode=ProgrammingMode.CHAOS,
+                        source="motif",
+                        programming_mode=ProgrammingMode.SHUFFLE,
                         media_scope=resolve_media_scope(
                             settings, channel_id=cid, default="both"
                         ),
+                        item_hints=(name,),
                         summary=f"Repair refill for “{name}”",
                     ).to_dict()
                 elif stored is None and not underdefined:

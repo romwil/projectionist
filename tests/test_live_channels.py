@@ -102,13 +102,13 @@ class FeatureFlagAndTunarrSettingsTests(unittest.TestCase):
 
 
 class StarterPackTests(unittest.TestCase):
-    def test_empty_inputs_with_chaos_and_youth(self) -> None:
+    def test_empty_inputs_with_youth_no_chaos(self) -> None:
         pack = propose_starter_pack(taste_clusters=[], motifs=[], collections=[])
         self.assertTrue(pack["empty_library"])
         sources = {p["source"] for p in pack["proposals"]}
-        self.assertIn("chaos", sources)
+        self.assertNotIn("chaos", sources)
         self.assertIn("youth", sources)
-        self.assertGreaterEqual(pack["count"], 2)
+        self.assertGreaterEqual(pack["count"], 1)
 
     def test_uses_clusters_motifs_collections(self) -> None:
         pack = propose_starter_pack(
@@ -683,14 +683,29 @@ class StatusBuilderTests(unittest.TestCase):
 class RecipeDictTests(unittest.TestCase):
     def test_to_dict(self) -> None:
         recipe = ChannelRecipe(
-            name="Chaos",
+            name="Mystery",
             number=102,
-            source="chaos",
-            programming_mode=ProgrammingMode.CHAOS,
+            source="motif",
+            programming_mode=ProgrammingMode.SHUFFLE,
         )
         payload = recipe.to_dict()
-        self.assertEqual(payload["programming_mode"], "chaos")
+        self.assertEqual(payload["programming_mode"], "shuffle")
         self.assertEqual(payload["number"], 102)
+
+    def test_chaos_wire_value_normalizes_to_shuffle(self) -> None:
+        from projectionist.live_channels.recipes import (
+            normalize_programming_mode,
+            recipe_from_mapping,
+        )
+
+        self.assertEqual(
+            normalize_programming_mode("chaos"), ProgrammingMode.SHUFFLE
+        )
+        recipe = recipe_from_mapping(
+            {"name": "Legacy", "number": 100, "source": "chaos", "programming_mode": "chaos"}
+        )
+        self.assertEqual(recipe.programming_mode, ProgrammingMode.SHUFFLE)
+        self.assertEqual(recipe.source, "chaos")
 
 
 class CraftOptionsTests(unittest.TestCase):
@@ -714,6 +729,11 @@ class CraftOptionsTests(unittest.TestCase):
         opts = build_craft_options(None, existing_channel_numbers=[100])
         self.assertEqual(opts["next_channel_number"], 101)
         self.assertTrue(opts["sources"])
+        source_ids = {s["id"] for s in opts["sources"]}
+        mode_ids = {m["id"] for m in opts["programming_modes"]}
+        self.assertNotIn("chaos", source_ids)
+        self.assertNotIn("chaos", mode_ids)
+        self.assertEqual(mode_ids, {"shuffle", "sequential"})
 
     def test_includes_plex_collections_and_empty_hint(self) -> None:
         from projectionist.connectors.plex_collections import PlexCollection
@@ -2960,6 +2980,66 @@ class CollectionIdMatchTests(unittest.TestCase):
         )
         # Without a resolvable show, return empty — never pad with Unrelated movies.
         self.assertEqual(picked, [])
+
+    def test_collect_full_run_show_exceeds_soft_thirty(self) -> None:
+        """Show expand must return the full episode pool, not truncate at ~30."""
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+        from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+
+        client = MagicMock()
+        client.list_library_programs.return_value = []
+        client.search_programs.return_value = {
+            "results": [
+                {
+                    "type": "show",
+                    "title": "Gilligan's Island",
+                    "uuid": "show-uuid-full",
+                    "externalKey": "185565",
+                    "identifiers": [
+                        {"type": "plex", "id": "185565", "sourceId": "src"}
+                    ],
+                }
+            ]
+        }
+        episodes = [
+            {
+                "type": "content",
+                "id": f"ep-{i}",
+                "duration": 1_500_000,
+                "program": {
+                    "uuid": f"ep-{i}",
+                    "type": "episode",
+                    "title": f"Episode {i}",
+                    "identifiers": [
+                        {"type": "plex", "id": str(200000 + i), "sourceId": "src"}
+                    ],
+                },
+            }
+            for i in range(1, 61)
+        ]
+        client.list_program_descendants.return_value = episodes
+        recipe = ChannelRecipe(
+            name="Gilligan's Island",
+            number=105,
+            source="collection",
+            programming_mode=ProgrammingMode.SHUFFLE,
+            collection_id="99",
+            collection_title="Gilligan's Island",
+            item_hints=("Gilligan's Island",),
+            item_rating_keys=("185565",),
+        )
+        stats: dict = {}
+        picked = collect_programs_for_recipe(
+            client,
+            recipe,
+            catalog=[],
+            media_scope="tv",
+            match_stats=stats,
+        )
+        self.assertEqual(len(picked), 60)
+        self.assertGreater(len(picked), 30)
+        self.assertTrue(stats.get("full_run"))
+        client.list_program_descendants.assert_called_with("show-uuid-full")
 
 
 class CraftFiltersTests(unittest.TestCase):

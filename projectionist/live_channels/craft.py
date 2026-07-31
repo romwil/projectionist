@@ -54,22 +54,20 @@ _SOURCES = (
         "description": "Play a Plex or published Projectionist collection in order.",
     },
     {
-        "id": "chaos",
-        "label": "Chaos",
-        "description": "Random shuffle across the indexed library.",
-    },
-    {
         "id": "youth",
         "label": "Youth-safe",
         "description": "Shuffle at or below the household youth rating ceiling.",
     },
 )
 
+# Owner-facing modes only — Chaos is a deprecated alias of Shuffle.
 _MODES = (
     {"id": ProgrammingMode.SHUFFLE.value, "label": "Shuffle"},
     {"id": ProgrammingMode.SEQUENTIAL.value, "label": "Sequential"},
-    {"id": ProgrammingMode.CHAOS.value, "label": "Chaos"},
 )
+
+# Accepted craft sources including legacy Chaos for refill of old stations.
+_ACCEPTED_SOURCES = frozenset({s["id"] for s in _SOURCES} | {"chaos"})
 
 
 def next_channel_number(
@@ -323,9 +321,10 @@ def build_craft_options(
         "pad_flex_max_minutes": pad_minutes,
         "empty_library": not bool(motifs or clusters or collections),
         "hint": (
-            "Pick TV, Movies, or Both, then a motif, taste cluster, collection, Chaos, "
+            "Pick TV, Movies, or Both, then a motif, taste cluster, collection, "
             "or youth-safe recipe. Stack additive filters (genre ∩ decade ∩ theme) before "
-            "publish — preview shows the match count. Titles in the "
+            "publish — preview shows the match count. Collection/show stations fill the "
+            "full resolved pool (Shuffle or Sequential). Titles in the "
             f"“{exclusion_name}” Plex collection are skipped."
         ),
     }
@@ -337,10 +336,15 @@ def recipe_from_craft_payload(
     default_number: int = 100,
 ) -> ChannelRecipe:
     """Normalize an Admin craft form into a ``ChannelRecipe``."""
+    from projectionist.live_channels.recipes import normalize_programming_mode
+
     payload = dict(data or {})
-    source = str(payload.get("source") or "chaos").strip().lower() or "chaos"
-    if source not in {s["id"] for s in _SOURCES}:
-        source = "chaos"
+    source = str(payload.get("source") or "motif").strip().lower() or "motif"
+    if source not in _ACCEPTED_SOURCES:
+        source = "motif"
+    # Legacy Chaos craft → Shuffle of the media_scope pool.
+    if source == "chaos":
+        payload.setdefault("programming_mode", ProgrammingMode.SHUFFLE.value)
 
     name = str(payload.get("name") or "").strip()
     motif = str(payload.get("motif") or "").strip()
@@ -360,7 +364,7 @@ def recipe_from_craft_payload(
         elif source == "youth":
             name = "Youth Safe"
         elif source == "chaos":
-            name = "Chaos"
+            name = "Library Shuffle"
         else:
             name = "Custom Station"
     name = name[:48]
@@ -376,10 +380,9 @@ def recipe_from_craft_payload(
     if not mode_raw:
         if source == "collection":
             mode_raw = ProgrammingMode.SEQUENTIAL.value
-        elif source == "chaos":
-            mode_raw = ProgrammingMode.CHAOS.value
         else:
             mode_raw = ProgrammingMode.SHUFFLE.value
+    mode_raw = normalize_programming_mode(mode_raw).value
 
     youth_safe = bool(payload.get("youth_safe")) or source == "youth"
     media_scope = normalize_media_scope(payload.get("media_scope"))

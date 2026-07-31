@@ -15,6 +15,7 @@ from projectionist.live_channels.recipes import (
     ProgrammingMode,
     library_type_matches_scope,
     normalize_media_scope,
+    normalize_programming_mode,
     program_type_matches_scope,
     recipe_from_mapping,
     replace_recipe,
@@ -23,7 +24,11 @@ from projectionist.live_channels.recipes import (
 # Prefer these Plex library mediaTypes when enabling Tunarr libraries for fill.
 _PREFERRED_LIBRARY_TYPES = frozenset({"movies", "shows"})
 _MIN_PROGRAM_DURATION_MS = 60_000
+# Motif / taste / filtered craft soft default (not a hard product ceiling).
 _DEFAULT_FILL_LIMIT = 30
+_SOFT_FILL_CAP = 80
+# Collection / show full-run: fill all ID-resolved episodes (safety cap).
+_FULL_RUN_FILL_CAP = 1000
 _DEFAULT_PAD_FLEX_MAX_MINUTES = 15
 
 # Tunarr 1.3.x ``createChannelV2`` requires these channel fields (OpenAPI).
@@ -525,14 +530,16 @@ def recipe_from_station_meta(
         source = source or "collection"
     if not source and not mode_raw:
         return None
-    try:
-        mode = ProgrammingMode(mode_raw) if mode_raw else (
-            ProgrammingMode.SEQUENTIAL
-            if source == "collection"
-            else ProgrammingMode.SHUFFLE
-        )
-    except ValueError:
-        mode = ProgrammingMode.SHUFFLE
+    default_mode = (
+        ProgrammingMode.SEQUENTIAL
+        if source == "collection"
+        else ProgrammingMode.SHUFFLE
+    )
+    mode = (
+        normalize_programming_mode(mode_raw, default=default_mode)
+        if mode_raw
+        else default_mode
+    )
     from projectionist.live_channels.filters import normalize_craft_filters
 
     craft_filters = normalize_craft_filters(row.get("craft_filters")).to_dict()
@@ -541,7 +548,7 @@ def recipe_from_station_meta(
             :48
         ],
         number=int(number or 0) or 100,
-        source=source or "chaos",
+        source=source or "motif",
         programming_mode=mode,
         media_scope=normalize_media_scope(row.get("media_scope")),
         cluster_tag=str(row.get("cluster_tag") or "").strip(),
@@ -1062,7 +1069,7 @@ def plex_collection_children(
     settings: Any,
     collection_id: str,
     *,
-    limit: int = 60,
+    limit: int = _FULL_RUN_FILL_CAP,
 ) -> List[Dict[str, str]]:
     """Plex collection children as ``{rating_key, title, thumb}`` (empty when unavailable)."""
     cid = str(collection_id or "").strip()
@@ -1098,7 +1105,7 @@ def plex_collection_item_hints(
     settings: Any,
     collection_id: str,
     *,
-    limit: int = 60,
+    limit: int = _FULL_RUN_FILL_CAP,
 ) -> List[str]:
     """Title hints from a Plex collection rating key (empty when not a Plex id)."""
     return [
@@ -1112,7 +1119,7 @@ def plex_collection_rating_keys(
     settings: Any,
     collection_id: str,
     *,
-    limit: int = 60,
+    limit: int = _FULL_RUN_FILL_CAP,
 ) -> List[str]:
     """Plex ratingKeys for collection children (preferred match path)."""
     return [
@@ -1235,12 +1242,8 @@ def random_slot_schedule_for_programs(
         if len(show_ids) >= 24:
             break
 
-    order = (
-        "shuffle"
-        if programming_mode
-        in {ProgrammingMode.SHUFFLE, ProgrammingMode.CHAOS}
-        else "next"
-    )
+    mode = normalize_programming_mode(programming_mode)
+    order = "shuffle" if mode == ProgrammingMode.SHUFFLE else "next"
     slots: List[Dict[str, Any]] = []
     if has_movie:
         slots.append(
@@ -1296,7 +1299,7 @@ def programming_body_for_recipe(
     """Best-effort programming payload for ``POST …/programming``.
 
     Tunarr 1.3.x manual updates require ``lineup`` (array), not ``programs``.
-    Shuffle/Chaos prefer ``type=random`` (RandomSlotSchedule) for continuous
+    Shuffle prefers ``type=random`` (RandomSlotSchedule) for continuous
     reshuffle within the resolved pool when Tunarr can schedule the pool;
     otherwise fall back to a shuffled manual lineup.
     When ``pad_lineups`` is true, insert flex (≤ ``max_flex_ms``) toward :00/:30
@@ -1319,8 +1322,8 @@ def programming_body_for_recipe(
         content_lineup.append({"type": "content", "id": pid, "duration": duration})
         program_ids.append(pid)
 
-    mode = recipe.programming_mode
-    use_random = mode in {ProgrammingMode.SHUFFLE, ProgrammingMode.CHAOS} and program_ids
+    mode = normalize_programming_mode(recipe.programming_mode)
+    use_random = mode == ProgrammingMode.SHUFFLE and program_ids
     if use_random:
         schedule = random_slot_schedule_for_programs(
             programs or (),
@@ -1478,11 +1481,32 @@ def _index_pool_by_plex_key(pool: Sequence[Mapping[str, Any]]) -> Dict[str, Dict
     return by_key
 
 
+def _fill_target_for_recipe(
+    recipe: ChannelRecipe,
+    *,
+    limit: Optional[int] = None,
+    full_run: bool = False,
+) -> int:
+    """Resolve fill target: soft default for motif/taste; full-run for collection/show.
+
+    ``limit=None`` means “use the path default” (full-run cap vs soft default).
+    An explicit positive ``limit`` is still clamped to the path’s safety cap.
+    """
+    del recipe  # reserved for future per-source tuning
+    if full_run:
+        if limit is None or int(limit) <= 0:
+            return _FULL_RUN_FILL_CAP
+        return max(1, min(int(limit), _FULL_RUN_FILL_CAP))
+    if limit is None or int(limit) <= 0:
+        return _DEFAULT_FILL_LIMIT
+    return max(1, min(int(limit), _SOFT_FILL_CAP))
+
+
 def collect_programs_for_recipe(
     client: TunarrClient,
     recipe: ChannelRecipe,
     *,
-    limit: int = _DEFAULT_FILL_LIMIT,
+    limit: Optional[int] = None,
     catalog: Optional[Sequence[Mapping[str, Any]]] = None,
     media_scope: str = "",
     settings: Any = None,
@@ -1493,9 +1517,20 @@ def collect_programs_for_recipe(
     Collection recipes prefer Plex ``ratingKey`` → Tunarr ``externalKey`` /
     ``plex|{source}|{key}``. Title soft-match is last-resort for unscanned items.
     When ID matches succeed, do **not** pad with random whole-library titles.
+
+    Collection / show stations use a full-run fill (all resolved programs up to
+    ``_FULL_RUN_FILL_CAP``). Motif / taste / filtered craft keep a softer default.
     """
     scope = normalize_media_scope(media_scope or getattr(recipe, "media_scope", None))
-    target = max(1, min(int(limit or _DEFAULT_FILL_LIMIT), 80))
+    rating_keys_early = [
+        str(k).strip() for k in (recipe.item_rating_keys or ()) if str(k).strip()
+    ]
+    is_collection = recipe.source == "collection" or bool(
+        recipe.collection_id or rating_keys_early or recipe.item_hints
+    )
+    # Full-run for collection/show ID pools; soft cap for motif/taste/legacy chaos.
+    full_run = is_collection and recipe.source != "chaos"
+    target = _fill_target_for_recipe(recipe, limit=limit, full_run=full_run)
     pool: List[Dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -1560,13 +1595,8 @@ def collect_programs_for_recipe(
             pass
 
     terms = _recipe_search_terms(recipe)
-    mode = recipe.programming_mode
-    rating_keys = [
-        str(k).strip() for k in (recipe.item_rating_keys or ()) if str(k).strip()
-    ]
-    is_collection = recipe.source == "collection" or bool(
-        recipe.collection_id or rating_keys or recipe.item_hints
-    )
+    mode = normalize_programming_mode(recipe.programming_mode)
+    rating_keys = list(rating_keys_early)
 
     def _record_stats(matched: int, total: int, programs: Sequence[Mapping[str, Any]]) -> None:
         if match_stats is None:
@@ -1574,6 +1604,8 @@ def collect_programs_for_recipe(
         match_stats["matched"] = int(matched)
         match_stats["match_total"] = int(total)
         match_stats["program_count"] = len(programs)
+        match_stats["full_run"] = bool(full_run)
+        match_stats["fill_target"] = int(target)
 
     # Additive craft filters + exclusion collection (NoLive).
     from projectionist.live_channels.filters import (
@@ -1596,7 +1628,7 @@ def collect_programs_for_recipe(
             db = None
         if db is not None:
             lib = library_items_matching_filters(
-                db, craft, media_scope=scope, limit=500
+                db, craft, media_scope=scope, limit=_FULL_RUN_FILL_CAP
             )
             allowed_keys = {str(k) for k in (lib.get("rating_keys") or []) if str(k)}
         # When library index cannot resolve motif/theme, keep Tunarr-side genre/year filter.
@@ -1616,9 +1648,9 @@ def collect_programs_for_recipe(
             excluded_rating_keys=excluded,
         )
 
-    # Larger pool for Tunarr random-slot schedules (Shuffle/Chaos).
-    if mode in {ProgrammingMode.SHUFFLE, ProgrammingMode.CHAOS}:
-        target = max(target, min(80, max(30, len(pool))))
+    # Soft-cap motif/taste Shuffle may use more of the filtered pool (still ≤ soft cap).
+    if not full_run and mode == ProgrammingMode.SHUFFLE and pool:
+        target = max(target, min(_SOFT_FILL_CAP, max(_DEFAULT_FILL_LIMIT, len(pool))))
 
     # Collection subfilter: intersect ratingKeys with craft filters + exclusion.
     if rating_keys:
@@ -1628,11 +1660,12 @@ def collect_programs_for_recipe(
         if allowed_keys is not None or excluded:
             rating_keys = filtered_keys
 
-    # Chaos: wider random within media_scope (not limited to collection IDs).
-    if mode == ProgrammingMode.CHAOS or recipe.source == "chaos":
+    # Legacy Chaos stations: Shuffle the media_scope pool (soft cap).
+    if recipe.source == "chaos":
         candidates = list(pool)
         random.shuffle(candidates)
-        picked = candidates[:target]
+        soft = _fill_target_for_recipe(recipe, limit=limit, full_run=False)
+        picked = candidates[:soft]
         _record_stats(len(picked), len(pool) if not craft.is_empty() else 0, picked)
         return picked
 
@@ -1641,6 +1674,8 @@ def collect_programs_for_recipe(
         sid = str(show_uuid or "").strip()
         if not sid:
             return []
+        # Show expand is always a full-run path (entire episode pool).
+        expand_cap = _fill_target_for_recipe(recipe, limit=limit, full_run=True)
         out: List[Dict[str, Any]] = []
         try:
             descendants = client.list_program_descendants(sid)
@@ -1673,7 +1708,7 @@ def collect_programs_for_recipe(
                 }
             if normalized and normalized["id"]:
                 out.append(normalized)
-            if len(out) >= target:
+            if len(out) >= expand_cap:
                 break
         return out
 
@@ -1896,7 +1931,9 @@ def collect_programs_for_recipe(
         for t in (recipe.collection_title, recipe.name, *recipe.item_hints)
         if str(t or "").strip()
     ]
-    if show_terms and mode != ProgrammingMode.CHAOS and recipe.source != "chaos":
+    if show_terms and recipe.source != "chaos":
+        # Show expand always uses the full-run cap (not the motif soft default).
+        show_cap = _fill_target_for_recipe(recipe, limit=limit, full_run=True)
         for term in show_terms:
             show_uuid = _resolve_show_uuid_for_key_or_title(title=str(term))
             if not show_uuid:
@@ -1906,7 +1943,7 @@ def collect_programs_for_recipe(
                 continue
             if mode == ProgrammingMode.SHUFFLE:
                 random.shuffle(expanded)
-            picked = expanded[:target]
+            picked = expanded[:show_cap]
             _record_stats(len(picked), 1, picked)
             return picked
 
@@ -2387,7 +2424,7 @@ def publish_collection_channel(
     media_scope: str = "",
     settings: Any = None,
 ) -> Dict[str, Any]:
-    """Create a station from a Plex/Projectionist collection (seq / shuffle / chaos)."""
+    """Create a station from a Plex/Projectionist collection (seq / shuffle)."""
     from projectionist.live_channels.filters import normalize_craft_filters
 
     title = str(collection_title or name or "Collection").strip() or "Collection"
@@ -2396,15 +2433,16 @@ def publish_collection_channel(
         existing = client.list_channels()
         numbers = [int(ch.get("number") or 0) for ch in existing]
         number = max(numbers) + 1 if numbers else 100
-    mode_raw = str(programming_mode or ProgrammingMode.SEQUENTIAL.value).strip().lower()
-    try:
-        mode = ProgrammingMode(mode_raw)
-    except ValueError:
-        mode = ProgrammingMode.SEQUENTIAL
+    mode = normalize_programming_mode(
+        programming_mode or ProgrammingMode.SEQUENTIAL.value,
+        default=ProgrammingMode.SEQUENTIAL,
+    )
     hints: tuple[str, ...] = ()
     rating_keys: tuple[str, ...] = ()
     if settings is not None:
-        children = plex_collection_children(settings, collection_id, limit=60)
+        children = plex_collection_children(
+            settings, collection_id, limit=_FULL_RUN_FILL_CAP
+        )
         hints = tuple(row["title"] for row in children if row.get("title"))
         rating_keys = tuple(
             row["rating_key"] for row in children if row.get("rating_key")
@@ -2412,7 +2450,6 @@ def publish_collection_channel(
     mode_label = {
         ProgrammingMode.SEQUENTIAL: "Sequential",
         ProgrammingMode.SHUFFLE: "Shuffle",
-        ProgrammingMode.CHAOS: "Chaos",
     }.get(mode, mode.value)
     recipe = ChannelRecipe(
         name=title[:48],
@@ -2472,7 +2509,9 @@ def publish_custom_channel(
         and recipe.collection_id
         and not recipe.item_rating_keys
     ):
-        children = plex_collection_children(settings, recipe.collection_id, limit=60)
+        children = plex_collection_children(
+            settings, recipe.collection_id, limit=_FULL_RUN_FILL_CAP
+        )
         hints = tuple(row["title"] for row in children if row.get("title"))
         keys = tuple(row["rating_key"] for row in children if row.get("rating_key"))
         if hints or keys:
@@ -2501,7 +2540,7 @@ def refill_channel_lineup(
     pad_lineups: bool = True,
     attach_continuity: bool = True,
 ) -> Dict[str, Any]:
-    """Re-fill an existing Tunarr station lineup from craft vocabulary / Chaos."""
+    """Re-fill an existing Tunarr station lineup from craft vocabulary / Shuffle."""
     from projectionist.live_channels.craft import recipe_from_craft_payload
     from projectionist.live_channels.filler import (
         attach_continuity_to_channel,
@@ -2537,7 +2576,8 @@ def refill_channel_lineup(
             default_number=number or 100,
         )
     else:
-        # Prefer persisted collection_id + programming_mode over Chaos default.
+        # Prefer persisted collection_id + programming_mode. Without meta, Shuffle
+        # the media_scope pool (legacy source="chaos" fill path — not owner-facing).
         stored = recipe_from_station_meta(
             settings, cid, name=name, number=number or 100
         )
@@ -2545,19 +2585,21 @@ def refill_channel_lineup(
             name=name[:48],
             number=number or 100,
             source="chaos",
-            programming_mode=ProgrammingMode.CHAOS,
+            programming_mode=ProgrammingMode.SHUFFLE,
             media_scope=stored_scope,
             summary=f"Refill lineup for “{name}”",
         )
 
-    # Re-load collection ratingKeys so Shuffle/Chaos reshuffle the same ID pool.
+    # Re-load collection ratingKeys so Shuffle reshuffles the same ID pool.
     if (
         settings is not None
         and recipe.source == "collection"
         and recipe.collection_id
         and not recipe.item_rating_keys
     ):
-        children = plex_collection_children(settings, recipe.collection_id, limit=60)
+        children = plex_collection_children(
+            settings, recipe.collection_id, limit=_FULL_RUN_FILL_CAP
+        )
         hints = tuple(row["title"] for row in children if row.get("title"))
         keys = tuple(row["rating_key"] for row in children if row.get("rating_key"))
         if hints or keys:
@@ -2662,8 +2704,8 @@ def refill_channel_lineup(
                 "No Tunarr program IDs yet — wait for the library scan, then refill again."
             )
         )
-    if recipe.programming_mode in {ProgrammingMode.SHUFFLE, ProgrammingMode.CHAOS}:
-        note += f" Reshuffled ({recipe.programming_mode.value})."
+    if normalize_programming_mode(recipe.programming_mode) == ProgrammingMode.SHUFFLE:
+        note += " Reshuffled (shuffle)."
 
     return {
         "ok": bool(programs),
