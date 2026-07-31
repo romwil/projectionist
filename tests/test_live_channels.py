@@ -1829,6 +1829,44 @@ class ContinuityFillerTests(unittest.TestCase):
         )
         client.scan_library.assert_called_once()
 
+    def test_ensure_media_libraries_disables_unconfigured_enabled(self) -> None:
+        from projectionist.live_channels.publish import ensure_media_libraries_enabled
+
+        client = MagicMock()
+        client.list_media_source_libraries.return_value = [
+            {
+                "id": "lib-m",
+                "name": "Movies",
+                "mediaType": "movies",
+                "externalKey": "1",
+                "enabled": True,
+            },
+            {
+                "id": "lib-magic",
+                "name": "Magical Media",
+                "mediaType": "movies",
+                "externalKey": "7",
+                "enabled": True,
+            },
+        ]
+        settings = Settings(plex_movie_section="1", plex_tv_section="2")
+        result = ensure_media_libraries_enabled(
+            client, media_source_id="ms-1", scan=False, settings=settings
+        )
+        self.assertEqual({row["name"] for row in result["enabled"]}, {"Movies"})
+        disable_calls = [
+            c for c in client.set_library_enabled.call_args_list if c.args[2:] == () and c.kwargs.get("enabled") is False
+            or (len(c.args) >= 3 and c.args[2] is False)
+            or c.kwargs.get("enabled") is False
+        ]
+        # Prefer kwargs form used by production code: enabled=False
+        found = False
+        for c in client.set_library_enabled.call_args_list:
+            args, kwargs = c
+            if args[:2] == ("ms-1", "lib-magic") and kwargs.get("enabled") is False:
+                found = True
+        self.assertTrue(found, client.set_library_enabled.call_args_list)
+
     def test_ensure_media_libraries_skips_unconfigured_sections(self) -> None:
         from projectionist.live_channels.publish import ensure_media_libraries_enabled
 
