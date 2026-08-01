@@ -105,6 +105,7 @@ export default function LivePlayer({
 
     let destroyed = false;
     let networkRetries = 0;
+    let recoverTimer = null;
     const syncTracks = () => {
       if (destroyed || !video) return;
       const list = [];
@@ -120,59 +121,85 @@ export default function LivePlayer({
       setTextTracks(list);
     };
 
+    const attachHls = () => {
+      if (destroyed || !video || !Hls.isSupported()) return;
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+      const hls = new Hls({
+        // Main-thread XHR keeps session cookies reliable on the auth’d proxy.
+        enableWorker: false,
+        lowLatencyMode: false,
+        backBufferLength: 30,
+        manifestLoadingTimeOut: 20000,
+        levelLoadingTimeOut: 20000,
+        fragLoadingTimeOut: 30000,
+        // Auth’d stream proxy needs the session cookie on every playlist/segment.
+        xhrSetup: (xhr) => {
+          xhr.withCredentials = true;
+        },
+      });
+      hlsRef.current = hls;
+      hls.loadSource(url);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        if (destroyed) return;
+        setStatus("playing");
+        setError("");
+        video.play().catch(() => setStatus("ready"));
+        syncTracks();
+      });
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (destroyed || !data?.fatal) return;
+        // Soft recover without re-calling tune (tune start-over mid-watch kills Tunarr).
+        if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 5) {
+          networkRetries += 1;
+          setStatus("loading");
+          setError("");
+          if (networkRetries <= 3) {
+            hls.startLoad();
+            return;
+          }
+          // Later retries: remount HLS against the same URL after a short pause.
+          if (recoverTimer) clearTimeout(recoverTimer);
+          recoverTimer = setTimeout(() => {
+            if (!destroyed) attachHls();
+          }, 1500 * Math.min(networkRetries, 4));
+          return;
+        }
+        if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+          setStatus("loading");
+          setError("");
+          hls.recoverMediaError();
+          return;
+        }
+        setStatus("error");
+        setError(formatHlsError(data));
+      });
+      hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
+        // Prefer native textTracks once demuxed; also surface HLS subtitle tracks.
+        const subs = hls.subtitleTracks || [];
+        if (subs.length) {
+          setTextTracks(
+            subs.map((track, index) => ({
+              index,
+              label: track.name || track.lang || `CC ${index + 1}`,
+              language: track.lang || "",
+              viaHls: true,
+            })),
+          );
+        } else {
+          syncTracks();
+        }
+      });
+    };
+
     const startPlayback = () => {
       if (destroyed || !video) return;
 
       if (Hls.isSupported()) {
-        const hls = new Hls({
-          // Main-thread XHR keeps session cookies reliable on the auth’d proxy.
-          enableWorker: false,
-          lowLatencyMode: false,
-          backBufferLength: 30,
-          manifestLoadingTimeOut: 20000,
-          levelLoadingTimeOut: 20000,
-          fragLoadingTimeOut: 30000,
-          // Auth’d stream proxy needs the session cookie on every playlist/segment.
-          xhrSetup: (xhr) => {
-            xhr.withCredentials = true;
-          },
-        });
-        hlsRef.current = hls;
-        hls.loadSource(url);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          if (destroyed) return;
-          setStatus("playing");
-          video.play().catch(() => setStatus("ready"));
-          syncTracks();
-        });
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (destroyed || !data?.fatal) return;
-          setStatus("error");
-          setError(formatHlsError(data));
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && networkRetries < 2) {
-            networkRetries += 1;
-            hls.startLoad();
-          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
-            hls.recoverMediaError();
-          }
-        });
-        hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
-          // Prefer native textTracks once demuxed; also surface HLS subtitle tracks.
-          const subs = hls.subtitleTracks || [];
-          if (subs.length) {
-            setTextTracks(
-              subs.map((track, index) => ({
-                index,
-                label: track.name || track.lang || `CC ${index + 1}`,
-                language: track.lang || "",
-                viaHls: true,
-              })),
-            );
-          } else {
-            syncTracks();
-          }
-        });
+        attachHls();
       } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
         video.src = url;
         video.addEventListener("loadedmetadata", () => {
@@ -192,7 +219,8 @@ export default function LivePlayer({
     };
 
     // Warm + start-over BEFORE loadSource so tune cannot reset the HLS session
-    // out from under the first playlist/segment fetches.
+    // out from under the first playlist/segment fetches. Mid-play recoveries
+    // intentionally skip tuneLiveChannel (see attachHls error path).
     (async () => {
       try {
         await tuneLiveChannel(channelId);
@@ -205,6 +233,7 @@ export default function LivePlayer({
 
     return () => {
       destroyed = true;
+      if (recoverTimer) clearTimeout(recoverTimer);
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;

@@ -842,11 +842,16 @@ def warm_channel_stream(
     *,
     timeout: int = _WARM_DEFAULT_TIMEOUT_S,
     min_ts_bytes: int = _WARM_MIN_TS_BYTES,
+    pull_ts: bool = True,
 ) -> Dict[str, Any]:
-    """Warm HLS until the media playlist has segments, then pull MPEG-TS bytes.
+    """Warm HLS until the media playlist has segments, optionally pull MPEG-TS.
 
     A single GET of the master ``.m3u8`` is not enough — Tunarr often returns the
     master before ``playlist.m3u8`` / segments exist. Plex HDHR uses ``.ts``.
+
+    Background keepalive should pass ``pull_ts=False``: opening ``.ts`` on every
+    channel every few minutes keeps six ffmpeg pipelines hot (2000%+ CPU) and
+    SIGKILLs mid-watch sessions when they contend for resources.
     """
     from urllib.request import Request, urlopen
 
@@ -898,26 +903,43 @@ def warm_channel_stream(
 
     ts_bytes = 0
     ts_error = ""
-    try:
-        request = Request(ts_url, method="GET")
-        with urlopen(request, timeout=max(10, int(timeout or _WARM_DEFAULT_TIMEOUT_S))) as response:
-            ts_bytes = len(response.read(max(int(min_ts_bytes or 0), _WARM_MIN_TS_BYTES)))
-    except Exception as error:  # noqa: BLE001
-        ts_error = str(error)[:200]
+    if pull_ts:
+        try:
+            request = Request(ts_url, method="GET")
+            with urlopen(
+                request, timeout=max(10, int(timeout or _WARM_DEFAULT_TIMEOUT_S))
+            ) as response:
+                ts_bytes = len(
+                    response.read(max(int(min_ts_bytes or 0), _WARM_MIN_TS_BYTES))
+                )
+        except Exception as error:  # noqa: BLE001
+            ts_error = str(error)[:200]
 
-    ok = playlist_ready or ts_bytes >= max(1, int(min_ts_bytes or _WARM_MIN_TS_BYTES) // 4)
+    if pull_ts:
+        ok = playlist_ready or ts_bytes >= max(
+            1, int(min_ts_bytes or _WARM_MIN_TS_BYTES) // 4
+        )
+        message = (
+            "Stream warmed (playlist + MPEG-TS)."
+            if ok
+            else "Warm-up incomplete — first Plex tune may still race cold start."
+        )
+    else:
+        ok = playlist_ready
+        message = (
+            "Playlist keepalive ok."
+            if ok
+            else "Playlist keepalive incomplete — stream may still be cold."
+        )
     return {
         "ok": ok,
         "channel_id": cid,
         "playlist_ready": playlist_ready,
         "ts_bytes": ts_bytes,
+        "pull_ts": bool(pull_ts),
         "polls": poll_count,
         "error": "" if ok else (ts_error or last_error or "stream not ready"),
-        "message": (
-            "Stream warmed (playlist + MPEG-TS)."
-            if ok
-            else "Warm-up incomplete — first Plex tune may still race cold start."
-        ),
+        "message": message,
     }
 
 
@@ -994,8 +1016,16 @@ def prepare_channels_for_playback(
     align_playhead: bool = True,
     warm_streams: bool = True,
     min_elapsed_ms: int = _ALIGN_MIN_ELAPSED_MS,
+    skip_active_sessions: bool = False,
+    max_warm_channels: Optional[int] = None,
+    pull_ts: bool = True,
 ) -> Dict[str, Any]:
-    """Labels + start-over (when deep/cold) + aggressive HLS warm for Plex Live TV."""
+    """Labels + start-over (when deep/cold) + HLS warm for playback.
+
+    ``skip_active_sessions`` / ``max_warm_channels`` / ``pull_ts=False`` are for
+    the background keepalive scheduler — never thrash channels that already have
+    viewers, and never keep every station's ffmpeg pipeline hot at once.
+    """
     wanted = {str(cid).strip() for cid in (channel_ids or ()) if str(cid).strip()}
     resolved_icon = str(icon_url or "").strip() or resolve_channel_icon_url(settings)
     labels = ensure_channel_labels(
@@ -1027,10 +1057,22 @@ def prepare_channels_for_playback(
         ]
 
     aligned: List[Dict[str, Any]] = []
+    skipped_active = 0
     if align_playhead:
         for ch in channels:
             cid = str(ch.get("id") or ch.get("uuid") or "").strip()
             has_session = bool(sessions.get(cid))
+            if skip_active_sessions and has_session:
+                skipped_active += 1
+                aligned.append(
+                    {
+                        "ok": True,
+                        "aligned": False,
+                        "channel_id": cid,
+                        "reason": "active_session",
+                    }
+                )
+                continue
             result = align_channel_playhead_to_program_start(
                 client,
                 ch,
@@ -1041,26 +1083,66 @@ def prepare_channels_for_playback(
 
     warmed: List[Dict[str, Any]] = []
     if warm_streams:
+        warm_budget = max_warm_channels
+        if warm_budget is not None:
+            try:
+                warm_budget = max(0, int(warm_budget))
+            except (TypeError, ValueError):
+                warm_budget = None
         for ch in channels:
             cid = str(ch.get("id") or ch.get("uuid") or "").strip()
-            if cid:
-                warmed.append(warm_channel_stream(client, cid))
+            if not cid:
+                continue
+            if skip_active_sessions and sessions.get(cid):
+                warmed.append(
+                    {
+                        "ok": True,
+                        "channel_id": cid,
+                        "skipped": True,
+                        "reason": "active_session",
+                        "message": "Skipped warm — session already active.",
+                    }
+                )
+                continue
+            if warm_budget is not None and warm_budget <= 0:
+                warmed.append(
+                    {
+                        "ok": True,
+                        "channel_id": cid,
+                        "skipped": True,
+                        "reason": "warm_budget",
+                        "message": "Skipped warm — background budget exhausted.",
+                    }
+                )
+                continue
+            result = warm_channel_stream(client, cid, pull_ts=pull_ts)
+            warmed.append(result)
+            if warm_budget is not None and not result.get("skipped"):
+                warm_budget -= 1
 
     aligned_count = sum(1 for row in aligned if row.get("aligned"))
-    warmed_ok = sum(1 for row in warmed if row.get("ok"))
+    warmed_attempted = [row for row in warmed if not row.get("skipped")]
+    warmed_ok = sum(1 for row in warmed_attempted if row.get("ok"))
     return {
         "ok": (not labels.get("errors"))
-        and (warmed_ok == len(warmed) if warmed else True),
+        and (warmed_ok == len(warmed_attempted) if warmed_attempted else True),
         "labels": labels,
         "aligned": aligned,
         "count_aligned": aligned_count,
         "warmed": warmed,
         "count_warmed_ok": warmed_ok,
+        "count_warmed_skipped": sum(1 for row in warmed if row.get("skipped")),
+        "count_skipped_active": skipped_active,
         "count_channels": len(channels),
         "icon_url": resolved_icon,
         "message": (
             f"Prepared {len(channels)} station(s): "
-            f"{aligned_count} start-over, {warmed_ok}/{len(warmed) or 0} warmed."
+            f"{aligned_count} start-over, {warmed_ok}/{len(warmed_attempted) or 0} warmed"
+            + (
+                f", {sum(1 for row in warmed if row.get('skipped'))} skipped."
+                if any(row.get("skipped") for row in warmed)
+                else "."
+            )
         ),
     }
 
