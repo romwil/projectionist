@@ -103,6 +103,13 @@ def _rank_tmdb_search_results(
         ]
         if exact:
             return exact
+        close = [
+            item
+            for item in year_matched
+            if _titles_roughly_match(normalised, str(item.get("title") or item.get("name") or ""))
+        ]
+        # Fail closed: do not return same-year unrelated hits (wrong posters).
+        return close
     return year_matched
 
 
@@ -248,6 +255,44 @@ def external_tmdb_search(
     tmdb = TMDBClient(settings.tmdb_api_key)
     results: List[Mapping[str, Any]] = []
     total_matched = 0
+
+    def _search_by_title() -> ExternalSearchResult | tuple[List[Mapping[str, Any]], int]:
+        if media_type == "movie":
+            page = tmdb.search_movie_page(title, year=year_int)
+        else:
+            page = tmdb.search_tv_page(title)
+        raw_results = page.get("results", [])
+        if not isinstance(raw_results, list):
+            raw_results = []
+        matched = int(page.get("total_results") or len(raw_results))
+        ranked = _rank_tmdb_search_results(raw_results, year=year_int, title=title)
+        if year_int is not None:
+            # Year pin: honest count is filtered matches, not unscoped TMDB total.
+            matched = len(ranked)
+        # Fail closed: when the caller named a title(+year), never return unrelated hits.
+        if title and not ranked:
+            return ExternalSearchResult(
+                error=(
+                    f"No confident TMDB match for '{title}'"
+                    + (f" ({year_int})" if year_int is not None else "")
+                    + ". Do not invent ids; try another title+year."
+                ),
+                error_kind=ERROR_NOT_FOUND,
+            )
+        if title and ranked:
+            top = ranked[0]
+            top_title = str(top.get("title") or top.get("name") or "")
+            if not _titles_roughly_match(title, top_title):
+                return ExternalSearchResult(
+                    error=(
+                        f"Top TMDB hit '{top_title}' does not match requested title '{title}'. "
+                        "Refuse unrelated posters; re-search with a clearer title+year."
+                    ),
+                    error_kind=ERROR_MISMATCH,
+                )
+        return ranked, matched
+
+    need_title_search = pinned_tmdb_id is None
     if pinned_tmdb_id is not None:
         try:
             details = (
@@ -263,30 +308,36 @@ def external_tmdb_search(
                 error_kind=ERROR_NOT_FOUND,
             )
         actual_title = str(details.get("title") or details.get("name") or "")
-        if title and not _titles_roughly_match(title, actual_title):
+        actual_year = _tmdb_result_year(details)
+        title_ok = (not title) or _titles_roughly_match(title, actual_title)
+        year_ok = (
+            year_int is None
+            or actual_year is None
+            or abs(int(actual_year) - int(year_int)) <= 1
+        )
+        if title_ok and year_ok:
+            results = [details]
+            total_matched = 1
+        elif title:
+            # Stale/wrong numeric ids are common in agent turns — re-search by
+            # title+year instead of attaching an unrelated poster.
+            need_title_search = True
+        else:
             return ExternalSearchResult(
                 error=(
-                    f"tmdb_id {pinned_tmdb_id} resolves to '{actual_title}', "
-                    f"which does not match requested title '{title}'. "
+                    f"tmdb_id {pinned_tmdb_id} resolves to '{actual_title}'"
+                    + (f" ({actual_year})" if actual_year is not None else "")
+                    + ", which does not match the requested pin. "
                     "Re-search by title+year instead of inventing ids."
                 ),
                 error_kind=ERROR_MISMATCH,
             )
-        results = [details]
-        total_matched = 1
-    else:
-        if media_type == "movie":
-            page = tmdb.search_movie_page(title, year=year_int)
-        else:
-            page = tmdb.search_tv_page(title)
-        raw_results = page.get("results", [])
-        if not isinstance(raw_results, list):
-            raw_results = []
-        total_matched = int(page.get("total_results") or len(raw_results))
-        results = _rank_tmdb_search_results(raw_results, year=year_int, title=title)
-        if year_int is not None:
-            # Year pin: honest count is filtered matches, not unscoped TMDB total.
-            total_matched = len(results)
+
+    if need_title_search:
+        searched = _search_by_title()
+        if isinstance(searched, ExternalSearchResult):
+            return searched
+        results, total_matched = searched
 
     owned = db.owned_tmdb_ids(media_type)
     queued = db.queued_tmdb_ids(media_type)

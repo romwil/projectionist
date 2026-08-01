@@ -23,6 +23,8 @@ from projectionist.agent.curator import (
     _cards_for_response,
     _extract_text,
     _extract_tool_calls,
+    household_tool_summary,
+    join_assistant_text_segments,
     stream_agent,
 )
 from projectionist.agent.providers import (
@@ -198,10 +200,84 @@ class ToolCallEventFormatTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(tool_starts[0].get("args"), {"query": "noir"})
             self.assertEqual(len(tool_results), 1)
             self.assertEqual(tool_results[0]["name"], "search_library")
-            self.assertIn("Chinatown", tool_results[0].get("summary", ""))
+            self.assertEqual(tool_results[0].get("summary"), "Found 1 title")
 
             done = next(e for e in events if e["type"] == "done")
             self.assertEqual(done["message"]["blocks"][0]["content"], "Found noir films.")
+
+    async def test_multi_round_tokens_insert_segment_separator(self) -> None:
+        """Live token stream must separate rounds so prose never glues."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _make_db(Path(tmp))
+            settings = _make_settings()
+
+            first_response_chunks = [
+                {"choices": [{"index": 0, "delta": {"content": "Looking once!"}, "finish_reason": None}]},
+                {"choices": [{"index": 0, "delta": {
+                    "tool_calls": [{
+                        "index": 0,
+                        "id": "call_1",
+                        "type": "function",
+                        "function": {"name": "search_library", "arguments": '{"query":"x"}'},
+                    }],
+                }, "finish_reason": "tool_calls"}]},
+            ]
+            second_response_chunks = [
+                {"choices": [{"index": 0, "delta": {"content": "Let me research."}, "finish_reason": None}]},
+                {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
+            ]
+            call_count = 0
+
+            async def fake_stream(messages, tools=None):
+                nonlocal call_count
+                call_count += 1
+                source = first_response_chunks if call_count == 1 else second_response_chunks
+                for chunk in source:
+                    yield chunk
+
+            provider = MagicMock()
+            provider.stream = fake_stream
+            provider.chat = AsyncMock()
+            mock_registry = MagicMock()
+            mock_registry.cards = []
+            mock_registry.pending_tokens = []
+            mock_registry.recommendation_context = False
+            mock_registry.review_prompts = []
+            mock_registry.review_conflicts = []
+            mock_registry.execute = AsyncMock(return_value='{"returned":0,"items":[]}')
+
+            with (
+                patch("projectionist.agent.curator.get_chat_provider", return_value=provider),
+                patch.object(CuratorAgent, "_registry", return_value=mock_registry),
+            ):
+                chunks = [c async for c in stream_agent(
+                    db, settings, "sess-sep", "find titles",
+                    lens_id=DEFAULT_LENS_ID,
+                )]
+
+            events = _collect_events(chunks)
+            token_events = [e for e in events if e["type"] == "token"]
+            combined = "".join(e["content"] for e in token_events)
+            self.assertIn("Looking once!\n\nLet me research.", combined)
+            done = next(e for e in events if e["type"] == "done")
+            self.assertEqual(
+                done["message"]["blocks"][0]["content"],
+                "Looking once!\n\nLet me research.",
+            )
+
+
+class HouseholdStatusFormatTests(unittest.TestCase):
+    def test_join_assistant_text_segments_uses_blank_lines(self) -> None:
+        self.assertEqual(
+            join_assistant_text_segments(["once!", "Let me research"]),
+            "once!\n\nLet me research",
+        )
+        self.assertEqual(join_assistant_text_segments(["", "  hi  ", None]), "hi")  # type: ignore[list-item]
+
+    def test_household_tool_summary_sanitizes_dumps_and_self_talk(self) -> None:
+        self.assertEqual(household_tool_summary('{"returned": 3, "items": []}'), "Found 3 titles")
+        self.assertEqual(household_tool_summary("The gap results are useless junk"), "Checked results")
+        self.assertEqual(household_tool_summary('[{"title":"Chinatown"}]'), "Found 1 title")
 
 
 class GracefulFallbackTests(unittest.IsolatedAsyncioTestCase):

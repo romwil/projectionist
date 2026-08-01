@@ -23,6 +23,62 @@ from projectionist.privacy.schema import sanitize
 
 logger = logging.getLogger(__name__)
 
+# Separates multi-round streamed narration so "…once!Let me…" never glues.
+_STREAM_SEGMENT_SEP = "\n\n"
+
+
+def join_assistant_text_segments(segments: List[str]) -> str:
+    """Join multi-round assistant prose with blank lines (never concatenate bare)."""
+    parts = [str(part or "").strip() for part in segments if str(part or "").strip()]
+    return _STREAM_SEGMENT_SEP.join(parts)
+
+
+def household_tool_summary(raw: Any, *, limit: int = 160) -> str:
+    """Short, household-safe tool activity blurb — no raw JSON dumps or self-talk."""
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    lowered = text.casefold()
+    if any(
+        needle in lowered
+        for needle in (
+            "useless junk",
+            "inventing ids",
+            "wrong id",
+            "tracebacks",
+            "stack trace",
+        )
+    ):
+        return "Checked results"
+    if text.startswith("{") or text.startswith("["):
+        try:
+            payload = json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            payload = None
+        if isinstance(payload, list):
+            n = len(payload)
+            return f"Found {n} title{'s' if n != 1 else ''}"
+        if isinstance(payload, dict):
+            if payload.get("error"):
+                return "No confident match"
+            count = payload.get("returned")
+            if count is None and isinstance(payload.get("items"), list):
+                count = len(payload["items"])
+            if count is not None:
+                try:
+                    n = int(count)
+                except (TypeError, ValueError):
+                    n = None
+                if n is not None:
+                    return f"Found {n} title{'s' if n != 1 else ''}"
+            if payload.get("ok") is True or payload.get("status") == "ok":
+                return "Done"
+        return "Updated results"
+    cleaned = " ".join(text.split())
+    if len(cleaned) > limit:
+        return cleaned[: max(0, limit - 3)] + "..."
+    return cleaned
+
 
 def _displayable_cards(cards: List[TitleCard]) -> List[TitleCard]:
     """Skip placeholders and collapse duplicate cards by stable media identity."""
@@ -368,7 +424,7 @@ class CuratorAgent:
             response = await self.provider.chat(messages, tools=tool_defs)
             _accumulate_response_text(response)
 
-        text = "\n\n".join(text_segments)
+        text = join_assistant_text_segments(text_segments)
         blocks: List[Dict[str, Any]] = []
         if text:
             blocks.append({"type": "text", "content": text})
@@ -521,6 +577,7 @@ async def stream_agent(
 
     tool_defs = build_tool_definitions(settings) if (settings.llm_api_key or settings.llm_provider == "ollama") else None
     text_segments: List[str] = []
+    pending_segment_sep = False
 
     for _ in range(MAX_TOOL_ROUNDS):
         round_text = ""
@@ -534,6 +591,11 @@ async def stream_agent(
 
                 content = delta.get("content")
                 if content:
+                    if pending_segment_sep and text_segments:
+                        # Live UI concatenates tokens; insert the same separator
+                        # final assembly uses so rounds never glue ("once!Let").
+                        yield json.dumps({"type": "token", "content": _STREAM_SEGMENT_SEP}) + "\n"
+                        pending_segment_sep = False
                     round_text += content
                     streamed_any_token = True
                     yield json.dumps({"type": "token", "content": content}) + "\n"
@@ -562,6 +624,9 @@ async def stream_agent(
             response = await agent.provider.chat(messages, tools=tool_defs)
             round_text = _extract_text(response)
             if round_text:
+                if pending_segment_sep and text_segments:
+                    yield json.dumps({"type": "token", "content": _STREAM_SEGMENT_SEP}) + "\n"
+                    pending_segment_sep = False
                 yield json.dumps({"type": "token", "content": round_text}) + "\n"
             for tc in _extract_tool_calls(response):
                 fn = tc.get("function") or {}
@@ -611,15 +676,16 @@ async def stream_agent(
                     wrap_untrusted_data(result) if str(name) in UNTRUSTED_MEMORY_TOOLS else result
                 )
                 messages.append({"role": "tool", "tool_call_id": call.get("id"), "content": tool_content})
-                summary = result if isinstance(result, str) else str(result)
-                if len(summary) > 240:
-                    summary = summary[:237] + "..."
+                summary = household_tool_summary(result)
                 yield json.dumps({"type": "tool_result", "name": name, "summary": summary}) + "\n"
+            # Next LLM round's tokens need a separator after tool work.
+            if text_segments:
+                pending_segment_sep = True
         else:
             break
 
     # --- Assemble final message ---
-    final_text = "\n\n".join(text_segments)
+    final_text = join_assistant_text_segments(text_segments)
     blocks: List[Dict[str, Any]] = []
     if final_text:
         blocks.append({"type": "text", "content": final_text})

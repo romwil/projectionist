@@ -6,6 +6,7 @@ import {
   formatProgressHint,
   formatRemaining,
   normalizeOnNow,
+  visibleOnNowChannels,
 } from "./onNow.js";
 import { plexLiveTvUrl } from "./titleLinks.js";
 import { readAllStyles } from "./readStyles.mjs";
@@ -49,6 +50,20 @@ describe("normalizeOnNow", () => {
     assert.equal(model.channels[0].secondsRemaining, 1080);
     assert.equal(model.channels[0].progressHint, "45% · 18m left");
     assert.equal(model.plexHint, "Open Plex");
+  });
+});
+
+describe("visibleOnNowChannels", () => {
+  it("keeps all stations in compact Explore mode (not a 4-row starter cap)", () => {
+    const six = Array.from({ length: 6 }, (_, i) => ({ id: `ch-${i}`, name: `S${i}` }));
+    assert.equal(visibleOnNowChannels(six, { compact: true }).length, 6);
+    assert.equal(visibleOnNowChannels(six, { compact: false }).length, 6);
+  });
+
+  it("applies only a high safety ceiling", () => {
+    const many = Array.from({ length: 30 }, (_, i) => ({ id: `ch-${i}` }));
+    assert.equal(visibleOnNowChannels(many, { compact: true }).length, 24);
+    assert.equal(visibleOnNowChannels(many, { compact: false }).length, 30);
   });
 });
 

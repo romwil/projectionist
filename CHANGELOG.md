@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.29.41] — 2026-08-01
+
+Curator chat rails stay honest, Explore On now lists every station, and the Explore hub drops the weekly For-you box so the page stays focused.
+
+### Highlights
+- **Posters match the titles.** When the curator names Hardware or Xtro, the cards are verified TMDB title+year matches — stale wrong IDs re-search instead of showing unrelated films.
+- **Every Live station on Explore.** On now shows all airing channels (not just the first four starters), with **See all** to Live.
+- **Clearer agent status.** Multi-step “thinking” text no longer glues into one run-on blob, and tool activity stays household-friendly.
+
+### Fixed
+- Streamed assistant rounds insert blank-line separators so live tokens match persisted prose (`once!Let me…` glue).
+- `search_tmdb` pinned-id mismatches (and year skew) fall back to title+year search; ranking fails closed on unrelated same-year hits.
+- Targeted `search_tmdb` clears prior gap/discover discussed cards so the rail refreshes to the titles under discussion.
+- Tool-result activity summaries sanitize JSON dumps and crude self-talk (“useless junk”).
+
+### Changed
+- Explore hub: remove **For you this week** weekly rail section (My Journey unchanged; taste weights still apply in chat).
+- On now compact/full: raise channel ceiling; add **See all** → `/live`.
+- Curator prompt: never invent TMDB ids; cards must match named titles; household tone for status prose.
+- HELP: Explore / weekly taste copy aligned with the hub change.
+
+### Verification
+- Focused: `pytest` agent TMDB + SSE separator/status helpers; `node --test src/lib/onNow.test.mjs`.
+- Full suite recorded after ship gates below.
+
 ## [1.29.40] — 2026-08-01
 
 Admin, Settings, Inbox, and My Journey share the same living-room label bar as Live — shorter nav, one household health glance, and empty states that feel like Explore.

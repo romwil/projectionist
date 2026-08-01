@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { getFeatures, getLiveChannelsOnNow, getPlexMachineId } from "../api/client";
+import { ROUTES } from "../lib/backNav.js";
+import { liveWatchHref } from "../lib/liveChannels.js";
 import {
   formatChannelLabel,
   formatOnNowLine,
   normalizeOnNow,
+  visibleOnNowChannels,
 } from "../lib/onNow.js";
-import { liveWatchHref } from "../lib/liveChannels.js";
 import { plexLiveTvUrl } from "../lib/titleLinks.js";
 
 export default function OnNowPanel({ compact = false }) {
@@ -51,7 +53,8 @@ export default function OnNowPanel({ compact = false }) {
     return null;
   }
 
-  const channels = model?.channels?.slice(0, compact ? 4 : 8) || [];
+  const channels = visibleOnNowChannels(model?.channels, { compact });
+  const totalChannels = Array.isArray(model?.channels) ? model.channels.length : 0;
   const showEmpty = !loading && featureOn && (!model || !model.ready);
   const firstChannelId = channels[0]?.id || "";
 
@@ -86,6 +89,11 @@ export default function OnNowPanel({ compact = false }) {
           >
             Also in Plex Live TV
           </a>
+          {totalChannels > 0 ? (
+            <Link className="ghost on-now-see-all" data-testid="on-now-see-all" to={ROUTES.live}>
+              See all
+            </Link>
+          ) : null}
         </div>
       </div>
 
