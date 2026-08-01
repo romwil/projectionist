@@ -5,6 +5,8 @@ import {
   postCourseProgress,
   startCourseSyllabus,
 } from "../api/client";
+import ChamberEmpty from "../components/ChamberEmpty";
+import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES, chatFromRailHref } from "../lib/backNav.js";
 import {
@@ -16,7 +18,6 @@ import {
   personaPathways,
 } from "../lib/journeyAchievements.js";
 import { guestDeepLinkBlocked } from "../lib/memberShell.js";
-import { useAuthGate } from "../components/UserMenu";
 
 function JourneyCallout({ node, x, y, onClose }) {
   if (!node) return null;
@@ -443,9 +444,13 @@ export default function MyJourneyPage() {
                   ))}
                 </ul>
               ) : (
-                <p className="explore-empty status status-secondary">
-                  No published courses yet. When your curator publishes one, it shows up here.
-                </p>
+                <ChamberEmpty
+                  title="No courses yet"
+                  body="When your curator publishes a cinema course, it shows up here."
+                  ctaLabel="Browse collections"
+                  ctaTo="/collections"
+                  testId="journey-courses-empty"
+                />
               )}
               {syllabusNote ? (
                 <p className="status status-secondary" data-testid="journey-syllabus-note">

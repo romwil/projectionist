@@ -2,6 +2,49 @@
 
 ## [Unreleased]
 
+## [1.29.40] — 2026-08-01
+
+Admin, Settings, Inbox, and My Journey share the same living-room label bar as Live — shorter nav, one household health glance, and empty states that feel like Explore.
+
+### Highlights
+- **Household health at a glance.** Admin Overview opens with Plex, library, and a Live readiness chip instead of separate connection/library cards.
+- **Speak · Tune · Notify.** Settings rail uses short verbs; page leads stay brief.
+- **Empty states match Explore.** Inbox and My Journey use Fraunces headlines with amber CTAs when there’s nothing waiting yet.
+
+### Fixed
+- SectionHelp: known glossary terms with a label but no dedicated blurb still show the (?) control (generic “More about this setting.” fallback); unknown keys stay hidden.
+
+### Changed
+- Primary nav: Explore eyebrow/hubs drop redundant “Browse”; Admin rail groups Home / Household / Ops with denser short labels.
+- Shared glossary helper (`frontend/src/lib/glossary.js`) feeds `SectionHelp` so Live Admin terms stay in sync with HELP.
+- Connections / Tasks / Advanced: raw env var and task-id names sit behind Advanced disclosures; secret placeholders say “Set by the host environment.”
+
+### Verification
+- `cd frontend && npm run test:unit` — 544 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.40**.
+
+## [1.29.39] — 2026-08-01
+
+Live feels like the same living room as Explore, and Admin Live Channels finally reads as a craft journey — Stations for what’s on, Setup for the engine — without Tunarr jargon in household empty states.
+
+### Highlights
+- **Watch here, icons for the rest.** `/live` leads with Guide / Watch here; pop-out and Plex Live TV are compact icon actions instead of wide text buttons.
+- **Channels are warming up.** Empty and error copy drops bare “Tunarr” / “Broadcast engine” for members; owners still get engine detail in Admin Setup.
+- **Stations | Setup.** Installation is renamed Setup; Create a station uses Custom · From collection · Starter pack; health is one sentence with a Details disclosure; between-show breaks fold filler paths and gap fill into one card.
+
+### Changed
+- Extracted Admin Live Channels UI into `frontend/src/pages/admin/LiveChannelsSection.jsx` (APIs unchanged).
+- Shared living-room copy helpers in `frontend/src/lib/liveChannelsCopy.js` (glossary, health sentence, setup step numbers, onboarding tip).
+- Soft Admin overview tip “Put your library on the air” when libraries are mapped/synced and Live is still off.
+- Live chrome density aligned with PrimaryTopbar / empty-state grammar (Fraunces headline, DM Sans body, amber CTA).
+
+### Verification
+- `cd frontend && npm run test:unit` — 530 passed.
+- `cd frontend && npm run lint` — 0 errors.
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.39**.
+
 ## [1.29.38] — 2026-08-01
 
 Returning to a Live Channel resumes the scheduled show at the live edge — not Continuity filler — and the cable-box OSD finally gets out of the way after you stop moving.

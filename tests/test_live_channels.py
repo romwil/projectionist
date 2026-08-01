@@ -975,7 +975,8 @@ class OnNowGuideTests(unittest.TestCase):
 
     def test_dual_watch_hint_on_snapshot(self) -> None:
         snap = build_on_now_snapshot(Settings())
-        self.assertIn("Projectionist", snap["plex_hint"])
+        self.assertIn("Watch here", snap["plex_hint"])
+        self.assertIn("Plex Live TV", snap["plex_hint"])
         self.assertEqual(snap["watch_hint"], DUAL_WATCH_HINT)
 
     def test_guide_snapshot_includes_programs(self) -> None:

@@ -5,11 +5,12 @@ import PrimaryTopbar from "../components/PrimaryTopbar";
 import { ROUTES } from "../lib/backNav.js";
 import { applyUiTheme, loadStoredUiTheme } from "../lib/uiPrefs.js";
 
+/** Rail labels use short verbs where the job is an action (Speak / Tune / Notify). */
 export const SETTINGS_NAV = [
   { to: "/settings/profile", id: "profile", label: "Profile" },
-  { to: "/settings/voice", id: "voice", label: "Voice" },
-  { to: "/settings/taste", id: "taste", label: "Taste" },
-  { to: "/settings/notifications", id: "notifications", label: "Notifications" },
+  { to: "/settings/voice", id: "voice", label: "Speak" },
+  { to: "/settings/taste", id: "taste", label: "Tune" },
+  { to: "/settings/notifications", id: "notifications", label: "Notify" },
   { to: "/settings/watchlist", id: "watchlist", label: "Watchlist" },
   { to: "/settings/lists", id: "lists", label: "Lists" },
 ];

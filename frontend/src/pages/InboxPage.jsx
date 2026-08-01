@@ -4,6 +4,7 @@ import {
   listNotifications,
   markNotificationsSeen,
 } from "../api/client";
+import ChamberEmpty from "../components/ChamberEmpty";
 import RecommendationsInbox from "../components/RecommendationsInbox";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
@@ -95,12 +96,13 @@ export default function InboxPage() {
         {state.error ? <p className="status status-error">{state.error}</p> : null}
         {!state.loading && !state.error && !state.items.length ? (
           <section className="explore-section" data-testid="inbox-empty">
-            <p className="explore-empty status status-secondary">
-              Nothing waiting — when someone recommends a title or a request lands, it shows up here.
-              Head back to{" "}
-              <a href={ROUTES.chat}>Chat</a> or{" "}
-              <a href={ROUTES.explore}>Explore</a> anytime.
-            </p>
+            <ChamberEmpty
+              title="Nothing waiting"
+              body="When someone recommends a title or a request lands, it shows up here."
+              ctaLabel="Back to Explore"
+              ctaTo={ROUTES.explore}
+              testId="inbox-empty-state"
+            />
           </section>
         ) : null}
         {!state.loading && state.items.length ? (

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatWallTime, programCellStyle } from "../../lib/liveChannels.js";
+import { liveGuideEmptyCopy } from "../../lib/liveChannelsCopy.js";
 
 const PX_PER_HOUR = 220;
 
@@ -78,10 +79,11 @@ export default function LiveGuide({
   }
 
   if (!guide?.ready) {
+    const empty = liveGuideEmptyCopy(guide?.reason);
     return (
       <div className="live-guide-empty" data-testid="live-guide-empty">
-        <h2>Guide is warming up</h2>
-        <p>{guide?.reason === "tunarr_unreachable" ? "Broadcast engine unreachable." : "No stations yet."}</p>
+        <h2>{empty.title}</h2>
+        <p>{empty.body}</p>
       </div>
     );
   }

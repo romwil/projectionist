@@ -7,7 +7,7 @@ import {
   YOUTH_NAV_ITEMS,
   buildAppNavItems,
 } from "./appNavItems.js";
-import { ADMIN_NAV } from "./adminNav.js";
+import { ADMIN_NAV, adminNavLinks } from "./adminNav.js";
 import { buildPrimaryNavItems } from "./primaryNav.js";
 
 /** Ids between the Navigate heading and the next heading. */
@@ -130,11 +130,16 @@ describe("buildAppNavItems", () => {
     ]);
     const adminIdx = ids.indexOf("heading-admin");
     assert.ok(adminIdx > 0);
-    assert.equal(ids[adminIdx + 1], "admin-overview");
+    assert.equal(ids[adminIdx + 1], "admin-heading-home");
+    assert.ok(ids.includes("admin-overview"));
     assert.ok(ids.includes("admin-issues"));
     assert.equal(
       items.filter((item) => item.kind === "admin").length,
-      ADMIN_NAV.length,
+      adminNavLinks().length,
+    );
+    assert.equal(
+      items.filter((item) => String(item.id).startsWith("admin-heading-")).length,
+      ADMIN_NAV.filter((item) => item.kind === "heading").length,
     );
     assert.ok(ids.indexOf("heading-more") > adminIdx);
     assert.deepEqual(moreBlock(items), [

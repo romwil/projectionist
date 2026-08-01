@@ -754,6 +754,19 @@ a.title-credit-link:hover {
   margin: 0;
 }
 
+.chamber-empty {
+  padding: var(--space-4) 0;
+}
+
+.chamber-empty-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.45rem, 3vw, 1.85rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+}
+
 .explore-owner-cta {
   display: inline-flex;
   align-items: center;

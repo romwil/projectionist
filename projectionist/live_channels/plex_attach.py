@@ -466,7 +466,7 @@ def build_plex_attach(
             "body": (
                 f"Starter stations use virtual channel numbers from {_VIRTUAL_CHANNEL_FLOOR}+ "
                 "so they usually sit above typical OTA majors — if a number collides, "
-                "renumber in Tunarr or Plex. Watch in Projectionist (/live) or Plex Live TV."
+                "renumber in Tunarr or Plex. Watch here (/live) or in Plex Live TV."
             ),
         },
     ]

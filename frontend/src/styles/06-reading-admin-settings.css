@@ -209,6 +209,52 @@
   flex: 1;
 }
 
+.admin-rail-heading {
+  margin: var(--space-3) 0 var(--space-1);
+  padding: 0 12px;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.admin-rail-heading:first-child {
+  margin-top: 0;
+}
+
+.config-advanced-details {
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.config-advanced-details > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.config-advanced-details[open] > summary {
+  color: var(--text);
+  margin-bottom: var(--space-2);
+}
+
+.scheduled-task-id-details {
+  margin-top: 4px;
+}
+
+.scheduled-task-id-details .scheduled-task-id {
+  display: block;
+  font-size: var(--text-xs);
+  word-break: break-all;
+}
+
+.section-help-term {
+  margin: 0 0 0.35rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .admin-rail-link,
 .settings-rail-link {
   display: block;

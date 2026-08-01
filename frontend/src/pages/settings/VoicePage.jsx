@@ -23,8 +23,7 @@ export default function VoicePage() {
   return (
     <div className="settings-stack" data-testid="settings-voice">
       <SettingsPageHeader title="Voice" testId="settings-voice-header">
-        Talk to your curator with the browser mic, and optionally hear replies spoken aloud. Preferences
-        stay on this device until account sync ships.
+        Speak to your curator. Hear replies aloud. Preferences stay on this device until account sync ships.
       </SettingsPageHeader>
 
       <SettingsPanel title="Input &amp; output" testId="settings-voice-panel">

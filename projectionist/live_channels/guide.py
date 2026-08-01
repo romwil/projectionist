@@ -22,7 +22,7 @@ MAX_CHANNELS = 24
 MAX_GUIDE_CHANNELS = 48
 
 DUAL_WATCH_HINT = (
-    "Watch in Projectionist (/live) or open Plex → Live TV — both are first-class."
+    "Watch here or in Plex Live TV — same stations, both first-class."
 )
 
 

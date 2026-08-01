@@ -31,6 +31,28 @@
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 4vw, 2.4rem);
   margin: 0.35rem 0 0.75rem;
+  color: var(--text);
+}
+
+.live-empty-card p {
+  font-family: var(--font-body, "DM Sans", system-ui, sans-serif);
+  color: var(--muted);
+  line-height: 1.5;
+  margin: 0 0 1.25rem;
+}
+
+.live-empty-card .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.5rem;
+  padding: 0.55rem 1.15rem;
+  border-radius: var(--radius-md, 0.65rem);
+  background: var(--accent);
+  color: #1a1200;
+  font-weight: 600;
+  text-decoration: none;
+  border: 0;
 }
 
 .live-eyebrow,
@@ -50,9 +72,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 1rem;
-  padding: 0.65rem 1rem;
-  padding-top: max(0.65rem, env(safe-area-inset-top));
+  gap: 0.75rem 1rem;
+  /* Peer PrimaryTopbar density — same control rhythm as Explore */
+  min-height: 3.25rem;
+  padding: 0.5rem 1rem;
+  padding-top: max(0.5rem, env(safe-area-inset-top));
   border-bottom: 1px solid var(--live-line);
   background: rgba(7, 8, 12, 0.72);
   backdrop-filter: blur(10px);
@@ -87,7 +111,7 @@
 .live-chrome-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
   flex-wrap: wrap;
 }
 
@@ -96,10 +120,48 @@
   white-space: nowrap;
 }
 
+.live-chrome-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+.live-chrome-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md, 0.65rem);
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.live-chrome-icon-btn .material-symbols-outlined {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.live-chrome-icon-btn:hover:not(:disabled),
+.live-chrome-icon-btn:focus-visible:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--live-line);
+}
+
+.live-chrome-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 .live-mode-toggle {
   display: inline-flex;
   border: 1px solid var(--live-line);
-  border-radius: 999px;
+  border-radius: var(--radius-md, 0.65rem);
   overflow: hidden;
   background: rgba(255, 255, 255, 0.03);
 }
@@ -108,8 +170,10 @@
   border: 0;
   background: transparent;
   color: var(--muted);
-  padding: 0.4rem 0.9rem;
+  padding: 0.4rem 0.85rem;
+  min-height: 2.25rem;
   font: inherit;
+  font-size: var(--text-sm, 0.9rem);
   cursor: pointer;
 }
 

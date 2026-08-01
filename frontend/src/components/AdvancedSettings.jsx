@@ -73,7 +73,6 @@ function McpKeyRow({
           >
             {configured ? "Set" : "Not set"}
           </span>
-          <code className="mcp-key-env-chip">{envName}</code>
         </div>
         <p className="mcp-key-desc">{description}</p>
         {configured ? (
@@ -85,11 +84,17 @@ function McpKeyRow({
             ) : (
               "Key configured."
             )}
-            {source ? ` · Source: ${source}` : null}
+            {source === "env" ? " · Set by the host environment" : source ? ` · Source: ${source}` : null}
           </p>
         ) : (
-          <p className="mcp-key-meta">HTTP /mcp stays disabled for this mode until a key is set.</p>
+          <p className="mcp-key-meta">HTTP MCP stays disabled for this mode until a key is set.</p>
         )}
+        <details className="config-advanced-details" data-testid={`mcp-key-${which}-env`}>
+          <summary>Advanced</summary>
+          <p className="wizard-note">
+            Env override: <code className="mcp-key-env-chip">{envName}</code>
+          </p>
+        </details>
         {revealed ? (
           <label className="mcp-key-reveal">
             <span>New key (copy now)</span>

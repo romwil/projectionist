@@ -1,6 +1,70 @@
 {
-  "generated_at": "2026-08-01T03:31:35Z",
+  "generated_at": "2026-08-01T05:03:49Z",
   "releases": [
+    {
+      "version": "1.29.40",
+      "date": "2026-08-01",
+      "summary": "Admin, Settings, Inbox, and My Journey share the same living-room label bar as Live — shorter nav, one household health glance, and empty states that feel like Explore.",
+      "highlights": [
+        "**Household health at a glance.** Admin Overview opens with Plex, library, and a Live readiness chip instead of separate connection/library cards.",
+        "**Speak · Tune · Notify.** Settings rail uses short verbs; page leads stay brief.",
+        "**Empty states match Explore.** Inbox and My Journey use Fraunces headlines with amber CTAs when there’s nothing waiting yet."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "SectionHelp: known glossary terms with a label but no dedicated blurb still show the (?) control (generic “More about this setting.” fallback); unknown keys stay hidden."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Primary nav: Explore eyebrow/hubs drop redundant “Browse”; Admin rail groups Home / Household / Ops with denser short labels.",
+            "Shared glossary helper (`frontend/src/lib/glossary.js`) feeds `SectionHelp` so Live Admin terms stay in sync with HELP.",
+            "Connections / Tasks / Advanced: raw env var and task-id names sit behind Advanced disclosures; secret placeholders say “Set by the host environment.”"
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`cd frontend && npm run test:unit` — 544 passed.",
+            "`cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).",
+            "`.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.40**."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.29.39",
+      "date": "2026-08-01",
+      "summary": "Live feels like the same living room as Explore, and Admin Live Channels finally reads as a craft journey — Stations for what’s on, Setup for the engine — without Tunarr jargon in household empty states.",
+      "highlights": [
+        "**Watch here, icons for the rest.** `/live` leads with Guide / Watch here; pop-out and Plex Live TV are compact icon actions instead of wide text buttons.",
+        "**Channels are warming up.** Empty and error copy drops bare “Tunarr” / “Broadcast engine” for members; owners still get engine detail in Admin Setup.",
+        "**Stations | Setup.** Installation is renamed Setup; Create a station uses Custom · From collection · Starter pack; health is one sentence with a Details disclosure; between-show breaks fold filler paths and gap fill into one card."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "Extracted Admin Live Channels UI into `frontend/src/pages/admin/LiveChannelsSection.jsx` (APIs unchanged).",
+            "Shared living-room copy helpers in `frontend/src/lib/liveChannelsCopy.js` (glossary, health sentence, setup step numbers, onboarding tip).",
+            "Soft Admin overview tip “Put your library on the air” when libraries are mapped/synced and Live is still off.",
+            "Live chrome density aligned with PrimaryTopbar / empty-state grammar (Fraunces headline, DM Sans body, amber CTA)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`cd frontend && npm run test:unit` — 530 passed.",
+            "`cd frontend && npm run lint` — 0 errors.",
+            "`cd frontend && npm run build` — passed.",
+            "`pytest tests/test_version.py` — lockstep **1.29.39**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.38",
       "date": "2026-08-01",

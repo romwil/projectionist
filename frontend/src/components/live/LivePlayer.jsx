@@ -12,27 +12,7 @@ import {
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
-
-function formatHlsError(data) {
-  const detail = String(data?.details || "Stream error");
-  const code = data?.response?.code;
-  if (code === 401 || code === 403) {
-    return "Sign in again to watch Live Channels.";
-  }
-  if (code === 502 || code === 503 || code === 504) {
-    return "Broadcast engine is still starting — try again in a few seconds.";
-  }
-  if (code && code >= 400) {
-    return `Stream unavailable (${detail}, HTTP ${code}).`;
-  }
-  if (detail === "manifestLoadError" || detail === "levelLoadError") {
-    return "Could not load this channel’s stream. Warming may still be in progress — try Watch again.";
-  }
-  if (detail === "fragLoadError") {
-    return "Video segments failed to load. Try another channel or Watch again.";
-  }
-  return detail;
-}
+import { formatLiveStreamError } from "../../lib/liveChannelsCopy.js";
 
 /**
  * Fullscreen-capable HLS player with cable-box OSD + subtitle picker.
@@ -190,7 +170,7 @@ export default function LivePlayer({
           return;
         }
         setStatus("error");
-        setError(formatHlsError(data));
+        setError(formatLiveStreamError(data));
       });
       hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
         // Prefer native textTracks once demuxed; also surface HLS subtitle tracks.

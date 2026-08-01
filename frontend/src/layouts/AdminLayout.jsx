@@ -135,6 +135,17 @@ export default function AdminLayout() {
             </div>
             <nav className="admin-rail-nav" aria-label="Admin sections">
               {ADMIN_NAV.map((item) => {
+                if (item.kind === "heading") {
+                  return (
+                    <p
+                      key={item.id}
+                      className="admin-rail-heading eyebrow"
+                      data-testid={`admin-nav-${item.id}`}
+                    >
+                      {item.label}
+                    </p>
+                  );
+                }
                 const count = item.badge ? badgeValue[item.badge] : null;
                 const showBadge = typeof count === "number" && count > 0;
                 return (

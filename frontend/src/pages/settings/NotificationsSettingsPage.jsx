@@ -154,9 +154,8 @@ export default function NotificationsSettingsPage() {
   return (
     <div className="settings-stack" data-testid="settings-notifications">
       <SettingsPageHeader title="Notifications">
-        Choose where Projectionist reaches you — inbox, email, Apprise destinations, and the weekly
-        newsletter. Badges mark channels that need owner/server setup versus ones you can configure
-        yourself.
+        Notify via inbox, email, Apprise, or the weekly newsletter. Badges mark channels that need owner
+        setup versus ones you configure yourself.
       </SettingsPageHeader>
 
       <form onSubmit={handleSave}>

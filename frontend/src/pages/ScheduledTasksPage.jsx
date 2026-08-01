@@ -674,9 +674,16 @@ export default function ScheduledTasksPage() {
                       >
                         <td>
                           <div className="scheduled-task-name">{taskDisplayName(task.name)}</div>
-                          <div className="scheduled-task-id" title={task.name}>
-                            {task.name}
-                          </div>
+                          <details
+                            className="config-advanced-details scheduled-task-id-details"
+                            data-testid={`scheduled-task-id-${task.name}`}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <summary>Advanced</summary>
+                            <code className="scheduled-task-id" title={task.name}>
+                              {task.name}
+                            </code>
+                          </details>
                         </td>
                         <td>{formatInterval(task.run_interval_seconds)}</td>
                         <td>
