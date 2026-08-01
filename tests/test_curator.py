@@ -6,7 +6,7 @@ import asyncio
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from projectionist.agent.curator import (
     CuratorAgent,
@@ -204,6 +204,64 @@ class CuratorAgentToolLoopTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(text_blocks)
             self.assertIn("noir collection", text_blocks[0]["content"])
             self.assertNotEqual(text_blocks[0]["content"], "Here are the results I found.")
+
+    async def test_stop_retrying_forces_tool_free_wrap_up(self) -> None:
+        """Fail-closed gap payloads must end the tool loop with a prose-only turn."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            settings = Settings(
+                llm_provider="anthropic",
+                llm_api_key="test-key",
+                llm_model="claude-sonnet-4-6",
+                tmdb_api_key="test-key",
+            )
+            agent = CuratorAgent(db, settings)
+
+            tool_response = _normalize_anthropic_response(
+                {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_gaps",
+                            "name": "find_collection_gaps",
+                            "input": {"media_type": "movie", "genres": "NotAGenre"},
+                        }
+                    ],
+                    "stop_reason": "tool_use",
+                }
+            )
+            text_response = _normalize_anthropic_response(
+                {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "I could not find confident matches for that theme.",
+                        }
+                    ],
+                    "stop_reason": "end_turn",
+                }
+            )
+            seen_tools: list[object] = []
+
+            async def mock_chat(messages, tools=None):
+                seen_tools.append(tools)
+                if len(seen_tools) == 1:
+                    return tool_response
+                return text_response
+
+            agent.provider = MagicMock()
+            agent.provider.chat = AsyncMock(side_effect=mock_chat)
+
+            with patch("projectionist.agent.tools.TMDBClient") as mock_tmdb_cls:
+                mock_tmdb = mock_tmdb_cls.return_value
+                mock_tmdb.genre_list_movies.return_value = [{"id": 99, "name": "Documentary"}]
+                result = await agent.run("session-stop", "missing BBC science documentaries")
+            text_blocks = [block for block in result["message"]["blocks"] if block.get("type") == "text"]
+
+            self.assertEqual(len(seen_tools), 2)
+            self.assertIsNotNone(seen_tools[0])
+            self.assertIsNone(seen_tools[1])
+            self.assertIn("could not find confident matches", text_blocks[0]["content"].lower())
 
 
 class DisplayableCardsTests(unittest.TestCase):

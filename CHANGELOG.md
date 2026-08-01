@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.29.48] — 2026-08-01
+
+Curator gap search stays on-theme for BBC/documentary missing-title asks, fails closed instead of dumping popularity junk, and stops the “Jefferson is thinking” tool spiral after empty results.
+
+### Highlights
+- **Themed gaps stay honest.** `find_collection_gaps` accepts `query` / `companies`, passes keywords to TV discover, and promotes brand keywords like BBC to TMDB companies.
+- **No more unfiltered junk rails.** Unresolved genres or empty themed filters return empty with `stop_retrying` instead of popularity.desc filler.
+- **Thinking ends after a dead end.** Fail-closed gap payloads force a prose-only wrap-up; tool rounds capped at 6.
+
+### Fixed
+- TV collection gaps ignored `with_keywords` (movie-only path).
+- Unknown genre names silently dropped filters and discovered unfiltered titles.
+- Multi-keyword theme stacks AND-failed closed or pushed the model into broader junk retries.
+- Long tool↔LLM loops after rejecting gap results left chat stuck on thinking dots.
+
+### Verification
+- Focused: gap tool + curator stop-retry tests — passed.
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.48**.
+
 ## [1.29.47] — 2026-08-01
 
 Live TV playhead stays on the wall-clock airing across Tunarr guide overlaps, and tune no longer yank a healthy next-title stream back into a past-EOF dead zone.

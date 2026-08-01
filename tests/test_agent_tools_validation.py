@@ -666,8 +666,8 @@ class TestEdgeCases(unittest.IsolatedAsyncioTestCase):
             self.assertIn("TMDB", result["error"])
 
     @patch("projectionist.agent.tools.TMDBClient")
-    async def test_gaps_unrecognized_genre_gets_silently_dropped(self, mock_tmdb_cls):
-        """Unknown genre names should not cause error but discover still runs."""
+    async def test_gaps_unrecognized_genre_fails_closed(self, mock_tmdb_cls):
+        """Unknown genre names must not fall through to unfiltered discover junk."""
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.genre_list_movies.return_value = [
             {"id": 27, "name": "Horror"},
@@ -685,9 +685,11 @@ class TestEdgeCases(unittest.IsolatedAsyncioTestCase):
                 await registry.execute("find_collection_gaps", {"media_type": "movie", "genres": "Nonexistent Genre"})
             )
 
-            call_kwargs = mock_tmdb.discover_movies.call_args[1]
-            self.assertIsNone(call_kwargs.get("with_genres"))
-            self.assertEqual(result["total_matched"], 1)
+            mock_tmdb.discover_movies.assert_not_called()
+            self.assertEqual(result["total_matched"], 0)
+            self.assertEqual(result["items"], [])
+            self.assertTrue(result.get("stop_retrying"))
+            self.assertIn("Nonexistent Genre", result.get("genres_unresolved") or [])
 
 
 if __name__ == "__main__":

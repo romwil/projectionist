@@ -219,15 +219,36 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "find_collection_gaps",
-            "description": "Find movies or shows missing from the library for a genre/decade/theme query.",
+            "description": (
+                "Find movies or shows missing from the library for a genre/decade/theme query. "
+                "For branded or topical asks (BBC science docs, PBS nature, etc.) pass query "
+                "and/or companies plus genres=Documentary — never invent titles when filters fail."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "media_type": {"type": "string", "enum": ["movie", "show"]},
                     "year_from": {"type": "integer"},
                     "year_to": {"type": "integer"},
-                    "genres": {"type": "string", "description": "Comma-separated genre names"},
-                    "keywords": {"type": "string", "description": "Theme keywords"},
+                    "genres": {
+                        "type": "string",
+                        "description": "Comma-separated TMDB genre names (e.g. Documentary, Drama)",
+                    },
+                    "keywords": {
+                        "type": "string",
+                        "description": "Theme keywords resolved via TMDB (OR'd when several match)",
+                    },
+                    "companies": {
+                        "type": "string",
+                        "description": "Comma-separated production companies / brands (e.g. BBC)",
+                    },
+                    "query": {
+                        "type": "string",
+                        "description": (
+                            "Free-text TMDB search for themed gaps "
+                            "(e.g. 'BBC science anthropology documentary')"
+                        ),
+                    },
                 },
                 "required": ["media_type"],
             },
