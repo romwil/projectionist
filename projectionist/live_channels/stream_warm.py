@@ -116,7 +116,9 @@ class StreamWarmScheduler:
             client,
             settings=settings,
             channel_ids=channel_ids or None,
-            align_playhead=True,
+            # Never start-over from background warm — that drifted schedules into
+            # flex/Continuity after viewers left a mid-episode station.
+            align_playhead=False,
             warm_streams=True,
             skip_active_sessions=True,
             max_warm_channels=WARM_MAX_CHANNELS_PER_TICK,

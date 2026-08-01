@@ -851,6 +851,55 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(slots["now"]["started_at"], now - 600)
         self.assertEqual(slots["now"]["ends_at"], now + 3600)
 
+    def test_prefer_real_titles_does_not_steal_next_episode(self) -> None:
+        from projectionist.live_channels.guide import (
+            _prefer_real_titles_over_flex,
+            _relabel_flex_program_placeholders,
+        )
+
+        slots = _prefer_real_titles_over_flex(
+            {
+                "now": {
+                    "title": "Gilligan's Island · Up next",
+                    "episode_title": None,
+                    "is_flex": True,
+                    "seconds_elapsed": 1012,
+                    "seconds_remaining": 788,
+                },
+                "next": {
+                    "title": "Gilligan's Island",
+                    "episode_title": "The Big Gold Strike",
+                    "is_flex": False,
+                    "content_rating": "TV-G",
+                },
+            }
+        )
+        self.assertTrue(slots["now"]["is_flex"])
+        self.assertEqual(slots["now"]["title"], "Gilligan's Island · Up next")
+        self.assertIsNone(slots["now"].get("episode_title"))
+        self.assertEqual(slots["next"]["episode_title"], "The Big Gold Strike")
+
+        programs = _relabel_flex_program_placeholders(
+            [
+                {
+                    "title": "Gilligan's Island · Up next",
+                    "is_flex": True,
+                    "start": 1.0,
+                    "stop": 2.0,
+                },
+                {
+                    "title": "Gilligan's Island",
+                    "episode_title": "The Big Gold Strike",
+                    "is_flex": False,
+                    "start": 2.0,
+                    "stop": 3.0,
+                },
+            ]
+        )
+        self.assertEqual(programs[0]["title"], "Gilligan's Island · Up next")
+        self.assertTrue(programs[0]["is_flex"])
+        self.assertEqual(programs[1]["episode_title"], "The Big Gold Strike")
+
     def test_empty_when_flag_off(self) -> None:
         snap = build_on_now_snapshot(Settings())
         self.assertFalse(snap["enabled"])
@@ -1007,7 +1056,12 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(row["next"]["title"], "Heat")
         self.assertEqual(row["programs"][0]["title"], "Homicide: Life on the Street")
 
-    def test_guide_flex_placeholder_prefers_next_real_title(self) -> None:
+    def test_guide_flex_placeholder_keeps_up_next_label(self) -> None:
+        """Flex pads must stay labeled as Up next — not the following movie/episode.
+
+        Painting Seven Samurai onto the flex cell while Continuity airs was the
+        Gilligan “Big Gold Strike vs Eight Is Enough” OSD lie.
+        """
         settings = Settings(
             features=FeatureFlags(live_channels_enabled=True),
             tunarr=TunarrSettings(url="http://tunarr.test"),
@@ -1048,10 +1102,11 @@ class OnNowGuideTests(unittest.TestCase):
         snap = build_guide_snapshot(settings, client=client, now=now, hours=6)
         row = snap["channels"][0]
         self.assertTrue(row["now"]["is_flex"])
-        self.assertEqual(row["now"]["title"], "Seven Samurai")
+        self.assertEqual(row["now"]["title"], "Kung Fu Theater · Up next")
         self.assertEqual(row["next"]["title"], "Seven Samurai")
-        self.assertEqual(row["programs"][0]["title"], "Seven Samurai")
+        self.assertEqual(row["programs"][0]["title"], "Kung Fu Theater · Up next")
         self.assertTrue(row["programs"][0]["is_flex"])
+        self.assertEqual(row["programs"][1]["title"], "Seven Samurai")
 
 
 class StreamProxyTests(unittest.TestCase):
@@ -2186,6 +2241,7 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
         }
         client = MagicMock()
         client.get_now_playing.return_value = {
+            "type": "content",
             "start": prog_start,
             "duration": 90 * 60 * 1000,
             "program": {"title": "Flight 7500"},
@@ -2199,6 +2255,51 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
         client.update_channel.assert_called_once()
         body = client.update_channel.call_args.args[1]
         self.assertEqual(body["startTime"], channel["startTime"] + (40 * 60 * 1000))
+
+    def test_align_skips_flex_and_snaps_future_start_time(self) -> None:
+        from projectionist.live_channels.publish import (
+            align_channel_playhead_to_program_start,
+            snap_future_channel_start_time,
+        )
+
+        now_ms = 1_800_000_000_000
+        duration = 7 * 24 * 60 * 60 * 1000
+        channel = {
+            "id": "ch-gilligan",
+            "name": "Gilligan's Island",
+            "number": 105,
+            "startTime": now_ms + (6 * 60 * 1000),  # 6 minutes ahead
+            "duration": duration,
+            "transcodeConfigId": "tc-1",
+            "icon": {"path": "http://10.10.1.202:18765/images/tunarr.png"},
+            "offline": {"mode": "pic"},
+        }
+        client = MagicMock()
+        snap = snap_future_channel_start_time(client, channel, now_ms=now_ms)
+        self.assertTrue(snap["snapped"])
+        self.assertLessEqual(snap["start_time_ms"], now_ms)
+        self.assertEqual(
+            snap["start_time_ms"],
+            channel["startTime"] - duration,
+        )
+
+        client.get_now_playing.return_value = {
+            "type": "flex",
+            "title": "Gilligan's Island · Up next",
+            "start": now_ms - (16 * 60 * 1000),
+            "duration": 30 * 60 * 1000,
+            "stop": now_ms + (14 * 60 * 1000),
+        }
+        with patch("projectionist.live_channels.publish.time.time", return_value=now_ms / 1000):
+            result = align_channel_playhead_to_program_start(
+                client, channel, has_session=False, min_elapsed_ms=5 * 60 * 1000
+            )
+        self.assertEqual(result.get("reason"), "flex_skip")
+        # Snap may update once; must not apply flex elapsed as a second push forward.
+        self.assertTrue(result.get("aligned") or result.get("snap", {}).get("snapped"))
+        bodies = [c.args[1]["startTime"] for c in client.update_channel.call_args_list]
+        self.assertTrue(bodies)
+        self.assertTrue(all(st <= now_ms for st in bodies))
 
     def test_warm_channel_stream_ready_when_media_playlist_has_segments(self) -> None:
         from projectionist.live_channels.publish import warm_channel_stream

@@ -1,6 +1,44 @@
 {
-  "generated_at": "2026-08-01T03:00:25Z",
+  "generated_at": "2026-08-01T03:31:35Z",
   "releases": [
+    {
+      "version": "1.29.38",
+      "date": "2026-08-01",
+      "summary": "Returning to a Live Channel resumes the scheduled show at the live edge — not Continuity filler — and the cable-box OSD finally gets out of the way after you stop moving.",
+      "highlights": [
+        "**Switch away and come back cleanly.** Re-tuning no longer force-aligns / start-overs the station, which was the leave→buffer→filler trap on Gilligan.",
+        "**Filler looks like filler.** Continuity pads no longer steal the next episode’s title and progress bar.",
+        "**OSD tucks away on Watch and pop-out.** The detail pane auto-hides after a short idle; move the mouse, press a key, or change channels to bring it back."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Owner timeline (ch 105): watching **The Big Gold Strike** → switch channels → return after buffering → HLS Continuity (*Eight Is Enough*) while OSD stayed mid Gold Strike (~16:52). Tunarr logs: `channel-105` SIGKILL with deep `-ss ~17m` seeks; Projectionist `/live` called `tune` → `prepare(align_playhead=True)` on every rejoin, and background warm also aligned cold stations after the viewer left.",
+            "`/api/live-channels/tune` and `StreamWarmScheduler` now use `align_playhead=False` (live-edge warm only). Admin prepare-playback still start-overs for Plex HDHR cold tunes.",
+            "`prepare_channels_for_playback` always runs `snap_future_channel_start_time` and stops stale sessions after a snap so warm rebuilds on the repaired schedule; live-edge warm still advances past-EOF playheads.",
+            "Align skips flex/continuity pads; clamps `new_start` ≤ now (flex force-align had pushed `#104`/`#105` into the future).",
+            "`_prefer_real_titles_over_flex` / `_relabel_flex_program_placeholders` no longer paint the next episode onto flex pads; Live OSD shows `Up next: …` when `is_flex`.",
+            "Pop-out `/live/watch` (and main Watch): OSD idle hide was defeated by zero-delta `mousemove` when the pane slid away under a still cursor — `shouldBumpOsdFromPointerMove` ignores those synthetic events so the timer can finish."
+          ]
+        },
+        {
+          "title": "Ops (Automat)",
+          "bullets": [
+            "Channel id `59bc2df4-eca9-4ab8-9012-c42ffec358be` (#105): snapped `startTime` into the live window; HLS 1920×1080 Gilligan content restored (lineup not wiped).",
+            "Kung Fu Theater #104 snapped similarly."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: `PlayheadAlignAndWarmTests` + guide flex honesty tests — passed.",
+            "`frontend/src/lib/liveChannels.test.mjs` (flex OSD + zero-delta pointer) — passed.",
+            "`pytest tests/test_version.py` — lockstep **1.29.38**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.37",
       "date": "2026-08-01",

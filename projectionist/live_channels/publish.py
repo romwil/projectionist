@@ -755,6 +755,90 @@ def should_align_playhead(
     return elapsed >= max(0, int(min_elapsed_ms or 0))
 
 
+def _now_playing_is_flex(playing: Mapping[str, Any]) -> bool:
+    """True when Tunarr now_playing is a flex / continuity / offline pad."""
+    kind = str(playing.get("type") or playing.get("programType") or "").strip().lower()
+    if kind in {"flex", "filler", "continuity", "offline", "commercial"}:
+        return True
+    title = str(playing.get("title") or "").strip().lower()
+    if title.endswith("· up next") or title.endswith("up next"):
+        return True
+    if title in {"flex", "filler", "continuity"}:
+        return True
+    return False
+
+
+def snap_future_channel_start_time(
+    client: TunarrClient,
+    channel: Mapping[str, Any],
+    *,
+    now_ms: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Pull a future ``startTime`` back by whole cycle lengths (preserve playhead).
+
+    When ``startTime`` is ahead of wall-clock, Tunarr synthesizes long flex /
+    offline pads until the cycle begins — Continuity filler airs while the
+    guide looks empty or misleading. Subtracting ``duration`` keeps the same
+    offset into the lineup without wiping the schedule.
+    """
+    cid = str(channel.get("id") or channel.get("uuid") or "").strip()
+    if not cid:
+        return {"ok": False, "snapped": False, "error": "channel_id required"}
+    ts = int(now_ms if now_ms is not None else time.time() * 1000)
+    try:
+        start = int(channel.get("startTime") or 0)
+    except (TypeError, ValueError):
+        start = 0
+    try:
+        duration = int(channel.get("duration") or 0)
+    except (TypeError, ValueError):
+        duration = 0
+    if start <= ts:
+        return {
+            "ok": True,
+            "snapped": False,
+            "channel_id": cid,
+            "reason": "already_live",
+            "start_time_ms": start,
+        }
+    if duration <= 0:
+        new_start = ts - 60_000
+    else:
+        new_start = start
+        # Bound iterations — pathological durations must not spin.
+        for _ in range(10_000):
+            if new_start <= ts:
+                break
+            new_start -= duration
+        if new_start > ts:
+            new_start = ts - (start - ts) % duration
+    body = _channel_put_body(channel, start_time_ms=int(new_start))
+    if not body["transcodeConfigId"]:
+        return {
+            "ok": False,
+            "snapped": False,
+            "channel_id": cid,
+            "error": "missing transcodeConfigId",
+        }
+    try:
+        client.update_channel(cid, body)
+    except Exception as error:  # noqa: BLE001
+        return {
+            "ok": False,
+            "snapped": False,
+            "channel_id": cid,
+            "error": str(error)[:200],
+        }
+    return {
+        "ok": True,
+        "snapped": True,
+        "channel_id": cid,
+        "start_time_ms": int(new_start),
+        "previous_start_time_ms": start,
+        "message": "Snapped future startTime back into the live window.",
+    }
+
+
 def align_channel_playhead_to_program_start(
     client: TunarrClient,
     channel: Mapping[str, Any],
@@ -767,11 +851,19 @@ def align_channel_playhead_to_program_start(
 
     Deep ``-ss`` seeks (or seeks past file EOF) delay HLS readiness past Plex's
     patience. Start-over keeps cold tunes near ``-ss 0``.
+
+    Never start-over on flex/continuity pads — adding flex elapsed to
+    ``startTime`` pushes the cycle into the future (Gilligan / Kung Fu drift).
     """
     cid = str(channel.get("id") or channel.get("uuid") or "").strip()
     if not cid:
         return {"ok": False, "aligned": False, "error": "channel_id required"}
     now_ms = int(time.time() * 1000)
+    # Repair drifted schedules before consulting now_playing (which is often a
+    # synthetic flex window while startTime is still in the future).
+    snap = snap_future_channel_start_time(client, channel, now_ms=now_ms)
+    if snap.get("snapped"):
+        channel = {**dict(channel), "startTime": snap.get("start_time_ms")}
     try:
         playing = client.get_now_playing(cid) or {}
     except Exception as error:  # noqa: BLE001
@@ -780,9 +872,26 @@ def align_channel_playhead_to_program_start(
             "aligned": False,
             "channel_id": cid,
             "error": str(error)[:200],
+            "snap": snap,
         }
     if not isinstance(playing, Mapping):
-        return {"ok": True, "aligned": False, "channel_id": cid, "reason": "no_now_playing"}
+        return {
+            "ok": True,
+            "aligned": bool(snap.get("snapped")),
+            "channel_id": cid,
+            "reason": "no_now_playing",
+            "snap": snap,
+        }
+    if _now_playing_is_flex(playing) and not force:
+        return {
+            "ok": True,
+            "aligned": bool(snap.get("snapped")),
+            "channel_id": cid,
+            "reason": "flex_skip",
+            "title": str(playing.get("title") or "").strip(),
+            "snap": snap,
+            "message": snap.get("message") or "Skipped start-over during flex/continuity.",
+        }
     prog_start = int(playing.get("start") or 0)
     prog_duration = int(playing.get("duration") or 0)
     title = ""
@@ -800,14 +909,18 @@ def align_channel_playhead_to_program_start(
     ):
         return {
             "ok": True,
-            "aligned": False,
+            "aligned": bool(snap.get("snapped")),
             "channel_id": cid,
             "elapsed_ms": elapsed,
             "title": title,
             "reason": "near_start_or_active",
+            "snap": snap,
         }
     channel_start = int(channel.get("startTime") or now_ms)
     new_start = channel_start + elapsed
+    # Never push the cycle into the future — that recreates pre-start flex.
+    if new_start > now_ms:
+        new_start = now_ms
     body = _channel_put_body(channel, start_time_ms=new_start)
     if not body["transcodeConfigId"]:
         return {
@@ -832,6 +945,7 @@ def align_channel_playhead_to_program_start(
         "elapsed_ms": elapsed,
         "title": title,
         "start_time_ms": new_start,
+        "snap": snap,
         "message": f"Start-over: was {elapsed // 60000}m into {title or 'program'}.",
     }
 
@@ -1057,7 +1171,34 @@ def prepare_channels_for_playback(
         ]
 
     aligned: List[Dict[str, Any]] = []
+    snapped: List[Dict[str, Any]] = []
     skipped_active = 0
+    # Always pull future startTimes back (preserves lineup offset). Safe on
+    # channel-surf / background warm — unlike content start-over, which was
+    # drifting schedules into flex/Continuity after leave→rejoin.
+    repaired_channels: List[Mapping[str, Any]] = []
+    for ch in channels:
+        cid = str(ch.get("id") or ch.get("uuid") or "").strip()
+        if not cid:
+            repaired_channels.append(ch)
+            continue
+        snap = snap_future_channel_start_time(client, ch)
+        snapped.append(snap)
+        if snap.get("snapped"):
+            repaired_channels.append(
+                {**dict(ch), "startTime": snap.get("start_time_ms")}
+            )
+            # Drop stale HLS so warm rebuilds against the repaired schedule
+            # instead of keeping a Continuity/flex session under the guide.
+            try:
+                client.stop_channel_sessions(cid)
+            except Exception:  # noqa: BLE001
+                pass
+            sessions.pop(cid, None)
+        else:
+            repaired_channels.append(ch)
+    channels = repaired_channels
+
     if align_playhead:
         for ch in channels:
             cid = str(ch.get("id") or ch.get("uuid") or "").strip()
@@ -1080,6 +1221,66 @@ def prepare_channels_for_playback(
                 min_elapsed_ms=min_elapsed_ms,
             )
             aligned.append(result)
+    else:
+        # Live-edge tune/warm: still unstick past-EOF playheads (ffmpeg -ss past
+        # file end → offline/Continuity while guide keeps the episode title).
+        for ch in channels:
+            cid = str(ch.get("id") or ch.get("uuid") or "").strip()
+            if not cid:
+                continue
+            try:
+                playing = client.get_now_playing(cid) or {}
+            except Exception:  # noqa: BLE001
+                continue
+            if not isinstance(playing, Mapping) or _now_playing_is_flex(playing):
+                continue
+            prog_start = int(playing.get("start") or 0)
+            prog_duration = int(playing.get("duration") or 0)
+            if not prog_start or not prog_duration:
+                continue
+            now_ms = int(time.time() * 1000)
+            elapsed = max(0, now_ms - prog_start)
+            if elapsed <= prog_duration:
+                continue
+            overflow = elapsed - prog_duration
+            try:
+                channel_start = int(ch.get("startTime") or now_ms)
+            except (TypeError, ValueError):
+                channel_start = now_ms
+            # Advance the cycle just past the ended program into the next item
+            # (do not restart the finished episode via classic start-over).
+            new_start = channel_start + overflow + 1_000
+            if new_start > now_ms:
+                new_start = now_ms
+            body = _channel_put_body(ch, start_time_ms=int(new_start))
+            if not body.get("transcodeConfigId"):
+                continue
+            try:
+                client.update_channel(cid, body)
+                client.stop_channel_sessions(cid)
+            except Exception as error:  # noqa: BLE001
+                aligned.append(
+                    {
+                        "ok": False,
+                        "aligned": False,
+                        "channel_id": cid,
+                        "reason": "past_eof_advance_failed",
+                        "error": str(error)[:200],
+                    }
+                )
+                continue
+            sessions.pop(cid, None)
+            aligned.append(
+                {
+                    "ok": True,
+                    "aligned": True,
+                    "channel_id": cid,
+                    "reason": "past_eof_advance",
+                    "overflow_ms": overflow,
+                    "start_time_ms": int(new_start),
+                    "message": "Advanced past ended program into the next lineup item.",
+                }
+            )
 
     warmed: List[Dict[str, Any]] = []
     if warm_streams:
@@ -1121,6 +1322,7 @@ def prepare_channels_for_playback(
                 warm_budget -= 1
 
     aligned_count = sum(1 for row in aligned if row.get("aligned"))
+    snapped_count = sum(1 for row in snapped if row.get("snapped"))
     warmed_attempted = [row for row in warmed if not row.get("skipped")]
     warmed_ok = sum(1 for row in warmed_attempted if row.get("ok"))
     return {
@@ -1128,7 +1330,9 @@ def prepare_channels_for_playback(
         and (warmed_ok == len(warmed_attempted) if warmed_attempted else True),
         "labels": labels,
         "aligned": aligned,
+        "snapped": snapped,
         "count_aligned": aligned_count,
+        "count_snapped": snapped_count,
         "warmed": warmed,
         "count_warmed_ok": warmed_ok,
         "count_warmed_skipped": sum(1 for row in warmed if row.get("skipped")),
@@ -1137,7 +1341,8 @@ def prepare_channels_for_playback(
         "icon_url": resolved_icon,
         "message": (
             f"Prepared {len(channels)} station(s): "
-            f"{aligned_count} start-over, {warmed_ok}/{len(warmed_attempted) or 0} warmed"
+            f"{snapped_count} snapped, {aligned_count} start-over, "
+            f"{warmed_ok}/{len(warmed_attempted) or 0} warmed"
             + (
                 f", {sum(1 for row in warmed if row.get('skipped'))} skipped."
                 if any(row.get("skipped") for row in warmed)

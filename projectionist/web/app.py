@@ -2865,7 +2865,12 @@ def live_channels_tune_endpoint(
     payload: LiveChannelsTunePayload,
     user=Depends(get_current_user_dep),
 ) -> Dict[str, Any]:
-    """Warm + start-over a single station before Projectionist `/live` playback."""
+    """Warm a station for Projectionist `/live` at the live edge (no start-over).
+
+    Channel leave→rejoin must not shift ``startTime`` / force-align into flex.
+    Background start-over after surfing away was landing Continuity filler while
+    the OSD still showed the mid-episode guide slot.
+    """
     from projectionist.live_channels.guide import (
         build_on_now_snapshot,
         youth_allows_channel_now,
@@ -2905,7 +2910,9 @@ def live_channels_tune_endpoint(
             settings=settings,
             channel_ids=[channel_id],
             icon_url=resolve_channel_icon_url(settings),
-            # Never start-over / re-warm under an already-watching session.
+            # Live edge only — never start-over on channel surf / rejoin.
+            align_playhead=False,
+            # Never re-warm under an already-watching session.
             skip_active_sessions=True,
         )
     except ValueError as error:

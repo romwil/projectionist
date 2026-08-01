@@ -155,52 +155,28 @@ def _program_is_flex(program: Mapping[str, Any]) -> bool:
 def _prefer_real_titles_over_flex(
     slots: Mapping[str, Optional[Dict[str, Any]]],
 ) -> Dict[str, Optional[Dict[str, Any]]]:
-    """When 'now' is a guideFlexTitle pad, surface the next real program title."""
+    """Return now/next unchanged — never paint the next episode onto a flex pad.
+
+    Older builds copied the following content title/episode onto ``now`` while
+    keeping the flex ``start``/``stop``. The Live OSD then showed mid-episode
+    progress for e.g. “The Big Gold Strike” while Tunarr concatenated Continuity
+    filler (vintage promos). The real upcoming title already lives in ``next``.
+    """
     now = slots.get("now") if isinstance(slots.get("now"), Mapping) else None
     nxt = slots.get("next") if isinstance(slots.get("next"), Mapping) else None
-    out: Dict[str, Optional[Dict[str, Any]]] = {
+    return {
         "now": dict(now) if now else None,
         "next": dict(nxt) if nxt else None,
     }
-    current = out["now"]
-    following = out["next"]
-    if (
-        current
-        and current.get("is_flex")
-        and _is_guide_flex_placeholder(str(current.get("title") or ""))
-        and following
-        and not following.get("is_flex")
-        and str(following.get("title") or "").strip()
-    ):
-        current["title"] = str(following["title"]).strip()
-        if following.get("episode_title"):
-            current["episode_title"] = following.get("episode_title")
-        if following.get("content_rating"):
-            current["content_rating"] = following.get("content_rating")
-    return out
 
 
 def _relabel_flex_program_placeholders(programs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """Replace guideFlexTitle bands with the following real content title when present."""
-    out = [dict(p) for p in programs]
-    for index, program in enumerate(out):
-        if not program.get("is_flex"):
-            continue
-        if not _is_guide_flex_placeholder(str(program.get("title") or "")):
-            continue
-        for later in out[index + 1 :]:
-            if later.get("is_flex"):
-                continue
-            title = str(later.get("title") or "").strip()
-            if not title:
-                continue
-            program["title"] = title
-            if later.get("episode_title"):
-                program["episode_title"] = later.get("episode_title")
-            if later.get("content_rating"):
-                program["content_rating"] = later.get("content_rating")
-            break
-    return out
+    """Keep guideFlexTitle pads labeled as flex (do not steal the next episode).
+
+    Relabeling made EPG cells look like the upcoming Gilligan episode during
+    Continuity bumps — tuning that cell played filler while the guide lied.
+    """
+    return [dict(p) for p in programs]
 
 
 def _to_epoch_seconds(value: Any) -> Optional[float]:
