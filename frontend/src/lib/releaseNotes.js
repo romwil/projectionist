@@ -82,6 +82,33 @@ export function findReleaseByVersion(releases, version) {
   return normalizeReleaseNotes(releases).find((item) => item.version === target) || null;
 }
 
+/** Max version chips in the About jump rail before switching to a picker. */
+export const RELEASE_JUMP_RECENT_LIMIT = 10;
+
+/**
+ * Allocate release-version jump UI for long histories.
+ * Short lists stay a chip rail; long lists get a compact picker + recent chips
+ * so About never becomes a wall of every patch number.
+ *
+ * @param {unknown} releases
+ * @param {{ recentLimit?: number }} [options]
+ * @returns {{ mode: "chips" | "picker", recent: string[], all: string[] }}
+ */
+export function allocateReleaseVersionJumps(releases, { recentLimit = RELEASE_JUMP_RECENT_LIMIT } = {}) {
+  const versions = normalizeReleaseNotes(releases)
+    .map((item) => String(item.version || "").trim())
+    .filter(Boolean);
+  const limit = Math.max(1, Number(recentLimit) || RELEASE_JUMP_RECENT_LIMIT);
+  if (versions.length <= limit) {
+    return { mode: "chips", recent: versions, all: versions };
+  }
+  return {
+    mode: "picker",
+    recent: versions.slice(0, limit),
+    all: versions,
+  };
+}
+
 /** Strip light markdown markers for plain-text list rendering. */
 export function plainChangelogText(value) {
   return String(value || "")

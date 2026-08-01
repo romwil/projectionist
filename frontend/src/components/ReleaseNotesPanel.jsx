@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { plainChangelogText } from "../lib/releaseNotes.js";
+import { allocateReleaseVersionJumps, plainChangelogText } from "../lib/releaseNotes.js";
 
 /**
  * Renders one or more changelog releases.
@@ -29,6 +29,7 @@ export default function ReleaseNotesPanel({
   testId = "release-notes-panel",
 }) {
   const panelRef = useRef(null);
+  const jumps = allocateReleaseVersionJumps(releases);
 
   if (!releases.length) {
     return (
@@ -38,14 +39,16 @@ export default function ReleaseNotesPanel({
     );
   }
 
-  function jumpToVersion(event, version) {
-    event.preventDefault();
-    const target = panelRef.current?.querySelector(`#release-${CSS.escape(version)}`);
+  function jumpToVersion(version, event) {
+    event?.preventDefault?.();
+    const targetVersion = String(version || "").trim();
+    if (!targetVersion) return;
+    const target = panelRef.current?.querySelector(`#release-${CSS.escape(targetVersion)}`);
     if (target) {
       target.scrollIntoView({ behavior: "smooth", block: "start" });
     }
     if (typeof window !== "undefined" && window.history?.replaceState) {
-      window.history.replaceState(null, "", `#release-${version}`);
+      window.history.replaceState(null, "", `#release-${targetVersion}`);
     }
   }
 
@@ -55,17 +58,49 @@ export default function ReleaseNotesPanel({
       className={`release-notes-panel${scrollable ? " is-scrollable" : ""}`}
       data-testid={testId}
     >
-      {showJumpLinks && releases.length > 1 ? (
-        <nav className="release-notes-jumps" aria-label="Release versions" data-testid={`${testId}-jumps`}>
-          {releases.map((release) => (
-            <a
-              key={release.version}
-              href={`#release-${release.version}`}
-              onClick={(event) => jumpToVersion(event, release.version)}
-            >
-              {release.version}
-            </a>
-          ))}
+      {showJumpLinks && jumps.all.length > 1 ? (
+        <nav
+          className={`release-notes-jumps${jumps.mode === "picker" ? " is-compact" : ""}`}
+          aria-label="Release versions"
+          data-testid={`${testId}-jumps`}
+          data-mode={jumps.mode}
+        >
+          {jumps.mode === "picker" ? (
+            <label className="release-notes-jump-picker">
+              <span className="release-notes-jump-picker-label">Jump to</span>
+              <select
+                className="release-notes-jump-select"
+                data-testid={`${testId}-jump-select`}
+                defaultValue=""
+                aria-label="Jump to release version"
+                onChange={(event) => {
+                  const next = event.target.value;
+                  if (next) jumpToVersion(next, event);
+                }}
+              >
+                <option value="" disabled>
+                  Version…
+                </option>
+                {jumps.all.map((version) => (
+                  <option key={version} value={version}>
+                    {version}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+          <div className="release-notes-jump-chips" data-testid={`${testId}-jump-chips`}>
+            {jumps.recent.map((version) => (
+              <a
+                key={version}
+                className="release-notes-jump-chip"
+                href={`#release-${version}`}
+                onClick={(event) => jumpToVersion(version, event)}
+              >
+                {version}
+              </a>
+            ))}
+          </div>
         </nav>
       ) : null}
 
