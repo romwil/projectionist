@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   LAST_SEEN_VERSION_KEY,
+  RELEASE_JUMP_RECENT_LIMIT,
+  allocateReleaseVersionJumps,
   compareSemver,
   fetchReleaseNotes,
   findReleaseByVersion,
@@ -71,6 +73,27 @@ test("pickLatestRelease and findReleaseByVersion", () => {
 test("plainChangelogText strips light markdown", () => {
   assert.equal(plainChangelogText("**Scheduled Tasks** admin"), "Scheduled Tasks admin");
   assert.equal(plainChangelogText("use `enrich` flag"), "use enrich flag");
+});
+
+test("allocateReleaseVersionJumps keeps short histories as chips", () => {
+  const releases = Array.from({ length: 4 }, (_, i) => ({ version: `1.0.${i}` }));
+  const got = allocateReleaseVersionJumps(releases);
+  assert.equal(got.mode, "chips");
+  assert.deepEqual(got.recent, ["1.0.0", "1.0.1", "1.0.2", "1.0.3"]);
+  assert.deepEqual(got.all, got.recent);
+});
+
+test("allocateReleaseVersionJumps switches long histories to picker + recent rail", () => {
+  const releases = Array.from({ length: RELEASE_JUMP_RECENT_LIMIT + 5 }, (_, i) => ({
+    version: `1.30.${RELEASE_JUMP_RECENT_LIMIT + 4 - i}`,
+  }));
+  const got = allocateReleaseVersionJumps(releases);
+  assert.equal(got.mode, "picker");
+  assert.equal(got.recent.length, RELEASE_JUMP_RECENT_LIMIT);
+  assert.equal(got.all.length, RELEASE_JUMP_RECENT_LIMIT + 5);
+  assert.equal(got.recent[0], got.all[0]);
+  assert.equal(got.recent.at(-1), got.all[RELEASE_JUMP_RECENT_LIMIT - 1]);
+  assert.ok(!got.recent.includes(got.all.at(-1)));
 });
 
 test("fetchReleaseNotes rejects non-OK and HTML responses", async () => {

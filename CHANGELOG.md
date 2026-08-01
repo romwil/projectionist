@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.30.1] — 2026-08-01
+
+About release notes stay usable with a long history — jump via a compact picker and a short recent-chip rail instead of a wall of every patch number.
+
+### Highlights
+- **Release history you can scan.** About → Release notes jumps with a version picker and a few recent chips, not a dense orange blob of every build.
+- **Same notes, clearer chrome.** Full CHANGELOG detail is unchanged; only the version allocation UI is fixed.
+
+### Fixed
+- About `/about#release-notes` version jump rail rendered all 160+ versions as wrapping plain links, which collapsed into an unusable multi-line number wall after the 1.30.0 history landed.
+
+### Changed
+- `allocateReleaseVersionJumps` caps the chip rail (`RELEASE_JUMP_RECENT_LIMIT`) and switches longer histories to a compact Jump-to select + recent chips with chip styling.
+
+### Verification
+- `cd frontend && npm run test:unit` — allocateReleaseVersionJumps cases + suite green.
+- `cd frontend && npm run lint` — 0 errors.
+- `cd frontend && npm run build` — production build.
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.30.1**.
+
 ## [1.30.0] — 2026-08-01
 
 Unified gaps-and-delight program: living-room Live habit surfaces, owner craft (holiday calendar + seasonal rails), curator village consults, household social, Phase E stretch Likes, Live OSD/stall/subtitle honesty, and leaner LLM spend.
