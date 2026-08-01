@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.29.36] — 2026-08-01
+
+Live Channels stays watchable: background stream-warm no longer keeps every Tunarr station’s ffmpeg pipeline hot (which was pegging the host and dropping mid-program to the Tunarr offline icon), and `/live` recovers HLS without re-tuning/start-over under an active watch.
+
+### Highlights
+- **Watch Live keeps playing.** Stations no longer “crash out” to the rainbow Tunarr graphic a few minutes in because Projectionist was restarting every channel’s transcoder in the background.
+- **Gentler on the server.** Background warm touches one cold station at a time with a light playlist check — not six full MPEG-TS pulls every few minutes.
+- **Plex guide refresh path still Mapped 6/6.** Tunarr XMLTV already carries real titles (MST3K, etc.); Admin repair/reloadGuide remains the fix when Plex still shows Unknown Airing.
+
+### Fixed
+- `StreamWarmScheduler` warmed **all** channels with full `.ts` pulls every 180s → Tunarr ~2000% CPU, constant SIGTERM/SIGKILL of concat/transcode, “Stream not ready yet”, offline-pic fallback (`images/tunarr.png`) mid-watch.
+- Background warm now: `skip_active_sessions`, `max_warm_channels=1`, rotating channel cursor, `pull_ts=False`, 300s interval.
+- `prepare_channels_for_playback` accepts those flags; `/api/live-channels/tune` skips start-over/warm when a session is already active.
+- `/live` LivePlayer: more network retries + remount-from-same-URL recovery **without** calling `tuneLiveChannel` again (tune start-over was killing Tunarr under the viewer).
+
+### Ops (Automat)
+- Reloaded Plex DVR 12 guide (`Mapped 6/6`); snapped Kung Fu Theater `#104` startTime back into the live window (was Aug 5 / then 38m ahead after a flex force-align).
+- Channel logos still default Tunarr mark until per-station art is published (`station_meta` / collection icons).
+
+### Verification
+- Focused: `PlayheadAlignAndWarmTests` (incl. skip-active + warm budget) — passed.
+- `.venv/bin/python -m pytest tests/` — 1585 passed, 6 skipped; coverage **75.9%** (≥74%).
+- `cd frontend && npm run test:unit` — 520 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `pytest tests/test_version.py` — lockstep **1.29.36**.
+- Automat: Tunarr CPU ~2000% → &lt;10% after restart + hot patch; Plex DVR 12 Mapped 6/6 + reloadGuide; health `ok`.
+
 ## [1.29.35] — 2026-07-31
 
 Projectionist `/live` Watch shows picture again: Content-Security-Policy now allows hls.js MediaSource `blob:` URLs on `<video>`, which `default-src 'self'` had been blocking after playlists and `.ts` segments loaded successfully.

@@ -2269,6 +2269,69 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
         align.assert_called_once()
         warm.assert_called_once()
 
+    def test_prepare_skips_active_sessions_and_caps_warm_budget(self) -> None:
+        from projectionist.live_channels.publish import prepare_channels_for_playback
+
+        client = MagicMock()
+        client.base_url = "http://tunarr.test:8000"
+        client.list_sessions.return_value = {
+            "ch-live": [{"type": "hls", "state": "started"}],
+        }
+        client.list_channels.return_value = [
+            {
+                "id": "ch-live",
+                "name": "Mystery",
+                "number": 100,
+                "startTime": 1_700_000_000_000,
+                "duration": 100_000_000,
+                "transcodeConfigId": "tc-1",
+                "icon": {"path": ""},
+                "offline": {"mode": "pic"},
+            },
+            {
+                "id": "ch-cold-a",
+                "name": "Sci-Fi",
+                "number": 101,
+                "startTime": 1_700_000_000_000,
+                "duration": 100_000_000,
+                "transcodeConfigId": "tc-1",
+                "icon": {"path": ""},
+                "offline": {"mode": "pic"},
+            },
+            {
+                "id": "ch-cold-b",
+                "name": "Chaos",
+                "number": 102,
+                "startTime": 1_700_000_000_000,
+                "duration": 100_000_000,
+                "transcodeConfigId": "tc-1",
+                "icon": {"path": ""},
+                "offline": {"mode": "pic"},
+            },
+        ]
+        with patch(
+            "projectionist.live_channels.publish.align_channel_playhead_to_program_start",
+            return_value={"ok": True, "aligned": True, "channel_id": "x"},
+        ) as align, patch(
+            "projectionist.live_channels.publish.warm_channel_stream",
+            return_value={"ok": True, "channel_id": "x", "ts_bytes": 0},
+        ) as warm:
+            result = prepare_channels_for_playback(
+                client,
+                icon_url="",
+                skip_active_sessions=True,
+                max_warm_channels=1,
+                pull_ts=False,
+            )
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["count_skipped_active"], 1)
+        self.assertEqual(result["count_warmed_skipped"], 2)  # live + budget
+        self.assertEqual(warm.call_count, 1)
+        self.assertEqual(warm.call_args.kwargs.get("pull_ts"), False)
+        # Active channel must not be aligned via start-over helper.
+        aligned_ids = {call.args[1]["id"] for call in align.call_args_list}
+        self.assertNotIn("ch-live", aligned_ids)
+
 
 class ContinuityFillerTests(unittest.TestCase):
     def test_parse_filler_binds_multi_path_and_host_only(self) -> None:

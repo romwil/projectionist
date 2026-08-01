@@ -2905,6 +2905,8 @@ def live_channels_tune_endpoint(
             settings=settings,
             channel_ids=[channel_id],
             icon_url=resolve_channel_icon_url(settings),
+            # Never start-over / re-warm under an already-watching session.
+            skip_active_sessions=True,
         )
     except ValueError as error:
         raise HTTPException(status_code=400, detail=str(error)) from error
