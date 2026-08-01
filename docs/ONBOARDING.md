@@ -161,7 +161,7 @@ Ask your curator something real:
 - "Which large files have never been watched?"
 - "Explore neo-noir with me based on what I already love."
 
-The chat surfaces a small **ambient context** tag under the thread title (default *General Exploration*) that shifts as the conversation's mood does — no manual "lens" switching required.
+The chat surfaces a small **ambient context** tag under the thread title (default *General Exploration*). Decade/year collection audits set a temporary label like *1970s Collection Audit*; once the thread leaves that year-slice path, the tag clears back to *General Exploration* — no manual "lens" switching required.
 
 ---
 

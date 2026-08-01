@@ -422,6 +422,8 @@ class ToolRegistry:
         self._review_prompts: List[Dict[str, Any]] = []
         # Titles stripped from Youth tool JSON this turn — for post-generation scrub.
         self._youth_blocked_titles: set[str] = set()
+        # Year-slice audit label set by query/summarize tools this turn (sticky clear).
+        self._turn_audit_label: Optional[str] = None
 
     def _deny_personal_mutation_if_gated(self) -> Optional[str]:
         """H5: under multi-user, block personal writes unless the household opts in.
@@ -570,6 +572,15 @@ class ToolRegistry:
     @property
     def review_prompts(self) -> List[Dict[str, Any]]:
         return list(self._review_prompts)
+
+    @property
+    def turn_audit_label(self) -> Optional[str]:
+        return self._turn_audit_label
+
+    def note_turn_audit_label(self, label: Optional[str]) -> None:
+        cleaned = str(label or "").strip()
+        if cleaned:
+            self._turn_audit_label = cleaned
 
     async def execute(self, name: str, arguments: Mapping[str, Any]) -> str:
         guest_denied = {
@@ -881,7 +892,7 @@ class ToolRegistry:
         else:
             result = query_library(self.db, filters)
         _attach_query_cards(self, self.db, result["items"], filters)
-        maybe_set_audit_context_label(self.db, filters)
+        self.note_turn_audit_label(maybe_set_audit_context_label(self.db, filters))
         payload = {
             **result,
             "items": [_query_item_to_tool_item(item) for item in result["items"]],
@@ -1080,7 +1091,7 @@ class ToolRegistry:
     async def _tool_summarize_library(self, args: Mapping[str, Any]) -> str:
         group_by = str(args.get("group_by") or "decade")
         filters = filters_from_mapping(args)
-        maybe_set_audit_context_label(self.db, filters)
+        self.note_turn_audit_label(maybe_set_audit_context_label(self.db, filters))
         summary = aggregate_library(self.db, group_by, filters)  # type: ignore[arg-type]
         return json.dumps(summary)
 

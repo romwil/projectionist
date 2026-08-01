@@ -978,10 +978,27 @@ export default function App() {
           );
           setActivityPanelOpen((open) => nextActivityPanelExpanded({ streamDone: true, expanded: open }));
           refreshJobs();
-          refreshThreads();
-          getActiveContext()
-            .then(setActiveContext)
-            .catch(() => {});
+          if (data?.context_label) {
+            setActiveContext((prev) => ({
+              context_hash: prev?.context_hash || "general",
+              inferred_label: String(data.context_label),
+            }));
+          }
+          refreshThreads().then((threadList) => {
+            const active = (threadList || []).find((thread) => thread.id === activeSessionId);
+            if (active?.context_label) {
+              setActiveContext({
+                context_hash: active.context_hash || "general",
+                inferred_label: active.context_label,
+              });
+              return;
+            }
+            if (!data?.context_label) {
+              getActiveContext()
+                .then(setActiveContext)
+                .catch(() => {});
+            }
+          });
         },
         onError: ({ error }) => {
           streamFailed = true;
