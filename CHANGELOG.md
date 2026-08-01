@@ -24,8 +24,11 @@ Curator chat rails stay honest, Explore On now lists every station, and the Expl
 - HELP: Explore / weekly taste copy aligned with the hub change.
 
 ### Verification
-- Focused: `pytest` agent TMDB + SSE separator/status helpers; `node --test src/lib/onNow.test.mjs`.
-- Full suite recorded after ship gates below.
+- `.venv/bin/python -m pytest tests/` — 1592 passed, 6 skipped (coverage 75.8% ≥ 74%).
+- `cd frontend && npm run test:unit` — 546 passed.
+- `cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.41**.
 
 ## [1.29.40] — 2026-08-01
 
