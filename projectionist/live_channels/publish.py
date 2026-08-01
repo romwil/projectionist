@@ -1234,22 +1234,48 @@ def prepare_channels_for_playback(
                 continue
             if not isinstance(playing, Mapping) or _now_playing_is_flex(playing):
                 continue
-            prog_start = int(playing.get("start") or 0)
-            prog_duration = int(playing.get("duration") or 0)
+            try:
+                prog_start = int(playing.get("start") or 0)
+                prog_duration = int(playing.get("duration") or 0)
+                prog_stop = int(playing.get("stop") or 0)
+            except (TypeError, ValueError):
+                continue
             if not prog_start or not prog_duration:
                 continue
             now_ms = int(time.time() * 1000)
             elapsed = max(0, now_ms - prog_start)
             if elapsed <= prog_duration:
                 continue
+            file_end = prog_start + prog_duration
             overflow = elapsed - prog_duration
+            # Tunarr often pads ``stop`` past file EOF while the engine has already
+            # rolled into the next lineup item. Shifting startTime by overflow then
+            # pulls the playhead BACK into the dead zone and SIGKILLs a healthy
+            # next-title transcode (Kung Fu: Samurai → Five Fingers).
+            if prog_stop and prog_stop > file_end + 2_000:
+                aligned.append(
+                    {
+                        "ok": True,
+                        "aligned": False,
+                        "channel_id": cid,
+                        "reason": "past_eof_padded_stop_skip",
+                        "overflow_ms": overflow,
+                        "message": (
+                            "now_playing past file EOF with padded stop; "
+                            "skip startTime shift to preserve live edge."
+                        ),
+                    }
+                )
+                continue
             try:
                 channel_start = int(ch.get("startTime") or now_ms)
             except (TypeError, ValueError):
                 channel_start = now_ms
             # Advance the cycle just past the ended program into the next item
             # (do not restart the finished episode via classic start-over).
-            new_start = channel_start + overflow + 1_000
+            # Decreasing effective playhead offset by (overflow - 1s) lands ~1s
+            # after file end: new_start = channel_start + overflow - 1_000.
+            new_start = channel_start + overflow - 1_000
             if new_start > now_ms:
                 new_start = now_ms
             body = _channel_put_body(ch, start_time_ms=int(new_start))

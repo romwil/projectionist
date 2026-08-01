@@ -326,16 +326,49 @@ def _sorted_programs(programs: Sequence[Any]) -> List[Mapping[str, Any]]:
     return sorted(items, key=sort_key)
 
 
+
+def now_playing_past_file_eof(
+    playing: Optional[Mapping[str, Any]],
+    *,
+    now: Optional[float] = None,
+) -> bool:
+    """True when Tunarr now_playing elapsed exceeds content ``duration`` (ms).
+
+    Guide ``stop`` is often padded past the file end, so wall-clock can still
+    show minutes remaining while ffmpeg has already left the file (or seeks
+    past EOF). Use file duration, not stop, for this check.
+    """
+    if not isinstance(playing, Mapping):
+        return False
+    ts_ms = int((time.time() if now is None else float(now)) * 1000)
+    try:
+        start = int(playing.get("start") or 0)
+        duration = int(playing.get("duration") or 0)
+    except (TypeError, ValueError):
+        return False
+    if start <= 0 or duration <= 0:
+        return False
+    return (ts_ms - start) > duration
+
+
 def pick_now_and_next(
     programs: Sequence[Any],
     *,
     now: Optional[float] = None,
 ) -> Dict[str, Optional[Dict[str, Any]]]:
-    """Choose the airing program and the following one from a guide window."""
+    """Choose the airing program and the following one from a guide window.
+
+    When Tunarr pads an ended title's ``stop`` past the next item's ``start``
+    (file-duration vs guide-slot mismatch), multiple rows can contain ``now``.
+    Prefer the latest ``start`` so the OSD/playhead matches the live edge
+    instead of a prior title that still claims a few minutes left.
+    """
     ts = time.time() if now is None else float(now)
     ordered = _sorted_programs(programs)
     now_prog: Optional[Dict[str, Any]] = None
     next_prog: Optional[Dict[str, Any]] = None
+    airing: List[tuple[float, int, Mapping[str, Any]]] = []
+    first_future: Optional[Mapping[str, Any]] = None
     for index, program in enumerate(ordered):
         start = _to_epoch_seconds(program.get("start") or program.get("startTime"))
         stop = _to_epoch_seconds(
@@ -349,15 +382,26 @@ def pick_now_and_next(
             dur_sec = _duration_to_seconds(duration_ms)
             stop = start + dur_sec if dur_sec is not None else None
         if start is not None and stop is not None and start <= ts < stop:
-            now_prog = _normalize_program(program, now=ts)
-            if index + 1 < len(ordered):
-                next_prog = _normalize_program(ordered[index + 1], now=ts)
-            break
-        if start is not None and start > ts:
-            # Nothing currently airing in the window; surface the upcoming slot.
-            if now_prog is None:
-                next_prog = _normalize_program(program, now=ts)
-            break
+            airing.append((float(start), index, program))
+            continue
+        if (
+            first_future is None
+            and start is not None
+            and start > ts
+            and not airing
+        ):
+            first_future = program
+    if airing:
+        # Latest start wins among overlaps (Tunarr stop-overrun).
+        airing.sort(key=lambda row: row[0])
+        _start, index, program = airing[-1]
+        now_prog = _normalize_program(program, now=ts)
+        for j in range(index + 1, len(ordered)):
+            next_prog = _normalize_program(ordered[j], now=ts)
+            if next_prog:
+                break
+    elif first_future is not None:
+        next_prog = _normalize_program(first_future, now=ts)
     if now_prog is None and next_prog is None and ordered:
         # Fallback: first program as "now" when timestamps are missing.
         now_prog = _normalize_program(ordered[0], now=ts)
@@ -558,7 +602,7 @@ def build_on_now_snapshot(
                 playing = tunarr_client.get_now_playing(cid)
             except Exception:  # noqa: BLE001
                 playing = None
-            if playing:
+            if playing and not now_playing_past_file_eof(playing, now=ts):
                 slots = {"now": _normalize_program(playing, now=ts), "next": None}
         # Nested Tunarr content + now_playing often beats an empty guide parse;
         # also prefer real titles over guideFlexTitle pads for OSD / on-now.
@@ -571,6 +615,10 @@ def build_on_now_snapshot(
             except Exception:  # noqa: BLE001
                 playing = None
             playing_norm = _normalize_program(playing, now=ts) if playing else None
+            # Past file EOF: now_playing often keeps the ended title with a padded
+            # stop while the guide/stream already rolled to the next airing.
+            if playing_norm and now_playing_past_file_eof(playing, now=ts):
+                playing_norm = None
             if playing_norm and not playing_norm.get("is_flex"):
                 next_slot = slots.get("next")
                 slots = {"now": playing_norm, "next": next_slot}

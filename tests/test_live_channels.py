@@ -851,6 +851,48 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(slots["now"]["started_at"], now - 600)
         self.assertEqual(slots["now"]["ends_at"], now + 3600)
 
+    def test_pick_now_and_next_prefers_latest_start_on_overlap(self) -> None:
+        """Tunarr may pad an ended title's stop past the next start (ch 104)."""
+        now = 1_700_000_100.0
+        programs = [
+            {
+                "title": "Samurai Rebellion",
+                "start": now - 7_200,
+                "stop": now + 600,  # padded past next start
+                "duration": 6_000_000,
+            },
+            {
+                "title": "Five Fingers of Death",
+                "start": now - 180,
+                "stop": now + 6_000,
+                "duration": 6_180_000,
+            },
+            {
+                "title": "The 36th Chamber of Shaolin",
+                "start": now + 6_000,
+                "stop": now + 12_000,
+            },
+        ]
+        slots = pick_now_and_next(programs, now=now)
+        self.assertEqual(slots["now"]["title"], "Five Fingers of Death")
+        self.assertEqual(slots["next"]["title"], "The 36th Chamber of Shaolin")
+        self.assertEqual(slots["now"]["seconds_elapsed"], 180)
+
+    def test_now_playing_past_file_eof(self) -> None:
+        from projectionist.live_channels.guide import now_playing_past_file_eof
+
+        now = 1_700_000_100.0
+        playing = {
+            "type": "content",
+            "start": int((now - 7_300) * 1000),
+            "duration": 7_200_000,  # 2h file; elapsed 7_300s > 7200s
+            "stop": int((now + 600) * 1000),  # padded stop still in future
+            "program": {"title": "Samurai Rebellion"},
+        }
+        self.assertTrue(now_playing_past_file_eof(playing, now=now))
+        playing["duration"] = 8_000_000
+        self.assertFalse(now_playing_past_file_eof(playing, now=now))
+
     def test_prefer_real_titles_does_not_steal_next_episode(self) -> None:
         from projectionist.live_channels.guide import (
             _prefer_real_titles_over_flex,
@@ -2370,6 +2412,94 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
         self.assertEqual(result["count_warmed_ok"], 1)
         align.assert_called_once()
         warm.assert_called_once()
+
+    def test_prepare_advances_past_eof_when_stop_matches_file(self) -> None:
+        from projectionist.live_channels.publish import prepare_channels_for_playback
+
+        now_ms = 1_800_000_000_000
+        prog_start = now_ms - (125 * 60 * 1000)
+        file_dur = 120 * 60 * 1000
+        channel_start = now_ms - (10 * 60 * 60 * 1000)
+        client = MagicMock()
+        client.base_url = "http://tunarr.test:8000"
+        client.list_sessions.return_value = {}
+        client.list_channels.return_value = [
+            {
+                "id": "ch-stuck",
+                "name": "Chaos",
+                "number": 102,
+                "startTime": channel_start,
+                "duration": 100_000_000,
+                "transcodeConfigId": "tc-1",
+                "icon": {"path": "http://10.10.1.202:18765/images/tunarr.png"},
+                "offline": {"mode": "pic"},
+            }
+        ]
+        client.get_now_playing.return_value = {
+            "type": "content",
+            "start": prog_start,
+            "duration": file_dur,
+            "stop": prog_start + file_dur,  # no pad — truly stuck past EOF
+            "program": {"title": "Bonhoeffer"},
+        }
+        with patch(
+            "projectionist.live_channels.publish.time.time", return_value=now_ms / 1000
+        ), patch(
+            "projectionist.live_channels.publish.warm_channel_stream",
+            return_value={"ok": True, "channel_id": "ch-stuck", "ts_bytes": 300_000},
+        ):
+            result = prepare_channels_for_playback(
+                client, channel_ids=["ch-stuck"], align_playhead=False, icon_url=""
+            )
+        client.update_channel.assert_called_once()
+        client.stop_channel_sessions.assert_called_once_with("ch-stuck")
+        body = client.update_channel.call_args.args[1]
+        overflow = (now_ms - prog_start) - file_dur
+        self.assertEqual(body["startTime"], channel_start + overflow - 1_000)
+        reasons = [row.get("reason") for row in result.get("aligned") or []]
+        self.assertIn("past_eof_advance", reasons)
+
+    def test_prepare_skips_past_eof_advance_when_stop_padded(self) -> None:
+        from projectionist.live_channels.publish import prepare_channels_for_playback
+
+        now_ms = 1_800_000_000_000
+        prog_start = now_ms - (121 * 60 * 1000)
+        file_dur = 120 * 60 * 1000
+        client = MagicMock()
+        client.base_url = "http://tunarr.test:8000"
+        client.list_sessions.return_value = {}
+        client.list_channels.return_value = [
+            {
+                "id": "ch-104",
+                "name": "Kung Fu Theater",
+                "number": 104,
+                "startTime": now_ms - (10 * 60 * 60 * 1000),
+                "duration": 100_000_000,
+                "transcodeConfigId": "tc-1",
+                "icon": {"path": "http://10.10.1.202:18765/images/tunarr.png"},
+                "offline": {"mode": "pic"},
+            }
+        ]
+        client.get_now_playing.return_value = {
+            "type": "content",
+            "start": prog_start,
+            "duration": file_dur,
+            "stop": prog_start + file_dur + (12 * 60 * 1000),  # padded
+            "program": {"title": "Samurai Rebellion"},
+        }
+        with patch(
+            "projectionist.live_channels.publish.time.time", return_value=now_ms / 1000
+        ), patch(
+            "projectionist.live_channels.publish.warm_channel_stream",
+            return_value={"ok": True, "channel_id": "ch-104", "ts_bytes": 300_000},
+        ):
+            result = prepare_channels_for_playback(
+                client, channel_ids=["ch-104"], align_playhead=False, icon_url=""
+            )
+        client.update_channel.assert_not_called()
+        client.stop_channel_sessions.assert_not_called()
+        reasons = [row.get("reason") for row in result.get("aligned") or []]
+        self.assertIn("past_eof_padded_stop_skip", reasons)
 
     def test_prepare_skips_active_sessions_and_caps_warm_budget(self) -> None:
         from projectionist.live_channels.publish import prepare_channels_for_playback
