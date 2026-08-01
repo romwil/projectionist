@@ -4,10 +4,15 @@ import {
   adjacentChannelId,
   buildOsdModel,
   formatClock,
+  isLivePlayerChromeTarget,
+  liveGuideHref,
   liveStreamUrl,
   liveWatchHref,
   normalizeGuide,
+  popoutHandoff,
   programCellStyle,
+  toggleLiveVideoPlayback,
+  tryPlayLiveVideo,
 } from "./liveChannels.js";
 
 describe("liveChannels helpers", () => {
@@ -15,6 +20,53 @@ describe("liveChannels helpers", () => {
     assert.equal(liveStreamUrl("ch-1"), "/api/live-channels/stream/ch-1/index.m3u8");
     assert.equal(liveWatchHref("ch-1"), "/live?channel=ch-1");
     assert.equal(liveWatchHref("ch-1", { popout: true }), "/live/watch?channel=ch-1");
+    assert.equal(liveGuideHref("ch-1"), "/live?channel=ch-1&mode=guide");
+    assert.deepEqual(popoutHandoff("ch-1"), {
+      popoutHref: "/live/watch?channel=ch-1",
+      guideHref: "/live?channel=ch-1&mode=guide",
+    });
+  });
+
+  it("ignores OSD chrome clicks for stage play/pause", () => {
+    const button = { closest: (sel) => (String(sel).includes("button") ? button : null) };
+    const video = { closest: () => null };
+    assert.equal(isLivePlayerChromeTarget(button), true);
+    assert.equal(isLivePlayerChromeTarget(video), false);
+    assert.equal(isLivePlayerChromeTarget(null), false);
+  });
+
+  it("toggles live playback and muted-first autoplay recovery", async () => {
+    const playing = {
+      paused: false,
+      muted: false,
+      pause() {
+        this.paused = true;
+      },
+      async play() {
+        this.paused = false;
+      },
+    };
+    assert.equal(await toggleLiveVideoPlayback(playing), "paused");
+    assert.equal(playing.paused, true);
+
+    const blocked = {
+      paused: true,
+      muted: false,
+      calls: 0,
+      pause() {
+        this.paused = true;
+      },
+      async play() {
+        this.calls += 1;
+        if (this.calls === 1 && !this.muted) throw new Error("autoplay");
+        this.paused = false;
+      },
+    };
+    assert.equal(await tryPlayLiveVideo(blocked), "playing");
+    assert.equal(blocked.muted, false);
+    assert.equal(blocked.paused, false);
+
+    assert.equal(await toggleLiveVideoPlayback(null), "idle");
   });
 
   it("formats clocks and OSD progress", () => {

@@ -17,6 +17,77 @@ export function liveWatchHref(channelId, { popout = false } = {}) {
   return qs ? `${path}?${qs}` : path;
 }
 
+/** Opener guide URL after pop-out — keeps channel selected without starting HLS. */
+export function liveGuideHref(channelId) {
+  const params = new URLSearchParams();
+  const id = String(channelId || "").trim();
+  if (id) params.set("channel", id);
+  params.set("mode", "guide");
+  return `${ROUTES.live}?${params.toString()}`;
+}
+
+/**
+ * Single-session pop-out handoff: TV window URL + opener guide URL.
+ * Caller must window.open(popoutHref) synchronously, then navigate opener to guideHref
+ * so the original LivePlayer unloads before the pop-out tunes.
+ */
+export function popoutHandoff(channelId) {
+  const id = String(channelId || "").trim();
+  return {
+    popoutHref: liveWatchHref(id, { popout: true }),
+    guideHref: liveGuideHref(id),
+  };
+}
+
+/** True when a click landed on OSD / chrome controls (not the video stage). */
+export function isLivePlayerChromeTarget(target) {
+  if (!target || typeof target.closest !== "function") return false;
+  return Boolean(
+    target.closest(
+      "button, a, input, select, textarea, [role='button'], .live-osd-actions, .live-cc-picker, .live-chrome",
+    ),
+  );
+}
+
+/**
+ * Start playback with muted-first fallback (pop-out / Safari autoplay).
+ * @param {HTMLMediaElement|null|undefined} video
+ * @returns {Promise<"playing"|"ready"|"idle">}
+ */
+export async function tryPlayLiveVideo(video) {
+  if (!video) return "idle";
+  try {
+    await video.play();
+    return "playing";
+  } catch {
+    const preferUnmuted = !video.muted;
+    try {
+      video.muted = true;
+      await video.play();
+      if (preferUnmuted) {
+        video.muted = false;
+      }
+      return "playing";
+    } catch {
+      return "ready";
+    }
+  }
+}
+
+/**
+ * Toggle pause ↔ play for live HLS. Pause freezes; play resumes (caller may startLoad).
+ * @param {HTMLMediaElement|null|undefined} video
+ * @returns {Promise<"playing"|"paused"|"ready"|"idle">}
+ */
+export async function toggleLiveVideoPlayback(video) {
+  if (!video) return "idle";
+  if (!video.paused) {
+    video.pause();
+    return "paused";
+  }
+  return tryPlayLiveVideo(video);
+}
+
 export function formatClock(seconds) {
   if (seconds == null || !Number.isFinite(Number(seconds))) return "";
   const total = Math.max(0, Math.round(Number(seconds)));

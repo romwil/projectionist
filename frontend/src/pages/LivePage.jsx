@@ -9,7 +9,11 @@ import LiveGuide from "../components/live/LiveGuide";
 import LivePlayer from "../components/live/LivePlayer";
 import { useAuthGate } from "../components/UserMenu";
 import { ROUTES } from "../lib/backNav.js";
-import { liveWatchHref, normalizeGuide } from "../lib/liveChannels.js";
+import {
+  liveGuideHref,
+  normalizeGuide,
+  popoutHandoff,
+} from "../lib/liveChannels.js";
 import { plexLiveTvUrl } from "../lib/titleLinks.js";
 
 /**
@@ -30,6 +34,7 @@ export default function LivePage({ popout = false }) {
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState(() => {
     if (popout) return "watch";
+    if (modeParam === "guide") return "guide";
     if (modeParam === "watch" || channelParam) return "watch";
     return "guide";
   });
@@ -73,11 +78,17 @@ export default function LivePage({ popout = false }) {
   }, [authReady, loadGuide]);
 
   useEffect(() => {
+    if (popout) return;
+    if (modeParam === "guide") setMode("guide");
+    else if (modeParam === "watch") setMode("watch");
+  }, [modeParam, popout]);
+
+  useEffect(() => {
     if (channelParam && channelParam !== activeChannelId) {
       setActiveChannelId(channelParam);
-      if (!popout) setMode("watch");
+      if (!popout && modeParam !== "guide") setMode("watch");
     }
-  }, [channelParam, activeChannelId, popout]);
+  }, [channelParam, activeChannelId, popout, modeParam]);
 
   const channels = guide?.channels || [];
   const activeChannel = useMemo(
@@ -107,10 +118,37 @@ export default function LivePage({ popout = false }) {
   }
 
   function openPopout() {
-    const href = liveWatchHref(activeChannel?.id || activeChannelId, { popout: true });
+    const channelId = activeChannel?.id || activeChannelId;
+    const { popoutHref } = popoutHandoff(channelId);
     const features =
       "popup=yes,width=960,height=540,menubar=no,toolbar=no,location=no,status=no";
-    window.open(href, "projectionist-live-tv", features);
+    // Must open synchronously inside the click gesture (popup blockers).
+    const popup = window.open(popoutHref, "projectionist-live-tv", features);
+    if (!popup) return;
+    // Hand off: unload opener LivePlayer so only the pop-out holds the Tunarr session.
+    setMode("guide");
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        const id = String(channelId || "").trim();
+        if (id) next.set("channel", id);
+        next.set("mode", "guide");
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
+  function goGuideMode() {
+    setMode("guide");
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("mode", "guide");
+        return next;
+      },
+      { replace: true },
+    );
   }
 
   if (!authReady || loading) {
@@ -179,7 +217,7 @@ export default function LivePage({ popout = false }) {
                 type="button"
                 className={mode === "guide" ? "is-active" : ""}
                 data-testid="live-mode-guide"
-                onClick={() => setMode("guide")}
+                onClick={() => goGuideMode()}
               >
                 Guide
               </button>
@@ -194,7 +232,7 @@ export default function LivePage({ popout = false }) {
             </div>
           ) : (
             <Link
-              to={liveWatchHref(activeChannel?.id, { popout: false })}
+              to={liveGuideHref(activeChannel?.id)}
               className="ghost live-chrome-link"
               data-testid="live-open-guide"
               onClick={(event) => {
@@ -203,7 +241,7 @@ export default function LivePage({ popout = false }) {
                   event.preventDefault();
                   window.opener.focus();
                   try {
-                    window.opener.location.href = liveWatchHref(activeChannel?.id);
+                    window.opener.location.href = liveGuideHref(activeChannel?.id);
                   } catch {
                     navigate(ROUTES.live);
                   }
