@@ -13,11 +13,15 @@ from projectionist.library.facets import library_facet_catalog
 from projectionist.library.query import (
     LibraryFilters,
     aggregate_library,
+    audit_context_label_for_filters,
     compute_library_overview,
     filters_from_mapping,
+    is_collection_audit_label,
     library_overview,
+    maybe_set_audit_context_label,
     query_library,
     refresh_library_overview_cache,
+    resolve_thread_ambient_context_label,
     _parse_timestamp,
 )
 
@@ -733,6 +737,54 @@ class LibraryQueryTests(unittest.TestCase):
 
             self.assertIn("added_at", columns)
             self.assertIn("idx_library_added_at", indexes)
+
+    def test_audit_context_label_for_decade_slice(self) -> None:
+        self.assertEqual(
+            audit_context_label_for_filters(LibraryFilters(year_from=1970, year_to=1979)),
+            "1970s Collection Audit",
+        )
+        self.assertEqual(
+            audit_context_label_for_filters(LibraryFilters(year_from=1985)),
+            "From 1985 Collection Audit",
+        )
+        self.assertIsNone(audit_context_label_for_filters(LibraryFilters(genres=["Horror"])))
+        self.assertTrue(is_collection_audit_label("1970s Collection Audit"))
+        self.assertFalse(is_collection_audit_label("General Exploration"))
+
+    def test_resolve_thread_ambient_context_clears_stale_audit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            session_id = "thread-audit-drift"
+            db.ensure_chat_session(session_id)
+
+            set_label = maybe_set_audit_context_label(
+                db, LibraryFilters(year_from=1970, year_to=1979)
+            )
+            self.assertEqual(set_label, "1970s Collection Audit")
+            reinforced = resolve_thread_ambient_context_label(
+                db, session_id, turn_audit_label=set_label
+            )
+            self.assertEqual(reinforced, "1970s Collection Audit")
+            thread = db.get_chat_thread(session_id)
+            assert thread is not None
+            self.assertEqual(thread["context_label"], "1970s Collection Audit")
+            self.assertEqual(
+                str(db.get_active_derived_context()["inferred_label"]),
+                "1970s Collection Audit",
+            )
+
+            # Later turn without year-slice tools — clear sticky audit chip.
+            cleared = resolve_thread_ambient_context_label(
+                db, session_id, turn_audit_label=None
+            )
+            self.assertEqual(cleared, "General Exploration")
+            thread = db.get_chat_thread(session_id)
+            assert thread is not None
+            self.assertEqual(thread["context_label"], "General Exploration")
+            self.assertEqual(
+                str(db.get_active_derived_context()["inferred_label"]),
+                "General Exploration",
+            )
 
 
 if __name__ == "__main__":

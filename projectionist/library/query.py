@@ -1634,20 +1634,79 @@ def compute_knowledge_coverage(db: Database) -> Dict[str, Any]:
     return result
 
 
-def maybe_set_audit_context_label(db: Database, filters: LibraryFilters) -> None:
-    """Update active derived context label when user is exploring a decade slice."""
+DEFAULT_AMBIENT_CONTEXT_LABEL = "General Exploration"
+_COLLECTION_AUDIT_SUFFIX = "Collection Audit"
+
+
+def audit_context_label_for_filters(filters: LibraryFilters) -> Optional[str]:
+    """Return a decade/year audit label when filters describe a collection slice."""
     if filters.year_from is None and filters.year_to is None:
-        return
+        return None
     year_from = filters.year_from
     year_to = filters.year_to
     if year_from is not None and year_to is not None and year_to - year_from <= 12:
         decade = (year_from // 10) * 10
-        label = f"{decade}s Collection Audit"
-    elif year_from is not None:
-        label = f"From {year_from} Collection Audit"
-    elif year_to is not None:
-        label = f"Through {year_to} Collection Audit"
-    else:
-        return
+        return f"{decade}s Collection Audit"
+    if year_from is not None:
+        return f"From {year_from} Collection Audit"
+    if year_to is not None:
+        return f"Through {year_to} Collection Audit"
+    return None
+
+
+def is_collection_audit_label(label: Optional[str]) -> bool:
+    text = str(label or "").strip()
+    return bool(text) and text.endswith(_COLLECTION_AUDIT_SUFFIX)
+
+
+def maybe_set_audit_context_label(db: Database, filters: LibraryFilters) -> Optional[str]:
+    """Update active derived context label when user is exploring a decade slice.
+
+    Returns the audit label when applied, otherwise ``None``. Callers should
+    record the return value on the turn so sticky audit chips can clear when
+    later turns leave the year-slice path.
+    """
+    label = audit_context_label_for_filters(filters)
+    if not label:
+        return None
     context_hash = db.get_config(ACTIVE_CONTEXT_CONFIG_KEY, DEFAULT_CONTEXT_HASH) or DEFAULT_CONTEXT_HASH
     db.update_derived_context_label(context_hash, label)
+    return label
+
+
+def resolve_thread_ambient_context_label(
+    db: Database,
+    session_id: str,
+    *,
+    turn_audit_label: Optional[str] = None,
+) -> str:
+    """Sync thread (+ sticky global) ambient label after a chat turn.
+
+    Year-slice library tools set a Collection Audit label for the turn. If this
+    turn did not reinforce that audit path, clear stale Collection Audit labels
+    back to General Exploration so the composer chip tracks topic drift.
+    """
+    reinforced = str(turn_audit_label or "").strip()
+    if reinforced:
+        context_hash = db.get_config(ACTIVE_CONTEXT_CONFIG_KEY, DEFAULT_CONTEXT_HASH) or DEFAULT_CONTEXT_HASH
+        db.update_derived_context_label(context_hash, reinforced)
+        db.update_thread_context_label(session_id, reinforced)
+        return reinforced
+
+    thread = db.get_chat_thread(session_id)
+    thread_label = str((thread or {}).get("context_label") or DEFAULT_AMBIENT_CONTEXT_LABEL)
+    ctx = db.get_active_derived_context()
+    global_label = str(ctx["inferred_label"] or DEFAULT_AMBIENT_CONTEXT_LABEL)
+    context_hash = str(ctx["context_hash"] or DEFAULT_CONTEXT_HASH)
+
+    if is_collection_audit_label(thread_label) or is_collection_audit_label(global_label):
+        if is_collection_audit_label(global_label):
+            db.update_derived_context_label(context_hash, DEFAULT_AMBIENT_CONTEXT_LABEL)
+        db.update_thread_context_label(session_id, DEFAULT_AMBIENT_CONTEXT_LABEL)
+        return DEFAULT_AMBIENT_CONTEXT_LABEL
+
+    # Non-audit labels stay as-is on the thread; fall back to global when unset.
+    label = thread_label if thread_label != DEFAULT_AMBIENT_CONTEXT_LABEL else global_label
+    cleaned = str(label or "").strip() or DEFAULT_AMBIENT_CONTEXT_LABEL
+    db.update_thread_context_label(session_id, cleaned)
+    return cleaned

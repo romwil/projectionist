@@ -18,6 +18,7 @@ from projectionist.agent.tools import (
 from projectionist.config_store import Settings, uses_seerr_request_path
 from projectionist.library.db import DEFAULT_LENS_ID, Database
 from projectionist.library.db_io import run_db
+from projectionist.library.query import resolve_thread_ambient_context_label
 from projectionist.models.schemas import TitleCard
 from projectionist.privacy.schema import sanitize
 
@@ -327,11 +328,13 @@ class CuratorAgent:
             )
             self.db.maybe_auto_title_thread(session_id, user_message)
             self.db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=self.lens_id)
+            context_label = _sync_thread_context_label(self.db, session_id, registry.turn_audit_label)
             return {
                 "session_id": session_id,
                 "lens_id": self.lens_id,
                 "message": {"id": assistant_id, "role": "assistant", "blocks": blocks, "lens_id": self.lens_id},
                 "pending_tokens": registry.pending_tokens,
+                "context_label": context_label,
             }
 
         history = self.db.chat_history(session_id, limit=20, lens_id=self.lens_id)
@@ -474,6 +477,7 @@ class CuratorAgent:
         )
         self.db.maybe_auto_title_thread(session_id, user_message)
         self.db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=self.lens_id)
+        context_label = _sync_thread_context_label(self.db, session_id, registry.turn_audit_label)
 
         return {
             "session_id": session_id,
@@ -485,6 +489,7 @@ class CuratorAgent:
                 "lens_id": self.lens_id,
             },
             "pending_tokens": registry.pending_tokens,
+            "context_label": context_label,
         }
 
 
@@ -712,7 +717,7 @@ async def stream_agent(
 
     user_msg_id = uuid.uuid4().hex
     assistant_id = uuid.uuid4().hex
-    await run_db(
+    context_label = await run_db(
         _persist_stream_turn,
         db,
         session_id,
@@ -721,6 +726,7 @@ async def stream_agent(
         assistant_id,
         blocks,
         resolved_lens,
+        registry.turn_audit_label,
     )
 
     yield json.dumps({
@@ -733,7 +739,25 @@ async def stream_agent(
         },
         "pending_tokens": registry.pending_tokens,
         "lens_id": resolved_lens,
+        "context_label": context_label,
     }) + "\n"
+
+
+def _sync_thread_context_label(
+    db: Database,
+    session_id: str,
+    turn_audit_label: Optional[str] = None,
+) -> str:
+    """Best-effort ambient label sync; never fail the chat turn."""
+    try:
+        return resolve_thread_ambient_context_label(
+            db,
+            session_id,
+            turn_audit_label=turn_audit_label,
+        )
+    except Exception:
+        logger.debug("Failed to update thread derived-context label", exc_info=True)
+        return "General Exploration"
 
 
 def _persist_stream_turn(
@@ -744,7 +768,8 @@ def _persist_stream_turn(
     assistant_id: str,
     blocks: List[Dict[str, Any]],
     lens_id: str,
-) -> None:
+    turn_audit_label: Optional[str] = None,
+) -> str:
     """Persist a streamed chat turn (runs in a worker thread via ``run_db``)."""
     db.save_chat_message(
         session_id,
@@ -755,13 +780,7 @@ def _persist_stream_turn(
     )
     db.maybe_auto_title_thread(session_id, user_message)
     db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=lens_id)
-    try:
-        ctx = db.get_active_derived_context()
-        db.update_thread_context_label(
-            session_id, str(ctx["inferred_label"] or "General Exploration")
-        )
-    except Exception:
-        logger.debug("Failed to update thread derived-context label", exc_info=True)
+    return _sync_thread_context_label(db, session_id, turn_audit_label)
 
 
 async def _emit_buffered(
@@ -795,7 +814,7 @@ async def _emit_buffered(
 
     user_msg_id = uuid.uuid4().hex
     assistant_id = uuid.uuid4().hex
-    await run_db(
+    context_label = await run_db(
         _persist_stream_turn,
         db,
         session_id,
@@ -804,6 +823,7 @@ async def _emit_buffered(
         assistant_id,
         blocks,
         lens_id,
+        registry.turn_audit_label,
     )
 
     yield json.dumps({
@@ -816,4 +836,5 @@ async def _emit_buffered(
         },
         "pending_tokens": registry.pending_tokens,
         "lens_id": lens_id,
+        "context_label": context_label,
     }) + "\n"

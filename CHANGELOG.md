@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.29.44] — 2026-08-01
+
+Stale chat ambient tags no longer stick on an old Collection Audit after the conversation moves on.
+
+### Highlights
+- **Ambient tag keeps up.** A long thread that started as a *1970s Collection Audit* won’t keep that chip forever once you’re talking about something else.
+- **Clears on drift.** When a turn doesn’t reinforce a year-slice audit, the tag returns to *General Exploration*.
+
+### Fixed
+- Sticky global/thread `context_label`: decade audit labels set via `query_library` / `summarize_library` are turn-scoped; non-audit turns clear Collection Audit chips instead of re-stamping the old global derived context.
+- Composer chip prefers the stream `context_label` / refreshed thread label over a stale `/api/context/active` read after each reply.
+
+### Changed
+- `maybe_set_audit_context_label` returns the applied label; `resolve_thread_ambient_context_label` syncs thread + derived context after each turn.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — **1600 passed**, 6 skipped; coverage **75.8%** (≥74).
+- `cd frontend && npm run test:unit` — **552 passed**.
+- `cd frontend && npm run lint` — **0 errors** (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.44**.
+
 ## [1.29.43] — 2026-08-01
 
 Mood/theme library searches still get a poster rail; only title-shaped queries fail closed on fuzzy noise.
