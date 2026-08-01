@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
 import {
   dedupeNotifications,
   inboxHeadline,
@@ -8,6 +7,7 @@ import {
 } from "../lib/recommendationInbox.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
+import TitleDetailLink from "./TitleDetailLink";
 
 function cardLead(rec) {
   const kind = String(rec.kind || "recommendation");
@@ -117,14 +117,14 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
                 {note ? <p className="recommendation-card-note">“{note}”</p> : null}
                 <div className="recommendation-card-actions">
                   {path ? (
-                    <Link
-                      to={path}
+                    <TitleDetailLink
+                      item={recommendation}
                       className="btn-link"
                       data-testid={`recommendation-open-${rec.id}`}
                       onClick={() => onDismiss?.(rec)}
                     >
                       Open title
-                    </Link>
+                    </TitleDetailLink>
                   ) : null}
                   <button
                     type="button"

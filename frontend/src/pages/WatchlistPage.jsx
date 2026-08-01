@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
   deleteLibraryItems,
@@ -14,7 +14,7 @@ import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
-import TitleDetailDrawer from "../components/TitleDetailDrawer";
+import { useTitleDetailOverlay } from "../components/TitleDetailOverlayProvider.jsx";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
@@ -48,6 +48,7 @@ function pinToCardItem(pin) {
 export default function WatchlistPage() {
   const { isOwner, multiUserEnabled } = useAuthGate();
   const { start, update, finish } = useBulkActionProgress();
+  const { openTitleDetail } = useTitleDetailOverlay();
   const [searchParams, setSearchParams] = useSearchParams();
   const [state, setState] = useState({ loading: true, items: [], error: "" });
   const [columns, setColumns] = useState(null);
@@ -58,9 +59,7 @@ export default function WatchlistPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const [removalSummary, setRemovalSummary] = useState(null);
-  const [drawerTarget, setDrawerTarget] = useState(null);
   const [recommendItem, setRecommendItem] = useState(null);
-  const titleTriggerRef = useRef(null);
 
   const refresh = useCallback(async ({ pull = false } = {}) => {
     setState((prev) => ({ ...prev, loading: true, error: "" }));
@@ -251,10 +250,14 @@ export default function WatchlistPage() {
   }
 
   function handleOpenDrawer(pin, trigger) {
-    const target = titleDetailTargetFromItem(pinToCardItem(pin));
-    if (!target) return;
-    titleTriggerRef.current = trigger;
-    setDrawerTarget(target);
+    const card = pinToCardItem(pin);
+    if (!titleDetailTargetFromItem(card)) return;
+    openTitleDetail(card, {
+      triggerEl: trigger,
+      onDeleted: () => {
+        refresh();
+      },
+    });
   }
 
   return (
@@ -421,13 +424,6 @@ export default function WatchlistPage() {
         onConfirm={handleBulkDeleteConfirm}
       />
 
-      <TitleDetailDrawer
-        open={Boolean(drawerTarget)}
-        target={drawerTarget}
-        returnFocusRef={titleTriggerRef}
-        onClose={() => setDrawerTarget(null)}
-        onDeleted={() => refresh()}
-      />
       <RecommendModal
         item={recommendItem}
         open={Boolean(recommendItem)}

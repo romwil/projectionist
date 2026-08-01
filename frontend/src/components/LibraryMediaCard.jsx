@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { formatMatchLayers } from "../lib/plotKnowledge.js";
+import { shouldOpenTitleOverlayClick } from "../lib/titleDetailDrawer.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
+import TitleDetailLink from "./TitleDetailLink";
+import { useTitleDetailOverlayOptional } from "./TitleDetailOverlayProvider.jsx";
 
 /**
  * Explore / tag / plot-lab poster card with hover Watch / Trailer / Recommend.
@@ -20,6 +22,7 @@ export default function LibraryMediaCard({
   pinned = false,
   testId = "explore-title-card",
 }) {
+  const overlay = useTitleDetailOverlayOptional();
   const [hovered, setHovered] = useState(false);
   const [whyOpen, setWhyOpen] = useState(false);
   // Browse/feed endpoints are library-only but some compact payloads omit
@@ -50,13 +53,19 @@ export default function LibraryMediaCard({
   );
 
   function handleOpenDetail(event) {
-    if (!onOpenDetail) return;
-    event.preventDefault();
-    onOpenDetail(item, event);
+    if (onOpenDetail) {
+      event.preventDefault();
+      onOpenDetail(item, event);
+      return;
+    }
+    if (!overlay || !shouldOpenTitleOverlayClick(event)) return;
+    if (overlay.openTitleDetail(libraryItem, { triggerEl: event.currentTarget })) {
+      event.preventDefault();
+    }
   }
 
-  const posterNode =
-    path && onOpenDetail ? (
+  const posterNode = path ? (
+    onOpenDetail ? (
       <button
         type="button"
         className="explore-poster-link explore-poster-button"
@@ -66,26 +75,37 @@ export default function LibraryMediaCard({
       >
         {media}
       </button>
-    ) : path ? (
-      <Link to={path} className="explore-poster-link" tabIndex={-1} aria-hidden="true">
-        {media}
-      </Link>
     ) : (
-      media
-    );
+      <TitleDetailLink
+        item={libraryItem}
+        className="explore-poster-link"
+        tabIndex={-1}
+        aria-hidden="true"
+      >
+        {media}
+      </TitleDetailLink>
+    )
+  ) : (
+    media
+  );
 
-  const titleNode =
-    path && onOpenDetail ? (
-      <button type="button" className="explore-cinema-card-link explore-cinema-card-button" onClick={handleOpenDetail}>
+  const titleNode = path ? (
+    onOpenDetail ? (
+      <button
+        type="button"
+        className="explore-cinema-card-link explore-cinema-card-button"
+        onClick={handleOpenDetail}
+      >
         {titleBlock}
       </button>
-    ) : path ? (
-      <Link to={path} className="explore-cinema-card-link">
-        {titleBlock}
-      </Link>
     ) : (
-      <div className="explore-cinema-card-link">{titleBlock}</div>
-    );
+      <TitleDetailLink item={libraryItem} className="explore-cinema-card-link">
+        {titleBlock}
+      </TitleDetailLink>
+    )
+  ) : (
+    <div className="explore-cinema-card-link">{titleBlock}</div>
+  );
 
   return (
     <article

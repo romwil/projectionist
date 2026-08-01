@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import PosterActionMenu from "./PosterActionMenu";
+import TitleDetailLink from "./TitleDetailLink";
 import { mediaBrowseWatchState } from "../lib/mediaBrowse.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 
@@ -95,7 +95,13 @@ export default function MediaListView({
               }}
               onBlur={hidePreview}
             >
-              {path ? <Link to={path}>{item.title || "Untitled"}</Link> : item.title || "Untitled"}
+              {path ? (
+                <TitleDetailLink item={{ ...item, in_library: true }}>
+                  {item.title || "Untitled"}
+                </TitleDetailLink>
+              ) : (
+                item.title || "Untitled"
+              )}
               {showInlineWatchState ? <span className={`media-list-watch-state is-${mediaBrowseWatchState(item)}`}>{watchStateLabel(item)}</span> : null}
             </span> :
               column === "genres" ? (item.genres || []).slice(0, 3).join(" · ") :

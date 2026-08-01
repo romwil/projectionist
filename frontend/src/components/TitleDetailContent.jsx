@@ -93,7 +93,7 @@ function MetaTile({ label, value, testId }) {
 }
 
 /**
- * Shared title detail presentation for the full page and slide-over drawer.
+ * Shared title detail presentation for the full page and modal overlay.
  * Action handlers and modal state live in the parent surface.
  */
 export default function TitleDetailContent({

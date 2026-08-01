@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import { getPlexMachineId } from "../api/client";
 import { itemNeedsAddGuidance, resolveAddCapability } from "../lib/addActions.js";
 import { setTitleCardDragData } from "../lib/easterEggs.js";
@@ -13,6 +12,7 @@ import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks
 import { watchProgressState } from "../lib/watchProgress.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
 import PosterActionMenu from "./PosterActionMenu";
+import TitleDetailLink from "./TitleDetailLink";
 import WatchProgressBadge from "./WatchProgressBadge";
 
 let cachedPlexMachineId;
@@ -289,14 +289,14 @@ export default function TitleCard({
       ) : null}
       <div className={`poster-wrap${hasWatchBadge ? " has-watch-badge" : ""}`}>
         {detailPath ? (
-          <Link
-            to={detailPath}
+          <TitleDetailLink
+            item={item}
             className="title-card-poster-link"
             data-testid="title-card-detail-link"
             aria-label={`Open details for ${titleLabel}`}
           >
             {posterMedia}
-          </Link>
+          </TitleDetailLink>
         ) : (
           posterMedia
         )}
@@ -349,10 +349,14 @@ export default function TitleCard({
       <div className="card-body">
         <h3>
           {detailPath ? (
-            <Link to={detailPath} className="title-card-title-link" data-testid="title-card-title-link">
+            <TitleDetailLink
+              item={item}
+              className="title-card-title-link"
+              data-testid="title-card-title-link"
+            >
               {item.title || "Unknown title"}
               {item.year ? <span className="year"> ({item.year})</span> : null}
-            </Link>
+            </TitleDetailLink>
           ) : (
             <>
               {item.title || "Unknown title"}

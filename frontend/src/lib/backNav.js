@@ -319,10 +319,31 @@ export function backLabelForPath(path, { defaultLabel = "Back" } = {}) {
   return defaultLabel;
 }
 
+/**
+ * Resolve title-detail back href + label from location state (full-page bookmarks).
+ * Prefers an explicit `from` (chat, explore, search, …); otherwise `fallback`.
+ */
+export function resolveTitleBackNav(locationState, fallback = ROUTES.chat) {
+  const to = resolveBackTarget(locationState, fallback);
+  return { to, label: backLabelForPath(to) };
+}
+
 /** Build location state so a destination can return here. */
 export function withReturnTo(pathname, search = "") {
-  const from = `${pathname || ""}${search || ""}` || ROUTES.explore;
+  const from = `${pathname || ""}${search || ""}` || ROUTES.chat;
   return { from };
+}
+
+/**
+ * Preserve an existing return target when hopping title → title; otherwise
+ * record the current location as `from`.
+ */
+export function returnStateFromLocation(location) {
+  const existing = location?.state?.from;
+  if (typeof existing === "string" && existing.startsWith("/") && !existing.startsWith("//")) {
+    return { from: existing };
+  }
+  return withReturnTo(location?.pathname || "", location?.search || "");
 }
 
 export function tagsSearchPath() {

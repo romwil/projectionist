@@ -345,7 +345,9 @@ describe("owner title-detail delete gating", () => {
       /\.bulk-delete-modal-backdrop\s*\{[^}]*z-index:\s*(\d+)/s,
     );
     const scrimRule = css.match(/\.title-detail-drawer-scrim\s*\{[^}]*z-index:\s*(\d+)/s);
-    const panelRule = css.match(/\.title-detail-drawer-panel\s*\{[^}]*z-index:\s*(\d+)/s);
+    const panelRule = css.match(
+      /\.title-detail-drawer-panel(?:\s*,\s*[^{]+)?\s*\{[^}]*z-index:\s*(\d+)/s,
+    );
     assert.ok(backdropRule, "expected bulk-delete-modal-backdrop z-index");
     assert.ok(scrimRule, "expected title-detail-drawer-scrim z-index");
     assert.ok(panelRule, "expected title-detail-drawer-panel z-index");

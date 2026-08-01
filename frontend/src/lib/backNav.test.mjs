@@ -13,6 +13,8 @@ import {
   recommendLikePrompt,
   isWatchlistPanelRequest,
   resolveBackTarget,
+  resolveTitleBackNav,
+  returnStateFromLocation,
   stripChatFromRailParam,
   stripRecommendLikeParam,
   stripWatchlistPanelParam,
@@ -47,6 +49,66 @@ describe("backLabelForPath", () => {
     assert.equal(backLabelForPath("/"), "Back to chat");
     assert.equal(backLabelForPath("/privacy"), "Back to Privacy");
   });
+
+  it("labels chat and search origins", () => {
+    assert.equal(backLabelForPath("/chat"), "Back to chat");
+    assert.equal(backLabelForPath("/chat?session=abc"), "Back to chat");
+    assert.equal(backLabelForPath("/search"), "Back to Search");
+    assert.equal(backLabelForPath("/search?q=heat"), "Back to Search");
+  });
+});
+
+describe("resolveTitleBackNav", () => {
+  it("returns chat label/href from chat rail origin", () => {
+    assert.deepEqual(resolveTitleBackNav({ from: "/chat" }), {
+      to: "/chat",
+      label: "Back to chat",
+    });
+  });
+
+  it("returns explore label/href from explore origin", () => {
+    assert.deepEqual(resolveTitleBackNav({ from: "/explore" }), {
+      to: "/explore",
+      label: "Back to Explore",
+    });
+  });
+
+  it("returns search label/href and preserves query", () => {
+    assert.deepEqual(resolveTitleBackNav({ from: "/search?q=unexpected" }), {
+      to: "/search?q=unexpected",
+      label: "Back to Search",
+    });
+  });
+
+  it("defaults to chat when no from state", () => {
+    assert.deepEqual(resolveTitleBackNav(null), {
+      to: ROUTES.chat,
+      label: "Back to chat",
+    });
+  });
+});
+
+describe("returnStateFromLocation", () => {
+  it("records the current path as from", () => {
+    assert.deepEqual(returnStateFromLocation({ pathname: "/chat", search: "" }), {
+      from: "/chat",
+    });
+    assert.deepEqual(
+      returnStateFromLocation({ pathname: "/search", search: "?q=heat" }),
+      { from: "/search?q=heat" },
+    );
+  });
+
+  it("preserves an existing from when hopping title to title", () => {
+    assert.deepEqual(
+      returnStateFromLocation({
+        pathname: "/title/show/2199",
+        search: "",
+        state: { from: "/chat" },
+      }),
+      { from: "/chat" },
+    );
+  });
 });
 
 describe("ROUTES.privacy", () => {
@@ -60,6 +122,10 @@ describe("withReturnTo", () => {
     assert.deepEqual(withReturnTo("/explore", "?genre=Horror"), {
       from: "/explore?genre=Horror",
     });
+  });
+
+  it("defaults empty origin to chat", () => {
+    assert.deepEqual(withReturnTo(""), { from: ROUTES.chat });
   });
 });
 

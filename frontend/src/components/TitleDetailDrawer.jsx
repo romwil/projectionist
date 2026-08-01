@@ -21,22 +21,22 @@ function getFocusableElements(root) {
   ];
 }
 
-/**
- * Right-docked slide-over for in-context title detail (reusable from lists).
- * Pass `target`: { mediaType, itemId, idType } from titleDetailTargetFromItem().
- *
- * Optional delete UI props match BulkLibraryDeleteDialog (e.g. Storage Intelligence
- * passes ``deleteSurface="purge"`` + full-remove default).
- */
-export default function TitleDetailDrawer({
-  open,
-  target,
-  onClose,
-  returnFocusRef,
-  onDeleted,
-  deleteDefaultMode = LIBRARY_DELETE_MODE_INDEX,
-  deleteSurface = "",
-}) {
+  /**
+   * Modal overlay for in-context title detail (reusable from posters/lists).
+   * Pass `target`: { mediaType, itemId, idType } from titleDetailTargetFromItem().
+   *
+   * Optional delete UI props match BulkLibraryDeleteDialog (e.g. Storage Intelligence
+   * passes ``deleteSurface="purge"`` + full-remove default).
+   */
+  export default function TitleDetailDrawer({
+    open,
+    target,
+    onClose,
+    returnFocusRef,
+    onDeleted,
+    deleteDefaultMode = LIBRARY_DELETE_MODE_INDEX,
+    deleteSurface = "",
+  }) {
   const panelRef = useRef(null);
   const closeButtonRef = useRef(null);
   const titleId = useId();
@@ -174,7 +174,7 @@ export default function TitleDetailDrawer({
 
           <aside
             ref={panelRef}
-            className="title-detail-drawer-panel"
+            className="title-detail-drawer-panel title-detail-drawer-panel--modal"
             role="dialog"
             aria-modal="true"
             aria-labelledby={titleId}

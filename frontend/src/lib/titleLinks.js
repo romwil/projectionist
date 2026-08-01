@@ -1,3 +1,5 @@
+import { returnStateFromLocation } from "./backNav.js";
+
 /** Build the in-app title detail route for a card/item, or null if not linkable. */
 export function titleDetailPath(item) {
   if (!item) return null;
@@ -13,6 +15,26 @@ export function titleDetailPath(item) {
     return `/title/${mediaType}/${item.tvdb_id}?id_type=tvdb`;
   }
   return null;
+}
+
+/**
+ * React Router `to` for full-page title detail, carrying return context so
+ * BackLink can label/href the origin when bookmarks / modified clicks navigate.
+ *
+ * @param {Record<string, unknown> | null | undefined} item
+ * @param {{ pathname?: string, search?: string, state?: { from?: string } } | null} fromLocation
+ */
+export function titleDetailTo(item, fromLocation = null) {
+  const path = titleDetailPath(item);
+  if (!path) return null;
+  const qIndex = path.indexOf("?");
+  const pathname = qIndex >= 0 ? path.slice(0, qIndex) : path;
+  const search = qIndex >= 0 ? path.slice(qIndex) : "";
+  return {
+    pathname,
+    search,
+    state: returnStateFromLocation(fromLocation),
+  };
 }
 
 /**

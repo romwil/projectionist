@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { canWatchOnPlex, plexPlayRatingKey, plexWatchUrl, titleDetailPath } from "./titleLinks.js";
+import {
+  canWatchOnPlex,
+  plexPlayRatingKey,
+  plexWatchUrl,
+  titleDetailPath,
+  titleDetailTo,
+} from "./titleLinks.js";
 
 test("titleDetailPath prefers tmdb id", () => {
   assert.equal(
@@ -28,6 +34,46 @@ test("titleDetailPath falls back to rating_key then tvdb", () => {
     "/title/show/12345?id_type=tvdb",
   );
   assert.equal(titleDetailPath({ media_type: "movie", title: "Nope" }), null);
+});
+
+test("titleDetailTo carries return state from the current location", () => {
+  assert.deepEqual(
+    titleDetailTo({ media_type: "show", tmdb_id: 2199 }, { pathname: "/chat", search: "" }),
+    {
+      pathname: "/title/show/2199",
+      search: "",
+      state: { from: "/chat" },
+    },
+  );
+  assert.deepEqual(
+    titleDetailTo(
+      { media_type: "movie", tmdb_id: 78 },
+      { pathname: "/explore", search: "?genre=Horror" },
+    ),
+    {
+      pathname: "/title/movie/78",
+      search: "",
+      state: { from: "/explore?genre=Horror" },
+    },
+  );
+});
+
+test("titleDetailTo preserves prior from across title hops", () => {
+  assert.deepEqual(
+    titleDetailTo(
+      { media_type: "movie", tmdb_id: 78 },
+      {
+        pathname: "/title/show/2199",
+        search: "",
+        state: { from: "/chat" },
+      },
+    ),
+    {
+      pathname: "/title/movie/78",
+      search: "",
+      state: { from: "/chat" },
+    },
+  );
 });
 
 test("plexWatchUrl requires rating key and machine id", () => {

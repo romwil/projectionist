@@ -11,6 +11,7 @@ import {
 } from "../api/client";
 import { useAuthGate } from "./UserMenu";
 import ReportMediaIssueModal from "./ReportMediaIssueModal";
+import TitleDetailLink from "./TitleDetailLink";
 import { chatAboutTitleHref, recommendLikeHref } from "../lib/backNav.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 import { posterWatchAction, watchedStatePatch } from "../lib/posterWatchAction.js";
@@ -143,7 +144,11 @@ export default function PosterActionMenu({
 
   const popover = open && typeof document !== "undefined" ? createPortal(
     <div className="poster-action-popover" ref={popoverRef} role="menu" style={popoverStyle || { visibility: "hidden" }}>
-      {detailPath ? <Link to={detailPath} onClick={() => setOpen(false)}>Open details</Link> : null}
+      {detailPath ? (
+        <TitleDetailLink item={{ ...item, in_library: true }} onClick={() => setOpen(false)}>
+          Open details
+        </TitleDetailLink>
+      ) : null}
       {plexHref ? <a href={plexHref} target="_blank" rel="noopener noreferrer">Watch on Plex</a> : null}
       {watchAction ? <button type="button" className="poster-action-watched" onClick={toggleWatched}>{watchAction.label}</button> : null}
       <button type="button" onClick={togglePin}>{pinned ? "Remove from watchlist" : "Add to watchlist"}</button>

@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [1.29.45] — 2026-08-01
+
+Poster clicks open title detail as a modal on top of chat, Explore, or search — close and you’re right where you left off.
+
+### Highlights
+- **Stay in place.** Click a poster on a chat rail or Explore and the title opens as a scrollable overlay; the page underneath keeps its scroll and thread.
+- **Big fixed close.** A large **X** stays put while you scroll the detail body; Escape and the scrim close it too.
+- **Bookmarks still work.** `/title/...` remains a full page, with a contextual back link when you opened it via modified click or deep link.
+
+### Added
+- App-wide `TitleDetailOverlayProvider` + `TitleDetailLink` — plain poster/card clicks open the existing `TitleDetailDrawer` modal in place.
+- `titleDetailTo` / `resolveTitleBackNav` / `returnStateFromLocation` for full-page return labels (chat, explore, search).
+
+### Changed
+- Title detail drawer presentation is a centered modal overlay (fixed header close, scrollable body) instead of a right slide-over.
+- Full-page title detail back fallback is chat (not Explore) when no `from` state is present.
+
+### Verification
+- `cd frontend && npm run test:unit` — **563 passed**.
+- `cd frontend && npm run lint` — **0 errors** (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.45**.
+
 ## [1.29.44] — 2026-08-01
 
 Stale chat ambient tags no longer stick on an old Collection Audit after the conversation moves on.

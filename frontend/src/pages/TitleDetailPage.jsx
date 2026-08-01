@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import BackLink from "../components/BackLink";
 import { api, queryLibrary } from "../api/client";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
@@ -7,12 +7,12 @@ import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import PosterOverlayControls from "../components/PosterOverlayControls";
 import RecommendModal from "../components/RecommendModal";
 import TitleDetailContent from "../components/TitleDetailContent";
+import TitleDetailLink from "../components/TitleDetailLink";
 import TitleReviewModal from "../components/TitleReviewModal";
 import AppShell from "../layouts/AppShell";
 import { useTitleDetail } from "../hooks/useTitleDetail.js";
 import { useTitleDetailInteractions } from "../hooks/useTitleDetailInteractions.js";
-import { resolveBackTarget } from "../lib/backNav.js";
-import { ROUTES } from "../lib/browseLinks.js";
+import { resolveBackTarget, ROUTES } from "../lib/backNav.js";
 import {
   canOwnerDeleteLibraryTitle,
   LIBRARY_DELETE_NOTICE_KEY,
@@ -35,10 +35,18 @@ function TitleNeighborCard({ item, testId, surpriseWhy = null }) {
   return (
     <article className="title-neighbor-card" data-testid={testId}>
       <div className="title-neighbor-poster">
-        {path ? <Link to={path} className="title-neighbor-poster-link">{poster}</Link> : poster}
+        {path ? (
+          <TitleDetailLink item={libraryItem} className="title-neighbor-poster-link">
+            {poster}
+          </TitleDetailLink>
+        ) : (
+          poster
+        )}
         <PosterOverlayControls item={libraryItem} testPrefix="title-neighbor" />
       </div>
-      <h3>{path ? <Link to={path}>{libraryItem.title}</Link> : libraryItem.title}</h3>
+      <h3>
+        {path ? <TitleDetailLink item={libraryItem}>{libraryItem.title}</TitleDetailLink> : libraryItem.title}
+      </h3>
       {libraryItem.year ? <p className="title-neighbor-year">{libraryItem.year}</p> : null}
       {surpriseWhy?.headline ? (
         <p className="title-neighbor-why" data-testid={`${testId}-why`}>
@@ -77,7 +85,7 @@ export default function TitleDetailPage() {
     detail,
     setDetail,
     onDeleted: ({ notice }) => {
-      const backTo = resolveBackTarget(location.state, ROUTES.explore);
+      const backTo = resolveBackTarget(location.state, ROUTES.chat);
       const prevState =
         location.state && typeof location.state === "object" ? { ...location.state } : {};
       navigate(backTo, {
@@ -137,7 +145,7 @@ export default function TitleDetailPage() {
         className="title-page title-detail-skinned"
         testId="title-detail-page"
         variant="sticky"
-        leading={<BackLink fallbackTo={ROUTES.explore} testId="title-detail-back" />}
+        leading={<BackLink fallbackTo={ROUTES.chat} testId="title-detail-back" />}
       >
         <p className="error">{error}</p>
       </AppShell>
@@ -149,7 +157,7 @@ export default function TitleDetailPage() {
         className="title-page title-detail-skinned"
         testId="title-detail-page"
         variant="sticky"
-        leading={<BackLink fallbackTo={ROUTES.explore} testId="title-detail-back" />}
+        leading={<BackLink fallbackTo={ROUTES.chat} testId="title-detail-back" />}
       >
         <p className="title-detail-loading">Loading…</p>
       </AppShell>
@@ -174,7 +182,7 @@ export default function TitleDetailPage() {
       className="title-page title-detail-skinned"
       testId="title-detail-page"
       variant="sticky"
-      leading={<BackLink fallbackTo={ROUTES.explore} testId="title-detail-back" />}
+      leading={<BackLink fallbackTo={ROUTES.chat} testId="title-detail-back" />}
       actions={
         <span className="title-detail-sticky-label">
           {detail.media_type === "movie" ? "Movie" : "TV Show"}
