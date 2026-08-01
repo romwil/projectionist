@@ -3,7 +3,6 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   getExploreFeedContinueWatching,
   getExploreFeedDirectorSpotlight,
-  getExploreFeedForYou,
   getExploreFeedGenreSpotlight,
   getExploreFeedOnThisDay,
   getExploreFeedRecentReleases,
@@ -218,7 +217,6 @@ export default function ExplorePage() {
   const [facetColumns, setFacetColumns] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const continueWatching = useFeed(() => getExploreFeedContinueWatching({ limit: 12 }), []);
-  const forYou = useFeed(() => getExploreFeedForYou({ limit: 12 }), []);
   const pickForMe = useFeed(() => getPickForMeFeed({ limit: 8 }), []);
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
@@ -482,38 +480,6 @@ export default function ExplorePage() {
         ) : null}
 
         <OnNowPanel compact />
-
-        <ExploreSection
-          id="for-you"
-          title={forYou.meta?.title || "For you this week"}
-          subtitle={
-            forYou.meta?.voice_line ||
-            "Personalized picks with a persona-voiced why — tune weights under Settings → Taste"
-          }
-          helpAnchorId="for-you-weekly-rail"
-          isOwner={isOwner}
-          empty={
-            forYou.error ||
-            (!forYou.loading && !forYou.items.length ? forYou.note : null)
-          }
-        >
-          <FeedRail
-            testId="explore-for-you-rail"
-            items={forYou.items}
-            loading={forYou.loading}
-            cardMeta={(item) => item.why || null}
-            chatHref={
-              forYou.items.length
-                ? chatFromRailHref({
-                    railTitle: forYou.meta?.title || "For you this week",
-                    railId: forYou.meta?.rail_id,
-                    items: forYou.items,
-                  })
-                : null
-            }
-            {...recommendProps}
-          />
-        </ExploreSection>
 
         <ExploreSection
           id="recently-added"

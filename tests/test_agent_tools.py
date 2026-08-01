@@ -782,6 +782,14 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
         ranked = _rank_tmdb_search_results(results, year=None)
         self.assertEqual(len(ranked), 2)
 
+    def test_rank_tmdb_search_results_title_year_fails_closed_on_unrelated(self) -> None:
+        results = [
+            {"id": 1, "title": "Lord of Illusions", "release_date": "1995-08-25"},
+            {"id": 2, "title": "Take Away", "release_date": "1995-01-01"},
+        ]
+        ranked = _rank_tmdb_search_results(results, year=1995, title="Hardware")
+        self.assertEqual(ranked, [])
+
     @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_movie_returns_structured_matches(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
@@ -1350,24 +1358,78 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             mock_tmdb.discover_movies.assert_not_called()
 
     @patch("projectionist.library.external_search.TMDBClient")
-    async def test_search_tmdb_rejects_mismatched_pinned_id(self, mock_tmdb_cls) -> None:
+    async def test_search_tmdb_mismatched_pinned_id_falls_back_to_title(self, mock_tmdb_cls) -> None:
         mock_tmdb = mock_tmdb_cls.return_value
         mock_tmdb.movie_details.return_value = {
             "id": 11,
             "title": "Star Wars",
             "release_date": "1977-05-25",
         }
+        mock_tmdb.search_movie_page.return_value = {
+            "total_results": 1,
+            "results": [
+                {
+                    "id": 603,
+                    "title": "The Matrix",
+                    "release_date": "1999-03-31",
+                    "overview": "Wake up",
+                }
+            ],
+        }
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
 
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
             result = await registry.execute(
                 "search_tmdb",
-                {"media_type": "movie", "title": "The Matrix", "tmdb_id": 11},
+                {"media_type": "movie", "title": "The Matrix", "tmdb_id": 11, "year": 1999},
             )
             payload = json.loads(result)
-            self.assertIn("error", payload)
-            self.assertIn("does not match", payload["error"])
+            self.assertNotIn("error", payload)
+            self.assertEqual(payload["returned"], 1)
+            self.assertEqual(payload["items"][0]["tmdb_id"], 603)
+            self.assertEqual(payload["items"][0]["title"], "The Matrix")
+            mock_tmdb.search_movie_page.assert_called_once()
+
+    @patch("projectionist.library.external_search.TMDBClient")
+    async def test_search_tmdb_replaces_prior_gap_discussed_cards(self, mock_tmdb_cls) -> None:
+        """Targeted search_tmdb must not leave earlier discover junk on the rail."""
+        from projectionist.models.schemas import TitleCard
+
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.search_movie_page.return_value = {
+            "total_results": 1,
+            "results": [
+                {
+                    "id": 9426,
+                    "title": "Hardware",
+                    "release_date": "1990-09-14",
+                    "overview": "Cyberpunk",
+                }
+            ],
+        }
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            registry._recommendation_context = True
+            registry._discussed_cards.append(
+                TitleCard(media_type="movie", title="Lord of Illusions", year=1995, tmdb_id=9991)
+            )
+            result = await registry.execute(
+                "search_tmdb",
+                {"media_type": "movie", "title": "Hardware", "year": 1990},
+            )
+            payload = json.loads(result)
+            self.assertEqual(payload["returned"], 1)
+            discussed = registry.discussed_cards
+            self.assertEqual(len(discussed), 1)
+            self.assertEqual(discussed[0].title, "Hardware")
+            self.assertEqual(discussed[0].tmdb_id, 9426)
 
 if __name__ == "__main__":
     unittest.main()

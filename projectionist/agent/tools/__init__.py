@@ -416,6 +416,7 @@ class ToolRegistry:
         self._discussed_cards: List[TitleCard] = []
         self._pending_token_entries: List[Dict[str, str]] = []
         self._recommendation_context = False
+        self._cleared_discussed_for_targeted_search = False
         self._suggested_replies: List[str] = []
         self._review_conflicts: List[Dict[str, Any]] = []
         self._review_prompts: List[Dict[str, Any]] = []
@@ -1509,18 +1510,22 @@ class ToolRegistry:
             reason=str(args.get("reason") or args.get("recommendation_reason") or ""),
         )
         if not result.ok:
-            error_payload: Dict[str, Any] = {"error": result.error}
-            if result.error_kind == "mismatch":
-                error_payload["items"] = []
+            error_payload: Dict[str, Any] = {"error": result.error, "items": []}
             return json.dumps(error_payload)
 
         allowed_cards = self._allowed_cards(result.cards)
         items = self._youth_filter_tool_items(result.items, cards=result.cards)
         total_matched = len(items) if self.is_youth else result.total_matched
+        # Targeted title/id lookups replace prior discover/gap junk so the rail
+        # matches the titles the agent is about to name — never leave stale posters.
+        targeted = bool(str(args.get("title") or "").strip()) or raw_tmdb_id is not None
+        if targeted and allowed_cards and not getattr(self, "_cleared_discussed_for_targeted_search", False):
+            self._discussed_cards.clear()
+            self._cleared_discussed_for_targeted_search = True
         _append_recommendation_cards(self, allowed_cards)
         note = (
-            "Prefer tmdb_id (exact) or title+year so turnstyle cards pin one work. "
-            "Only propose adds for in_library=false AND already_queued=false "
+            "Prefer verified title+year (or a tool-returned tmdb_id) so turnstyle cards pin one work. "
+            "Never invent numeric ids. Only propose adds for in_library=false AND already_queued=false "
             "(also respect in_radarr/in_sonarr). Use tmdb_id for add_to_radarr; tvdb_id for add_to_sonarr. "
             "Pass reason on search_tmdb or call set_recommendation_reasons so Why this? "
             "shows curator rationale (never pipeline labels)."

@@ -146,3 +146,25 @@ export function formatOnNowLine(channel) {
   if (channel.nextTitle) return `Up next: ${channel.nextTitle}`;
   return "Nothing scheduled right now";
 }
+
+/**
+ * Channels to render in On now panels.
+ *
+ * Explore uses ``compact`` for denser chrome, but must still list every airing
+ * station (Automat often has 6+). Keep a high safety ceiling only — never the
+ * old hard cap of 4 “starter” rows.
+ *
+ * @param {Array|null|undefined} channels
+ * @param {{ compact?: boolean, max?: number }} [options]
+ * @returns {Array}
+ */
+export function visibleOnNowChannels(channels, { compact = false, max } = {}) {
+  const list = Array.isArray(channels) ? channels.filter(Boolean) : [];
+  const ceiling =
+    max != null && Number.isFinite(Number(max))
+      ? Math.max(1, Math.round(Number(max)))
+      : compact
+        ? 24
+        : 40;
+  return list.slice(0, ceiling);
+}

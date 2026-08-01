@@ -80,8 +80,7 @@ Saved pages preserve the structured text, title cards, and reply chips. From the
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — in-progress titles from Plex On Deck (resume + Play), not a live "now playing" session list
-- **On now** — what's airing on household Live stations right now (when Live Channels is on). Tap a row or **Watch here** to open Projectionist Live; **Also in Plex Live TV** opens the same stations in Plex
-- **For you this week** — personalized unwatched picks with a short persona-voiced *why* (built on the weekly digest cadence). Tap **Why this?** on a card, or use **Chat about these** to discuss the same saved picks with those reasons attached.
+- **On now** — every airing household Live station right now (when Live Channels is on). Tap a row or **Watch here** to open Projectionist Live; **Also in Plex Live TV** opens the same stations in Plex; **See all** jumps to Live
 - **Recently Added** and **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
 - **On This Day**
@@ -108,15 +107,15 @@ When the household owner turns **Live Channels** on and publishes stations, **[L
 
 **How it works / honest limits.** Live only appears when stations are on the air. Youth mode may hide some stations by content rating. Guests see Live when the owner enabled it for the household — empty states invite you to ask the owner rather than dump Admin steps. Projectionist Live and Plex Live TV share the guide; neither replaces the other.
 
-### For you weekly rail
+### Weekly taste picks
 
-Your **For you** rail is rebuilt about once a week alongside the library digest. It prefers unwatched titles that match your taste clusters, saves each pick with its library id and a short reason in your default curator's voice, and surfaces that reason on **Why this?** and when you **Chat about these**.
+Projectionist still rebuilds personalized unwatched picks about once a week alongside the library digest (taste clusters + your default curator's voice). Those picks feed chat recommendations — they are **not** a separate Explore hub rail, so Explore stays focused on browse and what's on now.
 
 Tune the underlying weights under **Settings → Taste** — raise a cluster, lower another, and **Lock** anything you don't want the automatic refresh to drift. Locked weights stay put; unlocked ones can still learn from reviews and chat feedback.
 
-> **Example:** You lock `noir` high and leave `comedy` unlocked. Next week's For you leans hard into noir thrillers you haven't watched, while comedy weights can still soften if you keep rating rom-coms highly.
+> **Example:** You lock `noir` high and leave `comedy` unlocked. Next week's chat picks lean hard into noir thrillers you haven't watched, while comedy weights can still soften if you keep rating rom-coms highly.
 
-**How it works / honest limits.** The scheduler fans out one rail per member with a hard cap on optional LLM polish (v1 uses persona template voice). Empty rails usually mean cold taste data — rate a few titles or chat first.
+**How it works / honest limits.** The scheduler fans out one member rail with a hard cap on optional LLM polish (v1 uses persona template voice). Cold taste data means thinner recommendations — rate a few titles or chat first.
 
 ### Taste profile
 
