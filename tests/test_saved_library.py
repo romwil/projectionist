@@ -9,9 +9,12 @@ from unittest.mock import patch
 
 from projectionist.library.db import Database
 from projectionist.web.app import _persona_voiced_library_summary
+from projectionist.config_store import FeatureFlags, Settings
 from projectionist.web.library_privacy import (
     SAVED_LIBRARY_RAIL_LIMIT,
+    library_audience,
     normalize_saved_library_content,
+    sanitize_library_payload,
     sanitize_saved_rail_items,
 )
 
@@ -97,4 +100,65 @@ class SavedLibraryTests(unittest.TestCase):
         self.assertEqual(len(cards), 1)
         self.assertLessEqual(len(cards[0]["items"]), SAVED_LIBRARY_RAIL_LIMIT)
         self.assertTrue(all(c.get("tmdb_id") and c.get("title") for c in cards[0]["items"]))
+
+    def test_library_audience_and_payload_sanitize(self) -> None:
+        class _User:
+            def __init__(self, role: str) -> None:
+                self.role = role
+
+        multi = Settings(features=FeatureFlags(multi_user_enabled=True))
+        self.assertEqual(library_audience(multi, _User("member")), "member")
+        self.assertEqual(library_audience(multi, _User("owner")), "owner")
+        self.assertEqual(
+            sanitize_library_payload({"ok": True}, settings=Settings(), user=_User("owner")),
+            {"ok": True},
+        )
+
+    def test_sanitize_saved_rail_items_edge_cases(self) -> None:
+        self.assertEqual(sanitize_saved_rail_items(None), [])
+        self.assertEqual(sanitize_saved_rail_items("nope"), [])
+        cleaned = sanitize_saved_rail_items(
+            [
+                "skip",
+                {"title": "Bad tmdb", "tmdb_id": "x", "tvdb_id": "y"},
+                {"title": "TVDB only", "tvdb_id": 360893, "media_type": "show"},
+                {"title": "TVDB only dup", "tvdb_id": 360893, "media_type": "show"},
+            ],
+            limit=0,
+        )
+        self.assertEqual(len(cleaned), 1)
+        self.assertEqual(cleaned[0]["tvdb_id"], 360893)
+
+    def test_normalize_saved_library_content_viewport_and_passthrough(self) -> None:
+        self.assertEqual(normalize_saved_library_content("x"), "x")
+        self.assertEqual(normalize_saved_library_content({"name": "n"})["name"], "n")
+        content = normalize_saved_library_content(
+            {
+                "blocks": [
+                    "raw",
+                    {"type": "title_cards", "items": [{"title": "Nope", "tmdb_id": 0}]},
+                    {
+                        "type": "action_prompt",
+                        "action": "open_viewport",
+                        "payload": {
+                            "title": "Recs",
+                            "items": [{"title": "Chernobyl", "tmdb_id": 87108}],
+                        },
+                    },
+                    {"type": "action_prompt", "action": "open_viewport", "payload": "bad"},
+                    {
+                        "type": "action_prompt",
+                        "action": "open_viewport",
+                        "payload": {"items": [{"title": "Gone", "tmdb_id": 0}]},
+                    },
+                    {"type": "text", "content": "ok"},
+                ]
+            }
+        )
+        kinds = [b.get("type") if isinstance(b, dict) else "raw" for b in content["blocks"]]
+        self.assertEqual(
+            kinds,
+            ["raw", "action_prompt", "action_prompt", "text"],
+        )
+        self.assertEqual(content["blocks"][1]["payload"]["items"][0]["tmdb_id"], 87108)
 
