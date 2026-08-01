@@ -1,6 +1,32 @@
 {
-  "generated_at": "2026-08-01T21:34:20Z",
+  "generated_at": "2026-08-01T21:41:49Z",
   "releases": [
+    {
+      "version": "1.29.49",
+      "date": "2026-08-01",
+      "summary": "Gap show cards that TMDB has not linked to TVDB no longer look addable — they say why, Confirm counts stay honest, and Sonarr lookup can recover a TVDB id when configured.",
+      "highlights": [
+        "**Honest Add gating.** Shows without a TVDB id show **Can't add — no TVDB id yet** instead of a missing button with no explanation.",
+        "**Confirm matches addable.** Bulk **Confirm all N to Sonarr** still counts only titles Sonarr can accept; Expand can still list the full gap set.",
+        "**Sonarr fallback.** When TMDB omits `tvdb_id`, enrichment asks Sonarr's series lookup (by TMDB id / title+year) before giving up."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Discussed gap rails kept TMDB-only shows (e.g. AU *Back in Time for the Corner Shop* 2023) without Add or explanation.",
+            "`_enrich_show_external_ids` stopped after empty TMDB external ids and never tried Sonarr."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: enrichment + curator discussed-card + addActions Sonarr count tests — passed.",
+            "`.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.49**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.48",
       "date": "2026-08-01",

@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.29.49] — 2026-08-01
+
+Gap show cards that TMDB has not linked to TVDB no longer look addable — they say why, Confirm counts stay honest, and Sonarr lookup can recover a TVDB id when configured.
+
+### Highlights
+- **Honest Add gating.** Shows without a TVDB id show **Can't add — no TVDB id yet** instead of a missing button with no explanation.
+- **Confirm matches addable.** Bulk **Confirm all N to Sonarr** still counts only titles Sonarr can accept; Expand can still list the full gap set.
+- **Sonarr fallback.** When TMDB omits `tvdb_id`, enrichment asks Sonarr's series lookup (by TMDB id / title+year) before giving up.
+
+### Fixed
+- Discussed gap rails kept TMDB-only shows (e.g. AU *Back in Time for the Corner Shop* 2023) without Add or explanation.
+- `_enrich_show_external_ids` stopped after empty TMDB external ids and never tried Sonarr.
+
+### Verification
+- Focused: enrichment + curator discussed-card + addActions Sonarr count tests — passed.
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.49**.
+
 ## [1.29.48] — 2026-08-01
 
 Curator gap search stays on-theme for BBC/documentary missing-title asks, fails closed instead of dumping popularity junk, and stops the “Jefferson is thinking” tool spiral after empty results.

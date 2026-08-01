@@ -27,6 +27,9 @@ class TitleCard(BaseModel):
     in_library: bool = False
     in_radarr: bool = False
     in_sonarr: bool = False
+    # When set, the UI should show this instead of a dead Add button (e.g. show
+    # missing TVDB id that Sonarr requires). Empty means add is not blocked.
+    add_blocked_reason: str = ""
     # Carried on every card so the Youth rating gate can judge it; "" fails closed.
     content_rating: str = ""
     recommendation_reason: str = ""

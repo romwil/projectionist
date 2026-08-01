@@ -123,6 +123,34 @@ test("normalizePendingTokens drops empty entries", () => {
   ]);
 });
 
+test("collectAddableFromMessage counts only Sonarr-addable shows (needs tvdb_id)", () => {
+  const message = {
+    role: "assistant",
+    blocks: [
+      {
+        type: "title_cards",
+        items: [
+          { title: "Back in Time for the Weekend", media_type: "show", tmdb_id: 1, tvdb_id: 10, year: 2016 },
+          { title: "Back in Time for the Corner Shop", media_type: "show", tmdb_id: 2, tvdb_id: 20, year: 2020 },
+          {
+            title: "Back in Time for the Corner Shop",
+            media_type: "show",
+            tmdb_id: 3,
+            year: 2023,
+            add_blocked_reason: "Can't add — no TVDB id yet",
+          },
+        ],
+      },
+    ],
+  };
+  const { sonarr } = collectAddableFromMessage(message, { requestPath: "arr", role: "owner" });
+  assert.equal(sonarr.length, 2);
+  assert.deepEqual(
+    sonarr.map((item) => item.year),
+    [2016, 2020],
+  );
+});
+
 test("collectAddableFromMessage ignores empty placeholder cards", () => {
   const message = {
     role: "assistant",

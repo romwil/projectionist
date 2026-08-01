@@ -1449,7 +1449,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
             with patch(
                 "projectionist.agent.tools._enrich_show_external_ids",
-                side_effect=lambda item, _tmdb: item,
+                side_effect=lambda item, _tmdb, **_kwargs: item,
             ):
                 payload = json.loads(
                     await registry.execute(
@@ -1494,7 +1494,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
             with patch(
                 "projectionist.agent.tools._enrich_show_external_ids",
-                side_effect=lambda item, _tmdb: item,
+                side_effect=lambda item, _tmdb, **_kwargs: item,
             ):
                 payload = json.loads(
                     await registry.execute(
@@ -1536,7 +1536,7 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
             with patch(
                 "projectionist.agent.tools._enrich_show_external_ids",
-                side_effect=lambda item, _tmdb: item,
+                side_effect=lambda item, _tmdb, **_kwargs: item,
             ):
                 payload = json.loads(
                     await registry.execute(
