@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { savedLibraryBlocks } from "./savedLibraryBlocks.js";
+import {
+  SAVED_LIBRARY_RAIL_LIMIT,
+  sanitizeSavedRailItems,
+  savedLibraryBlocks,
+} from "./savedLibraryBlocks.js";
 
 const SEVEN_MOVIES = Array.from({ length: 7 }, (_, i) => ({
   media_type: "movie",
@@ -110,5 +114,36 @@ describe("savedLibraryBlocks", () => {
     assert.deepEqual(savedLibraryBlocks(), []);
     assert.deepEqual(savedLibraryBlocks(null), []);
     assert.deepEqual(savedLibraryBlocks("nope"), []);
+  });
+
+  it("sanitizeSavedRailItems drops id-less cards, de-dupes, and caps length", () => {
+    const items = [
+      { media_type: "show", title: "Chernobyl", tmdb_id: 87108 },
+      { media_type: "show", title: "Chernobyl copy", tmdb_id: 87108 },
+      { media_type: "show", title: "Invented", tmdb_id: 0 },
+      { media_type: "show", title: "", tmdb_id: 12 },
+      ...Array.from({ length: 20 }, (_, i) => ({
+        media_type: "show",
+        title: `Extra ${i}`,
+        tmdb_id: 2000 + i,
+      })),
+    ];
+    const cleaned = sanitizeSavedRailItems(items);
+    assert.equal(cleaned.length, SAVED_LIBRARY_RAIL_LIMIT);
+    assert.equal(cleaned[0].title, "Chernobyl");
+    assert.equal(cleaned.filter((c) => c.tmdb_id === 87108).length, 1);
+    assert.ok(cleaned.every((c) => c.tmdb_id > 0 && String(c.title || "").trim()));
+  });
+
+  it("savedLibraryBlocks hardens crazy title_cards rails from bad gap saves", () => {
+    const crazy = Array.from({ length: 40 }, (_, i) => ({
+      media_type: "show",
+      title: i % 3 === 0 ? "" : `Gap ${i}`,
+      tmdb_id: i % 5 === 0 ? 0 : 5000 + (i % 7),
+    }));
+    const rendered = savedLibraryBlocks([{ type: "title_cards", items: crazy }]);
+    assert.equal(rendered.length, 1);
+    assert.ok(rendered[0].items.length <= SAVED_LIBRARY_RAIL_LIMIT);
+    assert.ok(rendered[0].items.every((c) => c.tmdb_id > 0 && c.title));
   });
 });

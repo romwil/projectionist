@@ -194,7 +194,10 @@ from projectionist.web.jobs import get_job_manager, get_sync_scheduler
 from projectionist.scheduler import IdleScheduler
 from projectionist.scheduler.tasks import register_all as register_scheduler_tasks
 from projectionist.web.session_tokens import ensure_session_secret, has_usable_session_secret
-from projectionist.web.library_privacy import sanitize_library_payload
+from projectionist.web.library_privacy import (
+    normalize_saved_library_content,
+    sanitize_library_payload,
+)
 from projectionist.web.webhooks import register_webhook_routes
 from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
@@ -4291,15 +4294,19 @@ def _saved_library_response(page: Dict[str, Any], user) -> Dict[str, Any]:
     """Attach only display-safe persona metadata to a member-visible saved page."""
     persona_id = page.get("persona_id")
     persona = _db().get_persona_template(persona_id) if persona_id else None
+    content = normalize_saved_library_content(page.get("content"))
     if persona:
         page = {
             **page,
+            "content": content,
             "persona": {
                 "id": persona["id"],
                 "name": persona["name"],
                 "accent_color": persona.get("accent_color") or "",
             },
         }
+    elif content is not page.get("content"):
+        page = {**page, "content": content}
     return _sanitize_library_payload(page, user)
 
 
@@ -4318,9 +4325,13 @@ async def create_saved_library_page(
         if source_thread is None:
             raise HTTPException(status_code=404, detail="Source conversation not found")
     # Persist the same audience-safe representation that members can view.
-    content = _sanitize_library_payload(payload.content, user)
+    # Also bound/de-dupe title rails so a bad gap turn cannot save a crazy strip.
+    content = normalize_saved_library_content(payload.content)
+    content = _sanitize_library_payload(content, user)
     if not isinstance(content, dict):
-        content = payload.content
+        content = normalize_saved_library_content(payload.content)
+        if not isinstance(content, dict):
+            content = payload.content
     persona_id = source_thread.get("persona_id") if source_thread else None
     persona = db.get_persona_template(persona_id) if persona_id else None
     name = (payload.user_title or payload.name).strip()
