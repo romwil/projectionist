@@ -581,6 +581,12 @@ class TunarrSettings:
     # Per-station Projectionist metadata keyed by Tunarr channel id
     # (media_scope, continuity toggles, craft_filters, etc.). Tunarr has no first-class scope.
     station_meta: Dict[str, Any] = field(default_factory=dict)
+    # Default Tunarr ``subtitlesEnabled`` for newly created stations (Owner Admin).
+    # Existing stations keep their Tunarr value until toggled in station Settings.
+    subtitles_enabled_default: bool = False
+    # Household subtitle language prefs (Plex download + picker default). ISO-ish codes.
+    subtitle_language_primary: str = "en"
+    subtitle_language_fallback: str = ""
     # Virtual channel number base (coexist with OTA HDHomeRun).
     channel_number_base: int = 100
     # Owner wizard confirm — Plex does not expose Pass on server identity.

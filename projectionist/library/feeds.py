@@ -18,6 +18,13 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.connectors.plex import PlexClient, PlexOnDeckItem
 from projectionist.library.db import Database
+from projectionist.library.holidays import (
+    FIXED_HOLIDAYS,
+    HOLIDAY_WINDOW_DAYS,
+    SEASONAL_FALLBACKS as _SEASONAL_FALLBACK_ROWS,
+    compose_rail_items,
+    resolve_seasonal_context,
+)
 from projectionist.library.query import row_to_query_item
 
 DEFAULT_FEED_LIMIT = 12
@@ -28,29 +35,10 @@ REVISIT_IDLE_DAYS = 60
 MILESTONE_AGES = (5, 10, 15, 20, 25, 30, 40, 50, 75)
 DIRECTOR_MIN_TITLES = 3
 GENRE_MIN_TITLES = 4
-HOLIDAY_WINDOW_DAYS = 7
 
-# Keep this small, explicit calendar editable in one place. Movable observances
-# are calculated in ``_holiday_candidates`` rather than guessed from prose.
-FIXED_HOLIDAYS = (
-    ("New Year's Day", 1, 1, ("new year", "party", "celebration", "fresh start")),
-    ("Groundhog Day", 2, 2, ("groundhog", "winter", "repetition", "small town")),
-    ("Valentine's Day", 2, 14, ("romance", "love", "dating", "valentine")),
-    ("St. Patrick's Day", 3, 17, ("ireland", "irish", "green", "pub")),
-    ("Pi Day", 3, 14, ("math", "science", "pie", "genius")),
-    ("Earth Day", 4, 22, ("nature", "environment", "earth", "wildlife")),
-    ("May Day", 5, 1, ("spring", "garden", "flower", "festival")),
-    ("Independence Day", 7, 4, ("america", "independence", "summer", "fireworks")),
-    ("Día de los Muertos", 11, 2, ("afterlife", "spirit", "family", "mexico")),
-    ("Halloween", 10, 31, ("horror", "haunted", "ghost", "witch", "monster")),
-    ("Winter Solstice", 12, 21, ("winter", "snow", "holiday", "christmas")),
-    ("Christmas", 12, 25, ("christmas", "holiday", "winter", "family")),
-)
-SEASONAL_FALLBACKS = (
-    ("Winter nights", (12, 1, 2), ("winter", "snow", "holiday", "christmas")),
-    ("Spring awakenings", (3, 4, 5), ("spring", "nature", "garden", "coming of age")),
-    ("Summer comfort", (6, 7, 8), ("summer", "road trip", "beach", "vacation")),
-    ("Autumn gothic", (9, 10, 11), ("autumn", "fall", "gothic", "mystery", "horror")),
+# Legacy label/months/terms shape for callers that still unpack SEASONAL_FALLBACKS.
+SEASONAL_FALLBACKS = tuple(
+    (label, months, terms) for _scope_id, label, months, terms in _SEASONAL_FALLBACK_ROWS
 )
 
 
@@ -252,45 +240,146 @@ def feed_genre_spotlight(
     }
 
 
-def _holiday_candidates(today: date) -> List[tuple[str, date, tuple[str, ...]]]:
-    """Return the maintained fixed and movable holiday calendar for this year."""
-    candidates = [
-        (name, date(today.year, month, day), terms)
-        for name, month, day, terms in FIXED_HOLIDAYS
-    ]
-    april_first = date(today.year, 4, 1)
-    arbor_day = date(today.year, 4, 1 + ((4 - april_first.weekday()) % 7) + 21)
-    candidates.append(("Arbor Day", arbor_day, ("tree", "forest", "nature", "environment", "garden")))
-    september_first = date(today.year, 9, 1)
-    labor_day = date(today.year, 9, 1 + ((0 - september_first.weekday()) % 7))
-    candidates.append(("Labor Day", labor_day, ("work", "road trip", "summer", "family")))
-    november_first = date(today.year, 11, 1)
-    thanksgiving = date(today.year, 11, 1 + ((3 - november_first.weekday()) % 7) + 21)
-    candidates.append(("Thanksgiving", thanksgiving, ("family", "food", "home", "thanksgiving")))
-    return candidates
+def _holiday_observances(db: Database) -> List[Dict[str, Any]]:
+    """Load enabled+disabled observances from SQLite (seeds on first read)."""
+    try:
+        return db.list_holiday_observances(include_disabled=True)
+    except Exception:  # noqa: BLE001
+        # Pre-migration or bare test doubles — resolve from built-in seeds.
+        from projectionist.library.holidays import DEFAULT_OBSERVANCES
+
+        return [
+            {
+                **seed,
+                "enabled": True,
+                "is_builtin": True,
+                "search_terms": list(seed["search_terms"]),
+            }
+            for seed in DEFAULT_OBSERVANCES
+        ]
 
 
-def _seasonal_context(today: date) -> tuple[str, tuple[str, ...], str]:
-    nearest = min(_holiday_candidates(today), key=lambda entry: abs((entry[1] - today).days))
-    if abs((nearest[1] - today).days) <= HOLIDAY_WINDOW_DAYS:
-        return nearest[0], nearest[2], "holiday"
-    for label, months, terms in SEASONAL_FALLBACKS:
-        if today.month in months:
-            return label, terms, "season"
-    return "Seasonal picks", (), "season"
+def _seasonal_context(
+    db: Database, today: date, *, require_schedule_publish: bool = False
+) -> Dict[str, Any]:
+    ctx = resolve_seasonal_context(
+        _holiday_observances(db),
+        today,
+        require_schedule_publish=require_schedule_publish,
+    )
+    return {
+        "scope_id": ctx.scope_id,
+        "label": ctx.label,
+        "terms": ctx.terms,
+        "mode": ctx.mode,
+        "grounding_date": ctx.grounding_date.isoformat() if ctx.grounding_date else None,
+        "pre_shoulder_days": ctx.pre_shoulder_days,
+        "post_shoulder_days": ctx.post_shoulder_days,
+        "schedule_publish": ctx.schedule_publish,
+    }
+
+
+def _match_seasonal_rows(
+    rows: Sequence[Mapping[str, Any]], terms: Sequence[str]
+) -> List[Mapping[str, Any]]:
+    matches: List[Mapping[str, Any]] = []
+    for row in rows:
+        haystack = " ".join(
+            [
+                str(row["title"] or ""),
+                str(row["summary"] or ""),
+                " ".join(_json_list(row["genres"])),
+                " ".join(_json_list(row["keywords"])),
+            ]
+        ).casefold()
+        if any(term.casefold() in haystack for term in terms):
+            matches.append(row)
+    return matches
+
+
+def _apply_rail_curation(
+    db: Database,
+    *,
+    scope_id: str,
+    matches: Sequence[Mapping[str, Any]],
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """pins → includes ∪ matches − excludes; year-sort the unpinned tail."""
+    try:
+        curation = db.holiday_rail_curation_maps(scope_id)
+    except Exception:  # noqa: BLE001
+        curation = {"pins": [], "includes": [], "excludes": []}
+    pin_ids = list(curation.get("pins") or [])
+    include_ids = list(curation.get("includes") or [])
+    exclude_ids = list(curation.get("excludes") or [])
+    if not pin_ids and not include_ids and not exclude_ids:
+        return _sort_rail_items(matches, limit)
+
+    needed_ids = list(dict.fromkeys([*pin_ids, *include_ids]))
+    by_id = db.get_library_items_by_ids(needed_ids)
+    pin_rows = [by_id[item_id] for item_id in pin_ids if item_id in by_id]
+    include_rows = [by_id[item_id] for item_id in include_ids if item_id in by_id]
+
+    def _feed(row: Mapping[str, Any], **extra: Any) -> Dict[str, Any]:
+        return _feed_item(row, **extra)
+
+    return compose_rail_items(
+        pins=pin_rows,
+        includes=include_rows,
+        matches=matches,
+        excludes=exclude_ids,
+        limit=limit,
+        feed_item_fn=_feed,
+        sort_unpinned_fn=_sort_rail_items,
+    )
 
 
 def feed_seasonal_spotlight(
-    db: Database, *, limit: int = DEFAULT_FEED_LIMIT, today: Optional[date] = None
+    db: Database,
+    *,
+    limit: int = DEFAULT_FEED_LIMIT,
+    today: Optional[date] = None,
+    prefer_snapshot: bool = True,
 ) -> Dict[str, Any]:
     """Holiday-near matching with a modest, explicit season fallback.
 
+    Observances + asymmetric shoulders come from the Admin holiday store.
+    Owner rail curation: pins (front) → includes ∪ keyword matches − excludes.
     On weekends (and when a holiday window is active), prefer titles surfaced by
     the anniversary scanner when available — no calendar connector required.
     """
     selected_day = today or date.today()
-    label, terms, mode = _seasonal_context(selected_day)
+    capped = _cap_limit(limit)
+    context = _seasonal_context(db, selected_day)
+    label = str(context["label"])
+    terms = tuple(context["terms"] or ())
+    mode = str(context["mode"])
+    scope_id = str(context["scope_id"])
     is_weekend = selected_day.weekday() >= 5
+
+    # B2: prefer today's scheduled snapshot when present (stable through the day).
+    if prefer_snapshot:
+        try:
+            snapshot = db.get_seasonal_rail_snapshot(selected_day.isoformat())
+        except Exception:  # noqa: BLE001
+            snapshot = None
+        if snapshot and isinstance(snapshot.get("items"), list) and snapshot["items"]:
+            items = list(snapshot["items"])[:capped]
+            return {
+                "feed": "seasonal-spotlight",
+                "date": selected_day.isoformat(),
+                "label": str(snapshot.get("label") or label),
+                "mode": str(snapshot.get("mode") or mode),
+                "scope_id": str(snapshot.get("scope_id") or scope_id),
+                "grounding_date": context.get("grounding_date"),
+                "pre_shoulder_days": context.get("pre_shoulder_days"),
+                "post_shoulder_days": context.get("post_shoulder_days"),
+                "items": items,
+                "total": len(items),
+                "note": None,
+                "from_schedule": True,
+            }
+
     anniversary_items: List[Mapping[str, Any]] = []
     if is_weekend or mode == "holiday":
         try:
@@ -308,7 +397,7 @@ def feed_seasonal_spotlight(
                         ORDER BY a.id ASC
                         LIMIT ?
                         """,
-                        (selected_day.isoformat(), _cap_limit(limit)),
+                        (selected_day.isoformat(), capped),
                     ).fetchall()
                     anniversary_items = list(rows)
         except Exception:  # noqa: BLE001
@@ -333,31 +422,104 @@ def feed_seasonal_spotlight(
             "date": selected_day.isoformat(),
             "label": weekend_label,
             "mode": mode,
+            "scope_id": scope_id,
+            "grounding_date": context.get("grounding_date"),
+            "pre_shoulder_days": context.get("pre_shoulder_days"),
+            "post_shoulder_days": context.get("post_shoulder_days"),
             "items": items,
             "total": len(items),
             "note": None,
+            "from_schedule": False,
         }
 
-    matches: List[Mapping[str, Any]] = []
-    for row in db.all_library_items():
-        haystack = " ".join(
-            [
-                str(row["title"] or ""),
-                str(row["summary"] or ""),
-                " ".join(_json_list(row["genres"])),
-                " ".join(_json_list(row["keywords"])),
-            ]
-        ).casefold()
-        if any(term.casefold() in haystack for term in terms):
-            matches.append(row)
-    items = _sort_rail_items(matches, _cap_limit(limit))
+    matches = _match_seasonal_rows(db.all_library_items(), terms)
+    items = _apply_rail_curation(db, scope_id=scope_id, matches=matches, limit=capped)
     if is_weekend and mode == "season":
         label = f"Weekend · {label}"
         mode = "weekend"
     return {
-        "feed": "seasonal-spotlight", "date": selected_day.isoformat(), "label": label,
-        "mode": mode, "items": items, "total": len(matches),
+        "feed": "seasonal-spotlight",
+        "date": selected_day.isoformat(),
+        "label": label,
+        "mode": mode,
+        "scope_id": scope_id,
+        "grounding_date": context.get("grounding_date"),
+        "pre_shoulder_days": context.get("pre_shoulder_days"),
+        "post_shoulder_days": context.get("post_shoulder_days"),
+        "items": items,
+        "total": len(matches),
         "note": None if items else f"No {label.lower()} matches in your library yet.",
+        "from_schedule": False,
+    }
+
+
+def build_seasonal_rail_snapshot(
+    db: Database, *, today: Optional[date] = None, limit: int = DEFAULT_FEED_LIMIT
+) -> Dict[str, Any]:
+    """Materialize today's seasonal rail for the B2 schedule task / Admin preview."""
+    selected_day = today or date.today()
+    payload = feed_seasonal_spotlight(
+        db, limit=limit, today=selected_day, prefer_snapshot=False
+    )
+    snapshot = db.save_seasonal_rail_snapshot(
+        snapshot_date=selected_day.isoformat(),
+        scope_id=str(payload.get("scope_id") or ""),
+        label=str(payload.get("label") or ""),
+        mode=str(payload.get("mode") or ""),
+        items=list(payload.get("items") or []),
+    )
+    return {"status": "completed", "snapshot": snapshot, "payload": payload}
+
+
+def preview_holiday_rail(
+    db: Database, scope_id: str, *, limit: int = DEFAULT_FEED_LIMIT
+) -> Dict[str, Any]:
+    """Admin preview for one observance or season scope (ignores active window)."""
+    capped = _cap_limit(limit)
+    obs = None
+    try:
+        obs = db.get_holiday_observance(scope_id)
+    except Exception:  # noqa: BLE001
+        obs = None
+    if obs is not None:
+        label = str(obs["name"])
+        terms = tuple(obs.get("search_terms") or ())
+        grounding = obs.get("grounding_date")
+        mode = "holiday"
+        pre = obs.get("pre_shoulder_days")
+        post = obs.get("post_shoulder_days")
+    elif scope_id.startswith("season:"):
+        label = "Seasonal picks"
+        terms: tuple[str, ...] = ()
+        grounding = None
+        mode = "season"
+        pre = None
+        post = None
+        for sid, lab, _months, t in _SEASONAL_FALLBACK_ROWS:
+            if sid == scope_id:
+                label = lab
+                terms = t
+                break
+    else:
+        raise KeyError("Holiday not found")
+
+    matches = _match_seasonal_rows(db.all_library_items(), terms)
+    items = _apply_rail_curation(db, scope_id=scope_id, matches=matches, limit=capped)
+    try:
+        curation = db.list_holiday_rail_titles(scope_id)
+    except Exception:  # noqa: BLE001
+        curation = []
+    return {
+        "scope_id": scope_id,
+        "label": label,
+        "mode": mode,
+        "grounding_date": grounding,
+        "pre_shoulder_days": pre,
+        "post_shoulder_days": post,
+        "items": items,
+        "curation": curation,
+        "match_count": len(matches),
+        "note": None if items else "Add a favorite or loosen filter terms.",
     }
 
 

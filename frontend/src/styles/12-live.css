@@ -247,6 +247,27 @@
   letter-spacing: 0.02em;
 }
 
+/* Mid-watch buffer underrun — light veil so the frozen frame stays visible. */
+.live-player-status--health {
+  background: rgba(0, 0, 0, 0.28);
+  gap: 0.55rem;
+}
+
+.live-player-status--health p {
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #fff;
+  font-size: 0.92rem;
+  letter-spacing: 0.02em;
+}
+
+.live-player-status--stalled p {
+  border-color: rgba(255, 196, 120, 0.45);
+}
+
 .live-player-spinner {
   width: 2rem;
   height: 2rem;
@@ -388,6 +409,19 @@
   margin: 0.45rem 0 0;
   font-size: var(--text-sm);
   color: var(--muted);
+  cursor: default;
+  width: fit-content;
+  max-width: 100%;
+  border-radius: 6px;
+  padding: 0.1rem 0.2rem;
+  margin-left: -0.2rem;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.live-osd-next:hover,
+.live-osd-next:focus-visible {
+  color: var(--text);
+  background: rgba(255, 184, 0, 0.08);
 }
 
 .live-osd-actions {
@@ -616,6 +650,65 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.live-program-hover {
+  position: fixed;
+  z-index: 60;
+  display: grid;
+  gap: 0.2rem;
+  width: min(260px, calc(100vw - 16px));
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 184, 0, 0.35);
+  background: rgba(16, 18, 24, 0.97);
+  color: var(--text);
+  text-decoration: none;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+}
+
+.live-program-hover:hover,
+.live-program-hover:focus-visible {
+  border-color: rgba(255, 184, 0, 0.7);
+  outline: none;
+}
+
+.live-program-hover-eyebrow {
+  margin: 0;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.live-program-hover-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  line-height: 1.2;
+}
+
+.live-program-hover-subtitle,
+.live-program-hover-meta,
+.live-program-hover-overview,
+.live-program-hover-hint {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.live-program-hover-overview {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 0.2rem;
+}
+
+.live-program-hover-hint {
+  margin-top: 0.35rem;
+  color: var(--accent);
+  font-size: 0.72rem;
 }
 
 .live-guide-empty {

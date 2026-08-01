@@ -40,11 +40,14 @@ import YouthReviewPage from "./pages/YouthReviewPage";
 import MailSettingsPage from "./pages/MailSettingsPage";
 import AccessRequestsPage from "./pages/AccessRequestsPage";
 import LogsPage from "./pages/LogsPage";
+import HolidaysPage from "./pages/HolidaysPage";
+import LlmUsagePage from "./pages/LlmUsagePage";
 import JoinPage from "./pages/JoinPage";
 import GuestTourPage from "./pages/GuestTourPage";
 import { BulkActionProgressProvider } from "./components/BulkActionProgress";
 import { TitleDetailOverlayProvider } from "./components/TitleDetailOverlayProvider";
 import WhatsNewGate from "./components/WhatsNewGate";
+import LiveStickyOsd from "./components/LiveStickyOsd";
 import "./styles.css";
 
 createRoot(document.getElementById("root")).render(
@@ -53,6 +56,7 @@ createRoot(document.getElementById("root")).render(
       <BulkActionProgressProvider>
         <TitleDetailOverlayProvider>
         <WhatsNewGate />
+        <LiveStickyOsd />
         <Routes>
           <Route path="/" element={<Navigate to="/chat" replace />} />
           <Route path="/chat" element={<App />} />
@@ -85,9 +89,11 @@ createRoot(document.getElementById("root")).render(
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="overview" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
+            <Route path="usage" element={<LlmUsagePage />} />
             <Route path="tasks" element={<ScheduledTasksPage />} />
             <Route path="issues" element={<MediaIssuesPage />} />
             <Route path="youth" element={<YouthReviewPage />} />
+            <Route path="holidays" element={<HolidaysPage />} />
             <Route path="access" element={<AccessRequestsPage />} />
             <Route path="mail" element={<MailSettingsPage />} />
             <Route path="logs" element={<LogsPage />} />

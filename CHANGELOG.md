@@ -2,6 +2,63 @@
 
 ## [Unreleased]
 
+## [1.30.0] — 2026-08-01
+
+Unified gaps-and-delight program: living-room Live habit surfaces, owner craft (holiday calendar + seasonal rails), curator village consults, household social, Phase E stretch Likes, Live OSD/stall/subtitle honesty, and leaner LLM spend.
+
+### Highlights
+- **What’s on tonight, with a why.** Explore’s habit strip, tonight’s double feature, and station “why this is airing” chips make Live feel like a living-room choice — not a blank guide.
+- **Household social + village.** Watch-together invites, shared Library pages, Companion callbacks that dig back in, and curator sibling consults (“I asked the Scholar…”) without switching personas.
+- **Owner craft that sticks.** Admin Holidays with asymmetric shoulders and rail curation, seasonal Explore shelves on a schedule, honest craft soft-caps, and channel numbers that skip OTA collisions.
+- **Live stays honest when it’s stuck.** OSD tracks the tuned title and episode name, soft-stall copy explains freezes, expanded captions prefer Plex tracks, and tune-links keep a sticky mini OSD across routes.
+
+### Added
+- Phase E stretch: `station_airing_why` on owner now-playing + household On now / What’s on tonight; `GET /api/library/feeds/tonight-double-feature` + Explore habit; village consult `question` expandable in `ChatThread`; guest tour `live_teaser` → request-access CTA; youth Pick-for-me `live_station` suggest; `POST /api/syllabus/courses/{id}/publish-handoff` (confirm-gated Plex collection); `POST /api/admin/live-channels/anniversary-starter`; Live tune-link share + sticky mini OSD (`LiveStickyOsd`); `GET /api/admin/backup/snapshot` WAL-safe settings+DB zip.
+- Household social: recommend `intent` (`recommend` | `watch_party`) on `POST /api/recommendations`; dig-in **Watch together** CTA; RecommendModal intent toggle + note chips; Inbox watch-party badge / Chat about this; `library-share` notifications + `POST /api/saved-library/{id}/share` (schema migration 42 widens notification kind CHECK); ShareActionMenu household share + privacy copy; Library detail household-only chrome (`householdSocial.js`).
+- Companion callback title metadata on `remember_about_user` + recall/`deep_link` enrichment for dig-in + Chat about this; Scholar/Companion prompt + village specialty lines for Live/collection footnotes and callback deep-links.
+- Live program detail hover + dig-in: guide/OSD helpers (`liveProgramDetail.js`), `LiveProgramHoverCard`, richer guide payload fields (`episode_title`, season/episode, year, overview, `media_type`, `plex_rating_key` / `show_plex_rating_key`).
+- Holiday calendar store (`holiday_observances`, `holiday_rail_titles`, `seasonal_rail_snapshots` migration 41) + `projectionist/library/holidays.py` seeds with asymmetric defaults (e.g. Christmas 21/4, Halloween 12/3).
+- Admin Holidays page + `/api/admin/holidays*` routes (CRUD, restore defaults, rail curation, library search, schedule refresh); Household rail nav entry.
+- Idle task `seasonal_rail` publishes today’s seasonal Explore snapshot from B1 windows.
+- `craft_soft_cap_honesty` / preview `fill_mode` + `soft_capped` fields; frontend `craftSoftCapHonestyNote`.
+- `reset_live_channels_ready_nudge` + `delete_notifications_by_related` on Live disable.
+- `collect_plex_occupied_channel_numbers` + `next_channel_number(..., occupied=)`.
+- Mocked e2e `FeatureFlags.live_channels_*` defaults, `mockLiveChannelsHousehold`, `e2e/on-now-live-guide.spec.ts`.
+- `owner_now_playing_rows` + status `now_playing`; `OwnerNowPlayingBreakdown` on Dashboard + Stations.
+- `WhatsOnTonightHabit` on Explore (`whatsOnTonight` / `tonightQueue` helpers).
+- Live player stall honesty: `classifyLiveStreamHealth`, `recordLivePlaybackDiag` (`window.__projectionistLiveDiag`), `liveStreamHealthCopy` + `liveStreamSoftStallCopy` antenna phrase library; Watch chip for soft buffering / stalls + gentle `startLoad` nudge on hls.js buffer stalls.
+- Plex subtitle helpers (`list_subtitle_streams` / `search_subtitles` / `download_subtitle`) + `projectionist/library/subtitles.py` orchestration; `GET/POST /api/library/items/{rating_key}/subtitles*` and Live channel subtitle routes; Owner language prefs + `subtitles_enabled_default` on Tunarr settings; per-station captions toggle wired to Tunarr `subtitlesEnabled`.
+- LivePlayer richer CC picker (`mergeLiveCcTracks`) with Plex sidecar proxy (SRT→VTT) + “Ask Plex for subtitles”; movie dig-in `TitleSubtitlesPanel`.
+- `consult_persona` agent tool + `projectionist/agent/village.py`: shared user context (memory excerpts, recent thread titles, in-scope cards), specialty gatherers, one LLM consult round (`purpose=persona_consult`), max one sibling/turn, timeout → busy, youth/guest fail-closed.
+- Chat `persona_consult` quote block in `ChatThread` + activity-log summaries; Youth scrub drops consult quotes; saved Library pages keep the quote.
+
+### Changed
+- Live OSD **Next** / flex **Up next** prefer show + episode title (soft-fail to show name when episode metadata is missing).
+- `feed_seasonal_spotlight` reads the holiday store (asymmetric shoulders + rail curation); legacy `FIXED_HOLIDAYS` remains as seed/compat export.
+- `resolve_channel_icon_url` / `apply_station_icons` no longer fall back to `/images/tunarr.png`.
+- Stream wrap-up / chat rounds skip the buffered LLM fallback when the stream already produced tokens (eliminates the prior double-pay on interrupt).
+- `_persona_voiced_library_summary` returns the deterministic truncation when ≤280 chars (no LLM); longer sources use a 6h content-hash TTL cache before calling the model.
+- `llm_logline_enrichment` shares the same 6h content-hash TTL job cache for identical title+plot inputs.
+- **Estimated savings (P1c call/cache cuts, grounded):** up to 1 wrap_up/chat call avoided per already-streamed interrupt (~50% on that path); 100% of short (≤280) library_summary LLM calls avoided; TTL cache hits avoid 100% of identical re-jobs within 6h (assume low–moderate hit rate in practice; not a % of all LLM spend). Absolute household USD scales with how often those paths fire.
+- Explore compact On now strip becomes the What’s on tonight habit surface (household On now panel remains on Admin Dashboard).
+- LivePlayer soft network/media recoveries keep playback status (no silent “Tuning…” wipe) and surface stall copy while retrying.
+- `channel_create_body` reads household `subtitles_enabled_default` instead of hardcoding Tunarr `subtitlesEnabled: False`; guide `now` includes `plex_rating_key` when Tunarr maps one.
+
+### Verification
+- Backend `pytest` **1678 passed**, 6 skipped (29 subtests) at **74.70%** total coverage (`--cov-fail-under=74`).
+- Frontend `node --test` unit suite **608 passed**. ESLint **0 errors** (132 pre-existing warnings). Production build succeeds.
+- `test_version` lockstep holds at **1.30.0** across `_version.py`, root + frontend `package.json` / lockfiles, `pyproject.toml`, README badge, and both Unraid XML templates. `frontend/public/release-notes.json` regenerated via `scripts/generate-release-notes.sh`.
+- Focused: `tests/test_phase_e_stretch.py` (airing why, double feature, backup zip, syllabus handoff, consult question); frontend `onNow` / `ownerNowPlaying` / `liveTuneLink` unit tests.
+- Focused: `tests/test_recommendations.py` (watch_party payload + library-share notify); `tests/test_delight_phase5.py` callback deep-link enrichment; frontend `householdSocial.test.mjs` + `recommendationInbox.test.mjs`.
+- Focused: `OnNowGuideTests` past-EOF padded-stop + frontend `pickNowAndNext` / guide-click OSD cases in `liveChannels.test.mjs`.
+- Focused: `tests/test_live_channels.py` guide detail fields; `frontend/src/lib/liveProgramDetail.test.mjs` + `liveChannels.test.mjs` (Up next episode label).
+- Focused: `tests/test_holiday_calendar.py` (asymmetric shoulders, CRUD/restore, rail curation, schedule snapshot); `frontend/src/lib/adminNav.test.mjs` (Holidays link).
+- Focused: `tests/test_live_channels.py` soft-cap / icon / nudge / channel-number / owner now-playing cases; `frontend/src/lib/liveChannelsCopy.test.mjs`; `ownerNowPlaying.test.mjs`; `whatsOnTonight.test.mjs`; Playwright `e2e/on-now-live-guide.spec.ts` (mocked).
+- `tests/test_llm_usage.py` — short library-summary skip + job-cache TTL hit/miss.
+- Focused: `frontend/src/lib/liveChannels.test.mjs` + `liveChannelsCopy.test.mjs` + `liveStreamSoftStallCopy.test.mjs` (stall classify / diag ring / soft-stall phrases).
+- Focused: `tests/test_plex_subtitles.py` (list/search/download, soft-fail, create-body flag, guide plex key); `frontend/src/lib/liveChannels.test.mjs` CC merge empty/populated.
+- Focused: `tests/test_persona_village.py` — resolve aliases, youth/guest deny, one-consult cap, specialty-only without LLM, Concierge pending token, shared context, quote blocks.
+
 ## [1.29.49] — 2026-08-01
 
 Gap show cards that TMDB has not linked to TVDB no longer look addable — they say why, Confirm counts stay honest, and Sonarr lookup can recover a TVDB id when configured.

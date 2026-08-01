@@ -74,13 +74,21 @@ def next_channel_number(
     existing_numbers: Sequence[int] | None = None,
     *,
     base: int = 100,
+    occupied: Sequence[int] | None = None,
 ) -> int:
-    """Pick the next virtual channel number at or above ``base``."""
+    """Pick the next virtual channel number at or above ``base``.
+
+    Skips numbers already used by Tunarr stations **and** occupied OTA / Plex
+    Live TV majors so virtual stations do not collide past the 100+ floor.
+    """
     floor = max(1, int(base or 100))
-    used = [int(n) for n in (existing_numbers or ()) if int(n or 0) > 0]
-    if not used:
-        return floor
-    return max(floor, max(used) + 1)
+    used_existing = [int(n) for n in (existing_numbers or ()) if int(n or 0) > 0]
+    blocked = {int(n) for n in used_existing}
+    blocked |= {int(n) for n in (occupied or ()) if int(n or 0) > 0}
+    candidate = max(floor, (max(used_existing) + 1) if used_existing else floor)
+    while candidate in blocked:
+        candidate += 1
+    return candidate
 
 
 def _append_collection_row(
@@ -175,10 +183,21 @@ def build_craft_options(
     settings: Any = None,
     owner_user_id: Optional[str] = None,
     existing_channel_numbers: Sequence[int] | None = None,
+    occupied_channel_numbers: Sequence[int] | None = None,
 ) -> Dict[str, Any]:
     """Picker payload for Admin → Live Channels → Craft a station."""
     tunarr = getattr(settings, "tunarr", None) if settings is not None else None
     base = int(getattr(tunarr, "channel_number_base", 100) or 100) if tunarr else 100
+    occupied = list(occupied_channel_numbers or ())
+    if not occupied and settings is not None:
+        try:
+            from projectionist.live_channels.plex_attach import (
+                collect_plex_occupied_channel_numbers,
+            )
+
+            occupied = collect_plex_occupied_channel_numbers(settings)
+        except Exception:  # noqa: BLE001
+            occupied = []
 
     clusters: List[Dict[str, Any]] = []
     motifs: List[Dict[str, Any]] = []
@@ -314,18 +333,25 @@ def build_craft_options(
         "collections_empty_reason": empty_reason,
         "collections_empty_hint": empty_hint,
         "channel_number_base": base,
-        "next_channel_number": next_channel_number(existing_channel_numbers, base=base),
+        "next_channel_number": next_channel_number(
+            existing_channel_numbers, base=base, occupied=occupied
+        ),
+        "occupied_channel_numbers": sorted({int(n) for n in occupied if int(n or 0) > 0}),
         "youth_max_rating": youth_max,
         "filter_options": filter_opts,
         "exclusion_collection_name": exclusion_name,
         "pad_flex_max_minutes": pad_minutes,
         "empty_library": not bool(motifs or clusters or collections),
+        "soft_default": 30,
+        "soft_cap": 80,
+        "full_run_cap": 1000,
         "hint": (
             "Pick TV, Movies, or Both, then a motif, taste cluster, collection, "
             "or youth-safe recipe. Stack additive filters (genre ∩ decade ∩ theme) before "
             "publish — preview shows the match count. Collection/show stations fill the "
-            "full resolved pool (Shuffle or Sequential). Titles in the "
-            f"“{exclusion_name}” Plex collection are skipped."
+            "full resolved pool (up to 1000). Motif / taste craft samples about 30–80 "
+            "programs (soft cap). Channel numbers skip OTA majors already in Plex. "
+            f"Titles in the “{exclusion_name}” Plex collection are skipped."
         ),
     }
 

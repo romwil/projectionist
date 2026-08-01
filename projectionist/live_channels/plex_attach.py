@@ -591,6 +591,131 @@ def _iter_dvrs(root: Any) -> List[Any]:
     return [n for n in root.iter("Dvr") if str(getattr(n, "tag", "")) == "Dvr"]
 
 
+def _parse_channel_number_token(value: Any) -> Optional[int]:
+    """Best-effort int from Plex channel identifiers (``100``, ``100.1``, ``C100.1``)."""
+    text = str(value or "").strip()
+    if not text:
+        return None
+    # Prefer leading digits; strip common prefixes like ``C``.
+    digits = ""
+    started = False
+    for ch in text:
+        if ch.isdigit():
+            digits += ch
+            started = True
+        elif started:
+            break
+    if not digits:
+        return None
+    try:
+        number = int(digits)
+    except (TypeError, ValueError):
+        return None
+    return number if number > 0 else None
+
+
+def collect_plex_occupied_channel_numbers(
+    settings: Any = None,
+    *,
+    timeout: int = 5,
+) -> List[int]:
+    """Channel numbers already claimed by non-Tunarr Plex Live TV / OTA lineups.
+
+    Used so virtual stations (100+ floor) auto-avoid OTA majors instead of
+    silently colliding in the guide. Best-effort — empty list on probe failure.
+    """
+    if settings is None:
+        return []
+    plex_url = str(getattr(settings, "plex_url", "") or "").strip()
+    plex_token = str(getattr(settings, "plex_token", "") or "").strip()
+    if not plex_url or not plex_token:
+        return []
+    try:
+        from projectionist.connectors.plex import PlexClient
+
+        client = PlexClient(plex_url, plex_token, timeout=timeout)
+    except Exception:  # noqa: BLE001
+        return []
+
+    tunarr_base = ""
+    manual_address = ""
+    try:
+        facing = resolve_plex_facing_tunarr_base(settings)
+        tunarr_base = str(facing.get("base_url") or "").strip()
+        manual_address = str(facing.get("manual_address") or "").strip()
+    except Exception:  # noqa: BLE001
+        tunarr = getattr(settings, "tunarr", None)
+        tunarr_base = str(getattr(tunarr, "public_url", "") or getattr(tunarr, "url", "") or "")
+
+    occupied: set[int] = set()
+
+    def _absorb_mapping(node: Any) -> None:
+        if node is None:
+            return
+        for attr in (
+            "deviceIdentifier",
+            "lineupIdentifier",
+            "channelIdentifier",
+            "channelNumber",
+            "channel",
+            "number",
+        ):
+            parsed = _parse_channel_number_token(node.attrib.get(attr))
+            if parsed is not None:
+                occupied.add(parsed)
+                return
+        # channelKey like C100.1
+        parsed = _parse_channel_number_token(node.attrib.get("channelKey"))
+        if parsed is not None:
+            occupied.add(parsed)
+
+    try:
+        dvrs_root = _plex_xml(client, "/livetv/dvrs", timeout=timeout)
+        for dvr in _iter_dvrs(dvrs_root):
+            lineup = str(dvr.attrib.get("lineup") or "")
+            # Skip Tunarr XMLTV DVR — those numbers are Projectionist's own.
+            if "xmltv" in lineup.lower() and "tunarr" in lineup.lower():
+                continue
+            is_tunarr_dvr = False
+            for dev in dvr.findall("Device"):
+                if _device_matches_tunarr(
+                    dev, tunarr_base=tunarr_base, manual_address=manual_address
+                ):
+                    is_tunarr_dvr = True
+                    break
+            if is_tunarr_dvr:
+                continue
+            for mapping in dvr.iter("ChannelMapping"):
+                _absorb_mapping(mapping)
+    except Exception:  # noqa: BLE001
+        pass
+
+    try:
+        grabbers = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
+        for device in _iter_devices(grabbers):
+            if _device_matches_tunarr(
+                device, tunarr_base=tunarr_base, manual_address=manual_address
+            ):
+                continue
+            key = str(device.attrib.get("key") or "").strip()
+            if not key:
+                continue
+            try:
+                channels_root = _plex_xml(
+                    client, f"/media/grabbers/devices/{key}/channels", timeout=timeout
+                )
+            except Exception:  # noqa: BLE001
+                continue
+            if channels_root is None:
+                continue
+            for ch in channels_root.iter("DeviceChannel"):
+                _absorb_mapping(ch)
+    except Exception:  # noqa: BLE001
+        pass
+
+    return sorted(occupied)
+
+
 def _device_matches_tunarr(device: Any, *, tunarr_base: str, manual_address: str) -> bool:
     uri = str(device.attrib.get("uri") or "").strip().rstrip("/")
     device_id = str(device.attrib.get("deviceId") or "").strip().lower()

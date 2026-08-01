@@ -14,7 +14,6 @@ import {
   getLibraryPage,
   getThreadFeedback,
   getThreadMessages,
-  getTypingPhrases,
   listJobs,
   listNotifications,
   listReviewPrompts,
@@ -134,11 +133,6 @@ const THREAD_DELETE_UNDO_MS = 6000;
 const PERFECT_PICK_ACK =
   "\n\n*(You're on a roll with these picks — I'll keep that momentum going.)*";
 
-function pickRandomPhrase(phrases, fallback) {
-  if (!phrases?.length) return fallback;
-  return phrases[Math.floor(Math.random() * phrases.length)];
-}
-
 function isNightOwlHour() {
   return new Date().getHours() >= 23;
 }
@@ -196,7 +190,6 @@ export default function App() {
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [reviewPrompts, setReviewPrompts] = useState([]);
   const [reviewLookup, setReviewLookup] = useState({});
-  const [typingPhrases, setTypingPhrases] = useState([]);
   const [typingLabel, setTypingLabel] = useState("");
   const [agentActivityLog, setAgentActivityLog] = useState([]);
   const [activityPanelOpen, setActivityPanelOpen] = useState(false);
@@ -313,12 +306,6 @@ export default function App() {
       .catch(() => {
         setInboxUnreadCount(0);
       });
-  }, []);
-
-  const refreshTypingPhrases = useCallback(() => {
-    getTypingPhrases()
-      .then((data) => setTypingPhrases(data.phrases || []))
-      .catch(console.error);
   }, []);
 
   const refreshPersonas = useCallback(async () => {
@@ -675,7 +662,6 @@ export default function App() {
     }).catch(() => {});
     refreshJobs();
     refreshWatchlist();
-    refreshTypingPhrases();
     refreshPersonas();
     refreshRecommendations();
     applyUiTheme(loadStoredUiTheme());
@@ -703,7 +689,6 @@ export default function App() {
     refreshPersonas,
     refreshRecommendations,
     refreshReviewData,
-    refreshTypingPhrases,
     refreshWatchlist,
   ]);
 
@@ -734,18 +719,14 @@ export default function App() {
 
   useEffect(() => {
     if (!loading) return;
-    const fallback = `${persona?.curator_name || "Curator"} is thinking`;
-    const phrase = pickRandomPhrase(typingPhrases, fallback);
-    setTypingLabel(phrase);
+    // Neutral wait chip bound to the active thread persona — not a canned phrase lottery.
+    const waitLabel = persona?.curator_name || "Curator";
+    setTypingLabel(waitLabel);
     setAgentActivityLog((prev) => {
       if (prev.some((entry) => entry.kind === "status")) return prev;
-      return appendActivityLog(prev, createActivityEvent({ kind: "status", label: phrase }));
+      return appendActivityLog(prev, createActivityEvent({ kind: "status", label: "Working…" }));
     });
-  }, [loading, persona?.curator_name, typingPhrases]);
-
-  useEffect(() => {
-    refreshTypingPhrases();
-  }, [persona?.persona_preset_id, persona?.curator_name, refreshTypingPhrases]);
+  }, [loading, persona?.curator_name]);
 
   const personaUi = persona?.persona_ui;
   const composerPlaceholders =
@@ -942,15 +923,11 @@ export default function App() {
           );
         },
         onToolCall: ({ name, status, args, summary }) => {
+          // Activity log stays factual; do not overwrite the persona wait chip with
+          // mechanical "Searching…" / "is thinking" labels mid-turn.
           setAgentActivityLog((prev) =>
             appendActivityLog(prev, activityEventFromToolCall({ name, status, args, summary })),
           );
-          if (status === "start") {
-            const label = String(name || "tool").replace(/_/g, " ");
-            setTypingLabel(`Searching ${label}…`);
-          } else if (status === "complete") {
-            setTypingLabel(`${persona?.curator_name || "Curator"} is thinking`);
-          }
         },
         onDone: (data) => {
           let assistantMessage = mergeStreamedBlocks(data.message, streamAccumulated);
@@ -1652,11 +1629,7 @@ export default function App() {
             />
             {loading || agentActivityLog.length > 0 ? (
               <TypingIndicator
-                label={
-                  loading
-                    ? typingLabel || `${curatorName} is thinking`
-                    : "Agent activity"
-                }
+                label={loading ? typingLabel || curatorName : "Agent activity"}
                 activityLog={agentActivityLog}
                 expanded={activityPanelOpen}
                 onToggle={() => setActivityPanelOpen((open) => !open)}

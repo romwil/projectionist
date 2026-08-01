@@ -15,6 +15,7 @@ export const ADMIN_NAV = [
   { kind: "heading", id: "heading-household", label: "Household" },
   { to: "/admin/persona", id: "persona", label: "Persona" },
   { to: "/admin/household", id: "household", label: "Members" },
+  { to: "/admin/holidays", id: "holidays", label: "Holidays" },
   { to: "/admin/live-channels", id: "live-channels", label: "Live Channels" },
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },
   { kind: "heading", id: "heading-ops", label: "Ops" },
@@ -22,6 +23,7 @@ export const ADMIN_NAV = [
   { to: "/admin/mail", id: "mail", label: "Mail" },
   { to: "/admin/access", id: "access", label: "Access" },
   { to: "/admin/dashboard", id: "dashboard", label: "Dashboard" },
+  { to: "/admin/usage", id: "usage", label: "Usage" },
   { to: "/admin/issues", id: "issues", label: "Issues", badge: "openIssues" },
   { to: "/admin/youth", id: "youth", label: "Youth" },
   { to: "/admin/advanced", id: "advanced", label: "Advanced" },
@@ -31,6 +33,26 @@ export const ADMIN_NAV = [
 /** Link items only (no group headings). */
 export function adminNavLinks() {
   return ADMIN_NAV.filter((item) => item.kind !== "heading" && item.to);
+}
+
+/**
+ * Admin rail as ordered groups (Home / Household / Ops).
+ * Headings stay section chrome; links keep the same destinations.
+ * @returns {Array<{ id: string, label: string, links: Array<object> }>}
+ */
+export function adminNavGroups() {
+  const groups = [];
+  let current = null;
+  for (const item of ADMIN_NAV) {
+    if (item.kind === "heading") {
+      current = { id: item.id, label: item.label, links: [] };
+      groups.push(current);
+      continue;
+    }
+    if (!current) continue;
+    current.links.push(item);
+  }
+  return groups;
 }
 
 /** True when pathname is under `/admin`. */

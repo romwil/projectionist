@@ -42,6 +42,7 @@ from projectionist.live_channels.starter_pack import propose_starter_pack, propo
 from projectionist.live_channels.status import (
     airing_rows_from_snapshot,
     build_live_channels_status,
+    owner_now_playing_rows,
     summarize_sessions,
 )
 
@@ -625,6 +626,7 @@ class StatusBuilderTests(unittest.TestCase):
                             "percent": 40.4,
                             "is_paused": False,
                         },
+                        "next": {"title": "Ronin", "start": 100.0},
                     },
                     {"id": "ch-2", "name": "Empty", "now": None},
                 ]
@@ -633,6 +635,59 @@ class StatusBuilderTests(unittest.TestCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["title"], "Heat")
         self.assertEqual(rows[0]["percent"], 40.4)
+        self.assertEqual(rows[0]["next_title"], "Ronin")
+        self.assertEqual(rows[0]["next_start"], 100.0)
+
+    def test_owner_now_playing_includes_idle_next_and_health(self) -> None:
+        snap = {
+            "channels": [
+                {
+                    "id": "ch-1",
+                    "name": "Chaos",
+                    "number": 100,
+                    "now": {
+                        "title": "Heat",
+                        "percent": 40.0,
+                        "seconds_remaining": 120,
+                        "ends_at": 200.0,
+                        "is_paused": False,
+                    },
+                    "next": {"title": "Ronin", "start": 180.0},
+                },
+                {
+                    "id": "ch-2",
+                    "name": "Quiet",
+                    "number": 101,
+                    "now": None,
+                    "next": {"title": "Later", "start": 400.0},
+                },
+            ]
+        }
+        rows = owner_now_playing_rows(
+            snap,
+            channels=[
+                {"id": "ch-1", "name": "Chaos", "number": 100},
+                {"id": "ch-2", "name": "Quiet", "number": 101},
+            ],
+            lineup_health={
+                "channels": [
+                    {"id": "ch-1", "total_programs": 12},
+                    {"id": "ch-2", "total_programs": 0},
+                ]
+            },
+            sessions={
+                "channels": [{"channel_id": "ch-1", "connections": 2}],
+            },
+            engine_up=True,
+        )
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0]["now_title"], "Heat")
+        self.assertEqual(rows[0]["next_title"], "Ronin")
+        self.assertEqual(rows[0]["health"], "streaming")
+        self.assertEqual(rows[0]["warning"], "padded_stop")
+        self.assertEqual(rows[1]["now_title"], None)
+        self.assertEqual(rows[1]["next_title"], "Later")
+        self.assertEqual(rows[1]["health"], "empty")
 
     def test_status_includes_airing_and_sessions(self) -> None:
         settings = Settings(
@@ -678,6 +733,9 @@ class StatusBuilderTests(unittest.TestCase):
         self.assertEqual(status["airing"][0]["title"], "Heat")
         self.assertEqual(status["airing"][0]["percent"], 33.3)
         self.assertEqual(status["guide_status"]["channelIds"], ["ch-1"])
+        self.assertEqual(len(status["now_playing"]), 1)
+        self.assertEqual(status["now_playing"][0]["now_title"], "Heat")
+        self.assertEqual(status["now_playing"][0]["health"], "streaming")
 
 
 class RecipeDictTests(unittest.TestCase):
@@ -718,6 +776,15 @@ class CraftOptionsTests(unittest.TestCase):
 
         self.assertEqual(next_channel_number([], base=100), 100)
         self.assertEqual(next_channel_number([100, 102], base=100), 103)
+        # OTA majors above the 100+ floor are skipped (collision auto-avoid).
+        self.assertEqual(
+            next_channel_number([], base=100, occupied=[100, 101, 102]),
+            103,
+        )
+        self.assertEqual(
+            next_channel_number([100, 102], base=100, occupied=[103]),
+            104,
+        )
         recipe = recipe_from_craft_payload(
             {"source": "motif", "motif": "heist", "number": 0},
             default_number=110,
@@ -877,6 +944,50 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(slots["now"]["title"], "Five Fingers of Death")
         self.assertEqual(slots["next"]["title"], "The 36th Chamber of Shaolin")
         self.assertEqual(slots["now"]["seconds_elapsed"], 180)
+
+    def test_pick_now_and_next_drops_past_file_eof_padded_stop(self) -> None:
+        """Guide Dora past file EOF must not stay now when MythBusters has started."""
+        from projectionist.live_channels.guide import program_airing_bounds
+
+        now = 1_700_000_100.0
+        dora = {
+            "title": "Dora the Explorer",
+            "start": now - 1_800,
+            "stop": now + 600,  # padded past file end
+            "duration": 1_800_000,  # 30m file — already past EOF
+            "episode_title": "Dora Saves the Prince",
+        }
+        myth = {
+            "title": "MythBusters",
+            "start": now - 60,
+            "stop": now + 3_600,
+            "duration": 3_600_000,
+        }
+        start, stop = program_airing_bounds(dora)
+        self.assertEqual(start, now - 1_800)
+        self.assertEqual(stop, now)  # capped at file EOF
+        slots = pick_now_and_next([dora, myth], now=now)
+        self.assertEqual(slots["now"]["title"], "MythBusters")
+        self.assertEqual(slots["now"]["seconds_elapsed"], 60)
+
+    def test_pick_now_and_next_clears_dead_now_before_next_starts(self) -> None:
+        now = 1_700_000_100.0
+        programs = [
+            {
+                "title": "Dora the Explorer",
+                "start": now - 1_800,
+                "stop": now + 600,
+                "duration": 1_800_000,
+            },
+            {
+                "title": "MythBusters",
+                "start": now + 120,
+                "stop": now + 3_720,
+            },
+        ]
+        slots = pick_now_and_next(programs, now=now)
+        self.assertIsNone(slots["now"])
+        self.assertEqual(slots["next"]["title"], "MythBusters")
 
     def test_now_playing_past_file_eof(self) -> None:
         from projectionist.live_channels.guide import now_playing_past_file_eof
@@ -1096,8 +1207,79 @@ class OnNowGuideTests(unittest.TestCase):
         self.assertEqual(row["now"]["title"], "Homicide: Life on the Street")
         self.assertEqual(row["now"]["episode_title"], "Hostage (1)")
         self.assertEqual(row["now"]["content_rating"], "TV-14")
+        self.assertEqual(row["now"]["media_type"], "show")
         self.assertEqual(row["next"]["title"], "Heat")
+        self.assertEqual(row["next"]["media_type"], "movie")
         self.assertEqual(row["programs"][0]["title"], "Homicide: Life on the Street")
+
+    def test_guide_program_detail_fields_for_hover_and_dig_in(self) -> None:
+        """Episode/movie detail fields soft-fail when Tunarr omits them."""
+        settings = Settings(
+            features=FeatureFlags(live_channels_enabled=True),
+            tunarr=TunarrSettings(url="http://tunarr.test"),
+        )
+        now = 1_700_000_100.0
+        now_ms = int(now * 1000)
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "ch-1", "name": "Mystery", "number": 100},
+        ]
+        client.get_all_channel_guides.return_value = {
+            "ch-1": {
+                "programs": [
+                    {
+                        "type": "content",
+                        "title": None,
+                        "start": now_ms - 60_000,
+                        "stop": now_ms + 3_600_000,
+                        "duration": 3_660_000,
+                        "program": {
+                            "type": "episode",
+                            "title": "Hostage (1)",
+                            "summary": "A tense night in Baltimore.",
+                            "seasonNumber": 2,
+                            "episodeNumber": 4,
+                            "externalKey": "plex|lib|5501",
+                            "grandparentRatingKey": "1200",
+                            "show": {
+                                "title": "Homicide: Life on the Street",
+                                "rating": "TV-14",
+                                "externalKey": "plex|lib|1200",
+                            },
+                        },
+                    },
+                    {
+                        "type": "content",
+                        "title": None,
+                        "start": now_ms + 3_600_000,
+                        "stop": now_ms + 7_200_000,
+                        "duration": 3_600_000,
+                        "program": {
+                            "type": "movie",
+                            "title": "Heat",
+                            "year": 1995,
+                            "summary": "A crew of professionals.",
+                            "rating": "R",
+                            "externalKey": "9001",
+                        },
+                    },
+                ]
+            },
+        }
+        client.get_now_playing.return_value = None
+        snap = build_guide_snapshot(settings, client=client, now=now, hours=6)
+        now_row = snap["channels"][0]["now"]
+        next_row = snap["channels"][0]["next"]
+        self.assertEqual(now_row["episode_title"], "Hostage (1)")
+        self.assertEqual(now_row["season"], 2)
+        self.assertEqual(now_row["episode"], 4)
+        self.assertEqual(now_row["overview"], "A tense night in Baltimore.")
+        self.assertEqual(now_row["plex_rating_key"], "5501")
+        self.assertEqual(now_row["show_plex_rating_key"], "1200")
+        self.assertEqual(next_row["year"], 1995)
+        self.assertEqual(next_row["overview"], "A crew of professionals.")
+        self.assertEqual(next_row["plex_rating_key"], "9001")
+        self.assertEqual(next_row["media_type"], "movie")
 
     def test_guide_flex_placeholder_keeps_up_next_label(self) -> None:
         """Flex pads must stay labeled as Up next — not the following movie/episode.
@@ -2231,6 +2413,25 @@ class ReadyNudgeTests(unittest.TestCase):
         )
         self.assertEqual(second["delivered"], 0)
 
+    def test_reset_allows_renudge_after_disable(self) -> None:
+        from projectionist.live_channels.nudges import reset_live_channels_ready_nudge
+
+        settings = Settings(features=FeatureFlags(live_channels_enabled=True))
+        self.db.update_user_profile(
+            BOOTSTRAP_OWNER_ID, nudge_opt_in=True, notify_channel_inbox=True
+        )
+        first = maybe_deliver_live_channels_ready_nudge(
+            self.db, settings, ready=True, channel_count=1
+        )
+        self.assertGreaterEqual(first["delivered"], 1)
+        reset = reset_live_channels_ready_nudge(self.db)
+        self.assertTrue(reset["ok"])
+        self.assertGreaterEqual(reset["deleted"], 1)
+        again = maybe_deliver_live_channels_ready_nudge(
+            self.db, settings, ready=True, channel_count=3
+        )
+        self.assertGreaterEqual(again["delivered"], 1)
+
 
 class PlayheadAlignAndWarmTests(unittest.TestCase):
     def test_should_align_playhead_past_eof_and_cold_deep(self) -> None:
@@ -2451,11 +2652,17 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
             result = prepare_channels_for_playback(
                 client, channel_ids=["ch-stuck"], align_playhead=False, icon_url=""
             )
-        client.update_channel.assert_called_once()
+        # Stock Tunarr mark is cleared first; past-EOF advance is a later update.
+        self.assertGreaterEqual(client.update_channel.call_count, 1)
         client.stop_channel_sessions.assert_called_once_with("ch-stuck")
-        body = client.update_channel.call_args.args[1]
         overflow = (now_ms - prog_start) - file_dur
-        self.assertEqual(body["startTime"], channel_start + overflow - 1_000)
+        expected_start = channel_start + overflow - 1_000
+        advance_bodies = [
+            call.args[1]
+            for call in client.update_channel.call_args_list
+            if call.args[1].get("startTime") == expected_start
+        ]
+        self.assertTrue(advance_bodies, "expected past-EOF startTime advance update")
         reasons = [row.get("reason") for row in result.get("aligned") or []]
         self.assertIn("past_eof_advance", reasons)
 
@@ -2496,8 +2703,15 @@ class PlayheadAlignAndWarmTests(unittest.TestCase):
             result = prepare_channels_for_playback(
                 client, channel_ids=["ch-104"], align_playhead=False, icon_url=""
             )
-        client.update_channel.assert_not_called()
+        # May clear a stock Tunarr logo, but must not shift startTime / stop sessions.
         client.stop_channel_sessions.assert_not_called()
+        for call in client.update_channel.call_args_list:
+            body = call.args[1]
+            self.assertEqual(
+                body.get("startTime"),
+                now_ms - (10 * 60 * 60 * 1000),
+                "padded past-EOF must not advance startTime",
+            )
         reasons = [row.get("reason") for row in result.get("aligned") or []]
         self.assertIn("past_eof_padded_stop_skip", reasons)
 
@@ -3191,6 +3405,76 @@ class CollectionIdMatchTests(unittest.TestCase):
         self.assertIn("Matched 12/14", note)
         self.assertIn("lineup 12 program", note)
         self.assertNotIn("real titles", note)
+
+    def test_soft_cap_honesty_and_no_default_tunarr_icon(self) -> None:
+        from projectionist.live_channels.filters import preview_craft_match_count
+        from projectionist.live_channels.publish import (
+            craft_soft_cap_honesty,
+            is_default_tunarr_icon,
+            match_feedback_note,
+            resolve_channel_icon_url,
+        )
+
+        honesty = craft_soft_cap_honesty(fill_mode="soft", matched=40)
+        self.assertTrue(honesty["soft_capped"])
+        self.assertIn("30", honesty["note"])
+        self.assertIn("80", honesty["note"])
+        self.assertIn("1000", honesty["note"])
+        full = craft_soft_cap_honesty(fill_mode="full_run")
+        self.assertFalse(full["soft_capped"])
+        soft_note = match_feedback_note(
+            matched=40, match_total=0, program_count=30, soft_capped=True
+        )
+        self.assertIn("soft cap", soft_note.lower())
+        self.assertTrue(
+            is_default_tunarr_icon("http://10.10.1.202:18765/images/tunarr.png")
+        )
+        self.assertEqual(resolve_channel_icon_url(None), "")
+        self.assertEqual(
+            resolve_channel_icon_url(
+                None, preferred_url="http://lan/images/tunarr.png"
+            ),
+            "",
+        )
+        self.assertEqual(
+            resolve_channel_icon_url(
+                None, preferred_url="http://lan/posters/station.png"
+            ),
+            "http://lan/posters/station.png",
+        )
+        preview = preview_craft_match_count(
+            None, filters={}, source="motif", collection_id=""
+        )
+        self.assertEqual(preview["fill_mode"], "soft")
+        self.assertTrue(preview["soft_capped"])
+        self.assertIn("soft cap", (preview.get("note") or "").lower())
+
+    def test_apply_station_icons_clears_stock_tunarr_mark(self) -> None:
+        from projectionist.live_channels.publish import apply_station_icons
+
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {
+                "id": "ch-1",
+                "name": "Noir",
+                "number": 100,
+                "transcodeConfigId": "tc-1",
+                "icon": {"path": "http://10.10.1.202:18765/images/tunarr.png"},
+            }
+        ]
+        result = apply_station_icons(client, settings=None)
+        self.assertGreaterEqual(result["count_cleared_stock"], 1)
+        client.update_channel.assert_called_once()
+        body = client.update_channel.call_args[0][1]
+        self.assertEqual(body["icon"]["path"], "")
+
+    def test_parse_occupied_channel_tokens(self) -> None:
+        from projectionist.live_channels.plex_attach import _parse_channel_number_token
+
+        self.assertEqual(_parse_channel_number_token("100"), 100)
+        self.assertEqual(_parse_channel_number_token("C100.1"), 100)
+        self.assertEqual(_parse_channel_number_token("101.3"), 101)
+        self.assertIsNone(_parse_channel_number_token(""))
 
     def test_refill_uses_stored_collection_recipe(self) -> None:
         from projectionist.config_store import Settings, TunarrSettings

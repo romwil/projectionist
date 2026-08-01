@@ -139,6 +139,156 @@ def _channel_icon_url(meta: Mapping[str, Any]) -> str:
     return ""
 
 
+def _plex_keys_from_mapping(source: Mapping[str, Any]) -> List[str]:
+    """Collect bare + ``plex|…|key`` tails from common Tunarr/Plex id fields."""
+    keys: List[str] = []
+    for key in (
+        "externalKey",
+        "plexRatingKey",
+        "ratingKey",
+        "plex_rating_key",
+        "grandparentRatingKey",
+        "grandparentExternalKey",
+    ):
+        text = str(source.get(key) or "").strip()
+        if not text:
+            continue
+        keys.append(text)
+        if "|" in text:
+            tail = text.rsplit("|", 1)[-1].strip()
+            if tail:
+                keys.append(tail)
+    return keys
+
+
+def _prefer_bare_plex_key(keys: Sequence[str]) -> str:
+    for key in keys:
+        text = str(key or "").strip()
+        if text and "|" not in text:
+            return text
+    for key in keys:
+        text = str(key or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _program_plex_rating_key(program: Mapping[str, Any]) -> str:
+    """Best-effort Plex rating key from a Tunarr guide / now_playing row."""
+    nested = _nested_program(program)
+    keys: List[str] = []
+    for source in (program, nested):
+        if isinstance(source, Mapping):
+            keys.extend(_plex_keys_from_mapping(source))
+    # Content key — skip show-only grandparent fields already collected above when
+    # a leaf externalKey exists (prefer first bare non-grandparent later via order).
+    return _prefer_bare_plex_key(keys)
+
+
+def _program_show_plex_rating_key(program: Mapping[str, Any]) -> str:
+    """Show-level Plex key for dig-in (library indexes shows, not episodes)."""
+    nested = _nested_program(program)
+    show = _nested_show(program)
+    keys: List[str] = []
+    if isinstance(show, Mapping):
+        keys.extend(_plex_keys_from_mapping(show))
+    for source in (program, nested):
+        if not isinstance(source, Mapping):
+            continue
+        for key in ("grandparentRatingKey", "grandparentExternalKey", "showRatingKey"):
+            text = str(source.get(key) or "").strip()
+            if text:
+                keys.append(text)
+                if "|" in text:
+                    tail = text.rsplit("|", 1)[-1].strip()
+                    if tail:
+                        keys.append(tail)
+    return _prefer_bare_plex_key(keys)
+
+
+def _program_media_type(program: Mapping[str, Any]) -> str:
+    """``show`` / ``movie`` for dig-in; empty when unknown."""
+    nested = _nested_program(program)
+    show = _nested_show(program)
+    nested_type = str(nested.get("type") or program.get("type") or "").strip().lower()
+    if nested_type in {"episode", "show"} or show:
+        return "show"
+    if nested_type == "movie":
+        return "movie"
+    # Soft signal: an episode subtitle implies TV without inventing a title.
+    if _program_episode(program):
+        return "show"
+    if nested_type in {"flex", "filler", "continuity", "commercial"}:
+        return ""
+    return "movie" if _program_title(program) else ""
+
+
+def _program_year(program: Mapping[str, Any]) -> Optional[int]:
+    nested = _nested_program(program)
+    show = _nested_show(program)
+    for source in (program, nested, show):
+        if not isinstance(source, Mapping):
+            continue
+        for key in ("year", "releaseYear", "originallyAvailableAt"):
+            raw = source.get(key)
+            if raw is None:
+                continue
+            if isinstance(raw, int):
+                return raw if raw > 1000 else None
+            text = str(raw).strip()
+            if len(text) >= 4 and text[:4].isdigit():
+                year = int(text[:4])
+                return year if year > 1000 else None
+    return None
+
+
+def _program_overview(program: Mapping[str, Any]) -> str:
+    nested = _nested_program(program)
+    show = _nested_show(program)
+    for source in (program, nested, show):
+        if not isinstance(source, Mapping):
+            continue
+        for key in ("summary", "overview", "plot", "description", "tagline"):
+            text = str(source.get(key) or "").strip()
+            if text:
+                return text
+    return ""
+
+
+def _program_season_episode_numbers(
+    program: Mapping[str, Any],
+) -> tuple[Optional[int], Optional[int]]:
+    nested = _nested_program(program)
+
+    def _as_int(value: Any) -> Optional[int]:
+        if value is None or value is False:
+            return None
+        try:
+            number = int(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number >= 0 else None
+
+    season: Optional[int] = None
+    episode: Optional[int] = None
+    for source in (program, nested):
+        if not isinstance(source, Mapping):
+            continue
+        if season is None:
+            season = _as_int(
+                source.get("seasonNumber")
+                or source.get("season")
+                or source.get("parentIndex")
+            )
+        if episode is None:
+            episode = _as_int(
+                source.get("episodeNumber")
+                or source.get("episode")
+                or source.get("index")
+            )
+    return season, episode
+
+
 def _program_is_flex(program: Mapping[str, Any]) -> bool:
     for key in ("type", "programType", "kind"):
         value = str(program.get(key) or "").strip().lower()
@@ -286,23 +436,41 @@ def _normalize_program(
         or program.get("stopTime")
     )
     duration_ms = program.get("duration")
-    if stop is None and start is not None and duration_ms is not None:
-        dur_sec = _duration_to_seconds(duration_ms)
-        if dur_sec is not None:
-            stop = start + dur_sec
+    if duration_ms is None:
+        duration_ms = program.get("duration_ms")
+    dur_sec = _duration_to_seconds(duration_ms) if duration_ms is not None else None
+    if stop is None and start is not None and dur_sec is not None:
+        stop = start + dur_sec
+    # Progress / remaining follow file EOF when Tunarr padded stop past duration.
+    progress_stop = stop
+    if start is not None and dur_sec is not None and stop is not None:
+        progress_stop = min(float(stop), start + dur_sec)
+    elif start is not None and dur_sec is not None:
+        progress_stop = start + dur_sec
     rating = _program_rating(program)
     is_paused = bool(program.get("isPaused") or program.get("is_paused"))
     progress = program_airing_progress(
         start,
-        stop,
+        progress_stop,
         now=now,
         time_remaining=program.get("timeRemaining") or program.get("time_remaining"),
         is_paused=is_paused,
     )
     episode = _program_episode(program)
+    plex_key = _program_plex_rating_key(program)
+    show_plex_key = _program_show_plex_rating_key(program)
+    media_type = _program_media_type(program)
+    year = _program_year(program)
+    overview = _program_overview(program)
+    season_number, episode_number = _program_season_episode_numbers(program)
     return {
         "title": title,
         "episode_title": episode or None,
+        "season": season_number,
+        "episode": episode_number,
+        "year": year,
+        "overview": overview or None,
+        "media_type": media_type or None,
         "start": start,
         "stop": stop,
         "started_at": progress["started_at"],
@@ -313,6 +481,9 @@ def _normalize_program(
         "is_paused": progress["is_paused"],
         "content_rating": rating or None,
         "is_flex": _program_is_flex(program),
+        "duration_seconds": int(round(dur_sec)) if dur_sec is not None else None,
+        "plex_rating_key": plex_key or None,
+        "show_plex_rating_key": show_plex_key or None,
     }
 
 
@@ -351,6 +522,42 @@ def now_playing_past_file_eof(
     return (ts_ms - start) > duration
 
 
+def program_airing_bounds(
+    program: Mapping[str, Any],
+) -> tuple[Optional[float], Optional[float]]:
+    """Return ``(start, effective_stop)`` for wall-clock airing membership.
+
+    Tunarr often pads ``stop`` past the file's ``duration``. Once wall-clock is
+    past file EOF the stream has moved on — treat the airing as ended even when
+    the padded stop is still in the future.
+    """
+    start = _to_epoch_seconds(program.get("start") or program.get("startTime"))
+    stop = _to_epoch_seconds(
+        program.get("stop")
+        or program.get("end")
+        or program.get("endTime")
+        or program.get("stopTime")
+    )
+    duration_ms = program.get("duration")
+    if duration_ms is None:
+        duration_ms = program.get("duration_ms")
+    if duration_ms is None and program.get("duration_seconds") is not None:
+        try:
+            duration_ms = float(program.get("duration_seconds")) * 1000.0
+        except (TypeError, ValueError):
+            duration_ms = None
+    dur_sec = _duration_to_seconds(duration_ms) if duration_ms is not None else None
+    if stop is None and start is not None and dur_sec is not None:
+        stop = start + dur_sec
+    if start is not None and dur_sec is not None:
+        file_end = start + dur_sec
+        if stop is None:
+            stop = file_end
+        else:
+            stop = min(float(stop), file_end)
+    return start, stop
+
+
 def pick_now_and_next(
     programs: Sequence[Any],
     *,
@@ -362,6 +569,10 @@ def pick_now_and_next(
     (file-duration vs guide-slot mismatch), multiple rows can contain ``now``.
     Prefer the latest ``start`` so the OSD/playhead matches the live edge
     instead of a prior title that still claims a few minutes left.
+
+    Past file EOF (``duration``) also ends an airing even when padded ``stop``
+    still lies ahead — so a dead Dora cannot stay "now" after the stream rolled
+    to MythBusters.
     """
     ts = time.time() if now is None else float(now)
     ordered = _sorted_programs(programs)
@@ -370,17 +581,7 @@ def pick_now_and_next(
     airing: List[tuple[float, int, Mapping[str, Any]]] = []
     first_future: Optional[Mapping[str, Any]] = None
     for index, program in enumerate(ordered):
-        start = _to_epoch_seconds(program.get("start") or program.get("startTime"))
-        stop = _to_epoch_seconds(
-            program.get("stop")
-            or program.get("end")
-            or program.get("endTime")
-            or program.get("stopTime")
-        )
-        duration_ms = program.get("duration")
-        if stop is None and start is not None and duration_ms is not None:
-            dur_sec = _duration_to_seconds(duration_ms)
-            stop = start + dur_sec if dur_sec is not None else None
+        start, stop = program_airing_bounds(program)
         if start is not None and stop is not None and start <= ts < stop:
             airing.append((float(start), index, program))
             continue
@@ -643,6 +844,10 @@ def build_on_now_snapshot(
     ceiling = str(youth_max_rating or "").strip()
     if ceiling:
         channels = apply_youth_filter_to_on_now(channels, max_rating=ceiling)
+
+    from projectionist.live_channels.airing_why import enrich_channels_with_airing_why
+
+    channels = enrich_channels_with_airing_why(settings, channels)
 
     ready = bool(channels)
     return {

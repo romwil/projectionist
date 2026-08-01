@@ -207,10 +207,17 @@ def preview_craft_match_count(
     filters: CraftFilters | Mapping[str, Any] | None = None,
     media_scope: str = MediaScope.BOTH.value,
     collection_id: str = "",
+    source: str = "",
     settings: Any = None,
     limit: int = 1000,
 ) -> Dict[str, Any]:
     """Preview how many library titles match filters (+ optional collection ∩)."""
+    from projectionist.live_channels.publish import (
+        craft_fill_mode,
+        craft_soft_cap_honesty,
+        plex_collection_rating_keys,
+    )
+
     craft = (
         filters
         if isinstance(filters, CraftFilters)
@@ -218,13 +225,12 @@ def preview_craft_match_count(
     )
     excluded = exclusion_rating_keys(settings)
     excluded_n = 0
+    cid = str(collection_id or "").strip()
+    fill_mode = craft_fill_mode(collection_id=cid, source=source)
 
     collection_keys: Optional[Set[str]] = None
-    cid = str(collection_id or "").strip()
     if cid:
         try:
-            from projectionist.live_channels.publish import plex_collection_rating_keys
-
             collection_keys = {
                 str(k).strip()
                 for k in plex_collection_rating_keys(settings, cid, limit=limit)
@@ -233,27 +239,50 @@ def preview_craft_match_count(
         except Exception:  # noqa: BLE001
             collection_keys = set()
 
+    def _with_honesty(payload: Dict[str, Any], *, matched: int = 0) -> Dict[str, Any]:
+        h = craft_soft_cap_honesty(fill_mode=fill_mode, matched=matched)
+        payload.update(
+            {
+                "fill_mode": h["fill_mode"],
+                "soft_capped": h["soft_capped"],
+                "soft_default": h["soft_default"],
+                "soft_cap": h["soft_cap"],
+                "full_run_cap": h["full_run_cap"],
+            }
+        )
+        base_note = str(payload.get("note") or "").strip()
+        if h["soft_capped"]:
+            payload["note"] = f"{base_note} {h['note']}".strip() if base_note else h["note"]
+        elif base_note and fill_mode == "full_run":
+            payload["note"] = f"{base_note} {h['note']}".strip()
+        return payload
+
     if craft.is_empty() and collection_keys is None:
         # Scope-only preview from library counts is expensive; report unknown.
-        return {
-            "matched": 0,
-            "match_total": 0,
-            "excluded": 0,
-            "filters": craft.to_dict(),
-            "note": "Add filters or a collection to preview a match count.",
-        }
+        return _with_honesty(
+            {
+                "matched": 0,
+                "match_total": 0,
+                "excluded": 0,
+                "filters": craft.to_dict(),
+                "note": "Add filters or a collection to preview a match count.",
+            }
+        )
 
     if craft.is_empty() and collection_keys is not None:
         keys = [k for k in collection_keys if k not in excluded]
         excluded_n = len(collection_keys) - len(keys)
-        return {
-            "matched": len(keys),
-            "match_total": len(collection_keys),
-            "excluded": excluded_n,
-            "filters": craft.to_dict(),
-            "collection_id": cid,
-            "note": f"{len(keys)} titles in collection after exclusion.",
-        }
+        return _with_honesty(
+            {
+                "matched": len(keys),
+                "match_total": len(collection_keys),
+                "excluded": excluded_n,
+                "filters": craft.to_dict(),
+                "collection_id": cid,
+                "note": f"{len(keys)} titles in collection after exclusion.",
+            },
+            matched=len(keys),
+        )
 
     lib = library_items_matching_filters(
         db, craft, media_scope=media_scope, limit=limit
@@ -267,19 +296,22 @@ def preview_craft_match_count(
     total = int(lib.get("total_matched") or before_excl)
     if collection_keys is not None:
         total = before_excl
-    return {
-        "matched": len(keys),
-        "match_total": total,
-        "excluded": excluded_n,
-        "filters": craft.to_dict(),
-        "collection_id": cid or None,
-        "rating_keys_sample": keys[:12],
-        "note": (
-            f"Matched {len(keys)} title(s)"
-            + (f" · skipped {excluded_n} excluded" if excluded_n else "")
-            + "."
-        ),
-    }
+    return _with_honesty(
+        {
+            "matched": len(keys),
+            "match_total": total,
+            "excluded": excluded_n,
+            "filters": craft.to_dict(),
+            "collection_id": cid or None,
+            "rating_keys_sample": keys[:12],
+            "note": (
+                f"Matched {len(keys)} title(s)"
+                + (f" · skipped {excluded_n} excluded" if excluded_n else "")
+                + "."
+            ),
+        },
+        matched=len(keys),
+    )
 
 
 def _year_from_program(item: Mapping[str, Any]) -> Optional[int]:

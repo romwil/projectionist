@@ -643,7 +643,7 @@ class LiveChannelsApiTests(unittest.TestCase):
     def test_from_collection_async_accepts_job(self) -> None:
         self._enable()
         with patch(
-            "projectionist.web.app._finalize_live_channels_publish",
+            "projectionist.web.live_channels_routes._finalize_live_channels_publish",
             return_value={"ok": True, "note": "done", "count_published": 1},
         ), patch(
             "projectionist.live_channels.publish.publish_collection_channel",

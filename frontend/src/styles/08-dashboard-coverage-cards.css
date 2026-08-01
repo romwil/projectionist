@@ -1027,6 +1027,159 @@ a.on-this-day-item:focus-visible {
   gap: var(--space-2);
 }
 
+.recommend-intent-toggle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.recommend-intent.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.recommend-note-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.recommend-note-chip {
+  font-size: var(--text-sm);
+}
+
+.recommendation-card--watch-party {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+    var(--surface-2);
+}
+
+.recommendation-watch-party-badge {
+  display: inline-block;
+  margin-right: 0.25rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--accent-strong, var(--accent));
+  background: var(--accent-soft);
+}
+
+.recommendation-card-from-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.recommendation-from-avatar {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+
+.recommendation-from-avatar--fallback {
+  display: grid;
+  place-items: center;
+  background: var(--surface-raised);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.share-action-privacy {
+  margin: 0 0 var(--space-2);
+  padding: 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+}
+
+.share-household-panel {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: var(--space-2);
+}
+
+.share-household-lead {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.share-household-peers {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-1);
+}
+
+.share-household-peers label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.share-household-peers label.selected {
+  background: var(--accent-soft);
+}
+
+.share-household-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.library-detail-meta {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.library-privacy-pill {
+  justify-self: start;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+}
+
+.library-privacy-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  max-width: 42rem;
+}
+
+.library-detail-summary {
+  margin: 0;
+  max-width: 42rem;
+  color: var(--text);
+  font-size: var(--text-base);
+  line-height: 1.45;
+}
+
 /* Profile font size / theme segmented controls */
 .settings-font-size,
 .settings-ui-theme {
@@ -1072,5 +1225,75 @@ a.on-this-day-item:focus-visible {
   padding: var(--space-7) var(--gutter);
   display: grid;
   gap: var(--space-4);
+}
+
+/* Admin → Usage (LLM cost BI) */
+.llm-usage-page .admin-page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-4);
+  margin-bottom: var(--space-5);
+}
+
+.llm-usage-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-bottom: var(--space-5);
+}
+
+.llm-usage-filters label {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 9rem;
+}
+
+.llm-usage-filters span {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.llm-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: var(--space-4);
+}
+
+.llm-usage-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.llm-usage-table th,
+.llm-usage-table td {
+  text-align: left;
+  padding: var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.llm-model-hint {
+  display: inline-block;
+  margin-left: var(--space-2);
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.llm-model-catalog-note {
+  margin-top: var(--space-2);
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.llm-cheaper-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+.llm-cheaper-picks button {
+  font-size: 0.8rem;
 }
 

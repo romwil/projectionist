@@ -1,6 +1,6 @@
 """Per-user notification inbox (generalized kinds).
 
-Kinds: recommendation, arrival, access-request, digest, nudge.
+Kinds: recommendation, arrival, access-request, digest, nudge, library-share.
 """
 
 from __future__ import annotations
@@ -12,7 +12,14 @@ from typing import Any, Dict, List, Optional, Sequence
 
 
 NOTIFICATION_KINDS = frozenset(
-    {"recommendation", "arrival", "access-request", "digest", "nudge"}
+    {
+        "recommendation",
+        "arrival",
+        "access-request",
+        "digest",
+        "nudge",
+        "library-share",
+    }
 )
 
 
@@ -171,6 +178,27 @@ class NotificationsMixin:
         if row is None:
             return None
         return self._row_to_notification(row)
+
+    def delete_notifications_by_related(
+        self,
+        *,
+        kind: str,
+        related_id: str,
+    ) -> int:
+        """Delete all inbox rows matching kind + related_id (all users)."""
+        cleaned_kind = str(kind or "").strip().lower()
+        rid = str(related_id or "").strip()
+        if cleaned_kind not in NOTIFICATION_KINDS or not rid:
+            return 0
+        with self.connect() as conn:
+            cursor = conn.execute(
+                """
+                DELETE FROM user_notifications
+                WHERE kind = ? AND related_id = ?
+                """,
+                (cleaned_kind, rid),
+            )
+            return int(cursor.rowcount or 0)
 
     @staticmethod
     def _row_to_notification(row: sqlite3.Row) -> Dict[str, Any]:

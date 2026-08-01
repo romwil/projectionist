@@ -51,6 +51,14 @@ test("inboxHeadline and formatUnreadBadge cover multi-kind inbox chrome", () => 
   assert.equal(inboxHeadline([]), "Inbox");
   assert.equal(inboxHeadline([{ kind: "arrival", title: "X" }]), "Something new arrived");
   assert.equal(inboxHeadline([{ kind: "digest" }, { kind: "nudge" }]), "2 new notifications");
+  assert.equal(
+    inboxHeadline([{ kind: "recommendation", payload: { intent: "watch_party" }, title: "Heat" }]),
+    "Someone invited you to watch together",
+  );
+  assert.equal(
+    inboxHeadline([{ kind: "library-share", title: "Noir night" }]),
+    "Someone shared a saved page",
+  );
   assert.equal(formatUnreadBadge(0), "");
   assert.equal(formatUnreadBadge(3), "3");
   assert.equal(formatUnreadBadge(120), "99+");

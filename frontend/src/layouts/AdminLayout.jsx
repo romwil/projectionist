@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Navigate, Outlet, useNavigate } from "react-router-dom";
 import { getAuthMe, getFeatures, listMediaIssues, listNotifications } from "../api/client";
 import PrimaryTopbar from "../components/PrimaryTopbar";
-import { ADMIN_NAV } from "../lib/adminNav.js";
+import { ADMIN_NAV, adminNavGroups } from "../lib/adminNav.js";
 import { ROUTES } from "../lib/backNav.js";
 import { applyUiTheme, loadStoredUiTheme } from "../lib/uiPrefs.js";
 
@@ -134,42 +134,54 @@ export default function AdminLayout() {
               <h1 className="admin-rail-title">Admin</h1>
             </div>
             <nav className="admin-rail-nav" aria-label="Admin sections">
-              {ADMIN_NAV.map((item) => {
-                if (item.kind === "heading") {
-                  return (
+              {adminNavGroups().map((group, groupIndex) => (
+                <section
+                  key={group.id}
+                  className={`admin-rail-group admin-rail-group-${group.id.replace(/^heading-/, "")}`}
+                  data-testid={`admin-nav-group-${group.id}`}
+                  aria-labelledby={`admin-rail-${group.id}`}
+                >
+                  {groupIndex > 0 ? (
+                    <hr className="admin-rail-group-rule" data-testid={`admin-nav-rule-${group.id}`} />
+                  ) : null}
+                  <div className="admin-rail-group-band">
                     <p
-                      key={item.id}
-                      className="admin-rail-heading eyebrow"
-                      data-testid={`admin-nav-${item.id}`}
+                      id={`admin-rail-${group.id}`}
+                      className="admin-rail-heading"
+                      data-testid={`admin-nav-${group.id}`}
                     >
-                      {item.label}
+                      {group.label}
                     </p>
-                  );
-                }
-                const count = item.badge ? badgeValue[item.badge] : null;
-                const showBadge = typeof count === "number" && count > 0;
-                return (
-                  <NavLink
-                    key={item.id}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      `admin-rail-link ${isActive ? "admin-rail-link-active" : ""}`
-                    }
-                    data-testid={`admin-nav-${item.id}`}
-                  >
-                    <span>{item.label}</span>
-                    {showBadge ? (
-                      <span
-                        className="admin-rail-badge"
-                        data-testid={`admin-nav-badge-${item.id}`}
-                        aria-label={`${count} open`}
-                      >
-                        {count > 99 ? "99+" : count}
-                      </span>
-                    ) : null}
-                  </NavLink>
-                );
-              })}
+                    <div className="admin-rail-group-links">
+                      {group.links.map((item) => {
+                        const count = item.badge ? badgeValue[item.badge] : null;
+                        const showBadge = typeof count === "number" && count > 0;
+                        return (
+                          <NavLink
+                            key={item.id}
+                            to={item.to}
+                            className={({ isActive }) =>
+                              `admin-rail-link ${isActive ? "admin-rail-link-active" : ""}`
+                            }
+                            data-testid={`admin-nav-${item.id}`}
+                          >
+                            <span>{item.label}</span>
+                            {showBadge ? (
+                              <span
+                                className="admin-rail-badge"
+                                data-testid={`admin-nav-badge-${item.id}`}
+                                aria-label={`${count} open`}
+                              >
+                                {count > 99 ? "99+" : count}
+                              </span>
+                            ) : null}
+                          </NavLink>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </section>
+              ))}
             </nav>
             <div className="admin-rail-footer">
               <Link to="/settings" className="admin-rail-meta-link">

@@ -127,7 +127,9 @@ Without either key, `/mcp` returns **503**. Wrong key → **401**. Logs record `
 | `library_query` / `library_aggregate` / facets / TV helpers | Browse owned inventory |
 | `library_overview_tool` / `library_title_detail` | Compact stats + title detail |
 | `what_to_watch_tonight` | Owned watch suggestions |
-| `find_collection_gaps` / `recommend_hidden_gems` | Gap / gem style browses |
+| `sample_owned_library` | Owned inventory sample (overview + owned titles). `find_collection_gaps` is a one-release alias of this — not TMDB missing-title discover |
+| `discover_missing_titles` | Real TMDB collection gaps (title, year, media_type, poster CDN, `in_library=false`); shares agent gap filters (`genres`, `without_genres`, `tv_type`, years, query) |
+| `recommend_hidden_gems` | Lower-view owned “hidden gem” browses (full mode) |
 | `suggest_purge_candidates_tool` | Purge candidates |
 | `analyze_watch_patterns` | Overview + in-progress TV |
 | `list_watchlist_pins` | Watchlist snapshot |

@@ -4,7 +4,7 @@
 **Status:** Living log — append freely; do not treat as a shipping checklist  
 **Related:** [implementation plan](./2026-07-29-live-channels-tunarr.md) · [product spec](../specs/2026-07-29-live-channels-tunarr.md)
 
-Durable parking lot for product deferrals, engineering gaps, and mid-build discoveries so parallel agents do not lose intelligence. Reconciled **2026-07-29** with [implementation plan Status](./2026-07-29-live-channels-tunarr.md): Phases 1–3 core done (Admin Live Channels enable flow, publish APIs, `CERTIFIED_SERVICES` `tunarr`, household on-now). Remaining: Automat Phase 0 pin/OpenAPI, richer Tunarr program IDs, `schedule-slots`, HELP/CHANGELOG Task 7 (`CONFIGURATION.md` done), e2e `FeatureFlags` + on-now, nudge once-ever, guide shape validation.
+Durable parking lot for product deferrals, engineering gaps, and mid-build discoveries so parallel agents do not lose intelligence. Reconciled **2026-07-29** with [implementation plan Status](./2026-07-29-live-channels-tunarr.md): Phases 1–3 core done (Admin Live Channels enable flow, publish APIs, `CERTIFIED_SERVICES` `tunarr`, household on-now). Starter pack propose/publish + `TunarrClient.schedule_slots` client landed (see bullets below). Remaining: Automat Phase 0 pin/OpenAPI, richer Tunarr program IDs / wiring schedule-slots into publish modes, HELP/CHANGELOG Task 7 residual, e2e `FeatureFlags` + on-now, nudge once-ever, guide shape validation. Post–Phase-5 delight + residual trust backlog lives in the Cursor unified plan (`unified_gaps_and_delight_b1cef49d.plan.md`).
 
 ---
 
@@ -34,7 +34,7 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 
 - **Status:** `deferred`
 - **Why / note:** `ProgrammingMode` today is `sequential` | `shuffle` | `chaos` only (`recipes.py`). Multi-lineup dayparts are explicitly later in the spec.
-- **Suggested next phase:** After publish path is solid; needs Tunarr schedule-slots client + recipe model.
+- **Suggested next phase:** After publish path is solid; wire existing `TunarrClient.schedule_slots` into recipe/daypart models.
 - **Owner surface:** backend / recipes
 
 ### Docker-less cloud AIO as first-class
@@ -71,9 +71,9 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 
 ### Publish recipes → Tunarr programming (full path)
 
-- **Status:** `done` (channel create + publish APIs) / `deferred` (full lineup IDs)
-- **Why / note:** Orchestrator exists (`live_channels/publish.py`): `POST …/starters/publish`, `POST …/channels/from-collection`, `last_publish_at` / `last_error` persistence, Plex media-source wire best-effort. **Nuance:** `programming_body_for_recipe` still emits empty/minimal `manual` lineup shells (flex hints only) until Tunarr scanned program IDs are available — channels exist; rich programming is not filled yet. `schedule-slots` client method still absent.
-- **Suggested next phase:** Richer programming after media-source scan / Automat OpenAPI confirmation.
+- **Status:** `done` (channel create + publish APIs + starter pack + `schedule_slots` client) / residual (richer taste→ID + publish-mode wiring)
+- **Why / note:** Orchestrator exists (`live_channels/publish.py`): `POST …/starters/publish`, `POST …/channels/from-collection`, `last_publish_at` / `last_error` persistence, Plex media-source wire best-effort. Scanned program-ID fill landed **1.29.11**. `TunarrClient.schedule_slots` exists (`POST /channels/{id}/schedule-slots`). Residual: publish path still prefers content/manual fill over full shuffle/Chaos schedule-slots recipes; motif matching remains keyword-heuristic.
+- **Suggested next phase:** Wire schedule-slots into shuffle/Chaos publish when Automat OpenAPI confirms; tighter motif/genre filters.
 - **Owner surface:** backend
 
 ### Full Docker / Unraid orchestration (exposed pull/start/stop)
@@ -85,16 +85,16 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 
 ### Household on-now Dashboard / inbox nudges
 
-- **Status:** `done` (core path; see 2026-07-29 discoveries for residual gaps)
-- **Why / note:** Household delight landed 2026-07-29: `GET /api/live-channels/on-now` + `OnNowPanel` on Dashboard/Explore; ready nudge once-ever per user via `related_id=live-channels-ready`. Residual: no e2e for on-now; nudge does not reset on disable/re-enable; Tunarr guide field shapes still best-effort pending Automat pilot. **Do not regress this status** when updating wizard/publish docs.
-- **Suggested next phase:** Residual gaps in **New discoveries** (e2e / nudge reset / guide validation); HELP/CHANGELOG with shipping PR.
+- **Status:** `done` (core path + P0 residual trust)
+- **Why / note:** Household delight landed 2026-07-29: `GET /api/live-channels/on-now` + `OnNowPanel` on Dashboard/Explore; ready nudge via `related_id=live-channels-ready`. **Closed residuals:** disable→re-enable clears ready-nudge dedupe; mocked e2e On now + `/live` guide smoke (`e2e/on-now-live-guide.spec.ts`). Tunarr guide field shapes still best-effort pending Automat pilot. **Do not regress this status** when updating wizard/publish docs.
+- **Suggested next phase:** Guide field-shape validation on Automat pilot.
 - **Owner surface:** household / frontend Dashboard + notifications
 
 ### OTA / existing Live TV coexistence (multi-tuner)
 
-- **Status:** `done` (attach copy + soft detect) / residual (number collisions)
-- **Why / note:** Plex supports multiple tuners. Attach checklist matches real Plex UI: Tuner Setup = discovery + ZIP gate; EPG Location never offers XMLTV (first screen or channel-mapping) — finish wizard with a temporary ZIP-code lineup. Tunarr streams work; guide titles stay wrong until XMLTV is attached via a working path. Automat-verified: Device Settings / DVR Settings / EPG dropdown have no XMLTV paste for HDHomeRun-style devices on this Plex build — do not claim DVR Settings → XMLTV. Soft probe via `/livetv/dvrs` and `/livetv/tuners` surfaces “Existing Live TV setup detected…” when PMS answers; failures stay `unknown`. Residual: channel-number collisions with OTA majors if owners override the 100+ floor. **API attach landed in 1.29.10** (`POST …/plex-attach-guide`).
-- **Suggested next phase:** Automat pilot with real OTA + Tunarr; optional smarter channel pick.
+- **Status:** `done` (attach copy + soft detect + channel-number auto-avoid)
+- **Why / note:** Plex supports multiple tuners. Attach checklist matches real Plex UI: Tuner Setup = discovery + ZIP gate; EPG Location never offers XMLTV (first screen or channel-mapping) — finish wizard with a temporary ZIP-code lineup. Tunarr streams work; guide titles stay wrong until XMLTV is attached via a working path. Automat-verified: Device Settings / DVR Settings / EPG dropdown have no XMLTV paste for HDHomeRun-style devices on this Plex build — do not claim DVR Settings → XMLTV. Soft probe via `/livetv/dvrs` and `/livetv/tuners` surfaces “Existing Live TV setup detected…” when PMS answers; failures stay `unknown`. **Channel-number collision auto-avoid:** craft/publish skip occupied OTA majors beyond the 100+ floor (`collect_plex_occupied_channel_numbers` + `next_channel_number(..., occupied=)`). **API attach landed in 1.29.10** (`POST …/plex-attach-guide`).
+- **Suggested next phase:** Automat pilot with real OTA + Tunarr to validate occupied-number probe shapes.
 - **Owner surface:** Admin → Live Channels → Plex attach
 
 ### Reliable Plex Pass / Live TV entitlement detection
@@ -148,8 +148,8 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 
 ### Collection → channel API + Admin Live Channels surface
 
-- **Status:** `done` (core path)
-- **Why / note:** `POST /api/admin/live-channels/channels/from-collection` + starter pack propose/publish; Admin/Config Live Channels surface with status, preflight, lifecycle, publish, plex-attach. **2026-07-29 craft build:** custom craft form + `POST …/channels/publish`, collection one-tap, manage list with refill/delete, `GET …/craft-options`. Owner “re-run starter pack” additive polish still in Strong candidates.
+- **Status:** `done` (core path; starter pack propose/publish shipped)
+- **Why / note:** `POST /api/admin/live-channels/channels/from-collection` + starter pack propose/publish; Admin/Config Live Channels surface with status, preflight, lifecycle, publish, plex-attach. **2026-07-29 craft build:** custom craft form + `POST …/channels/publish`, collection one-tap, manage list with refill/delete, `GET …/craft-options`. Owner “re-run starter pack” additive polish still in Strong candidates (optional; core starter pack is done).
 - **Suggested next phase:** Strong-candidate polish if capacity; otherwise ship docs.
 - **Owner surface:** backend / wizard
 
@@ -157,7 +157,7 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 
 - **Status:** `done` (2026-07-29)
 - **Why / note:** Starters existed but owner could not craft a custom station or manage/delete from Admin — felt “no way to craft/publish.” Landed: craft vocabulary form, collection publish UI, Your stations refill/delete, HELP owner steps.
-- **Suggested next phase:** schedule-slots + richer motif→ID matching (still deferred separately).
+- **Suggested next phase:** Wire schedule-slots into shuffle/Chaos publish + richer motif→ID matching (client method already landed).
 - **Owner surface:** Admin → Live Channels
 
 ### Strong candidates (same release if capacity)
@@ -168,8 +168,8 @@ From the spec — park here so they are not forgotten if capacity allows after c
 |------|--------|---------------|
 | Auto-refresh programming after library sync / arrivals | `deferred` | backend |
 | Gap fillers from trailers/extras | `done` (1.29.19 — multi-path union filler list + attach + pad ≤15m + jump-start repair) | Installation / Stations |
-| Channel number ranges (virtual 100+) vs OTA | `done` (copy + 100+ floor) / residual collision risk | attach checklist documents 100+ floor + renumber; true auto-avoid of OTA majors still open |
-| Owner “re-run starter pack” (additive; no wipe) | `deferred` | wizard |
+| Channel number ranges (virtual 100+) vs OTA | `done` (copy + 100+ floor + occupied auto-avoid) | craft/publish skip Plex OTA majors via `collect_plex_occupied_channel_numbers` |
+| Owner “re-run starter pack” (additive; no wipe) | `deferred` (core starter pack propose/publish is `done`) | wizard |
 | Ephemeral “tonight’s queue” shelf | `deferred` | household |
 
 ---
@@ -194,9 +194,9 @@ From the spec — park here so they are not forgotten if capacity allows after c
 
 ### 2026-07-29 — `TunarrClient` schedule-slots gap
 
-- **Status:** `deferred`
-- **Why / note:** Module docstring maps shuffle/Chaos to `POST /channels/{id}/schedule-slots`, but no client method exists yet. Chaos/shuffle publish may be blocked until this lands (alongside program IDs).
-- **Suggested next phase:** With richer programming / post–Automat OpenAPI confirmation.
+- **Status:** `done` (client method) / residual (publish wiring)
+- **Why / note:** `TunarrClient.schedule_slots` now calls `POST /channels/{id}/schedule-slots`. Module docstring mapping for shuffle/Chaos is accurate for the client. Residual: Live Channels publish still fills via scanned program IDs / manual content more than full random-slot schedule recipes.
+- **Suggested next phase:** Wire schedule-slots into shuffle/Chaos publish after Automat OpenAPI confirmation.
 - **Owner surface:** backend
 
 ### 2026-07-29 — Package docstring lag
@@ -246,7 +246,7 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 
 - **Status:** `done` (core path in **1.29.11**) / residual (richer taste→ID matching, TV-library wait)
 - **Why / note:** Automat root cause: wired Plex media source left libraries `enabled: false` → empty lineups → Plex “session has ended” + empty guide. **1.29.11** enables Movies/TV, kicks scan, fills `content` lineup rows from scanned program IDs (keyword/name fallback), defaults `fill_programming=true`, and surfaces `guide_index` in Admin status. Residual: TV scan may still be queued at first publish; taste/motif matching is keyword-heuristic not full Tunarr schedule-slots.
-- **Suggested next phase:** schedule-slots client + tighter motif/genre filters; wait-for-scan UX.
+- **Suggested next phase:** Wire `schedule_slots` into shuffle/Chaos publish + tighter motif/genre filters; wait-for-scan UX.
 - **Owner surface:** backend / publish / Admin status
 
 #### HELP / CONFIGURATION / CHANGELOG Task 7 not fully shipped
@@ -265,9 +265,9 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 
 #### e2e `FeatureFlags` type lacks `live_channels_enabled`
 
-- **Status:** `deferred`
-- **Why / note:** `e2e/fixtures/api-mocks.ts` `FeatureFlags` still only types `multi_user_enabled` / `seerr_enabled` / `plex_collections_enabled`. Backend/frontend flag exists; mocked e2e helpers cannot type-safely default or override Live Channels without extending the type (+ defaults in `mockFeatures`).
-- **Suggested next phase:** When adding Live Channels e2e (on-now or wizard) or any shipping e2e touch.
+- **Status:** `done`
+- **Why / note:** `e2e/fixtures/api-mocks.ts` exports `FeatureFlags` with `live_channels_enabled` / `live_channels_ready` (plus defaults in `mockFeatures` / `mockCuratorApis`). Mocked On now + Live guide smoke: `e2e/on-now-live-guide.spec.ts` + `mockLiveChannelsHousehold`.
+- **Suggested next phase:** Optional wizard e2e when Admin Live craft needs UI coverage.
 - **Owner surface:** e2e / frontend
 
 ### 2026-07-29 — Plex UI has no XMLTV paste for HDHomeRun/Tunarr (Automat)
@@ -343,9 +343,9 @@ Parked from the persona UX build plan. **Do not schedule these until Phase 1 (Li
 
 ### Channel logo publish (end default Tunarr marks in Plex)
 
-- **Status:** `deferred` (parked behind persona UX Phase 1–2)
-- **Why / note:** LAN logo URL + per-station art landed **1.29.25**, but default Tunarr marks can still show in Plex when art is missing or not republished. Finish the path so household Live TV guide rows look like Projectionist stations, not stock Tunarr placeholders.
-- **Suggested next phase:** After Admin Live craft polish (Phase 1); craft/publish residual.
+- **Status:** `done` (P0 residual trust)
+- **Why / note:** LAN logo URL + per-station art landed **1.29.25**. Stock Tunarr `/images/tunarr.png` is no longer used as a fallback — `resolve_channel_icon_url` returns empty without preferred art, and `apply_station_icons` clears residual stock marks so Plex does not show default Tunarr logos.
+- **Suggested next phase:** Optional richer collection/title art when Plex posters are LAN-unreachable.
 - **Owner surface:** Admin Live Channels / publish / Plex guide
 
 ### First-run `WIZARD_STEPS` Live integration
@@ -357,7 +357,7 @@ Parked from the persona UX build plan. **Do not schedule these until Phase 1 (Li
 
 ### Craft honesty edges (motif soft-caps messaging)
 
-- **Status:** `deferred` (parked behind persona UX Phase 1–2)
-- **Why / note:** Motif / taste / filtered craft may still sample under a soft cap (~30–80) while collection/show full-run fills up to 1000. Owners need plain-language honesty in craft UI (preview + post-publish) when the pool was soft-capped — not silent undersize vs full-run stations.
-- **Suggested next phase:** With Admin Live craft compression (Phase 1 residual) or a dedicated craft-honesty pass.
+- **Status:** `done` (P0 residual trust)
+- **Why / note:** Motif / taste / filtered craft still sample under a soft cap (~30–80) while collection/show full-run fills up to 1000. Admin craft preview + publish feedback now surface `fill_mode` / `soft_capped` / soft-cap honesty copy (`craft_soft_cap_honesty`, `craftSoftCapHonestyNote`).
+- **Suggested next phase:** Optional gap→station handoff after craft honesty (Phase B Love).
 - **Owner surface:** Admin Live Channels craft / publish feedback

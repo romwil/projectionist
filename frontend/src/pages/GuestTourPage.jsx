@@ -10,7 +10,14 @@ import { ROUTES } from "../lib/backNav.js";
  */
 export default function GuestTourPage() {
   const [flag, setFlag] = useState({ loading: true, enabled: false });
-  const [state, setState] = useState({ loading: true, items: [], error: "", title: "", lede: "" });
+  const [state, setState] = useState({
+    loading: true,
+    items: [],
+    error: "",
+    title: "",
+    lede: "",
+    liveTeaser: null,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -42,6 +49,7 @@ export default function GuestTourPage() {
           error: "",
           title: data?.title || "What's great here",
           lede: data?.lede || "",
+          liveTeaser: data?.live_teaser || null,
         });
       })
       .catch((error) => {
@@ -52,6 +60,7 @@ export default function GuestTourPage() {
             error: error.message || "Could not load the tour.",
             title: "What's great here",
             lede: "",
+            liveTeaser: null,
           });
         }
       });
@@ -63,6 +72,8 @@ export default function GuestTourPage() {
   if (!flag.loading && !flag.enabled) {
     return <Navigate to="/login" replace />;
   }
+
+  const live = state.liveTeaser;
 
   return (
     <AppShell
@@ -81,6 +92,31 @@ export default function GuestTourPage() {
         ) : null}
         {state.lede ? <p className="guest-tour-lede">{state.lede}</p> : null}
         {state.error ? <p className="error">{state.error}</p> : null}
+
+        {live?.enabled ? (
+          <section className="guest-live-teaser" data-testid="guest-live-teaser">
+            <p className="eyebrow">What’s great tonight</p>
+            <h2>Live on the household stations</h2>
+            <p>{live.message || "Ask your host for access to tune in."}</p>
+            {(live.channels || []).length ? (
+              <ul className="guest-live-teaser-list" data-testid="guest-live-teaser-list">
+                {live.channels.map((channel) => (
+                  <li key={`${channel.number || ""}-${channel.name}`}>
+                    <strong>
+                      {channel.number != null ? `${channel.number} · ` : ""}
+                      {channel.name}
+                    </strong>
+                    {channel.now_title ? <span> — {channel.now_title}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <Link to="/login" className="primary" data-testid="guest-live-teaser-cta">
+              Request access to watch
+            </Link>
+          </section>
+        ) : null}
+
         {!flag.loading && !state.loading && !state.error ? (
           state.items.length ? (
             <div className="guest-tour-grid" data-testid="guest-tour-grid">

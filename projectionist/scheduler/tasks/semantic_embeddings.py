@@ -64,7 +64,7 @@ async def run(
         nonlocal embedded
         if not pending_rows:
             return
-        vectors = await embed_texts(pending_texts, settings)
+        vectors = await embed_texts(pending_texts, settings, db=db)
         pairs = [
             (int(row["id"]), vector, content_hash)
             for row, vector, content_hash in zip(pending_rows, vectors, pending_hashes)

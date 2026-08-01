@@ -8,6 +8,7 @@ import TitleCard from "../components/TitleCard";
 import AgentAvatar from "../components/AgentAvatar";
 import ShareActionMenu from "../components/ShareActionMenu";
 import { ROUTES } from "../lib/backNav";
+import { librarySharePrivacyNote } from "../lib/householdSocial.js";
 import { savedLibraryBlocks } from "../lib/savedLibraryBlocks";
 
 function groupedByDate(pages) {
@@ -44,8 +45,30 @@ export default function LibraryPage() {
     return (
       <AppShell className="app-root explore-page" title={page?.name || "Saved response"} actions={<BackLink fallbackTo={ROUTES.library} />}>
         <main className="explore-main">
-          <section className="explore-section">
-            <div className="section-heading"><p className="eyebrow">Saved curator library</p><h1>{page?.name || "Loading…"}</h1></div>
+          <section className="explore-section library-detail-section" data-testid="library-detail-page">
+            <div className="section-heading library-detail-heading">
+              <p className="eyebrow">Saved curator library</p>
+              <h1>{page?.name || "Loading…"}</h1>
+              {page ? (
+                <div className="library-detail-meta" data-testid="library-detail-meta">
+                  <span className="library-privacy-pill" data-testid="library-privacy-pill">
+                    Household only
+                  </span>
+                  {page.persona?.name ? (
+                    <span className="message-agent-meta library-persona-badge">
+                      <AgentAvatar name={page.persona.name} />
+                      <span>{page.persona.name}</span>
+                    </span>
+                  ) : null}
+                  <p className="library-privacy-note">{librarySharePrivacyNote()}</p>
+                  {page.summary ? (
+                    <p className="library-detail-summary" data-testid="library-detail-summary">
+                      {page.summary}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
             {savedLibraryBlocks(blocks).map((block, index) => {
               if (block.kind === "title_cards" || block.kind === "recommendations") {
                 return <div className="inline-cards" key={index}>{block.items.map((item) => <TitleCard key={`${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`} item={item} compact />)}</div>;
@@ -64,6 +87,18 @@ export default function LibraryPage() {
                       </button>
                     ))}
                   </div>
+                );
+              }
+              if (block.kind === "persona_consult") {
+                const name = block.persona || "Curator";
+                const lead = block.lead || `I asked ${name} and they said`;
+                return (
+                  <aside className="persona-consult-quote" key={index} aria-label={`Consulted ${name}`}>
+                    <p className="persona-consult-lead">{lead}…</p>
+                    <div className="persona-consult-answer">
+                      <MessageText content={block.answer} markdown />
+                    </div>
+                  </aside>
                 );
               }
               return <MessageText key={index} content={block.content} markdown />;

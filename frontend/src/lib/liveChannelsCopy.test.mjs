@@ -2,14 +2,17 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   CREATE_STATION_MODES,
+  craftSoftCapHonestyNote,
   formatLiveStreamError,
   liveAdminLabel,
   liveGuideEmptyCopy,
   liveHealthSentence,
   liveOnboardingTip,
   liveSetupStepNumbers,
+  liveStreamHealthCopy,
   liveUserEmptyCopy,
 } from "./liveChannelsCopy.js";
+import { LIVE_SOFT_STALL_PHRASES } from "./liveStreamSoftStallCopy.js";
 
 describe("liveChannelsCopy", () => {
   it("uses household warming copy without Tunarr", () => {
@@ -85,5 +88,40 @@ describe("liveChannelsCopy", () => {
       formatLiveStreamError({ response: { code: 503 } }),
       /Broadcast engine/i,
     );
+  });
+
+  it("uses antenna-library copy for soft stalls; keeps hard errors honest", () => {
+    assert.equal(liveStreamHealthCopy("ok"), "");
+    assert.equal(
+      liveStreamHealthCopy("buffering", { phrase: "Adjusting the antenna arms…" }),
+      "Adjusting the antenna arms…",
+    );
+    assert.equal(
+      liveStreamHealthCopy("stalled", { phrase: "Twisting the UHF antenna loop…" }),
+      "Twisting the UHF antenna loop…",
+    );
+    const picked = liveStreamHealthCopy("buffering", { pick: () => LIVE_SOFT_STALL_PHRASES[0] });
+    assert.equal(picked, LIVE_SOFT_STALL_PHRASES[0]);
+    assert.doesNotMatch(picked, /Buffering|Tunarr/i);
+    // Hard failures stay on the serious path.
+    assert.match(
+      formatLiveStreamError({ response: { code: 503 } }),
+      /warming up/i,
+    );
+  });
+
+  it("states motif soft-cap honesty vs full-run", () => {
+    const soft = craftSoftCapHonestyNote({
+      soft_capped: true,
+      soft_default: 30,
+      soft_cap: 80,
+      full_run_cap: 1000,
+      note: "Matched 40 title(s).",
+    });
+    assert.match(soft, /Matched 40/);
+    assert.match(soft, /30–80/);
+    assert.match(soft, /1000/);
+    const full = craftSoftCapHonestyNote({ fill_mode: "full_run" });
+    assert.match(full, /full resolved pool/i);
   });
 });

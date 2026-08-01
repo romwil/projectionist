@@ -44,11 +44,28 @@ def _clean_logline(text: str) -> str:
     return cleaned
 
 
-async def _generate_logline(settings: Settings, *, title: str, year: Any, plot: str) -> str:
+async def _generate_logline(
+    settings: Settings,
+    *,
+    title: str,
+    year: Any,
+    plot: str,
+    db: Database | None = None,
+) -> str:
     from projectionist.agent.providers import get_chat_provider
+    from projectionist.telemetry import PURPOSE_LOGLINE
+    from projectionist.telemetry.llm_track import tracked_chat
+    from projectionist.telemetry.llm_usage import content_hash, job_cache_get, job_cache_set
+
+    year_bit = f" ({year})" if year else ""
+    cache_src = f"{title}{year_bit}\n{plot}"
+    cache_key = content_hash(cache_src)
+    if db is not None:
+        cached = job_cache_get(db, kind="logline", key_hash=cache_key)
+        if cached:
+            return cached
 
     provider = get_chat_provider(settings)
-    year_bit = f" ({year})" if year else ""
     messages = [
         {
             "role": "system",
@@ -62,7 +79,10 @@ async def _generate_logline(settings: Settings, *, title: str, year: Any, plot: 
             "content": f"Title: {title}{year_bit}\n\nPlot material:\n{plot}",
         },
     ]
-    response = await provider.chat(messages)
+    if db is not None:
+        response = await tracked_chat(db, provider, messages, purpose=PURPOSE_LOGLINE)
+    else:
+        response = await provider.chat(messages)
     content = ""
     if isinstance(response, dict):
         content = str(response.get("content") or "")
@@ -72,7 +92,10 @@ async def _generate_logline(settings: Settings, *, title: str, year: Any, plot: 
             if choices and isinstance(choices[0], dict):
                 msg = choices[0].get("message") or {}
                 content = str(msg.get("content") or "")
-    return _clean_logline(content)
+    cleaned = _clean_logline(content)
+    if cleaned and db is not None:
+        job_cache_set(db, kind="logline", key_hash=cache_key, value=cleaned)
+    return cleaned
 
 
 async def run(
@@ -122,6 +145,7 @@ async def run(
                 title=str(row["title"] or ""),
                 year=row["year"],
                 plot=plot,
+                db=db,
             )
         except Exception as error:
             errors += 1

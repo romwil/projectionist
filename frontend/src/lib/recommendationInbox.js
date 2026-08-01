@@ -1,7 +1,9 @@
 /**
  * Pure helpers for the generalized notifications inbox.
- * Kinds: recommendation | arrival | access-request | digest | nudge
+ * Kinds: recommendation | arrival | access-request | digest | nudge | library-share
  */
+
+import { isWatchPartyRecommendation, recommendationIntent } from "./householdSocial.js";
 
 export const NOTIFICATION_KINDS = [
   "recommendation",
@@ -9,7 +11,10 @@ export const NOTIFICATION_KINDS = [
   "access-request",
   "digest",
   "nudge",
+  "library-share",
 ];
+
+export { isWatchPartyRecommendation, recommendationIntent };
 
 export function recommendationIdentity(item) {
   const type = item?.media_type === "show" ? "show" : "movie";
@@ -52,6 +57,7 @@ export function normalizeRecommendation(item) {
   return {
     ...item,
     kind: item?.kind || "recommendation",
+    intent: recommendationIntent(item),
     in_library: item?.in_library ?? Boolean(item?.rating_key || item?.plex_rating_key),
     message: item?.message ?? item?.body ?? null,
     body: item?.body ?? item?.message ?? null,
@@ -97,6 +103,10 @@ export function inboxHeadline(items = []) {
     if (kind === "digest") return "You have a digest";
     if (kind === "access-request") return "Someone requested access";
     if (kind === "nudge") return "A curator nudge for you";
+    if (kind === "library-share") return "Someone shared a saved page";
+    if (kind === "recommendation" && isWatchPartyRecommendation(list[0])) {
+      return "Someone invited you to watch together";
+    }
     return "Someone recommended a title";
   }
   return `${list.length} new notifications`;
@@ -123,17 +133,29 @@ export function inboxCardCopy(item) {
   if (kind === "nudge") {
     return { eyebrow: "Nudge", lead: title, note: item?.body || item?.message || null };
   }
+  if (kind === "library-share") {
+    return {
+      eyebrow: "Shared page",
+      lead: title,
+      note: item?.body || item?.message || null,
+      path: item?.payload?.path || (item?.payload?.page_id ? `/library/${item.payload.page_id}` : null),
+    };
+  }
+  const watchParty = isWatchPartyRecommendation(item);
   return {
-    eyebrow: "Recommendation",
+    eyebrow: watchParty ? "Watch together" : "Recommendation",
     lead: (
       // Plain string for non-JSX consumers; RecommendationsInbox may override.
       null
     ),
-    leadText: `${fromName} recommended ${title}${yearBit} for you`,
+    leadText: watchParty
+      ? `${fromName} invited you to watch ${title}${yearBit}`
+      : `${fromName} recommended ${title}${yearBit} for you`,
     note: item?.message || item?.body || null,
     fromName,
     title,
     yearBit,
+    intent: recommendationIntent(item),
   };
 }
 

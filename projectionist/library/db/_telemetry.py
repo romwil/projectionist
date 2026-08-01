@@ -90,6 +90,221 @@ class TelemetryConfigMixin:
 
     # --- Data retention / pruning ---
 
+    def insert_llm_usage(
+        self,
+        *,
+        usage_id: str,
+        purpose: str,
+        model: str = "",
+        provider: str = "",
+        prompt_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
+        total_tokens: Optional[int] = None,
+        latency_ms: Optional[int] = None,
+        estimated_usd: Optional[float] = None,
+        persona_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        meta_json: str = "{}",
+        created_at: Optional[float] = None,
+    ) -> None:
+        """Insert one row into the ``llm_usage`` accounting table."""
+
+        def _write() -> None:
+            with self.connect() as conn:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO llm_usage (
+                        id, created_at, purpose, model, provider,
+                        prompt_tokens, completion_tokens, total_tokens,
+                        latency_ms, estimated_usd, persona_id, session_id,
+                        user_id, meta_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        usage_id,
+                        float(created_at if created_at is not None else time.time()),
+                        purpose,
+                        model,
+                        provider,
+                        prompt_tokens,
+                        completion_tokens,
+                        total_tokens,
+                        latency_ms,
+                        estimated_usd,
+                        persona_id,
+                        session_id,
+                        user_id,
+                        meta_json or "{}",
+                    ),
+                )
+
+        self.run_write(_write, label="insert_llm_usage")
+
+    def llm_usage_summary(
+        self,
+        *,
+        days: int = 7,
+        model: Optional[str] = None,
+        purpose: Optional[str] = None,
+        persona_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Aggregate LLM usage for the owner BI explorer."""
+        days = max(1, min(int(days or 7), 90))
+        cutoff = time.time() - (days * 86400)
+        clauses = ["created_at >= ?"]
+        params: List[Any] = [cutoff]
+        if model:
+            clauses.append("model = ?")
+            params.append(model)
+        if purpose:
+            clauses.append("purpose = ?")
+            params.append(purpose)
+        if persona_id:
+            clauses.append("persona_id = ?")
+            params.append(persona_id)
+        where = " AND ".join(clauses)
+
+        with self.connect() as conn:
+            totals = conn.execute(
+                f"""
+                SELECT
+                    COUNT(*) AS call_count,
+                    COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens,
+                    COALESCE(SUM(completion_tokens), 0) AS completion_tokens,
+                    COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                    COALESCE(SUM(estimated_usd), 0) AS estimated_usd,
+                    COALESCE(AVG(latency_ms), 0) AS avg_latency_ms
+                FROM llm_usage
+                WHERE {where}
+                """,
+                params,
+            ).fetchone()
+
+            by_day = conn.execute(
+                f"""
+                SELECT date(created_at, 'unixepoch', 'localtime') AS day,
+                       COUNT(*) AS call_count,
+                       COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                       COALESCE(SUM(estimated_usd), 0) AS estimated_usd
+                FROM llm_usage
+                WHERE {where}
+                GROUP BY day
+                ORDER BY day ASC
+                """,
+                params,
+            ).fetchall()
+
+            by_model = conn.execute(
+                f"""
+                SELECT model, COUNT(*) AS call_count,
+                       COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                       COALESCE(SUM(estimated_usd), 0) AS estimated_usd
+                FROM llm_usage
+                WHERE {where}
+                GROUP BY model
+                ORDER BY total_tokens DESC, call_count DESC
+                LIMIT 40
+                """,
+                params,
+            ).fetchall()
+
+            by_purpose = conn.execute(
+                f"""
+                SELECT purpose, COUNT(*) AS call_count,
+                       COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                       COALESCE(SUM(estimated_usd), 0) AS estimated_usd
+                FROM llm_usage
+                WHERE {where}
+                GROUP BY purpose
+                ORDER BY total_tokens DESC, call_count DESC
+                """,
+                params,
+            ).fetchall()
+
+            by_persona = conn.execute(
+                f"""
+                SELECT COALESCE(persona_id, '') AS persona_id,
+                       COUNT(*) AS call_count,
+                       COALESCE(SUM(total_tokens), 0) AS total_tokens,
+                       COALESCE(SUM(estimated_usd), 0) AS estimated_usd
+                FROM llm_usage
+                WHERE {where}
+                GROUP BY COALESCE(persona_id, '')
+                ORDER BY total_tokens DESC, call_count DESC
+                LIMIT 40
+                """,
+                params,
+            ).fetchall()
+
+            filter_models = [
+                str(row["model"])
+                for row in conn.execute(
+                    "SELECT DISTINCT model FROM llm_usage WHERE created_at >= ? AND model != '' ORDER BY model",
+                    (cutoff,),
+                ).fetchall()
+            ]
+            filter_purposes = [
+                str(row["purpose"])
+                for row in conn.execute(
+                    "SELECT DISTINCT purpose FROM llm_usage WHERE created_at >= ? ORDER BY purpose",
+                    (cutoff,),
+                ).fetchall()
+            ]
+            filter_personas = [
+                str(row["persona_id"])
+                for row in conn.execute(
+                    """
+                    SELECT DISTINCT persona_id FROM llm_usage
+                    WHERE created_at >= ? AND persona_id IS NOT NULL AND persona_id != ''
+                    ORDER BY persona_id
+                    """,
+                    (cutoff,),
+                ).fetchall()
+            ]
+
+        def _rows(rows: List[sqlite3.Row]) -> List[Dict[str, Any]]:
+            return [dict(row) for row in rows]
+
+        return {
+            "days": days,
+            "filters": {
+                "model": model,
+                "purpose": purpose,
+                "persona_id": persona_id,
+                "models": filter_models,
+                "purposes": filter_purposes,
+                "personas": filter_personas,
+            },
+            "totals": {
+                "call_count": int(totals["call_count"] or 0),
+                "prompt_tokens": int(totals["prompt_tokens"] or 0),
+                "completion_tokens": int(totals["completion_tokens"] or 0),
+                "total_tokens": int(totals["total_tokens"] or 0),
+                "estimated_usd": float(totals["estimated_usd"] or 0),
+                "avg_latency_ms": float(totals["avg_latency_ms"] or 0),
+            },
+            "by_day": _rows(by_day),
+            "by_model": _rows(by_model),
+            "by_purpose": _rows(by_purpose),
+            "by_persona": _rows(by_persona),
+        }
+
+    def prune_llm_usage(self, retention_days: int) -> int:
+        """Delete LLM usage rows older than *retention_days*. Returns rows deleted."""
+        days = max(1, int(retention_days))
+        cutoff = time.time() - (days * 86400)
+
+        def _write() -> int:
+            with self.connect() as conn:
+                cursor = conn.execute(
+                    "DELETE FROM llm_usage WHERE created_at < ?",
+                    (cutoff,),
+                )
+                return int(cursor.rowcount or 0)
+
+        return int(self.run_write(_write, label="prune_llm_usage") or 0)
+
     def prune_telemetry(self, retention_days: int) -> int:
         """Delete telemetry events older than *retention_days*. Returns rows deleted."""
         with self.connect() as conn:

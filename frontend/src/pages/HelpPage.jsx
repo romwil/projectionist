@@ -28,6 +28,7 @@ const IN_APP_ROUTES = new Set([
   "/admin",
   "/admin/tasks",
   "/admin/dashboard",
+  "/admin/usage",
   "/explore",
   "/explore/tags",
   "/explore/plot-lab",

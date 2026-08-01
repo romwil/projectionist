@@ -180,6 +180,85 @@ class RecommendationsAndPrefsTests(unittest.TestCase):
         self.assertEqual(empty.json()["unread_count"], 0)
         self.assertEqual(empty.json()["count"], 0)
 
+    def test_watch_party_intent_lands_in_notification_payload(self) -> None:
+        self._enable_multi_user()
+        self._login(plex_id=10, title="Owner", email="owner-wp@example.com")
+        member_client = TestClient(self.app_mod.app)
+        profile = {
+            "id": 11,
+            "title": "Member",
+            "email": "member-wp@example.com",
+            "thumb": None,
+        }
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
+            member_login = member_client.post("/api/auth/plex", json={"auth_token": "tok-11"})
+        self.assertEqual(member_login.status_code, 200)
+        member = member_login.json()["user"]
+
+        created = self.client.post(
+            "/api/recommendations",
+            json={
+                "to_user_ids": [member["id"]],
+                "media_type": "movie",
+                "title": "Heat",
+                "tmdb_id": 949,
+                "year": 1995,
+                "message": "Watch together tonight?",
+                "intent": "watch_party",
+            },
+        )
+        self.assertEqual(created.status_code, 200)
+        inbox = member_client.get("/api/notifications?unread_only=true")
+        self.assertEqual(inbox.status_code, 200)
+        items = inbox.json()["items"]
+        self.assertTrue(items)
+        match = next((row for row in items if row.get("kind") == "recommendation"), None)
+        self.assertIsNotNone(match)
+        self.assertEqual(match["title"], "Heat")
+        self.assertEqual((match.get("payload") or {}).get("intent"), "watch_party")
+
+    def test_share_saved_library_page_notifies_household(self) -> None:
+        self._enable_multi_user()
+        owner = self._login(plex_id=20, title="Owner", email="owner-share@example.com")
+        member_client = TestClient(self.app_mod.app)
+        profile = {
+            "id": 21,
+            "title": "Member",
+            "email": "member-share@example.com",
+            "thumb": None,
+        }
+        with patch("projectionist.web.auth.fetch_plex_account", return_value=profile):
+            member_login = member_client.post("/api/auth/plex", json={"auth_token": "tok-21"})
+        self.assertEqual(member_login.status_code, 200)
+        member = member_login.json()["user"]
+
+        saved = self.client.post(
+            "/api/saved-library",
+            json={
+                "name": "Noir night picks",
+                "content": {"blocks": [{"kind": "text", "content": "Two rainy-night titles."}]},
+            },
+        )
+        self.assertEqual(saved.status_code, 200)
+        page_id = saved.json()["id"]
+
+        shared = self.client.post(
+            f"/api/saved-library/{page_id}/share",
+            json={"to_user_ids": [member["id"]], "message": "For Friday"},
+        )
+        self.assertEqual(shared.status_code, 200)
+        self.assertEqual(shared.json()["count"], 1)
+
+        inbox = member_client.get("/api/notifications?unread_only=true&kind=library-share")
+        self.assertEqual(inbox.status_code, 200)
+        items = inbox.json()["items"]
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]["kind"], "library-share")
+        self.assertEqual(items[0]["title"], "Noir night picks")
+        self.assertEqual(items[0]["payload"]["page_id"], page_id)
+        self.assertEqual(items[0]["payload"]["path"], f"/library/{page_id}")
+        self.assertEqual(items[0]["from_display_name"], owner["display_name"] or "Owner")
+
     def test_cached_plex_friendly_name(self) -> None:
         class FakeClient:
             def __init__(self, *args, **kwargs):

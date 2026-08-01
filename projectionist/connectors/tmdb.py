@@ -207,7 +207,9 @@ class TMDBClient:
         year_from: Optional[int] = None,
         year_to: Optional[int] = None,
         with_genres: Optional[str] = None,
+        without_genres: Optional[str] = None,
         with_keywords: Optional[str] = None,
+        without_keywords: Optional[str] = None,
         with_companies: Optional[str] = None,
         sort_by: str = "popularity.desc",
         page: int = 1,
@@ -219,8 +221,12 @@ class TMDBClient:
             params["primary_release_date.lte"] = f"{year_to}-12-31"
         if with_genres:
             params["with_genres"] = with_genres
+        if without_genres:
+            params["without_genres"] = without_genres
         if with_keywords:
             params["with_keywords"] = with_keywords
+        if without_keywords:
+            params["without_keywords"] = without_keywords
         if with_companies:
             params["with_companies"] = with_companies
         payload = request_json(self._url("/discover/movie", **params), timeout=self.timeout)
@@ -232,9 +238,12 @@ class TMDBClient:
         year_from: Optional[int] = None,
         year_to: Optional[int] = None,
         with_genres: Optional[str] = None,
+        without_genres: Optional[str] = None,
         with_keywords: Optional[str] = None,
+        without_keywords: Optional[str] = None,
         with_companies: Optional[str] = None,
         with_networks: Optional[str] = None,
+        with_type: Optional[str] = None,
         sort_by: str = "popularity.desc",
         page: int = 1,
     ) -> List[Mapping[str, Any]]:
@@ -245,12 +254,18 @@ class TMDBClient:
             params["first_air_date.lte"] = f"{year_to}-12-31"
         if with_genres:
             params["with_genres"] = with_genres
+        if without_genres:
+            params["without_genres"] = without_genres
         if with_keywords:
             params["with_keywords"] = with_keywords
+        if without_keywords:
+            params["without_keywords"] = without_keywords
         if with_companies:
             params["with_companies"] = with_companies
         if with_networks:
             params["with_networks"] = with_networks
+        if with_type:
+            params["with_type"] = with_type
         payload = request_json(self._url("/discover/tv", **params), timeout=self.timeout)
         return payload.get("results", []) if isinstance(payload, dict) else []
 

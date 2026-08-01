@@ -164,6 +164,63 @@ class PlexOnDeckItem:
     tvdb_id: Optional[str] = None
 
 
+@dataclass
+class PlexSubtitleStream:
+    """A subtitle track attached to a Plex movie/episode (streamType=3)."""
+
+    id: str
+    language: str = ""
+    language_code: str = ""
+    title: str = ""
+    display_title: str = ""
+    format: str = ""
+    key: str = ""
+    forced: bool = False
+    hearing_impaired: bool = False
+    selected: bool = False
+    default: bool = False
+    external: bool = False
+    # True when this row came from Plex on-demand subtitle search (not yet attached).
+    searchable: bool = False
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "language": self.language,
+            "language_code": self.language_code,
+            "title": self.title,
+            "display_title": self.display_title or self.title or self.language or "Subtitle",
+            "format": self.format,
+            "key": self.key,
+            "forced": self.forced,
+            "hearing_impaired": self.hearing_impaired,
+            "selected": self.selected,
+            "default": self.default,
+            "external": self.external,
+            "searchable": self.searchable,
+            "label": self._label(),
+        }
+
+    def _label(self) -> str:
+        base = (
+            self.display_title
+            or self.title
+            or self.language
+            or self.language_code
+            or "Subtitle"
+        ).strip()
+        tags: List[str] = []
+        if self.forced:
+            tags.append("Forced")
+        if self.hearing_impaired:
+            tags.append("SDH")
+        if self.external:
+            tags.append("External")
+        if tags:
+            return f"{base} ({', '.join(tags)})"
+        return base
+
+
 class PlexClient:
     def __init__(
         self,
@@ -556,6 +613,114 @@ class PlexClient:
         if not key:
             raise ValueError("section_key is required")
         self._request_empty(f"/library/sections/{urllib.parse.quote(key)}/refresh", method="GET")
+
+    def list_subtitle_streams(self, rating_key: str) -> List[PlexSubtitleStream]:
+        """Return subtitle streams already attached to a movie/episode (streamType=3)."""
+        key = str(rating_key or "").strip()
+        if not key:
+            raise ValueError("rating_key is required")
+        root = self._request_xml(f"/library/metadata/{urllib.parse.quote(key)}")
+        streams: List[PlexSubtitleStream] = []
+        for element in root.findall(".//Stream"):
+            if str(element.attrib.get("streamType") or "") != "3":
+                continue
+            parsed = self._parse_subtitle_stream(element, searchable=False)
+            if parsed:
+                streams.append(parsed)
+        return streams
+
+    def search_subtitles(
+        self,
+        rating_key: str,
+        *,
+        language: str = "en",
+        hearing_impaired: int = 0,
+        forced: int = 0,
+    ) -> List[PlexSubtitleStream]:
+        """Search Plex's on-demand subtitle agents for a language (movies + episodes)."""
+        key = str(rating_key or "").strip()
+        if not key:
+            raise ValueError("rating_key is required")
+        lang = str(language or "en").strip() or "en"
+        query = urllib.parse.urlencode(
+            {
+                "language": lang,
+                "hearingImpaired": int(hearing_impaired),
+                "forced": int(forced),
+            }
+        )
+        root = self._request_xml(
+            f"/library/metadata/{urllib.parse.quote(key)}/subtitles?{query}"
+        )
+        streams: List[PlexSubtitleStream] = []
+        for element in root.findall(".//Stream"):
+            parsed = self._parse_subtitle_stream(element, searchable=True)
+            if parsed:
+                streams.append(parsed)
+        return streams
+
+    def download_subtitle(self, rating_key: str, subtitle_key: str) -> None:
+        """Ask Plex to download an on-demand subtitle (async on the PMS side)."""
+        key = str(rating_key or "").strip()
+        sub_key = str(subtitle_key or "").strip()
+        if not key:
+            raise ValueError("rating_key is required")
+        if not sub_key:
+            raise ValueError("subtitle_key is required")
+        query = urllib.parse.urlencode({"key": sub_key})
+        self._request_empty(
+            f"/library/metadata/{urllib.parse.quote(key)}/subtitles?{query}",
+            method="PUT",
+        )
+
+    def fetch_subtitle_bytes(self, stream_key: str) -> bytes:
+        """Download raw subtitle file bytes for an attached stream ``key`` path."""
+        path = str(stream_key or "").strip()
+        if not path:
+            raise ValueError("stream_key is required")
+        if not path.startswith("/"):
+            path = f"/{path}"
+        separator = "&" if "?" in path else "?"
+        url = f"{self.base_url}{path}{separator}X-Plex-Token={urllib.parse.quote(self.token)}"
+        import urllib.request
+
+        request = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            return response.read()
+
+    @staticmethod
+    def _parse_subtitle_stream(element, *, searchable: bool = False) -> Optional[PlexSubtitleStream]:
+        stream_id = str(
+            element.attrib.get("id")
+            or element.attrib.get("streamKey")
+            or element.attrib.get("key")
+            or ""
+        ).strip()
+        key = str(element.attrib.get("key") or "").strip()
+        if not stream_id and not key:
+            return None
+        lang_code = str(
+            element.attrib.get("languageCode")
+            or element.attrib.get("languageTag")
+            or ""
+        ).strip().lower()
+        language = str(element.attrib.get("language") or lang_code or "").strip()
+        return PlexSubtitleStream(
+            id=stream_id or key,
+            language=language,
+            language_code=lang_code,
+            title=str(element.attrib.get("title") or "").strip(),
+            display_title=str(element.attrib.get("displayTitle") or "").strip(),
+            format=str(element.attrib.get("format") or element.attrib.get("codec") or "").strip().lower(),
+            key=key,
+            forced=str(element.attrib.get("forced") or "0") in {"1", "true", "True"},
+            hearing_impaired=str(element.attrib.get("hearingImpaired") or "0")
+            in {"1", "true", "True"},
+            selected=str(element.attrib.get("selected") or "0") in {"1", "true", "True"},
+            default=str(element.attrib.get("default") or "0") in {"1", "true", "True"},
+            external=str(element.attrib.get("external") or "0") in {"1", "true", "True"},
+            searchable=searchable,
+        )
 
     def _request_empty(self, path: str, *, method: str = "GET") -> None:
         separator = "&" if "?" in path else "?"

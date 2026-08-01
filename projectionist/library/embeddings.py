@@ -66,20 +66,41 @@ async def embed_text(text: str, settings: Settings) -> List[float]:
     return vectors[0] if vectors else _hash_embed(text)
 
 
-async def embed_texts(texts: Sequence[str], settings: Settings) -> List[List[float]]:
+async def embed_texts(
+    texts: Sequence[str],
+    settings: Settings,
+    *,
+    db: Any = None,
+) -> List[List[float]]:
     """Embed many texts; prefers provider batch API when available."""
     if not texts:
         return []
     if not remote_embedding_provider_available(settings):
         return [_hash_embed(text) for text in texts]
     try:
+        import time
+
         from projectionist.agent.providers import get_embedding_provider
+        from projectionist.telemetry import PURPOSE_EMBED
+        from projectionist.telemetry.llm_track import record_from_response
 
         provider = get_embedding_provider(settings)
+        t0 = time.time()
         embed_many = getattr(provider, "embed_many", None)
         if callable(embed_many):
-            return await embed_many(list(texts))
-        return [await provider.embed(text) for text in texts]
+            vectors = await embed_many(list(texts))
+        else:
+            vectors = [await provider.embed(text) for text in texts]
+        if db is not None:
+            record_from_response(
+                db,
+                purpose=PURPOSE_EMBED,
+                provider=provider,
+                latency_ms=int((time.time() - t0) * 1000),
+                usage=getattr(provider, "last_usage", None),
+                meta={"batch_size": len(texts)},
+            )
+        return vectors
     except Exception:
         logger.exception("Embedding provider failed; falling back to hash embeddings")
         return [_hash_embed(text) for text in texts]
@@ -203,7 +224,7 @@ async def rebuild_embeddings(
         nonlocal embedded
         if not pending_rows:
             return
-        vectors = await embed_texts(pending_texts, settings)
+        vectors = await embed_texts(pending_texts, settings, db=db)
         pairs = [
             (int(row["id"]), vector, content_hash)
             for row, vector, content_hash in zip(pending_rows, vectors, pending_hashes)

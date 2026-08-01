@@ -72,6 +72,14 @@ export async function deleteLibraryPage(pageId) {
   return api(`/saved-library/${encodeURIComponent(pageId)}`, { method: "DELETE" });
 }
 
+/** Notify household peers about an account-scoped saved page (never a public link). */
+export async function shareLibraryPage(pageId, payload) {
+  return api(`/saved-library/${encodeURIComponent(pageId)}/share`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function getFeatures() {
   return api("/features");
 }
@@ -706,6 +714,41 @@ export async function submitTasteQuiz({ likes = [], dislikes = [] } = {}) {
 export async function getPickForMeFeed({ limit = 8 } = {}) {
   const search = new URLSearchParams({ limit: String(limit) });
   return api(`/library/feeds/pick-for-me?${search}`);
+}
+
+export async function getTonightDoubleFeature({ theme = "" } = {}) {
+  const search = new URLSearchParams();
+  if (theme) search.set("theme", theme);
+  const qs = search.toString();
+  return api(`/library/feeds/tonight-double-feature${qs ? `?${qs}` : ""}`);
+}
+
+export async function syllabusPublishHandoff(listId, { confirm = false, target = "plex" } = {}) {
+  return api(`/syllabus/courses/${encodeURIComponent(listId)}/publish-handoff`, {
+    method: "POST",
+    body: JSON.stringify({ confirm, target }),
+  });
+}
+
+export async function anniversaryLiveStarter({ confirm = false, motifHint = "" } = {}) {
+  return api("/admin/live-channels/anniversary-starter", {
+    method: "POST",
+    body: JSON.stringify({ confirm, motif_hint: motifHint }),
+  });
+}
+
+export async function downloadAdminBackupSnapshot() {
+  const response = await fetch("/api/admin/backup/snapshot", {
+    credentials: "include",
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Backup failed (${response.status})`);
+  }
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition") || "";
+  const match = /filename="([^"]+)"/.exec(disposition);
+  return { blob, filename: match?.[1] || "projectionist-snapshot.zip" };
 }
 
 /** Owner-only: review a Youth-flagged account's memory notes (fail-closed on the server). */
@@ -1441,6 +1484,34 @@ export async function patchLiveChannelsStationSettings(channelId, body = {}) {
   });
 }
 
+export async function getLiveChannelSubtitles(channelId) {
+  return api(`/live-channels/channels/${encodeURIComponent(channelId)}/subtitles`);
+}
+
+export async function downloadLiveChannelSubtitles(channelId, body = {}) {
+  return api(`/live-channels/channels/${encodeURIComponent(channelId)}/subtitles/download`, {
+    method: "POST",
+    body: JSON.stringify({
+      confirm: true,
+      ...body,
+    }),
+  });
+}
+
+export async function getLibraryItemSubtitles(ratingKey) {
+  return api(`/library/items/${encodeURIComponent(ratingKey)}/subtitles`);
+}
+
+export async function downloadLibraryItemSubtitles(ratingKey, body = {}) {
+  return api(`/library/items/${encodeURIComponent(ratingKey)}/subtitles/download`, {
+    method: "POST",
+    body: JSON.stringify({
+      confirm: true,
+      ...body,
+    }),
+  });
+}
+
 export async function postLiveChannelsContinuityRepair(body = {}) {
   return api("/admin/live-channels/continuity/repair", {
     method: "POST",
@@ -1562,4 +1633,71 @@ export async function getScheduledTaskRate(name, { lookback_hours = 72 } = {}) {
     lookback_hours: String(lookback_hours || 72),
   });
   return api(`/admin/scheduled-tasks/${encodeURIComponent(name)}/rate?${search}`);
+}
+
+export async function getLlmUsage({ days = 7, model, purpose, persona_id } = {}) {
+  const search = new URLSearchParams({ days: String(days || 7) });
+  if (model) search.set("model", model);
+  if (purpose) search.set("purpose", purpose);
+  if (persona_id) search.set("persona_id", persona_id);
+  return api(`/admin/llm/usage?${search}`);
+}
+
+export async function getLlmModelCatalog() {
+  return api("/admin/llm/models");
+}
+
+export async function listHolidays() {
+  return api("/admin/holidays");
+}
+
+export async function createHoliday(payload) {
+  return api("/admin/holidays", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateHoliday(observanceId, payload) {
+  return api(`/admin/holidays/${encodeURIComponent(observanceId)}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteHoliday(observanceId) {
+  return api(`/admin/holidays/${encodeURIComponent(observanceId)}`, {
+    method: "DELETE",
+  });
+}
+
+export async function restoreHolidayDefaults() {
+  return api("/admin/holidays/restore-defaults", { method: "POST" });
+}
+
+export async function getHolidayRail(observanceId) {
+  return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail`);
+}
+
+export async function setHolidayRailTitle(observanceId, payload) {
+  return api(`/admin/holidays/${encodeURIComponent(observanceId)}/rail/titles`, {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function clearHolidayRailTitle(observanceId, libraryItemId) {
+  return api(
+    `/admin/holidays/${encodeURIComponent(observanceId)}/rail/titles/${encodeURIComponent(libraryItemId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function searchHolidayLibrary(q, { limit = 12 } = {}) {
+  const search = new URLSearchParams({ q: q || "", limit: String(limit || 12) });
+  return api(`/admin/holidays-library-search?${search}`);
+}
+
+export async function refreshHolidaySchedule() {
+  return api("/admin/holidays-schedule/refresh", { method: "POST" });
 }

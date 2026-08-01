@@ -240,6 +240,9 @@ def _build_migrations() -> List[Migration]:
         (37, "library_graph_fk_orphan_cleanup", _cleanup_library_graph_fk_orphans),
         (38, "acquisition_exclusions", wrap("_migrate_acquisition_exclusions")),
         (39, "show_file_size_rollups", _backfill_show_file_size_rollups),
+        (40, "llm_usage", wrap("_migrate_llm_usage")),
+        (41, "holiday_calendar", wrap("_migrate_holiday_calendar")),
+        (42, "notification_library_share_kind", wrap("_migrate_notification_library_share_kind")),
     ]
 
 

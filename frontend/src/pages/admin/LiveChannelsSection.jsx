@@ -1,5 +1,6 @@
 import { useState } from "react";
 import InlineAlert from "../../components/InlineAlert";
+import OwnerNowPlayingBreakdown from "../../components/OwnerNowPlayingBreakdown";
 import SectionHelp from "../../components/SectionHelp";
 import {
   deleteLiveChannelsChannel,
@@ -18,9 +19,9 @@ import {
   publishLiveChannelsStarters,
   refillLiveChannelsChannel,
 } from "../../api/client";
-import { formatRemaining } from "../../lib/onNow.js";
 import {
   CREATE_STATION_MODES,
+  craftSoftCapHonestyNote,
   liveHealthSentence,
   liveSetupStepNumbers,
 } from "../../lib/liveChannelsCopy.js";
@@ -368,28 +369,27 @@ export default function LiveChannelsSection({
                         testId="live-channels-last-error"
                       />
                     ) : null}
-                    {liveChannelsStatus?.airing?.length ? (
-                      <ul className="wizard-note" data-testid="live-channels-airing-progress">
-                        {liveChannelsStatus.airing.slice(0, 6).map((row) => {
-                          const label =
-                            row.number != null ? `${row.number} · ${row.name}` : row.name;
-                          const pct =
-                            row.percent == null || !Number.isFinite(Number(row.percent))
-                              ? null
-                              : `${Math.round(Number(row.percent))}%`;
-                          const remaining = formatRemaining(row.seconds_remaining);
-                          return (
-                            <li key={row.id || label}>
-                              {label}: {row.title}
-                              {pct ? ` — ${pct}` : ""}
-                              {remaining ? ` (${remaining})` : ""}
-                              {row.is_paused ? " · paused" : ""}
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    ) : null}
                   </div>
+                  ) : null}
+
+                  {!liveLaunched || effectiveLiveTab === "stations" ? (
+                    <OwnerNowPlayingBreakdown
+                      status={liveChannelsStatus}
+                      compact
+                      onRefreshStatus={async () => {
+                        setLiveBusy("status");
+                        try {
+                          const next = await getLiveChannelsStatus();
+                          setLiveChannelsStatus(next);
+                        } finally {
+                          setLiveBusy(null);
+                        }
+                      }}
+                      onOpenStationSettings={(channelId) => {
+                        setStationSettingsOpen(channelId);
+                        setLiveChannelsTab("stations");
+                      }}
+                    />
                   ) : null}
 
                   {!liveLaunched || effectiveLiveTab === "setup" ? (
@@ -914,7 +914,43 @@ export default function LiveChannelsSection({
                           onChange={(event) => setExclusionNameDraft(event.target.value)}
                         />
                       </label>
+                      <label>
+                        Preferred subtitle language
+                        <input
+                          type="text"
+                          data-testid="live-channels-subtitle-lang-primary"
+                          defaultValue={settings?.tunarr?.subtitle_language_primary || "en"}
+                          placeholder="en"
+                          maxLength={8}
+                          name="subtitle_language_primary"
+                        />
+                      </label>
+                      <label>
+                        Fallback language (optional)
+                        <input
+                          type="text"
+                          data-testid="live-channels-subtitle-lang-fallback"
+                          defaultValue={settings?.tunarr?.subtitle_language_fallback || ""}
+                          placeholder="es"
+                          maxLength={8}
+                          name="subtitle_language_fallback"
+                        />
+                      </label>
+                      <label className="live-channels-checkbox">
+                        <input
+                          type="checkbox"
+                          data-testid="live-channels-subtitles-default"
+                          defaultChecked={Boolean(settings?.tunarr?.subtitles_enabled_default)}
+                          name="subtitles_enabled_default"
+                        />
+                        New stations: show captions when available
+                      </label>
                     </div>
+                    <p className="wizard-note">
+                      Language prefs guide “Ask Plex for subtitles” and the Live CC picker.
+                      Projectionist never pulls from an outside subtitle marketplace — only Plex’s
+                      own agents.
+                    </p>
                     <div className="wizard-actions">
                       <button
                         type="button"
@@ -925,10 +961,25 @@ export default function LiveChannelsSection({
                           setLiveBusy("engine-settings");
                           try {
                             const minutes = Number(padFlexDraft);
+                            const root = document.querySelector(
+                              '[data-testid="live-channels-schedule-settings"]',
+                            );
+                            const primary =
+                              root?.querySelector('[name="subtitle_language_primary"]')?.value ||
+                              "en";
+                            const fallback =
+                              root?.querySelector('[name="subtitle_language_fallback"]')?.value ||
+                              "";
+                            const captionsDefault = Boolean(
+                              root?.querySelector('[name="subtitles_enabled_default"]')?.checked,
+                            );
                             const result = await patchLiveChannelsEngineSettings({
                               pad_flex_max_minutes: Number.isFinite(minutes) ? minutes : 15,
                               exclusion_collection_name: exclusionNameDraft || "NoLive",
                               auto_refresh_stations_after_sync: true,
+                              subtitle_language_primary: primary,
+                              subtitle_language_fallback: fallback,
+                              subtitles_enabled_default: captionsDefault,
                             });
                             setPadFlexDraft(String(result.pad_flex_max_minutes ?? minutes));
                             setExclusionNameDraft(
@@ -939,11 +990,14 @@ export default function LiveChannelsSection({
                               exclusion_collection_name: result.exclusion_collection_name,
                               auto_refresh_stations_after_sync:
                                 result.auto_refresh_stations_after_sync,
+                              subtitle_language_primary: result.subtitle_language_primary,
+                              subtitle_language_fallback: result.subtitle_language_fallback,
+                              subtitles_enabled_default: result.subtitles_enabled_default,
                             });
                             setActionFeedback(
                               "live-channels",
                               "success",
-                              `Saved gap fill ${result.pad_flex_max_minutes}m · exclusion “${result.exclusion_collection_name}”.`,
+                              `Saved gap fill ${result.pad_flex_max_minutes}m · exclusion “${result.exclusion_collection_name}” · captions ${result.subtitle_language_primary || "en"}.`,
                               { block: "filler" },
                             );
                           } catch (error) {
@@ -955,7 +1009,7 @@ export default function LiveChannelsSection({
                           }
                         }}
                       >
-                        {liveBusy === "engine-settings" ? "Saving…" : "Save gap fill & exclusion"}
+                        {liveBusy === "engine-settings" ? "Saving…" : "Save gap fill, exclusion & captions"}
                       </button>
                     </div>
                   </div>
@@ -1369,6 +1423,7 @@ export default function LiveChannelsSection({
                                 try {
                                   const result = await previewLiveChannelsCraft({
                                     media_scope: liveCraft.media_scope || "both",
+                                    source: liveCraft.source || "",
                                     collection_id:
                                       liveCraft.source === "collection"
                                         ? liveCraft.collection_id
@@ -1392,10 +1447,15 @@ export default function LiveChannelsSection({
                               <p
                                 className="wizard-note"
                                 data-testid="live-channels-craft-preview-result"
+                                data-fill-mode={liveCraftPreview.fill_mode || ""}
+                                data-soft-capped={
+                                  liveCraftPreview.soft_capped ? "true" : "false"
+                                }
                               >
-                                {liveCraftPreview.note ||
-                                  `Matched ${liveCraftPreview.matched ?? 0}` +
-                                    (liveCraftPreview.match_total
+                                {craftSoftCapHonestyNote(liveCraftPreview)
+                                  || liveCraftPreview.note
+                                  || `Matched ${liveCraftPreview.matched ?? 0}`
+                                    + (liveCraftPreview.match_total
                                       ? ` / ${liveCraftPreview.match_total}`
                                       : "")}
                               </p>
@@ -1759,6 +1819,9 @@ export default function LiveChannelsSection({
                           );
                           const mediaScope =
                             statusRow?.media_scope || ch.media_scope || "both";
+                          const captionsOn = Boolean(
+                            statusRow?.subtitles_enabled ?? ch.subtitles_enabled,
+                          );
                           const hasContinuity = Boolean(
                             statusRow?.has_continuity ?? ch.has_continuity,
                           );
@@ -1893,9 +1956,45 @@ export default function LiveChannelsSection({
                                       <option value="both">Both</option>
                                     </select>
                                   </label>
+                                  <label className="live-channels-checkbox">
+                                    <input
+                                      type="checkbox"
+                                      data-testid={`live-channels-station-captions-${id}`}
+                                      defaultChecked={captionsOn}
+                                      onChange={async (event) => {
+                                        const next = event.target.checked;
+                                        setLiveBusy(`settings-${id}`);
+                                        try {
+                                          const result = await patchLiveChannelsStationSettings(
+                                            id,
+                                            {
+                                              media_scope: mediaScope,
+                                              subtitles_enabled: next,
+                                            },
+                                          );
+                                          setActionFeedback(
+                                            "live-channels",
+                                            "success",
+                                            result.message || "Station captions updated.",
+                                            { block: "stations" },
+                                          );
+                                          setLiveChannelsStatus(await getLiveChannelsStatus());
+                                        } catch (error) {
+                                          setActionFeedback("live-channels", "error", error.message, {
+                                            block: "stations",
+                                          });
+                                        } finally {
+                                          setLiveBusy(null);
+                                        }
+                                      }}
+                                    />
+                                    Show captions when the station has them
+                                  </label>
                                   <p className="wizard-note">
                                     Refill after changing scope so the lineup only uses matching
                                     libraries. Continuity fillers stay shared across stations.
+                                    Captions still depend on the Live encode or a Plex-backed
+                                    track for the title on air — never a third-party subtitle shop.
                                   </p>
                                 </div>
                               ) : null}

@@ -4,6 +4,8 @@ Living backlog for experiences that make CuratorX feel more generous. Tags are t
 
 The backlog is delivered in **phases**, each one a self-contained milestone that ships and releases on its own. Phases 1 and 2 are done; Phases 3–5 below reflect a **full persona re-survey** (human + AI archetypes) and the locked planning decisions that close the former open questions. A contributor can pick up any remaining phase and plan it without re-deriving the groundwork.
 
+**Phases 1–5 are complete.** The post–Phase-5 program (residual Live trust, gaps/MCP, Admin rail + LLM ops, persona working tone, and a new persona delight sequence A–E) lives in the Cursor unified plan `unified_gaps_and_delight_b1cef49d` (local path `~/.cursor/plans/unified_gaps_and_delight_b1cef49d.plan.md` — not in-repo). Prefer that plan over inventing a Phase 6 here.
+
 Jump to: [Roadmap at a glance](#roadmap-at-a-glance) · [Locked decisions](#locked-decisions) · [Phase 3 — adult everyday](#phase-3--adult-everyday--notifications--engagement) · [Phase 4 — youth & guest](#phase-4--distinct-youth--guest-doors) · [Phase 5 — curator depth](#phase-5--giving-the-curators-room-to-shine) · [Persona backlog](#persona--archetype-backlog-the-source-of-the-phases)
 
 ---
@@ -22,6 +24,7 @@ The delight work is sequenced by *who* it serves, easiest-to-reach substrate fir
 | **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | ✅ P3a **1.20.0**; P3b **1.21.0**; P3c **1.22.0** |
 | **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, CuratorX request-access    | Youth members, guests                           | ✅ Shipped **1.23.0** |
 | **5** | Curator depth — Enthusiast nudge (no live now-watching), Scholar syllabus, Concierge acquire path, Companion mood + callbacks | The four curator archetypes                     | ✅ Shipped **1.24.0** |
+| **Next** | Post–Phase-5 program (gaps/MCP, Live residuals, Admin rail, LLM ops, delight A–E) | Household + curators | → Cursor unified plan `unified_gaps_and_delight_b1cef49d` |
 
 
 ```mermaid
@@ -30,6 +33,7 @@ flowchart LR
   P2 --> P3["Phase 3<br/>Adult + engagement + mail"]
   P3 --> P4["Phase 4<br/>Distinct youth + guest"]
   P4 --> P5["Phase 5<br/>Curator depth"]
+  P5 --> Next["Post–Phase-5<br/>unified gaps + delight"]
 ```
 
 

@@ -307,6 +307,32 @@ class CallbackMemoryTests(unittest.TestCase):
         kinds = {n["kind"] for n in exported["notes"]}
         self.assertIn("callback", kinds)
 
+    def test_callback_title_metadata_enriches_deep_link(self) -> None:
+        from projectionist.agent.tools import (
+            _callback_title_metadata,
+            _enrich_memory_note_deep_link,
+        )
+
+        meta = _callback_title_metadata(
+            {
+                "title": "The Office",
+                "media_type": "show",
+                "tmdb_id": 2236,
+                "year": 2001,
+            }
+        )
+        note = self.memory.remember(
+            caller_id=BOOTSTRAP_OWNER_ID,
+            kind="callback",
+            text="the bleak UK comedy bit",
+            metadata=meta,
+        )
+        enriched = _enrich_memory_note_deep_link(note)
+        self.assertEqual(enriched["deep_link"]["title"], "The Office")
+        self.assertEqual(enriched["deep_link"]["dig_in_path"], "/title/show/2236")
+        self.assertTrue(enriched["deep_link"]["chat_about"])
+        self.assertEqual(enriched["title_card"]["tmdb_id"], 2236)
+
 
 if __name__ == "__main__":
     unittest.main()

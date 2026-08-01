@@ -334,8 +334,22 @@ export async function mockCuratorApis(page: Page) {
       return;
     }
 
-    const response = await route.fetch();
-    const body = await response.json();
+    let response;
+    let body: Record<string, any>;
+    try {
+      response = await route.fetch();
+      body = await response.json();
+    } catch {
+      // Navigation can abort in-flight setup/wizard fetches during authz e2e.
+      if (!route.request().isNavigationRequest()) {
+        try {
+          await route.abort();
+        } catch {
+          // already closed
+        }
+      }
+      return;
+    }
     body.certifications = body.certifications || {};
     for (const service of certifiedServices) {
       body.certifications[service] = certificationEntry(true);
@@ -589,7 +603,16 @@ export async function mockCuratorApis(page: Page) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        features: { multi_user_enabled: false, seerr_enabled: false, plex_collections_enabled: false },
+        features: {
+          multi_user_enabled: false,
+          seerr_enabled: false,
+          plex_collections_enabled: false,
+          guest_tour_enabled: true,
+          invite_only: true,
+          open_auto_provision: false,
+          live_channels_enabled: false,
+          live_channels_ready: false,
+        },
         auth_methods: [],
         auth: {
           mode: "disabled",
@@ -763,14 +786,48 @@ export async function mockServiceFailure(page: Page, service: string, message = 
   });
 }
 
-type FeatureFlags = {
+/** Mirrors `GET /api/features` household flags used by mocked e2e. */
+export type FeatureFlags = {
   multi_user_enabled?: boolean;
   seerr_enabled?: boolean;
   plex_collections_enabled?: boolean;
+  guest_tour_enabled?: boolean;
+  invite_only?: boolean;
+  open_auto_provision?: boolean;
+  live_channels_enabled?: boolean;
+  live_channels_ready?: boolean;
 };
 
-export async function mockFeatures(page: Page, features: FeatureFlags = {}) {
+type MockFeaturesOptions = FeatureFlags & {
+  /** Override auth_methods when multi-user is on (default: ["plex"]). */
+  auth_methods?: string[];
+  oidc_enabled?: boolean;
+  local_login_enabled?: boolean;
+  oidc_provider_name?: string;
+  auth_mode?: string;
+};
+
+export async function mockFeatures(page: Page, features: MockFeaturesOptions = {}) {
   const multiUser = Boolean(features.multi_user_enabled);
+  const {
+    auth_methods: authMethodsOverride,
+    oidc_enabled: oidcEnabledOverride,
+    local_login_enabled: localLoginOverride,
+    oidc_provider_name: oidcProviderName,
+    auth_mode: authModeOverride,
+    ...featureFlags
+  } = features;
+  const localLogin = Boolean(localLoginOverride);
+  const oidcEnabled = Boolean(oidcEnabledOverride);
+  const authMethods =
+    authMethodsOverride ??
+    (multiUser
+      ? [
+          "plex",
+          ...(localLogin ? ["local"] : []),
+          ...(oidcEnabled ? ["oidc"] : []),
+        ]
+      : []);
   await page.route("**/api/features", async (route: Route) => {
     await route.fulfill({
       status: 200,
@@ -780,17 +837,114 @@ export async function mockFeatures(page: Page, features: FeatureFlags = {}) {
           multi_user_enabled: false,
           seerr_enabled: false,
           plex_collections_enabled: false,
-          ...features,
+          guest_tour_enabled: true,
+          invite_only: true,
+          open_auto_provision: false,
+          live_channels_enabled: false,
+          live_channels_ready: false,
+          ...featureFlags,
         },
-        auth_methods: multiUser ? ["plex"] : [],
+        auth_methods: authMethods,
         auth: {
-          mode: multiUser ? "plex" : "disabled",
+          mode: authModeOverride ?? (multiUser ? "plex" : "disabled"),
           plex_login_enabled: true,
-          oidc_enabled: false,
-          local_login_enabled: false,
+          oidc_enabled: oidcEnabled,
+          local_login_enabled: localLogin,
+          oidc_provider_name: oidcProviderName || "SSO",
         },
         seerr: { link_on_login: true, require_linked_user_for_requests: false },
       }),
+    });
+  });
+}
+
+/** Household On now + /live guide payloads for dual-watch smoke tests. */
+export async function mockLiveChannelsHousehold(
+  page: Page,
+  {
+    enabled = true,
+    ready = true,
+    channels,
+  }: {
+    enabled?: boolean;
+    ready?: boolean;
+    channels?: Array<Record<string, unknown>>;
+  } = {},
+) {
+  const now = Math.floor(Date.now() / 1000);
+  const defaultChannels = [
+    {
+      id: "ch-noir",
+      name: "Noir Alley",
+      number: 100,
+      now: {
+        title: "The Big Sleep",
+        start: now - 1800,
+        stop: now + 5400,
+        percent: 25,
+        seconds_elapsed: 1800,
+        seconds_remaining: 5400,
+      },
+      next: { title: "Chinatown", start: now + 5400, stop: now + 10800 },
+    },
+  ];
+  const list = Array.isArray(channels) ? channels : defaultChannels;
+
+  await page.route("**/api/live-channels/on-now**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled,
+        ready,
+        reason: ready ? "" : "tunarr_unreachable",
+        count: ready ? list.length : 0,
+        channels: ready ? list : [],
+        plex_hint: "Also in Plex → Live TV",
+      }),
+    });
+  });
+
+  await page.route("**/api/live-channels/guide**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        enabled,
+        ready,
+        reason: ready ? "" : "tunarr_unreachable",
+        windowStart: now - 1800,
+        windowEnd: now + 6 * 3600,
+        channels: ready
+          ? list.map((ch) => ({
+              id: ch.id,
+              name: ch.name,
+              number: ch.number,
+              programs: [
+                {
+                  title: (ch.now as { title?: string } | undefined)?.title || "Now",
+                  start: now - 1800,
+                  stop: now + 5400,
+                  isFlex: false,
+                },
+                {
+                  title: (ch.next as { title?: string } | undefined)?.title || "Next",
+                  start: now + 5400,
+                  stop: now + 10800,
+                  isFlex: false,
+                },
+              ],
+            }))
+          : [],
+      }),
+    });
+  });
+
+  await page.route("**/api/plex/machine-id**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ machine_id: "mock-plex-machine" }),
     });
   });
 }
@@ -912,6 +1066,63 @@ export async function mockPlexLogin(page: Page, user = { id: "user-1", display_n
     }
 
     await route.continue();
+  });
+}
+
+/** Mock local username/password login (POST /api/auth/local/login + /api/auth/me). */
+export async function mockLocalLogin(
+  page: Page,
+  user = { id: "user-local", display_name: "Local User", role: "owner" },
+) {
+  let authenticated = false;
+
+  await page.route("**/api/auth/**", async (route: Route) => {
+    const url = new URL(route.request().url());
+    const path = url.pathname;
+    const method = route.request().method();
+
+    if (method === "POST" && path.endsWith("/api/auth/local/login")) {
+      authenticated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ user, authenticated: true }),
+      });
+      return;
+    }
+
+    if (method === "GET" && path.endsWith("/api/auth/me")) {
+      if (!authenticated) {
+        await route.fulfill({
+          status: 401,
+          contentType: "application/json",
+          body: JSON.stringify({ detail: "Not authenticated" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ user }),
+      });
+      return;
+    }
+
+    await route.continue();
+  });
+}
+
+/** Mock OIDC authorize bootstrap (does not complete the browser redirect). */
+export async function mockOidcAuthorize(
+  page: Page,
+  authorizeUrl = "https://idp.example.test/authorize?client_id=projectionist",
+) {
+  await page.route("**/api/auth/oidc/authorize**", async (route: Route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ authorize_url: authorizeUrl }),
+    });
   });
 }
 

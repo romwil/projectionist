@@ -67,6 +67,17 @@ export function savedLibraryBlocks(blocks = []) {
       if (replies.length) result.push({ kind: "suggested_replies", replies });
       continue;
     }
+
+    if (block.type === "persona_consult" && block.payload?.answer) {
+      result.push({
+        kind: "persona_consult",
+        persona: block.payload.persona || "Curator",
+        lead: block.payload.lead || "",
+        answer: String(block.payload.answer),
+        specialty: block.payload.specialty || "",
+      });
+      continue;
+    }
   }
 
   return result;

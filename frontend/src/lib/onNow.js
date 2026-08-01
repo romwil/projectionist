@@ -101,6 +101,7 @@ export function normalizeOnNow(snapshot) {
         nowTitle: String(now?.title || "").trim(),
         nextTitle: String(next?.title || "").trim(),
         nowRating: String(now?.content_rating || "").trim(),
+        airingWhy: String(channel.airing_why || "").trim(),
         percent,
         secondsElapsed,
         secondsRemaining,

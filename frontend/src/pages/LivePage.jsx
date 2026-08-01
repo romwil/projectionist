@@ -7,14 +7,17 @@ import {
 } from "../api/client";
 import LiveGuide from "../components/live/LiveGuide";
 import LivePlayer from "../components/live/LivePlayer";
+import LiveTuneShare from "../components/live/LiveTuneShare";
 import { useAuthGate } from "../components/UserMenu";
 import { ROUTES } from "../lib/backNav.js";
 import {
   liveGuideHref,
+  liveProgramKey,
   normalizeGuide,
   popoutHandoff,
 } from "../lib/liveChannels.js";
 import { liveUserEmptyCopy } from "../lib/liveChannelsCopy.js";
+import { saveLiveStickyOsd } from "../lib/liveTuneLink.js";
 import { plexLiveTvUrl } from "../lib/titleLinks.js";
 
 /**
@@ -33,6 +36,7 @@ export default function LivePage({ popout = false }) {
   const [guide, setGuide] = useState(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedProgram, setSelectedProgram] = useState(null);
   const [mode, setMode] = useState(() => {
     if (popout) return "watch";
     if (modeParam === "guide") return "guide";
@@ -87,6 +91,7 @@ export default function LivePage({ popout = false }) {
   useEffect(() => {
     if (channelParam && channelParam !== activeChannelId) {
       setActiveChannelId(channelParam);
+      setSelectedProgram(null);
       if (!popout && modeParam !== "guide") setMode("watch");
     }
   }, [channelParam, activeChannelId, popout, modeParam]);
@@ -97,11 +102,12 @@ export default function LivePage({ popout = false }) {
     [channels, activeChannelId],
   );
 
-  function handleTune(channelId) {
+  function handleTune(channelId, program = null) {
     const id = String(channelId || "").trim();
     if (!id) return;
     // LivePlayer warms Tunarr before loadSource — do not race tune here.
     setActiveChannelId(id);
+    setSelectedProgram(program && typeof program === "object" ? program : null);
     setMode("watch");
     setSearchParams(
       (prev) => {
@@ -115,8 +121,24 @@ export default function LivePage({ popout = false }) {
   }
 
   function handleChannelChange(channelId) {
-    handleTune(channelId);
+    // Ch+/Ch− clears guide-cell selection so OSD follows wall-clock again.
+    handleTune(channelId, null);
   }
+
+  const selectedProgramKey = liveProgramKey(activeChannel?.id || activeChannelId, selectedProgram);
+
+  useEffect(() => {
+    if (!activeChannel?.id || mode !== "watch") return;
+    const nowTitle = String(
+      selectedProgram?.title || activeChannel?.now?.title || "",
+    ).trim();
+    saveLiveStickyOsd({
+      channelId: activeChannel.id,
+      channelName: String(activeChannel.name || "Live"),
+      nowTitle,
+    });
+    window.dispatchEvent(new Event("projectionist:live-sticky"));
+  }, [activeChannel, mode, selectedProgram]);
 
   function openPopout() {
     const channelId = activeChannel?.id || activeChannelId;
@@ -246,6 +268,12 @@ export default function LivePage({ popout = false }) {
 
           <div className="live-chrome-secondary" role="group" aria-label="Also watch">
             {!popout ? (
+              <LiveTuneShare
+                channelId={activeChannel?.id || activeChannelId}
+                channelName={activeChannel?.name || ""}
+              />
+            ) : null}
+            {!popout ? (
               <button
                 type="button"
                 className="live-chrome-icon-btn"
@@ -286,13 +314,15 @@ export default function LivePage({ popout = false }) {
         <LiveGuide
           guide={guide}
           selectedChannelId={activeChannel?.id || ""}
+          selectedProgramKey={selectedProgramKey}
           onSelectChannel={setActiveChannelId}
-          onTune={(id) => handleTune(id)}
+          onTune={(id, program) => handleTune(id, program)}
         />
       ) : (
         <LivePlayer
           channel={activeChannel}
           channels={channels}
+          selectedProgram={selectedProgram}
           onChannelChange={handleChannelChange}
           compact={popout}
         />

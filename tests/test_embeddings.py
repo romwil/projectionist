@@ -99,7 +99,7 @@ class RebuildEmbeddingsTests(unittest.IsolatedAsyncioTestCase):
 
             with patch(
                 "projectionist.library.embeddings.embed_texts",
-                new=AsyncMock(side_effect=lambda texts, settings: [[0.1] * 8 for _ in texts]),
+                new=AsyncMock(side_effect=lambda texts, settings, **_kw: [[0.1] * 8 for _ in texts]),
             ):
                 count = await rebuild_embeddings(
                     db,
@@ -145,7 +145,7 @@ class RebuildEmbeddingsTests(unittest.IsolatedAsyncioTestCase):
 
             embed_calls: list[int] = []
 
-            async def tracking_embed(texts, settings):
+            async def tracking_embed(texts, settings, **_kw):
                 embed_calls.append(len(texts))
                 return [[0.1] * 8 for _ in texts]
 
