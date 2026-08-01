@@ -190,7 +190,18 @@ def _extract_text(response: Mapping[str, Any]) -> str:
     return ""
 
 
-MAX_TOOL_ROUNDS = 8
+# Cap tool↔LLM loops so a bad gap/discover retry spiral cannot leave the UI on
+# "Jefferson is thinking" for many minutes (each provider call can take ≤120s).
+MAX_TOOL_ROUNDS = 6
+
+
+def _tool_result_requests_stop(result: str) -> bool:
+    """True when a tool JSON payload asks the agent to stop retrying tools."""
+    try:
+        parsed = json.loads(result)
+    except (json.JSONDecodeError, TypeError):
+        return False
+    return isinstance(parsed, dict) and bool(parsed.get("stop_retrying"))
 
 
 def _append_review_prompt_blocks(blocks: List[Dict[str, Any]], registry: ToolRegistry) -> None:
@@ -384,6 +395,7 @@ class CuratorAgent:
             if not tool_calls:
                 break
             messages.append(_assistant_message_from_response(response))
+            stop_retrying = False
             for call in tool_calls:
                 fn = call.get("function") or {}
                 name = fn.get("name")
@@ -392,6 +404,8 @@ class CuratorAgent:
                 _t0 = __import__("time").time()
                 result = await registry.execute(str(name), args)
                 _duration_ms = int((__import__("time").time() - _t0) * 1000)
+                if _tool_result_requests_stop(result):
+                    stop_retrying = True
                 try:
                     from projectionist.telemetry import TelemetryIngester
 
@@ -424,8 +438,12 @@ class CuratorAgent:
                         "content": tool_content,
                     }
                 )
-            response = await self.provider.chat(messages, tools=tool_defs)
+            # Force a prose wrap-up without tools after fail-closed gap/discover.
+            next_tools = None if stop_retrying else tool_defs
+            response = await self.provider.chat(messages, tools=next_tools)
             _accumulate_response_text(response)
+            if stop_retrying:
+                break
 
         text = join_assistant_text_segments(text_segments)
         blocks: List[Dict[str, Any]] = []
@@ -438,8 +456,8 @@ class CuratorAgent:
                 {
                     "type": "text",
                     "content": (
-                        "The curator used tools but did not finish with a summary. "
-                        "Try asking again or check your LLM model configuration."
+                        "I looked for matches but could not finish a confident answer. "
+                        "Try a more specific title, genre, or brand (for example BBC + Documentary)."
                     ),
                 }
             )
@@ -667,6 +685,7 @@ async def stream_agent(
             assistant_msg["tool_calls"] = tool_calls_list
             messages.append(assistant_msg)
 
+            stop_retrying = False
             for call in tool_calls_list:
                 fn = call.get("function") or {}
                 name = fn.get("name", "")
@@ -677,6 +696,8 @@ async def stream_agent(
                 yield json.dumps({"type": "tool_start", "name": name, "args": brief_args}) + "\n"
                 # Tool handlers that hit sqlite/cosine already offload via run_db.
                 result = await registry.execute(str(name), args)
+                if _tool_result_requests_stop(result):
+                    stop_retrying = True
                 tool_content = (
                     wrap_untrusted_data(result) if str(name) in UNTRUSTED_MEMORY_TOOLS else result
                 )
@@ -686,6 +707,33 @@ async def stream_agent(
             # Next LLM round's tokens need a separator after tool work.
             if text_segments:
                 pending_segment_sep = True
+            if stop_retrying:
+                # One final prose turn without tools, then end the stream loop.
+                round_text = ""
+                try:
+                    async for chunk in agent.provider.stream(messages, tools=None):
+                        choice = (chunk.get("choices") or [{}])[0]
+                        delta = choice.get("delta") or {}
+                        content = delta.get("content")
+                        if content:
+                            if pending_segment_sep and text_segments:
+                                yield json.dumps({"type": "token", "content": _STREAM_SEGMENT_SEP}) + "\n"
+                                pending_segment_sep = False
+                            round_text += content
+                            yield json.dumps({"type": "token", "content": content}) + "\n"
+                except Exception as exc:
+                    logger.warning("Streaming wrap-up failed, falling back to buffered: %s", exc)
+                    response = await agent.provider.chat(messages, tools=None)
+                    round_text = _extract_text(response) or ""
+                    if round_text:
+                        if pending_segment_sep and text_segments:
+                            yield json.dumps({"type": "token", "content": _STREAM_SEGMENT_SEP}) + "\n"
+                            pending_segment_sep = False
+                        yield json.dumps({"type": "token", "content": round_text}) + "\n"
+                stripped = (round_text or "").strip()
+                if stripped and (not text_segments or text_segments[-1] != stripped):
+                    text_segments.append(stripped)
+                break
         else:
             break
 
@@ -697,7 +745,15 @@ async def stream_agent(
     elif registry.cards:
         blocks.append({"type": "text", "content": "Here are the results I found."})
     else:
-        blocks.append({"type": "text", "content": "The curator returned an empty response. Check your LLM provider, API key, and model ID in Settings."})
+        blocks.append(
+            {
+                "type": "text",
+                "content": (
+                    "I looked for matches but could not finish a confident answer. "
+                    "Try a more specific title, genre, or brand (for example BBC + Documentary)."
+                ),
+            }
+        )
 
     if registry.cards:
         cards = _cards_for_response(registry)

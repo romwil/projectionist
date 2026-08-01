@@ -155,11 +155,37 @@ def _memory_freshness(known_since: Any, fetched_at: Any) -> Dict[str, Any]:
     return freshness
 
 
+def _pick_named_tmdb_match(
+    results: Sequence[Mapping[str, Any]],
+    needle: str,
+) -> Optional[Mapping[str, Any]]:
+    """Prefer exact name match, then strong prefix/containment — else None."""
+    needle_cf = needle.casefold()
+    exact = [
+        entry
+        for entry in results
+        if isinstance(entry, Mapping)
+        and str(entry.get("name") or "").strip().casefold() == needle_cf
+    ]
+    if exact:
+        return exact[0]
+    for entry in results:
+        if not isinstance(entry, Mapping):
+            continue
+        name = str(entry.get("name") or "").strip().casefold()
+        if not name:
+            continue
+        if name.startswith(needle_cf) or needle_cf.startswith(name) or needle_cf in name:
+            return entry
+    return None
+
+
 def _resolve_tmdb_keyword_ids(tmdb: TMDBClient, keywords_text: str) -> Dict[str, Any]:
     """Resolve keyword phrases to TMDB ids, preferring exact name matches.
 
-    Empty/noisy combos that cannot be resolved return unresolved names instead of
-    silently discovering with a wrong first hit.
+    Multiple resolved keywords are OR'd (``|``) for discover — AND stacks of
+    theme words (bbc + anthropology + science) almost always return empty or
+    force the model to drop filters and discover unfiltered junk.
     """
     resolved: List[Dict[str, Any]] = []
     unresolved: List[str] = []
@@ -174,24 +200,7 @@ def _resolve_tmdb_keyword_ids(tmdb: TMDBClient, keywords_text: str) -> Dict[str,
         if not isinstance(results, list) or not results:
             unresolved.append(kw)
             continue
-        needle = kw.casefold()
-        exact = [
-            entry
-            for entry in results
-            if isinstance(entry, Mapping)
-            and str(entry.get("name") or "").strip().casefold() == needle
-        ]
-        chosen = exact[0] if exact else None
-        if chosen is None:
-            # Accept a strong prefix/containment hit; otherwise treat as unresolved
-            # to avoid AND-ing unrelated keyword ids into discover.
-            for entry in results:
-                if not isinstance(entry, Mapping):
-                    continue
-                name = str(entry.get("name") or "").strip().casefold()
-                if name.startswith(needle) or needle.startswith(name) or needle in name:
-                    chosen = entry
-                    break
+        chosen = _pick_named_tmdb_match(results, kw)
         if chosen is None or not chosen.get("id"):
             unresolved.append(kw)
             continue
@@ -205,8 +214,131 @@ def _resolve_tmdb_keyword_ids(tmdb: TMDBClient, keywords_text: str) -> Dict[str,
     return {
         "resolved": resolved,
         "unresolved": unresolved,
-        "keyword_ids": ",".join(str(entry["id"]) for entry in resolved) if resolved else None,
+        # TMDB discover: comma = AND, pipe = OR. Theme stacks need OR.
+        "keyword_ids": "|".join(str(entry["id"]) for entry in resolved) if resolved else None,
     }
+
+
+def _resolve_tmdb_company_ids(tmdb: TMDBClient, companies_text: str) -> Dict[str, Any]:
+    """Resolve production-company / brand names to TMDB company ids."""
+    resolved: List[Dict[str, Any]] = []
+    unresolved: List[str] = []
+    for raw in str(companies_text or "").split(","):
+        name = raw.strip()
+        if not name:
+            continue
+        if name.isdigit():
+            resolved.append({"id": int(name), "name": name, "query": name})
+            continue
+        results = tmdb.search_company(name) or []
+        if not isinstance(results, list) or not results:
+            unresolved.append(name)
+            continue
+        chosen = _pick_named_tmdb_match(results, name)
+        if chosen is None or not chosen.get("id"):
+            unresolved.append(name)
+            continue
+        resolved.append(
+            {
+                "id": int(chosen["id"]),
+                "name": str(chosen.get("name") or name),
+                "query": name,
+            }
+        )
+    return {
+        "resolved": resolved,
+        "unresolved": unresolved,
+        "company_ids": "|".join(str(entry["id"]) for entry in resolved) if resolved else None,
+    }
+
+
+def _gap_theme_tokens(*parts: str) -> List[str]:
+    """Normalize free-text theme tokens for post-filter relevance scoring."""
+    stop = {
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "of",
+        "for",
+        "to",
+        "in",
+        "on",
+        "with",
+        "missing",
+        "gap",
+        "gaps",
+        "movie",
+        "movies",
+        "show",
+        "shows",
+        "tv",
+        "series",
+        "film",
+        "films",
+        "documentary",
+        "documentaries",
+        "doc",
+        "style",
+        "like",
+        "best",
+        "good",
+    }
+    tokens: List[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        for raw in re.split(r"[\s,/|;]+", str(part or "").strip().lower()):
+            tok = raw.strip(".,!?:;\"'()[]")
+            if len(tok) < 3 or tok in stop or tok in seen:
+                continue
+            seen.add(tok)
+            tokens.append(tok)
+    return tokens
+
+
+def _gap_item_relevance(item: Mapping[str, Any], theme_tokens: Sequence[str]) -> int:
+    """Score a discover/search hit against theme tokens (title + overview)."""
+    if not theme_tokens:
+        return 1
+    hay = " ".join(
+        [
+            str(item.get("title") or item.get("name") or ""),
+            str(item.get("original_title") or item.get("original_name") or ""),
+            str(item.get("overview") or ""),
+        ]
+    ).casefold()
+    if not hay.strip():
+        return 0
+    return sum(1 for tok in theme_tokens if tok in hay)
+
+
+def _empty_gaps_payload(
+    *,
+    note: str,
+    keywords_resolved: Optional[List[Any]] = None,
+    keywords_unresolved: Optional[List[str]] = None,
+    companies_resolved: Optional[List[Any]] = None,
+    companies_unresolved: Optional[List[str]] = None,
+    genres_unresolved: Optional[List[str]] = None,
+    stop_retrying: bool = True,
+) -> str:
+    return json.dumps(
+        {
+            "total_matched": 0,
+            "returned": 0,
+            "offset": 0,
+            "has_more": False,
+            "items": [],
+            "keywords_resolved": keywords_resolved or [],
+            "keywords_unresolved": keywords_unresolved or [],
+            "companies_resolved": companies_resolved or [],
+            "companies_unresolved": companies_unresolved or [],
+            "genres_unresolved": genres_unresolved or [],
+            "stop_retrying": stop_retrying,
+            "note": note,
+        }
+    )
 
 
 def _seerr_result_year(item: Mapping[str, Any]) -> Optional[int]:
@@ -1108,64 +1240,163 @@ class ToolRegistry:
             return json.dumps({"error": "TMDB API key not configured"})
         tmdb = TMDBClient(self.settings.tmdb_api_key)
         owned = _excluded_add_tmdb_ids(self.db, media_type)
-        genres = str(args.get("genres") or "")
+
+        genres = str(args.get("genres") or "").strip()
         genre_ids = ""
+        genres_unresolved: List[str] = []
         if genres:
             genre_list = tmdb.genre_list_movies() if media_type == "movie" else tmdb.genre_list_tv()
-            wanted = {g.strip().lower() for g in genres.split(",") if g.strip()}
-            matched = [str(g["id"]) for g in genre_list if g.get("name", "").lower() in wanted]
+            wanted = [g.strip() for g in genres.split(",") if g.strip()]
+            wanted_lower = {g.lower() for g in wanted}
+            matched = [str(g["id"]) for g in genre_list if g.get("name", "").lower() in wanted_lower]
+            known = {str(g.get("name") or "").lower() for g in genre_list}
+            genres_unresolved = [g for g in wanted if g.lower() not in known]
             genre_ids = ",".join(matched)
+            # Fail closed: "Science" / invented facets must not fall through to
+            # unfiltered popularity.desc discover (junk rails + tool thrash).
+            if not genre_ids:
+                return _empty_gaps_payload(
+                    note=(
+                        "Could not resolve genres to TMDB genre ids "
+                        f"({', '.join(genres_unresolved) or genres}). "
+                        "Use exact TMDB names (e.g. Documentary, Drama) plus query/companies "
+                        "for branded themes — do not invent titles or broaden to unfiltered discover."
+                    ),
+                    genres_unresolved=genres_unresolved,
+                )
 
         keywords_text = str(args.get("keywords") or "").strip()
+        keyword_meta: Dict[str, Any] = {"resolved": [], "unresolved": [], "keyword_ids": None}
         keyword_ids: Optional[str] = None
-        keyword_meta: Dict[str, Any] = {"resolved": [], "unresolved": []}
         if keywords_text:
             keyword_meta = _resolve_tmdb_keyword_ids(tmdb, keywords_text)
-            unresolved = keyword_meta.get("unresolved") or []
-            resolved = keyword_meta.get("resolved") or []
-            # Harden against empty/noisy keyword combos: do not discover unfiltered
-            # (or with a partial wrong AND) when the user asked for keywords.
-            if unresolved or not resolved:
-                return json.dumps(
-                    {
-                        "total_matched": 0,
-                        "returned": 0,
-                        "offset": 0,
-                        "has_more": False,
-                        "items": [],
-                        "keywords_resolved": resolved,
-                        "keywords_unresolved": unresolved,
-                        "note": (
-                            "Could not resolve keyword filter to confident TMDB keyword ids. "
-                            "Try a single well-known keyword (e.g. found footage) or search_tmdb / "
-                            "query_library with keywords instead of inventing ids."
-                        ),
-                    }
+            unresolved_kw = list(keyword_meta.get("unresolved") or [])
+            resolved_kw = list(keyword_meta.get("resolved") or [])
+            # Brand-like unresolved keywords (BBC, PBS…) often are companies, not keywords.
+            promoted_companies: List[str] = []
+            still_unresolved: List[str] = []
+            for kw in unresolved_kw:
+                company_try = _resolve_tmdb_company_ids(tmdb, kw)
+                if company_try.get("resolved"):
+                    promoted_companies.append(kw)
+                else:
+                    still_unresolved.append(kw)
+            keyword_meta["unresolved"] = still_unresolved
+            if promoted_companies:
+                existing_companies = str(args.get("companies") or "").strip()
+                args = dict(args)
+                args["companies"] = ", ".join(
+                    part for part in (existing_companies, ", ".join(promoted_companies)) if part
                 )
-            keyword_ids = keyword_meta.get("keyword_ids")
+            if not resolved_kw and still_unresolved and not promoted_companies:
+                return _empty_gaps_payload(
+                    note=(
+                        "Could not resolve keyword filter to confident TMDB keyword or company ids. "
+                        "Pass query='BBC science documentary' (or similar), companies=BBC, and "
+                        "genres=Documentary — or search_tmdb with a concrete title+year. "
+                        "Do not invent TMDB ids or retry unfiltered discover."
+                    ),
+                    keywords_resolved=resolved_kw,
+                    keywords_unresolved=still_unresolved,
+                )
+            keyword_ids = keyword_meta.get("keyword_ids") if resolved_kw else None
 
-        if media_type == "movie":
+        companies_text = str(args.get("companies") or "").strip()
+        company_meta: Dict[str, Any] = {"resolved": [], "unresolved": [], "company_ids": None}
+        company_ids: Optional[str] = None
+        if companies_text:
+            company_meta = _resolve_tmdb_company_ids(tmdb, companies_text)
+            if not company_meta.get("resolved"):
+                return _empty_gaps_payload(
+                    note=(
+                        "Could not resolve companies to TMDB company ids "
+                        f"({', '.join(company_meta.get('unresolved') or []) or companies_text}). "
+                        "Try query text instead (e.g. 'BBC science documentary') — "
+                        "do not invent titles."
+                    ),
+                    companies_unresolved=list(company_meta.get("unresolved") or []),
+                    keywords_resolved=list(keyword_meta.get("resolved") or []),
+                    keywords_unresolved=list(keyword_meta.get("unresolved") or []),
+                    genres_unresolved=genres_unresolved,
+                )
+            company_ids = company_meta.get("company_ids")
+
+        query = str(args.get("query") or "").strip()
+        theme_tokens = _gap_theme_tokens(
+            query,
+            keywords_text,
+            companies_text,
+            " ".join(genres_unresolved),
+        )
+
+        results: List[Mapping[str, Any]] = []
+        if query:
+            # Themed / branded asks: text search beats unfocused discover.
+            raw = tmdb.search_movie(query) if media_type == "movie" else tmdb.search_tv(query)
+            if not isinstance(raw, list):
+                raw = []
+            if genre_ids:
+                wanted_genre_ids = {int(g) for g in genre_ids.split(",") if g.isdigit()}
+                filtered: List[Mapping[str, Any]] = []
+                for item in raw:
+                    if not isinstance(item, Mapping):
+                        continue
+                    item_genres = item.get("genre_ids") or []
+                    try:
+                        item_ids = {int(g) for g in item_genres}
+                    except (TypeError, ValueError):
+                        item_ids = set()
+                    if item_ids & wanted_genre_ids:
+                        filtered.append(item)
+                results = filtered
+            else:
+                results = [item for item in raw if isinstance(item, Mapping)]
+        elif media_type == "movie":
             results = tmdb.discover_movies(
                 year_from=args.get("year_from"),
                 year_to=args.get("year_to"),
                 with_genres=genre_ids or None,
                 with_keywords=keyword_ids,
+                with_companies=company_ids,
             )
         else:
             results = tmdb.discover_tv(
                 year_from=args.get("year_from"),
                 year_to=args.get("year_to"),
                 with_genres=genre_ids or None,
+                with_keywords=keyword_ids,
+                with_companies=company_ids,
             )
+
+        if not isinstance(results, list):
+            results = []
+
+        # Query path: prefer title/overview overlap with theme tokens. Keep TMDB
+        # order when nothing overlaps so we fail closed on empty search, not on
+        # over-filtering. Structured discover (keywords/companies) trusts TMDB.
+        if query and theme_tokens:
+            scored = [
+                (_gap_item_relevance(item, theme_tokens), item)
+                for item in results
+                if isinstance(item, Mapping)
+            ]
+            scored.sort(key=lambda pair: pair[0], reverse=True)
+            positive = [item for score, item in scored if score > 0]
+            results = positive if positive else [item for _, item in scored]
 
         cards: List[TitleCard] = []
         for item in results:
+            if not isinstance(item, Mapping):
+                continue
             tmdb_id = int(item.get("id") or 0)
             if tmdb_id <= 0 or tmdb_id in owned:
                 continue
             if media_type == "show":
                 item = _enrich_show_external_ids(item, tmdb)
-            card = _apply_queue_flags(self.db, _tmdb_card(item, media_type, tmdb, reason="Missing from your collection"))
+            card = _apply_queue_flags(
+                self.db,
+                _tmdb_card(item, media_type, tmdb, reason="Missing from your collection"),
+            )
             if card.in_radarr or card.in_sonarr:
                 continue
             cards.append(card)
@@ -1178,15 +1409,24 @@ class ToolRegistry:
             "TMDB titles missing from the library and not already queued in Radarr/Sonarr. "
             "Do not re-propose already_queued / in_radarr / in_sonarr titles."
         )
+        stop_retrying = False
         if self.is_youth and not allowed:
             note = (
                 "No external titles available under Youth content rules "
                 "(unrated and over-ceiling titles are omitted)."
             )
-        elif keywords_text and not allowed:
+            stop_retrying = True
+        elif not allowed and (keywords_text or companies_text or query or genres):
             note = (
-                "Keyword discover returned no missing titles after ownership/queue filtering. "
-                "Broaden keywords or use search_tmdb with title+year — do not invent TMDB ids."
+                "No confident missing titles matched these filters after ownership/queue filtering. "
+                "Tell the user honestly — do not invent titles, do not broaden to unfiltered discover, "
+                "and at most try one search_tmdb with a concrete title+year you already know."
+            )
+            stop_retrying = True
+        elif keyword_meta.get("unresolved") or company_meta.get("unresolved") or genres_unresolved:
+            note += (
+                " Some filters were dropped as unresolved; only confident matches are shown. "
+                "Do not invent replacements for unresolved facets."
             )
         return json.dumps(
             {
@@ -1196,6 +1436,11 @@ class ToolRegistry:
                 "has_more": False,
                 "items": [_card_to_tool_item(c) for c in allowed],
                 "keywords_resolved": keyword_meta.get("resolved") or [],
+                "keywords_unresolved": keyword_meta.get("unresolved") or [],
+                "companies_resolved": company_meta.get("resolved") or [],
+                "companies_unresolved": company_meta.get("unresolved") or [],
+                "genres_unresolved": genres_unresolved,
+                "stop_retrying": stop_retrying,
                 "note": note,
             }
         )
@@ -3142,6 +3387,10 @@ def build_system_prompt(
         "never query_library or search_library (those only return owned titles). "
         "Never present in_library=true or already_queued/in_radarr/in_sonarr titles as recommendations to add; "
         "title cards for adds exclude owned and already-queued titles. "
+        "For branded or topical missing-title asks (BBC science docs, PBS nature, Criterion-style drama), call "
+        "find_collection_gaps with query plus genres=Documentary (or the real TMDB genre) and companies when known — "
+        "do not stack speculative keywords that cannot resolve. When a gap tool returns stop_retrying or empty items, "
+        "answer honestly in that turn; do not open another broader unfiltered discover loop or invent titles. "
         "For exact external title lookup before add_to_radarr or add_to_sonarr, use search_tmdb — not search_library. "
         "When you already know a specific work, call search_tmdb with tmdb_id (and media_type), or title+year — "
         "never title-only when recommending one film/show, or turnstyle cards may list every same-name TMDB hit. "

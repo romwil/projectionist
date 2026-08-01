@@ -208,6 +208,7 @@ class TMDBClient:
         year_to: Optional[int] = None,
         with_genres: Optional[str] = None,
         with_keywords: Optional[str] = None,
+        with_companies: Optional[str] = None,
         sort_by: str = "popularity.desc",
         page: int = 1,
     ) -> List[Mapping[str, Any]]:
@@ -220,6 +221,8 @@ class TMDBClient:
             params["with_genres"] = with_genres
         if with_keywords:
             params["with_keywords"] = with_keywords
+        if with_companies:
+            params["with_companies"] = with_companies
         payload = request_json(self._url("/discover/movie", **params), timeout=self.timeout)
         return payload.get("results", []) if isinstance(payload, dict) else []
 
@@ -229,6 +232,9 @@ class TMDBClient:
         year_from: Optional[int] = None,
         year_to: Optional[int] = None,
         with_genres: Optional[str] = None,
+        with_keywords: Optional[str] = None,
+        with_companies: Optional[str] = None,
+        with_networks: Optional[str] = None,
         sort_by: str = "popularity.desc",
         page: int = 1,
     ) -> List[Mapping[str, Any]]:
@@ -239,7 +245,20 @@ class TMDBClient:
             params["first_air_date.lte"] = f"{year_to}-12-31"
         if with_genres:
             params["with_genres"] = with_genres
+        if with_keywords:
+            params["with_keywords"] = with_keywords
+        if with_companies:
+            params["with_companies"] = with_companies
+        if with_networks:
+            params["with_networks"] = with_networks
         payload = request_json(self._url("/discover/tv", **params), timeout=self.timeout)
+        return payload.get("results", []) if isinstance(payload, dict) else []
+
+    def search_company(self, query: str, *, page: int = 1) -> List[Mapping[str, Any]]:
+        """Search TMDB production companies by text. Returns list of {id, name} dicts."""
+        payload = request_json(
+            self._url("/search/company", query=query, page=page), timeout=self.timeout
+        )
         return payload.get("results", []) if isinstance(payload, dict) else []
 
     def movie_keywords(self, tmdb_id: int) -> List[str]:
