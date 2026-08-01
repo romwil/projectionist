@@ -1,5 +1,5 @@
-import { Link } from "react-router-dom";
 import { titleDetailPath } from "../lib/titleLinks.js";
+import TitleDetailLink from "./TitleDetailLink";
 
 export default function OnThisDayCard({ items, accentColor }) {
   if (!items?.length) return null;
@@ -36,14 +36,14 @@ export default function OnThisDayCard({ items, accentColor }) {
           );
           const key = item.tmdb_id || item.rating_key || item.title;
           return path ? (
-            <Link
+            <TitleDetailLink
               key={key}
-              to={path}
+              item={item}
               className="on-this-day-item"
               data-testid="on-this-day-item-link"
             >
               {body}
-            </Link>
+            </TitleDetailLink>
           ) : (
             <article key={key} className="on-this-day-item">
               {body}

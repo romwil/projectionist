@@ -33,3 +33,14 @@ export function titleDetailHrefFromTarget(target) {
     tvdb_id: idType === "tvdb" ? itemId : null,
   });
 }
+
+/**
+ * True when a click should open the in-place title overlay instead of navigating.
+ * Modified clicks (new tab / new window) keep the full-page route.
+ */
+export function shouldOpenTitleOverlayClick(event) {
+  if (!event || event.defaultPrevented) return false;
+  if (typeof event.button === "number" && event.button !== 0) return false;
+  if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return false;
+  return true;
+}

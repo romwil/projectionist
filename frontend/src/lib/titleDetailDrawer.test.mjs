@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  shouldOpenTitleOverlayClick,
   titleDetailHrefFromTarget,
   titleDetailTargetFromItem,
   titleDetailTargetFromPurgeCandidate,
@@ -55,4 +56,13 @@ test("titleDetailHrefFromTarget builds full-page route", () => {
     titleDetailHrefFromTarget({ mediaType: "movie", itemId: "abc/1", idType: "rating_key" }),
     "/title/movie/abc%2F1?id_type=rating_key",
   );
+});
+
+test("shouldOpenTitleOverlayClick allows plain left clicks only", () => {
+  assert.equal(shouldOpenTitleOverlayClick({ button: 0 }), true);
+  assert.equal(shouldOpenTitleOverlayClick({ button: 1 }), false);
+  assert.equal(shouldOpenTitleOverlayClick({ button: 0, metaKey: true }), false);
+  assert.equal(shouldOpenTitleOverlayClick({ button: 0, ctrlKey: true }), false);
+  assert.equal(shouldOpenTitleOverlayClick({ button: 0, shiftKey: true }), false);
+  assert.equal(shouldOpenTitleOverlayClick({ button: 0, defaultPrevented: true }), false);
 });

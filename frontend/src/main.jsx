@@ -43,6 +43,7 @@ import LogsPage from "./pages/LogsPage";
 import JoinPage from "./pages/JoinPage";
 import GuestTourPage from "./pages/GuestTourPage";
 import { BulkActionProgressProvider } from "./components/BulkActionProgress";
+import { TitleDetailOverlayProvider } from "./components/TitleDetailOverlayProvider";
 import WhatsNewGate from "./components/WhatsNewGate";
 import "./styles.css";
 
@@ -50,6 +51,7 @@ createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <BrowserRouter>
       <BulkActionProgressProvider>
+        <TitleDetailOverlayProvider>
         <WhatsNewGate />
         <Routes>
           <Route path="/" element={<Navigate to="/chat" replace />} />
@@ -106,6 +108,7 @@ createRoot(document.getElementById("root")).render(
           <Route path="/tag/:tagName" element={<TagPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
+        </TitleDetailOverlayProvider>
       </BulkActionProgressProvider>
     </BrowserRouter>
   </React.StrictMode>
