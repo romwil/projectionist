@@ -376,6 +376,7 @@ def get_title_detail(
         except (TypeError, ValueError, KeyError):
             item_id = None
         if item_id is not None:
+            detail.library_item_id = item_id
             detail.credits = [
                 _credit_from_db_row(credit_row)
                 for credit_row in db.list_credits_for_item(item_id)

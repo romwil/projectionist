@@ -109,6 +109,30 @@ def _normalize_folder(path: str) -> str:
     return text
 
 
+def join_arr_path(root_path: str, relative_path: str) -> str:
+    """Join *arr root + relativePath when absolute path is missing."""
+    root = _normalize_folder(root_path or "")
+    rel = _as_path(relative_path).lstrip("/\\")
+    if not root or not rel:
+        return ""
+    if "\\" in root and "/" not in root:
+        return f"{root}\\{rel.replace('/', '\\')}"
+    return f"{root}/{rel.replace('\\', '/')}"
+
+
+def resolve_arr_file_path(
+    row: Mapping[str, Any],
+    *,
+    root_path: str = "",
+) -> str:
+    """Prefer absolute path; fall back to root + relativePath."""
+    data = _as_dict(row)
+    path = _as_path(data.get("path"))
+    if path:
+        return path
+    return join_arr_path(root_path, _as_path(data.get("relativePath") or data.get("relative_path")))
+
+
 def infer_removed_folders(
     file_paths: Sequence[str],
     *,
@@ -149,24 +173,70 @@ def aggregate_removal_totals(results: Sequence[Mapping[str, Any]]) -> Dict[str, 
     }
 
 
-def snapshot_radarr_movie(payload: Mapping[str, Any]) -> Dict[str, Any]:
-    """Build a removal snapshot from a Radarr movie GET payload."""
-    data = _as_dict(payload)
-    movie_file = _as_dict(data.get("movieFile"))
-    files: List[str] = []
-    file_path = _as_path(movie_file.get("path"))
-    file_size = _as_nonneg_int(movie_file.get("size"))
-    if file_path:
-        files.append(file_path)
-    root_path = _as_path(data.get("path"))
-    size_on_disk = _as_nonneg_int(data.get("sizeOnDisk"))
-    bytes_freed = size_on_disk if size_on_disk > 0 else file_size
-    folders = infer_removed_folders(files, root_path=root_path or None)
+def apply_library_bytes_fallback(
+    snapshot: Mapping[str, Any],
+    *,
+    library_bytes: int = 0,
+) -> Dict[str, Any]:
+    """Enrich a snapshot with library size / honesty fields when *arr is sparse."""
+    files = list(snapshot.get("files") or [])
+    folders = list(snapshot.get("folders") or [])
+    bytes_freed = _as_nonneg_int(snapshot.get("bytes_freed"))
+    bytes_source = str(snapshot.get("bytes_source") or "")
+    note = str(snapshot.get("note") or "").strip()
+
+    if bytes_freed > 0 and not bytes_source:
+        bytes_source = "arr"
+    elif bytes_freed <= 0 and library_bytes > 0 and (files or folders):
+        bytes_freed = int(library_bytes)
+        bytes_source = "library_estimate"
+        if not note and not files and folders:
+            note = (
+                "*arr reported the title folder but no episode/file list. "
+                "Disk files were still targeted for deletion with the folder; "
+                "byte count is from the Projectionist library index."
+            )
+    elif bytes_freed <= 0 and not files and folders:
+        bytes_source = bytes_source or "unknown"
+        if not note:
+            note = (
+                "*arr reported the title folder but no episode file list or size. "
+                "Disk files may have been removed with the folder; byte count unavailable."
+            )
+    elif not bytes_source:
+        bytes_source = "arr" if bytes_freed > 0 else "unknown"
+
     return {
         "files": files,
         "folders": folders,
         "bytes_freed": bytes_freed,
+        "bytes_source": bytes_source,
+        "note": note,
     }
+
+
+def snapshot_radarr_movie(payload: Mapping[str, Any]) -> Dict[str, Any]:
+    """Build a removal snapshot from a Radarr movie GET payload."""
+    data = _as_dict(payload)
+    movie_file = _as_dict(data.get("movieFile"))
+    root_path = _as_path(data.get("path"))
+    files: List[str] = []
+    file_path = resolve_arr_file_path(movie_file, root_path=root_path)
+    file_size = _as_nonneg_int(movie_file.get("size"))
+    if file_path:
+        files.append(file_path)
+    size_on_disk = _as_nonneg_int(data.get("sizeOnDisk"))
+    bytes_freed = size_on_disk if size_on_disk > 0 else file_size
+    folders = infer_removed_folders(files, root_path=root_path or None)
+    return apply_library_bytes_fallback(
+        {
+            "files": files,
+            "folders": folders,
+            "bytes_freed": bytes_freed,
+            "bytes_source": "arr" if bytes_freed > 0 else "unknown",
+            "note": "",
+        }
+    )
 
 
 def snapshot_sonarr_series(
@@ -175,29 +245,47 @@ def snapshot_sonarr_series(
 ) -> Dict[str, Any]:
     """Build a removal snapshot from Sonarr series + episodeFile list."""
     series = _as_dict(series_payload)
+    root_path = _as_path(series.get("path"))
     files: List[str] = []
     bytes_from_files = 0
     for item in episode_files:
         row = _as_dict(item)
-        path = _as_path(row.get("path"))
+        path = resolve_arr_file_path(row, root_path=root_path)
         if not path:
             continue
         files.append(path)
         bytes_from_files += _as_nonneg_int(row.get("size"))
-    root_path = _as_path(series.get("path"))
     stats = _as_dict(series.get("statistics"))
-    size_on_disk = _as_nonneg_int(stats.get("sizeOnDisk") or series.get("sizeOnDisk"))
+    size_on_disk = _as_nonneg_int(stats.get("sizeOnDisk"))
+    if size_on_disk <= 0:
+        size_on_disk = _as_nonneg_int(series.get("sizeOnDisk"))
     bytes_freed = size_on_disk if size_on_disk > 0 else bytes_from_files
     folders = infer_removed_folders(files, root_path=root_path or None)
-    return {
-        "files": files,
-        "folders": folders,
-        "bytes_freed": bytes_freed,
-    }
+    note = ""
+    if not files and folders:
+        note = (
+            "Sonarr reported the series folder but no episode file paths. "
+            "deleteFiles still targets that folder."
+        )
+    return apply_library_bytes_fallback(
+        {
+            "files": files,
+            "folders": folders,
+            "bytes_freed": bytes_freed,
+            "bytes_source": "arr" if bytes_freed > 0 else "unknown",
+            "note": note,
+        }
+    )
 
 
 def _empty_snapshot() -> Dict[str, Any]:
-    return {"files": [], "folders": [], "bytes_freed": 0}
+    return {
+        "files": [],
+        "folders": [],
+        "bytes_freed": 0,
+        "bytes_source": "unknown",
+        "note": "",
+    }
 
 
 def _snapshot_arr_before_delete(
@@ -331,6 +419,8 @@ def _remove_from_arr(
         "files": list(snapshot.get("files") or []),
         "folders": list(snapshot.get("folders") or []),
         "bytes_freed": int(snapshot.get("bytes_freed") or 0),
+        "bytes_source": str(snapshot.get("bytes_source") or "unknown"),
+        "note": str(snapshot.get("note") or ""),
     }
 
 
@@ -382,6 +472,7 @@ def full_remove_library_items(
         media_type = str(_row_value(row, "media_type") or "movie")
         tmdb_id = _optional_int(_row_value(row, "tmdb_id"))
         tvdb_id = _optional_int(_row_value(row, "tvdb_id"))
+        library_bytes = _as_nonneg_int(_row_value(row, "file_size"))
         entry: Dict[str, Any] = {
             "rating_key": key,
             "title": title,
@@ -391,6 +482,8 @@ def full_remove_library_items(
             "files": [],
             "folders": [],
             "bytes_freed": 0,
+            "bytes_source": "unknown",
+            "note": "",
         }
 
         try:
@@ -423,13 +516,25 @@ def full_remove_library_items(
             )
             continue
 
-        files = list(arr_result.pop("files", []) or [])
-        folders = list(arr_result.pop("folders", []) or [])
-        bytes_freed = int(arr_result.pop("bytes_freed", 0) or 0)
+        snapshot = apply_library_bytes_fallback(
+            {
+                "files": list(arr_result.pop("files", []) or []),
+                "folders": list(arr_result.pop("folders", []) or []),
+                "bytes_freed": int(arr_result.pop("bytes_freed", 0) or 0),
+                "bytes_source": str(arr_result.pop("bytes_source", "") or ""),
+                "note": str(arr_result.pop("note", "") or ""),
+            },
+            library_bytes=library_bytes,
+        )
+        files = list(snapshot.get("files") or [])
+        folders = list(snapshot.get("folders") or [])
+        bytes_freed = int(snapshot.get("bytes_freed") or 0)
         entry["arr"] = arr_result
         entry["files"] = files
         entry["folders"] = folders
         entry["bytes_freed"] = bytes_freed
+        entry["bytes_source"] = str(snapshot.get("bytes_source") or "unknown")
+        entry["note"] = str(snapshot.get("note") or "")
 
         entry["plex"] = _remove_from_plex(settings, key)
         removed = db.delete_library_items_by_rating_keys([key])

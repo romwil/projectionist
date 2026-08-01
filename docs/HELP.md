@@ -86,7 +86,7 @@ Saved pages preserve the structured text, title cards, and reply chips. From the
 - **On This Day**
 - A daily-rotating **director filmography** and **genre**, plus a nearby calendar-occasion rail (holidays and observances, including Arbor Day) or a gentle season-of-the-year fallback
 
-**Chat about a rail.** Most Explore rails offer **Chat about these** — it opens a new conversation seeded with that rail's titles, stable library identities, and the persona *why* when present, so the curator discusses those same in-library picks (not outside search replacements).
+**Chat about a rail.** Most Explore rails offer **Chat about these** — it opens a new conversation seeded with that rail's titles, stable library identities, and the persona *why* when present, so the curator discusses those same in-library picks (not outside search replacements). Posters and title detail also offer **Chat about this** for a single title — same Chat deep link, with a *Let's discuss* opener.
 
 Those discovery rails only appear when your library has enough matching metadata, and their headings open the matching director or genre wall.
 
@@ -392,6 +392,8 @@ Owner delete from a title detail page, browse multi-select, or Explore section t
 - **Index only** (default) — drops the Projectionist library index row. Plex files stay; the title can reappear on the next library sync.
 - **Full remove** — asks Radarr or Sonarr to delete the managed title **with files** and **add an import exclusion** (so list syncs do not re-add it), removes the Plex metadata entry when Plex is configured, then drops the Projectionist index row.
 
+On a **TV show** title detail page, owners also see **Seasons & episodes** (counts and per-episode rows from the library index). From that list you can fully remove one **season** or one **episode** (typed `DELETE`) — Sonarr deletes the matching episode files, Plex metadata is cleaned up, and Projectionist drops those episode rows. Season/episode remove does not add an import exclusion for the whole show.
+
 Full remove is owner-only (same gate as index delete). Youth and guests never see it. If *arr is not configured, or the title is not managed there, Projectionist leaves the index row alone and returns a clear per-title error — it will not claim a silent full success.
 
 ```bash
@@ -407,7 +409,18 @@ curl -s -X POST http://localhost:8788/api/library/items/delete \
 # → {"mode":"full","deleted":1,"results":[...],"errors":[]}
 ```
 
-**How it works / honest limits.** File deletion goes through Radarr/Sonarr (`deleteFiles` + `addExclusion`), not a direct filesystem wipe. Before delete, Projectionist snapshots file paths and sizes from *arr (and infers parent folders from those known paths) so the owner summary and logs can show what was removed — it does not walk the disk outside those paths. Plex cleanup deletes library metadata after *arr has removed files; it does not delete disk media by itself. Dashboard **Storage Intelligence** purge defaults to this **full remove** path (same *arr + Plex + index stack). Choose **Index only** in the purge confirm dialog when you want an undoable Projectionist-index prune without touching disk.
+**How it works / honest limits.** File deletion goes through Radarr/Sonarr (`deleteFiles` / episode-file delete + `addExclusion` for whole-title remove), not a direct filesystem wipe. Before delete, Projectionist snapshots file paths and sizes from *arr (and infers parent folders from those known paths) so the owner summary and logs can show what was removed — it does not walk the disk outside those paths. When *arr reports a title folder but no episode file list or size, the summary says so (and may show a library-index size estimate) instead of claiming **0 B freed**. Plex cleanup deletes library metadata after *arr has removed files; it does not delete disk media by itself. Dashboard **Storage Intelligence** purge defaults to this **full remove** path (same *arr + Plex + index stack). Choose **Index only** in the purge confirm dialog when you want an undoable Projectionist-index prune without touching disk.
+
+```bash
+# Season / episode remove (owner) — files via Sonarr episodefile delete
+curl -s -X POST http://localhost:8788/api/library/tv/remove \
+  -H 'Content-Type: application/json' \
+  -d '{"scope":"season","show_id":123,"season_number":1}' | python3 -m json.tool
+
+curl -s -X POST http://localhost:8788/api/library/tv/remove \
+  -H 'Content-Type: application/json' \
+  -d '{"scope":"episode","show_id":123,"episode_rating_key":"EPISODE_RATING_KEY"}' | python3 -m json.tool
+```
 
 ### Purge candidates & index undo
 

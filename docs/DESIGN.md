@@ -111,6 +111,8 @@ Inline and turnstyle cards share the same affordances:
 
 Runtime under 100 minutes gets emphasis on the card. Show cards may display a TV progress ring.
 
+In-library **TV show** title detail (full page and drawer) includes **Seasons & episodes**: accordion seasons with episode codes, runtime, size, and watched state from `library_episodes`. Owners can typed-`DELETE` confirm a season or episode (Sonarr files + Plex metadata + index), or remove the whole show through the existing delete dialog.
+
 ### Agent avatar
 
 Assistant messages show a circular **AgentAvatar** (curator initial) beside the bubble. Streaming state adds a subtle pulse so the chat feels inhabited without competing with title cards.

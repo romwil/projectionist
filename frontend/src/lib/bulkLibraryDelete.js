@@ -102,6 +102,42 @@ export function formatRemovalBytes(bytes) {
   return `${(value / 1024 ** 3).toFixed(2)} GB`;
 }
 
+/** Honest freed label — avoid implying measured 0 B when *arr had no size. */
+export function formatRemovalFreedLabel(entryOrTotals) {
+  const bytes = Number(entryOrTotals?.bytes_freed) || 0;
+  const source = String(entryOrTotals?.bytes_source || "").trim().toLowerCase();
+  const files = Array.isArray(entryOrTotals?.files)
+    ? entryOrTotals.files.length
+    : Number(entryOrTotals?.files) || 0;
+  const folders = Array.isArray(entryOrTotals?.folders)
+    ? entryOrTotals.folders.length
+    : Number(entryOrTotals?.folders) || 0;
+
+  if (source === "library_estimate" && bytes > 0) {
+    return `~${formatRemovalBytes(bytes)} (est.)`;
+  }
+  if (bytes > 0) return formatRemovalBytes(bytes);
+  if (source === "unknown" || (files === 0 && folders > 0)) {
+    return "Size unknown";
+  }
+  return "0 B";
+}
+
+export function removalPathsNote(entry) {
+  const note = String(entry?.note || "").trim();
+  if (note) return note;
+  const files = Array.isArray(entry?.files) ? entry.files : [];
+  const folders = Array.isArray(entry?.folders) ? entry.folders : [];
+  if (!files.length && folders.length) {
+    return (
+      "*arr reported the title folder but no episode file list. " +
+      "Disk files may have been removed with the folder."
+    );
+  }
+  if (!files.length) return "No file paths reported by *arr.";
+  return "";
+}
+
 /** Prefer API totals including 0; only fall back when missing/non-finite. */
 function coerceTotal(value, fallback) {
   const n = Number(value);
@@ -119,6 +155,8 @@ export function normalizeRemovalSummary(result) {
           ? entry.folders.map(String).filter(Boolean)
           : [],
         bytes_freed: Number(entry?.bytes_freed) || 0,
+        bytes_source: String(entry?.bytes_source || "").trim() || "unknown",
+        note: String(entry?.note || "").trim(),
         ok: Boolean(entry?.ok),
       }))
     : [];
@@ -137,11 +175,16 @@ export function normalizeRemovalSummary(result) {
       results.reduce((sum, entry) => sum + (Number(entry.bytes_freed) || 0), 0),
     ),
   };
+  const sources = new Set(results.map((entry) => entry.bytes_source).filter(Boolean));
+  let bytes_source = "unknown";
+  if (sources.size === 1) bytes_source = [...sources][0];
+  else if (sources.has("arr") && totals.bytes_freed > 0) bytes_source = "arr";
+  else if (sources.has("library_estimate")) bytes_source = "library_estimate";
   return {
     deleted: Number(result?.deleted) || 0,
     results,
     errors: Array.isArray(result?.errors) ? result.errors : [],
-    totals,
+    totals: { ...totals, bytes_source, files: totals.files, folders: totals.folders },
   };
 }
 

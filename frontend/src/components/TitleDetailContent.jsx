@@ -36,7 +36,8 @@ import {
   titleAvailabilityClassName,
 } from "../lib/titleAvailability.js";
 import { canWatchOnPlex, plexWatchUrl } from "../lib/titleLinks.js";
-import { ROUTES } from "../lib/backNav.js";
+import { chatAboutTitleHref, ROUTES } from "../lib/backNav.js";
+import ShowSeasonsPanel from "./ShowSeasonsPanel.jsx";
 
 const META_LINK_CLASS = "title-meta-link";
 const META_STATIC_CLASS = "title-meta-static";
@@ -342,6 +343,18 @@ export default function TitleDetailContent({
                 {addCapability.guidedCopy}
               </span>
             ) : null}
+            {detail.title ? (
+              <Link
+                to={chatAboutTitleHref(detail)}
+                className="title-cta title-cta-ghost"
+                data-testid="chat-about-title-link"
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  chat
+                </span>
+                Chat about this
+              </Link>
+            ) : null}
             {multiUserEnabled ? (
               <button
                 type="button"
@@ -397,6 +410,14 @@ export default function TitleDetailContent({
               <p className="title-detail-synopsis">{detail.overview}</p>
             </div>
           ) : null}
+
+          <ShowSeasonsPanel
+            detail={detail}
+            userRole={userRole}
+            multiUserEnabled={multiUserEnabled}
+            compact={compact}
+            onShowDelete={canDeleteLibrary ? onOpenDelete : undefined}
+          />
 
           {plotKnowledge ? (
             <div

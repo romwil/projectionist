@@ -1,9 +1,10 @@
 import { createPortal } from "react-dom";
 import SectionHelp from "./SectionHelp.jsx";
 import {
-  formatRemovalBytes,
+  formatRemovalFreedLabel,
   hasRemovalSummary,
   normalizeRemovalSummary,
+  removalPathsNote,
 } from "../lib/bulkLibraryDelete.js";
 
 function stopBubble(event) {
@@ -21,6 +22,12 @@ export default function RemovalSummaryDialog({ open, result = null, onClose }) {
   const summary = normalizeRemovalSummary(result);
   const { totals, results, errors, deleted } = summary;
   const titleCount = Number.isFinite(deleted) ? deleted : results.length;
+  const hasSparsePaths = results.some(
+    (entry) => !entry.files.length && entry.folders.length > 0,
+  );
+  const eyebrow = hasSparsePaths || totals.bytes_source === "unknown"
+    ? "Removal finished"
+    : "Removal complete";
 
   return createPortal(
     <div
@@ -40,7 +47,7 @@ export default function RemovalSummaryDialog({ open, result = null, onClose }) {
         <header className="bulk-delete-modal-header">
           <div className="removal-summary-title-row">
             <div>
-              <p className="eyebrow">Removal complete</p>
+              <p className="eyebrow">{eyebrow}</p>
               <h2 id="removal-summary-title">What was removed</h2>
             </div>
             <SectionHelp
@@ -50,8 +57,9 @@ export default function RemovalSummaryDialog({ open, result = null, onClose }) {
               <p>
                 Projectionist asked Radarr/Sonarr what files and folders belonged to
                 each title before deleting them, then reports those paths and the
-                storage freed. Empty folders listed here are inferred from those known
-                paths — not from a full disk scan.
+                storage freed. When *arr has a folder but no episode file list, the
+                summary says so instead of pretending 0 B was measured. Empty folders
+                listed here are inferred from known paths — not from a full disk scan.
               </p>
             </SectionHelp>
           </div>
@@ -79,52 +87,62 @@ export default function RemovalSummaryDialog({ open, result = null, onClose }) {
             <span>folder{totals.folders === 1 ? "" : "s"}</span>
           </div>
           <div>
-            <strong>{formatRemovalBytes(totals.bytes_freed)}</strong>
+            <strong data-testid="removal-summary-freed">
+              {formatRemovalFreedLabel(totals)}
+            </strong>
             <span>freed</span>
           </div>
         </div>
 
         <div className="removal-summary-scroll" data-testid="removal-summary-list">
-          {results.map((entry) => (
-            <article
-              key={entry.rating_key || entry.title}
-              className="removal-summary-item"
-              data-testid="removal-summary-item"
-            >
-              <header className="removal-summary-item-head">
-                <h3>{entry.title || "Untitled"}</h3>
-                <span className="removal-summary-item-bytes">
-                  {formatRemovalBytes(entry.bytes_freed)}
-                </span>
-              </header>
-              {entry.files.length ? (
-                <div className="removal-summary-paths">
-                  <p className="removal-summary-paths-label">Files</p>
-                  <ul>
-                    {entry.files.map((path) => (
-                      <li key={path} title={path}>
-                        <code>{path}</code>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : (
-                <p className="status status-secondary">No file paths reported by *arr.</p>
-              )}
-              {entry.folders.length ? (
-                <div className="removal-summary-paths">
-                  <p className="removal-summary-paths-label">Folders</p>
-                  <ul>
-                    {entry.folders.map((path) => (
-                      <li key={path} title={path}>
-                        <code>{path}</code>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </article>
-          ))}
+          {results.map((entry) => {
+            const pathNote = removalPathsNote(entry);
+            return (
+              <article
+                key={entry.rating_key || entry.title}
+                className="removal-summary-item"
+                data-testid="removal-summary-item"
+              >
+                <header className="removal-summary-item-head">
+                  <h3>{entry.title || "Untitled"}</h3>
+                  <span className="removal-summary-item-bytes">
+                    {formatRemovalFreedLabel(entry)}
+                  </span>
+                </header>
+                {entry.files.length ? (
+                  <div className="removal-summary-paths">
+                    <p className="removal-summary-paths-label">Files</p>
+                    <ul>
+                      {entry.files.map((path) => (
+                        <li key={path} title={path}>
+                          <code>{path}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : pathNote ? (
+                  <p
+                    className="status status-secondary"
+                    data-testid="removal-summary-paths-note"
+                  >
+                    {pathNote}
+                  </p>
+                ) : null}
+                {entry.folders.length ? (
+                  <div className="removal-summary-paths">
+                    <p className="removal-summary-paths-label">Folders</p>
+                    <ul>
+                      {entry.folders.map((path) => (
+                        <li key={path} title={path}>
+                          <code>{path}</code>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
         </div>
 
         {errors.length ? (

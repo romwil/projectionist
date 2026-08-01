@@ -103,6 +103,63 @@ const CHAT_FROM_RAIL_TITLE_PARAM = "rail_title";
 const CHAT_FROM_RAIL_WHY_PARAM = "rail_why";
 
 /**
+ * Default discuss opener for Chat about this (single title → /chat).
+ * Stored as focus why so buildRailChatPrompt leads with "Let's discuss"
+ * without repeating a redundant curator-why clause.
+ */
+export const CHAT_ABOUT_TITLE_WHY = "Let's discuss this";
+
+/**
+ * Normalize a poster/card/detail into a rail-seed item for Chat about this.
+ * Prefers library_item_id (title detail) then id; keeps tmdb / media_type / rating_key.
+ * @param {Record<string, unknown> | null | undefined} item
+ */
+export function chatAboutTitleSeed(item) {
+  if (!item || typeof item !== "object") return null;
+  const title = String(item.title || "").trim();
+  if (!title) return null;
+  const libraryIdRaw = item.library_item_id ?? item.id;
+  const libraryId =
+    libraryIdRaw != null && Number.isFinite(Number(libraryIdRaw)) ? Number(libraryIdRaw) : undefined;
+  const ratingKey = String(item.rating_key || item.plex_rating_key || "").trim();
+  const why = String(item.why || item.recommendation_reason || "").trim();
+  return {
+    title,
+    year: item.year,
+    media_type: item.media_type,
+    id: libraryId,
+    library_item_id: libraryId,
+    rating_key: ratingKey || undefined,
+    tmdb_id: item.tmdb_id,
+    tvdb_id: item.tvdb_id,
+    poster_url: item.poster_url || item.thumb || "",
+    backdrop_url: item.backdrop_url || item.art || "",
+    in_library: Boolean(item.in_library ?? (Boolean(ratingKey) || libraryId != null)),
+    why: why || CHAT_ABOUT_TITLE_WHY,
+    recommendation_reason: why || undefined,
+  };
+}
+
+/**
+ * Deep-link to default Chat with one title loaded (same rail_pack transport as
+ * Explore "Chat about these") and a discuss opener as the opening user message.
+ * @param {Record<string, unknown> | null | undefined} item
+ */
+export function chatAboutTitleHref(item) {
+  const seed = chatAboutTitleSeed(item);
+  if (!seed) return ROUTES.chat;
+  const railId =
+    seed.id != null
+      ? `title-${seed.id}`
+      : seed.rating_key
+        ? `rk-${seed.rating_key}`
+        : seed.tmdb_id != null
+          ? `tmdb-${seed.media_type || "movie"}-${seed.tmdb_id}`
+          : "about-title";
+  return chatFromRailHref({ railTitle: seed.title, railId, items: [seed] }, seed);
+}
+
+/**
  * Deep-link to chat with rail context (stable ids + why per title).
  * Also stashes full items (posters) in sessionStorage for the chat turn.
  * @param {{ railTitle?: string, railId?: string, items?: Array<Record<string, unknown>> }} rail

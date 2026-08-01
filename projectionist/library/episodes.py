@@ -586,12 +586,46 @@ def sync_tv_episodes(
     }
 
 
-def _resolve_show(db: Database, show: Optional[str] = None, show_id: Optional[int] = None):
+_SHOW_SEASONS_EPISODE_CAP = 2000
+
+
+def _resolve_show(
+    db: Database,
+    show: Optional[str] = None,
+    show_id: Optional[int] = None,
+    *,
+    tmdb_id: Optional[int] = None,
+    tvdb_id: Optional[int] = None,
+):
     if show_id is not None:
-        return db.library_item_by_id(int(show_id))
+        row = db.library_item_by_id(int(show_id))
+        if row is not None and str(row["media_type"] or "") == "show":
+            return row
+        return None
+    if tmdb_id is not None:
+        return db.library_item_by_tmdb(int(tmdb_id), "show")
+    if tvdb_id is not None:
+        return db.library_item_by_tvdb(int(tvdb_id))
     if show:
         return db.library_item_by_title(str(show), media_type="show")
     return None
+
+
+def _episode_api_item(show_title: str, row: Any) -> Dict[str, Any]:
+    view_count = int(row["view_count"] or 0)
+    return {
+        "id": int(row["id"]) if row["id"] is not None else None,
+        "show_title": show_title,
+        "rating_key": str(row["rating_key"] or "").strip() or None,
+        "season_number": int(row["season_number"]) if row["season_number"] is not None else None,
+        "episode_number": int(row["episode_number"]) if row["episode_number"] is not None else None,
+        "title": str(row["title"] or ""),
+        "runtime_minutes": int(row["runtime_minutes"]) if row["runtime_minutes"] is not None else None,
+        "view_count": view_count,
+        "unwatched": view_count == 0,
+        "file_size": int(row["file_size"] or 0),
+        "aired_at": str(row["aired_at"] or "") or None,
+    }
 
 
 def query_episodes(
@@ -603,8 +637,12 @@ def query_episodes(
     unwatched_only: bool = False,
     offset: int = 0,
     limit: int = 25,
+    tmdb_id: Optional[int] = None,
+    tvdb_id: Optional[int] = None,
 ) -> Dict[str, Any]:
-    show_row = _resolve_show(db, show=show, show_id=show_id)
+    show_row = _resolve_show(
+        db, show=show, show_id=show_id, tmdb_id=tmdb_id, tvdb_id=tvdb_id
+    )
     if show_row is None:
         return {"error": "Show not found", "total_matched": 0, "returned": 0, "items": []}
 
@@ -619,6 +657,7 @@ def query_episodes(
     where_sql = " AND ".join(clauses)
     capped_limit = min(max(1, limit), 50)
     capped_offset = max(0, offset)
+    show_title = str(show_row["title"])
 
     with db.connect() as conn:
         total = conn.execute(
@@ -635,27 +674,107 @@ def query_episodes(
             [*params, capped_limit, capped_offset],
         ).fetchall()
 
-    items = [
-        {
-            "show_title": str(show_row["title"]),
-            "season_number": int(r["season_number"]) if r["season_number"] is not None else None,
-            "episode_number": int(r["episode_number"]) if r["episode_number"] is not None else None,
-            "title": str(r["title"] or ""),
-            "runtime_minutes": int(r["runtime_minutes"]) if r["runtime_minutes"] is not None else None,
-            "view_count": int(r["view_count"] or 0),
-            "unwatched": int(r["view_count"] or 0) == 0,
-        }
-        for r in rows
-    ]
+    items = [_episode_api_item(show_title, r) for r in rows]
     returned = len(items)
     total_matched = int(total)
     return {
-        "show_title": str(show_row["title"]),
+        "show_title": show_title,
+        "show_id": int(show_row["id"]),
         "total_matched": total_matched,
         "returned": returned,
         "offset": capped_offset,
         "has_more": capped_offset + returned < total_matched,
         "items": items,
+    }
+
+
+def query_show_seasons(
+    db: Database,
+    *,
+    show_id: Optional[int] = None,
+    tmdb_id: Optional[int] = None,
+    tvdb_id: Optional[int] = None,
+    show: Optional[str] = None,
+    max_episodes: int = _SHOW_SEASONS_EPISODE_CAP,
+) -> Dict[str, Any]:
+    """Return seasons with nested episodes for title-detail browse."""
+    show_row = _resolve_show(
+        db, show=show, show_id=show_id, tmdb_id=tmdb_id, tvdb_id=tvdb_id
+    )
+    if show_row is None:
+        return {
+            "error": "Show not found",
+            "show_id": None,
+            "show_title": "",
+            "total_seasons": 0,
+            "total_episodes": 0,
+            "file_size_bytes": 0,
+            "truncated": False,
+            "seasons": [],
+        }
+
+    show_item_id = int(show_row["id"])
+    show_title = str(show_row["title"])
+    cap = max(1, min(int(max_episodes or _SHOW_SEASONS_EPISODE_CAP), _SHOW_SEASONS_EPISODE_CAP))
+
+    with db.connect() as conn:
+        total_episodes = int(
+            conn.execute(
+                "SELECT COUNT(*) AS cnt FROM library_episodes WHERE show_item_id = ?",
+                (show_item_id,),
+            ).fetchone()["cnt"]
+            or 0
+        )
+        rows = conn.execute(
+            """
+            SELECT * FROM library_episodes
+            WHERE show_item_id = ?
+            ORDER BY season_number ASC, episode_number ASC
+            LIMIT ?
+            """,
+            (show_item_id, cap),
+        ).fetchall()
+
+    truncated = total_episodes > len(rows)
+    seasons_map: Dict[Optional[int], Dict[str, Any]] = {}
+    for row in rows:
+        season_number = int(row["season_number"]) if row["season_number"] is not None else None
+        bucket = seasons_map.get(season_number)
+        if bucket is None:
+            bucket = {
+                "season_number": season_number,
+                "episode_count": 0,
+                "watched_count": 0,
+                "file_size_bytes": 0,
+                "episodes": [],
+            }
+            seasons_map[season_number] = bucket
+        item = _episode_api_item(show_title, row)
+        bucket["episodes"].append(item)
+        bucket["episode_count"] += 1
+        if not item["unwatched"]:
+            bucket["watched_count"] += 1
+        bucket["file_size_bytes"] += int(item["file_size"] or 0)
+
+    seasons = sorted(
+        seasons_map.values(),
+        key=lambda s: (
+            s["season_number"] is None,
+            s["season_number"] if s["season_number"] is not None else 0,
+        ),
+    )
+    file_size_bytes = sum(int(s["file_size_bytes"] or 0) for s in seasons)
+    return {
+        "show_id": show_item_id,
+        "show_title": show_title,
+        "rating_key": str(show_row["rating_key"] or "").strip() or None,
+        "tmdb_id": int(show_row["tmdb_id"]) if show_row["tmdb_id"] is not None else None,
+        "tvdb_id": int(show_row["tvdb_id"]) if show_row["tvdb_id"] is not None else None,
+        "total_seasons": len(seasons),
+        "total_episodes": total_episodes,
+        "file_size_bytes": file_size_bytes,
+        "truncated": truncated,
+        "seasons": seasons,
     }
 
 

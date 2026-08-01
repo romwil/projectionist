@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import urllib.parse
 from dataclasses import dataclass
-from typing import Any, List, Mapping, Optional
+from typing import Any, List, Mapping, Optional, Sequence
 
 from projectionist.config_store import pick_arr_root_folder, root_folder_paths_from_api
 from projectionist.connectors.arr_errors import ArrTitleExistsError, arr_exists_error_code
@@ -175,6 +175,42 @@ class SonarrClient:
             timeout=self.timeout,
         )
         return payload if isinstance(payload, list) else []
+
+    def episodes(self, series_id: int) -> List[Mapping[str, Any]]:
+        """Return episode records for a series (season/episode + episodeFileId)."""
+        payload = request_json(
+            f"{self.base_url}/api/v3/episode?seriesId={int(series_id)}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, list) else []
+
+    def delete_episode_file(self, episode_file_id: int) -> None:
+        """Delete one episode file from disk via Sonarr."""
+        request_json(
+            f"{self.base_url}/api/v3/episodefile/{int(episode_file_id)}",
+            method="DELETE",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+
+    def delete_episode_files(self, episode_file_ids: Sequence[int]) -> None:
+        """Bulk-delete episode files when Sonarr supports the bulk endpoint."""
+        ids = [int(value) for value in episode_file_ids if int(value) > 0]
+        if not ids:
+            return
+        try:
+            request_json(
+                f"{self.base_url}/api/v3/episodefile/bulk",
+                method="DELETE",
+                headers=self._headers(),
+                body={"episodeFileIds": ids},
+                timeout=self.timeout,
+            )
+            return
+        except RuntimeError:
+            for file_id in ids:
+                self.delete_episode_file(file_id)
 
     def delete_series(
         self,

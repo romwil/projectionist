@@ -51,7 +51,7 @@ from projectionist.library.query import (
     query_library_async,
     row_to_query_item,
 )
-from projectionist.library.search import row_to_title_card, search_library
+from projectionist.library.search import exact_title_cards, row_to_title_card, search_library
 from projectionist.library.titles import get_title_detail
 from projectionist.models.recommendation import sanitize_recommendation_reason
 from projectionist.models.schemas import TitleCard
@@ -596,23 +596,43 @@ class ToolRegistry:
             raise
 
     async def _tool_search_library(self, args: Mapping[str, Any]) -> str:
+        query = str(args.get("query") or "")
         cards = self._allowed_cards(
             await search_library(
                 self.db,
                 self.settings,
-                str(args.get("query") or ""),
+                query,
                 media_type=args.get("media_type"),
             )
         )
-        self._cards.extend(cards)
-        items = [_card_to_tool_item(c) for c in cards]
+        exact = exact_title_cards(cards, query) if query.strip() else []
+        if exact:
+            presence = "exact"
+            # Only exact hits become turnstyle cards — fuzzy "Adventures of…"
+            # noise must not fill the rail while prose names different titles.
+            display_cards = exact
+        elif cards:
+            presence = "partial"
+            display_cards = []
+        else:
+            presence = "none"
+            display_cards = []
+        self._cards.extend(display_cards)
+        items = [_card_to_tool_item(c) for c in (display_cards or cards[:8])]
         return json.dumps(
             {
                 "total_matched": len(cards),
-                "returned": len(cards),
+                "returned": len(items),
                 "offset": 0,
                 "has_more": False,
+                "presence": presence,
+                "exact_title_matches": [_card_to_tool_item(c) for c in exact],
                 "items": items,
+                "note": (
+                    "presence=exact means owned. presence=partial is uncertain fuzzy noise — "
+                    "do not claim ownership and do not invent missing-title cards from it. "
+                    "presence=none means no library hit; use search_tmdb with title+year for gaps."
+                ),
             }
         )
 

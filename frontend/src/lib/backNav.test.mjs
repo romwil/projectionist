@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  CHAT_ABOUT_TITLE_WHY,
   RECOMMEND_LIKE_PARAM,
   ROUTES,
   backLabelForPath,
+  chatAboutTitleHref,
+  chatAboutTitleSeed,
   chatFromRailHref,
   chatFromRailPrompt,
   recommendLikeHref,
@@ -138,8 +141,10 @@ describe("chat from rail deep link", () => {
     );
     const params = new URLSearchParams(href.split("?")[1] || "");
     const prompt = chatFromRailPrompt(params);
+    assert.match(prompt, /Let's discuss/);
     assert.match(prompt, /Heat/);
     assert.match(prompt, /noir lean/);
+    assert.match(prompt, /from my "For you this week" picks/);
     const stripped = stripChatFromRailParam(params);
     assert.equal(stripped.get("from_rail"), null);
     assert.equal(stripped.get("rail_why"), null);
@@ -171,5 +176,51 @@ describe("chat from rail deep link", () => {
     const stripped = stripChatFromRailParam(params);
     assert.equal(stripped.get("rail_pack"), null);
     assert.equal(stripped.get("rail_id"), null);
+  });
+});
+
+describe("chat about title deep link", () => {
+  it("normalizes library_item_id, tmdb, and media_type into a seed", () => {
+    const seed = chatAboutTitleSeed({
+      title: "The Bear",
+      library_item_id: 99,
+      tmdb_id: 12345,
+      media_type: "show",
+      year: 2022,
+    });
+    assert.equal(seed.title, "The Bear");
+    assert.equal(seed.id, 99);
+    assert.equal(seed.library_item_id, 99);
+    assert.equal(seed.tmdb_id, 12345);
+    assert.equal(seed.media_type, "show");
+    assert.equal(seed.why, CHAT_ABOUT_TITLE_WHY);
+  });
+
+  it("builds a from_rail chat href with discuss opener and stable ids", () => {
+    const href = chatAboutTitleHref({
+      title: "Heat",
+      id: 42,
+      year: 1995,
+      media_type: "movie",
+      rating_key: "rk-heat",
+      tmdb_id: 949,
+    });
+    assert.match(href, /^\/chat\?/);
+    assert.match(href, /from_rail=1/);
+    assert.match(href, /rail_pack=/);
+    assert.match(href, /rail_id=title-42/);
+    const params = new URLSearchParams(href.split("?")[1] || "");
+    const prompt = chatFromRailPrompt(params);
+    assert.match(prompt, /^Let's discuss "Heat"/);
+    assert.match(prompt, /library_id=42/);
+    assert.match(prompt, /rating_key=rk-heat/);
+    assert.match(prompt, /tmdb_id=949/);
+    assert.doesNotMatch(prompt, /The curator said: "Let's discuss this"/);
+    assert.doesNotMatch(prompt, /from my "Heat" picks/);
+  });
+
+  it("falls back to /chat when title is missing", () => {
+    assert.equal(chatAboutTitleHref({ media_type: "movie" }), ROUTES.chat);
+    assert.equal(chatAboutTitleSeed(null), null);
   });
 });

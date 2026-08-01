@@ -73,7 +73,11 @@ from projectionist.library.external_search import (
 from projectionist.memory import MemoryAccessError, UserMemoryService
 from projectionist.library.health import compute_library_health
 from projectionist.library.facets import ensure_library_facet_index
-from projectionist.library.episodes import query_episodes, summarize_tv_progress
+from projectionist.library.episodes import (
+    query_episodes,
+    query_show_seasons,
+    summarize_tv_progress,
+)
 from projectionist.library.facets import library_facet_catalog
 from projectionist.library.feeds import (
     feed_continue_watching,
@@ -754,6 +758,16 @@ class McpKeyWhichPayload(BaseModel):
 
 class RevealSecretPayload(BaseModel):
     field: str = Field(min_length=1)
+
+
+class TvRemovePayload(BaseModel):
+    scope: str = Field(min_length=1)
+    show_id: Optional[int] = None
+    tmdb_id: Optional[int] = None
+    tvdb_id: Optional[int] = None
+    rating_key: Optional[str] = None
+    season_number: Optional[int] = None
+    episode_rating_key: Optional[str] = None
 
 
 class PlexCollectionProposePayload(BaseModel):
@@ -4844,6 +4858,8 @@ def library_facets_endpoint(
 def library_tv_episodes_endpoint(
     show: Optional[str] = None,
     show_id: Optional[int] = None,
+    tmdb_id: Optional[int] = None,
+    tvdb_id: Optional[int] = None,
     season: Optional[int] = None,
     unwatched_only: bool = False,
     offset: int = 0,
@@ -4855,6 +4871,8 @@ def library_tv_episodes_endpoint(
             _db(),
             show=show,
             show_id=show_id,
+            tmdb_id=tmdb_id,
+            tvdb_id=tvdb_id,
             season=season,
             unwatched_only=unwatched_only,
             offset=offset,
@@ -4862,6 +4880,67 @@ def library_tv_episodes_endpoint(
         ),
         user,
     )
+
+
+@app.get("/api/library/tv/seasons")
+def library_tv_seasons_endpoint(
+    show: Optional[str] = None,
+    show_id: Optional[int] = None,
+    tmdb_id: Optional[int] = None,
+    tvdb_id: Optional[int] = None,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    if show_id is None and tmdb_id is None and tvdb_id is None and not show:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide show_id, tmdb_id, tvdb_id, or show",
+        )
+    payload = query_show_seasons(
+        _db(),
+        show=show,
+        show_id=show_id,
+        tmdb_id=tmdb_id,
+        tvdb_id=tvdb_id,
+    )
+    if payload.get("error"):
+        raise HTTPException(status_code=404, detail=str(payload["error"]))
+    return _sanitize_library_payload(payload, user)
+
+
+@app.post("/api/library/tv/remove")
+def library_tv_remove_endpoint(
+    payload: TvRemovePayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner season/episode remove via Sonarr episode files + Plex + index."""
+    del user
+    from projectionist.connectors.arr_errors import ArrTitleNotFoundError
+    from projectionist.library.tv_remove import remove_tv_scope
+
+    try:
+        return remove_tv_scope(
+            _db(),
+            _settings(),
+            scope=payload.scope,
+            show_id=payload.show_id,
+            tmdb_id=payload.tmdb_id,
+            tvdb_id=payload.tvdb_id,
+            rating_key=payload.rating_key,
+            season_number=payload.season_number,
+            episode_rating_key=payload.episode_rating_key,
+        )
+    except ValueError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Invalid TV remove request"),
+        ) from error
+    except ArrTitleNotFoundError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "TV remove failed"),
+        ) from error
 
 
 @app.get("/api/library/tv/progress")
