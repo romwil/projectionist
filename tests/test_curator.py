@@ -263,6 +263,92 @@ class CuratorAgentToolLoopTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(seen_tools[1])
             self.assertIn("could not find confident matches", text_blocks[0]["content"].lower())
 
+    async def test_empty_gaps_fallback_keeps_tools_for_one_round(self) -> None:
+        """First empty themed gaps keep tools; only stop_retrying strips them."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            settings = Settings(
+                llm_provider="anthropic",
+                llm_api_key="test-key",
+                llm_model="claude-sonnet-4-6",
+                tmdb_api_key="test-key",
+            )
+            agent = CuratorAgent(db, settings)
+
+            first_tool = _normalize_anthropic_response(
+                {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_gaps1",
+                            "name": "find_collection_gaps",
+                            "input": {
+                                "media_type": "show",
+                                "genres": "History",
+                                "tv_type": "miniseries",
+                            },
+                        }
+                    ],
+                    "stop_reason": "tool_use",
+                }
+            )
+            second_tool = _normalize_anthropic_response(
+                {
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_gaps2",
+                            "name": "find_collection_gaps",
+                            "input": {
+                                "media_type": "show",
+                                "genres": "History",
+                                "tv_type": "miniseries",
+                                "is_fallback_attempt": True,
+                            },
+                        }
+                    ],
+                    "stop_reason": "tool_use",
+                }
+            )
+            text_response = _normalize_anthropic_response(
+                {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": "Nothing confident matched after the broader History miniseries pass.",
+                        }
+                    ],
+                    "stop_reason": "end_turn",
+                }
+            )
+            seen_tools: list[object] = []
+
+            async def mock_chat(messages, tools=None):
+                seen_tools.append(tools)
+                if len(seen_tools) == 1:
+                    return first_tool
+                if len(seen_tools) == 2:
+                    return second_tool
+                return text_response
+
+            agent.provider = MagicMock()
+            agent.provider.chat = AsyncMock(side_effect=mock_chat)
+
+            with patch("projectionist.agent.tools.TMDBClient") as mock_tmdb_cls:
+                mock_tmdb = mock_tmdb_cls.return_value
+                mock_tmdb.genre_list_tv.return_value = [{"id": 36, "name": "History"}]
+                mock_tmdb.discover_tv.return_value = []
+                mock_tmdb.poster_url.return_value = ""
+                mock_tmdb.backdrop_url.return_value = ""
+                result = await agent.run("session-fallback", "recent history miniseries")
+            text_blocks = [block for block in result["message"]["blocks"] if block.get("type") == "text"]
+
+            self.assertEqual(len(seen_tools), 3)
+            self.assertIsNotNone(seen_tools[0])
+            self.assertIsNotNone(seen_tools[1])  # fallback round still has tools
+            self.assertIsNone(seen_tools[2])  # stop_retrying wrap-up
+            self.assertIn("nothing confident matched", text_blocks[0]["content"].lower())
+
 
 class DisplayableCardsTests(unittest.TestCase):
     def test_filters_empty_placeholder_cards(self) -> None:

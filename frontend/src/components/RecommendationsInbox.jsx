@@ -1,10 +1,13 @@
 import { useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   dedupeNotifications,
   inboxHeadline,
+  isWatchPartyRecommendation,
   normalizeRecommendation,
   recommendationMediaTitle,
 } from "../lib/recommendationInbox.js";
+import { chatAboutTitleHref } from "../lib/backNav.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
 import TitleDetailLink from "./TitleDetailLink";
@@ -52,7 +55,28 @@ function cardLead(rec, recommendation) {
       </>
     );
   }
+  if (kind === "library-share") {
+    return (
+      <>
+        <strong>{fromName}</strong> shared a saved page — <em>{rec.title || "Library page"}</em>
+      </>
+    );
+  }
   const mediaTitle = recommendationMediaTitle(rec);
+  if (isWatchPartyRecommendation(rec)) {
+    return (
+      <>
+        <span className="recommendation-watch-party-badge" data-testid="recommendation-watch-party-badge">
+          Watch together
+        </span>{" "}
+        <strong>{fromName}</strong> invited you to watch{" "}
+        <TitleDigInEm item={recommendation}>
+          {mediaTitle}
+          {yearBit}
+        </TitleDigInEm>
+      </>
+    );
+  }
   return (
     <>
       <strong>{fromName}</strong> recommended{" "}
@@ -98,11 +122,21 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
           const path = titleDetailPath(recommendation);
           const note = rec.message || rec.body;
           const kind = String(rec.kind || "recommendation");
-          const showPoster = Boolean(rec.poster_url) || kind === "recommendation" || kind === "arrival";
+          const watchParty = kind === "recommendation" && isWatchPartyRecommendation(rec);
+          const librarySharePath =
+            kind === "library-share"
+              ? rec.payload?.path ||
+                (rec.payload?.page_id ? `/library/${encodeURIComponent(rec.payload.page_id)}` : null)
+              : null;
+          const showPoster =
+            Boolean(rec.poster_url) || kind === "recommendation" || kind === "arrival";
           const mediaTitle = kind === "recommendation" ? recommendationMediaTitle(rec) : rec.title;
+          const chatHref =
+            kind === "recommendation" && mediaTitle ? chatAboutTitleHref(recommendation) : null;
           const cardClass = [
             "recommendation-card",
             `recommendation-card--${kind}`,
+            watchParty ? "recommendation-card--watch-party" : "",
             showPoster ? "" : "recommendation-card--text-only",
           ]
             .filter(Boolean)
@@ -113,6 +147,7 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
               className={cardClass}
               data-testid={`recommendation-card-${rec.id}`}
               data-kind={kind}
+              data-intent={watchParty ? "watch_party" : recommendation.intent || undefined}
               style={{ zIndex: recommendations.length - index }}
             >
               {showPoster ? (
@@ -140,9 +175,36 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
                 </div>
               ) : null}
               <div className="recommendation-card-body">
+                {rec.from_display_name && (kind === "recommendation" || kind === "library-share") ? (
+                  <p className="recommendation-card-from-meta">
+                    {rec.from_avatar_url ? (
+                      <img
+                        src={rec.from_avatar_url}
+                        alt=""
+                        className="recommendation-from-avatar"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="recommendation-from-avatar recommendation-from-avatar--fallback" aria-hidden="true">
+                        {String(rec.from_display_name).slice(0, 1)}
+                      </span>
+                    )}
+                    <span>{rec.from_display_name}</span>
+                  </p>
+                ) : null}
                 <p className="recommendation-card-from">{cardLead(rec, recommendation)}</p>
                 {note ? <p className="recommendation-card-note">“{note}”</p> : null}
                 <div className="recommendation-card-actions">
+                  {librarySharePath ? (
+                    <Link
+                      to={librarySharePath}
+                      className="btn-link"
+                      data-testid={`recommendation-open-library-${rec.id}`}
+                      onClick={() => onDismiss?.(rec)}
+                    >
+                      Open saved page
+                    </Link>
+                  ) : null}
                   {path ? (
                     <TitleDetailLink
                       item={recommendation}
@@ -152,6 +214,16 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
                     >
                       Open title
                     </TitleDetailLink>
+                  ) : null}
+                  {chatHref ? (
+                    <Link
+                      to={chatHref}
+                      className="btn-link"
+                      data-testid={`recommendation-chat-${rec.id}`}
+                      onClick={() => onDismiss?.(rec)}
+                    >
+                      Chat about this
+                    </Link>
                   ) : null}
                   <button
                     type="button"

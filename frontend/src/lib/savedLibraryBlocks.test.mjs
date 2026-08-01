@@ -87,6 +87,25 @@ describe("savedLibraryBlocks", () => {
     assert.deepEqual(rendered[0].replies, ["a", "b", "c", "d"]);
   });
 
+  it("keeps persona_consult quote blocks for saved pages", () => {
+    const blocks = [
+      {
+        type: "persona_consult",
+        payload: {
+          persona: "Scholar",
+          lead: "I asked Scholar and they said",
+          answer: "Two cited neighbors.",
+          specialty: "citations",
+        },
+      },
+    ];
+    const rendered = savedLibraryBlocks(blocks);
+    assert.equal(rendered.length, 1);
+    assert.equal(rendered[0].kind, "persona_consult");
+    assert.equal(rendered[0].persona, "Scholar");
+    assert.equal(rendered[0].answer, "Two cited neighbors.");
+  });
+
   it("returns an empty list for missing/invalid input", () => {
     assert.deepEqual(savedLibraryBlocks(), []);
     assert.deepEqual(savedLibraryBlocks(null), []);

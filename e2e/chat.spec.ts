@@ -82,7 +82,9 @@ test.describe("Chat workspace", () => {
     await page.getByTestId("composer-input").fill("Slow response test");
     await page.getByTestId("send-button").click();
     await expect(page.getByTestId("typing-indicator")).toBeVisible();
-    await expect(page.getByTestId("typing-indicator")).toContainText(/weighing|thinking|Curator/i);
+    // Neutral persona-bound wait chip — not canned "Searching…" / phrase lottery.
+    await expect(page.getByTestId("typing-indicator")).toContainText(/Curator/i);
+    await expect(page.getByTestId("typing-indicator")).not.toContainText(/Searching/i);
   });
 
   test("thinking indicator expands agent activity log from tool events", async ({ page }) => {
@@ -130,6 +132,7 @@ test.describe("Chat workspace", () => {
     const indicator = page.getByTestId("typing-indicator");
     await expect(indicator).toBeVisible();
     await expect(indicator).toContainText("Agent activity");
+    await expect(indicator).not.toContainText(/Searching/i);
     await expect(indicator).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByTestId("agent-activity-panel")).toHaveCount(0);
 

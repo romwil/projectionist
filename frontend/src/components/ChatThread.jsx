@@ -166,6 +166,31 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks, streami
       </>
     );
   }
+  if (block.type === "persona_consult" && block.payload?.answer) {
+    const name = String(block.payload.persona || "Curator").trim() || "Curator";
+    const lead = String(block.payload.lead || `I asked ${name} and they said`).trim();
+    const question = String(block.payload.question || "").trim();
+    return (
+      <aside
+        className="persona-consult-quote"
+        data-testid="persona-consult-quote"
+        data-persona={name}
+        data-specialty={block.payload.specialty || ""}
+        aria-label={`Consulted ${name}`}
+      >
+        <p className="persona-consult-lead">{lead}…</p>
+        <div className="persona-consult-answer">
+          <MessageText content={block.payload.answer} markdown={role === "assistant"} titleRefs={titleRefs} />
+        </div>
+        {question ? (
+          <details className="persona-consult-asked" data-testid="persona-consult-asked">
+            <summary>{`What I asked ${name}`}</summary>
+            <p className="persona-consult-asked-body">{question}</p>
+          </details>
+        ) : null}
+      </aside>
+    );
+  }
   if (block.type === "suggested_replies" && role === "assistant") {
     const replies = Array.isArray(block.payload?.replies) ? block.payload.replies.filter(Boolean).slice(0, 4) : [];
     if (!replies.length) return null;

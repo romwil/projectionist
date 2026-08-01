@@ -93,3 +93,13 @@ def maybe_deliver_live_channels_ready_nudge(
         if result.get("notification"):
             delivered += 1
     return {"delivered": delivered, "considered": considered, "skipped": ""}
+
+
+def reset_live_channels_ready_nudge(db: Database) -> Dict[str, Any]:
+    """Clear ready-nudge dedupe rows so a disable→re-enable cycle can nudge again."""
+    try:
+        deleted = db.delete_notifications_by_related(kind="nudge", related_id=RELATED_ID)
+    except Exception:  # noqa: BLE001
+        logger.debug("Could not reset Live Channels ready nudge", exc_info=True)
+        return {"deleted": 0, "ok": False}
+    return {"deleted": int(deleted or 0), "ok": True}

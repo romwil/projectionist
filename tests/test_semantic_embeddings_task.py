@@ -33,7 +33,7 @@ def _make_db(tmp: str, n_items: int) -> Database:
     return db
 
 
-def _fake_embed(texts, _settings):
+def _fake_embed(texts, _settings, **_kw):
     return [[0.1] * 8 for _ in texts]
 
 
@@ -158,7 +158,7 @@ class TrickleIngestionTests(unittest.IsolatedAsyncioTestCase):
         """embed_texts is called with at most BATCH_SIZE texts per invocation."""
         call_sizes: list[int] = []
 
-        async def tracking_embed(texts, _settings):
+        async def tracking_embed(texts, _settings, **_kw):
             call_sizes.append(len(texts))
             return [[0.1] * 8 for _ in texts]
 

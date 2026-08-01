@@ -989,7 +989,14 @@ class SchemaMigrationsMixin:
                 id TEXT PRIMARY KEY,
                 user_id TEXT NOT NULL,
                 kind TEXT NOT NULL CHECK (
-                    kind IN ('recommendation', 'arrival', 'access-request', 'digest', 'nudge')
+                    kind IN (
+                        'recommendation',
+                        'arrival',
+                        'access-request',
+                        'digest',
+                        'nudge',
+                        'library-share'
+                    )
                 ),
                 title TEXT NOT NULL,
                 body TEXT,
@@ -1007,6 +1014,69 @@ class SchemaMigrationsMixin:
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
                 FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE SET NULL
             );
+            CREATE INDEX IF NOT EXISTS idx_user_notifications_user
+                ON user_notifications(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_user_notifications_unread
+                ON user_notifications(user_id, seen_at);
+            CREATE INDEX IF NOT EXISTS idx_user_notifications_related
+                ON user_notifications(user_id, kind, related_id);
+            """
+        )
+
+    def _migrate_notification_library_share_kind(self, conn: sqlite3.Connection) -> None:
+        """Widen user_notifications.kind CHECK to allow library-share (SQLite rebuild)."""
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='user_notifications'"
+        ).fetchone()
+        ddl = str(row["sql"] or "") if row else ""
+        if "library-share" in ddl:
+            return
+        if not ddl:
+            # Fresh installs get the widened CHECK from _migrate_notifications CREATE.
+            return
+        conn.executescript(
+            """
+            CREATE TABLE user_notifications_v2 (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                kind TEXT NOT NULL CHECK (
+                    kind IN (
+                        'recommendation',
+                        'arrival',
+                        'access-request',
+                        'digest',
+                        'nudge',
+                        'library-share'
+                    )
+                ),
+                title TEXT NOT NULL,
+                body TEXT,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                media_type TEXT,
+                tmdb_id INTEGER,
+                tvdb_id INTEGER,
+                rating_key TEXT,
+                year INTEGER,
+                poster_url TEXT,
+                from_user_id TEXT,
+                related_id TEXT,
+                created_at REAL NOT NULL,
+                seen_at REAL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+            INSERT INTO user_notifications_v2 (
+                id, user_id, kind, title, body, payload_json,
+                media_type, tmdb_id, tvdb_id, rating_key, year, poster_url,
+                from_user_id, related_id, created_at, seen_at
+            )
+            SELECT
+                id, user_id, kind, title, body, payload_json,
+                media_type, tmdb_id, tvdb_id, rating_key, year, poster_url,
+                from_user_id, related_id, created_at, seen_at
+            FROM user_notifications;
+            DROP TABLE user_notifications;
+            ALTER TABLE user_notifications_v2 RENAME TO user_notifications;
             CREATE INDEX IF NOT EXISTS idx_user_notifications_user
                 ON user_notifications(user_id, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_user_notifications_unread
@@ -1485,6 +1555,111 @@ class SchemaMigrationsMixin:
                 );
             """
         )
+
+    def _migrate_llm_usage(self, conn: sqlite3.Connection) -> None:
+        """Owner BI table for per-call LLM tokens / estimated cost."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS llm_usage (
+                id TEXT PRIMARY KEY,
+                created_at REAL NOT NULL,
+                purpose TEXT NOT NULL,
+                model TEXT NOT NULL DEFAULT '',
+                provider TEXT NOT NULL DEFAULT '',
+                prompt_tokens INTEGER,
+                completion_tokens INTEGER,
+                total_tokens INTEGER,
+                latency_ms INTEGER,
+                estimated_usd REAL,
+                persona_id TEXT,
+                session_id TEXT,
+                user_id TEXT,
+                meta_json TEXT NOT NULL DEFAULT '{}'
+            );
+            CREATE INDEX IF NOT EXISTS idx_llm_usage_created ON llm_usage(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_llm_usage_purpose ON llm_usage(purpose, created_at);
+            CREATE INDEX IF NOT EXISTS idx_llm_usage_model ON llm_usage(model, created_at);
+            CREATE INDEX IF NOT EXISTS idx_llm_usage_persona ON llm_usage(persona_id, created_at);
+            """
+        )
+
+    def _migrate_holiday_calendar(self, conn: sqlite3.Connection) -> None:
+        """Owner-editable holiday calendar + seasonal rail curation (Phase B1/B1b/B2)."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS holiday_observances (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'fixed',
+                month INTEGER,
+                day INTEGER,
+                movable_rule TEXT,
+                pre_shoulder_days INTEGER NOT NULL DEFAULT 7,
+                post_shoulder_days INTEGER NOT NULL DEFAULT 7,
+                search_terms_json TEXT NOT NULL DEFAULT '[]',
+                enabled INTEGER NOT NULL DEFAULT 1,
+                is_builtin INTEGER NOT NULL DEFAULT 0,
+                schedule_publish INTEGER NOT NULL DEFAULT 1,
+                sort_order INTEGER NOT NULL DEFAULT 0,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_holiday_observances_enabled
+                ON holiday_observances(enabled, sort_order);
+
+            CREATE TABLE IF NOT EXISTS holiday_rail_titles (
+                scope_id TEXT NOT NULL,
+                library_item_id INTEGER NOT NULL,
+                curation TEXT NOT NULL,
+                pin_position INTEGER,
+                created_at REAL NOT NULL,
+                PRIMARY KEY (scope_id, library_item_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_holiday_rail_titles_scope
+                ON holiday_rail_titles(scope_id, curation, pin_position);
+
+            CREATE TABLE IF NOT EXISTS seasonal_rail_snapshots (
+                snapshot_date TEXT PRIMARY KEY,
+                scope_id TEXT NOT NULL,
+                label TEXT NOT NULL DEFAULT '',
+                mode TEXT NOT NULL DEFAULT '',
+                items_json TEXT NOT NULL DEFAULT '[]',
+                created_at REAL NOT NULL
+            );
+            """
+        )
+        # Seed builtins on migrate so Explore reads the store immediately.
+        from projectionist.library.holidays import DEFAULT_OBSERVANCES
+        import json
+        import time as _time
+
+        now = _time.time()
+        for index, seed in enumerate(DEFAULT_OBSERVANCES):
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO holiday_observances (
+                    id, name, kind, month, day, movable_rule,
+                    pre_shoulder_days, post_shoulder_days, search_terms_json,
+                    enabled, is_builtin, schedule_publish, sort_order,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?)
+                """,
+                (
+                    seed["id"],
+                    seed["name"],
+                    seed["kind"],
+                    seed.get("month"),
+                    seed.get("day"),
+                    seed.get("movable_rule"),
+                    int(seed["pre_shoulder_days"]),
+                    int(seed["post_shoulder_days"]),
+                    json.dumps(list(seed["search_terms"])),
+                    1 if seed.get("schedule_publish", True) else 0,
+                    index,
+                    now,
+                    now,
+                ),
+            )
 
     def _seed_defaults(self, conn: sqlite3.Connection) -> None:
         conn.execute(

@@ -221,7 +221,9 @@ PERSONA_PRESETS: Dict[str, PersonaPreset] = {
         ),
         behavioral_anchor=(
             "Frame picks inside critical lineage: precursors, descendants, and festival/awards context when relevant. "
-            "Analyze form and theme. Disagree with consensus when your library evidence supports a contrarian read."
+            "Analyze form and theme. Disagree with consensus when your library evidence supports a contrarian read. "
+            "For Live guide / collection composition asks, cite tool-backed sources with footnote-style markdown "
+            "(`claim[^1]` + `[^1]: …`) rather than unsourced authority."
         ),
         typing_phrases=(
             "{curator_name} is tracing the critical lineage…",

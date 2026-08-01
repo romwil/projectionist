@@ -4,6 +4,8 @@
  * mention Tunarr in help text only.
  */
 
+import { pickLiveSoftStallPhrase } from "./liveStreamSoftStallCopy.js";
+
 /** User-facing empty / warming states for `/live`. */
 export function liveUserEmptyCopy({ featureOn, featureReady, guideReady } = {}) {
   if (!featureOn) {
@@ -63,6 +65,26 @@ export function formatLiveStreamError(data) {
     return "Video segments failed to load. Try another channel or Watch again.";
   }
   return detail;
+}
+
+/**
+ * Mid-watch soft-stall chip copy (buffering / underrun — not hard stream death).
+ * Prefer a locked phrase from the antenna library so React re-renders don’t flicker.
+ * Hard failures stay on formatLiveStreamError — never this path.
+ *
+ * @param {"ok"|"buffering"|"stalled"|string} health
+ * @param {{ phrase?: string, pick?: () => string, allowPick?: boolean }} [options]
+ */
+export function liveStreamHealthCopy(health, options = {}) {
+  if (health !== "buffering" && health !== "stalled") return "";
+  const locked = String(options.phrase || "").trim();
+  if (locked) return locked;
+  if (typeof options.pick === "function") {
+    return String(options.pick() || "").trim();
+  }
+  // LivePlayer locks a phrase in state; skip random picks during render.
+  if (options.allowPick === false) return "";
+  return pickLiveSoftStallPhrase();
 }
 
 /** Admin glossary: ops label → craft-facing label. */
@@ -156,4 +178,35 @@ export function liveOnboardingTip({
     ctaTo: "/admin/live-channels",
     testId: "live-onboarding-tip",
   };
+}
+
+/**
+ * Owner-facing soft-cap honesty for motif/taste craft (~30–80) vs full-run (1000).
+ * Prefers API ``note`` when present; otherwise builds a short reminder.
+ */
+export function craftSoftCapHonestyNote(previewOrResult = {}) {
+  const note = String(previewOrResult?.note || "").trim();
+  if (note && /soft cap|full-run|full run|30|80|1000/i.test(note)) {
+    return note;
+  }
+  const soft = Boolean(
+    previewOrResult?.soft_capped
+      || String(previewOrResult?.fill_mode || "").toLowerCase() === "soft",
+  );
+  if (!soft) {
+    if (String(previewOrResult?.fill_mode || "").toLowerCase() === "full_run") {
+      return (
+        note
+        || "Collection/show stations fill the full resolved pool (up to 1000 programs)."
+      );
+    }
+    return note;
+  }
+  const softDefault = Number(previewOrResult?.soft_default) || 30;
+  const softCap = Number(previewOrResult?.soft_cap) || 80;
+  const fullRunCap = Number(previewOrResult?.full_run_cap) || 1000;
+  const honesty =
+    `Motif / taste craft samples about ${softDefault}–${softCap} programs (soft cap) — `
+    + `not the full-run ${fullRunCap} used for collection/show stations.`;
+  return note ? `${note} ${honesty}` : honesty;
 }

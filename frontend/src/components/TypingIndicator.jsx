@@ -14,7 +14,7 @@ function kindIcon(kind) {
 }
 
 export default function TypingIndicator({
-  label = "Curator is thinking",
+  label = "Curator",
   activityLog = [],
   expanded = false,
   onToggle,

@@ -223,6 +223,7 @@ class OpenAICompatibleProvider:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
+        self.last_usage: Optional[Dict[str, Any]] = None
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -247,17 +248,29 @@ class OpenAICompatibleProvider:
             )
             if response.is_error:
                 raise LLMProviderError(_format_openai_compatible_error(response, self.base_url))
-            return response.json()
+            payload = response.json()
+            usage = payload.get("usage") if isinstance(payload, dict) else None
+            self.last_usage = dict(usage) if isinstance(usage, dict) else None
+            return payload
 
     async def stream(
         self,
         messages: List[Mapping[str, Any]],
         tools: Optional[List[Mapping[str, Any]]] = None,
     ) -> AsyncIterator[Mapping[str, Any]]:
-        body: Dict[str, Any] = {"model": self.model, "messages": list(messages), "stream": True}
+        body: Dict[str, Any] = {
+            "model": self.model,
+            "messages": list(messages),
+            "stream": True,
+        }
+        # OpenAI / OpenRouter honor this; some local servers 400 on unknown fields.
+        host = self.base_url.lower()
+        if "openai.com" in host or "openrouter.ai" in host:
+            body["stream_options"] = {"include_usage": True}
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
+        self.last_usage = None
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
                 "POST",
@@ -265,14 +278,23 @@ class OpenAICompatibleProvider:
                 headers=self._headers(),
                 json=body,
             ) as response:
-                response.raise_for_status()
+                if response.is_error:
+                    await response.aread()
+                    raise LLMProviderError(_format_openai_compatible_error(response, self.base_url))
                 async for line in response.aiter_lines():
                     if not line.startswith("data: "):
                         continue
                     payload = line[6:].strip()
                     if payload == "[DONE]":
                         break
-                    yield json.loads(payload)
+                    try:
+                        chunk = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    usage = chunk.get("usage") if isinstance(chunk, dict) else None
+                    if isinstance(usage, dict):
+                        self.last_usage = dict(usage)
+                    yield chunk
 
 
 class OpenAIEmbeddingProvider:
@@ -280,6 +302,7 @@ class OpenAIEmbeddingProvider:
         self.base_url = base_url.rstrip("/")
         self.api_key = api_key
         self.model = model
+        self.last_usage: Optional[Dict[str, Any]] = None
 
     async def embed(self, text: str) -> List[float]:
         vectors = await self.embed_many([text])
@@ -288,6 +311,7 @@ class OpenAIEmbeddingProvider:
     async def embed_many(self, texts: Sequence[str]) -> List[List[float]]:
         if not texts:
             return []
+        self.last_usage = None
         async with httpx.AsyncClient(timeout=120.0) as client:
             response = await client.post(
                 f"{self.base_url}/embeddings",
@@ -299,6 +323,8 @@ class OpenAIEmbeddingProvider:
             )
             response.raise_for_status()
             payload = response.json()
+            usage = payload.get("usage") if isinstance(payload, dict) else None
+            self.last_usage = dict(usage) if isinstance(usage, dict) else None
             rows = payload.get("data") or []
             ordered = sorted(rows, key=lambda row: int(row.get("index", 0)))
             if len(ordered) != len(texts):
@@ -313,6 +339,7 @@ class AnthropicProvider:
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/").removesuffix("/v1")
+        self.last_usage: Optional[Dict[str, Any]] = None
 
     def _anthropic_headers(self) -> Dict[str, str]:
         return {
@@ -368,7 +395,10 @@ class AnthropicProvider:
             )
             if response.is_error:
                 raise LLMProviderError(_format_anthropic_error(response))
-            return _normalize_anthropic_response(response.json())
+            normalized = _normalize_anthropic_response(response.json())
+            usage = normalized.get("usage") if isinstance(normalized, dict) else None
+            self.last_usage = dict(usage) if isinstance(usage, dict) else None
+            return normalized
 
     async def stream(
         self,
@@ -384,6 +414,8 @@ class AnthropicProvider:
         """
         body = self._anthropic_body(messages, tools, stream=True)
         tool_call_index = -1
+        self.last_usage = None
+        usage_acc: Dict[str, Any] = {}
 
         async with httpx.AsyncClient(timeout=120.0) as client:
             async with client.stream(
@@ -409,7 +441,14 @@ class AnthropicProvider:
 
                     event_type = event.get("type")
 
-                    if event_type == "content_block_start":
+                    if event_type == "message_start":
+                        msg = event.get("message") or {}
+                        usage = msg.get("usage") if isinstance(msg, dict) else None
+                        if isinstance(usage, dict):
+                            usage_acc.update(usage)
+                            self.last_usage = dict(usage_acc)
+
+                    elif event_type == "content_block_start":
                         block = event.get("content_block") or {}
                         if block.get("type") == "tool_use":
                             tool_call_index += 1
@@ -460,6 +499,10 @@ class AnthropicProvider:
                                 }
 
                     elif event_type == "message_delta":
+                        usage = event.get("usage")
+                        if isinstance(usage, dict):
+                            usage_acc.update(usage)
+                            self.last_usage = dict(usage_acc)
                         stop = (event.get("delta") or {}).get("stop_reason")
                         finish = "tool_calls" if stop == "tool_use" else "stop"
                         yield {
@@ -468,6 +511,7 @@ class AnthropicProvider:
                                 "delta": {},
                                 "finish_reason": finish,
                             }],
+                            "usage": dict(usage_acc) if usage_acc else None,
                         }
 
                     elif event_type == "error":

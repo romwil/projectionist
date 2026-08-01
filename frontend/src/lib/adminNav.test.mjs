@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { ROUTES } from "./backNav.js";
 import {
   ADMIN_NAV,
+  adminNavGroups,
   adminNavLinks,
   buildAdminDrawerItems,
   isAdminPath,
@@ -19,11 +20,30 @@ describe("adminNav", () => {
     assert.equal(adminNavLinks().find((item) => item.id === "logs")?.to, "/admin/logs");
     assert.equal(adminNavLinks().find((item) => item.id === "tasks")?.label, "Tasks");
     assert.equal(adminNavLinks().find((item) => item.id === "mail")?.label, "Mail");
+    assert.equal(adminNavLinks().find((item) => item.id === "usage")?.label, "Usage");
+    assert.equal(adminNavLinks().find((item) => item.id === "usage")?.to, "/admin/usage");
+    assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.label, "Holidays");
+    assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.to, "/admin/holidays");
+    assert.equal(adminNavLinks().length, 18);
   });
 
   it("groups the dense rail with Home / Household / Ops headings", () => {
     const headings = ADMIN_NAV.filter((item) => item.kind === "heading").map((item) => item.label);
     assert.deepEqual(headings, ["Home", "Household", "Ops"]);
+    const groups = adminNavGroups();
+    assert.equal(groups.length, 3);
+    assert.deepEqual(
+      groups.map((group) => group.label),
+      ["Home", "Household", "Ops"],
+    );
+    assert.equal(
+      groups.reduce((sum, group) => sum + group.links.length, 0),
+      18,
+    );
+    assert.deepEqual(
+      groups[0].links.map((item) => item.id),
+      ["overview", "connections", "libraries", "sync"],
+    );
   });
 
   it("detects /admin paths", () => {

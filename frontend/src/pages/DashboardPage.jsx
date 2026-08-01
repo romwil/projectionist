@@ -19,6 +19,7 @@ import { useBulkActionProgress } from "../components/BulkActionProgress";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
 import OwnerHealthHero from "../components/OwnerHealthHero";
+import OwnerNowPlayingBreakdown from "../components/OwnerNowPlayingBreakdown";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import SectionHelp from "../components/SectionHelp.jsx";
 import OnNowPanel from "../components/OnNowPanel";
@@ -643,7 +644,10 @@ export default function DashboardPage() {
       {/* ─── At-a-glance owner health hero (M4) ─── */}
       <OwnerHealthHero health={hlth} streak={streak.data} />
 
-      {/* ─── Weekly digest + Live Channels on-now (household delight) ─── */}
+      {/* ─── Owner live now-playing (Phase A / P1.0) ─── */}
+      <OwnerNowPlayingBreakdown />
+
+      {/* ─── Weekly digest + household On now preview ─── */}
       <div className="dash-delight-row">
         <WeeklyDigestPanel />
         <OnNowPanel />

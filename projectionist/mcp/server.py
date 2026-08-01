@@ -344,15 +344,14 @@ def what_to_watch_tonight(
     return _emit(result)
 
 
-@mcp.tool()
-def find_collection_gaps(
+def _sample_owned_library_payload(
     media_type: Optional[str] = "movie",
     year_from: Optional[int] = None,
     year_to: Optional[int] = None,
     genres: Optional[str] = None,
     limit: int = 12,
 ) -> str:
-    """Summarize owned inventory slices useful for spotting collection gaps."""
+    """Owned-inventory sample (not TMDB missing-title discover)."""
     filters = filters_from_mapping(
         _filter_mapping(
             media_type=media_type,
@@ -366,6 +365,155 @@ def find_collection_gaps(
     overview = library_overview(_database())
     sample = query_library(_database(), filters)
     return _emit({"overview": overview, "sample_owned": sample})
+
+
+@mcp.tool()
+def sample_owned_library(
+    media_type: Optional[str] = "movie",
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    genres: Optional[str] = None,
+    limit: int = 12,
+) -> str:
+    """Sample owned library inventory for a slice (overview + owned titles).
+
+    This is NOT TMDB missing-title discovery — use discover_missing_titles for gaps.
+    """
+    return _sample_owned_library_payload(
+        media_type=media_type,
+        year_from=year_from,
+        year_to=year_to,
+        genres=genres,
+        limit=limit,
+    )
+
+
+@mcp.tool(name="find_collection_gaps")
+def find_collection_gaps(
+    media_type: Optional[str] = "movie",
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    genres: Optional[str] = None,
+    limit: int = 12,
+) -> str:
+    """Deprecated alias of sample_owned_library (owned inventory only).
+
+    Prefer sample_owned_library for owned slices, or discover_missing_titles for
+    real TMDB titles missing from the library. Kept for one release for clients
+    still calling find_collection_gaps.
+    """
+    return _sample_owned_library_payload(
+        media_type=media_type,
+        year_from=year_from,
+        year_to=year_to,
+        genres=genres,
+        limit=limit,
+    )
+
+
+@mcp.tool()
+def discover_missing_titles(
+    media_type: str = "movie",
+    year_from: Optional[int] = None,
+    year_to: Optional[int] = None,
+    genres: Optional[str] = None,
+    without_genres: Optional[str] = None,
+    keywords: Optional[str] = None,
+    without_keywords: Optional[str] = None,
+    companies: Optional[str] = None,
+    tv_type: Optional[str] = None,
+    query: Optional[str] = None,
+    limit: int = 12,
+) -> str:
+    """Privacy-safe TMDB titles missing from the library (real collection gaps).
+
+    Shares agent find_collection_gaps filters (genres, negatives, years, tv_type,
+    query). Returns title/year/media_type/poster CDN URLs with in_library=false.
+    """
+    from projectionist.agent.tools import ToolRegistry
+    from projectionist.library.db import DEFAULT_LENS_ID
+
+    settings = _settings()
+    if not settings.tmdb_api_key:
+        return _emit({"error": "TMDB API key is not configured"})
+
+    args: dict[str, Any] = {"media_type": media_type}
+    if year_from is not None:
+        args["year_from"] = year_from
+    if year_to is not None:
+        args["year_to"] = year_to
+    if genres:
+        args["genres"] = genres
+    if without_genres:
+        args["without_genres"] = without_genres
+    if keywords:
+        args["keywords"] = keywords
+    if without_keywords:
+        args["without_keywords"] = without_keywords
+    if companies:
+        args["companies"] = companies
+    if tv_type:
+        args["tv_type"] = tv_type
+    if query:
+        args["query"] = query
+
+    registry = ToolRegistry(_database(), settings, DEFAULT_LENS_ID)
+    raw = asyncio.run(registry.execute("find_collection_gaps", args))
+    try:
+        payload = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return _emit({"error": "Gap discovery failed", "detail": str(raw)[:240]})
+    if not isinstance(payload, dict):
+        return _emit({"error": "Gap discovery returned unexpected payload"})
+    if payload.get("error"):
+        return _emit({"error": payload["error"]})
+
+    capped = max(1, min(int(limit or 12), 25))
+    items_out: list[dict[str, Any]] = []
+    # Prefer TitleCard posters (CDN URLs); fall back to tool JSON items.
+    cards = list(getattr(registry, "cards", None) or [])
+    if cards:
+        for card in cards[:capped]:
+            items_out.append(
+                {
+                    "title": str(getattr(card, "title", "") or ""),
+                    "year": getattr(card, "year", None),
+                    "media_type": str(getattr(card, "media_type", None) or media_type),
+                    "tmdb_id": getattr(card, "tmdb_id", None),
+                    "poster_url": str(getattr(card, "poster_url", "") or "") or None,
+                    "in_library": False,
+                }
+            )
+    else:
+        for item in list(payload.get("items") or [])[:capped]:
+            if not isinstance(item, dict):
+                continue
+            items_out.append(
+                {
+                    "title": str(item.get("title") or ""),
+                    "year": item.get("year"),
+                    "media_type": str(item.get("media_type") or media_type),
+                    "tmdb_id": item.get("tmdb_id"),
+                    "poster_url": item.get("poster_url") or None,
+                    "in_library": False,
+                }
+            )
+    return _emit(
+        {
+            "total_matched": int(payload.get("total_matched") or len(items_out)),
+            "returned": len(items_out),
+            "items": items_out,
+            "genres_resolved": payload.get("genres_resolved") or [],
+            "genres_unresolved": payload.get("genres_unresolved") or [],
+            "genres_candidates": payload.get("genres_candidates") or [],
+            "keywords_resolved": payload.get("keywords_resolved") or [],
+            "keywords_unresolved": payload.get("keywords_unresolved") or [],
+            "companies_resolved": payload.get("companies_resolved") or [],
+            "companies_unresolved": payload.get("companies_unresolved") or [],
+            "suggested_fallback": payload.get("suggested_fallback"),
+            "note": payload.get("note"),
+        }
+    )
 
 
 @mcp.tool()

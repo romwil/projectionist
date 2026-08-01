@@ -238,6 +238,8 @@ def airing_rows_from_snapshot(snapshot: Mapping[str, Any]) -> List[Dict[str, Any
         title = str(now.get("title") or "").strip()
         if not title:
             continue
+        nxt = channel.get("next") if isinstance(channel.get("next"), Mapping) else None
+        next_title = str((nxt or {}).get("title") or "").strip()
         rows.append(
             {
                 "id": str(channel.get("id") or ""),
@@ -250,8 +252,161 @@ def airing_rows_from_snapshot(snapshot: Mapping[str, Any]) -> List[Dict[str, Any
                 "seconds_remaining": now.get("seconds_remaining"),
                 "percent": now.get("percent"),
                 "is_paused": bool(now.get("is_paused")),
+                "next_title": next_title or None,
+                "next_start": (nxt or {}).get("start") if nxt else None,
             }
         )
+    return rows
+
+
+def _station_health_chip(
+    *,
+    engine_up: bool,
+    now: Optional[Mapping[str, Any]],
+    lineup_programs: Optional[int],
+    stream_connections: int,
+) -> str:
+    """Compact owner health token for the now-playing table."""
+    if not engine_up:
+        return "unreachable"
+    if now and bool(now.get("is_paused")):
+        return "paused"
+    # Active streams beat an empty-lineup probe (probe can fail soft → 0).
+    if stream_connections > 0:
+        return "streaming"
+    if lineup_programs is not None and int(lineup_programs) <= 0:
+        return "empty"
+    if now and str(now.get("title") or "").strip():
+        return "airing"
+    return "idle"
+
+
+def owner_now_playing_rows(
+    snapshot: Mapping[str, Any],
+    *,
+    channels: Optional[Sequence[Mapping[str, Any]]] = None,
+    lineup_health: Optional[Mapping[str, Any]] = None,
+    sessions: Optional[Mapping[str, Any]] = None,
+    engine_up: bool = False,
+    settings: Any = None,
+) -> List[Dict[str, Any]]:
+    """Ops-grade all-station now-playing table (Admin Overview / Stations).
+
+    Richer than household On now: every station, next wall-clock start, stream /
+    lineup health chip, and a soft guide/stream skew warning when ``now.stop``
+    overruns the next ``start``.
+    """
+    from projectionist.live_channels.airing_why import station_airing_why
+    snap_by_id: Dict[str, Mapping[str, Any]] = {}
+    for channel in snapshot.get("channels") or []:
+        if not isinstance(channel, Mapping):
+            continue
+        cid = str(channel.get("id") or "").strip()
+        if cid:
+            snap_by_id[cid] = channel
+
+    lineup_by_id: Dict[str, int] = {}
+    for row in (lineup_health or {}).get("channels") or []:
+        if not isinstance(row, Mapping):
+            continue
+        cid = str(row.get("id") or "").strip()
+        if not cid:
+            continue
+        try:
+            lineup_by_id[cid] = int(row.get("total_programs") or 0)
+        except (TypeError, ValueError):
+            lineup_by_id[cid] = 0
+
+    sessions_by_id: Dict[str, int] = {}
+    for row in (sessions or {}).get("channels") or []:
+        if not isinstance(row, Mapping):
+            continue
+        cid = str(row.get("channel_id") or row.get("id") or "").strip()
+        if not cid:
+            continue
+        try:
+            sessions_by_id[cid] = int(row.get("connections") or 0)
+        except (TypeError, ValueError):
+            sessions_by_id[cid] = 0
+
+    # Prefer the Tunarr station list so idle / empty lineups still appear.
+    station_list: List[Mapping[str, Any]] = []
+    if channels:
+        station_list = [ch for ch in channels if isinstance(ch, Mapping)]
+    if not station_list:
+        station_list = list(snap_by_id.values())
+
+    rows: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+    for station in station_list:
+        cid = str(station.get("id") or station.get("uuid") or "").strip()
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        snap = snap_by_id.get(cid) or {}
+        now = snap.get("now") if isinstance(snap.get("now"), Mapping) else None
+        nxt = snap.get("next") if isinstance(snap.get("next"), Mapping) else None
+        name = str(
+            station.get("name") or snap.get("name") or "Channel"
+        ).strip() or "Channel"
+        number = station.get("number")
+        if number is None:
+            number = snap.get("number")
+        now_title = str((now or {}).get("title") or "").strip()
+        next_title = str((nxt or {}).get("title") or "").strip()
+        next_start = (nxt or {}).get("start") if nxt else None
+        ends_at = (now or {}).get("ends_at") if now else None
+        warning = ""
+        try:
+            if (
+                ends_at is not None
+                and next_start is not None
+                and float(ends_at) > float(next_start) + 1.0
+            ):
+                warning = "padded_stop"
+        except (TypeError, ValueError):
+            warning = ""
+        connections = int(sessions_by_id.get(cid) or 0)
+        lineup_total = lineup_by_id.get(cid)
+        health = _station_health_chip(
+            engine_up=engine_up,
+            now=now,
+            lineup_programs=lineup_total,
+            stream_connections=connections,
+        )
+        why = station_airing_why(settings, cid) if settings is not None else ""
+        rows.append(
+            {
+                "id": cid,
+                "name": name,
+                "number": number,
+                "now_title": now_title or None,
+                "title": now_title or None,  # alias for airing-row consumers
+                "percent": (now or {}).get("percent") if now else None,
+                "seconds_elapsed": (now or {}).get("seconds_elapsed") if now else None,
+                "seconds_remaining": (now or {}).get("seconds_remaining") if now else None,
+                "started_at": (now or {}).get("started_at") if now else None,
+                "ends_at": ends_at,
+                "is_paused": bool((now or {}).get("is_paused")) if now else False,
+                "next_title": next_title or None,
+                "next_start": next_start,
+                "health": health,
+                "stream_connections": connections,
+                "lineup_programs": lineup_total,
+                "warning": warning or None,
+                "airing_why": why or None,
+            }
+        )
+
+    def sort_key(row: Mapping[str, Any]) -> tuple:
+        num = row.get("number")
+        try:
+            num_key = int(num) if num is not None else 10**9
+        except (TypeError, ValueError):
+            num_key = 10**9
+        return (num_key, str(row.get("name") or ""))
+
+    rows.sort(key=sort_key)
     return rows
 
 
@@ -283,6 +438,7 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
     channels: List[Dict[str, Any]] = []
     listed_raw: List[Mapping[str, Any]] = []
     airing: List[Dict[str, Any]] = []
+    on_now_snap: Dict[str, Any] = {"channels": []}
     sessions = summarize_sessions({})
     guide_status: Dict[str, Any] = {}
     media_libraries: Dict[str, Any] = {"ok": False, "libraries": []}
@@ -307,7 +463,10 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                     enrich_channels_with_filler_collections,
                     find_continuity_filler_list,
                 )
-                from projectionist.live_channels.publish import resolve_media_scope
+                from projectionist.live_channels.publish import (
+                    resolve_media_scope,
+                    resolve_subtitles_enabled,
+                )
 
                 continuity_fid = str(
                     getattr(tunarr, "continuity_filler_list_id", "") or ""
@@ -322,10 +481,16 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                         continuity_fid = str(live_list.get("id") or continuity_fid)
                 except Exception:  # noqa: BLE001
                     pass
+
                 channels = []
                 for ch in enriched:
                     cid = str(ch.get("id") or ch.get("uuid") or "")
                     cols = ch.get("fillerCollections") or []
+                    # Prefer live Tunarr flag; fall back to Projectionist station_meta.
+                    if "subtitlesEnabled" in ch:
+                        subs_on = bool(ch.get("subtitlesEnabled"))
+                    else:
+                        subs_on = resolve_subtitles_enabled(settings, channel_id=cid)
                     channels.append(
                         {
                             "id": cid,
@@ -341,6 +506,7 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                             "media_scope": resolve_media_scope(
                                 settings, channel_id=cid, default="both"
                             ),
+                            "subtitles_enabled": subs_on,
                         }
                     )
             except Exception:  # noqa: BLE001
@@ -355,10 +521,11 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                 except Exception:  # noqa: BLE001
                     guide_status = {}
                 try:
-                    snap = build_on_now_snapshot(settings, client=client)
-                    airing = airing_rows_from_snapshot(snap)
+                    on_now_snap = build_on_now_snapshot(settings, client=client)
+                    airing = airing_rows_from_snapshot(on_now_snap)
                 except Exception:  # noqa: BLE001
                     airing = []
+                    on_now_snap = {"channels": []}
                 try:
                     media_libraries = _media_library_index(client)
                 except Exception:  # noqa: BLE001
@@ -474,6 +641,15 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
     except Exception as error:  # noqa: BLE001
         icon_probe = {"ok": False, "url": "", "message": str(error)[:200]}
 
+    now_playing = owner_now_playing_rows(
+        on_now_snap,
+        channels=channels or listed_raw,
+        lineup_health=lineup_health,
+        sessions=sessions,
+        engine_up=sidecar_up,
+        settings=settings,
+    )
+
     return {
         "live_channels_enabled": enabled,
         "broadcast": {
@@ -489,6 +665,7 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         "channels": channels,
         "channel_count": channel_count,
         "airing": airing,
+        "now_playing": now_playing,
         "sessions": sessions,
         "guide_status": guide_status,
         "guide_index": guide_index,

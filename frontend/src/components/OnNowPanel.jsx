@@ -117,6 +117,11 @@ export default function OnNowPanel({ compact = false }) {
               >
                 <span className="on-now-channel">{formatChannelLabel(channel)}</span>
                 <span className="on-now-titles">{formatOnNowLine(channel)}</span>
+                {channel.airingWhy ? (
+                  <span className="on-now-airing-why" data-testid="on-now-airing-why">
+                    {channel.airingWhy}
+                  </span>
+                ) : null}
                 {channel.progressHint ? (
                   <span className="on-now-progress-meta" data-testid="on-now-progress-meta">
                     {channel.progressHint}

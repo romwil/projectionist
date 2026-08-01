@@ -55,6 +55,7 @@ from ._engagement import EngagementMixin
 from ._access_requests import AccessRequestsMixin
 from ._invites import InvitesMixin
 from ._curated_lists import CuratedListsMixin
+from ._holidays import HolidaysMixin
 from ._media_issues import MediaIssuesMixin
 from ._ephemeral_collections import (
     DEFAULT_EPHEMERAL_TTL_HOURS,
@@ -77,6 +78,7 @@ class Database(
     ChatThreadsMixin,
     SavedLibraryMixin,
     WatchlistMixin,
+    HolidaysMixin,
     RecommendationsMixin,
     NotificationsMixin,
     EngagementMixin,

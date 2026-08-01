@@ -1,12 +1,19 @@
 import { useEffect, useState } from "react";
 import { createRecommendations, listHouseholdPeers } from "../api/client";
+import {
+  WATCH_PARTY_NOTE_CHIPS,
+  defaultWatchPartyNote,
+  normalizeRecommendIntent,
+  recommendModalCopy,
+} from "../lib/householdSocial.js";
 import { useBulkActionProgress } from "./BulkActionProgress";
 
-export default function RecommendModal({ item, open, onClose, onSent }) {
+export default function RecommendModal({ item, open, onClose, onSent, defaultIntent = "recommend" }) {
   const { start, update, finish } = useBulkActionProgress();
   const [peers, setPeers] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
   const [message, setMessage] = useState("");
+  const [intent, setIntent] = useState(() => normalizeRecommendIntent(defaultIntent));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
@@ -17,7 +24,9 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
     setLoading(true);
     setError("");
     setSelected(new Set());
-    setMessage("");
+    const nextIntent = normalizeRecommendIntent(defaultIntent);
+    setIntent(nextIntent);
+    setMessage(nextIntent === "watch_party" ? defaultWatchPartyNote(item?.title) : "");
     listHouseholdPeers()
       .then((data) => {
         if (cancelled) return;
@@ -33,9 +42,11 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
     return () => {
       cancelled = true;
     };
-  }, [open, item?.tmdb_id, item?.title]);
+  }, [open, item?.tmdb_id, item?.title, defaultIntent]);
 
   if (!open || !item) return null;
+
+  const copy = recommendModalCopy(intent);
 
   function togglePeer(id) {
     setSelected((prev) => {
@@ -44,6 +55,14 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
       else next.add(id);
       return next;
     });
+  }
+
+  function selectIntent(next) {
+    const normalized = normalizeRecommendIntent(next);
+    setIntent(normalized);
+    if (normalized === "watch_party" && !message.trim()) {
+      setMessage(defaultWatchPartyNote(item.title));
+    }
   }
 
   async function handleSend(event) {
@@ -57,7 +76,7 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
     let progressId = null;
     try {
       progressId = start({
-        label: "Sending recommendations",
+        label: intent === "watch_party" ? "Sending watch invites" : "Sending recommendations",
         total: selected.size,
         asynchronous: true,
       });
@@ -71,17 +90,21 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
         year: item.year || null,
         poster_url: item.poster_url || null,
         message: message.trim() || null,
+        intent,
       });
       update(progressId, selected.size);
       finish(progressId, {
-        label: `Sent recommendation${selected.size === 1 ? "" : "s"} to ${selected.size}.`,
+        label:
+          intent === "watch_party"
+            ? `Invited ${selected.size} to watch together.`
+            : `Sent recommendation${selected.size === 1 ? "" : "s"} to ${selected.size}.`,
       });
       onSent?.(result);
       onClose?.();
     } catch (err) {
-      const message = err.message || "Could not send recommendation.";
-      setError(message);
-      finish(progressId, { label: message, state: "error" });
+      const failMessage = err.message || "Could not send recommendation.";
+      setError(failMessage);
+      finish(progressId, { label: failMessage, state: "error" });
     } finally {
       setSending(false);
     }
@@ -93,12 +116,14 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
         className="recommend-modal"
         role="dialog"
         aria-modal="true"
-        aria-label={`Recommend ${item.title}`}
+        aria-label={
+          intent === "watch_party" ? `Watch ${item.title} together` : `Recommend ${item.title}`
+        }
         onClick={(event) => event.stopPropagation()}
       >
         <header className="recommend-modal-header">
           <div>
-            <p className="eyebrow">Recommend to…</p>
+            <p className="eyebrow">{copy.eyebrow}</p>
             <h2>
               {item.title}
               {item.year ? ` (${item.year})` : ""}
@@ -110,6 +135,32 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
         </header>
 
         <form className="recommend-modal-form" onSubmit={handleSend}>
+          <div
+            className="recommend-intent-toggle"
+            role="group"
+            aria-label="Recommendation style"
+            data-testid="recommend-intent-toggle"
+          >
+            <button
+              type="button"
+              className={`ghost recommend-intent${intent === "recommend" ? " is-active" : ""}`}
+              data-testid="recommend-intent-recommend"
+              aria-pressed={intent === "recommend"}
+              onClick={() => selectIntent("recommend")}
+            >
+              Recommend
+            </button>
+            <button
+              type="button"
+              className={`ghost recommend-intent${intent === "watch_party" ? " is-active" : ""}`}
+              data-testid="recommend-intent-watch-party"
+              aria-pressed={intent === "watch_party"}
+              onClick={() => selectIntent("watch_party")}
+            >
+              Watch together
+            </button>
+          </div>
+
           {loading ? <p className="status status-secondary">Loading household…</p> : null}
           {!loading && !peers.length ? (
             <p className="status status-secondary" data-testid="recommend-no-peers">
@@ -137,14 +188,29 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
             </ul>
           ) : null}
 
+          {intent === "watch_party" ? (
+            <div className="recommend-note-chips" data-testid="recommend-note-chips">
+              {WATCH_PARTY_NOTE_CHIPS.map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  className="ghost recommend-note-chip"
+                  onClick={() => setMessage(chip)}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          ) : null}
+
           <label className="recommend-note-label">
-            <span>Optional note</span>
+            <span>{copy.noteHint}</span>
             <textarea
               data-testid="recommend-note"
               value={message}
               maxLength={280}
               rows={2}
-              placeholder="Thought you'd love this…"
+              placeholder={copy.notePlaceholder}
               onChange={(event) => setMessage(event.target.value)}
             />
           </label>
@@ -164,7 +230,7 @@ export default function RecommendModal({ item, open, onClose, onSent }) {
               data-testid="recommend-send"
               disabled={sending || !peers.length || !selected.size}
             >
-              {sending ? "Sending…" : "Send recommendation"}
+              {sending ? copy.sendingLabel : copy.sendLabel}
             </button>
           </div>
         </form>

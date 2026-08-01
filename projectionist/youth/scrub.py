@@ -80,6 +80,10 @@ def scrub_youth_chat_blocks(
                 continue
             out.append({**dict(block), "payload": {**payload, "items": items}})
             continue
+        if btype == "persona_consult":
+            # Village consults are fail-closed for Youth at the tool boundary;
+            # drop any persisted quote blocks on Youth scrub/history paths.
+            continue
         if btype == "text" and blocked:
             content = str(block.get("content") or "")
             out.append({**dict(block), "content": _scrub_titles_from_text(content, blocked)})

@@ -39,6 +39,7 @@ describe("normalizeOnNow", () => {
             ends_at: 2080,
           },
           next: { title: "Ronin" },
+          airing_why: "Crafted around “heatwave nights” · shuffle",
         },
       ],
     });
@@ -49,6 +50,7 @@ describe("normalizeOnNow", () => {
     assert.equal(model.channels[0].percent, 45.2);
     assert.equal(model.channels[0].secondsRemaining, 1080);
     assert.equal(model.channels[0].progressHint, "45% · 18m left");
+    assert.equal(model.channels[0].airingWhy, "Crafted around “heatwave nights” · shuffle");
     assert.equal(model.plexHint, "Open Plex");
   });
 });

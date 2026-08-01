@@ -195,3 +195,98 @@ class TelemetryIngester:
                 "session_id": session_id,
             },
         )
+
+    def record_llm_usage(
+        self,
+        *,
+        purpose: str,
+        model: str = "",
+        provider: str = "",
+        prompt_tokens: Optional[int] = None,
+        completion_tokens: Optional[int] = None,
+        total_tokens: Optional[int] = None,
+        latency_ms: Optional[int] = None,
+        persona_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        meta: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """Persist one LLM call into ``llm_usage`` (fire-and-forget).
+
+        Also mirrors a lightweight ``llm_usage`` event into the telemetry stream
+        so existing summary APIs can see call volume without reading the BI table.
+        """
+        from projectionist.telemetry.llm_usage import (
+            VALID_PURPOSES,
+            estimate_usd,
+            parse_token_usage,
+        )
+
+        cleaned_purpose = str(purpose or "").strip() or "chat"
+        if cleaned_purpose not in VALID_PURPOSES:
+            cleaned_purpose = "chat"
+
+        # Allow callers to pass a raw provider usage blob via meta["usage"].
+        if prompt_tokens is None and completion_tokens is None and isinstance(meta, dict):
+            parsed = parse_token_usage(meta.get("usage") or meta)
+            prompt_tokens = parsed.get("prompt_tokens")
+            completion_tokens = parsed.get("completion_tokens")
+            total_tokens = total_tokens if total_tokens is not None else parsed.get("total_tokens")
+
+        estimated = estimate_usd(
+            model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+        )
+        event_id = uuid.uuid4().hex
+        safe_meta = {
+            key: value
+            for key, value in (meta or {}).items()
+            if key not in {"prompt", "messages", "content", "text", "usage"}
+        }
+
+        def _write() -> None:
+            try:
+                self._db.insert_llm_usage(
+                    usage_id=event_id,
+                    purpose=cleaned_purpose,
+                    model=str(model or ""),
+                    provider=str(provider or ""),
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    total_tokens=total_tokens,
+                    latency_ms=latency_ms,
+                    estimated_usd=estimated,
+                    persona_id=persona_id,
+                    session_id=session_id,
+                    user_id=user_id,
+                    meta_json=json.dumps(safe_meta, default=str, separators=(",", ":")),
+                )
+            except Exception:
+                logger.debug("LLM usage write failed for %s", cleaned_purpose, exc_info=True)
+
+        if self._is_enabled():
+            thread = threading.Thread(target=_write, daemon=True, name=f"telemetry-llm_usage")
+            thread.start()
+            self._emit(
+                "llm_usage",
+                {
+                    "purpose": cleaned_purpose,
+                    "model": str(model or ""),
+                    "provider": str(provider or ""),
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "latency_ms": latency_ms,
+                    "estimated_usd": estimated,
+                    "persona_id": persona_id,
+                    "session_id": session_id,
+                    "user_id": user_id,
+                },
+            )
+        else:
+            # Usage BI is owner ops data — still persist even when interaction
+            # telemetry is muted, so cost visibility is not silently lost.
+            thread = threading.Thread(target=_write, daemon=True, name="telemetry-llm_usage")
+            thread.start()

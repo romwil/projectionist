@@ -1371,6 +1371,13 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("confirm_pending_action", prompt)
             self.assertIn("confirmation_token", prompt)
 
+    def test_system_prompt_keeps_working_narration_in_persona_voice(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            prompt = build_system_prompt(db, lens_id=DEFAULT_LENS_ID)
+            self.assertIn("Working narration", prompt)
+            self.assertIn("persona's voice", prompt)
+            self.assertIn("Searching…", prompt)
 
     @patch("projectionist.agent.tools.TMDBClient")
     async def test_find_collection_gaps_unresolved_keywords(self, mock_tmdb_cls) -> None:
@@ -1551,6 +1558,197 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(payload["returned"], 1)
             self.assertEqual(mock_tmdb.discover_tv.call_args.kwargs.get("with_companies"), "3324")
             self.assertEqual(payload["companies_resolved"][0]["id"], 3324)
+
+    @patch("projectionist.agent.tools.TMDBClient")
+    async def test_find_collection_gaps_genre_alias_science(self, mock_tmdb_cls) -> None:
+        """Science alias resolves to Science Fiction instead of empty+stop_retrying."""
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.genre_list_movies.return_value = [
+            {"id": 878, "name": "Science Fiction"},
+            {"id": 18, "name": "Drama"},
+        ]
+        mock_tmdb.discover_movies.return_value = [
+            {
+                "id": 42,
+                "title": "Arrival",
+                "release_date": "2016-11-11",
+                "genre_ids": [878],
+                "vote_average": 8.0,
+            },
+        ]
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            payload = json.loads(
+                await registry.execute(
+                    "find_collection_gaps",
+                    {"media_type": "movie", "genres": "Science"},
+                )
+            )
+            mock_tmdb.discover_movies.assert_called_once()
+            self.assertEqual(mock_tmdb.discover_movies.call_args.kwargs.get("with_genres"), "878")
+            self.assertEqual(payload["returned"], 1)
+            self.assertFalse(payload.get("stop_retrying"))
+            self.assertEqual(payload["genres_resolved"][0]["name"], "Science Fiction")
+
+    @patch("projectionist.agent.tools.TMDBClient")
+    async def test_find_collection_gaps_query_applies_year_range(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.genre_list_tv.return_value = [{"id": 36, "name": "History"}]
+        mock_tmdb.search_tv.return_value = [
+            {
+                "id": 1,
+                "name": "Old History",
+                "first_air_date": "2001-01-01",
+                "genre_ids": [36],
+                "overview": "history",
+            },
+            {
+                "id": 2,
+                "name": "Recent History",
+                "first_air_date": "2022-06-01",
+                "genre_ids": [36],
+                "overview": "history",
+            },
+        ]
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            with patch(
+                "projectionist.agent.tools._enrich_show_external_ids",
+                side_effect=lambda item, _tmdb, **_kwargs: item,
+            ):
+                payload = json.loads(
+                    await registry.execute(
+                        "find_collection_gaps",
+                        {
+                            "media_type": "show",
+                            "genres": "History",
+                            "query": "history miniseries",
+                            "year_from": 2018,
+                            "year_to": 2025,
+                        },
+                    )
+                )
+            mock_tmdb.search_tv.assert_called_once()
+            mock_tmdb.discover_tv.assert_not_called()
+            self.assertEqual(payload["returned"], 1)
+            self.assertEqual(payload["items"][0]["title"], "Recent History")
+
+    @patch("projectionist.agent.tools.TMDBClient")
+    async def test_find_collection_gaps_tv_type_and_without_genres(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.genre_list_tv.return_value = [
+            {"id": 36, "name": "History"},
+            {"id": 10765, "name": "Sci-Fi & Fantasy"},
+        ]
+        mock_tmdb.discover_tv.return_value = [
+            {
+                "id": 77,
+                "name": "Chernobyl",
+                "first_air_date": "2019-05-06",
+                "vote_average": 8.6,
+                "overview": "history",
+            },
+        ]
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            with patch(
+                "projectionist.agent.tools._enrich_show_external_ids",
+                side_effect=lambda item, _tmdb, **_kwargs: item,
+            ):
+                payload = json.loads(
+                    await registry.execute(
+                        "find_collection_gaps",
+                        {
+                            "media_type": "show",
+                            "genres": "History",
+                            "without_genres": "Science",
+                            "tv_type": "miniseries",
+                            "year_from": 2015,
+                        },
+                    )
+                )
+            kwargs = mock_tmdb.discover_tv.call_args.kwargs
+            self.assertEqual(kwargs.get("with_type"), "2")
+            self.assertEqual(kwargs.get("without_genres"), "10765")
+            self.assertEqual(kwargs.get("with_genres"), "36")
+            self.assertEqual(payload["returned"], 1)
+
+    @patch("projectionist.agent.tools.TMDBClient")
+    async def test_find_collection_gaps_empty_offers_structured_fallback(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.genre_list_tv.return_value = [{"id": 36, "name": "History"}]
+        mock_tmdb.discover_tv.return_value = []
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            first = json.loads(
+                await registry.execute(
+                    "find_collection_gaps",
+                    {
+                        "media_type": "show",
+                        "genres": "History",
+                        "tv_type": "miniseries",
+                        "without_genres": "Science Fiction",
+                    },
+                )
+            )
+            self.assertEqual(first["returned"], 0)
+            self.assertFalse(first.get("stop_retrying"))
+            self.assertIn("suggested_fallback", first)
+            self.assertTrue(first["suggested_fallback"].get("is_fallback_attempt"))
+
+            second = json.loads(
+                await registry.execute(
+                    "find_collection_gaps",
+                    {**first["suggested_fallback"]},
+                )
+            )
+            self.assertEqual(second["returned"], 0)
+            self.assertTrue(second.get("stop_retrying"))
+            self.assertNotIn("suggested_fallback", second)
+
+    @patch("projectionist.agent.tools.TMDBClient")
+    async def test_explore_genre_passes_tv_type_and_without_genres(self, mock_tmdb_cls) -> None:
+        mock_tmdb = mock_tmdb_cls.return_value
+        mock_tmdb.genre_list_tv.return_value = [
+            {"id": 36, "name": "History"},
+            {"id": 10765, "name": "Sci-Fi & Fantasy"},
+        ]
+        mock_tmdb.discover_tv.return_value = []
+        mock_tmdb.poster_url.return_value = ""
+        mock_tmdb.backdrop_url.return_value = ""
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(tmdb_api_key="test-key"), DEFAULT_LENS_ID)
+            await registry.execute(
+                "explore_genre",
+                {
+                    "genre": "History",
+                    "media_type": "show",
+                    "include_missing": True,
+                    "tv_type": "miniseries",
+                    "without_genres": "Science",
+                },
+            )
+            kwargs = mock_tmdb.discover_tv.call_args.kwargs
+            self.assertEqual(kwargs.get("with_type"), "2")
+            self.assertEqual(kwargs.get("without_genres"), "10765")
 
     @patch("projectionist.library.external_search.TMDBClient")
     async def test_search_tmdb_mismatched_pinned_id_falls_back_to_title(self, mock_tmdb_cls) -> None:

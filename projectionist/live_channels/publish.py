@@ -30,6 +30,72 @@ _SOFT_FILL_CAP = 80
 # Collection / show full-run: fill all ID-resolved episodes (safety cap).
 _FULL_RUN_FILL_CAP = 1000
 _DEFAULT_PAD_FLEX_MAX_MINUTES = 15
+# Stock Tunarr mark — never push as a Plex guide logo when station art is missing.
+_TUNARR_DEFAULT_ICON_SUFFIX = "/images/tunarr.png"
+
+
+def soft_fill_default() -> int:
+    return _DEFAULT_FILL_LIMIT
+
+
+def soft_fill_cap() -> int:
+    return _SOFT_FILL_CAP
+
+
+def full_run_fill_cap() -> int:
+    return _FULL_RUN_FILL_CAP
+
+
+def is_default_tunarr_icon(url: str = "") -> bool:
+    """True when ``url`` is Tunarr's stock mark (or empty)."""
+    path = str(url or "").strip().lower()
+    if not path:
+        return True
+    return path.endswith(_TUNARR_DEFAULT_ICON_SUFFIX)
+
+
+def craft_fill_mode(*, collection_id: str = "", source: str = "") -> str:
+    """Return ``full_run`` for collection/show stations, else ``soft``."""
+    src = str(source or "").strip().lower()
+    if src == "chaos":
+        return "soft"
+    if src == "collection" or str(collection_id or "").strip():
+        return "full_run"
+    return "soft"
+
+
+def craft_soft_cap_honesty(
+    *,
+    fill_mode: str = "soft",
+    matched: int = 0,
+    program_count: int = 0,
+) -> Dict[str, Any]:
+    """Owner-facing soft-cap honesty for Admin craft preview / publish feedback."""
+    mode = "full_run" if str(fill_mode or "").strip().lower() == "full_run" else "soft"
+    payload: Dict[str, Any] = {
+        "fill_mode": mode,
+        "soft_default": _DEFAULT_FILL_LIMIT,
+        "soft_cap": _SOFT_FILL_CAP,
+        "full_run_cap": _FULL_RUN_FILL_CAP,
+        "soft_capped": mode == "soft",
+    }
+    if mode == "full_run":
+        payload["note"] = (
+            f"Collection/show stations fill the full resolved pool "
+            f"(up to {_FULL_RUN_FILL_CAP} programs)."
+        )
+    else:
+        count_bit = ""
+        if program_count > 0:
+            count_bit = f" This lineup scheduled {int(program_count)} program(s)."
+        elif matched > 0:
+            count_bit = f" Library matched {int(matched)} title(s)."
+        payload["note"] = (
+            f"Motif / taste craft samples about {_DEFAULT_FILL_LIMIT}–{_SOFT_FILL_CAP} "
+            f"programs (soft cap) — not the full-run {_FULL_RUN_FILL_CAP} used for "
+            f"collection/show stations.{count_bit}"
+        )
+    return payload
 
 # Tunarr 1.3.x ``createChannelV2`` requires these channel fields (OpenAPI).
 _DEFAULT_GROUP_TITLE = "Projectionist"
@@ -375,29 +441,15 @@ def resolve_channel_icon_url(
 ) -> str:
     """LAN-facing icon URL for channel logos (Plex must be able to fetch it).
 
-    Prefer ``preferred_url`` (collection / title art) when set; otherwise the
-    shared Tunarr mark at ``{plex_facing_base}/images/tunarr.png``.
+    Prefer ``preferred_url`` (collection / title art) when set. Do **not** fall
+    back to Tunarr's stock ``/images/tunarr.png`` — empty path keeps Plex from
+    showing default Tunarr marks when station art is missing.
     """
+    _ = (settings, tunarr_base)  # signature kept for callers; stock Tunarr mark unused
     preferred = str(preferred_url or "").strip()
-    if preferred:
+    if preferred and not is_default_tunarr_icon(preferred):
         return preferred
-    base = str(tunarr_base or "").strip().rstrip("/")
-    if not base and settings is not None:
-        try:
-            from projectionist.live_channels.plex_attach import (
-                resolve_plex_facing_tunarr_base,
-            )
-
-            facing = resolve_plex_facing_tunarr_base(settings)
-            base = str(facing.get("base_url") or "").strip().rstrip("/")
-        except Exception:  # noqa: BLE001
-            base = ""
-        if not base:
-            tunarr = getattr(settings, "tunarr", None)
-            base = str(getattr(tunarr, "public_url", "") or "").strip().rstrip("/")
-    if not base:
-        return ""
-    return f"{base}/images/tunarr.png"
+    return ""
 
 
 def probe_icon_url(url: str, *, timeout: int = 5) -> Dict[str, Any]:
@@ -464,6 +516,8 @@ def set_station_meta(
     craft_filters: Optional[Mapping[str, Any]] = None,
     motif: str = "",
     cluster_tag: str = "",
+    subtitles_enabled: Optional[bool] = None,
+    youth_safe: Optional[bool] = None,
 ) -> None:
     """Persist station recipe fields on ``settings.tunarr.station_meta`` (in-memory)."""
     cid = str(channel_id or "").strip()
@@ -496,6 +550,10 @@ def set_station_meta(
         row["motif"] = str(motif).strip()
     if cluster_tag:
         row["cluster_tag"] = str(cluster_tag).strip()
+    if subtitles_enabled is not None:
+        row["subtitles_enabled"] = bool(subtitles_enabled)
+    if youth_safe is not None:
+        row["youth_safe"] = bool(youth_safe)
     if craft_filters is not None:
         from projectionist.live_channels.filters import normalize_craft_filters
 
@@ -510,6 +568,48 @@ def set_station_media_scope(
 ) -> None:
     """Persist media_scope on settings.tunarr.station_meta[channel_id] (in-memory)."""
     set_station_meta(settings, channel_id, media_scope=scope)
+
+
+def resolve_subtitles_enabled(
+    settings: Any = None,
+    *,
+    channel_id: str = "",
+    default: Optional[bool] = None,
+) -> bool:
+    """Resolve Tunarr subtitlesEnabled from station_meta, then household default."""
+    row = station_meta_row(settings, channel_id) if channel_id else {}
+    if "subtitles_enabled" in row:
+        return bool(row.get("subtitles_enabled"))
+    tunarr = getattr(settings, "tunarr", None) if settings is not None else None
+    if tunarr is not None and hasattr(tunarr, "subtitles_enabled_default"):
+        return bool(getattr(tunarr, "subtitles_enabled_default", False))
+    if default is not None:
+        return bool(default)
+    return False
+
+
+def apply_channel_subtitles_enabled(
+    client: TunarrClient,
+    channel_id: str,
+    *,
+    enabled: bool,
+) -> Dict[str, Any]:
+    """PUT Tunarr ``subtitlesEnabled`` for an existing channel (soft-fail on miss)."""
+    cid = str(channel_id or "").strip()
+    if not cid:
+        raise ValueError("channel_id is required")
+    channel = client.get_channel(cid)
+    body = _channel_put_body(channel, subtitles_enabled=bool(enabled))
+    updated = client.update_channel(cid, body)
+    return {
+        "ok": True,
+        "channel_id": cid,
+        "subtitles_enabled": bool(
+            (updated or {}).get("subtitlesEnabled", enabled)
+            if isinstance(updated, Mapping)
+            else enabled
+        ),
+    }
 
 
 def recipe_from_station_meta(
@@ -582,6 +682,8 @@ def channel_create_body(
     group_title: str = _DEFAULT_GROUP_TITLE,
     icon_url: str = "",
     filler_list_id: str = "",
+    subtitles_enabled: Optional[bool] = None,
+    settings: Any = None,
 ) -> Dict[str, Any]:
     """Tunarr ``POST /api/channels`` body for ``createChannelV2``.
 
@@ -595,6 +697,8 @@ def channel_create_body(
     if not tcid:
         raise ValueError("transcode_config_id is required to create a Tunarr channel")
     name = str(recipe.name or "").strip() or f"Channel {int(recipe.number)}"
+    if subtitles_enabled is None:
+        subtitles_enabled = resolve_subtitles_enabled(settings, default=False)
     channel: Dict[str, Any] = {
         "id": str(channel_id or uuid.uuid4()),
         "name": name[:48],
@@ -611,7 +715,7 @@ def channel_create_body(
         ),
         "streamMode": _DEFAULT_STREAM_MODE,
         "transcodeConfigId": tcid,
-        "subtitlesEnabled": False,
+        "subtitlesEnabled": bool(subtitles_enabled),
     }
     channel.update(
         continuity_channel_fields(
@@ -630,6 +734,7 @@ def _channel_put_body(
     name: str = "",
     icon: Optional[Mapping[str, Any]] = None,
     start_time_ms: Optional[int] = None,
+    subtitles_enabled: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Trimmed Tunarr ``PUT /channels/{id}`` body from a list/detail channel row."""
     cid = str(ch.get("id") or ch.get("uuid") or "").strip()
@@ -638,6 +743,10 @@ def _channel_put_body(
     if not resolved_name:
         resolved_name = f"Channel {number}" if number else "Station"
     current_icon = ch.get("icon") if isinstance(ch.get("icon"), Mapping) else {}
+    if subtitles_enabled is None:
+        subtitles_flag = bool(ch.get("subtitlesEnabled", False))
+    else:
+        subtitles_flag = bool(subtitles_enabled)
     body: Dict[str, Any] = {
         "id": cid,
         "name": resolved_name[:48],
@@ -658,7 +767,7 @@ def _channel_put_body(
         ),
         "streamMode": str(ch.get("streamMode") or _DEFAULT_STREAM_MODE),
         "transcodeConfigId": str(ch.get("transcodeConfigId") or ""),
-        "subtitlesEnabled": bool(ch.get("subtitlesEnabled", False)),
+        "subtitlesEnabled": subtitles_flag,
     }
     if ch.get("fillerCollections") is not None:
         body["fillerCollections"] = list(ch.get("fillerCollections") or [])
@@ -1064,15 +1173,18 @@ def apply_station_icons(
     channel_ids: Optional[Sequence[str]] = None,
     fallback_icon: str = "",
 ) -> Dict[str, Any]:
-    """Prefer per-station art (station_meta / collection) over the shared Tunarr mark."""
+    """Prefer per-station art; clear stock Tunarr marks when art is missing."""
     wanted = {str(cid).strip() for cid in (channel_ids or ()) if str(cid).strip()}
-    fallback = str(fallback_icon or "").strip() or resolve_channel_icon_url(settings)
+    fallback = str(fallback_icon or "").strip()
+    if is_default_tunarr_icon(fallback):
+        fallback = ""
     meta = {}
     if settings is not None:
         tunarr = getattr(settings, "tunarr", None)
         meta = dict(getattr(tunarr, "station_meta", None) or {})
     updated: List[str] = []
     errors: List[str] = []
+    cleared = 0
     for ch in client.list_channels():
         if not isinstance(ch, Mapping):
             continue
@@ -1084,18 +1196,26 @@ def apply_station_icons(
         collection_id = str((row or {}).get("collection_id") or "").strip()
         if not preferred and collection_id:
             preferred = resolve_collection_icon_url(settings, collection_id)
+        if is_default_tunarr_icon(preferred):
+            preferred = ""
         target = preferred or fallback
-        if not target:
-            continue
         current = ch.get("icon") if isinstance(ch.get("icon"), Mapping) else {}
         current_path = str((current or {}).get("path") or "").strip()
+        # Strip residual Tunarr stock marks when we have no real art.
+        if not target and is_default_tunarr_icon(current_path) and current_path:
+            target = ""
+            clear_stock = True
+        else:
+            clear_stock = False
+        if not target and not clear_stock:
+            continue
         if current_path == target:
             continue
-        # Don't overwrite a non-generic custom icon with the Tunarr mark.
+        # Don't overwrite a non-generic custom icon with empty/stock.
         if (
-            target.endswith("/images/tunarr.png")
+            not target
             and current_path
-            and not current_path.endswith("/images/tunarr.png")
+            and not is_default_tunarr_icon(current_path)
             and not current_path.startswith("http://127.0.0.1")
             and not current_path.startswith("http://localhost")
         ):
@@ -1111,12 +1231,15 @@ def apply_station_icons(
         try:
             client.update_channel(cid, body)
             updated.append(cid)
+            if clear_stock or not target:
+                cleared += 1
         except Exception as error:  # noqa: BLE001
             errors.append(f"{cid}: {str(error)[:120]}")
     return {
         "ok": not errors,
         "updated": updated,
         "count_updated": len(updated),
+        "count_cleared_stock": cleared,
         "errors": errors,
     }
 
@@ -1513,16 +1636,28 @@ def match_feedback_note(
     match_total: int = 0,
     program_count: int = 0,
     stations_filled: int = 0,
+    full_run: Optional[bool] = None,
+    soft_capped: bool = False,
 ) -> str:
     """Honest owner-facing publish note (matched titles, not 'real titles N stations')."""
+    base = ""
     if match_total > 0:
-        return (
+        base = (
             f"Matched {matched}/{match_total} collection titles · "
             f"lineup {program_count} program(s)."
         )
-    if program_count > 0:
-        return f"Lineup {program_count} program(s) across {stations_filled or 1} station(s)."
-    return ""
+    elif program_count > 0:
+        base = f"Lineup {program_count} program(s) across {stations_filled or 1} station(s)."
+    honesty = ""
+    if soft_capped or full_run is False:
+        honesty = craft_soft_cap_honesty(
+            fill_mode="soft",
+            matched=matched,
+            program_count=program_count,
+        )["note"]
+    if base and honesty:
+        return f"{base} {honesty}"
+    return base or honesty
 
 
 def random_slot_schedule_for_programs(
@@ -2407,6 +2542,8 @@ def publish_recipes(
     total_programs = 0
     total_matched = 0
     total_match_pool = 0
+    soft_capped_any = False
+    full_run_any = False
 
     transcode_config_id = ""
     try:
@@ -2469,6 +2606,8 @@ def publish_recipes(
             craft_filters=getattr(recipe, "craft_filters", None) or {},
             motif=str(recipe.motif or ""),
             cluster_tag=str(recipe.cluster_tag or ""),
+            subtitles_enabled=resolve_subtitles_enabled(settings, default=False),
+            youth_safe=bool(getattr(recipe, "youth_safe", False)),
         )
 
     def _apply_programming(channel_id: str, recipe: ChannelRecipe) -> Dict[str, Any]:
@@ -2499,6 +2638,11 @@ def publish_recipes(
         total_programs += len(programs)
         total_matched += int(stats.get("matched") or 0)
         total_match_pool += int(stats.get("match_total") or 0)
+        is_full = bool(stats.get("full_run"))
+        if is_full:
+            full_run_any = True
+        else:
+            soft_capped_any = True
         flex_count = sum(
             1
             for row in (prog_body or {}).get("lineup") or []
@@ -2513,6 +2657,9 @@ def publish_recipes(
             "padded": flex_count > 0,
             "matched": int(stats.get("matched") or 0),
             "match_total": int(stats.get("match_total") or 0),
+            "full_run": is_full,
+            "fill_target": int(stats.get("fill_target") or 0),
+            "soft_capped": not is_full,
         }
 
     for raw in recipes:
@@ -2586,6 +2733,7 @@ def publish_recipes(
                     transcode_config_id=transcode_config_id,
                     icon_url=station_icon,
                     filler_list_id=filler_list_id,
+                    settings=settings,
                 )
             )
             channel_id = str(created.get("id") or created.get("uuid") or "")
@@ -2660,11 +2808,26 @@ def publish_recipes(
     if not published and not errors and (skipped or programming_updated):
         ok = True  # idempotent re-publish / fill
 
+    soft_capped = soft_capped_any and not full_run_any
+    if soft_capped_any and full_run_any:
+        # Mixed pack: still call out soft-capped stations.
+        soft_capped = True
+    honesty = craft_soft_cap_honesty(
+        fill_mode="soft" if soft_capped_any and not full_run_any else (
+            "full_run" if full_run_any and not soft_capped_any else "soft"
+        ),
+        matched=total_matched,
+        program_count=total_programs,
+    )
     match_note = match_feedback_note(
         matched=total_matched,
         match_total=total_match_pool,
         program_count=total_programs,
         stations_filled=content_filled,
+        full_run=None if soft_capped_any and full_run_any else (
+            False if soft_capped_any else (True if full_run_any else None)
+        ),
+        soft_capped=soft_capped_any and not full_run_any,
     )
     note = (
         "Stations use Tunarr program IDs when Plex libraries are enabled and "
@@ -2677,13 +2840,26 @@ def publish_recipes(
             f"Filled {content_filled} station lineup(s) · "
             f"{total_programs} program(s) scheduled."
         )
+        if soft_capped_any and not full_run_any:
+            note = f"{note} {honesty['note']}"
     elif not catalog:
         note = (
             "No Tunarr program IDs yet — libraries were enabled and a scan was started. "
             "Wait for the scan, then publish again with fill lineups."
         )
+    if soft_capped_any and full_run_any:
+        note += (
+            f" Some motif/taste stations use a soft sample "
+            f"(~{_DEFAULT_FILL_LIMIT}–{_SOFT_FILL_CAP}); collection/show stations "
+            f"fill up to {_FULL_RUN_FILL_CAP}."
+        )
     if labels.get("count_updated"):
         note += f" Updated labels/icons on {labels['count_updated']} station(s)."
+    if labels.get("count_cleared_stock"):
+        note += (
+            f" Cleared {labels['count_cleared_stock']} stock Tunarr logo(s) "
+            "(no station art yet)."
+        )
     if prepare.get("count_aligned"):
         note += (
             f" Start-over on {prepare['count_aligned']} station(s) "
@@ -2699,7 +2875,7 @@ def publish_recipes(
     icon_probe = probe_icon_url(resolved_icon) if resolved_icon else {
         "ok": False,
         "url": "",
-        "message": "No plex-facing Tunarr icon base configured.",
+        "message": "No station art URL — Plex will not show a Tunarr stock logo.",
     }
 
     return {
@@ -2723,6 +2899,11 @@ def publish_recipes(
         "prepare": prepare,
         "filler": filler_state,
         "icon_probe": icon_probe,
+        "fill_mode": honesty["fill_mode"],
+        "soft_capped": soft_capped,
+        "soft_default": _DEFAULT_FILL_LIMIT,
+        "soft_cap": _SOFT_FILL_CAP,
+        "full_run_cap": _FULL_RUN_FILL_CAP,
         "published_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "note": note,
     }
@@ -2746,9 +2927,28 @@ def publish_collection_channel(
     title = str(collection_title or name or "Collection").strip() or "Collection"
     number = int(channel_number or 0)
     if number <= 0:
+        from projectionist.live_channels.craft import next_channel_number
+
         existing = client.list_channels()
-        numbers = [int(ch.get("number") or 0) for ch in existing]
-        number = max(numbers) + 1 if numbers else 100
+        numbers = [int(ch.get("number") or 0) for ch in existing if ch.get("number") is not None]
+        occupied: List[int] = []
+        if settings is not None:
+            try:
+                from projectionist.live_channels.plex_attach import (
+                    collect_plex_occupied_channel_numbers,
+                )
+
+                occupied = collect_plex_occupied_channel_numbers(settings)
+            except Exception:  # noqa: BLE001
+                occupied = []
+        base = 100
+        if settings is not None:
+            tunarr = getattr(settings, "tunarr", None)
+            try:
+                base = int(getattr(tunarr, "channel_number_base", 100) or 100)
+            except (TypeError, ValueError):
+                base = 100
+        number = next_channel_number(numbers, base=base, occupied=occupied)
     mode = normalize_programming_mode(
         programming_mode or ProgrammingMode.SEQUENTIAL.value,
         default=ProgrammingMode.SEQUENTIAL,
@@ -2808,7 +3008,19 @@ def publish_custom_channel(
 
     existing = client.list_channels()
     numbers = [int(ch.get("number") or 0) for ch in existing if ch.get("number") is not None]
-    default_number = next_channel_number(numbers, base=int(channel_number_base or 100))
+    occupied: List[int] = []
+    if settings is not None:
+        try:
+            from projectionist.live_channels.plex_attach import (
+                collect_plex_occupied_channel_numbers,
+            )
+
+            occupied = collect_plex_occupied_channel_numbers(settings)
+        except Exception:  # noqa: BLE001
+            occupied = []
+    default_number = next_channel_number(
+        numbers, base=int(channel_number_base or 100), occupied=occupied
+    )
     if isinstance(recipe_payload, ChannelRecipe):
         recipe = recipe_payload
         if recipe.number <= 0:
@@ -2940,6 +3152,7 @@ def refill_channel_lineup(
             craft_filters=getattr(recipe, "craft_filters", None) or {},
             motif=str(recipe.motif or ""),
             cluster_tag=str(recipe.cluster_tag or ""),
+            youth_safe=bool(getattr(recipe, "youth_safe", False)),
         )
 
     media_types = (
@@ -3005,10 +3218,13 @@ def refill_channel_lineup(
 
     matched = int(stats.get("matched") or 0)
     match_total = int(stats.get("match_total") or 0)
+    is_full = bool(stats.get("full_run"))
     note = match_feedback_note(
         matched=matched,
         match_total=match_total,
         program_count=len(programs),
+        full_run=is_full,
+        soft_capped=not is_full,
     )
     if not note:
         note = (
@@ -3020,6 +3236,15 @@ def refill_channel_lineup(
                 "No Tunarr program IDs yet — wait for the library scan, then refill again."
             )
         )
+        if programs and not is_full:
+            note = (
+                f"{note} "
+                + craft_soft_cap_honesty(
+                    fill_mode="soft",
+                    matched=matched,
+                    program_count=len(programs),
+                )["note"]
+            )
     if normalize_programming_mode(recipe.programming_mode) == ProgrammingMode.SHUFFLE:
         note += " Reshuffled (shuffle)."
 
@@ -3031,6 +3256,11 @@ def refill_channel_lineup(
         "program_count": len(programs),
         "matched": matched,
         "match_total": match_total,
+        "full_run": is_full,
+        "soft_capped": not is_full,
+        "soft_default": _DEFAULT_FILL_LIMIT,
+        "soft_cap": _SOFT_FILL_CAP,
+        "full_run_cap": _FULL_RUN_FILL_CAP,
         "lineup_programs": len(programs),
         "titles": [p.get("title") for p in programs[:8]],
         "programming": dict(programming) if programming else {},

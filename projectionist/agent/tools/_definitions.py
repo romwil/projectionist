@@ -222,7 +222,10 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "description": (
                 "Find movies or shows missing from the library for a genre/decade/theme query. "
                 "For branded or topical asks (BBC science docs, PBS nature, etc.) pass query "
-                "and/or companies plus genres=Documentary — never invent titles when filters fail."
+                "and/or companies plus genres=Documentary — never invent titles when filters fail. "
+                "For TV miniseries/scripted use tv_type. For 'not science-focused' use without_genres "
+                "or without_keywords. If the tool returns suggested_fallback, retry once with those "
+                "args and is_fallback_attempt=true — do not invent a title-by-title list."
             ),
             "parameters": {
                 "type": "object",
@@ -232,21 +235,48 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     "year_to": {"type": "integer"},
                     "genres": {
                         "type": "string",
-                        "description": "Comma-separated TMDB genre names (e.g. Documentary, Drama)",
+                        "description": (
+                            "Comma-separated TMDB genre names (e.g. Documentary, Drama). "
+                            "Aliases like Science→Science Fiction are accepted; ambiguous names "
+                            "return genres_candidates to clarify."
+                        ),
+                    },
+                    "without_genres": {
+                        "type": "string",
+                        "description": (
+                            "Comma-separated TMDB genres to exclude "
+                            "(e.g. Science Fiction for 'not science-focused')"
+                        ),
                     },
                     "keywords": {
                         "type": "string",
                         "description": "Theme keywords resolved via TMDB (OR'd when several match)",
                     },
+                    "without_keywords": {
+                        "type": "string",
+                        "description": "Comma-separated theme keywords to exclude from discover/search",
+                    },
                     "companies": {
                         "type": "string",
                         "description": "Comma-separated production companies / brands (e.g. BBC)",
+                    },
+                    "tv_type": {
+                        "type": "string",
+                        "enum": ["miniseries", "scripted", "documentary", "reality", "news", "talk"],
+                        "description": "TMDB TV show type filter (shows only); use miniseries for limited series",
                     },
                     "query": {
                         "type": "string",
                         "description": (
                             "Free-text TMDB search for themed gaps "
-                            "(e.g. 'BBC science anthropology documentary')"
+                            "(e.g. 'BBC science anthropology documentary'). "
+                            "year_from/year_to also apply on this path."
+                        ),
+                    },
+                    "is_fallback_attempt": {
+                        "type": "boolean",
+                        "description": (
+                            "Set true only when retrying with suggested_fallback from a prior empty result"
                         ),
                     },
                 },
@@ -296,13 +326,32 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "description": (
                 "Remember a user-provided private fact, goal, intention, callback/in-joke, "
                 "or external watch for that same user only. Use kind=callback only when the "
-                "user consents to remembering an in-joke or shared reference."
+                "user consents to remembering an in-joke or shared reference. For callbacks "
+                "tied to a library title, pass title identity fields so dig-in / Chat about "
+                "this deep-links can surface later."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "text": {"type": "string"},
-                    "kind": {"type": "string", "enum": ["self_disclosure", "learning_goal", "watch_intention", "watched_external", "follow_up", "preference", "callback"]},
+                    "kind": {
+                        "type": "string",
+                        "enum": [
+                            "self_disclosure",
+                            "learning_goal",
+                            "watch_intention",
+                            "watched_external",
+                            "follow_up",
+                            "preference",
+                            "callback",
+                        ],
+                    },
+                    "title": {"type": "string"},
+                    "media_type": {"type": "string", "enum": ["movie", "show"]},
+                    "tmdb_id": {"type": "integer"},
+                    "tvdb_id": {"type": "integer"},
+                    "rating_key": {"type": "string"},
+                    "year": {"type": "integer"},
                 },
                 "required": ["text"],
             },
@@ -553,7 +602,8 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "description": (
                 "Browse a genre: owned titles (include_missing=false) or TMDB gaps to add "
                 "(include_missing=true). Do not use for add recommendations when the user only "
-                "wants missing titles — prefer find_collection_gaps or recommend_hidden_gems."
+                "wants missing titles — prefer find_collection_gaps or recommend_hidden_gems. "
+                "For TV gaps, optional tv_type (miniseries/scripted) and without_genres apply."
             ),
             "parameters": {
                 "type": "object",
@@ -563,6 +613,15 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     "include_missing": {
                         "type": "boolean",
                         "description": "When true, include TMDB titles not in library (add candidates)",
+                    },
+                    "tv_type": {
+                        "type": "string",
+                        "enum": ["miniseries", "scripted", "documentary", "reality", "news", "talk"],
+                        "description": "TMDB TV show type for missing discover (shows only)",
+                    },
+                    "without_genres": {
+                        "type": "string",
+                        "description": "Comma-separated TMDB genres to exclude from missing discover",
                     },
                 },
                 "required": ["genre", "media_type"],
@@ -1371,6 +1430,58 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                         "description": "Comma-separated genre filter",
                     },
                 },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "consult_persona",
+            "description": (
+                "Ask a sibling curator (Scholar, Enthusiast, Concierge, or Companion) for a short quoted answer. "
+                "Use sparingly for depth the active persona lacks — filmography/motif → Scholar; mood/comfort → Companion; "
+                "acquire/where-to-get → Concierge; heat/tonight energy → Enthusiast. "
+                "Max ONE consult per user turn; never nest consults. Quote the reply as "
+                "\"I asked {Name} and they said …\" — do not silently merge. "
+                "Unavailable for youth/guest. Timeout returns busy — use your own take."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "persona": {
+                        "type": "string",
+                        "description": (
+                            "Sibling to ask: Scholar, Enthusiast, Concierge, Companion "
+                            "(or builtin ids academic-critic / enthusiastic-scout / classic-curator / night-owl-host)."
+                        ),
+                    },
+                    "question": {
+                        "type": "string",
+                        "description": "Short question for the sibling (one beat, not a full thread).",
+                    },
+                    "title": {
+                        "type": "string",
+                        "description": "Optional title under discussion for specialty context.",
+                    },
+                    "media_type": {
+                        "type": "string",
+                        "enum": ["movie", "show"],
+                        "description": "Optional media type for the title under discussion.",
+                    },
+                    "tmdb_id": {
+                        "type": "integer",
+                        "description": "Optional TMDB id when Concierge acquire path should run.",
+                    },
+                    "tvdb_id": {
+                        "type": "integer",
+                        "description": "Optional TVDB id for show acquire path.",
+                    },
+                    "mood": {
+                        "type": "string",
+                        "description": "Optional mood hint when consulting Companion.",
+                    },
+                },
+                "required": ["persona", "question"],
             },
         },
     },

@@ -21,6 +21,12 @@ from projectionist.library.db_io import run_db
 from projectionist.library.query import resolve_thread_ambient_context_label
 from projectionist.models.schemas import TitleCard
 from projectionist.privacy.schema import sanitize
+from projectionist.telemetry import (
+    PURPOSE_CHAT,
+    PURPOSE_CHAT_TOOL,
+    PURPOSE_WRAP_UP,
+)
+from projectionist.telemetry.llm_track import tracked_chat, tracked_stream
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +66,13 @@ def household_tool_summary(raw: Any, *, limit: int = 160) -> str:
             n = len(payload)
             return f"Found {n} title{'s' if n != 1 else ''}"
         if isinstance(payload, dict):
+            if payload.get("quote_ok") and payload.get("persona"):
+                name = str(payload.get("persona") or "sibling").strip() or "sibling"
+                return f"Asked {name}"
+            if payload.get("code") == "consult_timeout" or payload.get("busy"):
+                return "Sibling busy"
+            if str(payload.get("code") or "").startswith("consult_"):
+                return "Consult skipped"
             if payload.get("error"):
                 return "No confident match"
             count = payload.get("returned")
@@ -254,6 +267,16 @@ def _append_suggested_reply_block(blocks: List[Dict[str, Any]], registry: ToolRe
         blocks.append(block)
 
 
+def _append_persona_consult_blocks(blocks: List[Dict[str, Any]], registry: ToolRegistry) -> None:
+    """Surface quoted village handoffs as structured chat blocks."""
+    from projectionist.agent.village import quote_block_from_consult
+
+    for payload in getattr(registry, "persona_consults", ()) or ():
+        block = quote_block_from_consult(payload)
+        if block:
+            blocks.append(block)
+
+
 def _sanitize_chat_blocks(blocks: List[Dict[str, Any]], registry: ToolRegistry) -> List[Dict[str, Any]]:
     """Persist and return member-safe message blocks without local media metadata."""
     return sanitize(blocks, audience="member", settings=registry.settings)
@@ -312,7 +335,12 @@ class CuratorAgent:
         await registry.execute("search_library", {"query": user_message})
         return "Here's what I found in your library. Configure an LLM provider for richer conversation."
 
-    def _registry(self) -> ToolRegistry:
+    def _registry(
+        self,
+        *,
+        persona_id: Optional[str] = None,
+        session_id: Optional[str] = None,
+    ) -> ToolRegistry:
         return ToolRegistry(
             self.db,
             self.settings,
@@ -321,11 +349,14 @@ class CuratorAgent:
             seerr_user_id=self.seerr_user_id,
             user_role=self.user_role,
             is_youth=self.is_youth,
+            persona_id=persona_id,
+            session_id=session_id,
         )
 
     async def run(self, session_id: str, user_message: str) -> Dict[str, Any]:
         self.db.ensure_chat_session(session_id, self.lens_id, user_id=self.user_id)
-        registry = self._registry()
+        thread_persona_id = self.db.get_thread_persona_id(session_id)
+        registry = self._registry(persona_id=thread_persona_id, session_id=session_id)
 
         if not self.provider:
             text = await self._fallback_run(registry, user_message)
@@ -341,6 +372,7 @@ class CuratorAgent:
                             "payload": {"title": "Results", "items": [c.model_dump() for c in cards]},
                         }
                     )
+            _append_persona_consult_blocks(blocks, registry)
             _append_review_prompt_blocks(blocks, registry)
             _append_review_conflict_blocks(blocks, registry)
             _append_suggested_reply_block(blocks, registry)
@@ -386,10 +418,19 @@ class CuratorAgent:
                 messages.append({"role": entry["role"], "content": text})
         messages.append({"role": "user", "content": user_message})
 
-        registry = self._registry()
+        registry = self._registry(persona_id=thread_persona_id, session_id=session_id)
         use_tools = bool(self.settings.llm_api_key or self.settings.llm_provider == "ollama")
         tool_defs = build_tool_definitions(self.settings) if use_tools else None
-        response = await self.provider.chat(messages, tools=tool_defs)
+        response = await tracked_chat(
+            self.db,
+            self.provider,
+            messages,
+            tools=tool_defs,
+            purpose=PURPOSE_CHAT,
+            persona_id=thread_persona_id,
+            session_id=session_id,
+            user_id=self.user_id,
+        )
 
         # Accumulate prose from the initial response and every tool round so
         # the final text block preserves earlier-round narration instead of
@@ -453,7 +494,16 @@ class CuratorAgent:
                 )
             # Force a prose wrap-up without tools after fail-closed gap/discover.
             next_tools = None if stop_retrying else tool_defs
-            response = await self.provider.chat(messages, tools=next_tools)
+            response = await tracked_chat(
+                self.db,
+                self.provider,
+                messages,
+                tools=next_tools,
+                purpose=PURPOSE_WRAP_UP if stop_retrying else PURPOSE_CHAT_TOOL,
+                persona_id=thread_persona_id,
+                session_id=session_id,
+                user_id=self.user_id,
+            )
             _accumulate_response_text(response)
             if stop_retrying:
                 break
@@ -496,6 +546,7 @@ class CuratorAgent:
                         "payload": {"title": viewport_title, "items": [c.model_dump() for c in cards]},
                     }
                 )
+        _append_persona_consult_blocks(blocks, registry)
         _append_review_prompt_blocks(blocks, registry)
         _append_review_conflict_blocks(blocks, registry)
         _append_suggested_reply_block(blocks, registry)
@@ -569,7 +620,15 @@ async def stream_agent(
 
     await run_db(_prepare_session)
 
-    registry = agent._registry()
+    # --- Build conversation history (sync sqlite off the event loop) ---
+    def _load_history() -> tuple:
+        return (
+            db.chat_history(session_id, limit=20, lens_id=resolved_lens),
+            db.get_thread_persona_id(session_id),
+        )
+
+    history, thread_persona_id = await run_db(_load_history)
+    registry = agent._registry(persona_id=thread_persona_id, session_id=session_id)
 
     # --- No LLM configured: keyword fallback with simulated streaming ---
     if not agent.provider:
@@ -579,15 +638,6 @@ async def stream_agent(
         ):
             yield event
         return
-
-    # --- Build conversation history (sync sqlite off the event loop) ---
-    def _load_history() -> tuple:
-        return (
-            db.chat_history(session_id, limit=20, lens_id=resolved_lens),
-            db.get_thread_persona_id(session_id),
-        )
-
-    history, thread_persona_id = await run_db(_load_history)
     messages: List[Dict[str, Any]] = [
         {
             "role": "system",
@@ -614,14 +664,26 @@ async def stream_agent(
     tool_defs = build_tool_definitions(settings) if (settings.llm_api_key or settings.llm_provider == "ollama") else None
     text_segments: List[str] = []
     pending_segment_sep = False
+    stream_round = 0
 
     for _ in range(MAX_TOOL_ROUNDS):
         round_text = ""
         current_tool_calls: Dict[int, Dict[str, Any]] = {}
         streamed_any_token = False
+        purpose = PURPOSE_CHAT if stream_round == 0 else PURPOSE_CHAT_TOOL
+        stream_round += 1
 
         try:
-            async for chunk in agent.provider.stream(messages, tools=tool_defs):
+            async for chunk in tracked_stream(
+                db,
+                agent.provider,
+                messages,
+                tools=tool_defs,
+                purpose=purpose,
+                persona_id=thread_persona_id,
+                session_id=session_id,
+                user_id=user_id,
+            ):
                 choice = (chunk.get("choices") or [{}])[0]
                 delta = choice.get("delta") or {}
 
@@ -657,7 +719,17 @@ async def stream_agent(
             if streamed_any_token:
                 raise
             logger.warning("Streaming failed, falling back to buffered: %s", exc)
-            response = await agent.provider.chat(messages, tools=tool_defs)
+            response = await tracked_chat(
+                db,
+                agent.provider,
+                messages,
+                tools=tool_defs,
+                purpose=purpose,
+                persona_id=thread_persona_id,
+                session_id=session_id,
+                user_id=user_id,
+                meta={"fallback": "buffered"},
+            )
             round_text = _extract_text(response)
             if round_text:
                 if pending_segment_sep and text_segments:
@@ -707,10 +779,32 @@ async def stream_agent(
 
                 brief_args = args if isinstance(args, dict) else {"value": args}
                 yield json.dumps({"type": "tool_start", "name": name, "args": brief_args}) + "\n"
+                _t0 = __import__("time").time()
                 # Tool handlers that hit sqlite/cosine already offload via run_db.
                 result = await registry.execute(str(name), args)
+                _duration_ms = int((__import__("time").time() - _t0) * 1000)
                 if _tool_result_requests_stop(result):
                     stop_retrying = True
+                try:
+                    from projectionist.telemetry import TelemetryIngester
+
+                    result_count = None
+                    try:
+                        parsed = json.loads(result)
+                        if isinstance(parsed, dict) and "count" in parsed:
+                            result_count = int(parsed["count"])
+                        elif isinstance(parsed, list):
+                            result_count = len(parsed)
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        pass
+                    TelemetryIngester(db).record_tool_invocation(
+                        tool_name=str(name),
+                        duration_ms=_duration_ms,
+                        result_count=result_count,
+                        session_id=session_id,
+                    )
+                except Exception:
+                    logger.debug("Failed to record stream tool-invocation telemetry", exc_info=True)
                 tool_content = (
                     wrap_untrusted_data(result) if str(name) in UNTRUSTED_MEMORY_TOOLS else result
                 )
@@ -722,9 +816,21 @@ async def stream_agent(
                 pending_segment_sep = True
             if stop_retrying:
                 # One final prose turn without tools, then end the stream loop.
+                # Skip a second paid call when the wrap-up stream already produced
+                # a final completion (partial stream + buffered chat was double-pay).
                 round_text = ""
+                wrap_streamed = False
                 try:
-                    async for chunk in agent.provider.stream(messages, tools=None):
+                    async for chunk in tracked_stream(
+                        db,
+                        agent.provider,
+                        messages,
+                        tools=None,
+                        purpose=PURPOSE_WRAP_UP,
+                        persona_id=thread_persona_id,
+                        session_id=session_id,
+                        user_id=user_id,
+                    ):
                         choice = (chunk.get("choices") or [{}])[0]
                         delta = choice.get("delta") or {}
                         content = delta.get("content")
@@ -733,16 +839,33 @@ async def stream_agent(
                                 yield json.dumps({"type": "token", "content": _STREAM_SEGMENT_SEP}) + "\n"
                                 pending_segment_sep = False
                             round_text += content
+                            wrap_streamed = True
                             yield json.dumps({"type": "token", "content": content}) + "\n"
                 except Exception as exc:
-                    logger.warning("Streaming wrap-up failed, falling back to buffered: %s", exc)
-                    response = await agent.provider.chat(messages, tools=None)
-                    round_text = _extract_text(response) or ""
-                    if round_text:
-                        if pending_segment_sep and text_segments:
-                            yield json.dumps({"type": "token", "content": _STREAM_SEGMENT_SEP}) + "\n"
-                            pending_segment_sep = False
-                        yield json.dumps({"type": "token", "content": round_text}) + "\n"
+                    if (round_text or "").strip() or wrap_streamed:
+                        logger.warning(
+                            "Streaming wrap-up interrupted after tokens; skipping buffered fallback: %s",
+                            exc,
+                        )
+                    else:
+                        logger.warning("Streaming wrap-up failed, falling back to buffered: %s", exc)
+                        response = await tracked_chat(
+                            db,
+                            agent.provider,
+                            messages,
+                            tools=None,
+                            purpose=PURPOSE_WRAP_UP,
+                            persona_id=thread_persona_id,
+                            session_id=session_id,
+                            user_id=user_id,
+                            meta={"fallback": "buffered_wrap_up"},
+                        )
+                        round_text = _extract_text(response) or ""
+                        if round_text:
+                            if pending_segment_sep and text_segments:
+                                yield json.dumps({"type": "token", "content": _STREAM_SEGMENT_SEP}) + "\n"
+                                pending_segment_sep = False
+                            yield json.dumps({"type": "token", "content": round_text}) + "\n"
                 stripped = (round_text or "").strip()
                 if stripped and (not text_segments or text_segments[-1] != stripped):
                     text_segments.append(stripped)
@@ -779,6 +902,7 @@ async def stream_agent(
                 "payload": {"title": viewport_title, "items": [c.model_dump() for c in cards]},
             })
 
+    _append_persona_consult_blocks(blocks, registry)
     _append_review_prompt_blocks(blocks, registry)
     _append_review_conflict_blocks(blocks, registry)
     _append_suggested_reply_block(blocks, registry)
@@ -876,6 +1000,7 @@ async def _emit_buffered(
                 "action": "open_viewport",
                 "payload": {"title": "Results", "items": [c.model_dump() for c in cards]},
             })
+    _append_persona_consult_blocks(blocks, registry)
     _append_review_prompt_blocks(blocks, registry)
     _append_review_conflict_blocks(blocks, registry)
     _append_suggested_reply_block(blocks, registry)

@@ -53,6 +53,8 @@ Try one of these — they're good first prompts because each exercises a differe
 
 **How to read the answer.** When Chat discusses collection gaps, its poster strip mirrors the *missing* titles being discussed rather than the owned titles it used as context. A gap card is marked **new** or **queued** and can offer an allowed request/add action; **Play** appears only for a true in-library title with a playable Plex identity. The short **reply chips** under a useful response are suggested next turns — tap one (for example *"only comedies"* or *"go older"*) to send it as your next message without retyping.
 
+**Curator village.** Sometimes your active curator will ask a sibling for a short take — Scholar for cited depth, Companion for mood memory, Concierge for find→request paths, Enthusiast for tonight heat — and quote it as *“I asked {Name} and they said…”*. You stay in the same thread; you don't have to switch personas to taste those specialties. Youth and guest accounts don't get village consults.
+
 **Slash commands** (instant, no LLM call): type `/help` for the list. The handy ones:
 
 - `/stats` — movie/show counts and last sync
@@ -67,9 +69,10 @@ Thumbs up / down on curator replies train future recommendations. Personal **rev
 
 When a recommendation set or explanation is worth returning to, open the **⋮ menu** below that curator response and choose **Save to library**. Projectionist creates a named, private library item, adds a short summary in your active persona's voice, and keeps it to authenticated household members only. Open saved items later from [Library](/library) — rows are searchable, grouped by day, and show which persona shaped the response.
 
-Saved pages preserve the structured text, title cards, and reply chips. From the same ⋮ menu you can:
+Saved pages preserve the structured text, title cards, reply chips, and any quoted village consult. Links stay **household-only** on your Projectionist account — never a public page. From the same ⋮ menu you can:
 
-- **Copy** the authenticated `/library/:id` link (no public/tokenized links)
+- **Copy household link** to the authenticated `/library/:id` route (no public/tokenized links)
+- **Share with household** — notify other members so the page lands in their Inbox
 - **Export** as **Markdown**, **JSON** (the structured source), or **TXT**
 - **Print / PDF** via a clean client-side view
 - **Share** through your device share sheet (falls back to Copy link)
@@ -80,7 +83,7 @@ Saved pages preserve the structured text, title cards, and reply chips. From the
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — in-progress titles from Plex On Deck (resume + Play), not a live "now playing" session list
-- **On now** — every airing household Live station right now (when Live Channels is on). Tap a row or **Watch here** to open Projectionist Live; **Also in Plex Live TV** opens the same stations in Plex; **See all** jumps to Live
+- **What’s on tonight** — persona-voiced glance at every airing Live station (when Live Channels is on). Dig into a row for **Watch here** / **Also in Plex**; youth accounts only see age-friendly stations. Optional **Tonight’s queue** pins titles for this browser session only
 - **Recently Added** and **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
 - **On This Day**
@@ -96,10 +99,10 @@ When the household owner turns **Live Channels** on and publishes stations, **[L
 
 **Shortest path tonight**
 
-1. Open **[Explore](/explore)** and skim **On now**, or go straight to **[Live](/live)**.
+1. Open **[Explore](/explore)** and skim **What’s on tonight**, or go straight to **[Live](/live)**.
 2. On Live, use **Guide** for the channel × time grid, or **Watch** to tune the selected station. Click a guide cell (or press Enter) to start watching.
 3. Prefer a dedicated TV window? Tap **Pop out** — Projectionist opens a watch-first window and leaves the original tab on the guide so you aren't running two streams of the same channel.
-4. Prefer living-room apps? Use **Also in Plex Live TV** (On now) or **Open in Plex Live TV** (Live chrome) — same stations, Plex clients.
+4. Prefer living-room apps? Use **Also in Plex** (What’s on tonight) or **Open in Plex Live TV** (Live chrome) — same stations, Plex clients.
 
 **While you watch.** Arrow keys change channels; Space / `K` pauses; `C` opens captions when available; `F` toggles fullscreen. Tap the video stage to pause or resume.
 
@@ -148,7 +151,7 @@ Youth-mode accounts see youth-safe achievements only. Member-facing copy never s
 
 ### Inbox & notifications
 
-**[Inbox](/inbox)** is a top-bar peer (the notifications icon). Unread items show a badge. Household recommendations, title arrivals, digests, and curator **nudges** all land there — not inside Chat.
+**[Inbox](/inbox)** is a top-bar peer (the notifications icon). Unread items show a badge. Household recommendations (including **Watch together** invites), shared Library pages, title arrivals, digests, and curator **nudges** all land there — not inside Chat. Recommendation cards can dig into the title or open **Chat about this**.
 
 Under **Settings → Notifications** you can:
 
@@ -635,6 +638,8 @@ Generate/rotate both in **Admin → Advanced** (or set the env vars); the keys m
 ## Live Channels (owners)
 
 When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. You never need Tunarr’s own admin UI. Household members watch in Projectionist **[Live](/live)** **and** Plex Live TV — both are first-class (see **Live** above for the member how-to).
+
+**What’s currently playing:** Admin **Overview** and **Live Channels → Stations** show an ops table for every station — channel # / name, now + progress, next + wall-clock start, health (airing / streaming / empty / unreachable), and dig-ins to Watch, Guide, or station settings. It refreshes while the page is open and is richer than the household **What’s on tonight** strip.
 
 **Craft and publish (Admin → Live Channels):**
 1. Turn Live Channels on, run preflight, and start the broadcast engine (when Docker management is available).

@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatWallTime, programCellStyle } from "../../lib/liveChannels.js";
 import { liveGuideEmptyCopy } from "../../lib/liveChannelsCopy.js";
+import {
+  formatProgramEpisodeLabel,
+  programTitle,
+} from "../../lib/liveProgramDetail.js";
+import LiveProgramHoverCard from "./LiveProgramHoverCard.jsx";
 
 const PX_PER_HOUR = 220;
 
@@ -15,9 +20,26 @@ export default function LiveGuide({
   onTune,
 }) {
   const gridRef = useRef(null);
+  const hoverLeaveTimer = useRef(null);
   const [focusRow, setFocusRow] = useState(0);
   const [focusCol, setFocusCol] = useState(0);
   const [nowMs, setNowMs] = useState(Date.now());
+  const [hover, setHover] = useState(null);
+
+  function cancelHoverLeave() {
+    if (hoverLeaveTimer.current) {
+      clearTimeout(hoverLeaveTimer.current);
+      hoverLeaveTimer.current = null;
+    }
+  }
+
+  function scheduleHoverLeave() {
+    cancelHoverLeave();
+    // Brief grace so the pointer can travel into the fixed hover card.
+    hoverLeaveTimer.current = setTimeout(() => setHover(null), 160);
+  }
+
+  useEffect(() => () => cancelHoverLeave(), []);
 
   const channels = guide?.channels || [];
   const windowStart = guide?.windowStart ?? Date.now() / 1000;
@@ -54,6 +76,22 @@ export default function LiveGuide({
     const program = channel.programs?.[col];
     onSelectChannel?.(channel.id);
     onTune?.(channel.id, program);
+  }
+
+  function placeHover(program, event, kind = "guide") {
+    cancelHoverLeave();
+    if (!program || program.isFlex) {
+      setHover(null);
+      return;
+    }
+    const rect = event.currentTarget?.getBoundingClientRect?.();
+    if (!rect) return;
+    setHover({
+      program,
+      kind,
+      x: rect.left,
+      y: rect.bottom + 6,
+    });
   }
 
   function onKeyDown(event) {
@@ -148,7 +186,10 @@ export default function LiveGuide({
               >
                 {(channel.programs || []).map((program, col) => {
                   const style = programCellStyle(program, windowStart, windowEnd, PX_PER_HOUR);
-                  const key = `${channel.id}:${program.start}:${program.title}`;
+                  const title = programTitle(program) || program.title;
+                  const episodeLabel =
+                    formatProgramEpisodeLabel(program) || program.episode || "";
+                  const key = `${channel.id}:${program.start}:${title}`;
                   const focused = row === focusRow && col === focusCol;
                   return (
                     <button
@@ -161,14 +202,23 @@ export default function LiveGuide({
                       onClick={() => {
                         setFocusRow(row);
                         setFocusCol(col);
+                        setHover(null);
                         tuneAt(row, col);
                       }}
+                      onMouseEnter={(event) => placeHover(program, event)}
+                      onMouseLeave={scheduleHoverLeave}
+                      onFocus={(event) => {
+                        setFocusRow(row);
+                        setFocusCol(col);
+                        placeHover(program, event);
+                      }}
+                      onBlur={scheduleHoverLeave}
                       data-testid="live-guide-cell"
-                      title={program.episode ? `${program.title} — ${program.episode}` : program.title}
+                      title={episodeLabel ? `${title} — ${episodeLabel}` : title}
                     >
-                      <span className="live-guide-cell-title">{program.title}</span>
-                      {program.episode ? (
-                        <span className="live-guide-cell-ep">{program.episode}</span>
+                      <span className="live-guide-cell-title">{title}</span>
+                      {episodeLabel ? (
+                        <span className="live-guide-cell-ep">{episodeLabel}</span>
                       ) : null}
                       {program.rating ? (
                         <span className="live-guide-cell-rating">{program.rating}</span>
@@ -181,6 +231,16 @@ export default function LiveGuide({
           </div>
         </div>
       </div>
+
+      <LiveProgramHoverCard
+        program={hover?.program}
+        kind={hover?.kind || "guide"}
+        open={Boolean(hover)}
+        x={hover?.x || 0}
+        y={hover?.y || 0}
+        onKeepAlive={cancelHoverLeave}
+        onClose={() => setHover(null)}
+      />
     </div>
   );
 }

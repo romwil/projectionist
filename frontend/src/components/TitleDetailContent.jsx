@@ -38,6 +38,7 @@ import {
 import { canWatchOnPlex, plexWatchUrl } from "../lib/titleLinks.js";
 import { chatAboutTitleHref, ROUTES } from "../lib/backNav.js";
 import ShowSeasonsPanel from "./ShowSeasonsPanel.jsx";
+import TitleSubtitlesPanel from "./TitleSubtitlesPanel.jsx";
 
 const META_LINK_CLASS = "title-meta-link";
 const META_STATIC_CLASS = "title-meta-static";
@@ -358,14 +359,15 @@ export default function TitleDetailContent({
             {multiUserEnabled ? (
               <button
                 type="button"
-                className="title-cta title-cta-icon"
+                className="title-cta title-cta-ghost"
                 data-testid="recommend-title-button"
-                aria-label="Recommend to…"
+                aria-label="Watch together or recommend to household"
                 onClick={onOpenRecommend}
               >
                 <span className="material-symbols-outlined" aria-hidden="true">
-                  person_add
+                  groups
                 </span>
+                Watch together
               </button>
             ) : null}
             {canDeleteLibrary ? (
@@ -418,6 +420,13 @@ export default function TitleDetailContent({
             compact={compact}
             onShowDelete={canDeleteLibrary ? onOpenDelete : undefined}
           />
+
+          {detail.in_library && detail.rating_key && detail.media_type === "movie" ? (
+            <TitleSubtitlesPanel
+              ratingKey={detail.rating_key}
+              canDownload={userRole !== "guest"}
+            />
+          ) : null}
 
           {plotKnowledge ? (
             <div

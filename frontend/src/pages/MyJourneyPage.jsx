@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import {
+  confirmAction,
   getEngagementSummary,
   postCourseProgress,
   startCourseSyllabus,
+  syllabusPublishHandoff,
 } from "../api/client";
 import ChamberEmpty from "../components/ChamberEmpty";
 import { useAuthGate } from "../components/UserMenu";
@@ -93,7 +95,8 @@ function JourneyDetailDrawer({ node, onClose, onChat }) {
 }
 
 export default function MyJourneyPage() {
-  const { authReady, isYouth, role, multiUserEnabled } = useAuthGate();
+  const { authReady, isYouth, role, multiUserEnabled, isOwner } = useAuthGate();
+  const [publishBusy, setPublishBusy] = useState("");
   const [state, setState] = useState({ loading: true, data: null, error: "" });
   const [view, setView] = useState("list");
   const [filter, setFilter] = useState("all");
@@ -188,6 +191,29 @@ export default function MyJourneyPage() {
       setSyllabusNote(err.message || "Could not start syllabus.");
     } finally {
       setSyllabusBusy("");
+    }
+  }
+
+  async function publishSyllabusToPlex(course) {
+    setPublishBusy(course.id);
+    setSyllabusNote("");
+    try {
+      const preview = await syllabusPublishHandoff(course.id, { confirm: false, target: "plex" });
+      if (preview?.needs_confirm) {
+        const ok = window.confirm(preview.message || `Publish “${course.name}” to Plex?`);
+        if (!ok) return;
+      }
+      const result = await syllabusPublishHandoff(course.id, { confirm: true, target: "plex" });
+      if (result?.confirmation_token) {
+        await confirmAction(result.confirmation_token, true);
+        setSyllabusNote(result.message || `Published “${course.name}” to Plex.`);
+      } else {
+        setSyllabusNote(result.message || "Publish queued.");
+      }
+    } catch (err) {
+      setSyllabusNote(err.message || "Could not publish syllabus collection.");
+    } finally {
+      setPublishBusy("");
     }
   }
 
@@ -439,6 +465,19 @@ export default function MyJourneyPage() {
                         >
                           {syllabusBusy === course.id ? "Opening syllabus…" : "Open multi-session syllabus"}
                         </button>
+                        {isOwner ? (
+                          <button
+                            type="button"
+                            className="text-button"
+                            disabled={publishBusy === course.id}
+                            onClick={() => publishSyllabusToPlex(course)}
+                            data-testid={`journey-syllabus-publish-${course.id}`}
+                          >
+                            {publishBusy === course.id
+                              ? "Publishing…"
+                              : "Publish syllabus to Plex"}
+                          </button>
+                        ) : null}
                       </div>
                     </li>
                   ))}

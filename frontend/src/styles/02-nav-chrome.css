@@ -1720,6 +1720,48 @@ button.watchlist-chip {
   color: var(--muted);
 }
 
+/* Curator village — quoted sibling consult handoff */
+.persona-consult-quote {
+  margin: 0.65em 0 0.9em;
+  padding: 0.7em 0.9em;
+  border-left: 3px solid var(--accent, var(--border));
+  background: color-mix(in srgb, var(--accent, var(--border)) 8%, transparent);
+  border-radius: 0 8px 8px 0;
+}
+
+.persona-consult-lead {
+  margin: 0 0 0.35em;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.persona-consult-asked {
+  margin-top: 0.55rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.persona-consult-asked summary {
+  cursor: pointer;
+  color: var(--text);
+}
+
+.persona-consult-asked-body {
+  margin: 0.35rem 0 0;
+  white-space: pre-wrap;
+}
+
+.persona-consult-answer {
+  margin: 0;
+  padding: 0;
+  border: none;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--muted);
+  white-space: pre-wrap;
+}
+
 .markdown-body .markdown-footnote-ref,
 .markdown-body sup.markdown-footnote-ref a {
   color: var(--accent);
