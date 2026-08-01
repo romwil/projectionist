@@ -1671,6 +1671,35 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   border-radius: 999px;
   padding: 0.2rem 0.6rem;
 }
+.weekly-digest-title-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: inherit;
+  text-decoration: none;
+}
+.weekly-digest-title-link:hover {
+  text-decoration: underline;
+}
+.weekly-digest-title-poster {
+  width: 1.35rem;
+  height: 2rem;
+  object-fit: cover;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.recommendation-poster-link,
+.review-prompt-poster-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.recommendation-title-link,
+.review-prompt-title-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.12em;
+}
 
 /* Live Channels on-now panel */
 .on-now-panel {

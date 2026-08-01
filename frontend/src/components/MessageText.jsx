@@ -1,7 +1,29 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { linkifyKnownTitles, titleItemFromHref } from "../lib/titleDigIn.js";
+import TitleDetailLink from "./TitleDetailLink";
+
+function MarkdownTitleLink({ href, children }) {
+  const item = titleItemFromHref(href);
+  if (item) {
+    return (
+      <TitleDetailLink item={item} className="message-title-link" data-testid="message-title-link">
+        {children}
+      </TitleDetailLink>
+    );
+  }
+  if (/^https?:\/\//.test(String(href || ""))) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    );
+  }
+  return <a href={href}>{children}</a>;
+}
 
 const markdownComponents = {
+  a: MarkdownTitleLink,
   table: ({ children }) => (
     <div className="markdown-table-wrap">
       <table>{children}</table>
@@ -32,16 +54,24 @@ const markdownComponents = {
   ),
 };
 
-export default function MessageText({ content, markdown = false, className = "message-text" }) {
-  if (markdown) {
+export default function MessageText({
+  content,
+  markdown = false,
+  className = "message-text",
+  titleRefs = [],
+}) {
+  const text = linkifyKnownTitles(content, titleRefs);
+  const hasMarkdownLinks = text.includes("](/title/");
+
+  if (markdown || hasMarkdownLinks) {
     return (
       <div className={`${className} markdown-body`}>
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-          {content}
+          {text}
         </ReactMarkdown>
       </div>
     );
   }
 
-  return <p className={className}>{content}</p>;
+  return <p className={className}>{text}</p>;
 }

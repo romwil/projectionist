@@ -17,4 +17,6 @@ test("MessageText wires footnote-friendly markdown components", () => {
   assert.match(src, /markdown-footnotes/);
   assert.match(src, /markdown-footnote-ref/);
   assert.match(src, /remarkGfm/);
+  assert.match(src, /TitleDetailLink/);
+  assert.match(src, /linkifyKnownTitles/);
 });

@@ -9,14 +9,29 @@ import { titleDetailPath } from "../lib/titleLinks.js";
 import PosterOverlayControls from "./PosterOverlayControls";
 import TitleDetailLink from "./TitleDetailLink";
 
-function cardLead(rec) {
+function TitleDigInEm({ item, children }) {
+  if (!item || !titleDetailPath(item)) return <em>{children}</em>;
+  return (
+    <em>
+      <TitleDetailLink item={item} className="recommendation-title-link">
+        {children}
+      </TitleDetailLink>
+    </em>
+  );
+}
+
+function cardLead(rec, recommendation) {
   const kind = String(rec.kind || "recommendation");
   const fromName = rec.from_display_name || "Someone";
   const yearBit = rec.year ? ` (${rec.year})` : "";
   if (kind === "arrival") {
     return (
       <>
-        <strong>Now available</strong> — <em>{rec.title}{yearBit}</em>
+        <strong>Now available</strong> —{" "}
+        <TitleDigInEm item={recommendation}>
+          {rec.title}
+          {yearBit}
+        </TitleDigInEm>
       </>
     );
   }
@@ -41,10 +56,10 @@ function cardLead(rec) {
   return (
     <>
       <strong>{fromName}</strong> recommended{" "}
-      <em>
+      <TitleDigInEm item={recommendation}>
         {mediaTitle}
         {yearBit}
-      </em>{" "}
+      </TitleDigInEm>{" "}
       for you
     </>
   );
@@ -102,7 +117,19 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
             >
               {showPoster ? (
                 <div className="recommendation-card-poster">
-                  {rec.poster_url ? (
+                  {path ? (
+                    <TitleDetailLink
+                      item={recommendation}
+                      className="recommendation-poster-link"
+                      aria-label={`Open details for ${mediaTitle || "title"}`}
+                    >
+                      {rec.poster_url ? (
+                        <img src={rec.poster_url} alt="" loading="lazy" />
+                      ) : (
+                        <div className="poster-fallback">{(mediaTitle || "?").slice(0, 1)}</div>
+                      )}
+                    </TitleDetailLink>
+                  ) : rec.poster_url ? (
                     <img src={rec.poster_url} alt="" loading="lazy" />
                   ) : (
                     <div className="poster-fallback">{(mediaTitle || "?").slice(0, 1)}</div>
@@ -113,7 +140,7 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
                 </div>
               ) : null}
               <div className="recommendation-card-body">
-                <p className="recommendation-card-from">{cardLead(rec)}</p>
+                <p className="recommendation-card-from">{cardLead(rec, recommendation)}</p>
                 {note ? <p className="recommendation-card-note">“{note}”</p> : null}
                 <div className="recommendation-card-actions">
                   {path ? (
