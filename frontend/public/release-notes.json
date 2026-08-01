@@ -1,6 +1,44 @@
 {
-  "generated_at": "2026-08-01T02:43:35Z",
+  "generated_at": "2026-08-01T03:00:25Z",
   "releases": [
+    {
+      "version": "1.29.37",
+      "date": "2026-08-01",
+      "summary": "Pop-out Live TV owns the stream, and clicking the picture pauses or resumes — without fighting OSD controls or reintroducing Tunarr warm thrash.",
+      "highlights": [
+        "**Pop out means the new window plays.** The original `/live` tab hands off to Guide so only the TV window holds the live session.",
+        "**Click the picture to pause or play.** Same TV remote habit on Watch and in the pop-out; channel / CC / fullscreen buttons stay out of the way.",
+        "**Pop-out autoplay recovers quietly.** If the browser blocks unmuted start, playback tries muted-first then restores sound when allowed."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`openPopout` opened `/live/watch` without unloading the opener `LivePlayer`, so both windows competed for the same Tunarr HLS session (opener kept playing; pop-out often froze on a still / offline frame).",
+            "Pop-out now opens synchronously (popup blockers), then opener switches to `mode=guide` via `popoutHandoff` / `liveGuideHref` so HLS destroys before the pop-out tunes.",
+            "LivePlayer: muted-first `tryPlayLiveVideo` after async tune (pop-out / Safari autoplay); click stage toggles pause/play without triggering on OSD chrome."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Click / Space / `K` toggles playback on the video stage; pause stops HLS load, play calls `startLoad` again.",
+            "Guide link from the pop-out focuses the opener on the guide URL (not watch)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Focused: `frontend/src/lib/liveChannels.test.mjs` (handoff, chrome click guard, toggle + muted-first) — passed.",
+            "`cd frontend && npm run test:unit` — 522 passed.",
+            "`cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).",
+            "`cd frontend && npm run build` — passed.",
+            "`.venv/bin/python -m pytest tests/` — 1585 passed, 6 skipped; coverage **75.9%** (≥74%).",
+            "`pytest tests/test_version.py` — lockstep **1.29.37**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.36",
       "date": "2026-08-01",

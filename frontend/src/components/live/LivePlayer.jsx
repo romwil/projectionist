@@ -5,7 +5,10 @@ import {
   buildOsdModel,
   formatClock,
   formatWallTime,
+  isLivePlayerChromeTarget,
   liveStreamUrl,
+  toggleLiveVideoPlayback,
+  tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
 
 const OSD_IDLE_MS = 3500;
@@ -121,6 +124,12 @@ export default function LivePlayer({
       setTextTracks(list);
     };
 
+    const beginPlay = () => {
+      tryPlayLiveVideo(video).then((next) => {
+        if (!destroyed) setStatus(next);
+      });
+    };
+
     const attachHls = () => {
       if (destroyed || !video || !Hls.isSupported()) return;
       if (hlsRef.current) {
@@ -145,9 +154,8 @@ export default function LivePlayer({
       hls.attachMedia(video);
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         if (destroyed) return;
-        setStatus("playing");
         setError("");
-        video.play().catch(() => setStatus("ready"));
+        beginPlay();
         syncTracks();
       });
       hls.on(Hls.Events.ERROR, (_event, data) => {
@@ -204,8 +212,8 @@ export default function LivePlayer({
         video.src = url;
         video.addEventListener("loadedmetadata", () => {
           if (destroyed) return;
-          setStatus("playing");
-          video.play().catch(() => setStatus("ready"));
+          setError("");
+          beginPlay();
           syncTracks();
         });
       } else {
@@ -277,6 +285,34 @@ export default function LivePlayer({
     bumpOsd();
   }
 
+  async function togglePlayback() {
+    const video = videoRef.current;
+    if (!video || status === "loading" || status === "error") return;
+    bumpOsd();
+    const wasPaused = video.paused;
+    if (wasPaused) {
+      // Resume segment fetching after a live pause.
+      hlsRef.current?.startLoad?.();
+    }
+    const next = await toggleLiveVideoPlayback(video);
+    if (next === "paused") {
+      hlsRef.current?.stopLoad?.();
+    }
+    setStatus(next);
+  }
+
+  function onStageClick(event) {
+    if (isLivePlayerChromeTarget(event.target)) return;
+    // Only the video stage (and tap-to-play overlay) toggles — not OSD chrome.
+    const onVideo = event.target === videoRef.current;
+    const onGesture =
+      typeof event.target?.closest === "function" &&
+      event.target.closest("[data-testid='live-player-tap']");
+    if (!onVideo && !onGesture) return;
+    event.preventDefault();
+    togglePlayback();
+  }
+
   function onKeyDown(event) {
     const key = event.key;
     if (key === "ArrowUp") {
@@ -285,6 +321,9 @@ export default function LivePlayer({
     } else if (key === "ArrowDown") {
       event.preventDefault();
       stepChannel(1);
+    } else if (key === " " || key === "k" || key === "K") {
+      event.preventDefault();
+      togglePlayback();
     } else if (key === "c" || key === "C") {
       event.preventDefault();
       setCcOpen((open) => !open);
@@ -302,6 +341,7 @@ export default function LivePlayer({
 
   const isCompact = compact || narrow;
   const showOsd = osdVisible || ccOpen || status === "loading" || status === "error";
+  const showTapHint = status === "ready" || status === "paused";
 
   return (
     <div
@@ -309,10 +349,12 @@ export default function LivePlayer({
       className={`live-player${isCompact ? " live-player--compact" : ""} ${className}`.trim()}
       data-testid="live-player"
       data-channel={channelId}
+      data-status={status}
       tabIndex={0}
       onMouseMove={bumpOsd}
       onFocus={bumpOsd}
       onPointerDown={bumpOsd}
+      onClick={onStageClick}
       onKeyDown={onKeyDown}
     >
       <video
@@ -335,6 +377,15 @@ export default function LivePlayer({
       {error ? (
         <div className="live-player-status live-player-status--error" data-testid="live-player-error">
           <p>{error}</p>
+        </div>
+      ) : null}
+
+      {showTapHint ? (
+        <div
+          className="live-player-status live-player-status--gesture"
+          data-testid="live-player-tap"
+        >
+          <p>{status === "paused" ? "Paused · tap to play" : "Tap to play"}</p>
         </div>
       ) : null}
 
