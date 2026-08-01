@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.30.2] — 2026-08-01
+
+Chat gap rails for “recent history miniseries that aren’t science-focused” return verified TMDB limited series, and saved Library pages drop id-less junk posters.
+
+### Highlights
+- **Honest history-miniseries gaps.** Collection-gap lookups prefer TMDB discover with History + miniseries + sci-fi exclusion + recent years — not sentence `search_tv` mismatches.
+- **Saved rails stay sane.** Library pages de-dupe and bound title cards, dropping entries without a usable TMDB/TVDB id.
+
+### Fixed
+- `find_collection_gaps` treated the whole user sentence as `search_tv`, which ignores `tv_type=miniseries` and could emit unrelated titles/IDs onto gap rails and saved Library pages.
+- Descriptive asks now infer `genres` / `tv_type` / `without_genres` / `year_from`, fail closed on theme-miss / id-less cards, and auto-run one structured discover fallback.
+- TMDB **TV has no History genre** (movies do). Real TV lists made `genres=History` fail closed, which pushed the model into title-by-title lookups with mismatched IDs. History now aliases to **War & Politics** and unions history-keyword discovers (Chernobyl-class Drama miniseries) with theme filtering.
+- Saved-library `title_cards` / viewport payloads are normalized server-side and in the SPA (de-dupe, drop id-less cards, cap at 12) so a bad gap-save cannot render an unbounded mismatched poster strip.
+
+### Changed
+- Gap tool schema + system prompt prefer structured History/miniseries filters over stuffing NL sentences into `query`.
+
+### Verification
+- `.venv/bin/python -m pytest tests/test_agent_tools.py tests/test_curator.py tests/test_saved_library.py tests/test_version.py --no-cov`
+- `cd frontend && npm run test:unit` — savedLibraryBlocks rail sanitize cases + suite.
+- `cd frontend && npm run lint` — 0 errors.
+- `cd frontend && npm run build` — production build.
+- `test_version` lockstep **1.30.2**.
+
 ## [1.30.1] — 2026-08-01
 
 About release notes stay usable with a long history — jump via a compact picker and a short recent-chip rail instead of a wall of every patch number.

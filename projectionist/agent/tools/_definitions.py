@@ -221,11 +221,12 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "find_collection_gaps",
             "description": (
                 "Find movies or shows missing from the library for a genre/decade/theme query. "
-                "For branded or topical asks (BBC science docs, PBS nature, etc.) pass query "
-                "and/or companies plus genres=Documentary — never invent titles when filters fail. "
-                "For TV miniseries/scripted use tv_type. For 'not science-focused' use without_genres "
-                "or without_keywords. If the tool returns suggested_fallback, retry once with those "
-                "args and is_fallback_attempt=true — do not invent a title-by-title list."
+                "For recent history miniseries (not science-focused) prefer media_type=show, "
+                "genres=History, tv_type=miniseries, without_genres='Science Fiction', year_from "
+                "(e.g. 2018) — do NOT put the whole user sentence in query (search ignores "
+                "tv_type and yields mismatched titles/IDs). For branded asks (BBC science docs) "
+                "pass query and/or companies plus genres=Documentary. Never invent titles or "
+                "numeric ids when filters fail; trust returned item tmdb_id/tvdb_id only."
             ),
             "parameters": {
                 "type": "object",

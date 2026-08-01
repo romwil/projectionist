@@ -263,8 +263,8 @@ class CuratorAgentToolLoopTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(seen_tools[1])
             self.assertIn("could not find confident matches", text_blocks[0]["content"].lower())
 
-    async def test_empty_gaps_fallback_keeps_tools_for_one_round(self) -> None:
-        """First empty themed gaps keep tools; only stop_retrying strips them."""
+    async def test_empty_gaps_auto_fallback_strips_tools_on_stop_retrying(self) -> None:
+        """Empty themed gaps auto-run fallback inside the tool; stop_retrying wraps up."""
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             settings = Settings(
@@ -292,24 +292,6 @@ class CuratorAgentToolLoopTests(unittest.IsolatedAsyncioTestCase):
                     "stop_reason": "tool_use",
                 }
             )
-            second_tool = _normalize_anthropic_response(
-                {
-                    "content": [
-                        {
-                            "type": "tool_use",
-                            "id": "toolu_gaps2",
-                            "name": "find_collection_gaps",
-                            "input": {
-                                "media_type": "show",
-                                "genres": "History",
-                                "tv_type": "miniseries",
-                                "is_fallback_attempt": True,
-                            },
-                        }
-                    ],
-                    "stop_reason": "tool_use",
-                }
-            )
             text_response = _normalize_anthropic_response(
                 {
                     "content": [
@@ -327,8 +309,6 @@ class CuratorAgentToolLoopTests(unittest.IsolatedAsyncioTestCase):
                 seen_tools.append(tools)
                 if len(seen_tools) == 1:
                     return first_tool
-                if len(seen_tools) == 2:
-                    return second_tool
                 return text_response
 
             agent.provider = MagicMock()
@@ -343,10 +323,10 @@ class CuratorAgentToolLoopTests(unittest.IsolatedAsyncioTestCase):
                 result = await agent.run("session-fallback", "recent history miniseries")
             text_blocks = [block for block in result["message"]["blocks"] if block.get("type") == "text"]
 
-            self.assertEqual(len(seen_tools), 3)
+            self.assertEqual(len(seen_tools), 2)
             self.assertIsNotNone(seen_tools[0])
-            self.assertIsNotNone(seen_tools[1])  # fallback round still has tools
-            self.assertIsNone(seen_tools[2])  # stop_retrying wrap-up
+            self.assertIsNone(seen_tools[1])  # stop_retrying wrap-up after auto-fallback
+            self.assertGreaterEqual(mock_tmdb.discover_tv.call_count, 2)
             self.assertIn("nothing confident matched", text_blocks[0]["content"].lower())
 
 

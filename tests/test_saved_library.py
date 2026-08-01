@@ -9,6 +9,11 @@ from unittest.mock import patch
 
 from projectionist.library.db import Database
 from projectionist.web.app import _persona_voiced_library_summary
+from projectionist.web.library_privacy import (
+    SAVED_LIBRARY_RAIL_LIMIT,
+    normalize_saved_library_content,
+    sanitize_saved_rail_items,
+)
 
 
 class SavedLibraryTests(unittest.TestCase):
@@ -57,4 +62,39 @@ class SavedLibraryTests(unittest.TestCase):
         with patch("projectionist.web.app.get_chat_provider", side_effect=RuntimeError("offline")):
             summary = asyncio.run(_persona_voiced_library_summary(content, persona={"name": "Jefferson"}))
         self.assertEqual(summary, "Watch Stalker for its meditative science-fiction atmosphere.")
+
+    def test_sanitize_saved_rail_items_dedupes_and_drops_idless(self) -> None:
+        items = [
+            {"media_type": "show", "title": "Chernobyl", "tmdb_id": 87108},
+            {"media_type": "show", "title": "Chernobyl again", "tmdb_id": 87108},
+            {"media_type": "show", "title": "Invented", "tmdb_id": 0},
+            {"media_type": "show", "title": "", "tmdb_id": 12},
+            *[{"media_type": "show", "title": f"Extra {i}", "tmdb_id": 2000 + i} for i in range(20)],
+        ]
+        cleaned = sanitize_saved_rail_items(items)
+        self.assertEqual(len(cleaned), SAVED_LIBRARY_RAIL_LIMIT)
+        self.assertEqual(cleaned[0]["title"], "Chernobyl")
+        self.assertEqual(sum(1 for c in cleaned if c["tmdb_id"] == 87108), 1)
+
+    def test_normalize_saved_library_content_bounds_crazy_gap_rails(self) -> None:
+        crazy = [
+            {
+                "media_type": "show",
+                "title": "" if i % 3 == 0 else f"Gap {i}",
+                "tmdb_id": 0 if i % 5 == 0 else 5000 + (i % 7),
+            }
+            for i in range(40)
+        ]
+        content = normalize_saved_library_content(
+            {
+                "blocks": [
+                    {"type": "text", "content": "Mixed bag"},
+                    {"type": "title_cards", "items": crazy},
+                ]
+            }
+        )
+        cards = [b for b in content["blocks"] if b.get("type") == "title_cards"]
+        self.assertEqual(len(cards), 1)
+        self.assertLessEqual(len(cards[0]["items"]), SAVED_LIBRARY_RAIL_LIMIT)
+        self.assertTrue(all(c.get("tmdb_id") and c.get("title") for c in cards[0]["items"]))
 

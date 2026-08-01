@@ -252,6 +252,72 @@ def _resolve_tmdb_company_ids(tmdb: TMDBClient, companies_text: str) -> Dict[str
     }
 
 
+# NL asks like "aren't science-focused" → exclude Sci-Fi when without_genres omitted.
+_SCIENCE_NEGATION_RE = re.compile(
+    r"\b(?:not|no|non|aren'?t|isn'?t|without|except|excluding)\b"
+    r"[^.?]{0,48}\b(?:science|sci[\s-]?fi|scientific)\b",
+    re.IGNORECASE,
+)
+_DESCRIPTIVE_ASK_GLUE = {
+    "any",
+    "good",
+    "great",
+    "recent",
+    "that",
+    "this",
+    "those",
+    "these",
+    "arent",
+    "isn't",
+    "isnt",
+    "without",
+    "focused",
+    "looking",
+    "recommend",
+    "suggestions",
+    "something",
+}
+
+
+def _query_is_descriptive_ask(query: str) -> bool:
+    """True for natural-language gap asks — not short brand/title needles."""
+    words = re.findall(r"[a-z0-9']+", (query or "").casefold())
+    if len(words) >= 5:
+        return True
+    normalized = {w.replace("'", "") for w in words}
+    return bool(normalized & _DESCRIPTIVE_ASK_GLUE)
+
+
+def _augment_gaps_args_from_query(args: Mapping[str, Any]) -> Dict[str, Any]:
+    """Infer structured discover filters from NL query; drop sentence-as-search."""
+    out: Dict[str, Any] = dict(args)
+    query = str(out.get("query") or "").strip()
+    if not query:
+        return out
+    q = query.casefold()
+
+    if _SCIENCE_NEGATION_RE.search(query) and not str(out.get("without_genres") or "").strip():
+        out["without_genres"] = "Science Fiction"
+    if re.search(r"\bmini[\s-]?series\b", q) and not str(out.get("tv_type") or "").strip():
+        out["tv_type"] = "miniseries"
+        out["media_type"] = "show"
+    if re.search(r"\bhistor", q) and not str(out.get("genres") or "").strip():
+        out["genres"] = "History"
+        if str(out.get("media_type") or "") != "movie":
+            out["media_type"] = "show"
+    if re.search(r"\brecent\b", q) and out.get("year_from") is None:
+        out["year_from"] = _dt.now().year - 8
+
+    # Sentence-shaped asks must not hit search_tv — that yields mismatched IDs.
+    if _query_is_descriptive_ask(query) and (
+        str(out.get("tv_type") or "").strip()
+        or str(out.get("genres") or "").strip()
+        or str(out.get("without_genres") or "").strip()
+    ):
+        out["query"] = ""
+    return out
+
+
 def _gap_theme_tokens(*parts: str) -> List[str]:
     """Normalize free-text theme tokens for post-filter relevance scoring."""
     stop = {
@@ -284,6 +350,23 @@ def _gap_theme_tokens(*parts: str) -> List[str]:
         "like",
         "best",
         "good",
+        "great",
+        "any",
+        "recent",
+        "that",
+        "this",
+        "those",
+        "these",
+        "focused",
+        "looking",
+        "recommend",
+        "suggestions",
+        "something",
+        "arent",
+        "isnt",
+        "without",
+        "except",
+        "excluding",
     }
     tokens: List[str] = []
     seen: set[str] = set()
@@ -330,7 +413,42 @@ _GENRE_ALIASES: Dict[str, str] = {
 _GENRE_ALIAS_FALLBACKS: Dict[str, List[str]] = {
     "Science Fiction": ["Sci-Fi & Fantasy"],
     "Sci-Fi & Fantasy": ["Science Fiction"],
+    # TMDB TV has no History genre (movies do). War & Politics is the closest
+    # official TV genre; Chernobyl-class Drama history is filled via keywords.
+    "History": ["War & Politics"],
+    "War & Politics": ["History", "War"],
+    "War": ["War & Politics"],
 }
+
+# Keyword union for TV "history" asks — Drama-tagged limited series often lack
+# War & Politics (e.g. Chernobyl) but carry these TMDB keywords.
+_TV_HISTORY_KEYWORD_QUERIES = (
+    "based on true story",
+    "historical event",
+    "world war ii",
+)
+_TV_HISTORY_THEME_TOKENS = (
+    "history",
+    "historical",
+    "war",
+    "century",
+    "revolution",
+    "empire",
+    "dynasty",
+    "medieval",
+    "victorian",
+    "roman",
+    "soviet",
+    "nazi",
+    "holocaust",
+    "chernobyl",
+    "wwii",
+    "world war",
+    "civil war",
+    "biography",
+    "biographical",
+    "true story",
+)
 
 # TMDB discover/tv with_type numeric codes.
 _TV_TYPE_IDS: Dict[str, str] = {
@@ -589,6 +707,87 @@ def _filter_tmdb_results_without_keyword_tokens(
     return kept
 
 
+def _genres_request_history(genres_text: str) -> bool:
+    """True when the caller asked for History / historical (movie or TV)."""
+    return bool(re.search(r"\bhistor", str(genres_text or "").casefold()))
+
+
+def _merge_tmdb_results_by_id(
+    primary: Sequence[Mapping[str, Any]],
+    secondary: Sequence[Mapping[str, Any]],
+) -> List[Mapping[str, Any]]:
+    """Union discover pages by TMDB id, preserving primary order first."""
+    merged: List[Mapping[str, Any]] = []
+    seen: set[int] = set()
+    for item in list(primary) + list(secondary):
+        if not isinstance(item, Mapping):
+            continue
+        tid = int(item.get("id") or 0)
+        if tid <= 0 or tid in seen:
+            continue
+        seen.add(tid)
+        merged.append(item)
+    return merged
+
+
+def _filter_tv_history_keyword_hits(
+    items: Sequence[Mapping[str, Any]],
+) -> List[Mapping[str, Any]]:
+    """Keep keyword-union hits that look historical (drop pure true-crime noise)."""
+    war_politics = 10768
+    crime = 80
+    # Stronger than bare "historical" (which matches "no historical angle" junk).
+    strong_history = (
+        "war",
+        "wwii",
+        "world war",
+        "civil war",
+        "century",
+        "revolution",
+        "empire",
+        "dynasty",
+        "medieval",
+        "victorian",
+        "roman",
+        "soviet",
+        "nazi",
+        "holocaust",
+        "chernobyl",
+        "biography",
+        "biographical",
+    )
+    kept: List[Mapping[str, Any]] = []
+    for item in items:
+        if not isinstance(item, Mapping):
+            continue
+        try:
+            genre_ids = {int(g) for g in (item.get("genre_ids") or [])}
+        except (TypeError, ValueError):
+            genre_ids = set()
+        if war_politics in genre_ids:
+            kept.append(item)
+            continue
+        # Crime/true-crime without War & Politics needs a strong period/war signal.
+        if crime in genre_ids and _gap_item_relevance(item, strong_history) <= 0:
+            continue
+        if _gap_item_relevance(item, strong_history) > 0:
+            kept.append(item)
+            continue
+        # Soft history tokens only when not crime-tagged.
+        if crime not in genre_ids and _gap_item_relevance(item, _TV_HISTORY_THEME_TOKENS) > 0:
+            hay = " ".join(
+                [
+                    str(item.get("title") or item.get("name") or ""),
+                    str(item.get("overview") or ""),
+                ]
+            ).casefold()
+            # Fail closed on negated "historical" phrasing ("no historical angle").
+            if re.search(r"\b(?:no|not|non|without)\s+historical\b", hay):
+                continue
+            kept.append(item)
+    return kept
+
+
 def _build_gaps_suggested_fallback(args: Mapping[str, Any]) -> Dict[str, Any]:
     """Broader structured recipe for one retry before tools are stripped."""
     media_type = str(args.get("media_type") or "movie")
@@ -613,7 +812,7 @@ def _build_gaps_suggested_fallback(args: Mapping[str, Any]) -> Dict[str, Any]:
     if media_type == "show":
         tv_type = str(args.get("tv_type") or "").strip() or "miniseries"
         fallback["tv_type"] = tv_type
-        # Prefer History (or kept genre) via discover — drop free-text query that emptied.
+        # History aliases to War & Politics on TV (+ keyword union in the tool).
         fallback["genres"] = genres or "History"
     else:
         fallback["genres"] = genres or "Documentary"
@@ -1607,6 +1806,7 @@ class ToolRegistry:
         return json.dumps(library_overview(self.db))
 
     async def _tool_find_collection_gaps(self, args: Mapping[str, Any]) -> str:
+        args = _augment_gaps_args_from_query(args)
         media_type = str(args.get("media_type") or "movie")
         if not self.settings.tmdb_api_key:
             return json.dumps({"error": "TMDB API key not configured"})
@@ -1648,7 +1848,11 @@ class ToolRegistry:
                     stop_retrying=False,
                 )
             # Fail closed: invented facets must not fall through to unfiltered discover.
-            if not genre_ids:
+            # Exception: TV History — TMDB has no TV History genre; continue and union
+            # history keywords below instead of an empty wall / invented title-by-title IDs.
+            if not genre_ids and not (
+                media_type == "show" and _genres_request_history(genres) and not ambiguous
+            ):
                 return _empty_gaps_payload(
                     note=(
                         "Could not resolve genres to TMDB genre ids "
@@ -1660,6 +1864,10 @@ class ToolRegistry:
                     genres_unresolved=genres_unresolved,
                     genres_candidates=genres_candidates or None,
                 )
+            if not genre_ids and media_type == "show" and _genres_request_history(genres):
+                genres_unresolved = [
+                    g for g in genres_unresolved if not re.search(r"\bhistor", str(g), re.I)
+                ]
 
         without_genres_text = str(args.get("without_genres") or "").strip()
         without_genre_ids = ""
@@ -1764,8 +1972,11 @@ class ToolRegistry:
         ]
 
         results: List[Mapping[str, Any]] = []
-        if query:
-            # Themed / branded asks: text search beats unfocused discover.
+        # search_tv/movie cannot apply with_type (miniseries). Prefer discover whenever
+        # tv_type is set so cards keep valid limited-series IDs — not sentence-search junk.
+        used_search = bool(query) and not with_type
+        if used_search:
+            # Branded / topical needles (BBC science docs, etc.): text search + post-filters.
             raw = tmdb.search_movie(query) if media_type == "movie" else tmdb.search_tv(query)
             if not isinstance(raw, list):
                 raw = []
@@ -1804,39 +2015,69 @@ class ToolRegistry:
                 with_companies=company_ids,
             )
         else:
-            results = tmdb.discover_tv(
-                year_from=year_from,
-                year_to=year_to,
-                with_genres=genre_ids or None,
-                without_genres=without_genre_ids or None,
-                with_keywords=keyword_ids,
-                without_keywords=without_keyword_ids,
-                with_companies=company_ids,
-                with_type=with_type,
-            )
+            history_tv = _genres_request_history(genres)
+            # Unfiltered TV discover (no genre/keyword) dumps popular junk — skip when
+            # History rematerializes to keywords only.
+            if history_tv and not genre_ids and not keyword_ids and not company_ids:
+                results = []
+            else:
+                results = tmdb.discover_tv(
+                    year_from=year_from,
+                    year_to=year_to,
+                    with_genres=genre_ids or None,
+                    without_genres=without_genre_ids or None,
+                    with_keywords=keyword_ids,
+                    without_keywords=without_keyword_ids,
+                    with_companies=company_ids,
+                    with_type=with_type,
+                )
+            # TV History: War & Politics discover misses Drama-only history miniseries
+            # (Chernobyl). Union a history-keyword discover and theme-filter the extras.
+            if history_tv:
+                hist_kw = _resolve_tmdb_keyword_ids(
+                    tmdb, ", ".join(_TV_HISTORY_KEYWORD_QUERIES)
+                )
+                hist_kw_ids = hist_kw.get("keyword_ids")
+                if hist_kw_ids and hist_kw_ids != keyword_ids:
+                    extra = tmdb.discover_tv(
+                        year_from=year_from,
+                        year_to=year_to,
+                        without_genres=without_genre_ids or None,
+                        with_keywords=str(hist_kw_ids),
+                        without_keywords=without_keyword_ids,
+                        with_type=with_type,
+                    )
+                    if isinstance(extra, list):
+                        results = _merge_tmdb_results_by_id(
+                            results if isinstance(results, list) else [],
+                            _filter_tv_history_keyword_hits(extra),
+                        )
+                    for entry in hist_kw.get("resolved") or []:
+                        if entry not in (keyword_meta.get("resolved") or []):
+                            keyword_meta.setdefault("resolved", []).append(entry)
 
         if not isinstance(results, list):
             results = []
 
-        # Query path: prefer title/overview overlap with theme tokens. Keep TMDB
-        # order when nothing overlaps so we fail closed on empty search, not on
-        # over-filtering. Structured discover (keywords/companies) trusts TMDB.
-        if query and theme_tokens:
+        # Search path: keep only theme-overlapping hits. Fail closed on zero overlap
+        # (never emit unrelated posters/IDs). Structured discover trusts TMDB filters.
+        if used_search and theme_tokens:
             scored = [
                 (_gap_item_relevance(item, theme_tokens), item)
                 for item in results
                 if isinstance(item, Mapping)
             ]
             scored.sort(key=lambda pair: pair[0], reverse=True)
-            positive = [item for score, item in scored if score > 0]
-            results = positive if positive else [item for _, item in scored]
+            results = [item for score, item in scored if score > 0]
 
         cards: List[TitleCard] = []
         for item in results:
             if not isinstance(item, Mapping):
                 continue
             tmdb_id = int(item.get("id") or 0)
-            if tmdb_id <= 0 or tmdb_id in owned:
+            title = str(item.get("title") or item.get("name") or "").strip()
+            # Fail closed: never emit id-less or title-less cards onto the gap rail.
+            if tmdb_id <= 0 or not title or tmdb_id in owned:
                 continue
             if media_type == "show":
                 item = _enrich_show_external_ids(item, tmdb, settings=self.settings)
@@ -1844,6 +2085,8 @@ class ToolRegistry:
                 self.db,
                 _tmdb_card(item, media_type, tmdb, reason="Missing from your collection"),
             )
+            if not card.tmdb_id or not str(card.title or "").strip():
+                continue
             if card.in_radarr or card.in_sonarr:
                 continue
             cards.append(card)
@@ -1859,7 +2102,6 @@ class ToolRegistry:
             "do not invent tvdb_id values."
         )
         stop_retrying = False
-        suggested_fallback: Optional[Dict[str, Any]] = None
         themed = bool(
             keywords_text
             or companies_text
@@ -1886,13 +2128,9 @@ class ToolRegistry:
                 )
                 stop_retrying = True
             else:
-                suggested_fallback = _build_gaps_suggested_fallback(args)
-                note = (
-                    "No confident missing titles matched these filters after ownership/queue filtering. "
-                    "Retry ONCE with suggested_fallback (set is_fallback_attempt=true). "
-                    "Do not invent a title-by-title list; do not broaden to unfiltered discover."
-                )
-                stop_retrying = False
+                # Run the structured discover recipe server-side once so the rail gets
+                # real History/miniseries IDs (or an honest empty) without a model retry.
+                return await self._tool_find_collection_gaps(_build_gaps_suggested_fallback(args))
         elif keyword_meta.get("unresolved") or company_meta.get("unresolved") or genres_unresolved:
             note += (
                 " Some filters were dropped as unresolved; only confident matches are shown. "
@@ -1919,8 +2157,6 @@ class ToolRegistry:
         }
         if genres_candidates:
             payload["genres_candidates"] = genres_candidates
-        if suggested_fallback:
-            payload["suggested_fallback"] = suggested_fallback
         if with_type:
             payload["tv_type"] = str(args.get("tv_type") or "")
             payload["with_type"] = with_type
@@ -3983,10 +4219,12 @@ def build_system_prompt(
         "find_collection_gaps with query plus genres=Documentary (or the real TMDB genre) and companies when known — "
         "do not stack speculative keywords that cannot resolve. For TV miniseries use tv_type=miniseries; "
         "for 'not science-focused' pass without_genres='Science Fiction' (aliases like Science resolve). "
-        "When a gap tool returns suggested_fallback, retry once with those args and is_fallback_attempt=true. "
+        "Prefer those structured filters over stuffing the whole user sentence into query — "
+        "free-text search cannot apply tv_type and produces mismatched titles/IDs. "
         "When it returns genres_candidates, clarify with an exact genre name. "
-        "When stop_retrying is true or the fallback already ran empty, answer honestly — "
+        "When stop_retrying is true or the gap tool returns no items, answer honestly — "
         "do not invent a title-by-title list or open another broader unfiltered discover loop. "
+        "Only cite tmdb_id/tvdb_id values from tool item payloads. "
         "For exact external title lookup before add_to_radarr or add_to_sonarr, use search_tmdb — not search_library. "
         "When you already know a specific work, call search_tmdb with tmdb_id (and media_type), or title+year — "
         "never title-only when recommending one film/show, or turnstyle cards may list every same-name TMDB hit. "
