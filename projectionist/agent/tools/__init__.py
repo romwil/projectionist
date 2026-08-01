@@ -655,7 +655,10 @@ class ToolRegistry:
                 "note": (
                     "presence=exact means owned. presence=partial for a title-like query is "
                     "uncertain — do not claim ownership or show those fuzzy hits as the rail. "
-                    "presence=none means no library hit; use search_tmdb with title+year for gaps."
+                    "presence=none means no library hit; use search_tmdb with title+year for gaps. "
+                    "When naming a specific owned title in prose, link it for dig-in: "
+                    "[Title](/title/movie/TMDB_ID) or [Title](/title/show/TMDB_ID); "
+                    "rating_key-only → [Title](/title/movie/RATING_KEY?id_type=rating_key)."
                 ),
             }
         )

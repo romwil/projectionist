@@ -63,14 +63,21 @@ def build_weekly_digest(
     except Exception:  # noqa: BLE001
         recent = {"items": [], "total": 0}
     recent_items: List[Dict[str, Any]] = list(recent.get("items") or [])
-    new_titles = [
-        {
+    new_titles = []
+    for item in recent_items[:8]:
+        entry: Dict[str, Any] = {
             "title": str(item.get("title") or "Untitled"),
             "year": item.get("year"),
             "media_type": item.get("media_type"),
         }
-        for item in recent_items[:8]
-    ]
+        if item.get("tmdb_id") is not None:
+            entry["tmdb_id"] = item.get("tmdb_id")
+        rating_key = item.get("rating_key") or item.get("plex_rating_key")
+        if rating_key:
+            entry["rating_key"] = rating_key
+        if item.get("poster_url"):
+            entry["poster_url"] = item.get("poster_url")
+        new_titles.append(entry)
 
     try:
         open_issues = len(db.list_media_issues(status="open", limit=500))

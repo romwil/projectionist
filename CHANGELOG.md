@@ -2,6 +2,30 @@
 
 ## [Unreleased]
 
+## [1.29.46] — 2026-08-01
+
+Specific titles dig in everywhere — click the name or the poster and the detail modal opens without leaving chat, inbox, or the digest.
+
+### Highlights
+- **Click the title.** Chat prose, inbox recommendations, review prompts, and weekly digest chips turn known titles into dig-in links.
+- **Poster control too.** Inbox and digest posters open the same in-place title modal.
+- **Stays on the page.** Overlay from 1.29.45; Escape / big **X** / scrim close you back to the same scroll position.
+
+### Added
+- `titleDigIn` helpers — parse `/title/...` hrefs, linkify known cards in chat prose, collect refs from message blocks.
+- `MessageText` opens title links in the modal overlay; auto-links bold/list titles that match sibling poster cards.
+- Weekly digest payloads keep `tmdb_id` / `rating_key` / `poster_url` so chips can dig in.
+
+### Changed
+- Curator guidance: name owned titles with `[Title](/title/…)` markdown so “already in your library” bullets dig in.
+- Inbox recommendation lead + poster wrap `TitleDetailLink`; review-prompt compact posters/titles do too.
+
+### Verification
+- `cd frontend && npm run test:unit` — **570 passed**.
+- `cd frontend && npm run lint` — **0 errors** (pre-existing warnings OK).
+- `cd frontend && npm run build` — passed.
+- `.venv/bin/python -m pytest tests/test_weekly_digest.py tests/test_version.py --no-cov` — passed; lockstep **1.29.46**.
+
 ## [1.29.45] — 2026-08-01
 
 Poster clicks open title detail as a modal on top of chat, Explore, or search — close and you’re right where you left off.

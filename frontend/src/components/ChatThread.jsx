@@ -11,6 +11,7 @@ import InlineAlert from "./InlineAlert";
 import MessageText from "./MessageText";
 import ShareActionMenu from "./ShareActionMenu";
 import { chatMediaStripClassName } from "../lib/chatCardScroll.js";
+import { titleRefsFromBlocks } from "../lib/titleDigIn.js";
 
 function renderBulkConfirmActions(message, handlers, showTokenConfirm, viewportBlock) {
   const { radarr, sonarr, seerr } = collectAddableFromMessage(message, {
@@ -100,8 +101,15 @@ function enrichTitleCard(item, reviewLookup = {}) {
 }
 
 function renderBlock(block, handlers, role, message, blockIndex, blocks, streaming) {
+  const titleRefs = handlers.titleRefs || titleRefsFromBlocks(blocks);
   if (block.type === "text") {
-    return <MessageText content={block.content} markdown={role === "assistant"} />;
+    return (
+      <MessageText
+        content={block.content}
+        markdown={role === "assistant"}
+        titleRefs={titleRefs}
+      />
+    );
   }
   if (block.type === "error") {
     return <MessageText content={block.content} className="message-text message-error-text" />;
@@ -327,6 +335,7 @@ export default function ChatThread({
                       multiUserEnabled,
                       draggableToDock,
                       onSuggestedReply,
+                      titleRefs: titleRefsFromBlocks(message.blocks),
                     },
                     message.role,
                     message,

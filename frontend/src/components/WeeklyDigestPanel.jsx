@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { generateWeeklyDigest, getWeeklyDigest } from "../api/client";
+import TitleDetailLink from "./TitleDetailLink";
+import { titleDetailPath } from "../lib/titleLinks.js";
 import { formatDigestTitle, normalizeWeeklyDigest } from "../lib/weeklyDigest.js";
 
 /** Owner "This week in your library" in-app digest (no email required). */
@@ -91,14 +93,32 @@ export default function WeeklyDigestPanel() {
             <>
               <p className="weekly-digest-meta">New additions</p>
               <ul className="weekly-digest-titles">
-                {model.newTitles.map((item, index) => (
-                  <li
-                    key={`${item.title}-${index}`}
-                    className="weekly-digest-title-chip"
-                  >
-                    {formatDigestTitle(item)}
-                  </li>
-                ))}
+                {model.newTitles.map((item, index) => {
+                  const label = formatDigestTitle(item);
+                  const digIn = titleDetailPath(item);
+                  return (
+                    <li
+                      key={`${item.title}-${item.tmdb_id || item.rating_key || index}`}
+                      className="weekly-digest-title-chip"
+                    >
+                      {digIn ? (
+                        <TitleDetailLink item={item} className="weekly-digest-title-link">
+                          {item.poster_url ? (
+                            <img
+                              className="weekly-digest-title-poster"
+                              src={item.poster_url}
+                              alt=""
+                              loading="lazy"
+                            />
+                          ) : null}
+                          <span>{label}</span>
+                        </TitleDetailLink>
+                      ) : (
+                        label
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </>
           ) : null}

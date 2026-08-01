@@ -4,6 +4,8 @@ import {
   starFillForValue,
   starValueFromKey,
 } from "../lib/starRating.js";
+import { titleDetailPath } from "../lib/titleLinks.js";
+import TitleDetailLink from "./TitleDetailLink";
 
 const DEFAULT_NEAR_COMPLETE_TEMPLATE =
   "{curator_name} noticed you're {pct}% through **{title}**. Quick rating while it's fresh?";
@@ -188,6 +190,17 @@ export default function ReviewPromptCard({
     }
   }
 
+  const digInItem = {
+    title: prompt.title,
+    media_type: prompt.media_type,
+    tmdb_id: prompt.tmdb_id,
+    tvdb_id: prompt.tvdb_id,
+    rating_key: prompt.rating_key || prompt.plex_rating_key,
+    in_library: true,
+  };
+  const digInPath = titleDetailPath(digInItem);
+  const titleLabel = prompt.title || "Untitled";
+
   if (saved) {
     return (
       <div
@@ -195,7 +208,14 @@ export default function ReviewPromptCard({
         data-testid="review-prompt-card"
       >
         <p className="review-prompt-lead">
-          {prompt.title} — {formatStarsLabel(stars)}★ saved
+          {digInPath ? (
+            <TitleDetailLink item={digInItem} className="review-prompt-title-link">
+              {titleLabel}
+            </TitleDetailLink>
+          ) : (
+            titleLabel
+          )}{" "}
+          — {formatStarsLabel(stars)}★ saved
         </p>
       </div>
     );
@@ -207,10 +227,28 @@ export default function ReviewPromptCard({
       data-testid="review-prompt-card"
     >
       {compact && prompt.poster_url ? (
-        <img className="review-prompt-poster" src={prompt.poster_url} alt="" loading="lazy" />
+        digInPath ? (
+          <TitleDetailLink
+            item={digInItem}
+            className="review-prompt-poster-link"
+            aria-label={`Open details for ${titleLabel}`}
+          >
+            <img className="review-prompt-poster" src={prompt.poster_url} alt="" loading="lazy" />
+          </TitleDetailLink>
+        ) : (
+          <img className="review-prompt-poster" src={prompt.poster_url} alt="" loading="lazy" />
+        )
       ) : null}
       <div className="review-prompt-body">
-        <p className="review-prompt-lead">{lead}</p>
+        <p className="review-prompt-lead">
+          {compact && digInPath ? (
+            <TitleDetailLink item={digInItem} className="review-prompt-title-link">
+              {lead}
+            </TitleDetailLink>
+          ) : (
+            lead
+          )}
+        </p>
         <StarRatingPicker
           value={stars}
           onChange={setStars}

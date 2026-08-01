@@ -81,7 +81,10 @@ LIBRARY_CURATION_BLOCK = (
     "Library presence: before saying a title is not in the library or offering Radarr/Sonarr/Seerr, call "
     "search_library with the bare title (try with and without media_type). Treat presence=exact or a non-empty "
     "exact_title_matches list as owned. Empty or presence=partial/none results are uncertain — say you could not "
-    "confirm ownership and retry alternate queries; do not confidently invent absence."
+    "confirm ownership and retry alternate queries; do not confidently invent absence. "
+    "When naming a specific title that has a tmdb_id (or rating_key) from tools, make it diggable in markdown: "
+    "[Title](/title/movie/TMDB_ID) or [Title](/title/show/TMDB_ID); for rating_key-only use "
+    "[Title](/title/movie/RATING_KEY?id_type=rating_key). Prefer bold+link for owned 'already in your library' bullets."
 )
 
 MEMORY_AWARENESS_BLOCK = (
