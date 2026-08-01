@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.29.43] — 2026-08-01
+
+Mood/theme library searches still get a poster rail; only title-shaped queries fail closed on fuzzy noise.
+
+### Highlights
+- **Theme browse still works.** Asking for “robots” or “noir” still shows library cards — while *Buckaroo Banzai*-style title checks stay exact-only.
+
+### Fixed
+- `search_library` rail attachment: Title Case / year-pinned queries without an exact hit attach no cards; lowercase mood/keyword queries keep their result rail (Youth ceiling filtering unchanged).
+
+### Verification
+- `pytest` youth search_library + partial-hits rail gates — passed.
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.43**.
+
 ## [1.29.42] — 2026-08-01
 
 TV show detail finally lists seasons and episodes, owners can remove a season or episode from disk, full-remove summaries stop claiming dishonest **0 B** when *arr only knew the folder, posters and title detail offer **Chat about this**, and chat library checks stop dumping fuzzy “Adventures of…” junk onto the rail.

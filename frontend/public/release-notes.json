@@ -1,6 +1,29 @@
 {
-  "generated_at": "2026-08-01T20:54:22Z",
+  "generated_at": "2026-08-01T20:57:34Z",
   "releases": [
+    {
+      "version": "1.29.43",
+      "date": "2026-08-01",
+      "summary": "Mood/theme library searches still get a poster rail; only title-shaped queries fail closed on fuzzy noise.",
+      "highlights": [
+        "**Theme browse still works.** Asking for “robots” or “noir” still shows library cards — while *Buckaroo Banzai*-style title checks stay exact-only."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`search_library` rail attachment: Title Case / year-pinned queries without an exact hit attach no cards; lowercase mood/keyword queries keep their result rail (Youth ceiling filtering unchanged)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`pytest` youth search_library + partial-hits rail gates — passed.",
+            "`.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.43**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.29.42",
       "date": "2026-08-01",

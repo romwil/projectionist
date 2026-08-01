@@ -605,18 +605,31 @@ class ToolRegistry:
                 media_type=args.get("media_type"),
             )
         )
-        exact = exact_title_cards(cards, query) if query.strip() else []
+        cleaned = " ".join(query.split())
+        exact = exact_title_cards(cards, cleaned) if cleaned else []
+        words = cleaned.split()
+        # Title-shaped queries (Title Case / year pin) vs lowercase mood browse.
+        title_like = bool(cleaned) and (
+            bool(re.search(r"\(\d{4}\)", cleaned))
+            or (len(words) >= 2 and sum(1 for w in words if w[:1].isupper()) >= 2)
+            or (len(words) == 1 and words[0][:1].isupper() and len(words[0]) > 3)
+        )
         if exact:
             presence = "exact"
-            # Only exact hits become turnstyle cards — fuzzy "Adventures of…"
-            # noise must not fill the rail while prose names different titles.
+            # Exact hits only — never mix in fuzzy remainder for title checks.
             display_cards = exact
-        elif cards:
+        elif not cards:
+            presence = "none"
+            display_cards = []
+        elif title_like:
+            # Title-shaped query with no exact hit (e.g. Buckaroo Banzai) — keep JSON
+            # for the agent but do not fill the rail with Adventures of… noise.
             presence = "partial"
             display_cards = []
         else:
-            presence = "none"
-            display_cards = []
+            # Theme / mood / keyword browse ("robots", "noir") — cards are the point.
+            presence = "partial"
+            display_cards = cards
         self._cards.extend(display_cards)
         items = [_card_to_tool_item(c) for c in (display_cards or cards[:8])]
         return json.dumps(
@@ -629,8 +642,8 @@ class ToolRegistry:
                 "exact_title_matches": [_card_to_tool_item(c) for c in exact],
                 "items": items,
                 "note": (
-                    "presence=exact means owned. presence=partial is uncertain fuzzy noise — "
-                    "do not claim ownership and do not invent missing-title cards from it. "
+                    "presence=exact means owned. presence=partial for a title-like query is "
+                    "uncertain — do not claim ownership or show those fuzzy hits as the rail. "
                     "presence=none means no library hit; use search_tmdb with title+year for gaps."
                 ),
             }
