@@ -11,7 +11,7 @@ import {
 } from "../api/client";
 import { useAuthGate } from "./UserMenu";
 import ReportMediaIssueModal from "./ReportMediaIssueModal";
-import { recommendLikeHref } from "../lib/backNav.js";
+import { chatAboutTitleHref, recommendLikeHref } from "../lib/backNav.js";
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 import { posterWatchAction, watchedStatePatch } from "../lib/posterWatchAction.js";
 
@@ -154,6 +154,7 @@ export default function PosterActionMenu({
       </div> : null}
       {onRecommend && multiUserEnabled ? <button type="button" onClick={() => { onRecommend(item); setOpen(false); }}>Recommend</button> : null}
       {item?.title ? <Link to={recommendLikeHref(item)} onClick={() => setOpen(false)}>Recommend like this in chat</Link> : null}
+      {item?.title ? <Link to={chatAboutTitleHref(item)} onClick={() => setOpen(false)}>Chat about this</Link> : null}
       {onSeed ? <button type="button" onClick={() => { onSeed(item); setOpen(false); }}>More like this</button> : null}
       {motifWhy ? <button type="button" onClick={() => { flashStatus(motifWhy.summary || "This title matches the current context."); }}>Why this?</button> : null}
       <button type="button" onClick={() => setReportOpen(true)}>Report issue…</button>

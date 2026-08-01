@@ -261,18 +261,28 @@ export function buildRailChatPrompt({ railTitle, items, focusTitle = "", focusWh
     const match =
       list.find((item) => String(item.title).toLowerCase() === focus.toLowerCase()) || null;
     const why = trimStr(focusWhy || match?.why || match?.recommendation_reason, 280);
+    const discussOnly = /^let'?s discuss(\s+this)?\.?$/i.test(why);
     const idBits = [];
     if (match?.id != null) idBits.push(`library_id=${match.id}`);
     if (match?.rating_key) idBits.push(`rating_key=${match.rating_key}`);
+    if (match?.tmdb_id != null) idBits.push(`tmdb_id=${match.tmdb_id}`);
     if (match?.year) idBits.push(String(match.year));
     if (match?.media_type) idBits.push(String(match.media_type));
     const idBit = idBits.length ? ` (${idBits.join(", ")})` : "";
-    const whyBit = why ? ` The curator said: "${why}"` : "";
+    const whyBit = why && !discussOnly ? ` The curator said: "${why}"` : "";
+    const fromPicks =
+      title.toLowerCase() !== focus.toLowerCase() ? ` from my "${title}" picks` : "";
+    const hasLibraryIdentity = match?.id != null || Boolean(match?.rating_key);
+    const lookupBit = hasLibraryIdentity
+      ? `This title is already in my library — look it up with search_library / query_library ` +
+        `using the library id or rating_key (or exact title + year). Do not search TMDB or show Add/Radarr cards for it. `
+      : `Prefer search_library / query_library when this title is in my collection; otherwise discuss it using the identity above. `;
+    const whyInstruction = why && !discussOnly ? `Use the curator why as recommendation_reason. ` : "";
     return (
-      `Let's talk about "${focus}"${idBit} from my "${title}" picks.${whyBit} ` +
-      `This title is already in my library — look it up with search_library / query_library ` +
-      `using the library id or rating_key (or exact title + year). Do not search TMDB or show Add/Radarr cards for it. ` +
-      `Use the curator why as recommendation_reason. What should I know, and what else fits that vibe in my library?`
+      `Let's discuss "${focus}"${idBit}${fromPicks}.${whyBit} ` +
+      lookupBit +
+      whyInstruction +
+      `What should I know, and what else fits that vibe${hasLibraryIdentity ? " in my library" : ""}?`
     );
   }
 

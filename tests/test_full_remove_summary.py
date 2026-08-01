@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 from projectionist.library.full_remove import (
     aggregate_removal_totals,
+    apply_library_bytes_fallback,
     infer_removed_folders,
     snapshot_radarr_movie,
     snapshot_sonarr_series,
@@ -87,6 +88,34 @@ class SnapshotTests(unittest.TestCase):
         self.assertIn("/tv/The Expanse/Season 01", snap["folders"])
         self.assertEqual(snap["bytes_freed"], 9_000)
 
+    def test_sonarr_uses_relative_path_when_absolute_missing(self) -> None:
+        snap = snapshot_sonarr_series(
+            {"path": "/tv/Hollywood Squares (2025)", "statistics": {"sizeOnDisk": 0}},
+            [
+                {
+                    "relativePath": "Season 01/S01E01.mkv",
+                    "size": 1_000,
+                }
+            ],
+        )
+        self.assertEqual(
+            snap["files"],
+            ["/tv/Hollywood Squares (2025)/Season 01/S01E01.mkv"],
+        )
+        self.assertEqual(snap["bytes_freed"], 1_000)
+
+    def test_sonarr_folder_only_gets_library_estimate(self) -> None:
+        snap = snapshot_sonarr_series(
+            {"path": "/tv/Hollywood Squares (2025)", "statistics": {"sizeOnDisk": 0}},
+            [],
+        )
+        enriched = apply_library_bytes_fallback(snap, library_bytes=24_100_000_000)
+        self.assertEqual(enriched["folders"], ["/tv/Hollywood Squares (2025)"])
+        self.assertEqual(enriched["files"], [])
+        self.assertEqual(enriched["bytes_freed"], 24_100_000_000)
+        self.assertEqual(enriched["bytes_source"], "library_estimate")
+        self.assertIn("no episode", enriched["note"].lower())
+
 
 class AggregateTotalsTests(unittest.TestCase):
     def test_sums_per_title_fields(self) -> None:
@@ -126,6 +155,7 @@ class FullRemoveApiShapeTests(unittest.TestCase):
             "title": "Dune",
             "media_type": "movie",
             "tmdb_id": 438631,
+            "file_size": 2000,
         }
         db.delete_library_items_by_rating_keys.return_value = 1
         settings = MagicMock()

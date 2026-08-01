@@ -73,6 +73,8 @@ class TitleDetail(TitleCard):
     file_size_bytes: int = 0
     last_viewed_at: Optional[int] = None
     arr_id: Optional[int] = None
+    # Stable SQLite library_items.id for season/episode APIs (not the URL TMDB id).
+    library_item_id: Optional[int] = None
     purge_score: Optional[float] = None
     purge_reason: str = ""
     trailer_youtube_key: str = ""

@@ -103,9 +103,43 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             payload = json.loads(result)
             self.assertEqual(payload["total_matched"], 1)
             self.assertEqual(payload["returned"], 1)
+            self.assertEqual(payload["presence"], "exact")
+            self.assertEqual(len(payload["exact_title_matches"]), 1)
             self.assertFalse(payload["has_more"])
             self.assertEqual(payload["items"][0]["title"], "Blade Runner")
             self.assertEqual(registry.cards[0].title, "Blade Runner")
+
+    async def test_search_library_partial_hits_do_not_attach_rail_cards(self) -> None:
+        """Fuzzy substring noise (e.g. Adventures of…) must not fill title cards."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            for idx, title in enumerate(
+                (
+                    "Adventures of Zatoichi",
+                    "The Adventures of Baron Munchausen",
+                    "The Adventures of Sherlock Holmes",
+                )
+            ):
+                db.upsert_library_item(
+                    {
+                        "rating_key": f"adv-{idx}",
+                        "media_type": "movie",
+                        "title": title,
+                        "year": 1960 + idx,
+                        "summary": "Adventure film",
+                        "genres": ["Adventure"],
+                    }
+                )
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            result = await registry.execute(
+                "search_library",
+                {"query": "Adventures of Buckaroo Banzai"},
+            )
+            payload = json.loads(result)
+            self.assertEqual(payload["presence"], "partial")
+            self.assertEqual(payload["exact_title_matches"], [])
+            self.assertEqual(registry.cards, [])
+            self.assertGreater(payload["total_matched"], 0)
 
     def test_tool_definitions_include_library_query_tools(self) -> None:
         names = {tool["function"]["name"] for tool in TOOL_DEFINITIONS}

@@ -1254,6 +1254,30 @@ export async function getTvProgress() {
   return api("/library/tv/progress");
 }
 
+/** Seasons + nested episodes for a library show (title detail). */
+export async function getShowSeasons({
+  showId = null,
+  tmdbId = null,
+  tvdbId = null,
+  show = "",
+} = {}) {
+  const params = new URLSearchParams();
+  if (showId != null && showId !== "") params.set("show_id", String(showId));
+  if (tmdbId != null && tmdbId !== "") params.set("tmdb_id", String(tmdbId));
+  if (tvdbId != null && tvdbId !== "") params.set("tvdb_id", String(tvdbId));
+  if (show) params.set("show", String(show));
+  const qs = params.toString();
+  return api(`/library/tv/seasons${qs ? `?${qs}` : ""}`);
+}
+
+/** Owner season/episode remove via Sonarr episode files + Plex + index. */
+export async function removeTvScope(body) {
+  return api("/library/tv/remove", {
+    method: "POST",
+    body: JSON.stringify(body || {}),
+  });
+}
+
 export async function startLibrarySync() {
   return api("/library/sync", { method: "POST" });
 }

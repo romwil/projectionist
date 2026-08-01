@@ -2,6 +2,37 @@
 
 ## [Unreleased]
 
+## [1.29.42] — 2026-08-01
+
+TV show detail finally lists seasons and episodes, owners can remove a season or episode from disk, full-remove summaries stop claiming dishonest **0 B** when *arr only knew the folder, posters and title detail offer **Chat about this**, and chat library checks stop dumping fuzzy “Adventures of…” junk onto the rail.
+
+### Highlights
+- **See the seasons.** Open a TV show and browse season counts plus episode rows (code, runtime, size, watched).
+- **Delete what you mean.** Owners can remove a whole show, one season, or a single episode — always with typed `DELETE` confirm.
+- **Honest storage freed.** When Sonarr has a folder but no episode file list, the summary says so (or shows a library size estimate) instead of **0 B freed**.
+- **Chat about this.** Poster menu and title detail deep-link into Chat with a *Let’s discuss* opener and stable library ids (same rail-seed transport as Explore).
+- **Exact library cards only.** Searching for *Buckaroo Banzai* won’t fill the rail with every *Adventures of…* title you own — only true title matches get posters.
+
+### Added
+- `GET /api/library/tv/seasons` + title-detail `ShowSeasonsPanel`.
+- `POST /api/library/tv/remove` for owner season/episode scope (Sonarr episodefile delete → Plex metadata → index).
+- `TitleDetail.library_item_id` for stable season API lookups.
+- Sonarr client `episodes` / `delete_episode_file(s)`.
+- `chatAboutTitleHref` / `chatAboutTitleSeed` — **Chat about this** on posters and title detail.
+
+### Fixed
+- Full-remove snapshots join Sonarr `relativePath`, fall back to library `file_size`, and surface folder-only notes.
+- Removal summary UI labels estimated / unknown sizes instead of implying measured 0 B.
+- `search_library` returns `presence` / `exact_title_matches` as documented and attaches turnstyle cards only for exact hits (partial/none stay JSON-only for the agent).
+
+### Changed
+- HELP / DESIGN: seasons browse + scoped TV delete; honest *arr summary limits.
+
+### Verification
+- `.venv/bin/python -m pytest tests/test_full_remove_summary.py tests/test_tv_remove.py tests/test_library_episodes.py tests/test_agent_tools.py -k search_library --no-cov`
+- `cd frontend && node --test src/lib/showSeasons.test.mjs src/lib/bulkLibraryDelete.test.mjs src/lib/backNav.test.mjs src/lib/railChatSeed.test.mjs`
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.42**.
+
 ## [1.29.41] — 2026-08-01
 
 Curator chat rails stay honest, Explore On now lists every station, and the Explore hub drops the weekly For-you box so the page stays focused.

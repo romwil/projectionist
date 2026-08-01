@@ -12,7 +12,12 @@ from unittest.mock import patch
 
 from projectionist.connectors.plex import PlexEpisode, PlexLibraryItem, PlexSeason
 from projectionist.library.db import Database
-from projectionist.library.episodes import query_episodes, summarize_tv_progress, sync_tv_episodes
+from projectionist.library.episodes import (
+    query_episodes,
+    query_show_seasons,
+    summarize_tv_progress,
+    sync_tv_episodes,
+)
 
 
 @dataclass
@@ -87,6 +92,31 @@ class LibraryEpisodeTests(unittest.TestCase):
             result = query_episodes(db, show="Wire", unwatched_only=True)
             self.assertEqual(result["total_matched"], 1)
             self.assertEqual(result["items"][0]["title"], "The Detail")
+            self.assertEqual(result["items"][0]["rating_key"], "ep-2")
+
+    def test_query_show_seasons_groups_episodes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = self._seed_show_with_episodes(db)
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": "ep-s2",
+                    "season_number": 2,
+                    "episode_number": 1,
+                    "title": "Ebb Tide",
+                    "view_count": 0,
+                    "file_size": 500,
+                }
+            )
+            db.update_show_episode_rollups(show_id)
+            payload = query_show_seasons(db, show_id=show_id)
+            self.assertEqual(payload["total_seasons"], 2)
+            self.assertEqual(payload["total_episodes"], 3)
+            self.assertEqual(payload["seasons"][0]["season_number"], 1)
+            self.assertEqual(payload["seasons"][0]["episode_count"], 2)
+            self.assertEqual(payload["seasons"][1]["season_number"], 2)
+            self.assertEqual(payload["seasons"][1]["episodes"][0]["rating_key"], "ep-s2")
 
     def test_summarize_tv_progress(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

@@ -14,8 +14,10 @@ import {
   formatBulkDeletePreviewTitles,
   formatBulkLibraryDeleteResultMessage,
   formatRemovalBytes,
+  formatRemovalFreedLabel,
   hasRemovalSummary,
   normalizeRemovalSummary,
+  removalPathsNote,
   formatLibraryDeleteSuccessMessage,
   isBulkDeleteConfirmPhrase,
   libraryDeleteModeLabel,
@@ -194,6 +196,32 @@ describe("owner title-detail delete gating", () => {
     assert.equal(formatRemovalBytes(0), "0 B");
     assert.equal(formatRemovalBytes(2048), "2.0 KB");
     assert.equal(
+      formatRemovalFreedLabel({
+        bytes_freed: 0,
+        bytes_source: "unknown",
+        files: [],
+        folders: ["/tv/Show"],
+      }),
+      "Size unknown",
+    );
+    assert.equal(
+      formatRemovalFreedLabel({
+        bytes_freed: 1024 ** 3,
+        bytes_source: "library_estimate",
+        files: [],
+        folders: ["/tv/Show"],
+      }),
+      "~1.00 GB (est.)",
+    );
+    assert.match(
+      removalPathsNote({
+        files: [],
+        folders: ["/tv/Show"],
+        note: "",
+      }),
+      /no episode file list/i,
+    );
+    assert.equal(
       hasRemovalSummary({
         mode: LIBRARY_DELETE_MODE_FULL,
         results: [{ title: "Dune", files: ["/a.mkv"], folders: ["/a"], bytes_freed: 10 }],
@@ -208,7 +236,7 @@ describe("owner title-detail delete gating", () => {
         deleted: 1,
         results: [{ title: "Dune", files: ["/a.mkv"], folders: ["/a"], bytes_freed: 10 }],
       }).totals,
-      { files: 1, folders: 1, bytes_freed: 10 },
+      { files: 1, folders: 1, bytes_freed: 10, bytes_source: "unknown" },
     );
     assert.deepEqual(
       normalizeRemovalSummary({
@@ -224,7 +252,7 @@ describe("owner title-detail delete gating", () => {
         ],
         totals: { files: 0, folders: 0, bytes_freed: 0 },
       }).totals,
-      { files: 0, folders: 0, bytes_freed: 0 },
+      { files: 0, folders: 0, bytes_freed: 0, bytes_source: "unknown" },
       "API totals of 0 must not fall back to recalculating from results",
     );
     assert.equal(

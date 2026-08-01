@@ -65,6 +65,30 @@ describe("railChatSeed", () => {
     assert.match(prompt, /Do NOT search TMDB/);
   });
 
+  it("builds a single-title discuss prompt without repeating the discuss why", () => {
+    const prompt = buildRailChatPrompt({
+      railTitle: "Heat",
+      items: [
+        {
+          id: 7,
+          title: "Heat",
+          year: 1995,
+          media_type: "movie",
+          rating_key: "rk-heat",
+          tmdb_id: 949,
+          why: "Let's discuss this",
+        },
+      ],
+      focusTitle: "Heat",
+      focusWhy: "Let's discuss this",
+    });
+    assert.match(prompt, /^Let's discuss "Heat"/);
+    assert.match(prompt, /library_id=7/);
+    assert.match(prompt, /tmdb_id=949/);
+    assert.doesNotMatch(prompt, /from my "Heat" picks/);
+    assert.doesNotMatch(prompt, /The curator said/);
+  });
+
   it("merges seed cards over external Add posters", () => {
     const seed = railItemsToTitleCards([
       {

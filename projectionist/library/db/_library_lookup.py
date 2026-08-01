@@ -495,6 +495,73 @@ class LibraryLookupMixin:
         with self.connect() as conn:
             conn.execute("DELETE FROM library_episodes WHERE show_item_id = ?", (show_item_id,))
 
+    def delete_episodes_for_season(self, show_item_id: int, season_number: int) -> int:
+        """Delete indexed episodes for one season and refresh show rollups."""
+
+        def _write() -> int:
+            with self.connect() as conn:
+                cursor = conn.execute(
+                    """
+                    DELETE FROM library_episodes
+                    WHERE show_item_id = ? AND season_number = ?
+                    """,
+                    (int(show_item_id), int(season_number)),
+                )
+                removed = int(cursor.rowcount or 0)
+                self._update_show_episode_rollups_on_conn(conn, int(show_item_id))
+                return removed
+
+        return self.run_write(_write, label="delete_episodes_for_season")
+
+    def delete_episode_by_rating_key(self, show_item_id: int, rating_key: str) -> int:
+        """Delete one indexed episode by Plex rating_key and refresh show rollups."""
+        key = str(rating_key or "").strip()
+        if not key:
+            return 0
+
+        def _write() -> int:
+            with self.connect() as conn:
+                cursor = conn.execute(
+                    """
+                    DELETE FROM library_episodes
+                    WHERE show_item_id = ? AND rating_key = ?
+                    """,
+                    (int(show_item_id), key),
+                )
+                removed = int(cursor.rowcount or 0)
+                if removed:
+                    self._update_show_episode_rollups_on_conn(conn, int(show_item_id))
+                return removed
+
+        return self.run_write(_write, label="delete_episode_by_rating_key")
+
+    def library_episodes_for_show(
+        self,
+        show_item_id: int,
+        *,
+        season_number: Optional[int] = None,
+        rating_key: Optional[str] = None,
+    ) -> List[sqlite3.Row]:
+        clauses = ["show_item_id = ?"]
+        params: List[Any] = [int(show_item_id)]
+        if season_number is not None:
+            clauses.append("season_number = ?")
+            params.append(int(season_number))
+        if rating_key is not None:
+            clauses.append("rating_key = ?")
+            params.append(str(rating_key).strip())
+        with self.connect() as conn:
+            return list(
+                conn.execute(
+                    f"""
+                    SELECT * FROM library_episodes
+                    WHERE {' AND '.join(clauses)}
+                    ORDER BY season_number ASC, episode_number ASC
+                    """,
+                    params,
+                ).fetchall()
+            )
+
     def upsert_library_episode(self, episode: Mapping[str, Any]) -> int:
         with self.connect() as conn:
             conn.execute(self._UPSERT_LIBRARY_EPISODE_SQL, self._library_episode_params(episode))

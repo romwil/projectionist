@@ -1695,3 +1695,22 @@ a.explore-cinema-card-link:focus-visible h3 {
   }
 }
 
+
+/* Show seasons / episodes on title detail */
+.show-seasons-panel { display: grid; gap: var(--space-3); }
+.show-seasons-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
+.show-seasons-summary { color: var(--muted); font-size: var(--text-sm); margin: 0; }
+.show-seasons-list { display: grid; gap: var(--space-2); }
+.show-season-details { border-top: 1px solid var(--border-subtle); padding: var(--space-2) 0; }
+.show-season-summary-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); cursor: pointer; list-style: none; }
+.show-season-summary-row::-webkit-details-marker { display: none; }
+.show-season-title { font-weight: 600; }
+.show-season-meta { color: var(--muted); font-size: var(--text-sm); }
+.show-season-remove, .show-episode-remove, .show-seasons-show-delete { font-size: var(--text-xs); }
+.show-episode-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; gap: var(--space-2); }
+.show-episode-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); padding: var(--space-1) 0; }
+.show-episode-main { display: flex; flex-wrap: wrap; gap: var(--space-2); min-width: 0; }
+.show-episode-code { font-variant-numeric: tabular-nums; color: var(--muted); font-size: var(--text-sm); }
+.show-episode-title { min-width: 0; }
+.show-episode-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); color: var(--muted); font-size: var(--text-sm); }
+.show-seasons-panel.is-compact .show-episode-meta { gap: var(--space-1); }
