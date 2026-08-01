@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-01T20:46:47Z",
+  "generated_at": "2026-08-01T20:47:06Z",
   "releases": [
     {
       "version": "1.29.41",
@@ -32,8 +32,11 @@
         {
           "title": "Verification",
           "bullets": [
-            "Focused: `pytest` agent TMDB + SSE separator/status helpers; `node --test src/lib/onNow.test.mjs`.",
-            "Full suite recorded after ship gates below."
+            "`.venv/bin/python -m pytest tests/` — 1592 passed, 6 skipped (coverage 75.8% ≥ 74%).",
+            "`cd frontend && npm run test:unit` — 546 passed.",
+            "`cd frontend && npm run lint` — 0 errors (pre-existing warnings OK).",
+            "`cd frontend && npm run build` — passed.",
+            "`.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.41**."
           ]
         }
       ]
