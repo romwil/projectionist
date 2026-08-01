@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.29.47] — 2026-08-01
+
+Live TV playhead stays on the wall-clock airing across Tunarr guide overlaps, and tune no longer yank a healthy next-title stream back into a past-EOF dead zone.
+
+### Highlights
+- **On now matches the guide.** When an ended movie’s Tunarr `stop` overruns the next start (Kung Fu: Samurai → Five Fingers), the OSD and EPG show the title that’s actually airing.
+- **Tune keeps the live edge.** Past-EOF repair skips startTime shifts when Tunarr padded the previous stop — so brief credits don’t die into a permanent “warming up” black screen.
+- **True stuck seeks still advance.** If now_playing is past file EOF without a padded stop, prepare still advances into the next lineup item (no mid-episode start-over thrash).
+
+### Fixed
+- `pick_now_and_next` prefers the latest `start` among overlapping airings instead of the first match.
+- Guide/on-now ignores `now_playing` past content `duration` (padded `stop` still in the future).
+- `prepare_channels_for_playback(align_playhead=False)` skips past-EOF startTime mutation when `stop` is padded past file end; real past-EOF advances land just after file end.
+
+### Verification
+- Focused: `OnNowGuideTests` overlap/past-EOF + `PlayheadAlignAndWarmTests` — passed.
+- `.venv/bin/python -m pytest tests/test_version.py --no-cov` — lockstep **1.29.47**.
+- Automat LAN (`http://10.10.1.202:8788`): channel 104 OSD at live edge; Watch plays past program boundaries.
+
 ## [1.29.46] — 2026-08-01
 
 Specific titles dig in everywhere — click the name or the poster and the detail modal opens without leaving chat, inbox, or the digest.
