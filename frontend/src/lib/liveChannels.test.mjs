@@ -9,8 +9,10 @@ import {
   liveStreamUrl,
   liveWatchHref,
   normalizeGuide,
+  OSD_IDLE_MS,
   popoutHandoff,
   programCellStyle,
+  shouldBumpOsdFromPointerMove,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "./liveChannels.js";
@@ -33,6 +35,22 @@ describe("liveChannels helpers", () => {
     assert.equal(isLivePlayerChromeTarget(button), true);
     assert.equal(isLivePlayerChromeTarget(video), false);
     assert.equal(isLivePlayerChromeTarget(null), false);
+  });
+
+  it("ignores zero-delta pointer moves so OSD can auto-hide", () => {
+    assert.ok(OSD_IDLE_MS >= 2000);
+    const first = shouldBumpOsdFromPointerMove(null, { clientX: 120, clientY: 80 });
+    assert.equal(first.bump, true);
+    assert.deepEqual(first.pos, { x: 120, y: 80 });
+
+    // Same coords as when an overlay vanishes under a still cursor.
+    const stuck = shouldBumpOsdFromPointerMove(first.pos, { clientX: 120, clientY: 80 });
+    assert.equal(stuck.bump, false);
+    assert.deepEqual(stuck.pos, { x: 120, y: 80 });
+
+    const moved = shouldBumpOsdFromPointerMove(stuck.pos, { clientX: 121, clientY: 80 });
+    assert.equal(moved.bump, true);
+    assert.deepEqual(moved.pos, { x: 121, y: 80 });
   });
 
   it("toggles live playback and muted-first autoplay recovery", async () => {
@@ -93,6 +111,35 @@ describe("liveChannels helpers", () => {
     assert.equal(osd.secondsElapsed, 600);
     assert.equal(osd.secondsRemaining, 3000);
     assert.ok(osd.percent > 0);
+  });
+
+  it("OSD keeps flex honest and surfaces next episode as Up next", () => {
+    const osd = buildOsdModel(
+      {
+        id: "59bc2df4-eca9-4ab8-9012-c42ffec358be",
+        number: 105,
+        name: "Gilligan's Island",
+        now: {
+          title: "Gilligan's Island · Up next",
+          episode_title: "The Big Gold Strike", // stolen label must not win
+          content_rating: "TV-G",
+          is_flex: true,
+          started_at: 1000,
+          ends_at: 2800,
+        },
+        next: {
+          title: "Gilligan's Island",
+          episode_title: "The Big Gold Strike",
+          start: 2800,
+        },
+      },
+      2000 * 1000,
+    );
+    assert.equal(osd.isFlex, true);
+    assert.equal(osd.title, "Gilligan's Island · Up next");
+    assert.equal(osd.episode, "Up next: The Big Gold Strike");
+    assert.equal(osd.rating, "");
+    assert.equal(osd.nextTitle, "Gilligan's Island");
   });
 
   it("normalizes guide rows with programs", () => {

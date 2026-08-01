@@ -7,11 +7,11 @@ import {
   formatWallTime,
   isLivePlayerChromeTarget,
   liveStreamUrl,
+  OSD_IDLE_MS,
+  shouldBumpOsdFromPointerMove,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
 } from "../../lib/liveChannels.js";
-
-const OSD_IDLE_MS = 3500;
 
 function formatHlsError(data) {
   const detail = String(data?.details || "Stream error");
@@ -49,6 +49,7 @@ export default function LivePlayer({
   const rootRef = useRef(null);
   const hlsRef = useRef(null);
   const idleTimerRef = useRef(null);
+  const pointerPosRef = useRef(null);
   const [osdVisible, setOsdVisible] = useState(true);
   const [osdTick, setOsdTick] = useState(Date.now());
   const [status, setStatus] = useState("idle");
@@ -65,6 +66,12 @@ export default function LivePlayer({
     setOsdVisible(true);
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     idleTimerRef.current = setTimeout(() => setOsdVisible(false), OSD_IDLE_MS);
+  }
+
+  function onPointerActivity(event) {
+    const { bump, pos } = shouldBumpOsdFromPointerMove(pointerPosRef.current, event);
+    pointerPosRef.current = pos;
+    if (bump) bumpOsd();
   }
 
   useEffect(() => {
@@ -351,9 +358,9 @@ export default function LivePlayer({
       data-channel={channelId}
       data-status={status}
       tabIndex={0}
-      onMouseMove={bumpOsd}
+      onMouseMove={onPointerActivity}
       onFocus={bumpOsd}
-      onPointerDown={bumpOsd}
+      onPointerDown={onPointerActivity}
       onClick={onStageClick}
       onKeyDown={onKeyDown}
     >

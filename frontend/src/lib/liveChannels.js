@@ -49,6 +49,39 @@ export function isLivePlayerChromeTarget(target) {
   );
 }
 
+/** Idle delay before the cable-box OSD slides away (Watch + pop-out). */
+export const OSD_IDLE_MS = 3500;
+
+/**
+ * Whether a pointer/mouse move should reveal or keep the OSD visible.
+ *
+ * Browsers fire a zero-delta `mousemove` when an overlay disappears under a
+ * stationary cursor. Treating those as activity creates a hide↔show loop that
+ * leaves the detail pane stuck on screen — especially in the small `/live/watch`
+ * pop-out where the cursor often rests over the OSD.
+ *
+ * @param {{x: number, y: number}|null|undefined} prev
+ * @param {{clientX?: number, clientY?: number}|null|undefined} next
+ * @returns {{bump: boolean, pos: {x: number, y: number}|null}}
+ */
+export function shouldBumpOsdFromPointerMove(prev, next) {
+  const x = Number(next?.clientX);
+  const y = Number(next?.clientY);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return { bump: true, pos: prev || null };
+  }
+  if (
+    prev &&
+    Number.isFinite(prev.x) &&
+    Number.isFinite(prev.y) &&
+    prev.x === x &&
+    prev.y === y
+  ) {
+    return { bump: false, pos: prev };
+  }
+  return { bump: true, pos: { x, y } };
+}
+
 /**
  * Start playback with muted-first fallback (pop-out / Safari autoplay).
  * @param {HTMLMediaElement|null|undefined} video
@@ -136,16 +169,28 @@ export function buildOsdModel(channel, nowMs = Date.now()) {
   }
   const durationSeconds =
     start != null && end != null ? Math.max(0, Number(end) - Number(start)) : null;
+  const isFlex = Boolean(now?.is_flex);
+  const nextTitle = String(next?.title || "").trim();
+  const nextEpisode = String(next?.episode_title || "").trim();
+  // During Continuity/flex, never show a stolen content episode on "now" — the
+  // upcoming show belongs in Next (and optionally as an Up-next subtitle).
+  let title = String(now?.title || "").trim();
+  let episode = isFlex ? "" : String(now?.episode_title || "").trim();
+  if (isFlex && nextEpisode) {
+    episode = `Up next: ${nextEpisode}`;
+  } else if (isFlex && nextTitle && !title.toLowerCase().includes("up next")) {
+    episode = `Up next: ${nextTitle}`;
+  }
   return {
     id: String(channel.id || ""),
     number: channel.number == null ? null : Number(channel.number),
     name: String(channel.name || "Channel").trim() || "Channel",
     iconUrl: String(channel.icon_url || "").trim(),
-    title: String(now?.title || "").trim(),
-    episode: String(now?.episode_title || "").trim(),
-    rating: String(now?.content_rating || "").trim(),
-    isFlex: Boolean(now?.is_flex),
-    nextTitle: String(next?.title || "").trim(),
+    title,
+    episode,
+    rating: isFlex ? "" : String(now?.content_rating || "").trim(),
+    isFlex,
+    nextTitle,
     nextStart: next?.started_at ?? next?.start ?? null,
     secondsElapsed,
     secondsRemaining,

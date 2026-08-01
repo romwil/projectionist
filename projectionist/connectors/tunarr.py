@@ -599,6 +599,27 @@ class TunarrClient:
             out[str(key)] = [item for item in value if isinstance(item, Mapping)]
         return out
 
+    def stop_channel_sessions(self, channel_id: str) -> None:
+        """Stop HLS sessions for a channel (``DELETE /api/channels/{id}/sessions``).
+
+        Used after repairing a drifted ``startTime`` so the next warm rebuilds
+        against the live lineup instead of a stale Continuity/flex pipeline.
+        """
+        cid = str(channel_id or "").strip()
+        if not cid:
+            raise ValueError("channel_id is required")
+        try:
+            request_json(
+                self._api_url(f"/channels/{cid}/sessions"),
+                method="DELETE",
+                timeout=self.timeout,
+            )
+        except RuntimeError as error:
+            # Tunarr returns 404 when no session exists — that is success for us.
+            if "HTTP 404" in str(error):
+                return
+            raise
+
     def get_guide_status(self) -> Mapping[str, Any]:
         """Guide cache status (``GET /api/guide/status``)."""
         payload = request_json(self._api_url("/guide/status"), timeout=self.timeout)
