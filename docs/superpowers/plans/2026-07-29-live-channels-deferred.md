@@ -26,8 +26,8 @@ Statuses: `deferred` | `in_progress` | `blocked` | `done`
 ### Full newspaper EPG / remote in Projectionist
 
 - **Status:** `deferred`
-- **Why / note:** Spec locks watch surface to Plex Live TV; Projectionist only reads a guide snapshot for “on now,” never a full EPG product.
-- **Suggested next phase:** Post–Phase 3 delight (if ever); not v1.
+- **Why / note:** Spec locks dual-watch (Projectionist `/live` + Plex Live TV); Projectionist already ships Guide ↔ Watch gasp UX — richer newspaper EPG / remote chrome stays later. See also **2026-08-01 — Persona UX Phase 4 park**.
+- **Suggested next phase:** Post–persona UX Phase 1–2 polish (if ever); not a Phase 1 blocker.
 - **Owner surface:** household / product
 
 ### Daypart programming beyond shuffle / sequential
@@ -251,9 +251,9 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 
 #### HELP / CONFIGURATION / CHANGELOG Task 7 not fully shipped
 
-- **Status:** `deferred` (HELP + CHANGELOG) / `done` (CONFIGURATION)
-- **Why / note:** `CONFIGURATION.md` nest/flag/env is in. Owner HELP (enable flow, Plex attach, what Live Channels will not do) and CHANGELOG `### Highlights` are still open — plan Task 7 incomplete.
-- **Suggested next phase:** Same PR as shipping / release coupling (finish Task 7).
+- **Status:** `done` (CONFIGURATION + member/owner HELP dual-watch) / residual (CHANGELOG Highlights if not yet coupled to a release)
+- **Why / note:** `CONFIGURATION.md` nest/flag/env is in. Member HELP documents `/live` (Guide / Watch / pop-out / Plex dual-watch); owner Live Channels section stays under `## For owners` (moved before Related so members do not see Tunarr craft). CHANGELOG `### Highlights` still couples to the shipping release that bumps Live UX.
+- **Suggested next phase:** Release notes when Phase 1–2 Live UX ships.
 - **Owner surface:** docs
 
 #### Exact Tunarr 1.3.x pin + OpenAPI gap list tied to Automat Phase 0
@@ -320,3 +320,44 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 - **Why / note:** No first-class “lineup fill %” API. Closest signals are programming/lineup payloads and guide cache (`GET /guide/status` — lastUpdate / guideTimes / channelIds), which we surface on Admin status as `guide_status` but do not invent a fill percent from.
 - **Suggested next phase:** After richer program-ID publish; optional heuristic from programming length vs target window.
 - **Owner surface:** Admin / backend
+
+---
+
+## 2026-08-01 — Persona UX Phase 4 park (after Phase 1–2 polish)
+
+Parked from the persona UX build plan. **Do not schedule these until Phase 1 (Live chrome + Admin Live IA/glossary) and Phase 2 (member HELP/README + On now coherence) have shipped.** They are delight / residual — not blockers for dual-watch or household Live.
+
+### Newspaper EPG / remote chrome in Projectionist
+
+- **Status:** `deferred` (parked behind persona UX Phase 1–2)
+- **Why / note:** Richer newspaper EPG / remote chrome beyond the current Guide ↔ Watch gasp surface. Overlaps **Full newspaper EPG / remote in Projectionist** above; keep one product decision — Projectionist stays dual-watch with Plex, not a full EPG product replacement.
+- **Suggested next phase:** Post–Phase 1–2 UX polish / roadmap residual delight.
+- **Owner surface:** household `/live` / product
+
+### Member weekly-rail Live slot
+
+- **Status:** `deferred` (parked behind persona UX Phase 1–2)
+- **Why / note:** Put a Live / On now slot into the member **For you** weekly rail (or adjacent delight) so “something’s on” shows up in the weekly habit loop — not only Explore’s On now strip. Requires Phase 2 On now language + ready nudges to feel coherent first.
+- **Suggested next phase:** After Phase 2 On now / ready-nudge work.
+- **Owner surface:** Explore / weekly rail / household
+
+### Channel logo publish (end default Tunarr marks in Plex)
+
+- **Status:** `deferred` (parked behind persona UX Phase 1–2)
+- **Why / note:** LAN logo URL + per-station art landed **1.29.25**, but default Tunarr marks can still show in Plex when art is missing or not republished. Finish the path so household Live TV guide rows look like Projectionist stations, not stock Tunarr placeholders.
+- **Suggested next phase:** After Admin Live craft polish (Phase 1); craft/publish residual.
+- **Owner surface:** Admin Live Channels / publish / Plex guide
+
+### First-run `WIZARD_STEPS` Live integration
+
+- **Status:** `deferred` (parked behind persona UX Phase 1–2)
+- **Why / note:** Soft “Put your library on the air” CTA after libraries map is Phase 1 (P1-O4). Hard-gating Live into the 3-step first-run wizard (`WIZARD_STEPS`) stays optional and later — must not block first boot.
+- **Suggested next phase:** After Phase 1 soft CTA proves out; optional hard gate only if product wants it.
+- **Owner surface:** first-run wizard / Admin onboarding
+
+### Craft honesty edges (motif soft-caps messaging)
+
+- **Status:** `deferred` (parked behind persona UX Phase 1–2)
+- **Why / note:** Motif / taste / filtered craft may still sample under a soft cap (~30–80) while collection/show full-run fills up to 1000. Owners need plain-language honesty in craft UI (preview + post-publish) when the pool was soft-capped — not silent undersize vs full-run stations.
+- **Suggested next phase:** With Admin Live craft compression (Phase 1 residual) or a dedicated craft-honesty pass.
+- **Owner surface:** Admin Live Channels craft / publish feedback

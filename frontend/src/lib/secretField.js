@@ -10,7 +10,7 @@
 /** Placeholder when a secret is already saved (or set via env). */
 export function secretPlaceholder(settings, field, fallback = "") {
   if (settings?.[`${field}_source`] === "env") {
-    return "Configured via environment (.env)";
+    return "Set by the host environment";
   }
   if (settings?.[`${field}_set`]) {
     return "Configured (leave blank to keep)";

@@ -1,8 +1,8 @@
 # Help
 
-Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Inbox**, **My Journey**, **Plot Lab**, and — for owners — idle curation.
+Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Live**, **Inbox**, **My Journey**, **Plot Lab**, and — for owners — idle curation and Live Channels craft.
 
-New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Plot Lab, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
+New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Live (when stations are on the air), Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Plot Lab, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
 
 Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [Privacy](/privacy)
 
@@ -15,6 +15,7 @@ Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [P
 | Talk to your curator | [Chat](/chat) |
 | Search your collection (and beyond) | [Search](/search) |
 | Browse rails & Pulse | [Explore](/explore) |
+| Watch household Live TV | [Live](/live) (when the owner has stations on the air) |
 | Recommendations & notices | [Inbox](/inbox) |
 | Achievements & cinema pathways | [My Journey](/my-journey) |
 | Motif walls & surprising neighbors | [Plot Lab](/explore/plot-lab) |
@@ -79,6 +80,7 @@ Saved pages preserve the structured text, title cards, and reply chips. From the
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — in-progress titles from Plex On Deck (resume + Play), not a live "now playing" session list
+- **On now** — what's airing on household Live stations right now (when Live Channels is on). Tap a row or **Watch here** to open Projectionist Live; **Also in Plex Live TV** opens the same stations in Plex
 - **For you this week** — personalized unwatched picks with a short persona-voiced *why* (built on the weekly digest cadence). Tap **Why this?** on a card, or use **Chat about these** to discuss the same saved picks with those reasons attached.
 - **Recently Added** and **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
@@ -88,6 +90,23 @@ Saved pages preserve the structured text, title cards, and reply chips. From the
 **Chat about a rail.** Most Explore rails offer **Chat about these** — it opens a new conversation seeded with that rail's titles, stable library identities, and the persona *why* when present, so the curator discusses those same in-library picks (not outside search replacements).
 
 Those discovery rails only appear when your library has enough matching metadata, and their headings open the matching director or genre wall.
+
+### Live
+
+When the household owner turns **Live Channels** on and publishes stations, **[Live](/live)** appears in the top bar after Explore. It's cable-box TV from *your* library — the same stations you can also open in **Plex → Live TV**. Both are first-class; pick whichever fits the room.
+
+**Shortest path tonight**
+
+1. Open **[Explore](/explore)** and skim **On now**, or go straight to **[Live](/live)**.
+2. On Live, use **Guide** for the channel × time grid, or **Watch** to tune the selected station. Click a guide cell (or press Enter) to start watching.
+3. Prefer a dedicated TV window? Tap **Pop out** — Projectionist opens a watch-first window and leaves the original tab on the guide so you aren't running two streams of the same channel.
+4. Prefer living-room apps? Use **Also in Plex Live TV** (On now) or **Open in Plex Live TV** (Live chrome) — same stations, Plex clients.
+
+**While you watch.** Arrow keys change channels; Space / `K` pauses; `C` opens captions when available; `F` toggles fullscreen. Tap the video stage to pause or resume.
+
+> **Example:** Explore shows **101 · Chaos Night** with *Heat* at 45%. Tap **Watch here** → Live opens on that station mid-airing. Later on the couch, **Also in Plex Live TV** opens the same lineup in the Plex app — you didn't lose the channel.
+
+**How it works / honest limits.** Live only appears when stations are on the air. Youth mode may hide some stations by content rating. Guests see Live when the owner enabled it for the household — empty states invite you to ask the owner rather than dump Admin steps. Projectionist Live and Plex Live TV share the guide; neither replaces the other.
 
 ### For you weekly rail
 
@@ -601,25 +620,9 @@ Projectionist can expose your **indexed library** to external tools over MCP, ga
 
 Generate/rotate both in **Admin → Advanced** (or set the env vars); the keys must differ. Privacy mode never exposes `X-Plex-Token` media URLs, `rating_key`, or secrets. Details and the exposure model: [MCP.md](MCP.md) and [Privacy](/privacy).
 
----
-
-## Related documentation
-
-| Doc | Audience |
-|-----|----------|
-| [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) | Why / what / how of library knowledge |
-| [ONBOARDING.md](ONBOARDING.md) | First-run wizard & sync |
-| [WEB_UI.md](WEB_UI.md) | Routes & chat features |
-| [FAQ.md](FAQ.md) | Short Q&A |
-| [PRIVACY.md](PRIVACY.md) | What's stored, what leaves the box, export/purge |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | Scheduler & Explore APIs |
-| [DATA_MODEL.md](DATA_MODEL.md) | Tables & provenance |
-| [CONFIGURATION.md](CONFIGURATION.md) | Settings reference |
-| [DOCS_STYLE.md](DOCS_STYLE.md) | How these docs are written |
-
 ## Live Channels (owners)
 
-When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. You never need Tunarr’s own admin UI.
+When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. You never need Tunarr’s own admin UI. Household members watch in Projectionist **[Live](/live)** **and** Plex Live TV — both are first-class (see **Live** above for the member how-to).
 
 **Craft and publish (Admin → Live Channels):**
 1. Turn Live Channels on, run preflight, and start the broadcast engine (when Docker management is available).
@@ -636,4 +639,20 @@ When Live Channels is on, Projectionist can publish library-aware stations throu
 If you already have an OTA antenna / HDHomeRun DVR, keep it — Plex supports multiple tuners. On **Tuner Setup** select the discovered Tunarr device (use the Tunarr web port from Admin, e.g. `host:18765` — not a leftover M3U / old dizqueTV address) and enter any US ZIP so Next unlocks (gate only). The **EPG Location** dropdown is commercial lineups only — pick any temporary lineup so Plex finishes adding the tuner. Device Settings and DVR Settings do **not** offer an XMLTV paste field. After the tuner exists, click **Attach Tunarr guide in Plex** — Projectionist uses the PMS API to put Tunarr on its own XMLTV DVR and map channels, leaving your OTA commercial guide alone. Virtual stations use channel numbers from 100+. Watch in **Plex Live TV** or in Projectionist’s **/live** guide (when enabled) — both are first-class.
 
 **If play fails with “This live TV session has ended”:** Prefer **Plex Web** (`http://your-plex:32400/web`) over the Windows/Linux desktop app. Desktop clients often hit a known Direct Stream quirk ([Tunarr#718](https://github.com/chrisbenincasa/tunarr/issues/718)) — in that client, open Settings → Debug (or Video) and **disable Direct Stream**, then retry. Also confirm Admin attach used the Tunarr HTTP address (same port as the Admin copy URL), not a dead leftover tuner.
+
+---
+
+## Related documentation
+
+| Doc | Audience |
+|-----|----------|
+| [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) | Why / what / how of library knowledge |
+| [ONBOARDING.md](ONBOARDING.md) | First-run wizard & sync |
+| [WEB_UI.md](WEB_UI.md) | Routes & chat features |
+| [FAQ.md](FAQ.md) | Short Q&A |
+| [PRIVACY.md](PRIVACY.md) | What's stored, what leaves the box, export/purge |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Scheduler & Explore APIs |
+| [DATA_MODEL.md](DATA_MODEL.md) | Tables & provenance |
+| [CONFIGURATION.md](CONFIGURATION.md) | Settings reference |
+| [DOCS_STYLE.md](DOCS_STYLE.md) | How these docs are written |
 

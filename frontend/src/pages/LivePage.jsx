@@ -14,6 +14,7 @@ import {
   normalizeGuide,
   popoutHandoff,
 } from "../lib/liveChannels.js";
+import { liveUserEmptyCopy } from "../lib/liveChannelsCopy.js";
 import { plexLiveTvUrl } from "../lib/titleLinks.js";
 
 /**
@@ -159,30 +160,21 @@ export default function LivePage({ popout = false }) {
     );
   }
 
-  if (!featureOn) {
+  const empty = liveUserEmptyCopy({
+    featureOn,
+    featureReady,
+    guideReady: Boolean(guide?.ready),
+  });
+  if (empty) {
+    const ctaTo = empty.ctaTo === "admin" ? ROUTES.admin : ROUTES.chat;
     return (
       <div className="live-page live-page--empty" data-testid="live-page">
-        <div className="live-empty-card">
-          <p className="live-eyebrow">Live Channels</p>
-          <h1>Not on the air yet</h1>
-          <p>Ask the household owner to enable Live Channels in Admin.</p>
-          <Link to={ROUTES.chat} className="btn">
-            Back to chat
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  if (!featureReady && !guide?.ready) {
-    return (
-      <div className="live-page live-page--empty" data-testid="live-page">
-        <div className="live-empty-card">
-          <p className="live-eyebrow">Live Channels</p>
-          <h1>Broadcast engine warming</h1>
-          <p>Stations appear here once Tunarr is reachable and published.</p>
-          <Link to={ROUTES.admin} className="btn">
-            Open Admin
+        <div className="live-empty-card" data-testid={empty.testId}>
+          <p className="live-eyebrow">{empty.eyebrow}</p>
+          <h1>{empty.title}</h1>
+          <p>{empty.body}</p>
+          <Link to={ctaTo} className="btn">
+            {empty.ctaLabel}
           </Link>
         </div>
       </div>
@@ -227,7 +219,7 @@ export default function LivePage({ popout = false }) {
                 data-testid="live-mode-watch"
                 onClick={() => activeChannel && handleTune(activeChannel.id)}
               >
-                Watch
+                Watch here
               </button>
             </div>
           ) : (
@@ -252,27 +244,39 @@ export default function LivePage({ popout = false }) {
             </Link>
           )}
 
-          {!popout ? (
-            <button
-              type="button"
-              className="ghost"
-              data-testid="live-popout"
-              onClick={openPopout}
-              disabled={!activeChannel}
-            >
-              Pop out
-            </button>
-          ) : null}
+          <div className="live-chrome-secondary" role="group" aria-label="Also watch">
+            {!popout ? (
+              <button
+                type="button"
+                className="live-chrome-icon-btn"
+                data-testid="live-popout"
+                onClick={openPopout}
+                disabled={!activeChannel}
+                aria-label="Pop out TV window"
+                data-tooltip="Pop out"
+                title="Pop out"
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  open_in_new
+                </span>
+              </button>
+            ) : null}
 
-          <a
-            className="ghost live-chrome-link"
-            href={plexUrl}
-            target="_blank"
-            rel="noreferrer"
-            data-testid="live-plex-secondary"
-          >
-            Open in Plex Live TV
-          </a>
+            <a
+              className="live-chrome-icon-btn"
+              href={plexUrl}
+              target="_blank"
+              rel="noreferrer"
+              data-testid="live-plex-secondary"
+              aria-label="Also in Plex Live TV — same stations, living-room apps"
+              data-tooltip="Plex Live TV"
+              title="Also in Plex Live TV — same stations, living-room apps"
+            >
+              <span className="material-symbols-outlined" aria-hidden="true">
+                live_tv
+              </span>
+            </a>
+          </div>
         </div>
       </header>
 

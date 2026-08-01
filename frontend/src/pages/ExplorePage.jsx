@@ -369,7 +369,7 @@ export default function ExplorePage() {
       className="app-root explore-page"
       testId="explore-page"
       title="Explore"
-      eyebrow="Browse your cinema"
+      eyebrow="Your cinema"
     >
       <main className="explore-main">
         <form
@@ -400,7 +400,7 @@ export default function ExplorePage() {
             className="explore-hub-card"
             data-testid="explore-hub-browse-movies"
           >
-            <h2>Browse Movies</h2>
+            <h2>Movies</h2>
             <p>Page through every film with sort, filters, and columns</p>
           </Link>
           <Link
@@ -408,7 +408,7 @@ export default function ExplorePage() {
             className="explore-hub-card"
             data-testid="explore-hub-browse-tv"
           >
-            <h2>Browse TV</h2>
+            <h2>TV</h2>
             <p>Page through every series with sort, filters, and columns</p>
           </Link>
           <Link to={ROUTES.plotLab} className="explore-hub-card" data-testid="explore-hub-plot-lab">

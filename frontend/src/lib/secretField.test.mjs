@@ -11,7 +11,7 @@ describe("secretPlaceholder", () => {
   it("prefers env source copy", () => {
     assert.equal(
       secretPlaceholder({ llm_api_key_source: "env", llm_api_key_set: true }, "llm_api_key"),
-      "Configured via environment (.env)",
+      "Set by the host environment",
     );
   });
 

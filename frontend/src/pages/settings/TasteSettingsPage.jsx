@@ -130,8 +130,7 @@ export default function TasteSettingsPage() {
   return (
     <div className="settings-stack" data-testid="settings-taste">
       <SettingsPageHeader title="Taste">
-        Tune how strongly Projectionist leans on each cluster. Lock a weight so the weekly refresh cannot
-        drift it.
+        Tune what Projectionist leans toward. Lock a weight so the weekly refresh cannot drift it.
       </SettingsPageHeader>
 
       {error ? <p className="status status-error">{error}</p> : null}

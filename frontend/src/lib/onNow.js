@@ -122,7 +122,7 @@ export function normalizeOnNow(snapshot) {
     plexHint: String(
       snapshot.watch_hint ||
         snapshot.plex_hint ||
-        "Watch in Projectionist (/live) or open Plex → Live TV — both are first-class.",
+        "Watch here or in Plex Live TV — same stations, both first-class.",
     ),
     channels,
   };

@@ -3,19 +3,27 @@ import { describe, it } from "node:test";
 import { ROUTES } from "./backNav.js";
 import {
   ADMIN_NAV,
+  adminNavLinks,
   buildAdminDrawerItems,
   isAdminPath,
 } from "./adminNav.js";
 
 describe("adminNav", () => {
-  it("lists core admin sections including Issues, Logs, and Youth review", () => {
-    const ids = ADMIN_NAV.map((item) => item.id);
+  it("lists core admin sections including Issues, Logs, and Youth", () => {
+    const ids = adminNavLinks().map((item) => item.id);
     assert.ok(ids.includes("overview"));
     assert.ok(ids.includes("logs"));
     assert.ok(ids.includes("issues"));
     assert.ok(ids.includes("youth"));
-    assert.equal(ADMIN_NAV.find((item) => item.id === "issues")?.badge, "openIssues");
-    assert.equal(ADMIN_NAV.find((item) => item.id === "logs")?.to, "/admin/logs");
+    assert.equal(adminNavLinks().find((item) => item.id === "issues")?.badge, "openIssues");
+    assert.equal(adminNavLinks().find((item) => item.id === "logs")?.to, "/admin/logs");
+    assert.equal(adminNavLinks().find((item) => item.id === "tasks")?.label, "Tasks");
+    assert.equal(adminNavLinks().find((item) => item.id === "mail")?.label, "Mail");
+  });
+
+  it("groups the dense rail with Home / Household / Ops headings", () => {
+    const headings = ADMIN_NAV.filter((item) => item.kind === "heading").map((item) => item.label);
+    assert.deepEqual(headings, ["Home", "Household", "Ops"]);
   });
 
   it("detects /admin paths", () => {
@@ -27,12 +35,14 @@ describe("adminNav", () => {
     assert.equal(isAdminPath(""), false);
   });
 
-  it("builds drawer items with stable test ids", () => {
+  it("builds drawer items with stable test ids (including headings)", () => {
     const items = buildAdminDrawerItems();
     assert.equal(items.length, ADMIN_NAV.length);
-    assert.equal(items[0].kind, "admin");
-    assert.equal(items[0].id, "admin-overview");
-    assert.equal(items[0].testId, "app-nav-admin-overview");
+    assert.equal(items[0].kind, "heading");
+    assert.equal(items[0].id, "admin-heading-home");
+    const overview = items.find((item) => item.id === "admin-overview");
+    assert.equal(overview?.kind, "admin");
+    assert.equal(overview?.testId, "app-nav-admin-overview");
     assert.equal(items.find((item) => item.id === "admin-issues")?.badge, "openIssues");
   });
 });

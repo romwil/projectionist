@@ -66,7 +66,7 @@ export default function OnNowPanel({ compact = false }) {
           <h3 className="dash-panel-title">On now</h3>
           <p className="on-now-panel-meta">
             {model?.plexHint ||
-              "Watch in Projectionist or open Plex → Live TV — both are first-class."}
+              "Watch here or in Plex Live TV — same stations, both first-class."}
           </p>
         </div>
         <div className="on-now-cta-row">
@@ -75,7 +75,7 @@ export default function OnNowPanel({ compact = false }) {
             data-testid="on-now-watch-cta"
             to={liveWatchHref(firstChannelId)}
           >
-            Watch in Projectionist
+            Watch here
           </Link>
           <a
             className="ghost on-now-plex-cta"
@@ -84,7 +84,7 @@ export default function OnNowPanel({ compact = false }) {
             target="_blank"
             rel="noreferrer"
           >
-            Open in Plex Live TV
+            Also in Plex Live TV
           </a>
         </div>
       </div>
@@ -95,8 +95,8 @@ export default function OnNowPanel({ compact = false }) {
         <p className="status status-secondary">Checking the guide…</p>
       ) : showEmpty ? (
         <p className="dash-empty" data-testid="on-now-empty">
-          Live Channels is on, but nothing is airing yet. Once stations publish,
-          they’ll show up here.
+          Live is on, but nothing is airing yet. Once something’s on, it’ll show
+          up here.
         </p>
       ) : (
         <ul className="on-now-list" data-testid="on-now-list">

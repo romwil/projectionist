@@ -97,7 +97,7 @@ flowchart TB
 2. **Watch:** `/live` → Watch → HLS via `/api/live-channels/stream/…`. OSD + **C** for CC.  
 3. **Guide:** Guide ↔ Watch; ↑↓←→ + Enter; youth rating gate.  
 4. **Pop-out:** `/live/watch`; fluid resize; compact OSD under ~480px.  
-5. **On now:** **Watch in Projectionist** primary; **Open in Plex Live TV** secondary.  
+5. **On now:** **Watch here** primary; **Also in Plex Live TV** secondary (persona UX Phase 1–2 glossary).  
 
 ## Verify (craft — 1.29.30 / full-run + no Chaos — 1.29.31)
 
