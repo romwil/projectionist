@@ -128,12 +128,25 @@ def _cards_for_response(registry: ToolRegistry) -> List[TitleCard]:
         discussed = registry.discussed_cards
         if discussed:
             # Gap/recommendation tools explicitly identify the titles under discussion.
-            # Do not replace them with earlier library-inspection context cards.
-            cards = [
-                card
-                for card in discussed
-                if not card.in_library and not card.in_radarr and not card.in_sonarr
-            ]
+            # Keep actionable adds, plus shows that are true gaps but cannot be added
+            # yet (missing TVDB) so the UI can explain instead of silently omitting Add.
+            kept: List[TitleCard] = []
+            for card in discussed:
+                if card.in_library or card.in_radarr or card.in_sonarr:
+                    continue
+                if _actionable_recommendation_card(card, registry):
+                    kept.append(card)
+                    continue
+                if (
+                    card.media_type == "show"
+                    and card.tmdb_id
+                    and not card.tvdb_id
+                    and not uses_seerr_request_path(registry.settings, role=registry.user_role or "owner")
+                ):
+                    if not str(getattr(card, "add_blocked_reason", "") or "").strip():
+                        card.add_blocked_reason = "Can't add — no TVDB id yet"
+                    kept.append(card)
+            cards = kept
         else:
             # Compatibility for recommendation tools that have not yet been migrated
             # to the discussed-card channel.

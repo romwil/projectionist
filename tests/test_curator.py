@@ -301,6 +301,21 @@ class DisplayableCardsTests(unittest.TestCase):
             filtered = _cards_for_response(registry)
             self.assertEqual([card.title for card in filtered], ["Ready", "Film"])
 
+    def test_cards_for_response_keeps_discussed_show_without_tvdb_with_reason(self) -> None:
+        """Gap rails must explain why a TMDB-only show cannot be added to Sonarr."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            registry = ToolRegistry(db, Settings(), DEFAULT_LENS_ID)
+            registry._recommendation_context = True
+            registry._discussed_cards = [
+                TitleCard(media_type="show", title="Ready", tmdb_id=10, tvdb_id=20, year=2020),
+                TitleCard(media_type="show", title="No TVDB", tmdb_id=11, year=2023),
+            ]
+            filtered = _cards_for_response(registry)
+            self.assertEqual([card.title for card in filtered], ["Ready", "No TVDB"])
+            blocked = next(card for card in filtered if card.title == "No TVDB")
+            self.assertIn("TVDB", blocked.add_blocked_reason)
+
     def test_cards_for_response_prefers_discussed_missing_titles(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

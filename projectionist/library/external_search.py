@@ -125,10 +125,96 @@ def _tmdb_search_item_to_tool_item(item: Mapping[str, Any], media_type: str) -> 
         "in_library": False,
     }
     if media_type == "show":
-        external = item.get("external_ids") or {}
-        if external.get("tvdb_id"):
-            payload["tvdb_id"] = int(external["tvdb_id"])
+        tvdb_id = _external_tvdb_id(item)
+        if tvdb_id:
+            payload["tvdb_id"] = tvdb_id
+        else:
+            payload["add_blocked_reason"] = "Can't add — no TVDB id yet"
     return payload
+
+
+def _external_tvdb_id(item: Mapping[str, Any]) -> Optional[int]:
+    external = item.get("external_ids") or {}
+    if not isinstance(external, Mapping):
+        return None
+    raw = external.get("tvdb_id")
+    if raw is None or raw == "":
+        return None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def _sonarr_resolve_tvdb_id(
+    settings: Settings,
+    *,
+    title: str,
+    year: Optional[int],
+    tmdb_id: Optional[int],
+) -> Optional[int]:
+    """Best-effort TVDB id via Sonarr's TVDB-backed series lookup."""
+    if not str(getattr(settings, "sonarr_url", "") or "").strip():
+        return None
+    if not str(getattr(settings, "sonarr_api_key", "") or "").strip():
+        return None
+    cleaned = str(title or "").strip()
+    if not cleaned:
+        return None
+    try:
+        from projectionist.connectors.sonarr import SonarrClient
+
+        results = SonarrClient(settings.sonarr_url, settings.sonarr_api_key).lookup(cleaned)
+    except Exception:
+        return None
+    if not isinstance(results, list) or not results:
+        return None
+
+    def _tvdb(entry: Mapping[str, Any]) -> Optional[int]:
+        try:
+            value = int(entry.get("tvdbId") or 0)
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0 else None
+
+    # Prefer exact TMDB id match when Sonarr exposes it (AU remakes etc.).
+    if tmdb_id:
+        for entry in results:
+            if not isinstance(entry, Mapping):
+                continue
+            try:
+                entry_tmdb = int(entry.get("tmdbId") or 0)
+            except (TypeError, ValueError):
+                entry_tmdb = 0
+            if entry_tmdb == int(tmdb_id):
+                found = _tvdb(entry)
+                if found:
+                    return found
+
+    needle = cleaned.casefold()
+    year_matched: List[Mapping[str, Any]] = []
+    title_matched: List[Mapping[str, Any]] = []
+    for entry in results:
+        if not isinstance(entry, Mapping):
+            continue
+        entry_title = str(entry.get("title") or "").strip().casefold()
+        if entry_title != needle and not _titles_roughly_match(cleaned, str(entry.get("title") or "")):
+            continue
+        title_matched.append(entry)
+        try:
+            entry_year = int(entry.get("year") or 0) or None
+        except (TypeError, ValueError):
+            entry_year = None
+        if year is not None and entry_year is not None and abs(entry_year - int(year)) <= 1:
+            year_matched.append(entry)
+
+    for pool in (year_matched, title_matched):
+        for entry in pool:
+            found = _tvdb(entry)
+            if found:
+                return found
+    return None
 
 
 def _tmdb_card(item: Mapping[str, Any], media_type: str, tmdb: TMDBClient, *, reason: str = "") -> TitleCard:
@@ -139,11 +225,10 @@ def _tmdb_card(item: Mapping[str, Any], media_type: str, tmdb: TMDBClient, *, re
     date = item.get("release_date") or item.get("first_air_date") or ""
     if date:
         year = int(str(date)[:4])
-    tvdb_id = None
-    if media_type == "show":
-        external = item.get("external_ids") or {}
-        if external.get("tvdb_id"):
-            tvdb_id = int(external["tvdb_id"])
+    tvdb_id = _external_tvdb_id(item) if media_type == "show" else None
+    add_blocked_reason = ""
+    if media_type == "show" and not tvdb_id:
+        add_blocked_reason = "Can't add — no TVDB id yet"
     return TitleCard(
         media_type=media_type,  # type: ignore[arg-type]
         title=str(title),
@@ -155,21 +240,40 @@ def _tmdb_card(item: Mapping[str, Any], media_type: str, tmdb: TMDBClient, *, re
         overview=str(item.get("overview") or ""),
         rating=float(item.get("vote_average") or 0) or None,
         recommendation_reason=sanitize_recommendation_reason(reason),
+        add_blocked_reason=add_blocked_reason,
         in_library=False,
     )
 
 
-def _enrich_show_external_ids(item: Mapping[str, Any], tmdb: TMDBClient) -> Mapping[str, Any]:
-    if item.get("external_ids"):
-        return item
-    tmdb_id = int(item.get("id") or 0)
-    if not tmdb_id:
-        return item
-    try:
-        details = tmdb.tv_details(tmdb_id)
-    except RuntimeError:
-        return item
-    return {**item, "external_ids": details.get("external_ids") or {}}
+def _enrich_show_external_ids(
+    item: Mapping[str, Any],
+    tmdb: TMDBClient,
+    *,
+    settings: Optional[Settings] = None,
+) -> Mapping[str, Any]:
+    """Attach TMDB external_ids; fall back to Sonarr lookup when TVDB is missing."""
+    enriched: Mapping[str, Any] = item
+    if not item.get("external_ids"):
+        tmdb_id = int(item.get("id") or 0)
+        if tmdb_id:
+            try:
+                details = tmdb.tv_details(tmdb_id)
+                enriched = {**item, "external_ids": details.get("external_ids") or {}}
+            except RuntimeError:
+                enriched = item
+
+    if _external_tvdb_id(enriched) or settings is None:
+        return enriched
+
+    title = str(enriched.get("name") or enriched.get("title") or "")
+    year = _tmdb_result_year(enriched)
+    tmdb_id = int(enriched.get("id") or 0) or None
+    tvdb_id = _sonarr_resolve_tvdb_id(settings, title=title, year=year, tmdb_id=tmdb_id)
+    if not tvdb_id:
+        return enriched
+    external = dict(enriched.get("external_ids") or {})
+    external["tvdb_id"] = tvdb_id
+    return {**enriched, "external_ids": external}
 
 
 def _apply_queue_flags(db: Database, card: TitleCard) -> TitleCard:
@@ -351,7 +455,7 @@ def external_tmdb_search(
         if result_tmdb_id <= 0:
             continue
         if media_type == "show":
-            item = _enrich_show_external_ids(item, tmdb)
+            item = _enrich_show_external_ids(item, tmdb, settings=settings)
         card = _apply_queue_flags(db, _tmdb_card(item, media_type, tmdb, reason=reason))
         card.in_library = result_tmdb_id in owned
         if result_tmdb_id in queued and media_type == "movie":

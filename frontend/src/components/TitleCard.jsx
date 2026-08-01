@@ -105,6 +105,14 @@ export default function TitleCard({
     item.media_type === "show" &&
     item.tvdb_id &&
     addStatus !== "success";
+  const sonarrBlockedReason =
+    capability.canAdd &&
+    !item.in_library &&
+    item.media_type === "show" &&
+    !item.tvdb_id &&
+    addStatus !== "success"
+      ? String(item.add_blocked_reason || "").trim() || "Can't add — no TVDB id yet"
+      : "";
   const showAskOwner =
     capability.showGuidedCopy && itemNeedsAddGuidance(item) && addStatus !== "success";
   const showWatchPlex = canWatchOnPlex(item);
@@ -233,6 +241,15 @@ export default function TitleCard({
         >
           {addButtonLabel("Add to Sonarr")}
         </button>
+      ) : null}
+      {sonarrBlockedReason ? (
+        <span
+          className="title-card-add-guidance"
+          data-testid="sonarr-blocked-guidance"
+          title={sonarrBlockedReason}
+        >
+          {sonarrBlockedReason}
+        </span>
       ) : null}
       {showAskOwner ? (
         <span

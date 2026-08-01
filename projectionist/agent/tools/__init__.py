@@ -391,6 +391,9 @@ def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
         item["in_radarr"] = True
     if card.in_sonarr:
         item["in_sonarr"] = True
+    blocked = str(getattr(card, "add_blocked_reason", "") or "").strip()
+    if blocked:
+        item["add_blocked_reason"] = blocked
     reason = sanitize_recommendation_reason(card.recommendation_reason)
     if reason:
         item["recommendation_reason"] = reason
@@ -1392,7 +1395,7 @@ class ToolRegistry:
             if tmdb_id <= 0 or tmdb_id in owned:
                 continue
             if media_type == "show":
-                item = _enrich_show_external_ids(item, tmdb)
+                item = _enrich_show_external_ids(item, tmdb, settings=self.settings)
             card = _apply_queue_flags(
                 self.db,
                 _tmdb_card(item, media_type, tmdb, reason="Missing from your collection"),
@@ -1407,7 +1410,9 @@ class ToolRegistry:
         _append_recommendation_cards(self, allowed)
         note = (
             "TMDB titles missing from the library and not already queued in Radarr/Sonarr. "
-            "Do not re-propose already_queued / in_radarr / in_sonarr titles."
+            "Do not re-propose already_queued / in_radarr / in_sonarr titles. "
+            "Shows with add_blocked_reason lack a TVDB id — tell the user honestly; "
+            "do not invent tvdb_id values."
         )
         stop_retrying = False
         if self.is_youth and not allowed:
@@ -1469,7 +1474,7 @@ class ToolRegistry:
             if rating < 7.0:
                 continue
             if media_type == "show":
-                item = _enrich_show_external_ids(item, tmdb)
+                item = _enrich_show_external_ids(item, tmdb, settings=self.settings)
             card = _apply_queue_flags(
                 self.db,
                 _tmdb_card(item, media_type, tmdb, reason=f"Hidden gem ({rating:.1f}/10)"),
@@ -1922,7 +1927,7 @@ class ToolRegistry:
                     if tmdb_id <= 0 or tmdb_id in owned:
                         continue
                     if media_type == "show":
-                        item = _enrich_show_external_ids(item, tmdb)
+                        item = _enrich_show_external_ids(item, tmdb, settings=self.settings)
                     card = _apply_queue_flags(
                         self.db,
                         _tmdb_card(item, media_type, tmdb, reason=f"Not in library · {genre.title()}"),
