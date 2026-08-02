@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from projectionist.connectors.tunarr import TunarrClient
+from projectionist.facets import motif_search_expansions
 from projectionist.live_channels.recipes import (
     ChannelRecipe,
     MediaScope,
@@ -1817,18 +1818,10 @@ def _recipe_search_terms(recipe: ChannelRecipe) -> List[str]:
         text = str(extra or "").strip()
         if text and text.lower() not in {t.lower() for t in terms}:
             terms.append(text)
-    # Genre-ish aliases for common starter names when hints are thin.
-    name_l = recipe.name.strip().lower()
-    aliases = {
-        "mystery": ("mystery", "thriller", "crime", "detective"),
-        "sci-fi": ("sci-fi", "science fiction", "alien", "space"),
-        "scifi": ("sci-fi", "science fiction", "alien", "space"),
-    }
-    for key, words in aliases.items():
-        if key in name_l.replace(" ", "").replace("-", "") or key in name_l:
-            for word in words:
-                if word.lower() not in {t.lower() for t in terms}:
-                    terms.append(word)
+    # Motif expansions from layered facet taxonomy (no inline dual SoT).
+    for word in motif_search_expansions(recipe.name):
+        if word.lower() not in {t.lower() for t in terms}:
+            terms.append(word)
     return terms
 
 

@@ -19,6 +19,7 @@ def register_all(scheduler: IdleScheduler) -> None:
         collection_gc,
         data_retention,
         entity_memory_enrichment,
+        facet_taxonomy_audit,
         gap_analysis,
         health_metrics,
         keyword_theme_tagging,
@@ -49,6 +50,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     gap_analysis.register(scheduler)
     data_retention.register(scheduler)
     collection_gc.register(scheduler)
+    facet_taxonomy_audit.register(scheduler)
     entity_memory_enrichment.register(scheduler)
     metadata_enrichment.register(scheduler)
     plot_neighbors.register(scheduler)

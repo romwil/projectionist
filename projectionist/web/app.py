@@ -199,6 +199,7 @@ from projectionist.web.library_privacy import (
     sanitize_library_payload,
 )
 from projectionist.web.webhooks import register_webhook_routes
+from projectionist.web.augmentation_routes import register_augmentation_routes
 from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
 from projectionist.web.setup import (
@@ -349,7 +350,21 @@ async def lifespan(_app: FastAPI):
     app.state.idle_scheduler = idle_scheduler
     logger.info("Startup: idle task scheduler ready (%d tasks)", len(idle_scheduler._definitions))
 
+    # Bind closed-loop miss telemetry so facet resolve can fire-and-forget P1 events.
+    try:
+        from projectionist.facets.closed_loop import bind_closed_loop_database
+
+        bind_closed_loop_database(lambda: manager.db)
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup: closed-loop facet telemetry bind failed (continuing)")
+
     yield
+    try:
+        from projectionist.facets.closed_loop import bind_closed_loop_database
+
+        bind_closed_loop_database(None)
+    except Exception:  # noqa: BLE001
+        pass
     idle_scheduler.stop()
     get_stream_warm_scheduler().stop()
     get_sync_scheduler().stop()
@@ -1634,6 +1649,7 @@ register_live_channels_routes(
     data_dir=DATA_DIR,
 )
 register_holidays_routes(app, db_factory=_db)
+register_augmentation_routes(app, db_factory=_db, data_dir=DATA_DIR)
 
 
 @app.get("/api/admin/access-requests")

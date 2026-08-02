@@ -648,6 +648,27 @@ export async function listMediaIssues(params = {}) {
   return api(`/media-issues${search.toString() ? `?${search}` : ""}`);
 }
 
+export async function listStagedAugmentations({ status, task_name, limit } = {}) {
+  const search = new URLSearchParams();
+  if (status) search.set("status", status);
+  if (task_name) search.set("task_name", task_name);
+  if (limit != null) search.set("limit", String(limit));
+  return api(`/admin/staged-augmentations${search.toString() ? `?${search}` : ""}`);
+}
+
+export async function approveStagedAugmentation(rowId, payload = {}) {
+  return api(`/admin/staged-augmentations/${encodeURIComponent(rowId)}/approve`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function rejectStagedAugmentation(rowId) {
+  return api(`/admin/staged-augmentations/${encodeURIComponent(rowId)}/reject`, {
+    method: "POST",
+  });
+}
+
 export async function updateMediaIssue(issueId, payload) {
   return api(`/media-issues/${encodeURIComponent(issueId)}`, {
     method: "PATCH",

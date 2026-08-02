@@ -4,6 +4,7 @@ const TASK_LABELS = {
   anniversary_scanner: "Anniversary scanner",
   enthusiast_nudge: "Enthusiast nudges",
   data_retention: "Data retention",
+  facet_taxonomy_audit: "Facet taxonomy audit",
   gap_analysis: "Gap analysis",
   health_metrics: "Health metrics",
   llm_logline_enrichment: "LLM logline enrichment",

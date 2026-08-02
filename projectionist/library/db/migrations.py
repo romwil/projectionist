@@ -243,6 +243,7 @@ def _build_migrations() -> List[Migration]:
         (40, "llm_usage", wrap("_migrate_llm_usage")),
         (41, "holiday_calendar", wrap("_migrate_holiday_calendar")),
         (42, "notification_library_share_kind", wrap("_migrate_notification_library_share_kind")),
+        (43, "closed_loop_augmentation", wrap("_migrate_closed_loop_augmentation")),
     ]
 
 

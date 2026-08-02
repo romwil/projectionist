@@ -1,25 +1,55 @@
 """Non-blocking telemetry event ingestion.
 
-Events are written to ``system_telemetry_stream`` in a daemon thread so
-the calling request never blocks on the DB write.  The ingester respects a
-``telemetry_enabled`` feature flag read from the system config table —
-when disabled, events are silently dropped.
+Two surfaces share this module:
 
-Privacy contract: callers MUST NOT pass raw message text.  Only metadata
-(lengths, IDs, counts, durations) should appear in the payload.
+1. **Interaction stream** — ``TelemetryIngester`` writes ``system_telemetry_stream``
+   on a daemon thread (chat/playback/LLM BI). Respects ``telemetry_enabled``.
+2. **Closed-loop augmentation** — ``schedule_closed_loop_event`` /
+   ``upsert_closed_loop_event`` write the unified ``telemetry_events`` table
+   via ``asyncio.to_thread`` (daemon-thread fallback). Never blocks the request
+   path. Independent of the interaction-stream feature flag.
+
+Privacy contract: callers MUST NOT pass raw message text or secrets. Only
+metadata (lengths, IDs, counts, durations, scrubbed context) should appear
+in payloads. Credential-like keys are stripped before persistence; logs never
+print secrets.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import threading
 import uuid
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 from projectionist.library.db import Database
 
 logger = logging.getLogger(__name__)
+
+# Keys that must never land in closed-loop payloads or logs.
+_SECRET_PAYLOAD_KEYS = frozenset(
+    {
+        "password",
+        "passwd",
+        "secret",
+        "token",
+        "access_token",
+        "refresh_token",
+        "api_key",
+        "apikey",
+        "api_token",
+        "authorization",
+        "plex_token",
+        "credential",
+        "credentials",
+        "private_key",
+        "client_secret",
+    }
+)
+_MAX_ENTITY_KEY_LEN = 512
+_MAX_PAYLOAD_CHARS = 8_192
 
 # Canonical event classes — keep in sync with the telemetry API docs.
 EVENT_CHAT_MESSAGE = "chat_message"
@@ -290,3 +320,143 @@ class TelemetryIngester:
             # telemetry is muted, so cost visibility is not silently lost.
             thread = threading.Thread(target=_write, daemon=True, name="telemetry-llm_usage")
             thread.start()
+
+
+# ---------------------------------------------------------------------------
+# Closed-loop augmentation telemetry (table: telemetry_events)
+# ---------------------------------------------------------------------------
+
+
+def scrub_closed_loop_payload(payload: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    """Return a JSON-safe payload with credential-like keys removed."""
+    if not payload:
+        return {}
+    cleaned: Dict[str, Any] = {}
+    for key, value in dict(payload).items():
+        key_l = str(key).strip().lower()
+        if key_l in _SECRET_PAYLOAD_KEYS or key_l.endswith("_token") or key_l.endswith("_secret"):
+            continue
+        if key_l in {"prompt", "messages", "content", "text", "body"}:
+            continue
+        cleaned[str(key)] = value
+    return cleaned
+
+
+def _normalize_entity_key(entity_key: str) -> str:
+    key = str(entity_key or "").strip()
+    if len(key) > _MAX_ENTITY_KEY_LEN:
+        key = key[:_MAX_ENTITY_KEY_LEN]
+    return key
+
+
+def upsert_closed_loop_event_sync(
+    db: Database,
+    *,
+    event_type: str,
+    priority_tier: str,
+    entity_type: str,
+    entity_key: str,
+    payload: Optional[Mapping[str, Any]] = None,
+) -> None:
+    """Synchronous upsert into ``telemetry_events`` (safe for ``asyncio.to_thread``)."""
+    key = _normalize_entity_key(entity_key)
+    if not key:
+        return
+    scrubbed = scrub_closed_loop_payload(payload)
+    payload_json = json.dumps(scrubbed, default=str, separators=(",", ":"))
+    if len(payload_json) > _MAX_PAYLOAD_CHARS:
+        payload_json = json.dumps(
+            {"_truncated": True, "keys": sorted(scrubbed.keys())[:40]},
+            separators=(",", ":"),
+        )
+    db.upsert_closed_loop_event(
+        event_type=str(event_type or "").strip() or "unknown",
+        priority_tier=str(priority_tier or "P3").strip().upper() or "P3",
+        entity_type=str(entity_type or "").strip() or "unknown",
+        entity_key=key,
+        payload_json=payload_json,
+    )
+
+
+async def upsert_closed_loop_event(
+    db: Database,
+    *,
+    event_type: str,
+    priority_tier: str,
+    entity_type: str,
+    entity_key: str,
+    payload: Optional[Mapping[str, Any]] = None,
+) -> None:
+    """Awaitable upsert that never blocks the event loop on SQLite I/O."""
+    await asyncio.to_thread(
+        upsert_closed_loop_event_sync,
+        db,
+        event_type=event_type,
+        priority_tier=priority_tier,
+        entity_type=entity_type,
+        entity_key=entity_key,
+        payload=payload,
+    )
+
+
+def schedule_closed_loop_event(
+    db: Database,
+    *,
+    event_type: str,
+    priority_tier: str,
+    entity_type: str,
+    entity_key: str,
+    payload: Optional[Mapping[str, Any]] = None,
+) -> None:
+    """Fire-and-forget closed-loop upsert; returns immediately.
+
+    Prefer ``asyncio.to_thread`` when a running loop exists; fall back to a
+    daemon thread so sync call sites (and tests without a loop) stay non-blocking.
+    Write failures are logged without payload contents and never raised.
+    """
+
+    def _safe_write() -> None:
+        try:
+            upsert_closed_loop_event_sync(
+                db,
+                event_type=event_type,
+                priority_tier=priority_tier,
+                entity_type=entity_type,
+                entity_key=entity_key,
+                payload=payload,
+            )
+        except Exception:
+            logger.debug(
+                "Closed-loop telemetry write failed for type=%s entity=%s",
+                event_type,
+                entity_type,
+                exc_info=True,
+            )
+
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        thread = threading.Thread(
+            target=_safe_write,
+            daemon=True,
+            name=f"closed-loop-{event_type}",
+        )
+        thread.start()
+        return
+
+    async def _runner() -> None:
+        try:
+            await asyncio.to_thread(_safe_write)
+        except Exception:
+            logger.debug(
+                "Closed-loop telemetry schedule failed for type=%s entity=%s",
+                event_type,
+                entity_type,
+                exc_info=True,
+            )
+
+    try:
+        loop.create_task(_runner(), name=f"closed-loop-{event_type}")
+    except TypeError:
+        # Python <3.11: create_task has no name=
+        loop.create_task(_runner())

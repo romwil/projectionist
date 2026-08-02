@@ -10,21 +10,24 @@ import {
 } from "./adminNav.js";
 
 describe("adminNav", () => {
-  it("lists core admin sections including Issues, Logs, and Youth", () => {
+  it("lists core admin sections including Issues, Logs, Youth, and Taxonomy", () => {
     const ids = adminNavLinks().map((item) => item.id);
     assert.ok(ids.includes("overview"));
     assert.ok(ids.includes("logs"));
     assert.ok(ids.includes("issues"));
     assert.ok(ids.includes("youth"));
+    assert.ok(ids.includes("taxonomy"));
     assert.equal(adminNavLinks().find((item) => item.id === "issues")?.badge, "openIssues");
     assert.equal(adminNavLinks().find((item) => item.id === "logs")?.to, "/admin/logs");
     assert.equal(adminNavLinks().find((item) => item.id === "tasks")?.label, "Tasks");
+    assert.equal(adminNavLinks().find((item) => item.id === "taxonomy")?.label, "Taxonomy");
+    assert.equal(adminNavLinks().find((item) => item.id === "taxonomy")?.to, "/admin/taxonomy");
     assert.equal(adminNavLinks().find((item) => item.id === "mail")?.label, "Mail");
     assert.equal(adminNavLinks().find((item) => item.id === "usage")?.label, "Usage");
     assert.equal(adminNavLinks().find((item) => item.id === "usage")?.to, "/admin/usage");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.label, "Holidays");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.to, "/admin/holidays");
-    assert.equal(adminNavLinks().length, 18);
+    assert.equal(adminNavLinks().length, 19);
   });
 
   it("groups the dense rail with Home / Household / Ops headings", () => {
@@ -38,12 +41,13 @@ describe("adminNav", () => {
     );
     assert.equal(
       groups.reduce((sum, group) => sum + group.links.length, 0),
-      18,
+      19,
     );
     assert.deepEqual(
       groups[0].links.map((item) => item.id),
       ["overview", "connections", "libraries", "sync"],
     );
+    assert.ok(groups[2].links.some((item) => item.id === "taxonomy"));
   });
 
   it("detects /admin paths", () => {

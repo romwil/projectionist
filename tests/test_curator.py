@@ -435,6 +435,58 @@ class SuggestedRepliesTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(block["type"], "suggested_replies")
             self.assertIn("Dive deeper into the gaps", block["payload"]["replies"])
 
+    async def test_no_llm_fallback_passes_nl_ask_as_gaps_query(self) -> None:
+        """No-LLM keyword fallback must not bare-discover popular movies."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            settings = Settings(llm_provider="openai", llm_api_key="")
+            agent = CuratorAgent(db, settings)
+            self.assertIsNone(agent.provider)
+            registry = agent._registry()
+            ask = (
+                "What recent history miniseries am I missing that are "
+                "not science-focused?"
+            )
+            seen: list[tuple[str, dict]] = []
+
+            async def _capture(name: str, args):
+                seen.append((name, dict(args)))
+                registry._discussed_cards = [
+                    TitleCard(
+                        media_type="show",
+                        title="Masters of the Air",
+                        year=2024,
+                        tmdb_id=46518,
+                    )
+                ]
+                return "{}"
+
+            with patch.object(registry, "execute", side_effect=_capture):
+                text = await agent._fallback_run(registry, ask)
+
+            self.assertEqual(len(seen), 1)
+            self.assertEqual(seen[0][0], "find_collection_gaps")
+            self.assertEqual(seen[0][1].get("query"), ask)
+            self.assertNotEqual(seen[0][1].get("media_type"), "movie")
+            self.assertIn("Review the cards below", text)
+
+    async def test_no_llm_fallback_honest_empty_when_gaps_find_nothing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            agent = CuratorAgent(db, Settings(llm_provider="openai", llm_api_key=""))
+            registry = agent._registry()
+
+            async def _empty(name: str, args):
+                del name, args
+                return "{}"
+
+            with patch.object(registry, "execute", side_effect=_empty):
+                text = await agent._fallback_run(
+                    registry, "What recent history miniseries am I missing?"
+                )
+            self.assertIn("could not find confident missing titles", text.casefold())
+            self.assertEqual(registry.cards, [])
+
 
 if __name__ == "__main__":
     unittest.main()

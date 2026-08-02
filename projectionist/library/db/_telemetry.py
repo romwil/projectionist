@@ -84,6 +84,193 @@ class TelemetryConfigMixin:
             )
         return [dict(row) for row in rows]
 
+    # --- Closed-loop augmentation (table: telemetry_events / staged_augmentations) ---
+
+    def upsert_closed_loop_event(
+        self,
+        *,
+        event_type: str,
+        priority_tier: str,
+        entity_type: str,
+        entity_key: str,
+        payload_json: Optional[str] = None,
+    ) -> None:
+        """Upsert one row into ``telemetry_events``, incrementing ``hit_count`` on conflict."""
+
+        def _write() -> None:
+            with self.connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO telemetry_events (
+                        event_type, priority_tier, entity_type, entity_key,
+                        payload_json, hit_count, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    ON CONFLICT(event_type, entity_type, entity_key) DO UPDATE SET
+                        hit_count = hit_count + 1,
+                        updated_at = CURRENT_TIMESTAMP,
+                        payload_json = excluded.payload_json,
+                        priority_tier = excluded.priority_tier
+                    """,
+                    (
+                        event_type,
+                        priority_tier,
+                        entity_type,
+                        entity_key,
+                        payload_json,
+                    ),
+                )
+
+        self.run_write(_write, label="upsert_closed_loop_event")
+
+    def list_closed_loop_events(
+        self,
+        *,
+        event_type: Optional[str] = None,
+        priority_tier: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        min_hit_count: int = 1,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Return closed-loop ``telemetry_events`` rows for audit tasks."""
+        clauses: List[str] = ["hit_count >= ?"]
+        params: List[Any] = [max(1, int(min_hit_count))]
+        if event_type:
+            clauses.append("event_type = ?")
+            params.append(event_type)
+        if priority_tier:
+            clauses.append("priority_tier = ?")
+            params.append(priority_tier)
+        if entity_type:
+            clauses.append("entity_type = ?")
+            params.append(entity_type)
+        where = " AND ".join(clauses)
+        params.append(max(1, min(int(limit), 1000)))
+        rows = self._query(
+            f"""
+            SELECT * FROM telemetry_events
+            WHERE {where}
+            ORDER BY hit_count DESC, updated_at DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        )
+        return [dict(row) for row in rows]
+
+    def insert_staged_augmentation(
+        self,
+        *,
+        task_name: str,
+        priority_tier: str,
+        target_entity_type: str,
+        target_entity_id: str,
+        candidate_data_json: str,
+        confidence_score: float,
+        status: str = "pending",
+    ) -> int:
+        """Insert one staged candidate; returns new row id."""
+
+        def _write() -> int:
+            with self.connect() as conn:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO staged_augmentations (
+                        task_name, priority_tier, target_entity_type, target_entity_id,
+                        candidate_data_json, confidence_score, status,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                    """,
+                    (
+                        task_name,
+                        priority_tier,
+                        target_entity_type,
+                        str(target_entity_id),
+                        candidate_data_json,
+                        float(confidence_score),
+                        status,
+                    ),
+                )
+                return int(cursor.lastrowid or 0)
+
+        return int(self.run_write(_write, label="insert_staged_augmentation") or 0)
+
+    def list_staged_augmentations(
+        self,
+        *,
+        status: Optional[str] = "pending",
+        task_name: Optional[str] = None,
+        limit: int = 100,
+    ) -> List[Dict[str, Any]]:
+        """Return staged augmentation candidates, newest first."""
+        clauses: List[str] = []
+        params: List[Any] = []
+        if status is not None:
+            clauses.append("status = ?")
+            params.append(status)
+        if task_name:
+            clauses.append("task_name = ?")
+            params.append(task_name)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(max(1, min(int(limit), 1000)))
+        rows = self._query(
+            f"""
+            SELECT * FROM staged_augmentations
+            {where}
+            ORDER BY confidence_score DESC, created_at DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        )
+        return [dict(row) for row in rows]
+
+    def get_staged_augmentation(self, row_id: int) -> Optional[Dict[str, Any]]:
+        """Return one staged augmentation row by id, or None."""
+        rows = self._query(
+            "SELECT * FROM staged_augmentations WHERE id = ? LIMIT 1",
+            (int(row_id),),
+        )
+        return dict(rows[0]) if rows else None
+
+    def update_staged_augmentation_status(
+        self,
+        row_id: int,
+        *,
+        status: str,
+        candidate_data_json: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
+        """Update status (and optional candidate JSON) for a staged row."""
+
+        cleaned = str(status or "").strip().lower()
+        if cleaned not in {"pending", "approved", "rejected"}:
+            raise ValueError(f"invalid staged augmentation status: {status!r}")
+
+        def _write() -> Optional[Dict[str, Any]]:
+            with self.connect() as conn:
+                if candidate_data_json is not None:
+                    conn.execute(
+                        """
+                        UPDATE staged_augmentations
+                        SET status = ?, candidate_data_json = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        (cleaned, candidate_data_json, int(row_id)),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        UPDATE staged_augmentations
+                        SET status = ?, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?
+                        """,
+                        (cleaned, int(row_id)),
+                    )
+                row = conn.execute(
+                    "SELECT * FROM staged_augmentations WHERE id = ?",
+                    (int(row_id),),
+                ).fetchone()
+                return dict(row) if row else None
+
+        return self.run_write(_write, label="update_staged_augmentation_status")
+
     def _query(self, sql: str, params=()) -> List[sqlite3.Row]:
         with self.connect() as conn:
             return conn.execute(sql, params).fetchall()
