@@ -10,6 +10,7 @@ import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
 import { guestDeepLinkBlocked } from "../lib/memberShell.js";
+import { INBOX_LIST_PARAMS } from "../lib/recommendationInbox.js";
 
 /**
  * Top-level Inbox — household notifications live here (not on Chat).
@@ -20,7 +21,8 @@ export default function InboxPage() {
 
   function reload() {
     setState((prev) => ({ ...prev, loading: true, error: "" }));
-    listNotifications({ unread_only: false, limit: 50 })
+    // Unread-only: dismiss marks seen_at; refetching all rows made clear-all look temporary.
+    listNotifications(INBOX_LIST_PARAMS)
       .then((data) => {
         setState({
           loading: false,
@@ -58,14 +60,11 @@ export default function InboxPage() {
     }
   }
 
-  async function handleDismissAll(items) {
+  async function handleDismissAll() {
     setState((prev) => ({ ...prev, items: [], unread: 0 }));
     try {
-      if (items?.length) {
-        await markNotificationsSeen({ ids: items.map((item) => item.id) });
-      } else {
-        await markNotificationsSeen({ all_unread: true });
-      }
+      // Always clear every unread row — not only the currently rendered/deduped ids.
+      await markNotificationsSeen({ all_unread: true });
     } catch {
       reload();
     }
@@ -108,6 +107,7 @@ export default function InboxPage() {
         {!state.loading && state.items.length ? (
           <RecommendationsInbox
             items={state.items}
+            role={role}
             onDismiss={handleDismiss}
             onDismissAll={handleDismissAll}
           />

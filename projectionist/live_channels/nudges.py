@@ -36,15 +36,15 @@ def maybe_deliver_live_channels_ready_nudge(
         return {"delivered": 0, "skipped": "not_ready"}
 
     count_label = f"{int(channel_count)} channel{'s' if int(channel_count) != 1 else ''}"
-    title = "Live Channels is on"
+    title = "Live Channels ready"
     body = (
         f"Your household stations are ready ({count_label}). "
-        "Open Plex → Live TV to tune in — Projectionist stays out of the way."
+        "Open Live in Projectionist to browse what’s on now."
     )
     payload = {
         "live_channels": True,
         "channel_count": int(channel_count),
-        "cta": "plex_live_tv",
+        "cta": "/live",
     }
 
     delivered = 0

@@ -466,6 +466,7 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                 from projectionist.live_channels.publish import (
                     resolve_media_scope,
                     resolve_subtitles_enabled,
+                    station_craft_snapshot,
                 )
 
                 continuity_fid = str(
@@ -491,6 +492,7 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                         subs_on = bool(ch.get("subtitlesEnabled"))
                     else:
                         subs_on = resolve_subtitles_enabled(settings, channel_id=cid)
+                    craft = station_craft_snapshot(settings, cid)
                     channels.append(
                         {
                             "id": cid,
@@ -507,6 +509,14 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
                                 settings, channel_id=cid, default="both"
                             ),
                             "subtitles_enabled": subs_on,
+                            "source": craft.get("source") or "",
+                            "motif": craft.get("motif") or "",
+                            "cluster_tag": craft.get("cluster_tag") or "",
+                            "collection_id": craft.get("collection_id") or "",
+                            "collection_title": craft.get("collection_title") or "",
+                            "programming_mode": craft.get("programming_mode") or "",
+                            "craft_filters": dict(craft.get("craft_filters") or {}),
+                            "youth_safe": bool(craft.get("youth_safe")),
                         }
                     )
             except Exception:  # noqa: BLE001

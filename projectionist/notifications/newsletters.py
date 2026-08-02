@@ -16,6 +16,9 @@ from projectionist.notifications.service import deliver_notification
 
 logger = logging.getLogger(__name__)
 
+# Cap pick strip for inbox cards; email body may list the same titles in prose.
+DIGEST_PICK_CAP = 8
+
 
 def _persona_voice_line(db: Database, *, for_guest: bool = False) -> str:
     """Short voice line from the default (or guest-oriented) persona."""
@@ -53,13 +56,83 @@ def _format_title_lines(titles: List[Dict[str, Any]], *, limit: int = 6) -> str:
     return "\n".join(lines)
 
 
+def structured_digest_picks(
+    titles: Sequence[Dict[str, Any]],
+    *,
+    limit: int = DIGEST_PICK_CAP,
+) -> List[Dict[str, Any]]:
+    """Normalize digest titles into inbox pick rows (fail-closed without an id).
+
+    Prefer ``tmdb_id``; accept ``rating_key`` / ``tvdb_id`` as fallback identity so
+    library-only titles still dig in. Skip id-less junk (same spirit as saved rails).
+    """
+    picks: List[Dict[str, Any]] = []
+    cap = max(1, min(int(limit), DIGEST_PICK_CAP))
+    for item in titles or []:
+        if not isinstance(item, dict):
+            continue
+        title = str(item.get("title") or "").strip()
+        if not title:
+            continue
+        tmdb_raw = item.get("tmdb_id")
+        tmdb_id: Optional[int] = None
+        if tmdb_raw is not None and str(tmdb_raw).strip() != "":
+            try:
+                tmdb_id = int(tmdb_raw)
+            except (TypeError, ValueError):
+                tmdb_id = None
+        rating_key = str(item.get("rating_key") or item.get("plex_rating_key") or "").strip() or None
+        tvdb_raw = item.get("tvdb_id")
+        tvdb_id: Optional[int] = None
+        if tvdb_raw is not None and str(tvdb_raw).strip() != "":
+            try:
+                tvdb_id = int(tvdb_raw)
+            except (TypeError, ValueError):
+                tvdb_id = None
+        if tmdb_id is None and not rating_key and tvdb_id is None:
+            continue
+        media_type = str(item.get("media_type") or "movie").strip().lower()
+        if media_type not in {"movie", "show"}:
+            media_type = "movie"
+        year = item.get("year")
+        year_int: Optional[int] = None
+        if year is not None and str(year).strip() != "":
+            try:
+                year_int = int(year)
+            except (TypeError, ValueError):
+                year_int = None
+        poster = (
+            str(item.get("poster_url") or item.get("poster_path") or "").strip() or None
+        )
+        pick: Dict[str, Any] = {
+            "title": title,
+            "media_type": media_type,
+        }
+        if year_int is not None:
+            pick["year"] = year_int
+        if tmdb_id is not None:
+            pick["tmdb_id"] = tmdb_id
+        if rating_key:
+            pick["rating_key"] = rating_key
+        if tvdb_id is not None:
+            pick["tvdb_id"] = tvdb_id
+        if poster:
+            pick["poster_url"] = poster
+            # Alias for clients that expect TMDB-style naming.
+            pick["poster_path"] = poster
+        picks.append(pick)
+        if len(picks) >= cap:
+            break
+    return picks
+
+
 def build_member_newsletter(
     db: Database,
     settings: Optional[Settings] = None,
     *,
     user: Dict[str, Any],
     now: Optional[float] = None,
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """Build a personalized weekly newsletter subject + body for one member."""
     del settings
     digest = build_weekly_digest(db, now=now)
@@ -70,6 +143,7 @@ def build_member_newsletter(
     new_block = digest.get("new_this_week") or {}
     titles = list(new_block.get("titles") or [])
     count = int(new_block.get("count") or len(titles))
+    picks = structured_digest_picks(titles)
     title_lines = _format_title_lines(titles) or "• Quiet week — nothing new landed yet."
     subject = f"This week for you, {preferred}"
     body = (
@@ -79,7 +153,13 @@ def build_member_newsletter(
         f"{title_lines}\n\n"
         "Open CuratorX anytime to chat about what to watch next.\n"
     )
-    return {"subject": subject, "body": body, "title": subject}
+    return {
+        "subject": subject,
+        "body": body,
+        "title": subject,
+        "blurb": voice,
+        "picks": picks,
+    }
 
 
 def deliver_weekly_newsletters(
@@ -134,7 +214,11 @@ def deliver_weekly_newsletters(
             kind="digest",
             title=content["title"],
             body=content["body"],
-            payload={"newsletter": "weekly"},
+            payload={
+                "newsletter": "weekly",
+                "picks": content.get("picks") or [],
+                "blurb": content.get("blurb") or "",
+            },
             related_id=f"weekly-{int((now or time.time()) // (7 * 86400))}",
             email_subject=content["subject"],
         )
@@ -163,7 +247,7 @@ def build_owner_monthly_curation(
     settings: Optional[Settings] = None,
     *,
     now: Optional[float] = None,
-) -> Dict[str, str]:
+) -> Dict[str, Any]:
     """Owner monthly collection / curation update body."""
     del settings
     ts = time.time() if now is None else float(now)
@@ -174,13 +258,24 @@ def build_owner_monthly_curation(
         recent = feed_recently_added(db, limit=12, days=min(days, 31))
     except Exception:  # noqa: BLE001
         recent = {"items": [], "total": 0}
-    titles = [
-        {
+    titles: List[Dict[str, Any]] = []
+    for item in list(recent.get("items") or [])[:10]:
+        entry: Dict[str, Any] = {
             "title": str(item.get("title") or "Untitled"),
             "year": item.get("year"),
+            "media_type": item.get("media_type"),
         }
-        for item in list(recent.get("items") or [])[:10]
-    ]
+        if item.get("tmdb_id") is not None:
+            entry["tmdb_id"] = item.get("tmdb_id")
+        rating_key = item.get("rating_key") or item.get("plex_rating_key")
+        if rating_key:
+            entry["rating_key"] = rating_key
+        if item.get("tvdb_id") is not None:
+            entry["tvdb_id"] = item.get("tvdb_id")
+        if item.get("poster_url"):
+            entry["poster_url"] = item.get("poster_url")
+        titles.append(entry)
+    picks = structured_digest_picks(titles)
     list_count = 0
     try:
         if hasattr(db, "list_curated_lists"):
@@ -189,6 +284,7 @@ def build_owner_monthly_curation(
     except Exception:  # noqa: BLE001
         list_count = 0
     title_lines = _format_title_lines(titles, limit=10) or "• No new arrivals logged this month."
+    blurb = f"Monthly curation pulse for {month_label}."
     subject = f"Monthly collection update — {month_label}"
     body = (
         f"Here's your monthly curation pulse for {month_label}.\n\n"
@@ -196,7 +292,13 @@ def build_owner_monthly_curation(
         f"Recent arrivals:\n{title_lines}\n\n"
         "Review collections, courses, and gaps in Admin when you're ready.\n"
     )
-    return {"subject": subject, "body": body, "title": subject}
+    return {
+        "subject": subject,
+        "body": body,
+        "title": subject,
+        "blurb": blurb,
+        "picks": picks,
+    }
 
 
 def deliver_owner_monthly_curation(
@@ -222,7 +324,12 @@ def deliver_owner_monthly_curation(
             kind="digest",
             title=content["title"],
             body=content["body"],
-            payload={"newsletter": "monthly-owner", "month": bucket},
+            payload={
+                "newsletter": "monthly-owner",
+                "month": bucket,
+                "picks": content.get("picks") or [],
+                "blurb": content.get("blurb") or "",
+            },
             related_id=f"monthly-owner-{bucket}",
             email_subject=content["subject"],
         )

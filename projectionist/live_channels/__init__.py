@@ -13,6 +13,7 @@ from projectionist.live_channels.recipes import (
     ChannelRecipe,
     ProgrammingMode,
     apply_youth_gate_to_items,
+    recipe_is_youth_safe,
 )
 from projectionist.live_channels.starter_pack import propose_starter_pack
 from projectionist.live_channels.status import build_live_channels_status
@@ -26,4 +27,5 @@ __all__ = [
     "check_plex_pass",
     "propose_starter_pack",
     "recipe_from_craft_payload",
+    "recipe_is_youth_safe",
 ]

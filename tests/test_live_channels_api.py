@@ -678,6 +678,68 @@ class LiveChannelsApiTests(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 400)
 
+    def test_station_settings_craft_filters_round_trip(self) -> None:
+        """PATCH settings persists decade/genre; Save does not refill lineup."""
+        from pathlib import Path
+
+        from projectionist.config_store import load_merged_settings, save_settings
+        from projectionist.live_channels.publish import set_station_meta
+
+        self._enable()
+        settings = load_merged_settings(Path(self._tmpdir.name))
+        set_station_meta(
+            settings,
+            "ch-106",
+            media_scope="movies",
+            source="motif",
+            programming_mode="shuffle",
+            motif="sci-fi",
+            craft_filters={"decade": 1970},
+        )
+        save_settings(Path(self._tmpdir.name), settings)
+
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "ch-106", "name": "Creature 70s", "number": 106}
+        ]
+        client.get_channel.return_value = {
+            "id": "ch-106",
+            "name": "Creature 70s",
+            "number": 106,
+            "subtitlesEnabled": True,
+        }
+        client.update_channel.return_value = {"id": "ch-106", "subtitlesEnabled": False}
+
+        with patch(
+            "projectionist.live_channels.publish.TunarrClient",
+            return_value=client,
+        ):
+            resp = self.client.patch(
+                "/api/admin/live-channels/channels/ch-106/settings",
+                json={
+                    "confirm": True,
+                    "media_scope": "movies",
+                    "motif": "creature feature",
+                    "craft_filters": {"genres": ["Horror"], "decade": 1970},
+                    "subtitles_enabled": False,
+                },
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body["ok"])
+        self.assertTrue(body.get("refill_required"))
+        self.assertEqual(body["craft_filters"]["decade"], 1970)
+        self.assertEqual(body["craft_filters"]["genres"], ["Horror"])
+        self.assertEqual(body["motif"], "creature feature")
+        self.assertIn("Refill", body["message"])
+        client.set_channel_programming.assert_not_called()
+
+        reloaded = load_merged_settings(Path(self._tmpdir.name))
+        meta = (reloaded.tunarr.station_meta or {}).get("ch-106") or {}
+        self.assertEqual((meta.get("craft_filters") or {}).get("decade"), 1970)
+        self.assertEqual((meta.get("craft_filters") or {}).get("genres"), ["Horror"])
+        self.assertEqual(meta.get("motif"), "creature feature")
+
     def test_refill_and_delete_channel(self) -> None:
         self._enable()
         client = MagicMock()

@@ -101,6 +101,58 @@ def normalize_craft_filters(data: Any = None) -> CraftFilters:
     )
 
 
+def _titleish(value: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return text.title() if text.islower() else text
+
+
+def craft_filters_station_name(
+    filters: CraftFilters | Mapping[str, Any] | None = None,
+    *,
+    motif: str = "",
+    cluster_tag: str = "",
+) -> str:
+    """Build a short station label from craft filters (+ optional motif/cluster).
+
+    Additive filters are part of the station identity — a decade-only craft should
+    not silently reuse a bare motif name that already exists on the dial.
+    """
+    craft = (
+        filters
+        if isinstance(filters, CraftFilters)
+        else normalize_craft_filters(filters)
+    )
+    bits: List[str] = []
+    motif_label = _titleish(motif) or (
+        _titleish(craft.motifs[0]) if craft.motifs else ""
+    )
+    cluster_label = _titleish(cluster_tag)
+    if motif_label:
+        bits.append(motif_label)
+    elif cluster_label:
+        bits.append(cluster_label)
+    if craft.genres:
+        bits.append(_titleish(craft.genres[0]))
+    if craft.decade is not None:
+        bits.append(f"{int(craft.decade)}s")
+    if craft.themes:
+        bits.append(_titleish(craft.themes[0]))
+    if craft.content_ratings:
+        bits.append(str(craft.content_ratings[0]).strip().upper())
+    # Drop duplicate adjacent tokens (motif "Mystery" + genre "Mystery").
+    deduped: List[str] = []
+    seen: Set[str] = set()
+    for bit in bits:
+        key = bit.casefold()
+        if not bit or key in seen:
+            continue
+        seen.add(key)
+        deduped.append(bit)
+    return " · ".join(deduped)[:48]
+
+
 def exclusion_collection_name(settings: Any = None) -> str:
     tunarr = getattr(settings, "tunarr", None) if settings is not None else None
     name = str(getattr(tunarr, "exclusion_collection_name", "") or "").strip()

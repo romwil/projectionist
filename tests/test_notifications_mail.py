@@ -24,6 +24,7 @@ from projectionist.notifications.arrivals import notify_arrivals
 from projectionist.notifications.newsletters import (
     build_member_newsletter,
     deliver_weekly_newsletters,
+    structured_digest_picks,
 )
 from projectionist.notifications.service import deliver_notification, notification_channel_offerings
 from projectionist.web.auth import clear_pin_bindings
@@ -273,6 +274,65 @@ class NotificationPlatformTests(unittest.TestCase):
         again = self.client.get("/api/notifications?unread_only=true")
         self.assertEqual(again.json()["unread_count"], 0)
 
+    def test_dismiss_all_persists_when_inbox_reloads_unread_only(self) -> None:
+        """Clear-all must survive reopen: inbox UI loads unread_only=true.
+
+        Marking seen leaves rows in SQLite; GET without unread_only still returns
+        them. The bug was InboxPage fetching that history after dismiss.
+        """
+        self._enable_multi_user()
+        member = self._login(plex_id=3, title="Member", email="member3@example.com")
+        settings = Settings.load(Path(self._tmpdir.name) / "settings.json")
+        for idx in range(2):
+            deliver_notification(
+                self.db,
+                settings,
+                user_id=member["id"],
+                kind="arrival",
+                title=f"Arrival {idx}",
+                body="Now available",
+                related_id=f"arrival-clear-{idx}",
+            )
+
+        before = self.client.get("/api/notifications?unread_only=true&limit=50")
+        self.assertEqual(before.status_code, 200)
+        items = before.json()["items"]
+        self.assertGreaterEqual(len(items), 2)
+        ids = [row["id"] for row in items]
+
+        # Same payload shape the inbox used for "Dismiss all" (explicit ids).
+        seen = self.client.post("/api/notifications/seen", json={"ids": ids})
+        self.assertEqual(seen.status_code, 200)
+        self.assertGreaterEqual(seen.json()["updated"], 2)
+
+        # History still exists (API default) — must not be what the inbox loads.
+        history = self.client.get("/api/notifications?unread_only=false&limit=50")
+        self.assertEqual(history.status_code, 200)
+        history_ids = {row["id"] for row in history.json()["items"]}
+        self.assertTrue(set(ids).issubset(history_ids))
+
+        # Reopen contract: unread-only list stays empty after clear-all.
+        again = self.client.get("/api/notifications?unread_only=true&limit=50")
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual(again.json()["unread_count"], 0)
+        self.assertEqual(again.json()["items"], [])
+
+        # all_unread path (current dismiss-all) is equivalent.
+        deliver_notification(
+            self.db,
+            settings,
+            user_id=member["id"],
+            kind="digest",
+            title="Weekly",
+            body="Digest body",
+            related_id="digest-clear-1",
+        )
+        clear = self.client.post("/api/notifications/seen", json={"all_unread": True})
+        self.assertEqual(clear.status_code, 200)
+        empty = self.client.get("/api/notifications?unread_only=true&limit=50")
+        self.assertEqual(empty.json()["unread_count"], 0)
+        self.assertEqual(empty.json()["items"], [])
+
     def test_recommendation_also_creates_notification(self) -> None:
         self._enable_multi_user()
         owner = self._login(plex_id=10, title="Owner", email="o@example.com")
@@ -324,6 +384,25 @@ class NotificationPlatformTests(unittest.TestCase):
             self.assertTrue(resp.json()["ok"])
             mock_send.assert_called_once()
 
+    def test_structured_digest_picks_fail_closed_without_ids(self) -> None:
+        picks = structured_digest_picks(
+            [
+                {
+                    "title": "Heat",
+                    "year": 1995,
+                    "tmdb_id": 949,
+                    "media_type": "movie",
+                    "poster_url": "/heat.jpg",
+                },
+                {"title": "Id-less junk", "year": 1999, "media_type": "movie"},
+                {"title": "Library only", "media_type": "show", "rating_key": "rk-1"},
+            ]
+        )
+        self.assertEqual(len(picks), 2)
+        self.assertEqual(picks[0]["tmdb_id"], 949)
+        self.assertEqual(picks[0]["poster_path"], "/heat.jpg")
+        self.assertEqual(picks[1]["rating_key"], "rk-1")
+
     def test_weekly_newsletter_opt_in(self) -> None:
         self._enable_multi_user()
         user = self.db.create_local_user(
@@ -339,12 +418,36 @@ class NotificationPlatformTests(unittest.TestCase):
             notify_channel_inbox=True,
             notify_channel_email=False,
         )
+        import time as _time
+
+        now = _time.time()
+        self.db.upsert_library_item(
+            {
+                "rating_key": "rk-digest-heat",
+                "media_type": "movie",
+                "title": "Heat",
+                "year": 1995,
+                "tmdb_id": 949,
+                "poster_url": "https://example.test/heat.jpg",
+                "added_at": now - 3600,
+            }
+        )
         settings = Settings.load(Path(self._tmpdir.name) / "settings.json")
         refreshed = self.db._row_to_user(self.db.get_user(user["id"]))
         content = build_member_newsletter(self.db, settings, user=refreshed)
         self.assertIn("This week", content["subject"])
+        self.assertTrue(content.get("blurb"))
+        self.assertTrue(content.get("picks"))
+        self.assertEqual(content["picks"][0]["tmdb_id"], 949)
         result = deliver_weekly_newsletters(self.db, settings)
         self.assertGreaterEqual(result["delivered"], 1)
+        notes = self.db.list_notifications_for_user(user["id"], kinds=["digest"])
+        self.assertTrue(notes)
+        payload = notes[0].get("payload") or {}
+        self.assertEqual(payload.get("newsletter"), "weekly")
+        self.assertTrue(payload.get("picks"))
+        self.assertEqual(payload["picks"][0]["title"], "Heat")
+        self.assertTrue(payload.get("blurb"))
 
     def test_weekly_newsletter_scoped_skips_opt_out(self) -> None:
         self._enable_multi_user()
