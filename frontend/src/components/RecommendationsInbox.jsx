@@ -1,10 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   dedupeNotifications,
+  digestBlurb,
+  digestPicks,
+  eventPrimaryCta,
   inboxHeadline,
+  isEnthusiastNudge,
+  isLiveChannelsNudge,
   isWatchPartyRecommendation,
   normalizeRecommendation,
+  nudgeCardNote,
   recommendationMediaTitle,
 } from "../lib/recommendationInbox.js";
 import { chatAboutTitleHref } from "../lib/backNav.js";
@@ -23,14 +29,14 @@ function TitleDigInEm({ item, children }) {
   );
 }
 
-function cardLead(rec, recommendation) {
+function cardLead(rec, recommendation, picks) {
   const kind = String(rec.kind || "recommendation");
   const fromName = rec.from_display_name || "Someone";
   const yearBit = rec.year ? ` (${rec.year})` : "";
   if (kind === "arrival") {
     return (
       <>
-        <strong>Now available</strong> —{" "}
+        <strong>Now in your library</strong> —{" "}
         <TitleDigInEm item={recommendation}>
           {rec.title}
           {yearBit}
@@ -39,19 +45,40 @@ function cardLead(rec, recommendation) {
     );
   }
   if (kind === "digest") {
-    return <strong>{rec.title || "Digest"}</strong>;
+    const count = picks.length;
+    if (count > 0) {
+      return (
+        <>
+          <strong>This week for you</strong>
+          <span className="recommendation-pick-count">
+            {" "}
+            · {`${count} pick${count === 1 ? "" : "s"}`}
+          </span>
+        </>
+      );
+    }
+    return <strong>{rec.title || "This week for you"}</strong>;
   }
   if (kind === "access-request") {
+    const name = rec.payload?.display_name || rec.title?.replace(/^Access request from\s+/i, "") || "Someone";
     return (
       <>
-        <strong>Access request</strong> — {rec.title || "New request"}
+        <strong>{name}</strong> wants access
       </>
     );
   }
   if (kind === "nudge") {
+    if (isLiveChannelsNudge(rec)) {
+      return <strong>Live Channels ready</strong>;
+    }
+    const mediaTitle = recommendationMediaTitle(rec) || rec.title || "this title";
     return (
       <>
-        <strong>Nudge</strong> — {rec.title || "Something to see"}
+        <strong>You have to see this</strong> —{" "}
+        <TitleDigInEm item={recommendation}>
+          {mediaTitle}
+          {yearBit}
+        </TitleDigInEm>
       </>
     );
   }
@@ -89,7 +116,111 @@ function cardLead(rec, recommendation) {
   );
 }
 
-export default function RecommendationsInbox({ items = [], onDismiss, onDismissAll }) {
+function DigestPickStrip({ picks, recId, onOpen }) {
+  if (!picks.length) return null;
+  return (
+    <ul
+      className="recommendation-pick-strip"
+      data-testid={`recommendation-pick-strip-${recId}`}
+      aria-label="Digest picks"
+    >
+      {picks.map((pick, index) => {
+        const key = `${pick.tmdb_id || pick.rating_key || pick.tvdb_id || pick.title}-${index}`;
+        const path = titleDetailPath(pick);
+        const inner = pick.poster_url ? (
+          <img src={pick.poster_url} alt="" loading="lazy" />
+        ) : (
+          <div className="poster-fallback">{(pick.title || "?").slice(0, 1)}</div>
+        );
+        return (
+          <li key={key} className="recommendation-pick-chip">
+            {path ? (
+              <TitleDetailLink
+                item={pick}
+                className="recommendation-pick-link"
+                aria-label={`Open ${pick.title}`}
+                data-testid={`recommendation-pick-${recId}-${index}`}
+                onClick={() => onOpen?.(pick)}
+              >
+                {inner}
+                <span className="recommendation-pick-title">{pick.title}</span>
+              </TitleDetailLink>
+            ) : (
+              <span className="recommendation-pick-link recommendation-pick-link--inert">
+                {inner}
+                <span className="recommendation-pick-title">{pick.title}</span>
+              </span>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+function DigestCardBody({ rec, onDismiss }) {
+  const picks = digestPicks(rec);
+  const blurb = digestBlurb(rec);
+  const fullNote = String(rec.body || rec.message || "").trim();
+  const showDisclosure = Boolean(fullNote && fullNote !== blurb);
+  const [openNote, setOpenNote] = useState(false);
+  const primaryPick = picks[0] || null;
+  const chatHref = primaryPick ? chatAboutTitleHref(primaryPick) : null;
+
+  return (
+    <>
+      {blurb ? (
+        <p className="recommendation-card-blurb" data-testid={`recommendation-blurb-${rec.id}`}>
+          {blurb}
+        </p>
+      ) : null}
+      <DigestPickStrip picks={picks} recId={rec.id} onOpen={() => onDismiss?.(rec)} />
+      {showDisclosure ? (
+        <details
+          className="recommendation-curator-note"
+          data-testid={`recommendation-curator-note-${rec.id}`}
+          open={openNote}
+          onToggle={(event) => setOpenNote(event.currentTarget.open)}
+        >
+          <summary>Read curator note</summary>
+          <p className="recommendation-card-note recommendation-card-note--full">“{fullNote}”</p>
+        </details>
+      ) : null}
+      <div className="recommendation-card-actions">
+        {primaryPick && titleDetailPath(primaryPick) ? (
+          <TitleDetailLink
+            item={primaryPick}
+            className="btn-link recommendation-cta-primary"
+            data-testid={`recommendation-open-${rec.id}`}
+            onClick={() => onDismiss?.(rec)}
+          >
+            Open picks
+          </TitleDetailLink>
+        ) : null}
+        {chatHref ? (
+          <Link
+            to={chatHref}
+            className="btn-link"
+            data-testid={`recommendation-chat-${rec.id}`}
+            onClick={() => onDismiss?.(rec)}
+          >
+            Chat about this week
+          </Link>
+        ) : null}
+        <button
+          type="button"
+          className="ghost"
+          data-testid={`recommendation-dismiss-${rec.id}`}
+          onClick={() => onDismiss?.(rec)}
+        >
+          Dismiss
+        </button>
+      </div>
+    </>
+  );
+}
+
+export default function RecommendationsInbox({ items = [], onDismiss, onDismissAll, role }) {
   const recommendations = useMemo(() => dedupeNotifications(items), [items]);
   if (!recommendations.length) return null;
 
@@ -120,23 +251,36 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
         {recommendations.map((rec, index) => {
           const recommendation = normalizeRecommendation(rec);
           const path = titleDetailPath(recommendation);
-          const note = rec.message || rec.body;
           const kind = String(rec.kind || "recommendation");
+          const picks = kind === "digest" ? digestPicks(rec) : [];
           const watchParty = kind === "recommendation" && isWatchPartyRecommendation(rec);
-          const librarySharePath =
-            kind === "library-share"
-              ? rec.payload?.path ||
-                (rec.payload?.page_id ? `/library/${encodeURIComponent(rec.payload.page_id)}` : null)
-              : null;
+          const primaryCta = eventPrimaryCta(rec, { role });
           const showPoster =
-            Boolean(rec.poster_url) || kind === "recommendation" || kind === "arrival";
-          const mediaTitle = kind === "recommendation" ? recommendationMediaTitle(rec) : rec.title;
+            Boolean(rec.poster_url) ||
+            kind === "recommendation" ||
+            kind === "arrival" ||
+            (kind === "nudge" && isEnthusiastNudge(rec) && Boolean(rec.poster_url || path));
+          const mediaTitle =
+            kind === "recommendation" || isEnthusiastNudge(rec)
+              ? recommendationMediaTitle(rec)
+              : rec.title;
           const chatHref =
             kind === "recommendation" && mediaTitle ? chatAboutTitleHref(recommendation) : null;
+          const note =
+            kind === "digest"
+              ? null
+              : kind === "nudge"
+                ? nudgeCardNote(rec)
+                : kind === "access-request"
+                  ? null
+                  : rec.message || rec.body;
           const cardClass = [
             "recommendation-card",
+            "recommendation-card--event",
             `recommendation-card--${kind}`,
             watchParty ? "recommendation-card--watch-party" : "",
+            isLiveChannelsNudge(rec) ? "recommendation-card--live-nudge" : "",
+            isEnthusiastNudge(rec) ? "recommendation-card--enthusiast-nudge" : "",
             showPoster ? "" : "recommendation-card--text-only",
           ]
             .filter(Boolean)
@@ -148,7 +292,7 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
               data-testid={`recommendation-card-${rec.id}`}
               data-kind={kind}
               data-intent={watchParty ? "watch_party" : recommendation.intent || undefined}
-              style={{ zIndex: recommendations.length - index }}
+              style={{ zIndex: recommendations.length - index, animationDelay: `${Math.min(index, 6) * 40}ms` }}
             >
               {showPoster ? (
                 <div className="recommendation-card-poster">
@@ -192,48 +336,58 @@ export default function RecommendationsInbox({ items = [], onDismiss, onDismissA
                     <span>{rec.from_display_name}</span>
                   </p>
                 ) : null}
-                <p className="recommendation-card-from">{cardLead(rec, recommendation)}</p>
-                {note ? <p className="recommendation-card-note">“{note}”</p> : null}
-                <div className="recommendation-card-actions">
-                  {librarySharePath ? (
-                    <Link
-                      to={librarySharePath}
-                      className="btn-link"
-                      data-testid={`recommendation-open-library-${rec.id}`}
-                      onClick={() => onDismiss?.(rec)}
-                    >
-                      Open saved page
-                    </Link>
-                  ) : null}
-                  {path ? (
-                    <TitleDetailLink
-                      item={recommendation}
-                      className="btn-link"
-                      data-testid={`recommendation-open-${rec.id}`}
-                      onClick={() => onDismiss?.(rec)}
-                    >
-                      Open title
-                    </TitleDetailLink>
-                  ) : null}
-                  {chatHref ? (
-                    <Link
-                      to={chatHref}
-                      className="btn-link"
-                      data-testid={`recommendation-chat-${rec.id}`}
-                      onClick={() => onDismiss?.(rec)}
-                    >
-                      Chat about this
-                    </Link>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="ghost"
-                    data-testid={`recommendation-dismiss-${rec.id}`}
-                    onClick={() => onDismiss?.(rec)}
-                  >
-                    Dismiss
-                  </button>
-                </div>
+                <p className="recommendation-card-from">{cardLead(rec, recommendation, picks)}</p>
+                {kind === "digest" ? (
+                  <DigestCardBody rec={rec} onDismiss={onDismiss} />
+                ) : (
+                  <>
+                    {note ? (
+                      <p className="recommendation-card-blurb" data-testid={`recommendation-blurb-${rec.id}`}>
+                        {note}
+                      </p>
+                    ) : null}
+                    <div className="recommendation-card-actions">
+                      {primaryCta ? (
+                        <Link
+                          to={primaryCta.href}
+                          className="btn-link recommendation-cta-primary"
+                          data-testid={`recommendation-${primaryCta.testIdSuffix}-${rec.id}`}
+                          onClick={() => onDismiss?.(rec)}
+                        >
+                          {primaryCta.label}
+                        </Link>
+                      ) : null}
+                      {!primaryCta && path ? (
+                        <TitleDetailLink
+                          item={recommendation}
+                          className="btn-link recommendation-cta-primary"
+                          data-testid={`recommendation-open-${rec.id}`}
+                          onClick={() => onDismiss?.(rec)}
+                        >
+                          Open title
+                        </TitleDetailLink>
+                      ) : null}
+                      {chatHref ? (
+                        <Link
+                          to={chatHref}
+                          className="btn-link"
+                          data-testid={`recommendation-chat-${rec.id}`}
+                          onClick={() => onDismiss?.(rec)}
+                        >
+                          Chat about this
+                        </Link>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="ghost"
+                        data-testid={`recommendation-dismiss-${rec.id}`}
+                        onClick={() => onDismiss?.(rec)}
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </article>
           );

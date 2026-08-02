@@ -139,6 +139,171 @@ class YouthGateHookTests(unittest.TestCase):
         filtered = apply_youth_gate_to_items(items, max_rating="PG-13")
         self.assertEqual([i["title"] for i in filtered], ["Ok"])
 
+    def test_youth_safe_recipe_excludes_tv_ma_dexter(self) -> None:
+        """Channel 103 Youth Safe must never schedule TV-MA / R / unrated titles."""
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+        from projectionist.live_channels.recipes import recipe_is_youth_safe
+
+        catalog = [
+            {
+                "id": "dex-e9",
+                "duration": 3_200_000,
+                "program": {
+                    "uuid": "dex-e9",
+                    "title": "Dexter",
+                    "type": "episode",
+                    "contentRating": "TV-MA",
+                    "externalKey": "dexter-e9",
+                    "show": {"title": "Dexter", "contentRating": "TV-MA"},
+                },
+            },
+            {
+                "id": "heat",
+                "duration": 7_200_000,
+                "program": {
+                    "uuid": "heat",
+                    "title": "Heat",
+                    "type": "movie",
+                    "contentRating": "R",
+                    "externalKey": "heat-1",
+                },
+            },
+            {
+                "id": "blank",
+                "duration": 5_400_000,
+                "program": {
+                    "uuid": "blank",
+                    "title": "Mystery Unrated",
+                    "type": "movie",
+                    "contentRating": "",
+                    "externalKey": "blank-1",
+                },
+            },
+            {
+                "id": "finding-nemo",
+                "duration": 6_000_000,
+                "program": {
+                    "uuid": "finding-nemo",
+                    "title": "Finding Nemo",
+                    "type": "movie",
+                    "contentRating": "G",
+                    "externalKey": "nemo-1",
+                },
+            },
+            {
+                "id": "cartoon",
+                "duration": 1_400_000,
+                "program": {
+                    "uuid": "cartoon",
+                    "title": "Saturday Cartoon",
+                    "type": "episode",
+                    "contentRating": "TV-G",
+                    "externalKey": "toon-1",
+                },
+            },
+        ]
+        recipe = ChannelRecipe(
+            name="Youth Safe",
+            number=103,
+            source="youth",
+            programming_mode=ProgrammingMode.SHUFFLE,
+            youth_safe=True,
+        )
+        self.assertTrue(recipe_is_youth_safe(recipe))
+        stats: dict = {}
+        picked = collect_programs_for_recipe(
+            MagicMock(),
+            recipe,
+            catalog=catalog,
+            settings=Settings(),
+            match_stats=stats,
+        )
+        titles = {p["title"] for p in picked}
+        self.assertNotIn("Dexter", titles)
+        self.assertNotIn("Heat", titles)
+        self.assertNotIn("Mystery Unrated", titles)
+        self.assertTrue(titles)
+        self.assertTrue(titles <= {"Finding Nemo", "Saturday Cartoon"})
+        self.assertTrue(stats.get("youth_safe"))
+        self.assertEqual(stats.get("youth_max_rating"), "PG-13")
+
+    def test_youth_safe_inherits_show_tv_ma_when_episode_unrated(self) -> None:
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+
+        catalog = [
+            {
+                "id": "dex-bare",
+                "duration": 3_200_000,
+                "program": {
+                    "uuid": "dex-bare",
+                    "title": "Get Gellar",
+                    "type": "episode",
+                    "externalKey": "dex-bare-1",
+                    "show": {
+                        "title": "Dexter",
+                        "contentRating": "TV-MA",
+                        "externalKey": "dexter-show",
+                    },
+                },
+            },
+            {
+                "id": "safe",
+                "duration": 5_000_000,
+                "program": {
+                    "uuid": "safe",
+                    "title": "Paddington",
+                    "type": "movie",
+                    "contentRating": "PG",
+                    "externalKey": "pad-1",
+                },
+            },
+        ]
+        recipe = ChannelRecipe(
+            name="Youth Safe",
+            number=103,
+            source="youth",
+            programming_mode=ProgrammingMode.SHUFFLE,
+            youth_safe=True,
+        )
+        picked = collect_programs_for_recipe(
+            MagicMock(), recipe, catalog=catalog, settings=Settings()
+        )
+        titles = {p["title"] for p in picked}
+        self.assertNotIn("Get Gellar", titles)
+        self.assertNotIn("Dexter", titles)
+        self.assertEqual(titles, {"Paddington"})
+
+    def test_merge_refill_preserves_youth_safe_flag(self) -> None:
+        from projectionist.live_channels.publish import (
+            merge_refill_recipe_payload,
+            recipe_from_station_meta,
+            set_station_meta,
+        )
+
+        settings = Settings(tunarr=TunarrSettings())
+        set_station_meta(
+            settings,
+            "ch-103",
+            media_scope="both",
+            source="youth",
+            programming_mode="shuffle",
+            youth_safe=True,
+        )
+        stored = recipe_from_station_meta(
+            settings, "ch-103", name="Youth Safe", number=103
+        )
+        assert stored is not None
+        self.assertTrue(stored.youth_safe)
+        merged = merge_refill_recipe_payload(
+            {"media_scope": "both"},
+            stored=stored,
+            name="Youth Safe",
+            number=103,
+            stored_scope="both",
+        )
+        self.assertTrue(merged.youth_safe)
+        self.assertEqual(merged.source, "youth")
+
 
 class PlexPassPreflightTests(unittest.TestCase):
     def test_unknown_without_confirm(self) -> None:
@@ -2267,7 +2432,132 @@ class PreflightAndPublishTests(unittest.TestCase):
                 fill_programming=False,
             )
         self.assertEqual(skipped["count_skipped"], 1)
+        self.assertEqual(skipped["skipped"][0]["reason"], "number_exists")
         client2.create_channel.assert_not_called()
+
+    def test_publish_name_collision_with_free_number_creates_unique(self) -> None:
+        """Free dial slot + colliding name must create, not skip/overwrite."""
+        from projectionist.live_channels.publish import publish_recipes
+
+        client = MagicMock()
+        client.base_url = "http://tunarr.test:8000"
+        client.list_media_sources.return_value = []
+        client.list_channels.return_value = [
+            {"id": "ch-mystery", "name": "Mystery", "number": 100}
+        ]
+        client.list_sessions.return_value = {}
+        client.default_transcode_config_id.return_value = "tc-default"
+        client.create_channel.return_value = {
+            "id": "ch-new",
+            "name": "Mystery 2",
+            "number": 107,
+        }
+        client.set_channel_programming.return_value = {"totalPrograms": 0, "lineup": []}
+        _filler = {
+            "ok": False,
+            "ready": False,
+            "filler_list_id": "",
+            "program_count": 0,
+            "message": "no filler",
+        }
+        with patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={
+                "ok": True,
+                "labels": {},
+                "warmed": [],
+                "count_aligned": 0,
+                "count_warmed_ok": 0,
+            },
+        ), patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value=_filler,
+        ):
+            result = publish_recipes(
+                client,
+                [ChannelRecipe(name="Mystery", number=107, source="motif", motif="mystery")],
+            )
+        self.assertEqual(result["count_published"], 1)
+        self.assertEqual(result["count_skipped"], 0)
+        self.assertEqual(result["count_programming_updated"], 0)
+        self.assertEqual(result["count_renamed"], 1)
+        self.assertEqual(result["renamed"][0]["from"], "Mystery")
+        self.assertEqual(result["renamed"][0]["to"], "Mystery 2")
+        client.create_channel.assert_called_once()
+        created_body = client.create_channel.call_args.args[0]
+        self.assertEqual(created_body["channel"]["name"], "Mystery 2")
+        self.assertEqual(created_body["channel"]["number"], 107)
+
+    def test_publish_custom_remaps_occupied_number(self) -> None:
+        from projectionist.live_channels.publish import publish_custom_channel
+
+        client = MagicMock()
+        client.base_url = "http://tunarr.test:8000"
+        client.list_media_sources.return_value = []
+        client.list_channels.return_value = [
+            {"id": "ch-100", "name": "Mystery", "number": 100}
+        ]
+        client.list_sessions.return_value = {}
+        client.default_transcode_config_id.return_value = "tc-default"
+        client.create_channel.return_value = {
+            "id": "ch-101",
+            "name": "1970s",
+            "number": 101,
+        }
+        client.set_channel_programming.return_value = {"totalPrograms": 0, "lineup": []}
+        _filler = {
+            "ok": False,
+            "ready": False,
+            "filler_list_id": "",
+            "program_count": 0,
+            "message": "no filler",
+        }
+        with patch(
+            "projectionist.live_channels.publish.prepare_channels_for_playback",
+            return_value={
+                "ok": True,
+                "labels": {},
+                "warmed": [],
+                "count_aligned": 0,
+                "count_warmed_ok": 0,
+            },
+        ), patch(
+            "projectionist.live_channels.filler.ensure_continuity_filler_list",
+            return_value=_filler,
+        ):
+            result = publish_custom_channel(
+                client,
+                {
+                    "name": "1970s",
+                    "number": 100,
+                    "source": "motif",
+                    "craft_filters": {"decade": 1970},
+                },
+                channel_number_base=100,
+            )
+        self.assertEqual(result["count_published"], 1)
+        self.assertEqual(result["count_skipped"], 0)
+        self.assertEqual(result["remapped_number_from"], 100)
+        self.assertEqual(result["remapped_number_to"], 101)
+        self.assertEqual(result["recipe"]["number"], 101)
+        created_body = client.create_channel.call_args.args[0]
+        self.assertEqual(created_body["channel"]["number"], 101)
+
+    def test_craft_payload_names_from_decade_filters(self) -> None:
+        from projectionist.live_channels.craft import recipe_from_craft_payload
+
+        # Admin auto-selects the first motif; stacked decade must not become "Mystery".
+        recipe = recipe_from_craft_payload(
+            {
+                "source": "motif",
+                "motif": "mystery",
+                "number": 107,
+                "craft_filters": {"decade": 1970},
+            },
+            default_number=107,
+        )
+        self.assertEqual(recipe.name, "Mystery · 1970s")
+        self.assertEqual(recipe.number, 107)
 
     def test_publish_fills_content_from_library_catalog(self) -> None:
         from projectionist.live_channels.publish import publish_recipes
@@ -2406,7 +2696,12 @@ class ReadyNudgeTests(unittest.TestCase):
         )
         self.assertGreaterEqual(first["delivered"], 1)
         notes = self.db.list_notifications_for_user(BOOTSTRAP_OWNER_ID, kinds=["nudge"])
-        self.assertTrue(any(n.get("related_id") == RELATED_ID for n in notes))
+        ready = [n for n in notes if n.get("related_id") == RELATED_ID]
+        self.assertTrue(ready)
+        payload = ready[0].get("payload") or {}
+        self.assertTrue(payload.get("live_channels"))
+        self.assertEqual(payload.get("cta"), "/live")
+        self.assertEqual(ready[0].get("title"), "Live Channels ready")
 
         second = maybe_deliver_live_channels_ready_nudge(
             self.db, settings, ready=True, channel_count=2
@@ -3499,6 +3794,145 @@ class CollectionIdMatchTests(unittest.TestCase):
         self.assertEqual(recipe.source, "collection")
         self.assertEqual(recipe.collection_id, "55")
         self.assertEqual(recipe.programming_mode, ProgrammingMode.SHUFFLE)
+
+    def test_merge_refill_keeps_decade_filters_when_admin_sends_media_scope_only(
+        self,
+    ) -> None:
+        """Admin Refill used to send {media_scope} and drop decade craft_filters."""
+        from projectionist.config_store import Settings, TunarrSettings
+        from projectionist.live_channels.publish import (
+            merge_refill_recipe_payload,
+            recipe_from_station_meta,
+            set_station_meta,
+        )
+
+        settings = Settings(tunarr=TunarrSettings())
+        set_station_meta(
+            settings,
+            "ch-106",
+            media_scope="movies",
+            source="motif",
+            programming_mode="shuffle",
+            motif="creature feature",
+            craft_filters={"genres": ["Horror"], "decade": 1970},
+        )
+        stored = recipe_from_station_meta(
+            settings, "ch-106", name="Creature Double Feature 70s Edition", number=106
+        )
+        assert stored is not None
+        merged = merge_refill_recipe_payload(
+            {"media_scope": "movies"},
+            stored=stored,
+            name="Creature Double Feature 70s Edition",
+            number=106,
+            stored_scope="movies",
+        )
+        self.assertEqual(merged.craft_filters.get("decade"), 1970)
+        self.assertEqual(merged.craft_filters.get("year_from"), 1970)
+        self.assertEqual(merged.craft_filters.get("year_to"), 1979)
+        self.assertEqual(merged.craft_filters.get("genres"), ["Horror"])
+        self.assertEqual(merged.motif, "creature feature")
+        self.assertEqual(merged.source, "motif")
+        self.assertEqual(merged.media_scope, "movies")
+
+    def test_refill_partial_payload_preserves_and_applies_decade_filters(self) -> None:
+        """End-to-end: Refill with Admin-style overlay only schedules in-decade titles."""
+        from projectionist.config_store import Settings, TunarrSettings
+        from projectionist.live_channels.publish import (
+            refill_channel_lineup,
+            set_station_meta,
+        )
+
+        settings = Settings(tunarr=TunarrSettings())
+        set_station_meta(
+            settings,
+            "ch-106",
+            media_scope="movies",
+            source="motif",
+            programming_mode="shuffle",
+            craft_filters={"decade": 1970, "genres": ["Horror"]},
+        )
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {
+                "id": "ch-106",
+                "name": "Creature Double Feature 70s Edition",
+                "number": 106,
+            }
+        ]
+        client.list_media_sources.return_value = [{"id": "ms-1", "type": "plex"}]
+        client.list_media_source_libraries.return_value = [
+            {
+                "id": "lib-m",
+                "name": "Movies",
+                "mediaType": "movies",
+                "externalKey": "1",
+                "enabled": True,
+            }
+        ]
+        client.get_library_scan_status.return_value = {"state": "idle"}
+        client.list_library_programs.return_value = [
+            {
+                "id": "old-horror",
+                "duration": 5_400_000,
+                "title": "The Texas Chain Saw Massacre",
+                "type": "movie",
+                "genres": ["Horror"],
+                "year": 1974,
+                "externalKey": "70",
+                "identifiers": [{"type": "plex", "id": "70"}],
+            },
+            {
+                "id": "modern",
+                "duration": 5_400_000,
+                "title": "Knock at the Cabin",
+                "type": "movie",
+                "genres": ["Horror"],
+                "year": 2023,
+                "externalKey": "2023",
+                "identifiers": [{"type": "plex", "id": "2023"}],
+            },
+        ]
+        client.set_channel_programming.return_value = {"ok": True}
+        client.search_programs.return_value = {"results": []}
+
+        with (
+            patch(
+                "projectionist.live_channels.publish.ensure_media_libraries_enabled",
+                return_value={
+                    "enabled": [
+                        {
+                            "id": "lib-m",
+                            "media_type": "movies",
+                        }
+                    ]
+                },
+            ),
+            patch(
+                "projectionist.web.jobs.get_job_manager",
+                side_effect=RuntimeError("no db"),
+            ),
+            patch(
+                "projectionist.live_channels.filters.exclusion_rating_keys",
+                return_value=set(),
+            ),
+        ):
+            result = refill_channel_lineup(
+                client,
+                "ch-106",
+                recipe_payload={"media_scope": "movies"},
+                settings=settings,
+                attach_continuity=False,
+            )
+
+        titles = [str(t) for t in (result.get("titles") or [])]
+        self.assertTrue(result.get("ok"), result)
+        self.assertIn("The Texas Chain Saw Massacre", titles)
+        self.assertNotIn("Knock at the Cabin", titles)
+        # Persist must keep decade bounds for the next refill.
+        meta = (settings.tunarr.station_meta or {}).get("ch-106") or {}
+        self.assertEqual((meta.get("craft_filters") or {}).get("decade"), 1970)
+        self.assertEqual((meta.get("craft_filters") or {}).get("year_from"), 1970)
 
     def test_repair_skips_chaos_wipe_when_lineup_already_filled(self) -> None:
         """Continuity repair must not Chaos-refill a station that already has programs."""

@@ -2,6 +2,51 @@
 
 ## [Unreleased]
 
+### Added
+- **Search bar on Browse library.** `/search` has a prominent progressive search input — results filter as you type via the existing library `q` / `queryLibrary` path; clearing the box restores full browse. Filters, posters, and Beyond your collection keep working with the query.
+
+### Verification
+- Frontend unit: `progressiveBrowseSearch` helpers + LibraryBrowsePage wiring (`library-browse-search-input`, debounce commit).
+- Interactive UI QA: `search.query` updated; new `search.progressive` for as-you-type on `/search`.
+
+## [1.30.4] — 2026-08-02
+
+Inbox becomes a curated event stream, and Live Channels craft stays honest: Youth Safe ratings actually gate airtime, Refill keeps decade/genre filters, and station Settings separate save from apply.
+
+### Highlights
+- **Inbox events, not email dumps.** Weekly digests lead with a short blurb and a poster pick strip — the full curator note sits behind disclosure.
+- **Youth Safe means Youth Safe.** TV-MA titles (e.g. Dexter) no longer slip onto Youth Safe stations after a Refill.
+- **Craft sticks when you Refill.** Decade, genre, and the rest of Narrow the pool survive rebuilds; Settings shows the saved craft, with Save craft vs Refill to apply.
+- **Dismiss all sticks.** Clearing the inbox marks every unread row seen; reopening no longer resurrects the pile.
+- **Buttons that go somewhere.** Access requests open Admin Access; Live-ready nudges open `/live`; enthusiast nudges spotlight one title without a recently-watched comma dump.
+
+### Added
+- Digest notifications carry structured `payload.picks` + `payload.blurb` (capped, fail-closed without an id) from weekly/monthly newsletter builders.
+- Inbox digest card: pick strip dig-in, “Open picks” / “Chat about this week”, curator-note disclosure.
+- Kind-tinted event chrome + soft enter / pick-hover / CTA press motions on inbox cards.
+- Interactive UI QA IDs: `inbox.digest-picks`, `inbox.access-review-cta`, `inbox.live-nudge-cta`; dismiss-all stick steps.
+- Station **Settings** craft panel: view/edit motif + Narrow the pool (genre/decade/theme/rating) + media scope/captions; **Save craft** vs **Refill to apply**.
+- `youth_safe` applied inside `collect_programs_for_recipe` (rating gate + inherit show rating when episode is unrated).
+
+### Fixed
+- Inbox list fetch uses unread-only; dismiss-all always sends `all_unread: true` so clear persists across reopen.
+- Enthusiast nudge inbox title is the media title; body no longer dumps recently-watched titles (kept in payload for later chips).
+- Live Channels **Refill** merges full `station_meta` craft filters instead of wiping with `{media_scope}` (modern titles no longer air on a 1970s station after refill).
+- Publish skip is number-only: colliding names remapped/renamed rather than silently skipped; feedback reports skip reasons honestly.
+
+### Changed
+- Live Channels ready nudge CTA points at `/live` with matching inbox primary action.
+- Access-request cards expose “Review request” → `/admin/access` for owners.
+- Refill fails closed with an honest empty when craft filters match nothing.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1748 passed, 6 skipped; coverage **75.3%** (≥74 floor).
+- Focused Live/inbox: `test_live_channels` (youth_safe / refill merge / publish skip), `test_live_channels_api`, `test_notifications_mail`, `test_delight_phase5`.
+- `cd frontend && npm run test:unit` — 618 passed (`liveChannelsCraft` + inbox helpers).
+- `cd frontend && npm run lint` — 0 errors; `npm run build` — production build.
+- `test_version` lockstep **1.30.4**.
+- QA `:8790` Path A redeploy (`projectionist-qa:wip` / health **1.30.4**); inbox delta **PASS** (`qa-runs/2026-08-02-member-inbox-delta.md`: digest strip, Live CTA, access Review request, dismiss-all stick); Youth Safe / Settings smoke as available.
+
 ## [1.30.3] — 2026-08-02
 
 Closed-loop facet taxonomy + Admin Taxonomy review, entity-memory demand pilot, and a no-LLM chat fallback that keeps history-miniseries gap asks structured instead of dumping popular movies.

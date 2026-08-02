@@ -147,6 +147,11 @@ class LiveChannelsRefillChannelPayload(BaseModel):
 class LiveChannelsStationSettingsPayload(BaseModel):
     media_scope: str = "both"
     subtitles_enabled: Optional[bool] = None
+    # Craft definition (optional). When present, replaces stored station_meta fields.
+    # Empty craft_filters clears decade/genre/theme/rating. Refill applies the lineup.
+    motif: Optional[str] = None
+    cluster_tag: Optional[str] = None
+    craft_filters: Optional[Dict[str, Any]] = None
     confirm: bool = False
 
 
@@ -900,7 +905,11 @@ def live_channels_station_settings_endpoint(
     payload: LiveChannelsStationSettingsPayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Update Projectionist-side station settings (media scope, captions, etc.)."""
+    """Update Projectionist-side station settings (scope, captions, craft filters).
+
+    Saves ``station_meta`` only — does **not** rewrite the Tunarr lineup. Owner
+    should Refill after changing decade/genre/theme/scope so the guide matches.
+    """
     del user
     if not payload.confirm:
         raise HTTPException(
@@ -910,12 +919,14 @@ def live_channels_station_settings_endpoint(
     settings = _settings()
     if not settings.features.live_channels_enabled:
         raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.filters import normalize_craft_filters
     from projectionist.live_channels.publish import (
         apply_channel_subtitles_enabled,
         resolve_media_scope,
         resolve_subtitles_enabled,
         set_station_meta,
         set_station_media_scope,
+        station_craft_snapshot,
         tunarr_client_from_settings,
     )
     from projectionist.live_channels.recipes import normalize_media_scope
@@ -925,9 +936,29 @@ def live_channels_station_settings_endpoint(
         raise HTTPException(status_code=400, detail="channel_id is required")
     scope = normalize_media_scope(payload.media_scope)
     set_station_media_scope(settings, cid, scope)
+    craft_touched = (
+        payload.craft_filters is not None
+        or payload.motif is not None
+        or payload.cluster_tag is not None
+    )
     notes: List[str] = [
-        f"Station media scope set to {scope}. Refill to apply to the lineup.",
+        f"Station media scope set to {scope}.",
     ]
+    if craft_touched:
+        craft_payload = (
+            normalize_craft_filters(payload.craft_filters or {}).to_dict()
+            if payload.craft_filters is not None
+            else None
+        )
+        set_station_meta(
+            settings,
+            cid,
+            craft_filters=craft_payload,
+            motif=payload.motif,
+            cluster_tag=payload.cluster_tag,
+        )
+        notes.append("Craft filters saved.")
+    notes.append("Refill to apply filters and scope to the lineup.")
     subtitles_enabled = None
     if payload.subtitles_enabled is not None:
         subtitles_enabled = bool(payload.subtitles_enabled)
@@ -959,11 +990,17 @@ def live_channels_station_settings_endpoint(
 
     tunarr = asdict(settings.tunarr)
     save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
+    craft = station_craft_snapshot(settings, cid)
     return {
         "ok": True,
         "channel_id": cid,
         "media_scope": resolve_media_scope(settings, channel_id=cid),
         "subtitles_enabled": resolve_subtitles_enabled(settings, channel_id=cid),
+        "motif": craft.get("motif") or "",
+        "cluster_tag": craft.get("cluster_tag") or "",
+        "craft_filters": dict(craft.get("craft_filters") or {}),
+        "source": craft.get("source") or "",
+        "refill_required": True,
         "message": " ".join(notes),
     }
 

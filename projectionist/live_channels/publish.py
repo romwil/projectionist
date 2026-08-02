@@ -65,6 +65,35 @@ def craft_fill_mode(*, collection_id: str = "", source: str = "") -> str:
     return "soft"
 
 
+def unique_station_name(
+    name: str,
+    existing_names: Mapping[str, Any] | Sequence[str] | None = None,
+) -> str:
+    """Return ``name`` or ``Name 2`` / ``Name 3`` … when the dial already has it.
+
+    Used when a free channel *number* is available but the recipe name collides —
+    craft should still create a new station instead of skipping / overwriting.
+    """
+    base = str(name or "").strip() or "Custom Station"
+    base = base[:48]
+    if existing_names is None:
+        return base
+    if isinstance(existing_names, Mapping):
+        taken = {str(k).strip().lower() for k in existing_names if str(k).strip()}
+    else:
+        taken = {str(n).strip().lower() for n in existing_names if str(n).strip()}
+    key = base.lower()
+    if key not in taken:
+        return base
+    for index in range(2, 100):
+        # Keep within Tunarr's short display budget.
+        suffix = f" {index}"
+        candidate = f"{base[: max(1, 48 - len(suffix))]}{suffix}"
+        if candidate.lower() not in taken:
+            return candidate
+    return f"{base[:40]} {uuid.uuid4().hex[:6]}"
+
+
 def craft_soft_cap_honesty(
     *,
     fill_mode: str = "soft",
@@ -515,12 +544,16 @@ def set_station_meta(
     icon_url: str = "",
     source: str = "",
     craft_filters: Optional[Mapping[str, Any]] = None,
-    motif: str = "",
-    cluster_tag: str = "",
+    motif: Optional[str] = None,
+    cluster_tag: Optional[str] = None,
     subtitles_enabled: Optional[bool] = None,
     youth_safe: Optional[bool] = None,
 ) -> None:
-    """Persist station recipe fields on ``settings.tunarr.station_meta`` (in-memory)."""
+    """Persist station recipe fields on ``settings.tunarr.station_meta`` (in-memory).
+
+    ``motif`` / ``cluster_tag`` / ``craft_filters``: ``None`` leaves the stored
+    value unchanged; a provided value (including empty) replaces it.
+    """
     cid = str(channel_id or "").strip()
     if not cid or settings is None:
         return
@@ -547,9 +580,9 @@ def set_station_meta(
         row["icon_url"] = str(icon_url).strip()
     if source:
         row["source"] = str(source).strip()
-    if motif:
+    if motif is not None:
         row["motif"] = str(motif).strip()
-    if cluster_tag:
+    if cluster_tag is not None:
         row["cluster_tag"] = str(cluster_tag).strip()
     if subtitles_enabled is not None:
         row["subtitles_enabled"] = bool(subtitles_enabled)
@@ -560,6 +593,28 @@ def set_station_meta(
 
         row["craft_filters"] = normalize_craft_filters(craft_filters).to_dict()
     meta[cid] = row
+
+
+def station_craft_snapshot(settings: Any, channel_id: str) -> Dict[str, Any]:
+    """Owner-facing craft definition from ``station_meta`` (for Settings / status)."""
+    from projectionist.live_channels.filters import normalize_craft_filters
+
+    row = station_meta_row(settings, channel_id)
+    craft = normalize_craft_filters(row.get("craft_filters")).to_dict()
+    return {
+        "source": str(row.get("source") or "").strip(),
+        "motif": str(row.get("motif") or "").strip(),
+        "cluster_tag": str(row.get("cluster_tag") or "").strip(),
+        "collection_id": str(row.get("collection_id") or "").strip(),
+        "collection_title": str(row.get("collection_title") or "").strip(),
+        "programming_mode": str(row.get("programming_mode") or "").strip(),
+        "media_scope": normalize_media_scope(row.get("media_scope")),
+        "craft_filters": craft,
+        "youth_safe": bool(row.get("youth_safe")),
+        "subtitles_enabled": (
+            bool(row["subtitles_enabled"]) if "subtitles_enabled" in row else None
+        ),
+    }
 
 
 def set_station_media_scope(
@@ -629,7 +684,12 @@ def recipe_from_station_meta(
     source = str(row.get("source") or "").strip()
     if collection_id:
         source = source or "collection"
-    if not source and not mode_raw:
+    from projectionist.live_channels.filters import normalize_craft_filters
+
+    craft_filters = normalize_craft_filters(row.get("craft_filters")).to_dict()
+    has_filters = not normalize_craft_filters(craft_filters).is_empty()
+    # Decade/genre stations may only have craft_filters + media_scope persisted.
+    if not source and not mode_raw and not collection_id and not has_filters:
         return None
     default_mode = (
         ProgrammingMode.SEQUENTIAL
@@ -641,9 +701,6 @@ def recipe_from_station_meta(
         if mode_raw
         else default_mode
     )
-    from projectionist.live_channels.filters import normalize_craft_filters
-
-    craft_filters = normalize_craft_filters(row.get("craft_filters")).to_dict()
     return ChannelRecipe(
         name=(str(name or row.get("collection_title") or "Station").strip() or "Station")[
             :48
@@ -658,6 +715,75 @@ def recipe_from_station_meta(
         collection_title=str(row.get("collection_title") or "").strip(),
         summary=f"Refill from stored recipe ({mode.value})",
         craft_filters=craft_filters,
+        youth_safe=bool(row.get("youth_safe")),
+    )
+
+
+def merge_refill_recipe_payload(
+    recipe_payload: Optional[Mapping[str, Any]],
+    *,
+    stored: Optional[ChannelRecipe],
+    name: str,
+    number: int,
+    stored_scope: str,
+) -> ChannelRecipe:
+    """Merge an optional Admin refill overlay onto persisted station_meta.
+
+    Admin Refill historically sent ``{media_scope}`` only. Treating that as a full
+    craft payload dropped decade/genre ``craft_filters`` and collection identity,
+    then wiped them on persist — modern catalog titles on a 70s station.
+    """
+    from projectionist.live_channels.craft import recipe_from_craft_payload
+    from projectionist.live_channels.filters import normalize_craft_filters
+
+    if not recipe_payload:
+        return stored or ChannelRecipe(
+            name=(name or "Station")[:48],
+            number=int(number or 0) or 100,
+            source="chaos",
+            programming_mode=ProgrammingMode.SHUFFLE,
+            media_scope=stored_scope,
+            summary=f"Refill lineup for “{name}”",
+        )
+
+    payload = dict(recipe_payload)
+    if stored is not None:
+        stored_dict = stored.to_dict()
+        for key in (
+            "source",
+            "programming_mode",
+            "collection_id",
+            "collection_title",
+            "motif",
+            "cluster_tag",
+            "summary",
+        ):
+            if not str(payload.get(key) or "").strip() and stored_dict.get(key):
+                payload[key] = stored_dict[key]
+        for key in ("item_hints", "item_rating_keys"):
+            if not payload.get(key) and stored_dict.get(key):
+                payload[key] = stored_dict[key]
+        # Empty / omitted craft_filters means “keep stored”, not “clear filters”.
+        incoming = payload.get("craft_filters")
+        if incoming is None:
+            incoming = payload.get("filters")
+        if incoming is None or normalize_craft_filters(incoming).is_empty():
+            if stored_dict.get("craft_filters"):
+                payload["craft_filters"] = dict(stored_dict["craft_filters"])
+        if "youth_safe" not in payload and stored_dict.get("youth_safe"):
+            payload["youth_safe"] = stored_dict["youth_safe"]
+        if not payload.get("media_scope"):
+            payload["media_scope"] = stored_dict.get("media_scope") or stored_scope
+    elif not payload.get("media_scope"):
+        payload["media_scope"] = stored_scope
+
+    return recipe_from_craft_payload(
+        {
+            **payload,
+            "name": str(payload.get("name") or name),
+            "number": int(payload.get("number") or number or 100),
+        },
+        default_number=number or 100,
     )
 
 
@@ -1881,6 +2007,13 @@ def _normalize_program_row(
         show_title = str(show_obj.get("title") or show_obj.get("name") or "").strip()
         if not show_id:
             show_id = str(show_obj.get("uuid") or show_obj.get("id") or "").strip()
+        # Episodes often omit contentRating — inherit the show's rating for youth gates.
+        if not content_rating:
+            content_rating = str(
+                show_obj.get("contentRating")
+                or show_obj.get("content_rating")
+                or ""
+            ).strip()
         # Index show-level Plex keys so collection children that are *shows* match.
         plex_keys = list(plex_keys) + [
             k
@@ -1975,6 +2108,28 @@ def collect_programs_for_recipe(
     pool: List[Dict[str, Any]] = []
     seen: set[str] = set()
 
+    # Youth gate must be available inside ``_add`` so show-expand / Tunarr search
+    # cannot re-introduce TV-MA after the pool was filtered.
+    from projectionist.live_channels.recipes import (
+        apply_youth_gate_to_items,
+        recipe_is_youth_safe,
+        resolve_recipe_youth_max_rating,
+    )
+
+    youth_safe = recipe_is_youth_safe(recipe)
+    youth_ceiling = (
+        resolve_recipe_youth_max_rating(recipe, settings=settings) if youth_safe else ""
+    )
+
+    def _youth_allows(normalized: Mapping[str, Any]) -> bool:
+        if not youth_safe:
+            return True
+        return bool(
+            apply_youth_gate_to_items(
+                [normalized], settings=settings, max_rating=youth_ceiling
+            )
+        )
+
     def _add(row: Optional[Mapping[str, Any]]) -> None:
         if not row:
             return
@@ -1994,6 +2149,16 @@ def collect_programs_for_recipe(
             if ptype and not program_type_matches_scope(ptype, scope):
                 return
             plex_keys = list(row.get("plex_keys") or _extract_plex_rating_keys(row))
+            content_rating = str(
+                row.get("content_rating") or row.get("contentRating") or ""
+            ).strip()
+            show_obj = row.get("show") if isinstance(row.get("show"), Mapping) else None
+            if not content_rating and isinstance(show_obj, Mapping):
+                content_rating = str(
+                    show_obj.get("contentRating")
+                    or show_obj.get("content_rating")
+                    or ""
+                ).strip()
             normalized = {
                 "id": str(row["id"]),
                 "duration": duration,
@@ -2001,8 +2166,14 @@ def collect_programs_for_recipe(
                 "type": ptype,
                 "genres": list(row.get("genres") or []),
                 "plex_keys": plex_keys,
+                "content_rating": content_rating,
+                "year": row.get("year"),
+                "show_id": str(row.get("show_id") or row.get("showId") or "").strip(),
+                "show_title": str(row.get("show_title") or row.get("showTitle") or "").strip(),
             }
         if not normalized or normalized["id"] in seen:
+            return
+        if not _youth_allows(normalized):
             return
         seen.add(normalized["id"])
         pool.append(normalized)
@@ -2059,6 +2230,17 @@ def collect_programs_for_recipe(
     craft = normalize_craft_filters(getattr(recipe, "craft_filters", None))
     excluded = exclusion_rating_keys(settings)
     allowed_keys: Optional[set[str]] = None
+
+    def _apply_youth_gate(
+        items: Sequence[Mapping[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Fail-closed rating filter for youth-safe / source=youth stations."""
+        if not youth_safe:
+            return [dict(i) for i in items if isinstance(i, Mapping)]
+        return apply_youth_gate_to_items(
+            items, settings=settings, max_rating=youth_ceiling
+        )
+
     if not craft.is_empty():
         db = None
         try:
@@ -2091,6 +2273,15 @@ def collect_programs_for_recipe(
             craft,
             excluded_rating_keys=excluded,
         )
+
+    # Defense in depth: ``_add`` already gates, but craft/exclusion may have
+    # reshaped the pool — re-assert the youth ceiling before soft-pad / shuffle.
+    if youth_safe:
+        pool = _apply_youth_gate(pool)
+        if match_stats is not None:
+            match_stats["youth_safe"] = True
+            match_stats["youth_max_rating"] = youth_ceiling
+            match_stats["youth_matched"] = len(pool)
 
     # Soft-cap motif/taste Shuffle may use more of the filtered pool (still ≤ soft cap).
     if not full_run and mode == ProgrammingMode.SHUFFLE and pool:
@@ -2140,6 +2331,13 @@ def collect_programs_for_recipe(
                 prog = (
                     row.get("program") if isinstance(row.get("program"), Mapping) else {}
                 )
+                content_rating = str(
+                    (prog or {}).get("contentRating")
+                    or (prog or {}).get("content_rating")
+                    or row.get("contentRating")
+                    or row.get("content_rating")
+                    or ""
+                ).strip()
                 normalized = {
                     "id": str(row.get("id") or prog.get("uuid") or ""),
                     "duration": duration,
@@ -2147,10 +2345,11 @@ def collect_programs_for_recipe(
                     "type": str((prog or {}).get("type") or row.get("type") or ""),
                     "genres": [],
                     "plex_keys": _extract_plex_rating_keys(row),
+                    "content_rating": content_rating,
                     "show_id": sid,
                     "show_title": "",
                 }
-            if normalized and normalized["id"]:
+            if normalized and normalized["id"] and _youth_allows(normalized):
                 out.append(normalized)
             if len(out) >= expand_cap:
                 break
@@ -2370,12 +2569,20 @@ def collect_programs_for_recipe(
 
     # Named station / show-title path: expand “Gilligan's Island” → episodes before
     # keyword scoring (episode titles rarely contain the show name).
+    # Skip when craft filters are active — show expand ignores decade/genre bounds.
+    # Skip youth-safe / source=youth — station name “Youth Safe” must never resolve
+    # to a show, and youth fill is a rating-gated shuffle of the media_scope pool.
     show_terms = [
         t
         for t in (recipe.collection_title, recipe.name, *recipe.item_hints)
         if str(t or "").strip()
     ]
-    if show_terms and recipe.source != "chaos":
+    if (
+        show_terms
+        and recipe.source not in {"chaos", "youth"}
+        and not youth_safe
+        and craft.is_empty()
+    ):
         # Show expand always uses the full-run cap (not the motif soft default).
         show_cap = _fill_target_for_recipe(recipe, limit=limit, full_run=True)
         for term in show_terms:
@@ -2441,6 +2648,18 @@ def collect_programs_for_recipe(
                             "type": hit.get("type"),
                         }
                     )
+            # Tunarr search hits omit year/genre reliability — re-apply craft filters
+            # so decade/genre stations never absorb modern catalog noise.
+            if not craft.is_empty():
+                pool[:] = apply_craft_filters_to_pool(
+                    pool,
+                    craft,
+                    allowed_rating_keys=allowed_keys,
+                    excluded_rating_keys=excluded,
+                )
+            # ``_add`` gates youth at ingest; re-assert after craft reshapes the pool.
+            if youth_safe:
+                pool[:] = _apply_youth_gate(pool)
             # Rebuild picks after search supplements.
             scored = []
             for item in pool:
@@ -2462,6 +2681,7 @@ def collect_programs_for_recipe(
     if len(picked) < 8 and pool and not rating_keys and not is_collection:
         # Non-collection fallback only — never pad collection/show stations with
         # off-collection random titles (Gilligan ← Samurai Jack class of bug).
+        # Pool is already craft-filtered when decade/genre filters are set.
         extras = [p for p in pool if p["id"] not in {x["id"] for x in picked}]
         random.shuffle(extras)
         picked.extend(extras[: max(0, target - len(picked))])
@@ -2531,6 +2751,7 @@ def publish_recipes(
     skipped: List[Dict[str, Any]] = []
     errors: List[Dict[str, Any]] = []
     programming_updated: List[Dict[str, Any]] = []
+    renamed: List[Dict[str, Any]] = []
     content_filled = 0
     total_programs = 0
     total_matched = 0
@@ -2658,10 +2879,12 @@ def publish_recipes(
     for raw in recipes:
         recipe = raw if isinstance(raw, ChannelRecipe) else recipe_from_mapping(raw)
         key_name = recipe.name.strip().lower()
-        if skip_existing_numbers and (
-            recipe.number in by_number or key_name in by_name
-        ):
-            match = by_number.get(recipe.number) or by_name.get(key_name) or {}
+        # Only number collisions are "existing" for skip_existing_numbers.
+        # A free number + colliding name used to count as skipped / overwrite the
+        # name-matched station (e.g. craft decade publish named "Mystery" via
+        # auto motif) — that looked like "skipped 1" for a brand-new station.
+        if skip_existing_numbers and recipe.number in by_number:
+            match = by_number.get(recipe.number) or {}
             channel_id = str(match.get("id") or match.get("uuid") or "")
             station_icon = resolved_icon
             if recipe.collection_id:
@@ -2688,6 +2911,7 @@ def publish_recipes(
                             "name": recipe.name,
                             "number": recipe.number,
                             "channel_id": channel_id,
+                            "reason": "number_exists",
                             **applied,
                         }
                     )
@@ -2704,15 +2928,33 @@ def publish_recipes(
                     {
                         "name": recipe.name,
                         "number": recipe.number,
-                        "reason": "already_exists",
+                        "reason": "number_exists",
                         "channel_id": channel_id or None,
                         "note": (
-                            "Lineup not updated; re-publish with fill_programming=true "
-                            "after Tunarr libraries are enabled and scanned."
+                            "Channel number already on the dial. "
+                            + (
+                                "Lineup not updated; re-publish with fill_programming=true "
+                                "after Tunarr libraries are enabled and scanned."
+                                if not fill_programming
+                                else "Could not resolve Tunarr channel id to refresh the lineup."
+                            )
                         ),
                     }
                 )
             continue
+        if key_name and key_name in by_name:
+            unique = unique_station_name(recipe.name, by_name)
+            if unique != recipe.name:
+                renamed.append(
+                    {
+                        "from": recipe.name,
+                        "to": unique,
+                        "number": recipe.number,
+                        "reason": "name_exists",
+                    }
+                )
+                recipe = replace_recipe(recipe, name=unique)
+                key_name = recipe.name.strip().lower()
         try:
             station_icon = resolved_icon
             if recipe.collection_id:
@@ -2864,6 +3106,26 @@ def publish_recipes(
         note += f" Continuity filler list attached ({filler_state.get('program_count', 0)} shorts)."
     elif filler_state.get("message"):
         note += f" Continuity: {filler_state.get('message')}"
+    if renamed:
+        bits = [f"“{row.get('from')}” → “{row.get('to')}”" for row in renamed[:3]]
+        note += (
+            f" Renamed {len(renamed)} station(s) to avoid a name clash"
+            + (f" ({'; '.join(bits)})" if bits else "")
+            + "."
+        )
+    if skipped:
+        reasons = sorted(
+            {
+                str(row.get("reason") or "skipped")
+                for row in skipped
+                if str(row.get("reason") or "").strip()
+            }
+        )
+        note += (
+            f" Skipped {len(skipped)} existing channel number(s)"
+            + (f" ({', '.join(reasons)})" if reasons else "")
+            + "."
+        )
 
     icon_probe = probe_icon_url(resolved_icon) if resolved_icon else {
         "ok": False,
@@ -2876,10 +3138,12 @@ def publish_recipes(
         "published": published,
         "skipped": skipped,
         "programming_updated": programming_updated,
+        "renamed": renamed,
         "errors": errors,
         "count_published": len(published),
         "count_skipped": len(skipped),
         "count_programming_updated": len(programming_updated),
+        "count_renamed": len(renamed),
         "count_errors": len(errors),
         "count_content_filled": content_filled,
         "matched": total_matched,
@@ -3014,6 +3278,7 @@ def publish_custom_channel(
     default_number = next_channel_number(
         numbers, base=int(channel_number_base or 100), occupied=occupied
     )
+    remapped_number_from = 0
     if isinstance(recipe_payload, ChannelRecipe):
         recipe = recipe_payload
         if recipe.number <= 0:
@@ -3023,6 +3288,16 @@ def publish_custom_channel(
             recipe_payload or {},
             default_number=default_number,
         )
+    # Craft "publish new station" must not land on an occupied number — remap
+    # instead of counting the recipe as skipped / refreshing the wrong station.
+    occupied_numbers = {
+        int(ch.get("number") or 0)
+        for ch in existing
+        if ch.get("number") is not None and int(ch.get("number") or 0) > 0
+    }
+    if recipe.number in occupied_numbers:
+        remapped_number_from = int(recipe.number)
+        recipe = replace_recipe(recipe, number=default_number)
     # Enrich collection recipes with Plex children (ratingKeys first).
     if (
         settings is not None
@@ -3049,6 +3324,15 @@ def publish_custom_channel(
         settings=settings,
     )
     result["recipe"] = recipe.to_dict()
+    if remapped_number_from:
+        result["remapped_number_from"] = remapped_number_from
+        result["remapped_number_to"] = int(recipe.number)
+        prior = str(result.get("note") or "").strip()
+        remap_note = (
+            f"Channel number {remapped_number_from} was taken — "
+            f"published on {int(recipe.number)} instead."
+        )
+        result["note"] = f"{prior} {remap_note}".strip() if prior else remap_note
     return result
 
 
@@ -3062,7 +3346,7 @@ def refill_channel_lineup(
     attach_continuity: bool = True,
 ) -> Dict[str, Any]:
     """Re-fill an existing Tunarr station lineup from craft vocabulary / Shuffle."""
-    from projectionist.live_channels.craft import recipe_from_craft_payload
+    from projectionist.live_channels.filters import normalize_craft_filters
     from projectionist.live_channels.filler import (
         attach_continuity_to_channel,
         ensure_continuity_filler_list,
@@ -3084,32 +3368,15 @@ def refill_channel_lineup(
     number = int(match.get("number") or 0)
     name = str(match.get("name") or "Station").strip() or "Station"
     stored_scope = resolve_media_scope(settings, channel_id=cid, default=MediaScope.BOTH.value)
-    if recipe_payload:
-        payload = dict(recipe_payload)
-        if not payload.get("media_scope"):
-            payload["media_scope"] = stored_scope
-        recipe = recipe_from_craft_payload(
-            {
-                **payload,
-                "name": str(payload.get("name") or name),
-                "number": int(payload.get("number") or number or 100),
-            },
-            default_number=number or 100,
-        )
-    else:
-        # Prefer persisted collection_id + programming_mode. Without meta, Shuffle
-        # the media_scope pool (legacy source="chaos" fill path — not owner-facing).
-        stored = recipe_from_station_meta(
-            settings, cid, name=name, number=number or 100
-        )
-        recipe = stored or ChannelRecipe(
-            name=name[:48],
-            number=number or 100,
-            source="chaos",
-            programming_mode=ProgrammingMode.SHUFFLE,
-            media_scope=stored_scope,
-            summary=f"Refill lineup for “{name}”",
-        )
+    # Always start from station_meta; merge partial Admin overlays (media_scope-only).
+    stored = recipe_from_station_meta(settings, cid, name=name, number=number or 100)
+    recipe = merge_refill_recipe_payload(
+        recipe_payload,
+        stored=stored,
+        name=name,
+        number=number or 100,
+        stored_scope=stored_scope,
+    )
 
     # Re-load collection ratingKeys so Shuffle reshuffles the same ID pool.
     if (
@@ -3133,6 +3400,7 @@ def refill_channel_lineup(
             )
 
     scope = normalize_media_scope(getattr(recipe, "media_scope", None) or stored_scope)
+    craft_for_meta = normalize_craft_filters(getattr(recipe, "craft_filters", None))
     if settings is not None:
         set_station_meta(
             settings,
@@ -3142,7 +3410,8 @@ def refill_channel_lineup(
             collection_title=str(recipe.collection_title or ""),
             programming_mode=recipe.programming_mode.value,
             source=str(recipe.source or ""),
-            craft_filters=getattr(recipe, "craft_filters", None) or {},
+            # Never wipe decade/genre filters with an empty overlay from Refill.
+            craft_filters=craft_for_meta.to_dict() if not craft_for_meta.is_empty() else None,
             motif=str(recipe.motif or ""),
             cluster_tag=str(recipe.cluster_tag or ""),
             youth_safe=bool(getattr(recipe, "youth_safe", False)),
@@ -3212,6 +3481,7 @@ def refill_channel_lineup(
     matched = int(stats.get("matched") or 0)
     match_total = int(stats.get("match_total") or 0)
     is_full = bool(stats.get("full_run"))
+    craft_active = not craft_for_meta.is_empty()
     note = match_feedback_note(
         matched=matched,
         match_total=match_total,
@@ -3220,23 +3490,29 @@ def refill_channel_lineup(
         soft_capped=not is_full,
     )
     if not note:
-        note = (
-            f"Filled {len(programs)} titles into {name}"
-            + (f" ({flex_count} flex pad(s))" if flex_count else "")
-            + "."
-            if programs
-            else (
-                "No Tunarr program IDs yet — wait for the library scan, then refill again."
-            )
-        )
-        if programs and not is_full:
+        if programs:
             note = (
-                f"{note} "
-                + craft_soft_cap_honesty(
-                    fill_mode="soft",
-                    matched=matched,
-                    program_count=len(programs),
-                )["note"]
+                f"Filled {len(programs)} titles into {name}"
+                + (f" ({flex_count} flex pad(s))" if flex_count else "")
+                + "."
+            )
+            if not is_full:
+                note = (
+                    f"{note} "
+                    + craft_soft_cap_honesty(
+                        fill_mode="soft",
+                        matched=matched,
+                        program_count=len(programs),
+                    )["note"]
+                )
+        elif craft_active:
+            note = (
+                "No titles match this station’s saved filters (decade / genre / theme). "
+                "Lineup left empty rather than filling from the whole library."
+            )
+        else:
+            note = (
+                "No Tunarr program IDs yet — wait for the library scan, then refill again."
             )
     if normalize_programming_mode(recipe.programming_mode) == ProgrammingMode.SHUFFLE:
         note += " Reshuffled (shuffle)."

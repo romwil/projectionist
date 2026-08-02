@@ -61,7 +61,9 @@ class NudgeUnitTests(unittest.TestCase):
         self.assertIsNotNone(pick)
         assert pick is not None
         copy = build_nudge_copy(self.db, pick=pick)
-        self.assertIn("You have to see this", copy["title"])
+        self.assertEqual(copy["title"], pick["title"])
+        self.assertIn("You have to see this", copy["subject"])
+        self.assertNotIn("recently watched:", copy["body"].lower())
 
         self.db.update_user_profile(
             BOOTSTRAP_OWNER_ID, nudge_opt_in=True, notify_channel_inbox=True

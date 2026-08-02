@@ -127,9 +127,17 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 
 - **roles:** `member`, `owner`, `youth`, `guest`
 - **tags:** `search`
-- **source:** `frontend/src/pages/ExplorePage.jsx`, `frontend/src/pages/SearchPage.jsx` → `LibraryBrowsePage.jsx`, `frontend/src/lib/browseLinks.js`
-- **steps:** From Explore search (`explore-search-input` + submit) **or** topbar Search → ensure a `q` query is submitted (e.g. a known title fragment).
-- **pass:** Navigates to `/search?q=…` (or equivalent browse path); heading/results reflect the query (`library-browse-title` / results / empty for that `q`).
+- **source:** `frontend/src/pages/ExplorePage.jsx`, `frontend/src/pages/SearchPage.jsx` → `LibraryBrowsePage.jsx`, `frontend/src/lib/browseLinks.js`, `frontend/src/lib/progressiveBrowseSearch.js`
+- **steps:** Open `/search` via topbar Search (or Explore `explore-search-input` + submit). On Search, use the on-page bar (`library-browse-search-input`) with a known title fragment — progressive as-you-type is enough; submit optional.
+- **pass:** URL becomes `/search?q=…` (or equivalent); `library-browse-title` / results / empty reflect that `q`. Emptying the input restores full browse (no `q`, “Browse library” / full grid).
+
+### `search.progressive`
+
+- **roles:** `member`, `owner`, `youth`, `guest`
+- **tags:** `search`
+- **source:** `frontend/src/pages/LibraryBrowsePage.jsx`, `frontend/src/lib/progressiveBrowseSearch.js`
+- **steps:** On `/search` with a populated library, type a title fragment into `library-browse-search-input` without pressing Search/Enter. Wait briefly (~200ms debounce). Clear the input.
+- **pass:** While typing, results update without requiring Enter (`q` in URL, grid/empty/heading follow). Clearing restores full browse. Filters/sort still apply with an active `q`.
 
 ### `inbox.empty-or-item`
 
@@ -160,24 +168,48 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `inbox`
 - **source:** `frontend/src/components/RecommendationsInbox.jsx`, `frontend/src/pages/InboxPage.jsx`
-- **steps:** With at least one notification present (`recommendations-inbox`), identify card `data-kind` (recommendation / arrival / digest / access-request / nudge). Dismiss one card via `recommendation-dismiss-*` **or** open via `recommendation-open-*` (which also marks seen).
-- **pass:** Card removes from stack (or navigates to title after open). No crash. If inbox empty, N/A (use `inbox.empty-state`). Multi-kind: when several kinds are present, note each `data-kind` observed; a single kind is still PASS.
+- **steps:** With at least one notification present (`recommendations-inbox`), identify card `data-kind` (recommendation / arrival / digest / access-request / nudge). Dismiss one card via `recommendation-dismiss-*` **or** open via primary CTA (`recommendation-open-*`, `recommendation-review-access-*`, `recommendation-open-live-*`, or digest pick `recommendation-pick-*`).
+- **pass:** Card removes from stack (or navigates after open). No crash. If inbox empty, N/A (use `inbox.empty-state`). Multi-kind: when several kinds are present, note each `data-kind` observed; a single kind is still PASS.
 
 ### `inbox.card-layout`
 
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `inbox`, `layout`
 - **source:** `frontend/src/components/RecommendationsInbox.jsx`, `frontend/src/styles/08-dashboard-coverage-cards.css`
-- **steps:** Open `/inbox` with at least one card. Prefer a mix that includes a **text-only** kind (digest / access-request / nudge without poster → `recommendation-card--text-only`) and a poster kind (recommendation / arrival). At desktop width, inspect card geometry.
-- **pass:** Every card spans the inbox reading column (not a ~64px strip). Lead/note text wraps as normal lines — **not** character-by-character vertically. Huge empty vertical gaps from collapsed columns are FAIL. If inbox empty, N/A.
+- **steps:** Open `/inbox` with at least one card. Prefer a mix that includes a **text-only** kind (digest without picks / access-request / live nudge → `recommendation-card--text-only`) and a poster kind (recommendation / arrival / enthusiast nudge). At desktop width, inspect card geometry. Digests should show `recommendation-blurb-*` + optional `recommendation-pick-strip-*`, **not** the full email body as the main surface (`recommendation-curator-note-*` disclosure is OK).
+- **pass:** Every card spans the inbox reading column (not a ~64px strip). Lead/blurb wraps as normal lines — **not** character-by-character vertically. Huge empty vertical gaps from collapsed columns are FAIL. If inbox empty, N/A.
 
 ### `inbox.dismiss-all`
 
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `inbox`
+- **source:** `frontend/src/components/RecommendationsInbox.jsx`, `frontend/src/pages/InboxPage.jsx`, `frontend/src/lib/recommendationInbox.js`
+- **steps:** With **two or more** cards, click `recommendations-dismiss-all`. Confirm stack clears. Reload `/inbox` (or leave and reopen via `topbar-inbox-button`).
+- **pass:** Stack clears to empty state (or loading then empty). After reload, dismissed items stay gone (`inbox-empty` or fewer cards) — dismiss must stick because list uses unread-only (`INBOX_LIST_PARAMS.unread_only`). Button absent with <2 cards → N/A.
+
+### `inbox.digest-picks`
+
+- **roles:** `member`, `owner`, `youth`
+- **tags:** `inbox`, `digest`
 - **source:** `frontend/src/components/RecommendationsInbox.jsx`
-- **steps:** With **two or more** cards, click `recommendations-dismiss-all`.
-- **pass:** Stack clears to empty state (or loading then empty). Button absent with <2 cards → N/A.
+- **steps:** When a `data-kind="digest"` card is present with `recommendation-pick-strip-*`, open one pick (`recommendation-pick-*-N`) **or** primary `recommendation-open-*` (“Open picks”). Optionally expand `recommendation-curator-note-*`.
+- **pass:** Dig-in opens title detail (or overlay); full body stays behind disclosure by default. No pick strip + empty picks → short lead + Dismiss only is PASS. No digest card → N/A.
+
+### `inbox.access-review-cta`
+
+- **roles:** `owner`
+- **tags:** `inbox`, `access`
+- **source:** `frontend/src/components/RecommendationsInbox.jsx`
+- **steps:** With an `access-request` card, click `recommendation-review-access-*`.
+- **pass:** Navigates to `/admin/access`. Member role: CTA absent (Dismiss only) is PASS. No access-request card → N/A.
+
+### `inbox.live-nudge-cta`
+
+- **roles:** `member`, `owner`
+- **tags:** `inbox`, `live`
+- **source:** `frontend/src/components/RecommendationsInbox.jsx`
+- **steps:** With a Live Channels ready nudge (`data-kind="nudge"` + Open Live), click `recommendation-open-live-*`.
+- **pass:** Navigates to `/live`. No live nudge → N/A.
 
 ### `recommend.open-modal`
 
@@ -736,7 +768,7 @@ QA library is fully synced — assert real posters/results, not just empty state
 - **roles:** `member`, `owner`, `youth`, `guest`
 - **tags:** `search`, `library`, `explore`
 - **source:** `frontend/src/pages/ExplorePage.jsx`, `LibraryBrowsePage.jsx`, `TitleDetailPage.jsx`
-- **steps:** From Explore search (`explore-search-input` + `explore-search-submit`) submit a known title fragment. On the results, open a poster to `title-detail-page`.
+- **steps:** From Explore search (`explore-search-input` + submit) **or** on-page Search (`library-browse-search-input`, progressive or submit) enter a known title fragment. On the results, open a poster to `title-detail-page`.
 - **pass:** Query lands on `/search?q=…` with matching `library-browse-title`/results; opening a card reaches `title-detail-page` with hero (`title-detail-hero`) for that title. Full search→detail flow completes.
 
 ### `explore.facets`
@@ -931,12 +963,16 @@ after direct URL navigation.
 | `explore.chat-about-these` | member, owner, youth, guest |
 | `explore.hub-links` | member, owner, youth |
 | `search.query` | member, owner, youth, guest |
+| `search.progressive` | member, owner, youth, guest |
 | `inbox.empty-or-item` | member, owner, youth |
 | `inbox.empty-state` | member, owner, youth |
 | `inbox.badge` | member, owner, youth |
 | `inbox.card-actions` | member, owner, youth |
 | `inbox.card-layout` | member, owner, youth |
 | `inbox.dismiss-all` | member, owner, youth |
+| `inbox.digest-picks` | member, owner, youth |
+| `inbox.access-review-cta` | owner |
+| `inbox.live-nudge-cta` | member, owner |
 | `recommend.open-modal` | member, owner |
 | `recommend.send-to-peer` | member, owner |
 | `settings.notifications-prefs` | member, owner, youth |

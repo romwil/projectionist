@@ -20,30 +20,17 @@ import {
   refillLiveChannelsChannel,
 } from "../../api/client";
 import {
+  buildCraftFiltersPayload,
+  craftDraftFromStation,
+} from "../../lib/liveChannelsCraft.js";
+import {
   CREATE_STATION_MODES,
   craftSoftCapHonestyNote,
   liveHealthSentence,
   liveSetupStepNumbers,
 } from "../../lib/liveChannelsCopy.js";
 
-export function buildCraftFiltersPayload(craft) {
-  const genres = Array.isArray(craft?.genres)
-    ? craft.genres.filter(Boolean)
-    : craft?.genre
-      ? [craft.genre]
-      : [];
-  const decadeRaw = craft?.decade;
-  const decade =
-    decadeRaw === "" || decadeRaw == null ? undefined : Number(decadeRaw);
-  const theme = String(craft?.theme || "").trim();
-  const rating = String(craft?.content_rating || "").trim();
-  const payload = {};
-  if (genres.length) payload.genres = genres;
-  if (Number.isFinite(decade)) payload.decade = decade;
-  if (theme) payload.themes = [theme];
-  if (rating) payload.content_ratings = [rating];
-  return payload;
-}
+export { buildCraftFiltersPayload, craftDraftFromStation };
 
 export function isLiveChannelsLaunched(status, engineProgress) {
   const engineUp = Boolean(
@@ -148,6 +135,8 @@ export default function LiveChannelsSection({
   refreshTunarrLogs,
   formatPublishFeedback,
 }) {
+  const [stationCraftDraft, setStationCraftDraft] = useState(null);
+  const [stationSettingsSavedId, setStationSettingsSavedId] = useState(null);
   const dockerOrchestration = Boolean(settings?.tunarr?.docker_orchestration);
   const setupSteps = liveSetupStepNumbers({ dockerOrchestration });
   const [createStationMode, setCreateStationMode] = useState("custom");
@@ -1819,9 +1808,6 @@ export default function LiveChannelsSection({
                           );
                           const mediaScope =
                             statusRow?.media_scope || ch.media_scope || "both";
-                          const captionsOn = Boolean(
-                            statusRow?.subtitles_enabled ?? ch.subtitles_enabled,
-                          );
                           const hasContinuity = Boolean(
                             statusRow?.has_continuity ?? ch.has_continuity,
                           );
@@ -1845,11 +1831,21 @@ export default function LiveChannelsSection({
                                     className="ghost"
                                     data-testid={`live-channels-settings-${id}`}
                                     disabled={!id}
-                                    onClick={() =>
-                                      setStationSettingsOpen(
-                                        stationSettingsOpen === id ? null : id,
-                                      )
-                                    }
+                                    onClick={() => {
+                                      if (stationSettingsOpen === id) {
+                                        setStationSettingsOpen(null);
+                                        setStationCraftDraft(null);
+                                        setStationSettingsSavedId(null);
+                                        return;
+                                      }
+                                      const row =
+                                        (liveChannelsStatus?.channels || []).find(
+                                          (c) => (c.id || c.channel_id) === id,
+                                        ) || ch;
+                                      setStationCraftDraft(craftDraftFromStation(row));
+                                      setStationSettingsSavedId(null);
+                                      setStationSettingsOpen(id);
+                                    }}
                                   >
                                     Settings
                                   </button>
@@ -1863,9 +1859,9 @@ export default function LiveChannelsSection({
                                       if (!window.confirm(`Refill lineup for ${ch.name}?`)) return;
                                       setLiveBusy(`refill-${id}`);
                                       try {
-                                        const result = await refillLiveChannelsChannel(id, {
-                                          recipe: { media_scope: mediaScope },
-                                        });
+                                        // Omit partial recipe overlays — backend
+                                        // refills from station_meta (decade/genre).
+                                        const result = await refillLiveChannelsChannel(id);
                                         setActionFeedback("live-channels",
                                           result.ok ? "success" : "error",
                                           result.note || "Refill finished.",
@@ -1916,40 +1912,176 @@ export default function LiveChannelsSection({
                                   </button>
                                 </span>
                               </div>
-                              {stationSettingsOpen === id ? (
+                              {stationSettingsOpen === id && stationCraftDraft ? (
                                 <div
                                   className="live-channels-station-settings"
                                   data-testid={`live-channels-station-settings-${id}`}
                                 >
+                                  <p className="wizard-note" data-testid={`live-channels-station-name-${id}`}>
+                                    <strong>{ch.name || "Station"}</strong>
+                                    {stationCraftDraft.source
+                                      ? ` · ${stationCraftDraft.source === "collection"
+                                        ? "Collection"
+                                        : stationCraftDraft.source === "taste_cluster"
+                                          ? "Taste"
+                                          : stationCraftDraft.source === "youth"
+                                            ? "Youth safe"
+                                            : "Motif"}`
+                                      : ""}
+                                    {stationCraftDraft.collection_title
+                                      ? ` · ${stationCraftDraft.collection_title}`
+                                      : ""}
+                                  </p>
+                                  {stationCraftDraft.source === "motif" ||
+                                  stationCraftDraft.motif ||
+                                  (liveCraftOptions?.motifs || []).length ? (
+                                    <label>
+                                      Motif
+                                      <select
+                                        data-testid={`live-channels-station-motif-${id}`}
+                                        value={stationCraftDraft.motif || ""}
+                                        onChange={(event) =>
+                                          setStationCraftDraft((prev) => ({
+                                            ...prev,
+                                            motif: event.target.value,
+                                          }))
+                                        }
+                                      >
+                                        <option value="">No motif</option>
+                                        {(liveCraftOptions?.motifs || []).map((motif) => (
+                                          <option key={motif.value} value={motif.value}>
+                                            {motif.label || motif.value}
+                                          </option>
+                                        ))}
+                                        {stationCraftDraft.motif &&
+                                        !(liveCraftOptions?.motifs || []).some(
+                                          (m) => m.value === stationCraftDraft.motif,
+                                        ) ? (
+                                          <option value={stationCraftDraft.motif}>
+                                            {stationCraftDraft.motif}
+                                          </option>
+                                        ) : null}
+                                      </select>
+                                    </label>
+                                  ) : null}
+                                  <details
+                                    className="live-channels-craft-filters"
+                                    data-testid={`live-channels-station-filters-${id}`}
+                                    open={Boolean(
+                                      stationCraftDraft.genres?.[0] ||
+                                        stationCraftDraft.decade ||
+                                        stationCraftDraft.theme ||
+                                        stationCraftDraft.content_rating,
+                                    )}
+                                  >
+                                    <summary>Narrow the pool</summary>
+                                    <p className="wizard-note">
+                                      Additive filters (AND) saved on this station — e.g. 1970s ∩ Horror.
+                                      Refill applies them to the lineup.
+                                    </p>
+                                    <label>
+                                      Genre
+                                      <select
+                                        data-testid={`live-channels-station-genre-${id}`}
+                                        value={stationCraftDraft.genres?.[0] || ""}
+                                        onChange={(event) =>
+                                          setStationCraftDraft((prev) => ({
+                                            ...prev,
+                                            genres: event.target.value ? [event.target.value] : [],
+                                          }))
+                                        }
+                                      >
+                                        <option value="">Any genre</option>
+                                        {(liveCraftOptions?.filter_options?.genres || []).map((row) => (
+                                          <option key={row.value} value={row.value}>
+                                            {row.label}
+                                            {row.count ? ` (${row.count})` : ""}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label>
+                                      Decade
+                                      <select
+                                        data-testid={`live-channels-station-decade-${id}`}
+                                        value={
+                                          stationCraftDraft.decade === "" ||
+                                          stationCraftDraft.decade == null
+                                            ? ""
+                                            : String(stationCraftDraft.decade)
+                                        }
+                                        onChange={(event) =>
+                                          setStationCraftDraft((prev) => ({
+                                            ...prev,
+                                            decade: event.target.value,
+                                          }))
+                                        }
+                                      >
+                                        <option value="">Any decade</option>
+                                        {(liveCraftOptions?.filter_options?.decades || []).map((row) => (
+                                          <option key={row.value} value={String(row.value)}>
+                                            {row.label}
+                                            {row.count ? ` (${row.count})` : ""}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label>
+                                      Theme
+                                      <select
+                                        data-testid={`live-channels-station-theme-${id}`}
+                                        value={stationCraftDraft.theme || ""}
+                                        onChange={(event) =>
+                                          setStationCraftDraft((prev) => ({
+                                            ...prev,
+                                            theme: event.target.value,
+                                          }))
+                                        }
+                                      >
+                                        <option value="">Any theme</option>
+                                        {(liveCraftOptions?.filter_options?.themes || []).map((row) => (
+                                          <option key={row.value} value={row.value}>
+                                            {row.label}
+                                            {row.count ? ` (${row.count})` : ""}
+                                          </option>
+                                        ))}
+                                      </select>
+                                    </label>
+                                    <label>
+                                      Rating
+                                      <select
+                                        data-testid={`live-channels-station-rating-${id}`}
+                                        value={stationCraftDraft.content_rating || ""}
+                                        onChange={(event) =>
+                                          setStationCraftDraft((prev) => ({
+                                            ...prev,
+                                            content_rating: event.target.value,
+                                          }))
+                                        }
+                                      >
+                                        <option value="">Any rating</option>
+                                        {(liveCraftOptions?.filter_options?.content_ratings || []).map(
+                                          (row) => (
+                                            <option key={row.value} value={row.value}>
+                                              {row.label}
+                                              {row.count ? ` (${row.count})` : ""}
+                                            </option>
+                                          ),
+                                        )}
+                                      </select>
+                                    </label>
+                                  </details>
                                   <label>
                                     Media scope
                                     <select
                                       data-testid={`live-channels-station-scope-${id}`}
-                                      defaultValue={mediaScope}
-                                      onChange={async (event) => {
-                                        const next = event.target.value;
-                                        setLiveBusy(`settings-${id}`);
-                                        try {
-                                          const result = await patchLiveChannelsStationSettings(
-                                            id,
-                                            { media_scope: next },
-                                          );
-                                          setActionFeedback("live-channels",
-                                            "success",
-                                            result.message || "Station settings saved.",
-                                            { block: "stations" },
-                                        );
-                                          setLiveChannelsStatus(await getLiveChannelsStatus());
-                                        } catch (error) {
-                                          setActionFeedback("live-channels",
-                                            "error",
-                                            error.message,
-                                            { block: "stations" },
-                                        );
-                                        } finally {
-                                          setLiveBusy(null);
-                                        }
-                                      }}
+                                      value={stationCraftDraft.media_scope || "both"}
+                                      onChange={(event) =>
+                                        setStationCraftDraft((prev) => ({
+                                          ...prev,
+                                          media_scope: event.target.value,
+                                        }))
+                                      }
                                     >
                                       <option value="tv">TV</option>
                                       <option value="movies">Movies</option>
@@ -1960,22 +2092,40 @@ export default function LiveChannelsSection({
                                     <input
                                       type="checkbox"
                                       data-testid={`live-channels-station-captions-${id}`}
-                                      defaultChecked={captionsOn}
-                                      onChange={async (event) => {
-                                        const next = event.target.checked;
+                                      checked={Boolean(stationCraftDraft.subtitles_enabled)}
+                                      onChange={(event) =>
+                                        setStationCraftDraft((prev) => ({
+                                          ...prev,
+                                          subtitles_enabled: event.target.checked,
+                                        }))
+                                      }
+                                    />
+                                    Show captions when the station has them
+                                  </label>
+                                  <div className="wizard-actions">
+                                    <button
+                                      type="button"
+                                      data-testid={`live-channels-station-save-${id}`}
+                                      disabled={!id || liveBusy === `settings-${id}`}
+                                      onClick={async () => {
+                                        if (!id || !stationCraftDraft) return;
                                         setLiveBusy(`settings-${id}`);
                                         try {
-                                          const result = await patchLiveChannelsStationSettings(
-                                            id,
-                                            {
-                                              media_scope: mediaScope,
-                                              subtitles_enabled: next,
-                                            },
-                                          );
+                                          const result = await patchLiveChannelsStationSettings(id, {
+                                            media_scope: stationCraftDraft.media_scope || "both",
+                                            subtitles_enabled: Boolean(
+                                              stationCraftDraft.subtitles_enabled,
+                                            ),
+                                            motif: stationCraftDraft.motif || "",
+                                            cluster_tag: stationCraftDraft.cluster_tag || "",
+                                            craft_filters: buildCraftFiltersPayload(stationCraftDraft),
+                                          });
+                                          setStationSettingsSavedId(id);
                                           setActionFeedback(
                                             "live-channels",
                                             "success",
-                                            result.message || "Station captions updated.",
+                                            result.message ||
+                                              "Station craft saved. Refill to apply the lineup.",
                                             { block: "stations" },
                                           );
                                           setLiveChannelsStatus(await getLiveChannelsStatus());
@@ -1987,14 +2137,49 @@ export default function LiveChannelsSection({
                                           setLiveBusy(null);
                                         }
                                       }}
-                                    />
-                                    Show captions when the station has them
-                                  </label>
+                                    >
+                                      {liveBusy === `settings-${id}` ? "Saving…" : "Save craft"}
+                                    </button>
+                                    {stationSettingsSavedId === id ? (
+                                      <button
+                                        type="button"
+                                        className="ghost"
+                                        data-testid={`live-channels-station-refill-cta-${id}`}
+                                        disabled={!id || liveBusy === `refill-${id}`}
+                                        onClick={async () => {
+                                          if (!id) return;
+                                          if (!window.confirm(`Refill lineup for ${ch.name}?`)) return;
+                                          setLiveBusy(`refill-${id}`);
+                                          try {
+                                            const result = await refillLiveChannelsChannel(id);
+                                            setStationSettingsSavedId(null);
+                                            setActionFeedback(
+                                              "live-channels",
+                                              result.ok ? "success" : "error",
+                                              result.note || "Refill finished.",
+                                              { block: "stations" },
+                                            );
+                                            setLiveChannelsStatus(await getLiveChannelsStatus());
+                                          } catch (error) {
+                                            setActionFeedback("live-channels", "error", error.message, {
+                                              block: "stations",
+                                            });
+                                          } finally {
+                                            setLiveBusy(null);
+                                          }
+                                        }}
+                                      >
+                                        {liveBusy === `refill-${id}`
+                                          ? "Refilling…"
+                                          : "Refill to apply"}
+                                      </button>
+                                    ) : null}
+                                  </div>
                                   <p className="wizard-note">
-                                    Refill after changing scope so the lineup only uses matching
-                                    libraries. Continuity fillers stay shared across stations.
-                                    Captions still depend on the Live encode or a Plex-backed
-                                    track for the title on air — never a third-party subtitle shop.
+                                    Save updates the station recipe only. Refill rebuilds the lineup
+                                    from those filters — empty when nothing matches, never the whole
+                                    library. Captions still depend on the Live encode or a Plex-backed
+                                    track for the title on air.
                                   </p>
                                 </div>
                               ) : null}

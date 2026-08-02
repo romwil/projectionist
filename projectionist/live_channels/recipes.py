@@ -141,6 +141,37 @@ class ChannelRecipe:
         return payload
 
 
+def recipe_is_youth_safe(recipe: Any) -> bool:
+    """True when a recipe must fail-closed on content ratings during fill/refill."""
+    if recipe is None:
+        return False
+    if bool(getattr(recipe, "youth_safe", False)):
+        return True
+    if isinstance(recipe, Mapping) and bool(recipe.get("youth_safe")):
+        return True
+    source = str(
+        getattr(recipe, "source", None)
+        if not isinstance(recipe, Mapping)
+        else recipe.get("source")
+        or ""
+    ).strip().lower()
+    return source == "youth"
+
+
+def resolve_recipe_youth_max_rating(
+    recipe: Any = None,
+    *,
+    settings: Any = None,
+    max_rating: Optional[str] = None,
+) -> str:
+    """Ceiling for youth-safe stations (explicit → settings → PG-13 default)."""
+    del recipe  # reserved for per-station ceilings later
+    ceiling = str(max_rating or "").strip()
+    if ceiling:
+        return ceiling
+    return resolve_youth_max_rating(settings)
+
+
 def apply_youth_gate_to_items(
     items: Sequence[Mapping[str, Any]] | Iterable[Mapping[str, Any]],
     *,
@@ -151,6 +182,8 @@ def apply_youth_gate_to_items(
     """Filter playlist candidates with the existing youth rating gate.
 
     Prefer an explicit ``max_rating``; otherwise resolve from ``settings.youth``.
+    Live Channels youth-safe fill must pass an explicit ceiling (see
+    :func:`resolve_recipe_youth_max_rating`) so this never fails open there.
     """
     ceiling = str(max_rating or "").strip()
     if not ceiling and settings is not None:
@@ -204,7 +237,7 @@ def recipe_from_mapping(data: Mapping[str, Any]) -> ChannelRecipe:
         motif=str(data.get("motif") or "").strip(),
         collection_id=str(data.get("collection_id") or "").strip(),
         collection_title=str(data.get("collection_title") or "").strip(),
-        youth_safe=bool(data.get("youth_safe")),
+        youth_safe=bool(data.get("youth_safe")) or source == "youth",
         summary=str(data.get("summary") or "").strip(),
         item_hints=hint_tuple,
         item_rating_keys=key_tuple,

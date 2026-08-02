@@ -379,9 +379,26 @@ def recipe_from_craft_payload(
         payload.get("collection_title") or payload.get("collection_name") or ""
     ).strip()
     collection_id = str(payload.get("collection_id") or "").strip()
+    from projectionist.live_channels.filters import (
+        craft_filters_station_name,
+        normalize_craft_filters,
+    )
+
+    craft_filters = normalize_craft_filters(
+        payload.get("craft_filters") or payload.get("filters") or {}
+    )
 
     if not name:
-        if source == "motif" and motif:
+        filter_name = craft_filters_station_name(
+            craft_filters,
+            motif=motif if source == "motif" else "",
+            cluster_tag=cluster if source == "taste_cluster" else "",
+        )
+        # Prefer filter-aware labels when the owner stacked decade/genre/theme —
+        # Admin auto-selects the first motif, which otherwise reuses e.g. "Mystery".
+        if filter_name and not craft_filters.is_empty():
+            name = filter_name
+        elif source == "motif" and motif:
             name = motif.title() if motif.islower() else motif
         elif source == "taste_cluster" and cluster:
             name = cluster.title() if cluster.islower() else cluster
@@ -454,6 +471,6 @@ def recipe_from_craft_payload(
             "summary": summary,
             "item_hints": payload.get("item_hints") or (),
             "item_rating_keys": payload.get("item_rating_keys") or (),
-            "craft_filters": payload.get("craft_filters") or payload.get("filters") or {},
+            "craft_filters": craft_filters.to_dict(),
         }
     )

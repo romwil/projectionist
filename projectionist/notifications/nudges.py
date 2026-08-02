@@ -165,23 +165,25 @@ def build_nudge_copy(
     pick: Dict[str, Any],
     recent: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, str]:
+    """Build nudge subject/body. Inbox lead uses media title; no comma-dump of watches.
+
+    ``recent`` is accepted for callers/tests but kept out of the visible body — the
+    structured ``recently_watched`` payload carries context for future chips.
+    """
+    del recent  # payload keeps recently_watched; inbox must not dump a title list
     voice = _persona_nudge_voice(db)
     title = str(pick.get("title") or "this title")
     year = pick.get("year")
     label = f"{title} ({year})" if year else title
     why = str(pick.get("why") or "").strip()
-    recent_bit = ""
-    if recent:
-        names = ", ".join(str(r.get("title") or "") for r in recent[:2] if r.get("title"))
-        if names:
-            recent_bit = f" (reacting to what you recently watched: {names})"
     subject = f"You have to see this — {label}"
+    # Inbox card lead prefers the media title; subject stays the full email line.
     body = (
-        f"{voice} here: you have to see {label}.{recent_bit}\n"
+        f"{voice} here: you have to see {label}.\n"
         f"{why or 'An unwatched pick from your shelves that fits the moment.'}\n"
         "Open CuratorX when you’re ready — this is an opt-in nudge, not a live session alert."
     )
-    return {"subject": subject, "body": body, "title": subject}
+    return {"subject": subject, "body": body, "title": title}
 
 
 def deliver_enthusiast_nudges(
@@ -237,7 +239,6 @@ def deliver_enthusiast_nudges(
             related_id=related,
             email_subject=content["subject"],
         )
-        # Patch title field on notification uses subject; keep media title in payload.
         if result.get("notification"):
             delivered += 1
         if result.get("emailed"):

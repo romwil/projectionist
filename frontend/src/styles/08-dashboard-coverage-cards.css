@@ -880,6 +880,17 @@ a.on-this-day-item:focus-visible {
   min-width: 0;
 }
 
+@keyframes recommendation-card-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Poster + body. Use minmax(0, 1fr) so the text column can shrink without
    forcing the card wider than the reading column (classic grid min-content blowout). */
 .recommendation-card {
@@ -892,6 +903,27 @@ a.on-this-day-item:focus-visible {
   border-radius: var(--radius);
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    opacity 180ms ease,
+    transform 160ms ease;
+}
+
+.recommendation-card--event {
+  animation: recommendation-card-enter 320ms ease both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .recommendation-card--event {
+    animation: none;
+  }
+
+  .recommendation-card,
+  .recommendation-pick-link,
+  .recommendation-cta-primary {
+    transition: none;
+  }
 }
 
 /* Digest / access-request / nudge (and any card without a poster cell): a single
@@ -939,10 +971,150 @@ a.on-this-day-item:focus-visible {
   overflow-wrap: anywhere;
 }
 
+.recommendation-card-blurb {
+  margin: 0 0 var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.recommendation-card-note--full {
+  margin-top: var(--space-2);
+  white-space: pre-wrap;
+}
+
 .recommendation-card-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  align-items: center;
+}
+
+.recommendation-cta-primary {
+  font-weight: 600;
+}
+
+.recommendation-cta-primary:active {
+  transform: translateY(1px);
+}
+
+.recommendation-pick-count {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.recommendation-pick-strip {
+  display: flex;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+  padding: 0 0 var(--space-1);
+  list-style: none;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.recommendation-pick-chip {
+  flex: 0 0 auto;
+  width: 4.5rem;
+}
+
+.recommendation-pick-link {
+  display: grid;
+  gap: 0.35rem;
+  text-decoration: none;
+  color: inherit;
+  transition: transform 160ms ease;
+}
+
+.recommendation-pick-link:hover {
+  transform: translateY(-2px);
+}
+
+.recommendation-pick-link--inert {
+  cursor: default;
+}
+
+.recommendation-pick-link img,
+.recommendation-pick-link .poster-fallback {
+  width: 4.5rem;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+}
+
+.recommendation-pick-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 0.72rem;
+  line-height: 1.25;
+  color: var(--muted);
+}
+
+.recommendation-curator-note {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--muted);
+}
+
+.recommendation-curator-note summary {
+  cursor: pointer;
+  color: var(--text);
+  list-style: none;
+}
+
+.recommendation-curator-note summary::-webkit-details-marker {
+  display: none;
+}
+
+.recommendation-curator-note summary::before {
+  content: "▸ ";
+  color: var(--accent);
+}
+
+.recommendation-curator-note[open] summary::before {
+  content: "▾ ";
+}
+
+/* Kind-tinted event chrome — editorial accents, not a new purple system. */
+.recommendation-card--arrival {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--border-subtle));
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 58%),
+    var(--surface-2);
+}
+
+.recommendation-card--recommendation {
+  border-color: color-mix(in srgb, var(--accent-strong, var(--accent)) 28%, var(--border-subtle));
+}
+
+.recommendation-card--digest {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border-subtle));
+  background:
+    linear-gradient(160deg, rgba(212, 165, 116, 0.14), transparent 60%),
+    var(--surface-2);
+}
+
+.recommendation-card--nudge.recommendation-card--enthusiast-nudge,
+.recommendation-card--enthusiast-nudge {
+  border-color: color-mix(in srgb, var(--accent-strong, var(--accent)) 42%, var(--border-subtle));
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent) 14%, transparent), transparent 55%),
+    var(--surface-2);
+}
+
+.recommendation-card--live-nudge {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-subtle));
+}
+
+.recommendation-card--access-request {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
 }
 
 /* Recommend modal */
