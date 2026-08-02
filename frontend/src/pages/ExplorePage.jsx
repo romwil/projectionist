@@ -422,10 +422,6 @@ export default function ExplorePage() {
             <h2>Tag search</h2>
             <p>Find keyword tags across your full library index</p>
           </Link>
-          <Link to="/explore/engagement" className="explore-hub-card" data-testid="explore-hub-engagement">
-            <h2>Engagement</h2>
-            <p>Badges, streaks, rate challenges, and cinema courses</p>
-          </Link>
         </section>
 
         <ExploreSection

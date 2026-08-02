@@ -2,12 +2,28 @@
 
 ## [Unreleased]
 
+## [1.30.5] — 2026-08-02
+
+Explore and Search polish: progressive library search on `/search` and a leaner Explore hub without the Engagement card.
+
+### Highlights
+- **Search as you type.** On Search, results update while you type — no Enter required; clear the box to restore full browse.
+- **Leaner Explore hub.** The Engagement card is removed from Explore; Plot Lab, Tags, and Browse cards stay front and center.
+
 ### Added
-- **Search bar on Browse library.** `/search` has a prominent progressive search input — results filter as you type via the existing library `q` / `queryLibrary` path; clearing the box restores full browse. Filters, posters, and Beyond your collection keep working with the query.
+- Progressive search bar on `/search` (`library-browse-search-input`) — debounced commit to URL `q` via existing `queryLibrary` + Beyond path; filters, sort, and pagination unchanged.
+
+### Changed
+- Explore hub no longer links to `/explore/engagement` (`explore-hub-engagement` removed).
+- Help copy documents as-you-type Search behavior.
 
 ### Verification
-- Frontend unit: `progressiveBrowseSearch` helpers + LibraryBrowsePage wiring (`library-browse-search-input`, debounce commit).
-- Interactive UI QA: `search.query` updated; new `search.progressive` for as-you-type on `/search`.
+- `frontend/src/lib/progressiveBrowseSearch.test.mjs` — normalize/debounce helpers + LibraryBrowsePage wiring.
+- `cd frontend && npm run test:unit` — progressive search suite green.
+- `cd frontend && npm run lint` — 0 errors; `npm run build` — production build.
+- `e2e/explore.spec.ts` — hub cards (no Engagement), title detail open-full.
+- `test_version` lockstep **1.30.5**.
+- Interactive UI QA: `search.query`, `search.progressive`.
 
 ## [1.30.4] — 2026-08-02
 
