@@ -12,8 +12,11 @@ test.describe("Explore hub", () => {
     await page.goto("/explore");
     await expect(page.getByTestId("explore-page")).toBeVisible();
 
+    await expect(page.getByTestId("explore-hub-browse-movies")).toBeVisible();
+    await expect(page.getByTestId("explore-hub-browse-tv")).toBeVisible();
     await expect(page.getByTestId("explore-hub-plot-lab")).toBeVisible();
     await expect(page.getByTestId("explore-hub-tags")).toBeVisible();
+    await expect(page.getByTestId("explore-hub-engagement")).toHaveCount(0);
 
     await expect(page.getByTestId("explore-recently-added-rail")).toBeVisible();
     await expect(page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card")).toContainText(
@@ -48,6 +51,7 @@ test.describe("Explore hub", () => {
 
     await page.goto("/explore");
     await page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card").first().click();
+    await page.getByTestId("title-detail-open-full").click();
     await expect(page).toHaveURL(/\/title\/movie\/348/);
   });
 
