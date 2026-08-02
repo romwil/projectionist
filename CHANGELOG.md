@@ -2,6 +2,39 @@
 
 ## [Unreleased]
 
+## [1.30.3] — 2026-08-02
+
+Closed-loop facet taxonomy + Admin Taxonomy review, entity-memory demand pilot, and a no-LLM chat fallback that keeps history-miniseries gap asks structured instead of dumping popular movies.
+
+### Highlights
+- **Facet aliases that grow with the household.** Unmapped chat/Explore tokens stage for owner review; approving writes a DATA_DIR overlay that survives upgrades.
+- **Gaps stay honest without an LLM.** Keyword chat fallback passes your natural-language ask into gap discover so History/miniseries filters still apply.
+- **Idle enrichment stays off the event loop.** Closed-loop audit and staging DB work runs via `run_db` / `asyncio.to_thread` so IdleScheduler does not block.
+
+### Added
+- Facet registry + resolve layer (`projectionist/facets/`) with seed taxonomy, DATA_DIR overlay promote, and fire-and-forget closed-loop miss telemetry.
+- Migration 43: `telemetry_events` + `staged_augmentations`; Phase 0 ingestion with hit_count upserts and secret scrubbing.
+- `BaseAugmentationTask` + severity-tiered IdleScheduler helpers; P1 never auto-commits.
+- Idle task `facet_taxonomy_audit` stages unmapped facet tokens for Admin review.
+- Admin **Taxonomy** page + `/api/admin/staged-augmentations*` (list / approve → overlay / reject).
+- Phase C pilot: `schedule_metadata_demand` + `EntityMemoryDemandPilot` stages sparse/stale repository-memory demand (P2, stage-only).
+- Contract tests for closed-loop bind failure paths, Admin list `status=all`, approve-without-mapping 400, and double-approve 409.
+
+### Fixed
+- No-LLM `/api/chat/stream` fallback matched “missing”/“gap” and called `find_collection_gaps({"media_type":"movie"})`, which bare-discovered popular theatrical titles. It now passes `query=user_message` so facet intent structuring (History/miniseries/negations) runs, and returns honest empty copy when nothing confident matches.
+- Closed-loop augmentation async methods (`fetch_telemetry_signals`, `_already_staged`, `stage_candidate`) offload sync SQLite through `run_db` instead of blocking the IdleScheduler loop.
+
+### Changed
+- Agent gap helpers lean on the facet registry for genre/tv_type packs; Admin nav adds Taxonomy under Ops.
+
+### Verification
+- `.venv/bin/python -m pytest tests/` — 1734 passed, 6 skipped; coverage **75.0%** (≥74 floor).
+- Focused closed-loop / facets / gaps / saved-library: `test_base_augmentation`, `test_closed_loop_telemetry`, `test_facet_taxonomy_phase_b`, `test_entity_memory_phase_c`, `test_facets_registry`, `test_curator`, `test_agent_tools`, `test_saved_library`.
+- `cd frontend && npm run test:unit` — 612 passed (adminNav Taxonomy count).
+- `cd frontend && npm run lint` — 0 errors.
+- `cd frontend && npm run build` — production build.
+- `test_version` lockstep **1.30.3**.
+
 ## [1.30.2] — 2026-08-01
 
 Chat gap rails for “recent history miniseries that aren’t science-focused” return verified TMDB limited series, and saved Library pages drop id-less junk posters.

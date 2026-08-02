@@ -1,0 +1,171 @@
+{
+  "version": 2,
+  "concepts": {
+    "science_fiction": {
+      "label": "Science Fiction",
+      "names": ["Science Fiction", "Sci-Fi & Fantasy"]
+    },
+    "history": {
+      "label": "History",
+      "names": ["History", "War & Politics", "War"]
+    },
+    "documentary": {
+      "label": "Documentary",
+      "names": ["Documentary"]
+    }
+  },
+  "aliases": {
+    "science": "science_fiction",
+    "sci-fi": "science_fiction",
+    "scifi": "science_fiction",
+    "sci fi": "science_fiction",
+    "sf": "science_fiction",
+    "science fiction": "science_fiction",
+    "science-fiction": "science_fiction",
+    "sci-fi & fantasy": "science_fiction",
+    "scifi & fantasy": "science_fiction",
+    "historical": "history",
+    "hist": "history",
+    "history": "history",
+    "war & politics": "history",
+    "war and politics": "history",
+    "doc": "documentary",
+    "docs": "documentary",
+    "documentaries": "documentary",
+    "documentary": "documentary"
+  },
+  "packs": {
+    "history_tv": {
+      "concept": "history",
+      "label": "TV history / historical drama",
+      "match_pattern": "\\bhistor",
+      "match_aliases": ["History", "historical", "hist"],
+      "keyword_queries": [
+        "based on true story",
+        "historical event",
+        "world war ii"
+      ],
+      "theme_tokens": [
+        "history",
+        "historical",
+        "war",
+        "century",
+        "revolution",
+        "empire",
+        "dynasty",
+        "medieval",
+        "victorian",
+        "roman",
+        "soviet",
+        "nazi",
+        "holocaust",
+        "chernobyl",
+        "wwii",
+        "world war",
+        "civil war",
+        "biography",
+        "biographical",
+        "true story"
+      ],
+      "strong_theme_tokens": [
+        "war",
+        "wwii",
+        "world war",
+        "civil war",
+        "century",
+        "revolution",
+        "empire",
+        "dynasty",
+        "medieval",
+        "victorian",
+        "roman",
+        "soviet",
+        "nazi",
+        "holocaust",
+        "chernobyl",
+        "biography",
+        "biographical"
+      ],
+      "keep_genre_names": ["War & Politics"],
+      "reject_genre_names": ["Crime"],
+      "reject_overview_patterns": [
+        "\\b(?:no|not|non|without)\\s+historical\\b"
+      ]
+    }
+  },
+  "tv_types": {
+    "documentary": "0",
+    "news": "1",
+    "miniseries": "2",
+    "mini-series": "2",
+    "mini series": "2",
+    "limited series": "2",
+    "limited-series": "2",
+    "reality": "3",
+    "scripted": "4",
+    "talk": "5",
+    "talk show": "5",
+    "talk-show": "5",
+    "video": "6"
+  },
+  "intent": {
+    "descriptive_ask_glue": [
+      "any",
+      "good",
+      "great",
+      "recent",
+      "that",
+      "this",
+      "those",
+      "these",
+      "arent",
+      "isn't",
+      "isnt",
+      "without",
+      "focused",
+      "looking",
+      "recommend",
+      "suggestions",
+      "something",
+      "except",
+      "excluding"
+    ],
+    "descriptive_ask_min_words": 5,
+    "recent_years_lookback": 8,
+    "theme_stopwords": [
+      "a", "an", "the", "and", "or", "of", "for", "to", "in", "on", "with",
+      "missing", "gap", "gaps", "movie", "movies", "show", "shows", "tv",
+      "series", "film", "films", "documentary", "documentaries", "doc",
+      "style", "like", "best", "good", "great", "any", "recent", "that",
+      "this", "those", "these", "focused", "looking", "recommend",
+      "suggestions", "something", "arent", "isnt", "without", "except",
+      "excluding"
+    ],
+    "negations": [
+      {
+        "pattern": "\\b(?:not|no|non|aren'?t|isn'?t|without|except|excluding)\\b[^.?]{0,48}\\b(?:science|sci[\\s-]?fi|scientific)\\b",
+        "without_genres": "Science Fiction"
+      }
+    ],
+    "genre_hints": [
+      {
+        "pattern": "\\bhistor",
+        "genres": "History",
+        "prefer_media_type": "show"
+      }
+    ],
+    "tv_type_hints": [
+      {
+        "pattern": "\\b(?:mini[\\s-]?series|limited[\\s-]?series)\\b",
+        "tv_type": "miniseries",
+        "media_type": "show"
+      }
+    ],
+    "recent_pattern": "\\brecent\\b"
+  },
+  "motif_search_aliases": {
+    "mystery": ["mystery", "thriller", "crime", "detective"],
+    "sci-fi": ["sci-fi", "science fiction", "alien", "space"],
+    "scifi": ["sci-fi", "science fiction", "alien", "space"]
+  }
+}

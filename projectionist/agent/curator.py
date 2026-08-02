@@ -324,11 +324,25 @@ class CuratorAgent:
             await registry.execute("suggest_purge_candidates", {"limit": 10})
             return "Here are titles that may not be worth the drive space based on play history and taste fit."
         if any(word in lowered for word in ("add", "missing", "gap", "recommend", "gem", "70s", "80s", "genre")):
-            await registry.execute(
-                "find_collection_gaps",
-                {"media_type": "movie", "year_from": 1970, "year_to": 1979} if "70s" in lowered else {"media_type": "movie"},
+            # Pass the NL ask as query so find_collection_gaps can structure
+            # History/miniseries/negations via facets.augment_gaps_args_from_query.
+            # Bare media_type=movie dumps popular theatrical discover junk.
+            gaps_args: Dict[str, Any] = {"query": user_message}
+            if "70s" in lowered:
+                gaps_args.update(
+                    {"media_type": "movie", "year_from": 1970, "year_to": 1979}
+                )
+            await registry.execute("find_collection_gaps", gaps_args)
+            if registry.cards or registry.discussed_cards:
+                return (
+                    "I searched for missing titles that fit what you described. "
+                    "Review the cards below."
+                )
+            return (
+                "I could not find confident missing titles that match that ask. "
+                "Try a more specific genre or brand, or configure an LLM provider "
+                "for richer conversation."
             )
-            return "I searched for missing titles that fit what you described. Review the cards below."
         if "watch" in lowered or "tonight" in lowered:
             await registry.execute("search_library", {"query": user_message, "media_type": "movie"})
             return "Based on your library, here are some options worth revisiting tonight."

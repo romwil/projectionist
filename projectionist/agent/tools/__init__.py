@@ -20,6 +20,15 @@ from projectionist.config_store import (
     sonarr_add_configuration_error,
     validate_arr_root_folder,
 )
+from projectionist.facets import (
+    augment_gaps_args_from_query as _augment_gaps_args_from_query,
+    filter_pack_keyword_hits,
+    gap_theme_tokens as _gap_theme_tokens,
+    item_text_relevance as _gap_item_relevance,
+    match_facet_pack,
+    normalize_tv_type as _normalize_tv_type,
+    resolve_genre_ids as _resolve_tmdb_genre_ids,
+)
 from projectionist.connectors.arr_errors import ArrTitleExistsError, ArrTitleNotFoundError
 from projectionist.connectors.radarr import RadarrClient
 from projectionist.connectors.seerr import SeerrClient
@@ -252,219 +261,6 @@ def _resolve_tmdb_company_ids(tmdb: TMDBClient, companies_text: str) -> Dict[str
     }
 
 
-# NL asks like "aren't science-focused" → exclude Sci-Fi when without_genres omitted.
-_SCIENCE_NEGATION_RE = re.compile(
-    r"\b(?:not|no|non|aren'?t|isn'?t|without|except|excluding)\b"
-    r"[^.?]{0,48}\b(?:science|sci[\s-]?fi|scientific)\b",
-    re.IGNORECASE,
-)
-_DESCRIPTIVE_ASK_GLUE = {
-    "any",
-    "good",
-    "great",
-    "recent",
-    "that",
-    "this",
-    "those",
-    "these",
-    "arent",
-    "isn't",
-    "isnt",
-    "without",
-    "focused",
-    "looking",
-    "recommend",
-    "suggestions",
-    "something",
-}
-
-
-def _query_is_descriptive_ask(query: str) -> bool:
-    """True for natural-language gap asks — not short brand/title needles."""
-    words = re.findall(r"[a-z0-9']+", (query or "").casefold())
-    if len(words) >= 5:
-        return True
-    normalized = {w.replace("'", "") for w in words}
-    return bool(normalized & _DESCRIPTIVE_ASK_GLUE)
-
-
-def _augment_gaps_args_from_query(args: Mapping[str, Any]) -> Dict[str, Any]:
-    """Infer structured discover filters from NL query; drop sentence-as-search."""
-    out: Dict[str, Any] = dict(args)
-    query = str(out.get("query") or "").strip()
-    if not query:
-        return out
-    q = query.casefold()
-
-    if _SCIENCE_NEGATION_RE.search(query) and not str(out.get("without_genres") or "").strip():
-        out["without_genres"] = "Science Fiction"
-    if re.search(r"\bmini[\s-]?series\b", q) and not str(out.get("tv_type") or "").strip():
-        out["tv_type"] = "miniseries"
-        out["media_type"] = "show"
-    if re.search(r"\bhistor", q) and not str(out.get("genres") or "").strip():
-        out["genres"] = "History"
-        if str(out.get("media_type") or "") != "movie":
-            out["media_type"] = "show"
-    if re.search(r"\brecent\b", q) and out.get("year_from") is None:
-        out["year_from"] = _dt.now().year - 8
-
-    # Sentence-shaped asks must not hit search_tv — that yields mismatched IDs.
-    if _query_is_descriptive_ask(query) and (
-        str(out.get("tv_type") or "").strip()
-        or str(out.get("genres") or "").strip()
-        or str(out.get("without_genres") or "").strip()
-    ):
-        out["query"] = ""
-    return out
-
-
-def _gap_theme_tokens(*parts: str) -> List[str]:
-    """Normalize free-text theme tokens for post-filter relevance scoring."""
-    stop = {
-        "a",
-        "an",
-        "the",
-        "and",
-        "or",
-        "of",
-        "for",
-        "to",
-        "in",
-        "on",
-        "with",
-        "missing",
-        "gap",
-        "gaps",
-        "movie",
-        "movies",
-        "show",
-        "shows",
-        "tv",
-        "series",
-        "film",
-        "films",
-        "documentary",
-        "documentaries",
-        "doc",
-        "style",
-        "like",
-        "best",
-        "good",
-        "great",
-        "any",
-        "recent",
-        "that",
-        "this",
-        "those",
-        "these",
-        "focused",
-        "looking",
-        "recommend",
-        "suggestions",
-        "something",
-        "arent",
-        "isnt",
-        "without",
-        "except",
-        "excluding",
-    }
-    tokens: List[str] = []
-    seen: set[str] = set()
-    for part in parts:
-        for raw in re.split(r"[\s,/|;]+", str(part or "").strip().lower()):
-            tok = raw.strip(".,!?:;\"'()[]")
-            if len(tok) < 3 or tok in stop or tok in seen:
-                continue
-            seen.add(tok)
-            tokens.append(tok)
-    return tokens
-
-
-def _gap_item_relevance(item: Mapping[str, Any], theme_tokens: Sequence[str]) -> int:
-    """Score a discover/search hit against theme tokens (title + overview)."""
-    if not theme_tokens:
-        return 1
-    hay = " ".join(
-        [
-            str(item.get("title") or item.get("name") or ""),
-            str(item.get("original_title") or item.get("original_name") or ""),
-            str(item.get("overview") or ""),
-        ]
-    ).casefold()
-    if not hay.strip():
-        return 0
-    return sum(1 for tok in theme_tokens if tok in hay)
-
-
-# Common shorthand → canonical TMDB genre names (casefold keys).
-_GENRE_ALIASES: Dict[str, str] = {
-    "science": "Science Fiction",
-    "sci-fi": "Science Fiction",
-    "scifi": "Science Fiction",
-    "sci fi": "Science Fiction",
-    "sf": "Science Fiction",
-    "doc": "Documentary",
-    "docs": "Documentary",
-    "documentaries": "Documentary",
-    "historical": "History",
-    "hist": "History",
-}
-# When the preferred alias is movie-only, try TV (or sibling) names next.
-_GENRE_ALIAS_FALLBACKS: Dict[str, List[str]] = {
-    "Science Fiction": ["Sci-Fi & Fantasy"],
-    "Sci-Fi & Fantasy": ["Science Fiction"],
-    # TMDB TV has no History genre (movies do). War & Politics is the closest
-    # official TV genre; Chernobyl-class Drama history is filled via keywords.
-    "History": ["War & Politics"],
-    "War & Politics": ["History", "War"],
-    "War": ["War & Politics"],
-}
-
-# Keyword union for TV "history" asks — Drama-tagged limited series often lack
-# War & Politics (e.g. Chernobyl) but carry these TMDB keywords.
-_TV_HISTORY_KEYWORD_QUERIES = (
-    "based on true story",
-    "historical event",
-    "world war ii",
-)
-_TV_HISTORY_THEME_TOKENS = (
-    "history",
-    "historical",
-    "war",
-    "century",
-    "revolution",
-    "empire",
-    "dynasty",
-    "medieval",
-    "victorian",
-    "roman",
-    "soviet",
-    "nazi",
-    "holocaust",
-    "chernobyl",
-    "wwii",
-    "world war",
-    "civil war",
-    "biography",
-    "biographical",
-    "true story",
-)
-
-# TMDB discover/tv with_type numeric codes.
-_TV_TYPE_IDS: Dict[str, str] = {
-    "documentary": "0",
-    "news": "1",
-    "miniseries": "2",
-    "mini-series": "2",
-    "mini series": "2",
-    "reality": "3",
-    "scripted": "4",
-    "talk": "5",
-    "talk show": "5",
-    "video": "6",
-}
-
-
 def _empty_gaps_payload(
     *,
     note: str,
@@ -496,133 +292,6 @@ def _empty_gaps_payload(
     if suggested_fallback:
         payload["suggested_fallback"] = dict(suggested_fallback)
     return json.dumps(payload)
-
-
-def _normalize_tv_type(raw: Any) -> Optional[str]:
-    """Map tv_type labels to TMDB discover ``with_type`` ids."""
-    key = str(raw or "").strip().casefold()
-    if not key:
-        return None
-    if key.isdigit():
-        return key
-    return _TV_TYPE_IDS.get(key)
-
-
-def _resolve_tmdb_genre_ids(
-    genre_list: Sequence[Mapping[str, Any]],
-    genres_text: str,
-) -> Dict[str, Any]:
-    """Resolve genre names with aliases + unique substring match (explore_genre-style).
-
-    Returns resolved ids, unresolved names, and ambiguous queries with candidates
-    so the agent can clarify instead of only empty+stop_retrying.
-    """
-    by_name: Dict[str, Mapping[str, Any]] = {}
-    for entry in genre_list or []:
-        name = str(entry.get("name") or "").strip()
-        if not name or entry.get("id") is None:
-            continue
-        by_name[name.casefold()] = entry
-
-    resolved: List[Dict[str, Any]] = []
-    unresolved: List[str] = []
-    ambiguous: List[Dict[str, Any]] = []
-    matched_ids: List[str] = []
-    seen_ids: set[int] = set()
-
-    for raw in str(genres_text or "").split(","):
-        wanted = raw.strip()
-        if not wanted:
-            continue
-        key = wanted.casefold()
-        alias = _GENRE_ALIASES.get(key)
-        lookup_names: List[str] = []
-        if alias:
-            lookup_names.append(alias)
-            lookup_names.extend(_GENRE_ALIAS_FALLBACKS.get(alias) or [])
-        lookup_names.append(wanted)
-        # Also try fallbacks when the user already passed a canonical movie/TV name.
-        for extra in _GENRE_ALIAS_FALLBACKS.get(wanted) or []:
-            if extra not in lookup_names:
-                lookup_names.append(extra)
-
-        exact = None
-        display_name = wanted
-        for candidate_name in lookup_names:
-            hit = by_name.get(candidate_name.casefold())
-            if hit is not None:
-                exact = hit
-                display_name = candidate_name
-                break
-        if exact is not None:
-            gid = int(exact["id"])
-            if gid not in seen_ids:
-                seen_ids.add(gid)
-                matched_ids.append(str(gid))
-                resolved.append(
-                    {"id": gid, "name": str(exact.get("name") or display_name), "query": wanted}
-                )
-            continue
-
-        lookup = (alias or wanted).casefold()
-        subs = [
-            entry
-            for name_cf, entry in by_name.items()
-            if lookup in name_cf or name_cf in lookup
-        ]
-        # Deduplicate by id while preserving order.
-        uniq: List[Mapping[str, Any]] = []
-        seen_sub: set[int] = set()
-        for entry in subs:
-            gid = int(entry["id"])
-            if gid in seen_sub:
-                continue
-            seen_sub.add(gid)
-            uniq.append(entry)
-
-        if len(uniq) == 1:
-            entry = uniq[0]
-            gid = int(entry["id"])
-            if gid not in seen_ids:
-                seen_ids.add(gid)
-                matched_ids.append(str(gid))
-                resolved.append(
-                    {
-                        "id": gid,
-                        "name": str(entry.get("name") or display_name),
-                        "query": wanted,
-                    }
-                )
-            continue
-        if len(uniq) > 1:
-            ambiguous.append(
-                {
-                    "query": wanted,
-                    "candidates": [
-                        {"id": int(e["id"]), "name": str(e.get("name") or "")} for e in uniq
-                    ],
-                }
-            )
-            continue
-        unresolved.append(wanted)
-
-    candidates_flat: List[Dict[str, Any]] = []
-    seen_cand: set[int] = set()
-    for group in ambiguous:
-        for cand in group.get("candidates") or []:
-            cid = int(cand["id"])
-            if cid in seen_cand:
-                continue
-            seen_cand.add(cid)
-            candidates_flat.append(cand)
-
-    return {
-        "resolved": resolved,
-        "unresolved": unresolved,
-        "ambiguous": ambiguous,
-        "genres_candidates": candidates_flat,
-        "genre_ids": ",".join(matched_ids) if matched_ids else "",
-    }
 
 
 def _year_in_range(
@@ -707,11 +376,6 @@ def _filter_tmdb_results_without_keyword_tokens(
     return kept
 
 
-def _genres_request_history(genres_text: str) -> bool:
-    """True when the caller asked for History / historical (movie or TV)."""
-    return bool(re.search(r"\bhistor", str(genres_text or "").casefold()))
-
-
 def _merge_tmdb_results_by_id(
     primary: Sequence[Mapping[str, Any]],
     secondary: Sequence[Mapping[str, Any]],
@@ -728,64 +392,6 @@ def _merge_tmdb_results_by_id(
         seen.add(tid)
         merged.append(item)
     return merged
-
-
-def _filter_tv_history_keyword_hits(
-    items: Sequence[Mapping[str, Any]],
-) -> List[Mapping[str, Any]]:
-    """Keep keyword-union hits that look historical (drop pure true-crime noise)."""
-    war_politics = 10768
-    crime = 80
-    # Stronger than bare "historical" (which matches "no historical angle" junk).
-    strong_history = (
-        "war",
-        "wwii",
-        "world war",
-        "civil war",
-        "century",
-        "revolution",
-        "empire",
-        "dynasty",
-        "medieval",
-        "victorian",
-        "roman",
-        "soviet",
-        "nazi",
-        "holocaust",
-        "chernobyl",
-        "biography",
-        "biographical",
-    )
-    kept: List[Mapping[str, Any]] = []
-    for item in items:
-        if not isinstance(item, Mapping):
-            continue
-        try:
-            genre_ids = {int(g) for g in (item.get("genre_ids") or [])}
-        except (TypeError, ValueError):
-            genre_ids = set()
-        if war_politics in genre_ids:
-            kept.append(item)
-            continue
-        # Crime/true-crime without War & Politics needs a strong period/war signal.
-        if crime in genre_ids and _gap_item_relevance(item, strong_history) <= 0:
-            continue
-        if _gap_item_relevance(item, strong_history) > 0:
-            kept.append(item)
-            continue
-        # Soft history tokens only when not crime-tagged.
-        if crime not in genre_ids and _gap_item_relevance(item, _TV_HISTORY_THEME_TOKENS) > 0:
-            hay = " ".join(
-                [
-                    str(item.get("title") or item.get("name") or ""),
-                    str(item.get("overview") or ""),
-                ]
-            ).casefold()
-            # Fail closed on negated "historical" phrasing ("no historical angle").
-            if re.search(r"\b(?:no|not|non|without)\s+historical\b", hay):
-                continue
-            kept.append(item)
-    return kept
 
 
 def _build_gaps_suggested_fallback(args: Mapping[str, Any]) -> Dict[str, Any]:
@@ -1492,6 +1098,20 @@ class ToolRegistry:
             logger.exception("recall_repo_memory failed for %r", name)
             return json.dumps({"error": "Repository memory could not be read", "known": False})
         if not record:
+            # P2 demand: discussed but missing from repository memory.
+            kind = (entity_type or "title").strip().lower()
+            if kind in {"title", "person", "company"}:
+                try:
+                    from projectionist.telemetry.demand import schedule_metadata_demand
+
+                    schedule_metadata_demand(
+                        entity_type=kind,
+                        name=name,
+                        reason="missing_snapshot",
+                        context_source="recall",
+                    )
+                except Exception:
+                    logger.debug("Could not schedule metadata demand for miss", exc_info=True)
             return json.dumps({"known": False, "name": name, "entity_type": entity_type})
         try:
             self.db.record_entity_discussion(record["entity_id"])
@@ -1501,6 +1121,26 @@ class ToolRegistry:
         record["frequently_discussed"] = int(record.get("discussion_count") or 0) >= 3
         record["freshness"] = _memory_freshness(record.get("known_since"), record.get("fetched_at"))
         record["known"] = True
+        # P2 demand: stale or empty research snapshot while actively recalled.
+        try:
+            freshness = record.get("freshness") if isinstance(record.get("freshness"), dict) else {}
+            snapshot = record.get("snapshot") if isinstance(record.get("snapshot"), dict) else {}
+            sparse = not snapshot or bool(freshness.get("stale"))
+            kind = str(record.get("entity_type") or "").strip().lower()
+            if sparse and kind in {"title", "person", "company"}:
+                from projectionist.telemetry.demand import schedule_metadata_demand
+
+                reason = "stale_snapshot" if freshness.get("stale") else "sparse_snapshot"
+                schedule_metadata_demand(
+                    entity_type=kind,
+                    name=str(record.get("name") or name),
+                    reason=reason,
+                    entity_id=str(record.get("entity_id") or "") or None,
+                    context_source="recall",
+                    extra={"age_days": freshness.get("age_days")},
+                )
+        except Exception:
+            logger.debug("Could not schedule metadata demand for stale recall", exc_info=True)
         return json.dumps(record)
 
     async def _tool_search_memory(self, args: Mapping[str, Any]) -> str:
@@ -1828,7 +1468,12 @@ class ToolRegistry:
                 tmdb.genre_list_movies() if media_type == "movie" else tmdb.genre_list_tv()
             )
         if genres:
-            genre_meta = _resolve_tmdb_genre_ids(genre_list, genres)
+            genre_meta = _resolve_tmdb_genre_ids(
+                genre_list,
+                genres,
+                context_source="gaps",
+                media_type=media_type,
+            )
             genre_ids = str(genre_meta.get("genre_ids") or "")
             genres_unresolved = list(genre_meta.get("unresolved") or [])
             genres_resolved = list(genre_meta.get("resolved") or [])
@@ -1848,11 +1493,14 @@ class ToolRegistry:
                     stop_retrying=False,
                 )
             # Fail closed: invented facets must not fall through to unfiltered discover.
-            # Exception: TV History — TMDB has no TV History genre; continue and union
-            # history keywords below instead of an empty wall / invented title-by-title IDs.
-            if not genre_ids and not (
-                media_type == "show" and _genres_request_history(genres) and not ambiguous
-            ):
+            # Exception: TV History pack — TMDB has no TV History genre; continue and
+            # union pack keyword queries below instead of an empty wall.
+            history_tv_pack = (
+                match_facet_pack(genres, pack_id="history_tv")
+                if media_type == "show"
+                else None
+            )
+            if not genre_ids and not (history_tv_pack is not None and not ambiguous):
                 return _empty_gaps_payload(
                     note=(
                         "Could not resolve genres to TMDB genre ids "
@@ -1864,7 +1512,7 @@ class ToolRegistry:
                     genres_unresolved=genres_unresolved,
                     genres_candidates=genres_candidates or None,
                 )
-            if not genre_ids and media_type == "show" and _genres_request_history(genres):
+            if not genre_ids and history_tv_pack is not None:
                 genres_unresolved = [
                     g for g in genres_unresolved if not re.search(r"\bhistor", str(g), re.I)
                 ]
@@ -1877,7 +1525,12 @@ class ToolRegistry:
                 genre_list = list(
                     tmdb.genre_list_movies() if media_type == "movie" else tmdb.genre_list_tv()
                 )
-            without_meta = _resolve_tmdb_genre_ids(genre_list, without_genres_text)
+            without_meta = _resolve_tmdb_genre_ids(
+                genre_list,
+                without_genres_text,
+                context_source="gaps",
+                media_type=media_type,
+            )
             without_genre_ids = str(without_meta.get("genre_ids") or "")
             without_genres_unresolved = list(without_meta.get("unresolved") or [])
             if without_meta.get("ambiguous") and not without_genre_ids:
@@ -2015,7 +1668,8 @@ class ToolRegistry:
                 with_companies=company_ids,
             )
         else:
-            history_tv = _genres_request_history(genres)
+            history_pack = match_facet_pack(genres, pack_id="history_tv")
+            history_tv = history_pack is not None
             # Unfiltered TV discover (no genre/keyword) dumps popular junk — skip when
             # History rematerializes to keywords only.
             if history_tv and not genre_ids and not keyword_ids and not company_ids:
@@ -2031,11 +1685,11 @@ class ToolRegistry:
                     with_companies=company_ids,
                     with_type=with_type,
                 )
-            # TV History: War & Politics discover misses Drama-only history miniseries
-            # (Chernobyl). Union a history-keyword discover and theme-filter the extras.
-            if history_tv:
+            # TV History pack: War & Politics discover misses Drama-only history
+            # miniseries (Chernobyl). Union pack keyword queries + theme filter.
+            if history_pack and history_pack.keyword_queries:
                 hist_kw = _resolve_tmdb_keyword_ids(
-                    tmdb, ", ".join(_TV_HISTORY_KEYWORD_QUERIES)
+                    tmdb, ", ".join(history_pack.keyword_queries)
                 )
                 hist_kw_ids = hist_kw.get("keyword_ids")
                 if hist_kw_ids and hist_kw_ids != keyword_ids:
@@ -2050,7 +1704,9 @@ class ToolRegistry:
                     if isinstance(extra, list):
                         results = _merge_tmdb_results_by_id(
                             results if isinstance(results, list) else [],
-                            _filter_tv_history_keyword_hits(extra),
+                            filter_pack_keyword_hits(
+                                extra, history_pack, genre_list=genre_list
+                            ),
                         )
                     for entry in hist_kw.get("resolved") or []:
                         if entry not in (keyword_meta.get("resolved") or []):
@@ -2642,21 +2298,28 @@ class ToolRegistry:
             tmdb = TMDBClient(self.settings.tmdb_api_key)
             owned = _excluded_add_tmdb_ids(self.db, media_type)
             genre_list = tmdb.genre_list_movies() if media_type == "movie" else tmdb.genre_list_tv()
-            # Prefer alias/unique-substring resolution; keep legacy substring OR for multi-match.
-            resolved = _resolve_tmdb_genre_ids(genre_list, genre) if genre else {}
-            genre_ids = (
-                str(resolved.get("genre_ids") or "").split(",")
-                if resolved.get("genre_ids")
-                else [
-                    str(g["id"])
-                    for g in genre_list
-                    if genre.lower() in str(g.get("name", "")).lower()
-                ]
+            # Fail-closed: same resolve contract as find_collection_gaps (no soft OR).
+            resolved = (
+                _resolve_tmdb_genre_ids(
+                    genre_list,
+                    genre,
+                    context_source="explore_genre",
+                    media_type=media_type,
+                )
+                if genre
+                else {}
             )
-            genre_ids = [gid for gid in genre_ids if gid]
+            genre_ids = [
+                gid for gid in str(resolved.get("genre_ids") or "").split(",") if gid
+            ]
             without_genre_ids = ""
             if without_genres_text:
-                without_meta = _resolve_tmdb_genre_ids(genre_list, without_genres_text)
+                without_meta = _resolve_tmdb_genre_ids(
+                    genre_list,
+                    without_genres_text,
+                    context_source="explore_genre",
+                    media_type=media_type,
+                )
                 without_genre_ids = str(without_meta.get("genre_ids") or "")
             if genre_ids:
                 if media_type == "movie":

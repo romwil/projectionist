@@ -1583,6 +1583,48 @@ class SchemaMigrationsMixin:
             """
         )
 
+    def _migrate_closed_loop_augmentation(self, conn: sqlite3.Connection) -> None:
+        """Unified closed-loop tables: telemetry_events + staged_augmentations.
+
+        Distinct from interaction stream ``system_telemetry_stream``. Used by
+        BaseAugmentationTask observe → stage → promote (SPEC-2026-AUG-001).
+        """
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS telemetry_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                priority_tier TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_key TEXT NOT NULL,
+                payload_json TEXT,
+                hit_count INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                CONSTRAINT uq_event_entity UNIQUE (event_type, entity_type, entity_key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_telemetry_priority
+                ON telemetry_events(priority_tier, hit_count DESC);
+            CREATE INDEX IF NOT EXISTS idx_telemetry_updated
+                ON telemetry_events(updated_at DESC);
+
+            CREATE TABLE IF NOT EXISTS staged_augmentations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_name TEXT NOT NULL,
+                priority_tier TEXT NOT NULL,
+                target_entity_type TEXT NOT NULL,
+                target_entity_id TEXT NOT NULL,
+                candidate_data_json TEXT NOT NULL,
+                confidence_score REAL NOT NULL,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_staged_status_conf
+                ON staged_augmentations(status, confidence_score DESC);
+            """
+        )
+
     def _migrate_holiday_calendar(self, conn: sqlite3.Connection) -> None:
         """Owner-editable holiday calendar + seasonal rail curation (Phase B1/B1b/B2)."""
         conn.executescript(

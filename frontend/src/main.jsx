@@ -41,6 +41,7 @@ import MailSettingsPage from "./pages/MailSettingsPage";
 import AccessRequestsPage from "./pages/AccessRequestsPage";
 import LogsPage from "./pages/LogsPage";
 import HolidaysPage from "./pages/HolidaysPage";
+import StagedAugmentationsPage from "./pages/StagedAugmentationsPage";
 import LlmUsagePage from "./pages/LlmUsagePage";
 import JoinPage from "./pages/JoinPage";
 import GuestTourPage from "./pages/GuestTourPage";
@@ -94,6 +95,7 @@ createRoot(document.getElementById("root")).render(
             <Route path="issues" element={<MediaIssuesPage />} />
             <Route path="youth" element={<YouthReviewPage />} />
             <Route path="holidays" element={<HolidaysPage />} />
+            <Route path="taxonomy" element={<StagedAugmentationsPage />} />
             <Route path="access" element={<AccessRequestsPage />} />
             <Route path="mail" element={<MailSettingsPage />} />
             <Route path="logs" element={<LogsPage />} />
