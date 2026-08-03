@@ -49,7 +49,7 @@ When multi-user is enabled, these stay scoped to your user:
 - Ratings and review prompts tied to you
 - Preference / taste facts the curator keeps for you
 - Private memory notes (for example stated goals, watch intentions, callbacks/in-jokes, and external watches)
-- Normalized Plex played-history evidence that Plex attributed to your exact account id
+- Normalized Plex played-history, live-progress, webhook, and manual watched-state evidence that Plex attributed to your exact account id
 - **Preferred conversation name** — how the curator addresses you in chat (may differ from your Plex display name)
 - Voice toggles (listen / speak replies), when voice mode is available
 
@@ -148,7 +148,7 @@ Stored under the app data directory (typically `/config` → `settings.json` and
 
 **Who can view them in the UI:** owner Admin / Configuration only (not household members). Treat the Docker `/config` volume and backups as secret material. UI-saved keys in `settings.json` are encrypted at rest when a secrets key is available; still protect the volume and back up `PROJECTIONIST_SECRETS_KEY` with `/config`.
 
-### Plex history ledger health
+### Plex watch evidence health
 
 Every 15 minutes, the **Plex Watch History** scheduled task asks Plex for a
 bounded page of played-history evidence. Projectionist keeps normalized
@@ -156,10 +156,20 @@ movie/episode identifiers, the stable Plex account id, event time, optional
 progress/duration, and a deterministic fingerprint. It does **not** keep the
 raw response, Plex token, client IP, or transcode details.
 
+Webhooks add pause, stop, and played signals immediately, including progress
+below the separate rating-prompt threshold. Active playback is sampled once per
+minute while sessions exist and every five minutes while idle; an unavailable
+Plex server makes the poller back off rather than blocking startup. Projectionist
+keeps only a one-way client hash for those samples—not the device name, address,
+bandwidth, or raw session payload. Marking a title watched or unwatched records
+an append-only manual correction only for an exactly linked Plex account.
+
 Exact account mapping matters: an event maps to a household user only when
 Plex's stable account id exactly matches that user's linked Plex id. Unmapped
 events remain separate evidence. Display names are never used to guess
 ownership, and one history event does not prove an uninterrupted viewing.
+These observations are evidence only: Phase 2 does not turn them into a logical
+session or completion count.
 
 On a trusted single-owner installation, inspect freshness and mapping coverage:
 

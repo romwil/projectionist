@@ -95,29 +95,17 @@ def handle_plex_webhook(db: Database, payload: Mapping[str, Any]) -> Dict[str, A
     # Always attempt watch-tracker ingest for supported playback events (even below prompt gate).
     tracker_ingested = False
     try:
-        from projectionist.watch_tracker.correlate import rebuild_watch_derivations
         from projectionist.watch_tracker.store import ingest_watch_events
         from projectionist.watch_tracker.webhook_adapter import webhook_to_watch_event
 
-        server_machine_id = "unknown"
-        try:
-            # Best-effort; webhooks may arrive without a live Plex client.
-            from projectionist.connectors.plex import cached_plex_identity
-            # Identity cache may be empty — leave unknown.
-            del cached_plex_identity
-        except Exception:  # noqa: BLE001
-            pass
+        server = payload.get("Server") if isinstance(payload.get("Server"), Mapping) else {}
+        server_machine_id = str(
+            server.get("uuid") or server.get("machineIdentifier") or "unknown"
+        ).strip()
         watch_event = webhook_to_watch_event(payload, server_machine_id=server_machine_id)
         if watch_event is not None:
             ingest_result = ingest_watch_events(db, [watch_event])
             tracker_ingested = ingest_result.inserted > 0 or ingest_result.deduped > 0
-            if watch_event.source_user_key:
-                # Correlate for mapped user when possible.
-                row = db.get_user_by_plex_id(watch_event.source_user_key)
-                if row is not None:
-                    rebuild_watch_derivations(db, user_id=str(row["id"]))
-                else:
-                    rebuild_watch_derivations(db, source_user_key=watch_event.source_user_key)
     except Exception:  # noqa: BLE001
         logger.debug("Watch tracker webhook ingest failed", exc_info=True)
 

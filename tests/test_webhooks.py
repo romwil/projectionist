@@ -118,6 +118,46 @@ class PlexWebhookHandlerTests(unittest.TestCase):
         self.assertFalse(result["handled"])
         self.assertEqual(result["reason"], "below_threshold")
         self.assertEqual(list_pending_prompts(self.db, user_id=self.user["id"]), [])
+        with self.db.connect() as conn:
+            row = conn.execute(
+                """
+                SELECT source_event_kind, user_id, progress_ms, duration_ms, terminal
+                FROM watch_events
+                """
+            ).fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row["source_event_kind"], "session_stop")
+        self.assertEqual(row["user_id"], self.user["id"])
+        self.assertEqual(row["progress_ms"], 1_000_000)
+        self.assertEqual(row["duration_ms"], 6_000_000)
+        self.assertEqual(row["terminal"], 1)
+
+    def test_pause_event_is_persisted_without_queueing_prompt(self) -> None:
+        payload = _movie_stop_payload(view_offset=600_000, duration=6_000_000)
+        payload["event"] = "media.pause"
+        payload["Server"] = {"uuid": "plex-server-1", "title": "Private server name"}
+        payload["Player"] = {
+            "uuid": "client-uuid-1",
+            "title": "Living Room",
+            "publicAddress": "203.0.113.1",
+        }
+        payload["Session"] = {"id": "session-1", "bandwidth": 42_000}
+
+        result = handle_plex_webhook(self.db, payload)
+
+        self.assertFalse(result["handled"])
+        self.assertTrue(result["tracker_ingested"])
+        with self.db.connect() as conn:
+            row = conn.execute("SELECT * FROM watch_events").fetchone()
+        self.assertEqual(row["source_event_kind"], "session_pause")
+        self.assertEqual(row["server_machine_id"], "plex-server-1")
+        self.assertEqual(row["client_key"], "client-uuid-1")
+        self.assertEqual(row["session_key"], "session-1")
+        self.assertEqual(row["terminal"], 0)
+        stored = " ".join(str(value) for value in row)
+        self.assertNotIn("Living Room", stored)
+        self.assertNotIn("203.0.113.1", stored)
+        self.assertNotIn("Private server name", stored)
 
     def test_scrobble_event_queues_without_view_offset(self) -> None:
         result = handle_plex_webhook(self.db, _episode_scrobble_payload())
@@ -125,6 +165,20 @@ class PlexWebhookHandlerTests(unittest.TestCase):
         self.assertTrue(result["queued"])
         prompts = list_pending_prompts(self.db, user_id=self.user["id"])
         self.assertEqual(prompts[0]["title"], "Severance — S01E03")
+
+    def test_unknown_account_stays_unmapped_and_never_queues(self) -> None:
+        result = handle_plex_webhook(
+            self.db,
+            _movie_stop_payload(plex_account_id=9999),
+        )
+        self.assertTrue(result["handled"])
+        self.assertFalse(result["queued"])
+        with self.db.connect() as conn:
+            row = conn.execute(
+                "SELECT source_user_key, user_id FROM watch_events"
+            ).fetchone()
+        self.assertEqual(row["source_user_key"], "9999")
+        self.assertIsNone(row["user_id"])
 
 
 class PlexWebhookApiTests(unittest.TestCase):

@@ -7,8 +7,10 @@ import time
 from typing import Any, Dict, Optional
 
 from projectionist.config_store import Settings
-from projectionist.connectors.plex import PlexClient
+from projectionist.connectors.plex import PlexClient, cached_machine_identifier
 from projectionist.library.db import Database
+from projectionist.watch_tracker.models import WatchEventInput
+from projectionist.watch_tracker.store import ingest_watch_events
 from projectionist.watchlist.plex_sync import resolve_account_token
 
 logger = logging.getLogger(__name__)
@@ -103,6 +105,57 @@ def resolve_plex_watch_token(
     }
 
 
+def record_manual_watch_observation(
+    db: Database,
+    rating_key: str,
+    *,
+    watched: bool,
+    user_id: Optional[str],
+    token_source: Optional[str],
+    server_machine_id: str,
+    occurred_at_ms: Optional[int] = None,
+) -> bool:
+    """Append a mapped manual scrobble correction without retaining credentials."""
+    key = str(rating_key or "").strip()
+    actor_id = str(user_id or "").strip()
+    if not key or not actor_id:
+        return False
+    user = db.get_user(actor_id)
+    if user is None:
+        return False
+    source_user_key = str(user["plex_user_id"] or "").strip()
+    if not source_user_key:
+        # Local/OIDC identities must not be guessed into a Plex account.
+        return False
+    item = db.library_item_by_rating_key(key)
+    if item is None:
+        return False
+    media_type = str(item["media_type"] or "").strip().lower()
+    if media_type not in {"movie", "episode"}:
+        return False
+
+    stamp = int(occurred_at_ms if occurred_at_ms is not None else time.time() * 1000)
+    kind = "manual_scrobble" if watched else "manual_unscrobble"
+    source = (
+        "plex_manual_account"
+        if token_source == "plex_token_enc"
+        else "plex_manual_server"
+    )
+    event = WatchEventInput(
+        source=source,
+        source_event_id=f"{kind}:{source_user_key}:{key}:{stamp}",
+        source_event_kind=kind,
+        server_machine_id=str(server_machine_id or "").strip() or "unknown",
+        source_user_key=source_user_key,
+        rating_key=key,
+        media_type=media_type,  # type: ignore[arg-type]
+        occurred_at_ms=stamp,
+        terminal=True,
+        manual=True,
+    )
+    return ingest_watch_events(db, [event]).inserted == 1
+
+
 def sync_watched_to_plex(
     db: Database,
     settings: Settings,
@@ -136,6 +189,27 @@ def sync_watched_to_plex(
             client.scrobble(key)
         else:
             client.unscrobble(key)
+        machine_id = cached_machine_identifier(
+            settings.plex_url,
+            str(token),
+            timeout=5,
+        )
+        observation_recorded = record_manual_watch_observation(
+            db,
+            key,
+            watched=watched,
+            user_id=(
+                str(resolved.get("user_id"))
+                if resolved.get("user_id") is not None
+                else user_id
+            ),
+            token_source=(
+                str(resolved.get("source"))
+                if resolved.get("source") is not None
+                else None
+            ),
+            server_machine_id=machine_id or "unknown",
+        )
     except Exception:
         logger.exception(
             "Failed to sync Plex watched state rating_key=%s watched=%s",
@@ -152,4 +226,5 @@ def sync_watched_to_plex(
         "plex_synced": True,
         "plex_reason": None,
         "plex_token_source": resolved.get("source"),
+        "watch_observation_recorded": observation_recorded,
     }
