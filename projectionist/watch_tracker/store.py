@@ -8,7 +8,7 @@ import logging
 import sqlite3
 import time
 import uuid
-from typing import Any, Dict, Optional, Sequence
+from typing import Any, Dict, Mapping, Optional, Sequence
 
 from projectionist.library.db import Database
 from projectionist.watch_tracker.models import IngestResult, SOURCE_EVENT_KINDS, WatchEventInput
@@ -322,17 +322,18 @@ def list_user_watch_summary(
             """,
             (uid, key),
         ).fetchall()
-        latest = conn.execute(
+        timeline_rows = conn.execute(
             """
-            SELECT completed_at_ms
-            FROM watch_completions
-            WHERE user_id = ? AND rating_key = ?
-              AND superseded_by_completion_id IS NULL
-            ORDER BY completed_at_ms DESC
-            LIMIT 1
+            SELECT c.completed_at_ms, c.confidence, c.basis, c.threshold_pct,
+                   s.event_count AS sittings_observed
+            FROM watch_completions c
+            JOIN watch_sessions s ON s.id = c.session_id
+            WHERE c.user_id = ? AND c.rating_key = ?
+              AND c.superseded_by_completion_id IS NULL
+            ORDER BY c.completed_at_ms DESC, c.id DESC
             """,
             (uid, key),
-        ).fetchone()
+        ).fetchall()
         event_count = conn.execute(
             "SELECT COUNT(*) AS count FROM watch_events WHERE user_id = ? AND rating_key = ?",
             (uid, key),
@@ -350,9 +351,23 @@ def list_user_watch_summary(
         "logical_viewings": int(sessions["logical_viewings"] if sessions else 0),
         "sittings_observed": int(sessions["sittings_observed"] if sessions else 0),
         "last_tracked_completion_at": (
-            int(latest["completed_at_ms"]) if latest is not None else None
+            int(timeline_rows[0]["completed_at_ms"]) if timeline_rows else None
         ),
         "tracker_coverage": "partial" if evidence_count else "none",
+        "completion_timeline": [
+            {
+                "completed_at_ms": int(row["completed_at_ms"]),
+                "confidence": str(row["confidence"]),
+                "basis": str(row["basis"]),
+                "threshold_pct": (
+                    float(row["threshold_pct"])
+                    if row["threshold_pct"] is not None
+                    else None
+                ),
+                "sittings_observed": int(row["sittings_observed"] or 0),
+            }
+            for row in timeline_rows
+        ],
     }
 
 
@@ -391,10 +406,31 @@ def list_user_show_watch_summary(
         name = str(row["confidence"])
         if name in confidence:
             confidence[name] += 1
+    episode_completions: Dict[str, Dict[str, Any]] = {}
+    for row in rows:
+        episode_key = str(row["rating_key"])
+        entry = episode_completions.setdefault(
+            episode_key,
+            {
+                "tracked_completions": 0,
+                "completion_confidence": {
+                    "certain": 0,
+                    "likely": 0,
+                    "plex_event_only": 0,
+                },
+                "last_tracked_completion_at": None,
+            },
+        )
+        entry["tracked_completions"] += 1
+        entry["completion_confidence"][str(row["confidence"])] += 1
+        if entry["last_tracked_completion_at"] is None:
+            entry["last_tracked_completion_at"] = int(row["completed_at_ms"])
+    unique_completed = len(episode_completions)
     return {
         "rating_key": key,
-        "unique_episodes_completed": len({str(row["rating_key"]) for row in rows}),
+        "unique_episodes_completed": unique_completed,
         "total_episode_completions": len(rows),
+        "repeat_episode_completions": max(0, len(rows) - unique_completed),
         "episodes_in_progress": int(in_progress["count"] if in_progress else 0),
         "most_recently_completed_episode": (
             {
@@ -405,8 +441,72 @@ def list_user_show_watch_summary(
             else None
         ),
         "completion_confidence": confidence,
+        "episode_completions": episode_completions,
+        "recent_activity": [
+            {
+                "rating_key": str(row["rating_key"]),
+                "completed_at_ms": int(row["completed_at_ms"]),
+                "confidence": str(row["confidence"]),
+            }
+            for row in rows[:20]
+        ],
         "tracker_coverage": "partial" if rows or (in_progress and in_progress["count"]) else "none",
     }
+
+
+def attach_user_watch_summaries(
+    db: Database,
+    payload: Any,
+    *,
+    user_id: Optional[str],
+) -> Any:
+    """Add user-scoped tracker fields beside legacy Plex count semantics.
+
+    The recursive pass caches each title summary so repeated card/detail
+    representations in one tool or API response do not repeat database reads.
+    """
+    uid = str(user_id or "").strip()
+    if not uid:
+        return payload
+    cache: Dict[tuple[str, str], Dict[str, Any]] = {}
+
+    def _walk(value: Any) -> Any:
+        if isinstance(value, list):
+            for index, item in enumerate(value):
+                value[index] = _walk(item)
+            return value
+        if not isinstance(value, Mapping):
+            return value
+        if not isinstance(value, dict):
+            value = dict(value)
+        for child_key, child in list(value.items()):
+            value[child_key] = _walk(child)
+        rating_key = str(value.get("rating_key") or "").strip()
+        media_type = str(value.get("media_type") or "").strip().lower()
+        if rating_key and media_type in {"movie", "show", "episode"}:
+            cache_key = (media_type, rating_key)
+            summary = cache.get(cache_key)
+            if summary is None:
+                summary = (
+                    list_user_show_watch_summary(
+                        db,
+                        user_id=uid,
+                        rating_key=rating_key,
+                    )
+                    if media_type == "show"
+                    else list_user_watch_summary(
+                        db,
+                        user_id=uid,
+                        rating_key=rating_key,
+                    )
+                )
+                cache[cache_key] = summary
+            if "view_count" in value:
+                value["plex_played_event_count"] = int(value.get("view_count") or 0)
+            value.update(summary)
+        return value
+
+    return _walk(payload)
 
 
 def list_watch_evidence_diagnostics(

@@ -857,7 +857,21 @@ class ToolRegistry:
             return json.dumps({"error": f"Unknown tool {name}"})
         logger.debug("Executing tool %s", name)
         try:
-            return await handler(arguments)
+            result = await handler(arguments)
+            if not self.user_id:
+                return result
+            try:
+                parsed = json.loads(result)
+            except (TypeError, json.JSONDecodeError):
+                return result
+            from projectionist.watch_tracker.store import attach_user_watch_summaries
+
+            adopted = attach_user_watch_summaries(
+                self.db,
+                parsed,
+                user_id=self.user_id,
+            )
+            return json.dumps(adopted)
         except Exception:
             logger.exception("Tool %s failed", name)
             raise
@@ -4004,12 +4018,19 @@ def build_system_prompt(
         "When Seerr is enabled for household members, use request_via_seerr instead of add_to_radarr/add_to_sonarr.\n"
         "Star ratings accept half-stars (e.g. 4.5); never ask users to round fractional ratings.\n"
         "For movies, Plex view_count is a per-user completed-or-marked-played counter, not playback sessions. "
-        "Use completed_watches, rewatch_count, watch_state, partial, and watch_progress_percent from tool items. "
+        "Tool items preserve that legacy value as plex_played_event_count and completed_watches. When "
+        "tracker_coverage is not none, prefer tracked_completions for this signed-in user and always state "
+        "the completion_confidence breakdown. Say “tracked completion” for certain/likely evidence and "
+        "“Plex played event” for plex_event_only; a tracked rewatch is max(tracked_completions - 1, 0) only "
+        "for this same user. Never combine household users, infer favourite status from frequency, or claim "
+        "that any confidence level proves uninterrupted or attentive viewing. When tracker_coverage is none, "
+        "fall back to completed_watches, rewatch_count, watch_state, partial, and watch_progress_percent. "
         "play_sessions=null means Projectionist has no per-session history evidence. A partial sitting may leave "
         "only a playhead and must not be called a completed play or rewatch; partial may be true alongside "
         "watch_state=watched when an earlier completion exists. Say “Plex has marked this played N times” when "
-        "the distinction matters; only call a movie a rewatch when completed_watches >= 2, and describe the count "
-        "as one initial completion plus rewatch_count later completions. Because Plex may mark played at its "
+        "the distinction matters; on the no-coverage fallback, only call a movie a possible rewatch when "
+        "completed_watches >= 2, and describe the count as one initial Plex played event plus rewatch_count "
+        "later events. Because Plex may mark played at its "
         "configured threshold/credits marker or by a manual/synced watched action, never infer favourite status "
         "or uninterrupted full viewings from the counter alone.\n"
         "For TV shows, view_count in tool items is total episode plays (sum of per-episode Plex viewCounts), "

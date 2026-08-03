@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Highlights
+- **Your watch history now explains itself.** Movie detail shows a personal completion timeline with confidence and “Why this count?”, while shows stay episode-first and cards use tracked counts only when coverage exists.
+- **Chat uses the strongest honest evidence available.** The curator prefers your tracker-backed completions, labels bare Plex played events, and falls back to the old aggregate without claiming uninterrupted viewing.
+- **Watch evidence follows your privacy choices.** Personal tracker events, sessions, and completions are included in account export and removed by purge or account deletion.
 - **Watch evidence now becomes an honest personal timeline.** Projectionist conservatively joins playback observations into logical movie or episode viewings, records confidence for each completion, and keeps TV totals episode-first.
 - **Your summaries stay yours.** Authenticated summary APIs return only the current user’s tracked evidence, while owner diagnostics explain correlation without exposing Plex account identifiers or raw payloads.
 - **Watch evidence now arrives while playback is happening.** Pause, stop, played, and privacy-minimized progress samples are recorded even when a title is below the rating-prompt threshold.
@@ -19,6 +22,8 @@
 - Deterministic Phase 3 session/completion materialization with `certain`, `likely`, and `plex_event_only` confidence; stable rebuild ids; reconnect, cross-source, and implausible-recompletion suppression; and manual-unscrobble correction handling.
 - Current-user movie/episode summary (`GET /api/watch-tracker/summary/{rating_key}`), current-user show episode rollup (`GET /api/watch-tracker/shows/{rating_key}/summary`), and owner-only sanitized evidence review (`GET /api/admin/watch-tracker/evidence`) APIs.
 - Focused Phase 3 coverage for multi-sitting viewings, client handoff, genuine rewatches, duplicate played events, manual corrections, user isolation, episode rollups, stable rebuilds, API authorization, and diagnostics redaction.
+- Phase 4 title/episode completion timelines, show rollups with repeat episode completions and recent activity, confidence explanations, and concise movie-card tracked counts.
+- Focused Phase 4 backend/frontend coverage for tracker-preferred agent payloads, no-coverage fallback, user-scoped timelines, and privacy export/purge/account deletion.
 
 ### Changed
 - The 15-minute `watch_history_ingest` task now reads the flat Plex settings contract, reports unsupported/unavailable history as a degraded task outcome, and stores only a sanitized error category.
@@ -26,7 +31,9 @@
 - Every successful watch-event batch now refreshes only the affected users’ or unmapped identities’ derivations; raw evidence remains append-only and user boundaries remain exact.
 - Supported Plex webhooks persist normalized evidence before the existing 85% rating-prompt decision; unknown Plex accounts remain unmapped and never receive personal prompts.
 - Successful manual watched/unwatched Plex writes append mapped correction evidence with only a token-source category—never the token.
-- Live, webhook, history, and manual observations now share the same Phase 3 correlation path without changing legacy aggregate counts or adopting tracker fields in the agent/UI yet.
+- Live, webhook, history, and manual observations share the same correlation path without changing legacy aggregate counts.
+- Agent payloads now keep `plex_played_event_count` beside user-scoped tracker fields; prompt policy prefers tracked evidence when coverage exists and uses `certain`, `likely`, and `plex_event_only` without treating any level as proof of uninterrupted viewing.
+- Personal data export/purge and household account deletion now include normalized watch evidence and derived sessions/completions.
 
 ### Fixed
 - Paging advances by the number of rows Plex returned, not only rows that normalized successfully, preventing malformed entries from replaying the same page indefinitely.

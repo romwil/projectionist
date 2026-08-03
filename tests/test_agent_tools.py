@@ -26,6 +26,8 @@ from projectionist.library.db import DEFAULT_LENS_ID, Database
 from projectionist.library.query import query_library, row_to_query_item
 from projectionist.library.search import row_to_title_card
 from projectionist.models.schemas import TitleCard
+from projectionist.watch_tracker.models import WatchEventInput
+from projectionist.watch_tracker.store import ingest_watch_events
 
 
 class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
@@ -672,6 +674,78 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("completed_watches", prompt)
             self.assertIn("not playback sessions", prompt)
             self.assertIn("never infer favourite", prompt)
+            self.assertIn("tracked completion", prompt)
+            self.assertIn("plex_event_only", prompt)
+            self.assertIn("uninterrupted", prompt)
+
+    async def test_query_library_prefers_user_scoped_tracker_fields_without_relabeling_plex_count(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_plex_user(
+                user_id="viewer-a",
+                display_name="Viewer A",
+                email=None,
+                plex_user_id="plex-a",
+                role="member",
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "movie-tracked",
+                    "media_type": "movie",
+                    "title": "Tracked Movie",
+                    "view_count": 3,
+                }
+            )
+            ingest_watch_events(
+                db,
+                [
+                    WatchEventInput(
+                        source="plex_session",
+                        source_event_id="tracked-low",
+                        source_event_kind="session_progress",
+                        server_machine_id="server",
+                        source_user_key="plex-a",
+                        rating_key="movie-tracked",
+                        media_type="movie",
+                        occurred_at_ms=1_704_067_200_000,
+                        progress_ms=100_000,
+                        duration_ms=1_000_000,
+                    ),
+                    WatchEventInput(
+                        source="plex_session",
+                        source_event_id="tracked-done",
+                        source_event_kind="session_stop",
+                        server_machine_id="server",
+                        source_user_key="plex-a",
+                        rating_key="movie-tracked",
+                        media_type="movie",
+                        occurred_at_ms=1_704_067_800_000,
+                        progress_ms=950_000,
+                        duration_ms=1_000_000,
+                        terminal=True,
+                    ),
+                ],
+            )
+            registry = ToolRegistry(
+                db,
+                Settings(),
+                DEFAULT_LENS_ID,
+                user_id="viewer-a",
+                user_role="member",
+            )
+
+            payload = json.loads(
+                await registry.execute("query_library", {"query": "Tracked Movie"})
+            )
+            item = payload["items"][0]
+
+            self.assertEqual(item["plex_played_event_count"], 3)
+            self.assertEqual(item["completed_watches"], 3)
+            self.assertEqual(item["tracked_completions"], 1)
+            self.assertEqual(item["completion_confidence"]["certain"], 1)
+            self.assertEqual(item["tracker_coverage"], "partial")
 
     @patch("projectionist.agent.tools.TMDBClient")
     async def test_find_collection_gaps_items_include_tmdb_id(self, mock_tmdb_cls) -> None:

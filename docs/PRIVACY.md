@@ -70,9 +70,10 @@ Projectionist can hand you a full **export** of your account data, or permanentl
 | **Message transcripts** — every message in your threads | Yes | Yes | `chat_messages` |
 | **Saved library pages** — your saved curator responses | Yes | Yes | `saved_library_pages` |
 | **Preference / taste facts** | Yes | Yes | `preference_facts` |
+| **Personal watch evidence and derivations** — normalized events, logical sessions, and completion confidence | Yes | Yes | `watch_events`, `watch_sessions`, `watch_completions` |
 | Shared, sanitized media research (titles/people/companies) | No | No | Repository knowledge — not tied to any account |
 
-The export is a single JSON (or Markdown) document containing your notes, your chat threads with their full message transcripts, your saved pages, and your preference facts. **Purge is permanent — export first if you want a copy.** Both actions record a small event (`export` / `purge`) so the account has an audit trail that it happened.
+The export is a single JSON (or Markdown) document containing your notes, chat threads with their full message transcripts, saved pages, preference facts, and privacy-minimized watch events plus their derived sessions/completions. Provider account keys, payload hashes, server ids, tokens, and raw Plex payloads are excluded. **Purge is permanent — export first if you want a copy.** Removing a household account runs the same purge before deleting its profile. Both export and purge record a small audit event.
 
 Curator research about titles, people, and production companies is **shared repository knowledge** drawn from configured official media APIs. It's kept separate from account memory, and the idle refresh task never reads private notes or chats — so purging your account never erases (and never leaks) that shared media knowledge.
 
@@ -168,8 +169,14 @@ Exact account mapping matters: an event maps to a household user only when
 Plex's stable account id exactly matches that user's linked Plex id. Unmapped
 events remain separate evidence. Display names are never used to guess
 ownership, and one history event does not prove an uninterrupted viewing.
-These observations are evidence only: Phase 2 does not turn them into a logical
-session or completion count.
+The tracker conservatively correlates mapped observations into logical movie or
+episode viewings. A completion is `certain` when progress directly crosses the
+90% boundary, `likely` when strong terminal evidence reconstructs the crossing,
+or `plex_event_only` when Plex reported played without enough progress detail.
+These are evidence-confidence labels, not proof of uninterrupted playback,
+attention, or who was in front of the screen. Member summaries always use the
+current signed-in user; show totals roll up episodes rather than inventing a
+show-level viewing count.
 
 On a trusted single-owner installation, inspect freshness and mapping coverage:
 

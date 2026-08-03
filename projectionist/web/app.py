@@ -1047,7 +1047,14 @@ def _maybe_emit_explore_miss(payload: Any) -> None:
 
 def _sanitize_library_payload(payload: Any, user) -> Any:
     settings = _settings()
-    sanitized = sanitize_library_payload(payload, settings=settings, user=user)
+    from projectionist.watch_tracker.store import attach_user_watch_summaries
+
+    tracker_adopted = attach_user_watch_summaries(
+        _db(),
+        payload,
+        user_id=str(getattr(user, "id", "") or ""),
+    )
+    sanitized = sanitize_library_payload(tracker_adopted, settings=settings, user=user)
     from projectionist.youth.apply import filter_payload_for_youth
 
     filtered = filter_payload_for_youth(sanitized, user=user, settings=settings)
