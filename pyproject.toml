@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "projectionist"
-version = "1.31.2"
+version = "1.31.3"
 description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,7 +35,9 @@ web = [
 ]
 
 mcp = [
-    "mcp>=1.0.0",
+    # Stay on the v1 SDK until Projectionist migrates off mcp.server.fastmcp.
+    # pip install mcp now resolves to 2.x, which relocated FastMCP.
+    "mcp>=1.28.0,<2",
 ]
 
 # Optional ANN prefilter for neighbor rebuild / semantic search. Not required

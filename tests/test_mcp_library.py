@@ -6,20 +6,23 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import skipUnless
 from unittest.mock import patch
 
 from projectionist.library.db import Database
 
+try:
+    from projectionist.mcp import server as mcp_server
 
+    HAS_MCP = True
+except Exception:  # noqa: BLE001
+    HAS_MCP = False
+    mcp_server = None  # type: ignore[assignment]
+
+
+@skipUnless(HAS_MCP, "mcp package not installed")
 class McpLibraryTests(unittest.TestCase):
     def test_library_query_tool(self) -> None:
-        try:
-            import mcp  # noqa: F401
-        except ImportError:
-            self.skipTest("mcp package not installed")
-
-        from projectionist.mcp import server as mcp_server
-
         with tempfile.TemporaryDirectory() as tmp:
             db_path = Path(tmp) / "test.db"
             db = Database(db_path)
@@ -41,13 +44,6 @@ class McpLibraryTests(unittest.TestCase):
             self.assertEqual(payload["items"][0]["title"], "Nosferatu")
 
     def test_library_aggregate_tool(self) -> None:
-        try:
-            import mcp  # noqa: F401
-        except ImportError:
-            self.skipTest("mcp package not installed")
-
-        from projectionist.mcp import server as mcp_server
-
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             db.upsert_library_item(
@@ -67,13 +63,6 @@ class McpLibraryTests(unittest.TestCase):
             self.assertEqual(payload["buckets"][0]["count"], 1)
 
     def test_sample_owned_library_and_find_collection_gaps_alias(self) -> None:
-        try:
-            import mcp  # noqa: F401
-        except ImportError:
-            self.skipTest("mcp package not installed")
-
-        from projectionist.mcp import server as mcp_server
-
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             db.upsert_library_item(
@@ -94,12 +83,6 @@ class McpLibraryTests(unittest.TestCase):
             self.assertEqual(alias["sample_owned"]["total_matched"], 1)
 
     def test_discover_missing_titles_privacy_safe_gaps(self) -> None:
-        try:
-            import mcp  # noqa: F401
-        except ImportError:
-            self.skipTest("mcp package not installed")
-
-        from projectionist.mcp import server as mcp_server
         from projectionist.config_store import Settings
 
         with tempfile.TemporaryDirectory() as tmp:

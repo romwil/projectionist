@@ -1,6 +1,32 @@
 {
-  "generated_at": "2026-08-03T04:18:19Z",
+  "generated_at": "2026-08-03T04:28:03Z",
   "releases": [
+    {
+      "version": "1.31.3",
+      "date": "2026-08-03",
+      "summary": "Pin the optional MCP Python SDK to the v1 line so `mcp.server.fastmcp` keeps importing after `pip install mcp` started resolving to 2.x.",
+      "highlights": [
+        "**MCP tools stay loadable.** Docker and CI install an MCP SDK that still exposes FastMCP — the surface Projectionist’s stdio/HTTP MCP server uses today.",
+        "**No surprise 2.x pull.** Until Projectionist migrates off `mcp.server.fastmcp`, the dependency stays on `mcp>=1.28,<2`."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`pyproject.toml` `[project.optional-dependencies].mcp` pins `mcp>=1.28.0,<2` (unbounded `>=1.0.0` pulled MCP SDK 2.0 and broke `from mcp.server.fastmcp import FastMCP` in CI and image builds).",
+            "`tests/test_mcp_library.py` uses the same `@skipUnless` import of `projectionist.mcp.server` as other MCP suites (bare `import mcp` is not enough on SDK 2.x)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`.venv/bin/ruff check .` — clean.",
+            "`tests/test_mcp_library.py` + affinity MCP test — pass on mcp 1.28.1.",
+            "`test_version` lockstep **1.31.3**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.31.2",
       "date": "2026-08-03",
