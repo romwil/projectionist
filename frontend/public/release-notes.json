@@ -1,6 +1,55 @@
 {
-  "generated_at": "2026-08-03T00:03:27Z",
+  "generated_at": "2026-08-03T01:11:06Z",
   "releases": [
+    {
+      "version": "1.30.7",
+      "date": "2026-08-03",
+      "summary": "Explore feed polish, honest TV watch badges, and library sync cleanup after Plex rematches.",
+      "highlights": [
+        "**Sort labels that match the feed.** Recently Added and Recent Releases show **Date added** and **Release date** in the sort menu instead of opaque \"Default\".",
+        "**Movies and TV stay in Recently Added.** Explore hub Movies/TV links open the recently-added section filtered by type — not generic library browse.",
+        "**No more phantom duplicates.** Library sync prunes stale index rows after Plex rematches (e.g. duplicate \"72 Hours\" cards). Run a library sync to clean orphans.",
+        "**Honest watch badges for TV.** Shows with episode totals but no synced unwatched count no longer display **Watched**."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "`libraryBrowseItemKey` — stable React/selection keys prefer `rating_key` over shared `tmdb_id`.",
+            "`exploreSectionSortOptions` — section-specific default sort labels on Explore section pages.",
+            "`prune_library_items_not_in_plex_scan` — post-enrich cleanup drops library rows not seen in the current Plex scan; sync reports `items_pruned`."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Explore Recently Added Movies/TV chips link to `exploreSectionPath(\"recently-added\", { mediaType })`.",
+            "`watch_progress_state` / frontend `watchProgressState` — missing `unwatched_episode_count` with known `total_episode_count` → `unwatched` (not watched).",
+            "`watched_episode_count` / agent tool payloads omit inferred watched counts when unwatched is unknown."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "React key collisions when sorting Explore grids where multiple Plex items share a TMDB id.",
+            "False **Watched** badges when episode progress was never synced."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`tests/test_watch_progress.py` — unsynced unwatched count semantics.",
+            "`tests/test_agent_tools.py` — tool items omit watched count when unwatched unknown.",
+            "`tests/test_explore_wave3.py` — feed order + distinct rating keys for shared TMDB.",
+            "`tests/test_library_sync_enrich.py` — stale rating key prune after Plex rematch.",
+            "`frontend/src/lib/bulkLibraryDelete.test.mjs`, `watchProgress.test.mjs`, `exploreFeeds.test.mjs`.",
+            "`cd frontend && npm run test:unit` — browse key, watch progress, explore feeds suites green.",
+            "`cd frontend && npm run lint` — 0 errors; `npm run build` — production build.",
+            "`test_version` lockstep **1.30.7**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.30.6",
       "date": "2026-08-02",

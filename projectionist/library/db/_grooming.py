@@ -15,6 +15,8 @@ from typing import (
     Dict,
     List,
     Optional,
+    Sequence,
+    Set,
 )
 
 
@@ -56,6 +58,43 @@ class GroomingDigestMixin:
                 return int(cursor.rowcount)
 
         return self.run_write(_write, label="delete_library_items")
+
+    def prune_library_items_not_in_plex_scan(
+        self,
+        seen_rating_keys: Sequence[str],
+        *,
+        media_types: Sequence[str] = ("movie", "show"),
+    ) -> int:
+        """Remove index rows whose ``rating_key`` was not in the latest Plex scan.
+
+        Plex can assign a new ``ratingKey`` after rematch, merge, or split; upserts
+        only touch the new key, leaving the old row as a phantom duplicate.
+        """
+        seen: Set[str] = {
+            str(key).strip() for key in seen_rating_keys if str(key or "").strip()
+        }
+        types = tuple(str(value).strip() for value in media_types if str(value or "").strip())
+        if not types:
+            return 0
+        placeholders = ", ".join("?" for _ in types)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT rating_key FROM library_items
+                WHERE media_type IN ({placeholders})
+                  AND rating_key IS NOT NULL
+                  AND TRIM(rating_key) != ''
+                """,
+                types,
+            ).fetchall()
+        stale = [
+            str(row["rating_key"])
+            for row in rows
+            if str(row["rating_key"] or "").strip() not in seen
+        ]
+        if not stale:
+            return 0
+        return self.delete_library_items_by_rating_keys(stale)
 
     def snapshot_library_items_by_rating_keys(
         self, rating_keys: List[str]

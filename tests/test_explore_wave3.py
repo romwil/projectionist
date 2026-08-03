@@ -106,6 +106,21 @@ class FeedHelperTests(unittest.TestCase):
             self.assertEqual(len(page["items"]), 2)
             self.assertTrue(page["has_more"])
 
+            all_items = feed_recently_added(db, limit=10, days=30)
+            self.assertEqual(
+                [item["title"] for item in all_items["items"]],
+                [
+                    "Movie 0",
+                    "Show 0",
+                    "Movie 1",
+                    "Show 1",
+                    "Movie 2",
+                    "Show 2",
+                    "Movie 3",
+                    "Movie 4",
+                ],
+            )
+
             movies = feed_recently_added(db, limit=10, days=30, media_type="movie")
             self.assertEqual(movies["total"], 5)
             self.assertTrue(all(item["media_type"] == "movie" for item in movies["items"]))
@@ -113,6 +128,27 @@ class FeedHelperTests(unittest.TestCase):
             shows = feed_recently_added(db, limit=10, days=30, media_type="show")
             self.assertEqual(shows["total"], 3)
             self.assertTrue(all(item["media_type"] == "show" for item in shows["items"]))
+
+    def test_recently_added_returns_distinct_rating_keys_for_shared_tmdb(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            now = int(time.time())
+            for idx, rating_key in enumerate(["dup-a", "dup-b"]):
+                db.upsert_library_item(
+                    {
+                        "rating_key": rating_key,
+                        "media_type": "movie",
+                        "title": "72 Hours",
+                        "year": 2026,
+                        "tmdb_id": 999001,
+                        "added_at": now - idx * 60,
+                    }
+                )
+            payload = feed_recently_added(db, limit=10, days=30, media_type="movie")
+            self.assertEqual(payload["total"], 2)
+            keys = [item["rating_key"] for item in payload["items"]]
+            self.assertEqual(len(keys), len(set(keys)))
+            self.assertEqual(set(keys), {"dup-a", "dup-b"})
 
     def test_recent_releases_honest_empty_without_dates(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

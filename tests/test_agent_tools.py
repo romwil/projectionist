@@ -548,6 +548,34 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(tool_item["watched_episode_count"], 12)
             self.assertEqual(tool_item["watch_state"], "watched")
 
+    def test_card_to_tool_item_show_omits_watched_count_when_unwatched_unknown(self) -> None:
+        card = TitleCard(
+            media_type="show",
+            title="Partial Sync Show",
+            year=2020,
+            total_episode_count=12,
+            unwatched_episode_count=None,
+            in_library=True,
+        )
+        tool_item = _card_to_tool_item(card)
+        self.assertEqual(tool_item["total_episode_count"], 12)
+        self.assertNotIn("unwatched_episode_count", tool_item)
+        self.assertNotIn("watched_episode_count", tool_item)
+        self.assertEqual(tool_item["watch_state"], "unwatched")
+
+    def test_query_item_to_tool_item_show_omits_watched_count_when_unwatched_unknown(self) -> None:
+        tool_item = _query_item_to_tool_item(
+            {
+                "title": "Partial Sync Show",
+                "media_type": "show",
+                "total_episode_count": 12,
+                "unwatched_episode_count": None,
+                "view_count": 0,
+            }
+        )
+        self.assertNotIn("watched_episode_count", tool_item)
+        self.assertEqual(tool_item["watch_state"], "unwatched")
+
     def test_card_to_tool_item_movie_view_count_unchanged(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")

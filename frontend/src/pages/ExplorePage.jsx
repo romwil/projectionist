@@ -492,12 +492,12 @@ export default function ExplorePage() {
             {
               mediaType: "movie",
               label: "Movies",
-              href: libraryBrowsePath({ mediaType: "movie" }),
+              href: exploreSectionPath("recently-added", { mediaType: "movie" }),
             },
             {
               mediaType: "show",
               label: "TV",
-              href: libraryBrowsePath({ mediaType: "show" }),
+              href: exploreSectionPath("recently-added", { mediaType: "show" }),
             },
           ]}
           empty={

@@ -71,6 +71,39 @@ class WatchProgressStateTests(unittest.TestCase):
             "watched",
         )
 
+    def test_show_unwatched_when_episode_progress_not_synced(self) -> None:
+        """total_episode_count without unwatched_episode_count must not imply watched."""
+        self.assertEqual(
+            watch_progress_state(
+                {
+                    "media_type": "show",
+                    "total_episode_count": 12,
+                    "unwatched_episode_count": None,
+                }
+            ),
+            "unwatched",
+        )
+        self.assertEqual(
+            watch_progress_state(
+                {
+                    "media_type": "show",
+                    "total_episode_count": 12,
+                }
+            ),
+            "unwatched",
+        )
+        # Explicit zero still means all episodes watched.
+        self.assertEqual(
+            watch_progress_state(
+                {
+                    "media_type": "show",
+                    "total_episode_count": 12,
+                    "unwatched_episode_count": 0,
+                }
+            ),
+            "watched",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

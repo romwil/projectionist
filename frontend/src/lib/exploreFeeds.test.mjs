@@ -6,6 +6,7 @@ import {
   buildMotifQueryParams,
   buildExploreSectionQuery,
   buildPulseStats,
+  exploreSectionSortOptions,
   feedPaginationSummary,
   formatTotalRuntimeMinutes,
   getExploreSectionConfig,
@@ -238,6 +239,31 @@ test("buildExploreSectionQuery preserves list filters", () => {
   assert.equal(params.get("genres"), "Drama");
 });
 
+test("sortExploreSectionItems default preserves server feed order", () => {
+  const items = [
+    { title: "Newest", added_at: 300 },
+    { title: "Middle", added_at: 200 },
+    { title: "Oldest", added_at: 100 },
+  ];
+  const sorted = sortExploreSectionItems(items, "default");
+  assert.deepEqual(
+    sorted.map((item) => item.title),
+    ["Newest", "Middle", "Oldest"],
+  );
+});
+
+test("exploreSectionSortOptions labels default sort per section", () => {
+  const recentlyAdded = exploreSectionSortOptions("recently-added");
+  assert.equal(recentlyAdded[0].id, "default");
+  assert.equal(recentlyAdded[0].label, "Date added");
+
+  const recentReleases = exploreSectionSortOptions("recent-releases");
+  assert.equal(recentReleases[0].label, "Release date");
+
+  const unknown = exploreSectionSortOptions("unknown");
+  assert.equal(unknown[0].label, "Feed order");
+});
+
 test("sortExploreSectionItems sorts by year desc", () => {
   const sorted = sortExploreSectionItems(
     [
@@ -250,6 +276,20 @@ test("sortExploreSectionItems sorts by year desc", () => {
   assert.deepEqual(
     sorted.map((item) => item.title),
     ["A", "B", "C"],
+  );
+});
+
+test("sortExploreSectionItems does not duplicate rows with shared tmdb_id", () => {
+  const items = [
+    { title: "72 Hours", year: 2026, tmdb_id: 100, rating_key: "plex-a" },
+    { title: "72 Hours", year: 2026, tmdb_id: 100, rating_key: "plex-b" },
+    { title: "Other", year: 2025, tmdb_id: 200, rating_key: "plex-c" },
+  ];
+  const sorted = sortExploreSectionItems(items, "year", "desc");
+  assert.equal(sorted.length, items.length);
+  assert.deepEqual(
+    sorted.map((item) => item.rating_key),
+    ["plex-a", "plex-b", "plex-c"],
   );
 });
 

@@ -230,6 +230,59 @@ class ParallelEnrichSyncTests(unittest.IsolatedAsyncioTestCase):
             titles = {row["title"] for row in db.all_library_items()}
             self.assertEqual(titles, {"Good One", "Good Two"})
 
+    async def test_sync_prunes_stale_rating_keys_after_plex_rematch(self) -> None:
+        """When Plex keeps one title but assigns a new ratingKey, drop the old index row."""
+        items = [_movie("rk-new", "72 Hours", tmdb_id="991")]
+        stale_row = {
+            "rating_key": "rk-old",
+            "media_type": "movie",
+            "title": "72 Hours",
+            "year": 2024,
+            "tmdb_id": 991,
+            "added_at": int(time.time()) - 86400,
+        }
+
+        def instant_row(item, *_args, **_kwargs):
+            return {
+                "rating_key": item.rating_key,
+                "media_type": item.media_type,
+                "title": item.title,
+                "year": item.year,
+                "tmdb_id": int(item.tmdb_id) if item.tmdb_id else None,
+                "added_at": int(time.time()),
+            }
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "lib.db")
+            db.upsert_library_item(stale_row)
+            self.assertEqual(len(db.all_library_items()), 1)
+            settings = Settings(
+                plex_url="http://plex.test:32400",
+                plex_token="token",
+                library_enrich_workers=1,
+            )
+            with patch.object(PlexClient, "movie_items", return_value=items), patch.object(
+                PlexClient, "show_items", return_value=[]
+            ), patch(
+                "projectionist.library.sync._row_from_plex_item",
+                side_effect=instant_row,
+            ), patch(
+                "projectionist.library.sync.rebuild_embeddings",
+                new=AsyncMock(return_value=0),
+            ), patch(
+                "projectionist.library.sync.sync_tv_episodes",
+                return_value={"shows_synced": 0, "episodes_synced": 0},
+            ), patch(
+                "projectionist.library.sync.scan_for_rating_prompts",
+                return_value=0,
+            ):
+                result = await sync_library(db, settings)
+
+            rows = db.all_library_items()
+            self.assertEqual(result["items_pruned"], 1)
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(str(rows[0]["rating_key"]), "rk-new")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -69,10 +69,10 @@ def effective_view_count(item: Mapping[str, Any]) -> int:
 
 def watched_episode_count(item: Mapping[str, Any]) -> int:
     total = _as_nonneg_int(_row_get(item, "total_episode_count"))
-    unwatched = _as_nonneg_int(_row_get(item, "unwatched_episode_count"))
-    if total <= 0:
+    raw_unwatched = _row_get(item, "unwatched_episode_count")
+    if total <= 0 or raw_unwatched is None:
         return 0
-    return max(0, total - unwatched)
+    return max(0, total - _as_nonneg_int(raw_unwatched))
 
 
 def enrich_rows_with_episode_play_sums(

@@ -10,7 +10,8 @@
  * Shows:
  * - watched: total_episode_count > 0 && unwatched_episode_count === 0
  * - partial: 0 < unwatched < total
- * - fallback when episode counts missing: view_count > 0 → watched
+ * - unwatched when total > 0 but unwatched_episode_count is null (not synced)
+ * - fallback when episode totals missing: view_count > 0 → watched
  */
 
 function asNonNegInt(value) {
@@ -40,13 +41,16 @@ export function watchProgressState(item) {
   const viewCount = asNonNegInt(item.view_count);
   const viewOffsetMs = asNonNegInt(item.view_offset_ms);
   const total = asNonNegInt(item.total_episode_count);
-  const unwatched = asNonNegInt(item.unwatched_episode_count);
+  const rawUnwatched = item.unwatched_episode_count;
 
   // Episode totals imply show semantics even when media_type is omitted.
   const isShow = media === "show" || media === "tv" || media === "series" || total > 0;
   if (isShow) {
     if (total > 0) {
-      if (unwatched <= 0) return "watched";
+      // Missing unwatched count means episode progress was never synced.
+      if (rawUnwatched == null) return "unwatched";
+      const unwatched = asNonNegInt(rawUnwatched);
+      if (unwatched === 0) return "watched";
       if (unwatched < total) return "partial";
       return "unwatched";
     }
