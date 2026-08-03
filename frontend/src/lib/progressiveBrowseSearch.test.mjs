@@ -43,7 +43,8 @@ describe("progressiveBrowseSearch", () => {
       join(dirname(fileURLToPath(import.meta.url)), "..", "pages", "LibraryBrowsePage.jsx"),
       "utf8",
     );
-    assert.match(page, /library-browse-search-input/);
+    assert.match(page, /LibrarySearchBar/);
+    assert.match(page, /testId="library-browse-search"/);
     assert.match(page, /BROWSE_SEARCH_DEBOUNCE_MS/);
     assert.match(page, /nextBrowseSearchQuery/);
     assert.match(page, /setBrowseSearchQueryParam/);

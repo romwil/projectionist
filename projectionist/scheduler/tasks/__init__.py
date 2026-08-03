@@ -17,6 +17,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     from projectionist.scheduler.tasks import (
         anniversary_scanner,
         collection_gc,
+        coverage_deficit_audit,
         data_retention,
         entity_memory_enrichment,
         facet_taxonomy_audit,
@@ -51,6 +52,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     data_retention.register(scheduler)
     collection_gc.register(scheduler)
     facet_taxonomy_audit.register(scheduler)
+    coverage_deficit_audit.register(scheduler)
     entity_memory_enrichment.register(scheduler)
     metadata_enrichment.register(scheduler)
     plot_neighbors.register(scheduler)

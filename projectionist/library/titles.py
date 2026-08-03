@@ -11,6 +11,7 @@ from projectionist.connectors.fanart import FanartClient
 from projectionist.connectors.plex import cached_machine_identifier, plex_watch_url
 from projectionist.connectors.tmdb import TMDBClient
 from projectionist.library.db import Database
+from projectionist.library.play_counts import effective_view_count, enrich_rows_with_episode_play_sums
 from projectionist.models.schemas import CreditPerson, PlotKnowledge, TitleDetail
 
 logger = logging.getLogger(__name__)
@@ -312,6 +313,9 @@ def get_title_detail(
     if row is None and tvdb_id:
         row = db.library_item_by_tvdb(tvdb_id)
 
+    if row is not None:
+        row = enrich_rows_with_episode_play_sums(db, [row])[0]
+
     detail = TitleDetail(
         media_type=media_type,  # type: ignore[arg-type]
         title="",
@@ -335,7 +339,7 @@ def get_title_detail(
         detail.directors = json.loads(row["directors"]) if row["directors"] else []
         detail.keywords = json.loads(row["keywords"]) if row["keywords"] else []
         detail.file_size_bytes = int(row["file_size"] or 0)
-        detail.view_count = int(row["view_count"] or 0)
+        detail.view_count = effective_view_count(row)
         detail.last_viewed_at = row["last_viewed_at"]
         detail.in_radarr = bool(row["in_radarr"])
         detail.in_sonarr = bool(row["in_sonarr"])

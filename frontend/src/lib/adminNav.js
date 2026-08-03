@@ -20,7 +20,7 @@ export const ADMIN_NAV = [
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },
   { kind: "heading", id: "heading-ops", label: "Ops" },
   { to: "/admin/tasks", id: "tasks", label: "Tasks" },
-  { to: "/admin/taxonomy", id: "taxonomy", label: "Taxonomy" },
+  { to: "/admin/taxonomy", id: "taxonomy", label: "Knowledge Ops" },
   { to: "/admin/mail", id: "mail", label: "Mail" },
   { to: "/admin/access", id: "access", label: "Access" },
   { to: "/admin/dashboard", id: "dashboard", label: "Dashboard" },

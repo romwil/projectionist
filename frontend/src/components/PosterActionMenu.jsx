@@ -7,8 +7,10 @@ import {
   addWatchlistPin,
   deleteLibraryItems,
   listCuratedLists,
+  markBadMedia,
   setLibraryItemWatched,
 } from "../api/client";
+import MarkBadMediaDialog from "./MarkBadMediaDialog.jsx";
 import { useAuthGate } from "./UserMenu";
 import ReportMediaIssueModal from "./ReportMediaIssueModal";
 import TitleDetailLink from "./TitleDetailLink";
@@ -44,6 +46,8 @@ export default function PosterActionMenu({
   const [lists, setLists] = useState([]);
   const [listOpen, setListOpen] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
+  const [badMediaOpen, setBadMediaOpen] = useState(false);
+  const [badMediaLoading, setBadMediaLoading] = useState(false);
   const [flash, setFlash] = useState("");
   const flashTimerRef = useRef(null);
   // Optimistic overlay so the menu label + card reflect a completed scrobble
@@ -142,6 +146,24 @@ export default function PosterActionMenu({
     }
   }
 
+  async function handleMarkBadMedia() {
+    setBadMediaLoading(true);
+    try {
+      await markBadMedia({
+        rating_key: item.rating_key || item.plex_rating_key || undefined,
+        tmdb_id: item?.tmdb_id ?? undefined,
+        tvdb_id: item?.tvdb_id ?? undefined,
+        media_type: item?.media_type || undefined,
+      });
+      setBadMediaOpen(false);
+      flashStatus("Asked Radarr/Sonarr to replace the bad file. No exclusion added.");
+    } catch (error) {
+      flashStatus(error.message || "Could not mark media for replacement.");
+    } finally {
+      setBadMediaLoading(false);
+    }
+  }
+
   const popover = open && typeof document !== "undefined" ? createPortal(
     <div className="poster-action-popover" ref={popoverRef} role="menu" style={popoverStyle || { visibility: "hidden" }}>
       {detailPath ? (
@@ -165,7 +187,14 @@ export default function PosterActionMenu({
       <button type="button" onClick={() => setReportOpen(true)}>Report issue…</button>
       {isOwner ? <div className="poster-action-owner">
         <span>Owner tools</span>
-        {item?.rating_key || item?.plex_rating_key ? <button type="button" onClick={deleteIndex}>Delete from index</button> : null}
+        {item?.rating_key || item?.plex_rating_key ? (
+          <>
+            <button type="button" data-testid="poster-action-mark-bad-media" onClick={() => { setOpen(false); setBadMediaOpen(true); }}>
+              Mark as bad media
+            </button>
+            <button type="button" onClick={deleteIndex}>Delete from index</button>
+          </>
+        ) : null}
       </div> : null}
     </div>,
     document.body,
@@ -185,5 +214,13 @@ export default function PosterActionMenu({
     {popover}
     {flashToast}
     <ReportMediaIssueModal item={item} open={reportOpen} onClose={() => setReportOpen(false)} onReported={() => flashStatus("Issue reported to the owner queue.")} />
+    <MarkBadMediaDialog
+      open={badMediaOpen}
+      title={item?.title || "Untitled"}
+      mediaType={item?.media_type || "movie"}
+      loading={badMediaLoading}
+      onCancel={() => setBadMediaOpen(false)}
+      onConfirm={handleMarkBadMedia}
+    />
   </div>;
 }

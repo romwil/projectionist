@@ -1,6 +1,67 @@
 {
-  "generated_at": "2026-08-02T23:15:27Z",
+  "generated_at": "2026-08-03T00:03:27Z",
   "releases": [
+    {
+      "version": "1.30.6",
+      "date": "2026-08-02",
+      "summary": "Knowledge Operations dashboard, mark-bad-media replace flow, honest TV play counts for chat, and a shared full-width library search bar on Explore and Search.",
+      "highlights": [
+        "**One place to see knowledge backlog.** Admin **Knowledge Ops** (`/admin/taxonomy`) shows pending facet aliases, all staged augmentations, signal volume, approve/reject rates, and a closed-loop funnel.",
+        "**Demand and coverage rows are actionable.** Approve runs targeted enrichment (or queues theme tagging for unmapped keywords) — not taxonomy overlay writes.",
+        "**Bad file? Replace, don't exclude.** Owners can **Mark as bad media** from title detail or poster menus (and via chat) — Radarr/Sonarr delete the bad file and search for a replacement without import exclusion.",
+        "**TV play counts that add up.** Shows report total episode plays in chat and library tools (e.g. 19 plays across 12 watched episodes), not just the show-level Plex counter.",
+        "**Same search bar everywhere.** Explore and Search share a full-width hero `LibrarySearchBar` — Explore navigates to Search; Search keeps progressive as-you-type results."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Knowledge Ops APIs: `/api/admin/knowledge-ops/summary`, `/funnel`, `/taxonomy-registry`, `/telemetry/trend`, `/telemetry/top-events`, `/staged-aggregates`.",
+            "Idle task `coverage_deficit_audit` and `projectionist/telemetry/coverage.py` helpers.",
+            "Admin UI tabs: Taxonomy, Demand, Coverage, Activity, All staged work (`data-testid` preserves `admin-taxonomy`).",
+            "`projectionist/web/staged_augmentation_promote.py` — promote/act handlers per task/deficit kind.",
+            "`projectionist/telemetry/explore.py` — `explore_miss` and `bad_neighbor_match` emitters.",
+            "`POST /api/library/neighbors/{item_id}/{neighbor_id}/dismiss` — remove edge + telemetry.",
+            "Plot Lab **Not a neighbor** control (owner).",
+            "`projectionist/library/bad_media.py` + `POST /api/library/items/mark-bad-media` — owner confirm replace flow (no exclusion list).",
+            "`MarkBadMediaDialog` + poster/title-detail **Mark as bad media** menus; agent `mark_bad_media` tool.",
+            "`projectionist/library/play_counts.py` — `effective_view_count` / episode play sums for shows in query, cards, and agent tools.",
+            "Shared `LibrarySearchBar` component on Explore (`explore-search`) and Search (`library-browse-search-input`).",
+            "Interactive UI QA IDs: `admin.taxonomy-surface`, `admin.knowledge-ops-facet-approve`, `admin.knowledge-ops-act-non-facet`, `admin.knowledge-ops-empty-states`."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "`POST /api/admin/staged-augmentations/{id}/approve` handles demand + coverage rows (async targeted enrichment).",
+            "Explore feed responses emit `explore_miss` when empty with a note.",
+            "`keyword_theme_tagging` / `summary_motifs` / P2 enrichment tasks emit coverage deficit signals.",
+            "Admin rail label **Taxonomy** → **Knowledge Ops** (route unchanged for QA baseline).",
+            "Agent system prompt documents TV `view_count` as total episode plays; `query_library` / card tools use `effective_view_count`.",
+            "HELP owner section documents Knowledge Ops promote semantics, neighbor dismissal, and bad-media replace."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`tests/test_knowledge_ops.py` — aggregates, routes, promote/act, explore/bad-neighbor telemetry.",
+            "`tests/test_bad_media.py` — replace logic, API confirm gate, agent tool.",
+            "`tests/test_agent_tools.py` — TV episode play sum semantics (`view_count` 19 / 12 watched).",
+            "Facet approve/reject (`tests/test_facet_taxonomy_phase_b.py`).",
+            "`cd frontend && npm run test:unit` — adminNav + progressive search suites green.",
+            "`cd frontend && npm run lint` — 0 errors; `npm run build` — production build.",
+            "`test_version` lockstep **1.30.6**.",
+            "Interactive UI QA: Knowledge Ops surface, mark-bad-media dialog, explore/search bar IDs."
+          ]
+        },
+        {
+          "title": "Deferred",
+          "bullets": [
+            "Bulk `plot_neighbors` vector edge-penalty adjustment from rejection patterns (dismiss + Activity visibility shipped instead)."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.30.5",
       "date": "2026-08-02",

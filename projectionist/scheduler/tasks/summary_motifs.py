@@ -26,6 +26,7 @@ from typing import Any, Callable, Dict, Iterable, List, Mapping, Set, Tuple
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.tasks.coverage_signals import emit_motif_deficit_signals
 
 logger = logging.getLogger(__name__)
 
@@ -370,8 +371,18 @@ async def run(
         return {"status": "interrupted", "motifs": 0}
 
     count = db.replace_facets_of_type("motif", rows)
-    logger.info("Summary motifs: wrote %s motif facet rows", count)
-    return {"status": "completed", "motifs": count, "unique_items": len({r[0] for r in rows})}
+    signals = emit_motif_deficit_signals(db)
+    logger.info(
+        "Summary motifs: wrote %s motif facet rows; emitted %s deficit signals",
+        count,
+        signals,
+    )
+    return {
+        "status": "completed",
+        "motifs": count,
+        "unique_items": len({r[0] for r in rows}),
+        "coverage_signals": signals,
+    }
 
 
 def register(scheduler: IdleScheduler) -> None:

@@ -419,6 +419,38 @@ Owner peers: member set **plus** Admin (before My Journey).
 - **steps:** After a successful full remove that returns a removal summary (or when QA seed already surfaces one), confirm `removal-summary-dialog` opens with totals (`removal-summary-totals`) and list (`removal-summary-list`). Open `removal-summary-help`. Close via `removal-summary-close` or `removal-summary-done`.
 - **pass:** Dialog shows title/file/folder totals; help explains *arr path reporting. Close dismisses the dialog. If no remove was performed this session, mark N/A and do not invent a destructive delete solely for this ID — prefer pairing with an intentional QA purge campaign.
 
+### `admin.taxonomy-surface`
+
+- **roles:** `owner`
+- **tags:** `admin`, `taxonomy`, `knowledge-ops`
+- **source:** `frontend/src/pages/StagedAugmentationsPage.jsx`
+- **steps:** Open Admin → Knowledge Ops (`/admin/taxonomy`). Confirm `admin-taxonomy` root, `knowledge-ops-summary`, `knowledge-ops-tabs`, and `knowledge-ops-funnel` render.
+- **pass:** Page loads for owner (not redirected). Summary strip shows stat cards; funnel bars visible. Tabs switch without crash.
+
+### `admin.knowledge-ops-facet-approve`
+
+- **roles:** `owner`
+- **tags:** `admin`, `taxonomy`, `knowledge-ops`
+- **source:** `frontend/src/pages/StagedAugmentationsPage.jsx`, `projectionist/web/augmentation_routes.py`
+- **steps:** On Taxonomy or All staged work tab with a pending facet row, open context panel (`knowledge-ops-context`). If QA has a pending facet candidate, fill concept id or TMDB name and click `taxonomy-approve-{id}`. Otherwise mark N/A when no pending facet rows.
+- **pass:** Approve succeeds with `taxonomy-feedback` success message, or N/A when backlog empty. Reject (`taxonomy-reject-{id}`) clears row without overlay write when exercised.
+
+### `admin.knowledge-ops-act-non-facet`
+
+- **roles:** `owner`
+- **tags:** `admin`, `knowledge-ops`
+- **source:** `frontend/src/pages/StagedAugmentationsPage.jsx`, `projectionist/web/staged_augmentation_promote.py`
+- **steps:** Switch to Demand or Coverage tab (or All staged work). Select a pending non-facet row if present. Confirm act button (`taxonomy-act-{id}`) shows label (Run enrichment / Run theme tagging). Click act or mark N/A if no pending demand/coverage rows.
+- **pass:** Act button copy matches task kind; click completes with feedback or honest API error (e.g. missing TMDB key). Reject remains available.
+
+### `admin.knowledge-ops-empty-states`
+
+- **roles:** `owner`
+- **tags:** `admin`, `knowledge-ops`
+- **source:** `frontend/src/pages/StagedAugmentationsPage.jsx`
+- **steps:** Open Activity tab — confirm trend panel and top events (`knowledge-ops-top-events` or empty message). Open Taxonomy tab top unresolved facets (`knowledge-ops-top-facets-empty` when none). Filter staged list to pending with no rows — `taxonomy-empty` message.
+- **pass:** Empty states are honest (not errors). Activity tab renders sparkline area or “No signal trend yet.”
+
 ### `explore.surprising-neighbors-showcase`
 
 - **roles:** `member`, `owner`
@@ -986,6 +1018,10 @@ after direct URL navigation.
 | `admin.storage-purge-type-pagination` | owner |
 | `admin.grooming-section-help` | owner |
 | `admin.removal-summary-dialog` | owner |
+| `admin.taxonomy-surface` | owner |
+| `admin.knowledge-ops-facet-approve` | owner |
+| `admin.knowledge-ops-act-non-facet` | owner |
+| `admin.knowledge-ops-empty-states` | owner |
 | `explore.surprising-neighbors-showcase` | member, owner |
 | `journey.list-filter` | member, owner, youth |
 | `journey.tree-mode` | member, owner, youth |

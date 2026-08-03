@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  dismissPlotNeighbor,
   getLibraryFacets,
   getLibraryMotifs,
   getLibraryNeighbors,
@@ -113,6 +114,7 @@ export default function PlotLabPage() {
   const [seedQuery, setSeedQuery] = useState("");
   const [seedHits, setSeedHits] = useState([]);
   const [neighbors, setNeighbors] = useState({ loading: false, items: [], note: null, error: "" });
+  const [neighborDismissBusy, setNeighborDismissBusy] = useState(null);
   const [recommendItem, setRecommendItem] = useState(null);
   const [browse, setBrowse] = useState({ ...DEFAULT_MEDIA_BROWSE, sort: "title", sort_dir: "asc" });
   const [columns, setColumns] = useState(null);
@@ -306,6 +308,22 @@ export default function PlotLabPage() {
     setSeed(item);
     setSeedQuery(item.title || "");
     setSeedHits([]);
+  }
+
+  async function handleDismissNeighbor(item) {
+    if (!seed?.id || !item?.id) return;
+    setNeighborDismissBusy(item.id);
+    try {
+      await dismissPlotNeighbor(seed.id, item.id);
+      setNeighbors((prev) => ({
+        ...prev,
+        items: (prev.items || []).filter((row) => row.id !== item.id),
+      }));
+    } catch {
+      // Keep UI stable — owner can retry.
+    } finally {
+      setNeighborDismissBusy(null);
+    }
   }
 
   return (
@@ -556,6 +574,9 @@ export default function PlotLabPage() {
             loading={neighbors.loading}
             seedGenres={Array.isArray(seed?.genres) ? seed.genres : []}
             showIntro={false}
+            seedItemId={seed?.id ?? null}
+            onDismissNeighbor={isOwner ? handleDismissNeighbor : null}
+            dismissBusyId={neighborDismissBusy}
           />
         </div>
 

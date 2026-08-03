@@ -100,6 +100,22 @@ class EnrichmentMixin:
 
         self.run_write(_write, label="set_neighbors")
 
+    def remove_neighbor_edge(self, item_id: int, neighbor_id: int) -> bool:
+        """Delete one cached neighbor edge. Returns True if a row was removed."""
+
+        def _write() -> bool:
+            with self.connect() as conn:
+                cursor = conn.execute(
+                    """
+                    DELETE FROM item_neighbors
+                    WHERE item_id = ? AND neighbor_id = ?
+                    """,
+                    (int(item_id), int(neighbor_id)),
+                )
+                return int(cursor.rowcount or 0) > 0
+
+        return bool(self.run_write(_write, label="remove_neighbor_edge"))
+
     def get_neighbors(
         self,
         item_id: int,

@@ -109,12 +109,15 @@ export default function TitleDetailContent({
   watchStatus = null,
   watchMessage = "",
   deleting = false,
+  markingBadMedia = false,
+  badMediaMessage = "",
   onRequestAdd,
   onToggleWatched,
   onOpenTrailer,
   onOpenReview,
   onOpenRecommend,
   onOpenDelete,
+  onOpenMarkBadMedia,
   titleId,
 }) {
   if (!detail) return null;
@@ -371,18 +374,32 @@ export default function TitleDetailContent({
               </button>
             ) : null}
             {canDeleteLibrary ? (
-              <button
-                type="button"
-                className="title-cta title-cta-danger"
-                data-testid="title-detail-delete-button"
-                disabled={deleting}
-                onClick={onOpenDelete}
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  delete
-                </span>
-                Delete
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="title-cta title-cta-ghost"
+                  data-testid="title-detail-mark-bad-media-button"
+                  disabled={markingBadMedia || deleting}
+                  onClick={onOpenMarkBadMedia}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    sync_problem
+                  </span>
+                  Mark as bad media
+                </button>
+                <button
+                  type="button"
+                  className="title-cta title-cta-danger"
+                  data-testid="title-detail-delete-button"
+                  disabled={deleting || markingBadMedia}
+                  onClick={onOpenDelete}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    delete
+                  </span>
+                  Delete
+                </button>
+              </>
             ) : null}
           </div>
           {addMessage ? (
@@ -399,6 +416,11 @@ export default function TitleDetailContent({
               data-testid="title-watched-feedback"
             >
               {watchMessage}
+            </p>
+          ) : null}
+          {badMediaMessage ? (
+            <p className="title-detail-add-feedback" data-testid="title-bad-media-feedback">
+              {badMediaMessage}
             </p>
           ) : null}
         </div>

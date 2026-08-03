@@ -487,7 +487,9 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "description": (
                 "Propose removing a title from Radarr/Sonarr. Returns a confirmation_token. "
                 "After the user affirms, call confirm_pending_action with that token. "
-                "Prefer tmdb_id for movies and tvdb_id for shows so the correct Radarr/Sonarr id is resolved."
+                "Prefer tmdb_id for movies and tvdb_id for shows so the correct Radarr/Sonarr id is resolved. "
+                "Use when the owner does not want the title again (adds import exclusion when confirmed). "
+                "Do NOT use for corrupted or wrong files — use mark_bad_media instead."
             ),
             "parameters": {
                 "type": "object",
@@ -500,6 +502,33 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     "delete_files": {"type": "boolean"},
                 },
                 "required": ["media_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "mark_bad_media",
+            "description": (
+                "Ask Radarr/Sonarr to delete a corrupted or wrong on-disk file and search for a "
+                "replacement. Does NOT add import or acquisition exclusions — the title stays wanted. "
+                "Use for bad video/audio/wrong download/platform replace. Do NOT use when the owner "
+                "wants the title gone forever (use remove_from_arr or full library delete instead). "
+                "Prefer rating_key from library tools; otherwise tmdb_id (movies) or tvdb_id (shows). "
+                "For a single bad TV episode, pass episode_rating_key or season_number+episode_number."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "rating_key": {"type": "string", "description": "Plex/library rating key when known"},
+                    "media_type": {"type": "string", "enum": ["movie", "show"]},
+                    "tmdb_id": {"type": "integer", "description": "TMDB id for movies"},
+                    "tvdb_id": {"type": "integer", "description": "TVDB id for shows"},
+                    "episode_rating_key": {"type": "string", "description": "Episode rating key for one bad TV episode"},
+                    "season_number": {"type": "integer"},
+                    "episode_number": {"type": "integer"},
+                    "note": {"type": "string", "description": "Optional owner note (corruption, wrong file, etc.)"},
+                },
             },
         },
     },

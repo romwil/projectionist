@@ -246,6 +246,20 @@ class SonarrClient:
         )
         return payload if isinstance(payload, dict) else {}
 
+    def search_episodes(self, episode_ids: Sequence[int]) -> Mapping[str, Any]:
+        """Ask Sonarr to search specific episodes (replacement after bad file delete)."""
+        ids = [int(value) for value in episode_ids if int(value) > 0]
+        if not ids:
+            return {}
+        payload = request_json(
+            f"{self.base_url}/api/v3/command",
+            method="POST",
+            headers=self._headers(),
+            body={"name": "EpisodeSearch", "episodeIds": ids},
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, dict) else {}
+
     def quality_profiles(self) -> List[Mapping[str, Any]]:
         payload = request_json(
             f"{self.base_url}/api/v3/qualityprofile",
