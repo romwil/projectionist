@@ -7,16 +7,17 @@ test.describe("Explore hub", () => {
     await mockCuratorApis(page);
   });
 
-  test("loads feed rails, pulse, and plot lab motifs", async ({ page }) => {
+  test("loads feed rails, pulse, and Related titles hub", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/explore");
     await expect(page.getByTestId("explore-page")).toBeVisible();
 
     await expect(page.getByTestId("explore-hub-browse-movies")).toBeVisible();
     await expect(page.getByTestId("explore-hub-browse-tv")).toBeVisible();
-    await expect(page.getByTestId("explore-hub-plot-lab")).toBeVisible();
+    await expect(page.getByTestId("explore-hub-related-titles")).toBeVisible();
     await expect(page.getByTestId("explore-hub-tags")).toBeVisible();
     await expect(page.getByTestId("explore-hub-engagement")).toHaveCount(0);
+    await expect(page.getByTestId("explore-hub-plot-lab")).toHaveCount(0);
 
     await expect(page.getByTestId("explore-recently-added-rail")).toBeVisible();
     await expect(page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card")).toContainText(
@@ -33,21 +34,12 @@ test.describe("Explore hub", () => {
     await expect(page.getByTestId("explore-on-this-day-rail")).toBeVisible();
     await expect(page.getByTestId("explore-on-this-day-rail")).toContainText("Jaws");
 
-    await page.getByTestId("explore-hub-plot-lab").click();
-    await expect(page).toHaveURL(/\/explore\/plot-lab$/);
-    await expect(page.getByTestId("plot-lab-page")).toBeVisible();
-
-    await expect(page.getByTestId("explore-motif-chips")).toBeVisible();
-    const chip = page.getByTestId("explore-motif-chip").first();
-    await chip.click();
-    await expect(page.getByTestId("explore-motif-wall")).toBeVisible();
-    await expect(page.getByTestId("explore-motif-wall").getByTestId("explore-title-card")).toContainText("Alien");
-
-    await page.getByTestId("explore-seed-input").fill("Alien");
-    await expect(page.getByTestId("explore-seed-hits")).toBeVisible();
-    await page.getByTestId("explore-seed-hits").getByRole("button").first().click();
-    await expect(page.getByTestId("explore-seed-active")).toContainText("Alien");
-    await expect(page.getByTestId("explore-neighbors-rail")).toContainText("The Thing");
+    await page.getByTestId("explore-hub-related-titles").click();
+    await expect(page).toHaveURL(/\/explore\/related$/);
+    await expect(page.getByTestId("related-titles-page")).toBeVisible();
+    await expect(page.getByTestId("related-title-seed")).toBeVisible();
+    await page.goto("/explore/plot-lab");
+    await expect(page).toHaveURL(/\/explore\/related$/);
 
     await page.goto("/explore");
     await page.getByTestId("explore-recently-added-rail").getByTestId("explore-title-card").first().click();
