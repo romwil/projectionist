@@ -47,7 +47,7 @@ test.describe("CA release mocked flows", () => {
   test("config maintenance has no phase labels in copy", async ({ page, request }) => {
     await completeOnboardingViaApi(request);
     await page.goto("/admin/overview");
-    await page.getByTestId("maintenance-dashboard").waitFor();
+    await page.getByTestId("household-health-hero").waitFor();
     await page.goto("/admin/sync");
     await expect(page.getByTestId("library-sync-card")).toBeVisible();
     await expect(page.locator("body")).not.toContainText("(Phase");

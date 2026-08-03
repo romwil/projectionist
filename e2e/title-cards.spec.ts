@@ -289,14 +289,20 @@ test.describe("Title cards in chat", () => {
     await sendMockChat(page);
 
     const card = page.getByTestId("chat-message-assistant").getByTestId("title-card").first();
-    await expect(card.getByTestId("title-card-detail-link")).toHaveAttribute("href", "/title/movie/78");
+    await expect(card.getByTestId("title-card-detail-link")).toHaveAttribute(
+      "href",
+      /\/title\/movie\/78/,
+    );
     await expect(page.getByTestId("agent-avatar").first()).toBeVisible();
+    // Plain click opens the in-place title drawer; cmd/ctrl still navigates.
     await card.getByTestId("title-card-title-link").click();
-    await expect(page).toHaveURL(/\/title\/movie\/78$/);
-    await expect(page.getByTestId("title-detail-page")).toContainText("Blade Runner");
-    await expect(page.getByTestId("title-detail-hero")).toBeVisible();
-    await expect(page.getByTestId("title-why-card")).toBeVisible();
-    await page.getByTestId("watch-trailer-button").click();
+    await expect(page).toHaveURL(/\/chat/);
+    const drawer = page.getByTestId("title-detail-drawer");
+    await expect(drawer).toBeVisible();
+    await expect(drawer).toContainText("Blade Runner");
+    await expect(drawer.getByTestId("title-detail-hero")).toBeVisible();
+    await expect(drawer.getByTestId("title-why-card")).toBeVisible();
+    await drawer.getByTestId("watch-trailer-button").click();
     await expect(page.getByTestId("trailer-modal")).toBeVisible();
   });
 
