@@ -14,11 +14,13 @@ import {
   isLivePlayerChromeTarget,
   LIVE_CC_EMPTY_STREAM,
   LIVE_STALL_ESCALATE_MS,
+  LIVE_STALL_NOTICE_MS,
   liveStreamUrl,
   mergeLiveCcTracks,
   OSD_IDLE_MS,
   recordLivePlaybackDiag,
   shouldBumpOsdFromPointerMove,
+  stepLiveStreamHealthUi,
   summarizeLiveVideoBuffer,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
@@ -50,6 +52,8 @@ export default function LivePlayer({
   const waitingSinceRef = useRef(null);
   const mediaStalledRef = useRef(false);
   const hlsBufferStalledRef = useRef(false);
+  const healthUiRef = useRef({ displayed: "ok", stickyUntil: null });
+  const stallUiTimerRef = useRef(null);
   const lastProgressAtRef = useRef(null);
   const lastProgressTimeRef = useRef(null);
   const lastMediaUrlRef = useRef("");
@@ -89,7 +93,28 @@ export default function LivePlayer({
     };
   }
 
-  function recomputeStreamHealth(nowMs = Date.now()) {
+  function clearStallUiTimer() {
+    if (stallUiTimerRef.current) {
+      clearTimeout(stallUiTimerRef.current);
+      stallUiTimerRef.current = null;
+    }
+  }
+
+  function resetStallUiState() {
+    clearStallUiTimer();
+    healthUiRef.current = { displayed: "ok", stickyUntil: null };
+    waitingSinceRef.current = null;
+    mediaStalledRef.current = false;
+    hlsBufferStalledRef.current = false;
+    setStreamHealth("ok");
+    setSoftStallPhrase("");
+  }
+
+  /**
+   * Recompute raw stall signals → notice-delayed + sticky displayed health.
+   * Returns displayed health; bumps OSD only when a chip newly appears (or escalates).
+   */
+  function recomputeStreamHealth(nowMs = Date.now(), { bump = false } = {}) {
     const video = videoRef.current;
     const waitingSince = waitingSinceRef.current;
     const waiting = waitingSince != null;
@@ -103,7 +128,7 @@ export default function LivePlayer({
     ) {
       playheadFrozen = nowMs - lastProgressAtRef.current >= LIVE_STALL_ESCALATE_MS;
     }
-    const next = classifyLiveStreamHealth({
+    const raw = classifyLiveStreamHealth({
       playbackStatus: statusRef.current,
       waiting,
       mediaStalled: mediaStalledRef.current,
@@ -111,6 +136,10 @@ export default function LivePlayer({
       playheadFrozen,
       waitingMs,
     });
+    const prevDisplayed = healthUiRef.current.displayed;
+    const nextUi = stepLiveStreamHealthUi(healthUiRef.current, { rawHealth: raw, nowMs });
+    healthUiRef.current = nextUi;
+    const next = nextUi.displayed;
     setStreamHealth((prev) => (prev === next ? prev : next));
     if (next === "ok") {
       setSoftStallPhrase("");
@@ -118,7 +147,38 @@ export default function LivePlayer({
       // Lock one wry line for this soft-stall episode (no flicker on recompute).
       setSoftStallPhrase((phrase) => phrase || pickLiveSoftStallPhrase({ exclude: phrase }));
     }
+    if (
+      bump
+      && next !== "ok"
+      && (prevDisplayed === "ok" || (prevDisplayed === "buffering" && next === "stalled"))
+    ) {
+      bumpOsd();
+    }
+    // Arm timers so notice/hold edges fire without waiting for the 1s poll.
+    armStallUiTimer(nowMs);
     return next;
+  }
+
+  function armStallUiTimer(nowMs = Date.now()) {
+    if (stallUiTimerRef.current) return;
+    const waitingSince = waitingSinceRef.current;
+    const stickyUntil = healthUiRef.current.stickyUntil;
+    let delay = null;
+    if (waitingSince != null && healthUiRef.current.displayed === "ok") {
+      delay = Math.max(0, LIVE_STALL_NOTICE_MS - (nowMs - waitingSince));
+    } else if (stickyUntil != null && healthUiRef.current.displayed !== "ok") {
+      delay = Math.max(0, stickyUntil - nowMs);
+    }
+    if (delay == null) return;
+    stallUiTimerRef.current = setTimeout(() => {
+      stallUiTimerRef.current = null;
+      recomputeStreamHealth(Date.now(), { bump: true });
+    }, delay);
+  }
+
+  function noteStallSignal() {
+    if (waitingSinceRef.current == null) waitingSinceRef.current = Date.now();
+    return recomputeStreamHealth(Date.now(), { bump: true });
   }
 
   function clearStallSignals({ logEvent } = {}) {
@@ -126,12 +186,14 @@ export default function LivePlayer({
       waitingSinceRef.current != null
       || mediaStalledRef.current
       || hlsBufferStalledRef.current
+      || healthUiRef.current.displayed !== "ok"
       || streamHealth !== "ok";
+    clearStallUiTimer();
     waitingSinceRef.current = null;
     mediaStalledRef.current = false;
     hlsBufferStalledRef.current = false;
-    setStreamHealth("ok");
-    setSoftStallPhrase("");
+    // Route recovery through hysteresis — do not hard-clear the chip/chrome.
+    recomputeStreamHealth(Date.now(), { bump: false });
     if (had && logEvent) {
       recordLivePlaybackDiag(logEvent, diagBase());
     }
@@ -207,11 +269,7 @@ export default function LivePlayer({
     lastMediaUrlRef.current = url;
     setError("");
     setStatus("loading");
-    setStreamHealth("ok");
-    setSoftStallPhrase("");
-    waitingSinceRef.current = null;
-    mediaStalledRef.current = false;
-    hlsBufferStalledRef.current = false;
+    resetStallUiState();
     lastProgressAtRef.current = null;
     lastProgressTimeRef.current = null;
     setTextTracks([]);
@@ -306,9 +364,7 @@ export default function LivePlayer({
         if (!fatal) {
           if (isHlsBufferStallDetail(detail)) {
             hlsBufferStalledRef.current = true;
-            if (waitingSinceRef.current == null) waitingSinceRef.current = Date.now();
-            recomputeStreamHealth();
-            bumpOsd();
+            noteStallSignal();
             if (!stallNudgeTimer) {
               stallNudgeTimer = setTimeout(() => {
                 stallNudgeTimer = null;
@@ -330,9 +386,7 @@ export default function LivePlayer({
           setStatus("playing");
           setError("");
           hlsBufferStalledRef.current = true;
-          if (waitingSinceRef.current == null) waitingSinceRef.current = Date.now();
-          recomputeStreamHealth();
-          bumpOsd();
+          noteStallSignal();
           if (networkRetries <= 3) {
             hls.startLoad();
             return;
@@ -348,14 +402,12 @@ export default function LivePlayer({
           setStatus("playing");
           setError("");
           hlsBufferStalledRef.current = true;
-          if (waitingSinceRef.current == null) waitingSinceRef.current = Date.now();
-          recomputeStreamHealth();
-          bumpOsd();
+          noteStallSignal();
           hls.recoverMediaError();
           return;
         }
         setStatus("error");
-        setStreamHealth("ok");
+        resetStallUiState();
         setError(formatLiveStreamError(data));
       });
       hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, () => {
@@ -421,6 +473,7 @@ export default function LivePlayer({
       destroyed = true;
       if (recoverTimer) clearTimeout(recoverTimer);
       if (stallNudgeTimer) clearTimeout(stallNudgeTimer);
+      clearStallUiTimer();
       if (hlsRef.current) {
         hlsRef.current.destroy();
         hlsRef.current = null;
@@ -439,18 +492,14 @@ export default function LivePlayer({
 
     const onWaiting = () => {
       if (statusRef.current === "loading" || statusRef.current === "paused") return;
-      if (waitingSinceRef.current == null) waitingSinceRef.current = Date.now();
       recordLivePlaybackDiag("video-waiting", diagBase());
-      recomputeStreamHealth();
-      bumpOsd();
+      noteStallSignal();
     };
     const onStalled = () => {
       if (statusRef.current === "loading" || statusRef.current === "paused") return;
       mediaStalledRef.current = true;
-      if (waitingSinceRef.current == null) waitingSinceRef.current = Date.now();
       recordLivePlaybackDiag("video-stalled", diagBase());
-      recomputeStreamHealth();
-      bumpOsd();
+      noteStallSignal();
     };
     const onPlaying = () => {
       if (statusRef.current !== "paused" && statusRef.current !== "error") {
@@ -483,8 +532,8 @@ export default function LivePlayer({
     video.addEventListener("playing", onPlaying);
     video.addEventListener("timeupdate", onTimeUpdate);
     const tick = setInterval(() => {
-      const health = recomputeStreamHealth();
-      if (health !== "ok") bumpOsd();
+      // Poll for notice/escalate/hold edges; chrome stays up via streamHealth !== "ok".
+      recomputeStreamHealth(Date.now(), { bump: true });
     }, 1000);
 
     return () => {

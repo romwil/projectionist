@@ -10,6 +10,8 @@ import {
   LIVE_CC_EMPTY_AIRING,
   LIVE_CC_EMPTY_STREAM,
   LIVE_STALL_ESCALATE_MS,
+  LIVE_STALL_HOLD_MS,
+  LIVE_STALL_NOTICE_MS,
   liveGuideHref,
   liveProgramKey,
   liveStreamUrl,
@@ -23,6 +25,7 @@ import {
   programCellStyle,
   recordLivePlaybackDiag,
   shouldBumpOsdFromPointerMove,
+  stepLiveStreamHealthUi,
   summarizeLiveVideoBuffer,
   toggleLiveVideoPlayback,
   tryPlayLiveVideo,
@@ -108,8 +111,33 @@ describe("liveChannels helpers", () => {
       classifyLiveStreamHealth({ playbackStatus: "paused", waiting: true }),
       "ok",
     );
+    // Brief underruns stay silent — below notice threshold.
     assert.equal(
       classifyLiveStreamHealth({ playbackStatus: "playing", waiting: true, waitingMs: 500 }),
+      "ok",
+    );
+    assert.equal(
+      classifyLiveStreamHealth({
+        playbackStatus: "playing",
+        hlsBufferStalled: true,
+        waitingMs: 200,
+      }),
+      "ok",
+    );
+    assert.equal(
+      classifyLiveStreamHealth({
+        playbackStatus: "playing",
+        waiting: true,
+        waitingMs: LIVE_STALL_NOTICE_MS,
+      }),
+      "buffering",
+    );
+    assert.equal(
+      classifyLiveStreamHealth({
+        playbackStatus: "playing",
+        hlsBufferStalled: true,
+        waitingMs: LIVE_STALL_NOTICE_MS,
+      }),
       "buffering",
     );
     assert.equal(
@@ -123,13 +151,6 @@ describe("liveChannels helpers", () => {
     assert.equal(
       classifyLiveStreamHealth({
         playbackStatus: "playing",
-        hlsBufferStalled: true,
-      }),
-      "stalled",
-    );
-    assert.equal(
-      classifyLiveStreamHealth({
-        playbackStatus: "playing",
         playheadFrozen: true,
       }),
       "stalled",
@@ -137,6 +158,38 @@ describe("liveChannels helpers", () => {
     assert.ok(isHlsBufferStallDetail("bufferStalledError"));
     assert.ok(isHlsBufferStallDetail("bufferNudgeOnStall"));
     assert.equal(isHlsBufferStallDetail("fragLoadError"), false);
+  });
+
+  it("holds soft-stall UI briefly after recovery to avoid clear→flash loops", () => {
+    const t0 = 1_000_000;
+    let ui = stepLiveStreamHealthUi(
+      { displayed: "ok", stickyUntil: null },
+      { rawHealth: "buffering", nowMs: t0 },
+    );
+    assert.deepEqual(ui, { displayed: "buffering", stickyUntil: null });
+
+    // Raw recovers — keep chip sticky through the hold window.
+    ui = stepLiveStreamHealthUi(ui, { rawHealth: "ok", nowMs: t0 + 10 });
+    assert.equal(ui.displayed, "buffering");
+    assert.equal(ui.stickyUntil, t0 + 10 + LIVE_STALL_HOLD_MS);
+
+    // A follow-on micro-stall that is still raw-ok must not clear the sticky chip.
+    ui = stepLiveStreamHealthUi(ui, { rawHealth: "ok", nowMs: t0 + 10 + 200 });
+    assert.equal(ui.displayed, "buffering");
+
+    // After hold elapses, chrome/chip may clear.
+    ui = stepLiveStreamHealthUi(ui, {
+      rawHealth: "ok",
+      nowMs: t0 + 10 + LIVE_STALL_HOLD_MS,
+    });
+    assert.deepEqual(ui, { displayed: "ok", stickyUntil: null });
+
+    // Escalation while sticky is still active should refresh displayed health.
+    ui = stepLiveStreamHealthUi(
+      { displayed: "buffering", stickyUntil: t0 + 9999 },
+      { rawHealth: "stalled", nowMs: t0 + 50 },
+    );
+    assert.deepEqual(ui, { displayed: "stalled", stickyUntil: null });
   });
 
   it("summarizes buffered ranges and records a diag ring", () => {

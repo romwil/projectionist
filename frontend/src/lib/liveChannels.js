@@ -161,8 +161,24 @@ export async function toggleLiveVideoPlayback(video) {
   return tryPlayLiveVideo(video);
 }
 
-/** Escalate brief buffering copy to “stalled — retrying” after this many ms. */
+/**
+ * Escalate brief buffering copy to “stalled — retrying” after this many ms.
+ * Playhead-frozen detection uses the same window.
+ */
 export const LIVE_STALL_ESCALATE_MS = 4000;
+
+/**
+ * Do not paint buffering/stalled OSD chips until a stall signal has lasted this long.
+ * Typical HLS micro-underruns are often under 500ms — short enough users barely notice —
+ * so 1200ms sits above those hiccups and well below the 4s escalate window.
+ */
+export const LIVE_STALL_NOTICE_MS = 1200;
+
+/**
+ * After recovery, keep the last non-ok health chip/chrome sticky for this long so a
+ * second micro-stall cannot clear→flash→reopen the bottom OSD in a loop.
+ */
+export const LIVE_STALL_HOLD_MS = 1000;
 
 /** Max ring-buffer entries retained on ``window.__projectionistLiveDiag``. */
 export const LIVE_DIAG_RING_MAX = 40;
@@ -213,6 +229,10 @@ export function isHlsBufferStallDetail(detail) {
  * Initial tune (`loading`), hard `error`, idle, and user `paused` stay `"ok"` so we
  * do not paint Buffering… over Tuning… / Pause / error chips.
  *
+ * Brief `waiting` / hls.js buffer stalls stay `"ok"` until `waitingMs` reaches
+ * `noticeMs` — callers still track signals immediately for diagnostics + recovery.
+ * `playheadFrozen` already implies a long freeze (see {@link LIVE_STALL_ESCALATE_MS}).
+ *
  * @param {{
  *   playbackStatus?: string,
  *   waiting?: boolean,
@@ -220,6 +240,7 @@ export function isHlsBufferStallDetail(detail) {
  *   hlsBufferStalled?: boolean,
  *   playheadFrozen?: boolean,
  *   waitingMs?: number,
+ *   noticeMs?: number,
  *   escalateMs?: number,
  * }} [input]
  * @returns {"ok"|"buffering"|"stalled"}
@@ -231,6 +252,7 @@ export function classifyLiveStreamHealth({
   hlsBufferStalled = false,
   playheadFrozen = false,
   waitingMs = 0,
+  noticeMs = LIVE_STALL_NOTICE_MS,
   escalateMs = LIVE_STALL_ESCALATE_MS,
 } = {}) {
   if (
@@ -241,16 +263,46 @@ export function classifyLiveStreamHealth({
   ) {
     return "ok";
   }
-  if (
-    hlsBufferStalled
-    || mediaStalled
-    || playheadFrozen
-    || (waiting && waitingMs >= escalateMs)
-  ) {
-    return "stalled";
+  const signaled = waiting || mediaStalled || hlsBufferStalled || playheadFrozen;
+  if (!signaled) return "ok";
+  // Frozen playhead is already past escalateMs of no progress — surface immediately.
+  if (playheadFrozen || waitingMs >= escalateMs) return "stalled";
+  if (waitingMs < noticeMs) return "ok";
+  return "buffering";
+}
+
+/**
+ * Hysteresis for Live soft-stall UI: suppress clear→flash loops after brief recovery.
+ *
+ * While `rawHealth` is non-ok, mirror it. When raw recovers, keep the previous chip
+ * until `holdMs` elapses so a follow-on micro-stall does not restart the flash cycle.
+ *
+ * @param {{ displayed?: "ok"|"buffering"|"stalled", stickyUntil?: number|null }} [state]
+ * @param {{ rawHealth?: "ok"|"buffering"|"stalled", nowMs?: number, holdMs?: number }} [input]
+ * @returns {{ displayed: "ok"|"buffering"|"stalled", stickyUntil: number|null }}
+ */
+export function stepLiveStreamHealthUi(
+  state = {},
+  { rawHealth = "ok", nowMs = Date.now(), holdMs = LIVE_STALL_HOLD_MS } = {},
+) {
+  const displayed = state.displayed === "buffering" || state.displayed === "stalled"
+    ? state.displayed
+    : "ok";
+  const stickyUntil = Number.isFinite(state.stickyUntil) ? Number(state.stickyUntil) : null;
+
+  if (rawHealth === "buffering" || rawHealth === "stalled") {
+    return { displayed: rawHealth, stickyUntil: null };
   }
-  if (waiting) return "buffering";
-  return "ok";
+
+  if (displayed === "ok") {
+    return { displayed: "ok", stickyUntil: null };
+  }
+
+  const until = stickyUntil == null ? nowMs + Math.max(0, Number(holdMs) || 0) : stickyUntil;
+  if (nowMs < until) {
+    return { displayed, stickyUntil: until };
+  }
+  return { displayed: "ok", stickyUntil: null };
 }
 
 /**
