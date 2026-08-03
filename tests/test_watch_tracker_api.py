@@ -95,6 +95,97 @@ class WatchTrackerApiTests(unittest.TestCase):
             high_watermark_ms=1_704_067_201_000,
         )
 
+    def _enable_multi_user(self) -> None:
+        (Path(self._tmp.name) / "settings.json").write_text(
+            json.dumps(
+                {
+                    "features": {"multi_user_enabled": True},
+                    "auth": {"mode": "plex", "plex_login_enabled": True},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    def _seed_user_summaries(self) -> None:
+        db = self.app_mod._db()
+        for user_id, plex_id, role in (
+            ("user-a", "4242", "owner"),
+            ("user-b", "9999", "member"),
+        ):
+            db.upsert_plex_user(
+                user_id=user_id,
+                display_name=user_id,
+                email=None,
+                plex_user_id=plex_id,
+                role=role,
+            )
+        base = 1_704_067_200_000
+        events = []
+        for index, (user_key, title) in enumerate(
+            (("4242", "movie-shared"), ("9999", "movie-shared"))
+        ):
+            events.extend(
+                [
+                    WatchEventInput(
+                        source="plex_session",
+                        source_event_id=f"{user_key}-low",
+                        source_event_kind="session_progress",
+                        server_machine_id="server",
+                        source_user_key=user_key,
+                        rating_key=title,
+                        media_type="movie",
+                        occurred_at_ms=base + index * 10_000_000,
+                        progress_ms=100_000,
+                        duration_ms=1_000_000,
+                    ),
+                    WatchEventInput(
+                        source="plex_session",
+                        source_event_id=f"{user_key}-done",
+                        source_event_kind="session_stop",
+                        server_machine_id="server",
+                        source_user_key=user_key,
+                        rating_key=title,
+                        media_type="movie",
+                        occurred_at_ms=base + index * 10_000_000 + 600_000,
+                        progress_ms=950_000,
+                        duration_ms=1_000_000,
+                        terminal=True,
+                    ),
+                ]
+            )
+        events.extend(
+            [
+                WatchEventInput(
+                    source="plex_session",
+                    source_event_id="episode-low",
+                    source_event_kind="session_progress",
+                    server_machine_id="server",
+                    source_user_key="4242",
+                    rating_key="episode-1",
+                    parent_rating_key="show-1",
+                    media_type="episode",
+                    occurred_at_ms=base + 20_000_000,
+                    progress_ms=100_000,
+                    duration_ms=1_000_000,
+                ),
+                WatchEventInput(
+                    source="plex_session",
+                    source_event_id="episode-done",
+                    source_event_kind="session_stop",
+                    server_machine_id="server",
+                    source_user_key="4242",
+                    rating_key="episode-1",
+                    parent_rating_key="show-1",
+                    media_type="episode",
+                    occurred_at_ms=base + 20_600_000,
+                    progress_ms=950_000,
+                    duration_ms=1_000_000,
+                    terminal=True,
+                ),
+            ]
+        )
+        ingest_watch_events(db, events)
+
     def test_owner_status_reports_health_without_identity_or_title_leaks(self) -> None:
         self._seed_status()
         response = self.client.get("/api/admin/watch-tracker/status")
@@ -118,15 +209,7 @@ class WatchTrackerApiTests(unittest.TestCase):
             self.assertNotIn(secret, serialized)
 
     def test_member_cannot_read_owner_status(self) -> None:
-        (Path(self._tmp.name) / "settings.json").write_text(
-            json.dumps(
-                {
-                    "features": {"multi_user_enabled": True},
-                    "auth": {"mode": "plex", "plex_login_enabled": True},
-                }
-            ),
-            encoding="utf-8",
-        )
+        self._enable_multi_user()
         self.app_mod._db().upsert_plex_user(
             user_id="member-1",
             display_name="Member",
@@ -140,6 +223,55 @@ class WatchTrackerApiTests(unittest.TestCase):
         response = member.get("/api/admin/watch-tracker/status")
 
         self.assertEqual(response.status_code, 403)
+
+    def test_current_user_summary_is_scoped_to_authenticated_user(self) -> None:
+        self._enable_multi_user()
+        self._seed_user_summaries()
+        member = TestClient(self.app_mod.app)
+        member.cookies.set(SESSION_COOKIE_NAME, create_session_token("user-b"))
+
+        response = member.get("/api/watch-tracker/summary/movie-shared")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["tracked_completions"], 1)
+        self.assertEqual(body["completion_confidence"]["certain"], 1)
+        self.assertNotIn("user-a", json.dumps(body))
+        self.assertNotIn("4242", json.dumps(body))
+
+    def test_show_summary_rolls_up_episode_completions(self) -> None:
+        self._enable_multi_user()
+        self._seed_user_summaries()
+        owner = TestClient(self.app_mod.app)
+        owner.cookies.set(SESSION_COOKIE_NAME, create_session_token("user-a"))
+
+        response = owner.get("/api/watch-tracker/shows/show-1/summary")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["unique_episodes_completed"], 1)
+        self.assertEqual(response.json()["total_episode_completions"], 1)
+
+    def test_owner_evidence_diagnostics_are_sanitized_and_member_forbidden(self) -> None:
+        self._enable_multi_user()
+        self._seed_user_summaries()
+        owner = TestClient(self.app_mod.app)
+        owner.cookies.set(SESSION_COOKIE_NAME, create_session_token("user-a"))
+        member = TestClient(self.app_mod.app)
+        member.cookies.set(SESSION_COOKIE_NAME, create_session_token("user-b"))
+
+        response = owner.get(
+            "/api/admin/watch-tracker/evidence",
+            params={"rating_key": "movie-shared", "limit": 20},
+        )
+        forbidden = member.get("/api/admin/watch-tracker/evidence")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertGreater(response.json()["count"], 0)
+        serialized = json.dumps(response.json())
+        self.assertNotIn("source_user_key", serialized)
+        self.assertNotIn("4242", serialized)
+        self.assertNotIn("9999", serialized)
+        self.assertEqual(forbidden.status_code, 403)
 
 
 if __name__ == "__main__":
