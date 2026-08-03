@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.31.5] — 2026-08-03
+
+Projectionist now turns live, webhook, manual, and Plex-history observations into private, confidence-labeled personal watch timelines.
+
 ### Highlights
 - **Your watch history now explains itself.** Movie detail shows a personal completion timeline with confidence and “Why this count?”, while shows stay episode-first and cards use tracked counts only when coverage exists.
 - **Chat uses the strongest honest evidence available.** The curator prefers your tracker-backed completions, labels bare Plex played events, and falls back to the old aggregate without claiming uninterrupted viewing.
@@ -39,6 +43,12 @@
 - Paging advances by the number of rows Plex returned, not only rows that normalized successfully, preventing malformed entries from replaying the same page indefinitely.
 - History rows without a provider event id rely on the normalized fingerprint rather than a fabricated Plex id.
 - Database write failures are no longer misreported as duplicate events; only uniqueness violations count as deduplication.
+
+### Verification
+- Backend: 1,833 passed, 6 skipped, 29 subtests passed; 75.49% coverage (74% required).
+- Frontend unit: 660 passed, 0 failed.
+- ESLint: 0 errors; production Vite build passed.
+- Focused Playwright watch tracker: 2 passed.
 
 ## [1.31.4] — 2026-08-03
 
