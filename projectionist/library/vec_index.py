@@ -10,7 +10,6 @@ UI/agent read cache either way.
 from __future__ import annotations
 
 import logging
-import os
 import struct
 from typing import Any, List, Optional, Sequence, Tuple
 

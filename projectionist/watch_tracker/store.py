@@ -7,7 +7,7 @@ import json
 import logging
 import time
 import uuid
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, Optional, Sequence
 
 from projectionist.library.db import Database
 from projectionist.watch_tracker.models import IngestResult, SOURCE_EVENT_KINDS, WatchEventInput

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from typing import Callable, List, Optional
 
@@ -682,7 +683,6 @@ class PlexClient:
             path = f"/{path}"
         separator = "&" if "?" in path else "?"
         url = f"{self.base_url}{path}{separator}X-Plex-Token={urllib.parse.quote(self.token)}"
-        import urllib.request
 
         request = urllib.request.Request(url, method="GET")
         with urllib.request.urlopen(request, timeout=self.timeout) as response:

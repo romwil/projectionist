@@ -20,6 +20,7 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from projectionist.agent.curator import CuratorAgent, stream_agent

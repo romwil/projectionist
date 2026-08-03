@@ -7,7 +7,7 @@ titles (default Plex name ``NoLive``) are skipped during fill and starters.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
 
 from projectionist.live_channels.recipes import MediaScope, normalize_media_scope

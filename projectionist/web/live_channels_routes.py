@@ -6,6 +6,7 @@ Extracted from web/app.py (H1/M8 incremental carve). Registered via
 
 from __future__ import annotations
 
+import logging
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Literal, Mapping, Optional
@@ -15,7 +16,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from projectionist.config_store import Settings, save_settings
+from projectionist.live_channels.stream_warm import get_stream_warm_scheduler
 from projectionist.web.auth import get_current_user_dep, require_role
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["live-channels"])
 

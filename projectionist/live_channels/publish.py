@@ -2826,6 +2826,7 @@ def publish_recipes(
 
     def _apply_programming(channel_id: str, recipe: ChannelRecipe) -> Dict[str, Any]:
         nonlocal content_filled, total_programs, total_matched, total_match_pool
+        nonlocal full_run_any, soft_capped_any
         scope = normalize_media_scope(getattr(recipe, "media_scope", None))
         stats: Dict[str, Any] = {}
         programs = collect_programs_for_recipe(

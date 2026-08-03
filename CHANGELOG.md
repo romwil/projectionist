@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.31.1] — 2026-08-03
+
+Patch release so CI is green again after the 1.31.0 ship: ruff clean, and tonight’s queue unit test works without a browser `sessionStorage`.
+
+### Highlights
+- **Lint is green again.** Unused imports and a few undefined names from the watch-tracker / Year in Review land no longer trip the Lint workflow.
+- **Tonight’s queue tests reliably in CI.** The session-scoped queue helpers now run against a small in-memory `sessionStorage` mock under `node:test`.
+
+### Fixed
+- Ruff F401 / F821 / F823 / F841 / F541 and py310 f-string escape syntax across plex, engagement, feeds, full_remove, vec_index, live_channels, preferences, coverage_signals, telemetry, watch_tracker, jobs, live_channels_routes, rate_limit, year_in_review, and `tests/test_prompt_injection.py`.
+- `live_channels_routes` imports `get_stream_warm_scheduler` and defines `logger`; `jobs.py` / prompt-injection tests import `Any`.
+- `publish.py` marks `full_run_any` / `soft_capped_any` as `nonlocal` so soft-cap fill mode aggregates correctly.
+- `frontend/src/lib/whatsOnTonight.test.mjs` installs a Map-backed `sessionStorage` before tonightQueue assertions (Node has no DOM storage).
+
+### Verification
+- `.venv/bin/ruff check .` — clean (0 errors).
+- `.venv/bin/python -m mypy` — Success (scoped baseline).
+- `cd frontend && npm run test:unit` — 655 passed, including tonightQueue.
+- `cd frontend && npm run lint` — 0 errors.
+- `.venv/bin/python -m pytest tests/` — 1793 passed, 6 skipped; coverage 75.3% (≥74%).
+- `test_version` lockstep **1.31.1**.
+
 ## [1.31.0] — 2026-08-03
 
 Year in Review cinema reels from your personal watch tracker, plus Related titles that keep the “why” next to every hop.

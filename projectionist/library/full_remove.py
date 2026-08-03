@@ -116,8 +116,8 @@ def join_arr_path(root_path: str, relative_path: str) -> str:
     if not root or not rel:
         return ""
     if "\\" in root and "/" not in root:
-        return f"{root}\\{rel.replace('/', '\\')}"
-    return f"{root}/{rel.replace('\\', '/')}"
+        return root + "\\" + rel.replace("/", "\\")
+    return root + "/" + rel.replace("\\", "/")
 
 
 def resolve_arr_file_path(
