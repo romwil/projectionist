@@ -5,11 +5,17 @@ export const ADMIN_TASKS_PATH = "/admin/tasks";
 
 /** Notes that mean idle caches / enrichment have not warmed yet (owner can fix in tasks). */
 const OWNER_EMPTY_CTA_RULES = [
-  { test: /plot_neighbors|neighbors cache|not built yet/i, label: "Warm Explore" },
-  { test: /summary_motifs|plot motifs/i, label: "Run enrichment" },
+  {
+    test: /plot_neighbors|neighbors cache|plot-similarity data|similar titles yet|not built yet/i,
+    label: "Refresh similar titles",
+  },
+  {
+    test: /summary_motifs|plot motifs|plot patterns yet/i,
+    label: "Refresh plot patterns",
+  },
   {
     test: /metadata_enrichment|not enriched|enrich release|release dates|release_date|first_air_date/i,
-    label: "Run enrichment",
+    label: "Refresh title details",
   },
   { test: /library sync|added_at yet/i, label: "Open Scheduled Tasks" },
 ];

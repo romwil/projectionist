@@ -63,6 +63,13 @@ export function formatTvProgress(detail) {
   };
 }
 
+/** Plex movie counters are completions/marked-played events; TV uses episode sums. */
+export function titleWatchCountLabel(detail) {
+  return String(detail?.media_type || "").toLowerCase() === "show"
+    ? "Episode plays"
+    : "Completed watches";
+}
+
 /** Other library titles sharing a collection_name (excludes current). */
 export function filterCollectionPeers(items, detail, { limit = 12 } = {}) {
   const name = String(detail?.collection_name || "").trim().toLowerCase();

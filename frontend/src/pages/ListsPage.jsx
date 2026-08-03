@@ -4,13 +4,17 @@ import { deleteCuratedListItem, getCuratedList, listCuratedLists } from "../api/
 import BackLink from "../components/BackLink";
 import CourseAuthoringPanel from "../components/CourseAuthoringPanel";
 import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowsePagination from "../components/MediaBrowsePagination";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/browseLinks.js";
+import { pageAgentListItems } from "../lib/agentResultLists.js";
 import {
+  MEDIA_BROWSE_PAGE_SIZES,
   buildMediaBrowseParams,
+  isAllPageSize,
   matchesMediaBrowseWatchState,
   mediaBrowseRowsToCsv,
   parseMediaBrowse,
@@ -47,6 +51,7 @@ export default function ListsPage() {
       .map((entry) => ({ ...(entry.media || entry), _listItemId: entry.id }))
       .filter((item) => !browse.media_type || item?.media_type === browse.media_type)
       .filter((item) => !browse.year || String(item?.year || "") === String(browse.year))
+      .filter((item) => !browse.genres.length || browse.genres.every((genre) => (item?.genres || []).includes(genre)))
       .filter((item) => matchesMediaBrowseWatchState(item, browse.watch_state));
     const direction = browse.sort_dir === "desc" ? -1 : 1;
     return [...source].sort((left, right) => {
@@ -54,14 +59,29 @@ export default function ListsPage() {
       const b = right?.[browse.sort] ?? (browse.sort === "vote_average" ? right?.rating : "") ?? "";
       return String(a).localeCompare(String(b), undefined, { numeric: true }) * direction;
     });
-  }, [browse.media_type, browse.sort, browse.sort_dir, browse.watch_state, browse.year, state.list?.items]);
+  }, [browse.genres, browse.media_type, browse.sort, browse.sort_dir, browse.watch_state, browse.year, state.list?.items]);
+  const page = useMemo(
+    () => pageAgentListItems(items, { limit: browse.limit, offset: browse.offset }),
+    [browse.limit, browse.offset, items],
+  );
+  const filterOptions = useMemo(() => ({
+    years: [...new Set(items.map((item) => item?.year).filter(Boolean))].sort((a, b) => b - a),
+    genres: [...new Set(items.flatMap((item) => item?.genres || []).filter(Boolean))].sort(),
+  }), [items]);
+  const allPages = isAllPageSize(browse.limit);
+  const pageSize = allPages ? Math.max(1, page.total) : Number(browse.limit) || 48;
+  const pageNumber = allPages ? 1 : Math.floor(browse.offset / pageSize) + 1;
+  const pageCount = allPages ? 1 : Math.max(1, Math.ceil(page.total / pageSize));
+  const paginationSummary = allPages
+    ? `${page.total} title${page.total === 1 ? "" : "s"}`
+    : `Page ${pageNumber} of ${pageCount}${page.total ? ` · ${page.total} titles` : ""}`;
 
   function handleBrowseChange(patch) {
     setSearchParams(buildMediaBrowseParams(browse, patch), { replace: true });
   }
 
   function exportCurrentPage(exportColumns) {
-    const blob = new Blob([mediaBrowseRowsToCsv(items, exportColumns)], { type: "text/csv;charset=utf-8" });
+    const blob = new Blob([mediaBrowseRowsToCsv(page.items, exportColumns)], { type: "text/csv;charset=utf-8" });
     const href = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = href;
@@ -99,13 +119,18 @@ export default function ListsPage() {
           columns={columns}
           onColumnsChange={setColumns}
           columnScope={`list-${listId}`}
+          filterOptions={filterOptions}
+          pageSizes={MEDIA_BROWSE_PAGE_SIZES}
           exportItems
           onExport={exportCurrentPage}
         />
-        {items.length ? (
+        <p className="explore-section-pagination-summary" data-testid="list-browse-summary">
+          {paginationSummary}
+        </p>
+        {page.items.length ? (
           <MediaBrowseResults
             state={browse}
-            items={items}
+            items={page.items}
             columns={columns || undefined}
             cardProps={(item) => ({
               testId: "list-title-card",
@@ -116,7 +141,20 @@ export default function ListsPage() {
               onRemoveFromList: removeFromCollection,
             })}
           />
-        ) : <p className="explore-empty status status-secondary">This {state.list?.list_kind === "playlist" ? "playlist" : "list"} has no titles yet.</p>}
+        ) : <p className="explore-empty status status-secondary">{page.total ? "No titles on this page." : `This ${state.list?.list_kind === "playlist" ? "playlist" : "list"} has no titles yet.`}</p>}
+        {page.total ? (
+          <MediaBrowsePagination
+            summary={paginationSummary}
+            pageSize={allPages ? "all" : pageSize}
+            pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+            onPageSizeChange={(limit) => handleBrowseChange({ limit, offset: 0 })}
+            hasPrevious={page.hasPrevious}
+            hasNext={page.hasNext}
+            onPrevious={() => handleBrowseChange({ offset: Math.max(0, browse.offset - pageSize) })}
+            onNext={() => handleBrowseChange({ offset: browse.offset + pageSize })}
+            testIdPrefix="list-browse"
+          />
+        ) : null}
       </section>
     ) : null}
     <RecommendModal

@@ -139,8 +139,8 @@ def register(scheduler: IdleScheduler) -> None:
         priority="P2",
         run_fn=run,
         description=(
-            "P2 coverage audit: aggregates coverage_deficit telemetry (themes, "
-            "motifs, synopsis, embeddings, metadata) and stages high-hit gaps "
-            "for Admin Knowledge Ops visibility — never auto-writes enrichment."
+            "Finds recurring gaps in plot patterns, themes, synopses, plot-similarity "
+            "data, and title details, then queues the most useful refreshes for owner "
+            "review. It never changes built-in knowledge automatically."
         ),
     )

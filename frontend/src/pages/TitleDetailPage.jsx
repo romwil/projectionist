@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import BackLink from "../components/BackLink";
-import { api, queryLibrary } from "../api/client";
+import { getTitleRelations } from "../api/client";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
 import MarkBadMediaDialog from "../components/MarkBadMediaDialog.jsx";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
@@ -18,11 +18,10 @@ import {
   canOwnerDeleteLibraryTitle,
   LIBRARY_DELETE_NOTICE_KEY,
 } from "../lib/bulkLibraryDelete.js";
-import { SURPRISE_SECTION_INTRO, buildSurpriseWhy } from "../lib/surpriseNeighbors.js";
-import { filterCollectionPeers } from "../lib/titleDetailExtras.js";
+import { relationWhyCopy, relatedTitlesPath } from "../lib/relationUx.js";
 import { titleDetailPath } from "../lib/titleLinks.js";
 
-function TitleNeighborCard({ item, testId, surpriseWhy = null }) {
+function TitleNeighborCard({ item, testId, why = null }) {
   // Both endpoint sources are library relations; make that explicit because
   // the compact relation payloads do not consistently include in_library.
   const libraryItem = { ...item, in_library: true };
@@ -49,12 +48,10 @@ function TitleNeighborCard({ item, testId, surpriseWhy = null }) {
         {path ? <TitleDetailLink item={libraryItem}>{libraryItem.title}</TitleDetailLink> : libraryItem.title}
       </h3>
       {libraryItem.year ? <p className="title-neighbor-year">{libraryItem.year}</p> : null}
-      {surpriseWhy?.headline ? (
+      {why?.label ? (
         <p className="title-neighbor-why" data-testid={`${testId}-why`}>
-          {surpriseWhy.headline}
-          {surpriseWhy.signals?.[0] ? (
-            <span className="title-neighbor-why-detail"> · {surpriseWhy.signals[0]}</span>
-          ) : null}
+          {why.label}
+          {why.detail ? <span className="title-neighbor-why-detail"> · {why.detail}</span> : null}
         </p>
       ) : null}
     </article>
@@ -67,12 +64,11 @@ export default function TitleDetailPage() {
   const navigate = useNavigate();
   const location = useLocation();
   const idType = searchParams.get("id_type") || "tmdb";
-  const [neighbors, setNeighbors] = useState(null);
+  const [relations, setRelations] = useState(null);
   const [neighborMode, setNeighborMode] = useState("similar");
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [recommendOpen, setRecommendOpen] = useState(false);
   const [reviewOpen, setReviewOpen] = useState(false);
-  const [collectionPeers, setCollectionPeers] = useState([]);
   const carouselRef = useRef(null);
 
   const { detail, setDetail, error, loading } = useTitleDetail({
@@ -100,36 +96,18 @@ export default function TitleDetailPage() {
   });
 
   useEffect(() => {
-    setNeighbors(null);
-    const neighborQuery = new URLSearchParams({
-      limit: "12",
-      mode: neighborMode === "surprising" ? "surprising" : "similar",
-    });
-    if (idType && idType !== "tmdb") neighborQuery.set("id_type", idType);
-    api(`/title/${mediaType}/${itemId}/neighbors?${neighborQuery}`)
-      .then((data) => setNeighbors(Array.isArray(data?.items) ? data.items : []))
-      .catch(() => setNeighbors([]));
-  }, [mediaType, itemId, idType, neighborMode]);
-
-  useEffect(() => {
-    const name = String(detail?.collection_name || "").trim();
-    if (!name) {
-      setCollectionPeers([]);
-      return undefined;
-    }
     let cancelled = false;
-    queryLibrary({ collection_name: name, limit: 16, sort: "year" })
+    getTitleRelations(mediaType, itemId, { idType, limit: 50 })
       .then((data) => {
-        if (cancelled) return;
-        setCollectionPeers(filterCollectionPeers(data?.items || [], detail, { limit: 12 }));
+        if (!cancelled) setRelations(Array.isArray(data?.items) ? data.items : []);
       })
       .catch(() => {
-        if (!cancelled) setCollectionPeers([]);
+        if (!cancelled) setRelations([]);
       });
     return () => {
       cancelled = true;
     };
-  }, [detail]);
+  }, [mediaType, itemId, idType]);
 
   useEffect(() => {
     if (!trailerOpen) return undefined;
@@ -166,7 +144,15 @@ export default function TitleDetailPage() {
   }
 
   const trailerKey = String(detail.trailer_youtube_key || "").trim();
-  const showNeighbors = Array.isArray(neighbors) && neighbors.length > 0;
+  const collectionEdges = (relations || []).filter((edge) => edge.relation === "collection");
+  const crewEdges = (relations || []).filter((edge) => edge.relation === "shared_crew");
+  const plotEdges = (relations || []).filter((edge) => edge.relation === "neighbor");
+  const neighbors =
+    neighborMode === "surprising"
+      ? plotEdges.filter((edge) => edge.why?.surprise_flavor)
+      : plotEdges;
+  const showNeighbors = plotEdges.length > 0;
+  const relatedPath = relatedTitlesPath(detail);
   const canDeleteLibrary = canOwnerDeleteLibraryTitle(detail, {
     role: interactions.userRole,
     multiUserEnabled: interactions.multiUserEnabled,
@@ -212,17 +198,61 @@ export default function TitleDetailPage() {
         onOpenMarkBadMedia={interactions.openMarkBadMedia}
       />
 
-      {collectionPeers.length ? (
+      <section className="title-relations-entry" data-testid="title-relations-entry">
+        <div>
+          <h2>Title connections</h2>
+          <p>Follow this title through collections, shared filmmakers, and plot kinship.</p>
+        </div>
+        <Link to={relatedPath} className="title-cta title-cta-ghost title-relations-cta">
+          Related titles
+          <span className="material-symbols-outlined" aria-hidden="true">
+            arrow_forward
+          </span>
+        </Link>
+      </section>
+
+      {Array.isArray(relations) && !relations.length ? (
+        <p className="title-relations-cold-note status status-secondary">
+          Connections are still warming up for this title. The background library refresh may
+          add them later.
+        </p>
+      ) : null}
+
+      {collectionEdges.length ? (
         <section className="title-neighbors title-collection-rail" data-testid="title-collection-rail">
           <div className="title-neighbors-header">
-            <h2>More in {detail.collection_name}</h2>
+            <h2>
+              More in{" "}
+              {detail.collection_name ||
+                collectionEdges[0]?.why?.collection_name ||
+                "this collection"}
+            </h2>
           </div>
           <div className="title-neighbors-track">
-            {collectionPeers.map((item) => (
+            {collectionEdges.map((edge) => (
               <TitleNeighborCard
-                key={`${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`}
-                item={item}
+                key={`${edge.relation}-${edge.to_id}`}
+                item={edge.peer}
                 testId="title-collection-peer"
+                why={relationWhyCopy(edge.why)}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {crewEdges.length ? (
+        <section className="title-neighbors title-crew-rail" data-testid="title-crew-rail">
+          <div className="title-neighbors-header">
+            <h2>Shared cast &amp; crew</h2>
+          </div>
+          <div className="title-neighbors-track">
+            {crewEdges.map((edge) => (
+              <TitleNeighborCard
+                key={`${edge.relation}-${edge.to_id}`}
+                item={edge.peer}
+                testId="title-crew-peer"
+                why={relationWhyCopy(edge.why)}
               />
             ))}
           </div>
@@ -235,7 +265,7 @@ export default function TitleDetailPage() {
           data-testid="title-neighbors"
         >
           <div className="title-neighbors-header">
-            <h2>{neighborMode === "surprising" ? "Surprising neighbors" : "More Like This"}</h2>
+            <h2>{neighborMode === "surprising" ? "Surprisingly similar" : "Similar plot"}</h2>
             <div className="title-neighbors-controls">
               <div className="title-neighbors-modes" role="group" aria-label="Neighbor ranking">
                 <button
@@ -281,22 +311,21 @@ export default function TitleDetailPage() {
           </div>
           {neighborMode === "surprising" ? (
             <p className="title-neighbors-intro" data-testid="title-neighbors-surprise-intro">
-              {SURPRISE_SECTION_INTRO}
+              Strong plot kinship with little overlap in genre, keyword, or filmmaker labels.
+            </p>
+          ) : null}
+          {neighborMode === "surprising" && !neighbors.length ? (
+            <p className="title-neighbors-intro">
+              No surprising connection is ready yet. Similar plot matches are still available.
             </p>
           ) : null}
           <div className="title-neighbors-track" ref={carouselRef}>
-            {neighbors.map((item) => (
+            {neighbors.map((edge) => (
               <TitleNeighborCard
-                key={`${item.media_type}-${item.tmdb_id || item.rating_key || item.title}`}
-                item={item}
+                key={`${edge.relation}-${edge.to_id}`}
+                item={edge.peer}
                 testId="title-neighbor-card"
-                surpriseWhy={
-                  neighborMode === "surprising"
-                    ? buildSurpriseWhy(item, {
-                        seedGenres: Array.isArray(detail.genres) ? detail.genres : [],
-                      })
-                    : null
-                }
+                why={relationWhyCopy(edge.why)}
               />
             ))}
           </div>

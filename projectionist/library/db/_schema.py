@@ -1625,6 +1625,225 @@ class SchemaMigrationsMixin:
             """
         )
 
+    def _migrate_watch_event_ledger(self, conn: sqlite3.Connection) -> None:
+        """Append-only watch events + ingest cursors + source identity map."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS watch_ingest_cursors (
+                source TEXT NOT NULL,
+                server_machine_id TEXT NOT NULL,
+                cursor_value TEXT,
+                high_watermark_ms INTEGER,
+                last_success_at REAL,
+                last_error_at REAL,
+                last_error TEXT,
+                updated_at REAL NOT NULL,
+                PRIMARY KEY (source, server_machine_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS watch_source_identities (
+                source TEXT NOT NULL,
+                server_machine_id TEXT NOT NULL,
+                source_user_key TEXT NOT NULL,
+                user_id TEXT,
+                display_name TEXT,
+                mapping_method TEXT NOT NULL DEFAULT 'unmapped',
+                first_seen_at REAL NOT NULL,
+                last_seen_at REAL NOT NULL,
+                PRIMARY KEY (source, server_machine_id, source_user_key),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS watch_events (
+                id TEXT PRIMARY KEY,
+                source TEXT NOT NULL,
+                source_event_id TEXT,
+                source_event_kind TEXT NOT NULL,
+                server_machine_id TEXT NOT NULL,
+                source_user_key TEXT NOT NULL,
+                user_id TEXT,
+                rating_key TEXT NOT NULL,
+                parent_rating_key TEXT,
+                media_type TEXT NOT NULL CHECK (media_type IN ('movie', 'episode')),
+                occurred_at_ms INTEGER NOT NULL,
+                client_key TEXT,
+                session_key TEXT,
+                progress_ms INTEGER,
+                duration_ms INTEGER,
+                completion_pct REAL,
+                terminal INTEGER NOT NULL DEFAULT 0,
+                manual INTEGER NOT NULL DEFAULT 0,
+                payload_hash TEXT NOT NULL,
+                duplicate_of_event_id TEXT,
+                ingested_at REAL NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY(duplicate_of_event_id) REFERENCES watch_events(id) ON DELETE SET NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_events_source_id
+                ON watch_events(source, server_machine_id, source_event_id)
+                WHERE source_event_id IS NOT NULL;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_watch_events_fingerprint
+                ON watch_events(source, server_machine_id, payload_hash);
+            CREATE INDEX IF NOT EXISTS idx_watch_events_correlation
+                ON watch_events(source_user_key, rating_key, occurred_at_ms);
+            CREATE INDEX IF NOT EXISTS idx_watch_events_user_time
+                ON watch_events(user_id, occurred_at_ms DESC);
+            """
+        )
+
+    def _migrate_watch_sessions_completions(self, conn: sqlite3.Connection) -> None:
+        """Derived logical sessions and accepted completions."""
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS watch_sessions (
+                id TEXT PRIMARY KEY,
+                user_id TEXT,
+                source_user_key TEXT NOT NULL,
+                rating_key TEXT NOT NULL,
+                parent_rating_key TEXT,
+                media_type TEXT NOT NULL CHECK (media_type IN ('movie', 'episode')),
+                started_at_ms INTEGER NOT NULL,
+                ended_at_ms INTEGER,
+                start_progress_ms INTEGER,
+                max_progress_ms INTEGER,
+                duration_ms INTEGER,
+                first_event_id TEXT NOT NULL,
+                last_event_id TEXT NOT NULL,
+                primary_client_key TEXT,
+                client_count INTEGER NOT NULL DEFAULT 1,
+                event_count INTEGER NOT NULL DEFAULT 1,
+                terminal_reason TEXT,
+                algorithm_version INTEGER NOT NULL,
+                created_at REAL NOT NULL,
+                updated_at REAL NOT NULL,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY(first_event_id) REFERENCES watch_events(id),
+                FOREIGN KEY(last_event_id) REFERENCES watch_events(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_watch_sessions_user_title
+                ON watch_sessions(user_id, rating_key, started_at_ms DESC);
+
+            CREATE TABLE IF NOT EXISTS watch_session_events (
+                session_id TEXT NOT NULL,
+                event_id TEXT NOT NULL UNIQUE,
+                ordinal INTEGER NOT NULL,
+                PRIMARY KEY(session_id, event_id),
+                FOREIGN KEY(session_id) REFERENCES watch_sessions(id) ON DELETE CASCADE,
+                FOREIGN KEY(event_id) REFERENCES watch_events(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS watch_completions (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL UNIQUE,
+                user_id TEXT,
+                rating_key TEXT NOT NULL,
+                parent_rating_key TEXT,
+                media_type TEXT NOT NULL CHECK (media_type IN ('movie', 'episode')),
+                completed_at_ms INTEGER NOT NULL,
+                confidence TEXT NOT NULL CHECK (
+                    confidence IN ('certain', 'likely', 'plex_event_only')
+                ),
+                basis TEXT NOT NULL,
+                threshold_pct REAL,
+                evidence_event_id TEXT NOT NULL,
+                superseded_by_completion_id TEXT,
+                algorithm_version INTEGER NOT NULL,
+                created_at REAL NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES watch_sessions(id) ON DELETE CASCADE,
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL,
+                FOREIGN KEY(evidence_event_id) REFERENCES watch_events(id),
+                FOREIGN KEY(superseded_by_completion_id) REFERENCES watch_completions(id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_watch_completions_user_title
+                ON watch_completions(user_id, rating_key, completed_at_ms DESC);
+            CREATE INDEX IF NOT EXISTS idx_watch_completions_user_time
+                ON watch_completions(user_id, completed_at_ms DESC);
+            """
+        )
+
+    def _migrate_year_in_review(self, conn: sqlite3.Connection) -> None:
+        """Year in Review snapshots, opt-in pref, and notification kind."""
+        user_cols = self._table_columns(conn, "users")
+        if "year_in_review_opt_in" not in user_cols:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN year_in_review_opt_in INTEGER NOT NULL DEFAULT 0"
+            )
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS year_in_review_snapshots (
+                user_id TEXT NOT NULL,
+                year INTEGER NOT NULL,
+                schema_version INTEGER NOT NULL,
+                status TEXT NOT NULL CHECK (status IN ('ready', 'tease', 'empty', 'error')),
+                reel_json TEXT NOT NULL,
+                generated_at REAL NOT NULL,
+                notified_at REAL,
+                PRIMARY KEY (user_id, year),
+                FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_yir_snapshots_year
+                ON year_in_review_snapshots(year, status);
+            """
+        )
+        # Widen notification kind CHECK for year-in-review.
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type='table' AND name='user_notifications'"
+        ).fetchone()
+        ddl = str(row["sql"] or "") if row else ""
+        if ddl and "year-in-review" not in ddl:
+            conn.executescript(
+                """
+                CREATE TABLE user_notifications_v3 (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    kind TEXT NOT NULL CHECK (
+                        kind IN (
+                            'recommendation',
+                            'arrival',
+                            'access-request',
+                            'digest',
+                            'nudge',
+                            'library-share',
+                            'year-in-review'
+                        )
+                    ),
+                    title TEXT NOT NULL,
+                    body TEXT,
+                    payload_json TEXT NOT NULL DEFAULT '{}',
+                    media_type TEXT,
+                    tmdb_id INTEGER,
+                    tvdb_id INTEGER,
+                    rating_key TEXT,
+                    year INTEGER,
+                    poster_url TEXT,
+                    from_user_id TEXT,
+                    related_id TEXT,
+                    created_at REAL NOT NULL,
+                    seen_at REAL,
+                    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                    FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE SET NULL
+                );
+                INSERT INTO user_notifications_v3 (
+                    id, user_id, kind, title, body, payload_json,
+                    media_type, tmdb_id, tvdb_id, rating_key, year, poster_url,
+                    from_user_id, related_id, created_at, seen_at
+                )
+                SELECT
+                    id, user_id, kind, title, body, payload_json,
+                    media_type, tmdb_id, tvdb_id, rating_key, year, poster_url,
+                    from_user_id, related_id, created_at, seen_at
+                FROM user_notifications;
+                DROP TABLE user_notifications;
+                ALTER TABLE user_notifications_v3 RENAME TO user_notifications;
+                CREATE INDEX IF NOT EXISTS idx_user_notifications_user
+                    ON user_notifications(user_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_user_notifications_unread
+                    ON user_notifications(user_id, seen_at);
+                CREATE INDEX IF NOT EXISTS idx_user_notifications_related
+                    ON user_notifications(user_id, kind, related_id);
+                """
+            )
+
     def _migrate_holiday_calendar(self, conn: sqlite3.Connection) -> None:
         """Owner-editable holiday calendar + seasonal rail curation (Phase B1/B1b/B2)."""
         conn.executescript(

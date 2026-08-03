@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import tempfile
 import unittest
@@ -12,8 +13,10 @@ from projectionist.agent.curator import _append_persona_consult_blocks, househol
 from projectionist.agent.tools import TOOL_DEFINITIONS, ToolRegistry, build_system_prompt
 from projectionist.agent.village import (
     build_shared_consult_context,
+    cancel_unpromised_persona_consults,
     quote_block_from_consult,
     resolve_village_sibling,
+    run_persona_consult,
 )
 from projectionist.config_store import Settings
 from projectionist.library.db import DEFAULT_LENS_ID, Database
@@ -40,6 +43,126 @@ class TestVillageResolve(unittest.TestCase):
 
 
 class TestConsultPersonaTool(unittest.IsolatedAsyncioTestCase):
+    async def test_unpromised_callback_is_cancelled_on_disconnect(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.ensure_chat_session("thread-disconnected", DEFAULT_LENS_ID)
+            settings = Settings()
+            settings.llm_api_key = "test-key"
+            registry = ToolRegistry(
+                db,
+                settings,
+                DEFAULT_LENS_ID,
+                session_id="thread-disconnected",
+            )
+            sibling = resolve_village_sibling("Scholar")
+            assert sibling is not None
+            cancelled = asyncio.Event()
+
+            async def hanging_chat(*args, **kwargs):
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    cancelled.set()
+
+            with (
+                patch("projectionist.agent.providers.get_chat_provider", return_value=object()),
+                patch("projectionist.telemetry.llm_track.tracked_chat", side_effect=hanging_chat),
+                patch("projectionist.agent.village.CONSULT_TIMEOUT_S", 0.01),
+                patch("projectionist.agent.village.CONSULT_HARD_TIMEOUT_S", 1.0),
+            ):
+                result = await run_persona_consult(
+                    registry,
+                    sibling,
+                    question="Will this be cancelled?",
+                    shared={"question": "Will this be cancelled?"},
+                    specialty={"specialty": "citations"},
+                    session_id="thread-disconnected",
+                )
+                self.assertTrue(result.get("pending"))
+
+                cancel_unpromised_persona_consults("thread-disconnected")
+                await asyncio.wait_for(cancelled.wait(), timeout=0.2)
+
+    async def test_soft_timeout_keeps_consult_running_and_persists_callback(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.create_local_user(
+                user_id="u1",
+                display_name="Adult",
+                password_hash="x",
+                role="member",
+            )
+            db.ensure_chat_session("thread-1", DEFAULT_LENS_ID, user_id="u1")
+            settings = Settings()
+            settings.llm_api_key = "test-key"
+            registry = ToolRegistry(
+                db,
+                settings,
+                DEFAULT_LENS_ID,
+                user_id="u1",
+                user_role="member",
+                session_id="thread-1",
+            )
+            sibling = resolve_village_sibling("Scholar")
+            assert sibling is not None
+            release = asyncio.Event()
+
+            async def delayed_chat(*args, **kwargs):
+                await release.wait()
+                return {
+                    "choices": [{
+                        "message": {
+                            "content": "The archive points to two precise neighbors.",
+                        },
+                    }],
+                }
+
+            with (
+                patch("projectionist.agent.providers.get_chat_provider", return_value=object()),
+                patch("projectionist.telemetry.llm_track.tracked_chat", side_effect=delayed_chat),
+                patch("projectionist.agent.village.CONSULT_TIMEOUT_S", 0.01),
+                patch("projectionist.agent.village.CONSULT_HARD_TIMEOUT_S", 1.0),
+            ):
+                result = await run_persona_consult(
+                    registry,
+                    sibling,
+                    question="What does the archive suggest?",
+                    shared={"question": "What does the archive suggest?"},
+                    specialty={"specialty": "citations"},
+                    session_id="thread-1",
+                )
+
+                self.assertTrue(result.get("pending"))
+                self.assertEqual(result.get("code"), "consult_pending")
+                self.assertFalse(result.get("quote_ok"))
+
+                pending_block = quote_block_from_consult(result)
+                assert pending_block is not None
+                db.save_chat_message(
+                    "thread-1",
+                    "jefferson-reply",
+                    "assistant",
+                    [{"type": "text", "content": "I left Scholar a note."}, pending_block],
+                )
+                release.set()
+
+                for _ in range(50):
+                    history = db.chat_history("thread-1")
+                    if len(history) == 2:
+                        break
+                    await asyncio.sleep(0.01)
+
+            self.assertEqual(len(history), 2)
+            callback = history[-1]
+            self.assertNotEqual(callback["id"], "jefferson-reply")
+            self.assertIn("called back", callback["blocks"][0]["content"])
+            self.assertEqual(callback["blocks"][1]["type"], "persona_consult")
+            self.assertEqual(
+                callback["blocks"][1]["payload"]["consult_id"],
+                result["consult_id"],
+            )
+
     async def test_tool_definition_present(self) -> None:
         names = {tool["function"]["name"] for tool in TOOL_DEFINITIONS}
         self.assertIn("consult_persona", names)
@@ -196,6 +319,27 @@ class TestConsultPersonaTool(unittest.IsolatedAsyncioTestCase):
 
 
 class TestConsultQuoteBlocks(unittest.TestCase):
+    def test_callback_save_does_not_recreate_deleted_thread(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.ensure_chat_session("deleted-thread", DEFAULT_LENS_ID)
+            self.assertTrue(db.delete_chat_thread("deleted-thread"))
+
+            saved = db.save_chat_message_if_thread_exists(
+                "deleted-thread",
+                "late-callback",
+                "assistant",
+                [{"type": "text", "content": "Too late"}],
+            )
+
+            self.assertFalse(saved)
+            with db.connect() as conn:
+                count = conn.execute(
+                    "SELECT COUNT(*) FROM chat_messages WHERE id = ?",
+                    ("late-callback",),
+                ).fetchone()[0]
+            self.assertEqual(count, 0)
+
     def test_quote_block_and_append(self) -> None:
         payload = {
             "quote_ok": True,
@@ -227,6 +371,12 @@ class TestConsultQuoteBlocks(unittest.TestCase):
                 json.dumps({"quote_ok": True, "persona": "Companion", "answer": "x"})
             ),
             "Asked Companion",
+        )
+        self.assertEqual(
+            household_tool_summary(
+                json.dumps({"pending": True, "persona": "Scholar"})
+            ),
+            "Left Scholar a message",
         )
         self.assertEqual(
             household_tool_summary(json.dumps({"code": "consult_timeout", "busy": True})),

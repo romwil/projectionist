@@ -31,7 +31,7 @@ const IN_APP_ROUTES = new Set([
   "/admin/usage",
   "/explore",
   "/explore/tags",
-  "/explore/plot-lab",
+  "/explore/related",
   "/explore/browse",
   "/watchlist",
 ]);
@@ -194,7 +194,7 @@ export default function HelpPage() {
       testId="help-page"
       requireAuth={false}
       title="Help"
-      eyebrow="Chat, Explore, Plot Lab, and idle curation"
+      eyebrow="Chat, Explore, Related titles, and idle curation"
       actions={<BackLink fallbackTo={ROUTES.chat} testId="help-back" label="Back to chat" />}
     >
       <main className="explore-main help-main">
@@ -208,9 +208,8 @@ export default function HelpPage() {
           <nav className="help-jump-nav" aria-label="Help sections">
             <a href="#start-here">Start</a>
             <a href="#chat">Chat</a>
-            <a href="#plot-lab">Plot Lab</a>
+            <a href="#related-titles">Related titles</a>
             <a href="#title-detail--plot-knowledge">Plot knowledge</a>
-            <a href="#why-motif-walls-feel-sparse">Sparse walls</a>
             {showOwnerNav ? (
               <>
                 <a href="#for-owners--curation--scheduler" data-testid="help-jump-owners">
@@ -230,7 +229,7 @@ export default function HelpPage() {
                 </Link>
               </>
             ) : null}
-            <Link to={ROUTES.plotLab}>Plot Lab app</Link>
+            <Link to={ROUTES.relatedTitles}>Related titles</Link>
             <Link to={ROUTES.about}>About</Link>
             <Link to="/privacy">Privacy</Link>
             <a

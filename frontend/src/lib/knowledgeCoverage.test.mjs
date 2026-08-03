@@ -35,7 +35,10 @@ test("formatCoveragePct rounds and guards non-finite", () => {
 
 test("formatCoverageDetail formats averages and counts", () => {
   assert.equal(formatCoverageDetail(8, { suffix: "/title", decimals: 1 }), "8.0/title");
-  assert.equal(formatCoverageDetail(8625, { suffix: " edges", decimals: 0 }), "8625 edges");
+  assert.equal(
+    formatCoverageDetail(8625, { suffix: " similarity links", decimals: 0 }),
+    "8625 similarity links",
+  );
   assert.equal(formatCoverageDetail(null), null);
 });
 
@@ -52,6 +55,9 @@ test("buildKnowledgeCoverageRows omits empty themes and missing synopsis", () =>
   const motifs = rows.find((r) => r.id === "motifs");
   assert.equal(motifs.pctLabel, "100%");
   assert.equal(motifs.detail, "8.0/title");
+  const similarTitles = rows.find((r) => r.id === "neighbors");
+  assert.equal(similarTitles.label, "Similar titles");
+  assert.equal(similarTitles.detail, "8625 similarity links");
 });
 
 test("buildKnowledgeCoverageRows includes themes and synopsis when present", () => {

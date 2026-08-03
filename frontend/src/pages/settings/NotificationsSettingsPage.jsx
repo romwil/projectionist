@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   generateWeeklyNewsletter,
+  generateYearInReview,
   getAuthMe,
   getFeatures,
   patchAuthMe,
@@ -51,6 +52,7 @@ export default function NotificationsSettingsPage() {
   const [appriseRows, setAppriseRows] = useState([]);
   const [newsletterOn, setNewsletterOn] = useState(false);
   const [nudgeOn, setNudgeOn] = useState(false);
+  const [yirOn, setYirOn] = useState(false);
   const [isOwner, setIsOwner] = useState(false);
   const [channels, setChannels] = useState([]);
   const [mailConfigured, setMailConfigured] = useState(false);
@@ -59,6 +61,8 @@ export default function NotificationsSettingsPage() {
   const [ready, setReady] = useState(false);
   const [sendingSelf, setSendingSelf] = useState(false);
   const [selfStatus, setSelfStatus] = useState(null);
+  const [sendingYir, setSendingYir] = useState(false);
+  const [yirStatus, setYirStatus] = useState(null);
 
   useEffect(() => {
     Promise.all([getAuthMe(), getFeatures().catch(() => null)])
@@ -71,6 +75,7 @@ export default function NotificationsSettingsPage() {
         setAppriseRows(parseAppriseDestinationRows(user.apprise_urls || ""));
         setNewsletterOn(Boolean(user.newsletter_opt_in));
         setNudgeOn(Boolean(user.nudge_opt_in));
+        setYirOn(Boolean(user.year_in_review_opt_in));
         setIsOwner(user.role === "owner");
         const offerings = features?.notifications?.channels;
         setChannels(Array.isArray(offerings) ? offerings : []);
@@ -97,6 +102,7 @@ export default function NotificationsSettingsPage() {
         apprise_urls: serializeAppriseDestinationRows(appriseRows) || null,
         newsletter_opt_in: newsletterOn,
         nudge_opt_in: nudgeOn,
+        year_in_review_opt_in: yirOn,
       });
       const user = result.user || {};
       setNotificationEmail(user.notification_email || user.email || "");
@@ -106,6 +112,7 @@ export default function NotificationsSettingsPage() {
       setAppriseRows(parseAppriseDestinationRows(user.apprise_urls || ""));
       setNewsletterOn(Boolean(user.newsletter_opt_in));
       setNudgeOn(Boolean(user.nudge_opt_in));
+      setYirOn(Boolean(user.year_in_review_opt_in));
       setStatus({ type: "success", message: "Notification preferences saved." });
     } catch (error) {
       setStatus({ type: "error", message: error.message || "Could not save." });
@@ -135,6 +142,44 @@ export default function NotificationsSettingsPage() {
       });
     } finally {
       setSendingSelf(false);
+    }
+  }
+
+  async function handleGenerateYir() {
+    if (!yirOn) {
+      setYirStatus({
+        type: "error",
+        message: "Turn on Year in Review and save before generating your reel.",
+      });
+      return;
+    }
+    if (
+      !window.confirm(
+        "Generate your Year in Review reel now and send it to your inbox (and email if enabled)?"
+      )
+    ) {
+      return;
+    }
+    setSendingYir(true);
+    setYirStatus(null);
+    try {
+      const result = await generateYearInReview({ scope: "self", notify: true });
+      const year = result?.year;
+      const path = year ? `/year-in-review/${year}` : null;
+      const delivered = Number(result?.delivered) || 0;
+      setYirStatus({
+        type: "success",
+        message: path
+          ? `Ready — delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}. Open ${path}.`
+          : `Generated. Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}.`,
+      });
+    } catch (error) {
+      setYirStatus({
+        type: "error",
+        message: error.message || "Could not generate Year in Review.",
+      });
+    } finally {
+      setSendingYir(false);
     }
   }
 
@@ -247,6 +292,14 @@ export default function NotificationsSettingsPage() {
             help="Opt in to occasional “you have to see this” nudges (inbox + email/Apprise if enabled). Never live session alerts."
             testId="notifications-nudge-toggle"
           />
+          <SettingsToggle
+            id="notify-yir"
+            checked={yirOn}
+            onChange={setYirOn}
+            label="Year in Review"
+            help="Opt in to a private year-end cinema reel built from your tracked watch history (not household Plex totals)."
+            testId="notifications-yir-toggle"
+          />
         </SettingsPanel>
 
         {status ? (
@@ -286,6 +339,33 @@ export default function NotificationsSettingsPage() {
               data-testid="notifications-newsletter-self-status"
             >
               {selfStatus.message}
+            </p>
+          ) : null}
+        </SettingsPanel>
+      ) : null}
+
+      {isOwner ? (
+        <SettingsPanel title="Generate my Year in Review">
+          <p className="settings-field-hint">
+            Builds a private reel from your watch-tracker completions for the prior calendar year
+            and notifies your inbox. Requires Year in Review opt-in and a mapped Plex identity with
+            enough tracked finishes.
+          </p>
+          <button
+            type="button"
+            className="ghost"
+            onClick={handleGenerateYir}
+            disabled={sendingYir}
+            data-testid="notifications-yir-self-generate"
+          >
+            {sendingYir ? "Generating…" : "Generate & send to me"}
+          </button>
+          {yirStatus ? (
+            <p
+              className={`status ${yirStatus.type === "error" ? "status-error" : "status-success"}`}
+              data-testid="notifications-yir-self-status"
+            >
+              {yirStatus.message}
             </p>
           ) : null}
         </SettingsPanel>

@@ -17,6 +17,7 @@ export const ROUTES = {
   myJourney: "/my-journey",
   explore: "/explore",
   tags: "/explore/tags",
+  relatedTitles: "/explore/related",
   plotLab: "/explore/plot-lab",
   libraryBrowse: "/explore/browse",
   /** @deprecated Prefer ROUTES.myJourney — legacy engagement path redirects. */

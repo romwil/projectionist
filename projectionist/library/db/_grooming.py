@@ -73,6 +73,9 @@ class GroomingDigestMixin:
         seen: Set[str] = {
             str(key).strip() for key in seen_rating_keys if str(key or "").strip()
         }
+        if not seen:
+            # Empty scan set would mark every indexed row stale (total wipe).
+            return 0
         types = tuple(str(value).strip() for value in media_types if str(value or "").strip())
         if not types:
             return 0

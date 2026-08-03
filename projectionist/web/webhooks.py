@@ -92,6 +92,35 @@ def handle_plex_webhook(db: Database, payload: Mapping[str, Any]) -> Dict[str, A
     if not rating_key:
         return {"handled": False, "reason": "missing_rating_key", "event": event}
 
+    # Always attempt watch-tracker ingest for supported playback events (even below prompt gate).
+    tracker_ingested = False
+    try:
+        from projectionist.watch_tracker.correlate import rebuild_watch_derivations
+        from projectionist.watch_tracker.store import ingest_watch_events
+        from projectionist.watch_tracker.webhook_adapter import webhook_to_watch_event
+
+        server_machine_id = "unknown"
+        try:
+            # Best-effort; webhooks may arrive without a live Plex client.
+            from projectionist.connectors.plex import cached_plex_identity
+            # Identity cache may be empty — leave unknown.
+            del cached_plex_identity
+        except Exception:  # noqa: BLE001
+            pass
+        watch_event = webhook_to_watch_event(payload, server_machine_id=server_machine_id)
+        if watch_event is not None:
+            ingest_result = ingest_watch_events(db, [watch_event])
+            tracker_ingested = ingest_result.inserted > 0 or ingest_result.deduped > 0
+            if watch_event.source_user_key:
+                # Correlate for mapped user when possible.
+                row = db.get_user_by_plex_id(watch_event.source_user_key)
+                if row is not None:
+                    rebuild_watch_derivations(db, user_id=str(row["id"]))
+                else:
+                    rebuild_watch_derivations(db, source_user_key=watch_event.source_user_key)
+    except Exception:  # noqa: BLE001
+        logger.debug("Watch tracker webhook ingest failed", exc_info=True)
+
     completion_pct = completion_from_plex_metadata(metadata)
     if event == "media.scrobble" and (completion_pct is None or completion_pct < COMPLETION_THRESHOLD):
         completion_pct = 90.0
@@ -101,6 +130,7 @@ def handle_plex_webhook(db: Database, payload: Mapping[str, Any]) -> Dict[str, A
             "reason": "below_threshold",
             "event": event,
             "completion_pct": completion_pct,
+            "tracker_ingested": tracker_ingested,
         }
 
     title = title_from_plex_metadata(metadata)
@@ -123,6 +153,7 @@ def handle_plex_webhook(db: Database, payload: Mapping[str, Any]) -> Dict[str, A
             "rating_key": rating_key,
             "title": title,
             "completion_pct": completion_pct,
+            "tracker_ingested": tracker_ingested,
         }
 
     queued = queue_rating_prompt(
@@ -141,6 +172,7 @@ def handle_plex_webhook(db: Database, payload: Mapping[str, Any]) -> Dict[str, A
         "title": title,
         "completion_pct": completion_pct,
         "user_id": user_id,
+        "tracker_ingested": tracker_ingested,
     }
 
 

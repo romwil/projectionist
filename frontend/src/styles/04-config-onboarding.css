@@ -227,6 +227,56 @@
   pointer-events: none;
 }
 
+.persona-capabilities {
+  margin-bottom: 24px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.persona-capabilities-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.persona-capabilities-header h3 {
+  margin: 0;
+}
+
+.persona-capabilities-list {
+  margin: 10px 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 8px;
+}
+
+.persona-capabilities-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.persona-capability-detail {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.persona-capabilities-more {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+
+.persona-legacy-reset {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+}
+
 .persona-behavioral {
   margin-bottom: 24px;
 }

@@ -31,7 +31,7 @@ import InboxPage from "./pages/InboxPage";
 import PersonPage from "./pages/PersonPage";
 import TagPage from "./pages/TagPage";
 import TagsPage from "./pages/TagsPage";
-import PlotLabPage from "./pages/PlotLabPage";
+import RelatedTitlesPage from "./pages/RelatedTitlesPage";
 import ListsPage from "./pages/ListsPage";
 import CollectionsPage from "./pages/CollectionsPage";
 import LibraryPage from "./pages/LibraryPage";
@@ -45,6 +45,7 @@ import StagedAugmentationsPage from "./pages/StagedAugmentationsPage";
 import LlmUsagePage from "./pages/LlmUsagePage";
 import JoinPage from "./pages/JoinPage";
 import GuestTourPage from "./pages/GuestTourPage";
+import YearInReviewPage from "./pages/YearInReviewPage";
 import { BulkActionProgressProvider } from "./components/BulkActionProgress";
 import { TitleDetailOverlayProvider } from "./components/TitleDetailOverlayProvider";
 import WhatsNewGate from "./components/WhatsNewGate";
@@ -63,10 +64,12 @@ createRoot(document.getElementById("root")).render(
           <Route path="/chat" element={<App />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/inbox" element={<InboxPage />} />
+          <Route path="/year-in-review/:year" element={<YearInReviewPage />} />
           <Route path="/my-journey" element={<MyJourneyPage />} />
           <Route path="/explore" element={<ExplorePage />} />
           <Route path="/explore/tags" element={<TagsPage />} />
-          <Route path="/explore/plot-lab" element={<PlotLabPage />} />
+          <Route path="/explore/related" element={<RelatedTitlesPage />} />
+          <Route path="/explore/plot-lab" element={<Navigate to="/explore/related" replace />} />
           <Route path="/explore/browse" element={<LibraryBrowsePage />} />
           <Route path="/explore/engagement" element={<Navigate to="/my-journey" replace />} />
           <Route path="/explore/section/:sectionId" element={<ExploreSectionPage />} />

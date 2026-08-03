@@ -54,9 +54,9 @@ def register(scheduler: IdleScheduler) -> None:
             enabled=True,
             run_fn=run,
             description=(
-                "Rebuilds title-to-title relations (collections, neighbors, shared crew) "
-                "from local library data. Completes as a full rebuild each run — no "
-                "trickle backlog."
+                "Refreshes title connections from collections, similar plots, and shared "
+                "cast or crew already present in the library. Rebuilds the complete "
+                "connection set each run."
             ),
         )
     )

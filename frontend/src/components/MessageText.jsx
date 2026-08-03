@@ -54,19 +54,47 @@ const markdownComponents = {
   ),
 };
 
+function childText(children) {
+  if (Array.isArray(children)) return children.map(childText).join("");
+  if (children?.props?.children != null) return childText(children.props.children);
+  return String(children ?? "");
+}
+
 export default function MessageText({
   content,
   markdown = false,
   className = "message-text",
   titleRefs = [],
+  headingActionLabel = "",
+  headingActions = null,
 }) {
   const text = linkifyKnownTitles(content, titleRefs);
   const hasMarkdownLinks = text.includes("](/title/");
+  const components = headingActions && headingActionLabel
+    ? {
+        ...markdownComponents,
+        ...Object.fromEntries(
+          ["h1", "h2", "h3", "h4", "h5", "h6"].map((tag) => [
+            tag,
+            ({ children }) => {
+              const Heading = tag;
+              const matches = childText(children).trim() === headingActionLabel;
+              return (
+                <Heading className={matches ? "agent-media-heading" : undefined}>
+                  <span>{children}</span>
+                  {matches ? headingActions : null}
+                </Heading>
+              );
+            },
+          ]),
+        ),
+      }
+    : markdownComponents;
 
   if (markdown || hasMarkdownLinks) {
     return (
       <div className={`${className} markdown-body`}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
           {text}
         </ReactMarkdown>
       </div>

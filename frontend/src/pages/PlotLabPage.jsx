@@ -135,7 +135,7 @@ export default function PlotLabPage() {
         setMotifsNote(
           facets.length
             ? ""
-            : "No plot motifs yet — summary_motifs idle task has not populated facets.",
+            : "No plot patterns yet — the background library refresh is still filling them in.",
         );
         setMotifsLoading(false);
       })
@@ -208,7 +208,8 @@ export default function PlotLabPage() {
       .then((data) => {
         if (cancelled) return;
         const normalized = normalizeFeed(data, {
-          fallbackNote: "Empty — plot_neighbors cache not built yet for this title.",
+          fallbackNote:
+            "No similar titles yet — plot-similarity data is still filling in for this title.",
         });
         setNeighbors({
           loading: false,
@@ -223,7 +224,7 @@ export default function PlotLabPage() {
           loading: false,
           items: [],
           note: null,
-          error: err.message || "Could not load surprising neighbors.",
+          error: err.message || "Could not load surprising similar titles.",
         });
       });
     return () => {
@@ -393,7 +394,7 @@ export default function PlotLabPage() {
             {themes.length ? (
               <>
                 <p className="explore-section-subtitle" data-testid="plot-lab-theme-hint">
-                  Themes — from TMDB keywords via keyword_theme_tagging (no LLM).
+                  Themes — grouped from existing title tags without generating new plot text.
                 </p>
                 <div
                   className="explore-motif-chips explore-motif-chips-scroll"

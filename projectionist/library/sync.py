@@ -782,11 +782,18 @@ async def sync_library(
             for item in plex_items
             if str(getattr(item, "rating_key", "") or "").strip()
         }
-        items_pruned = db.prune_library_items_not_in_plex_scan(seen_rating_keys)
-        if items_pruned:
-            logger.info(
-                "Library sync: pruned %s stale index row(s) absent from Plex scan",
-                items_pruned,
+        if seen_rating_keys:
+            items_pruned = db.prune_library_items_not_in_plex_scan(seen_rating_keys)
+            if items_pruned:
+                logger.info(
+                    "Library sync: pruned %s stale index row(s) absent from Plex scan",
+                    items_pruned,
+                )
+        else:
+            logger.warning(
+                "Library sync: skipping stale-row prune — Plex scan returned no rating keys "
+                "(%s item(s); empty or failed scan would wipe the index)",
+                len(plex_items),
             )
         clock.finish(extra=f"{count} titles saved, pruned={items_pruned}")
         with db.connect() as conn:

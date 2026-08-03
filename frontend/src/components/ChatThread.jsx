@@ -1,4 +1,9 @@
+import { useState } from "react";
 import { collectAddableFromMessage } from "../lib/addActions";
+import {
+  buildAgentRailPrompt,
+  lastMarkdownHeading,
+} from "../lib/agentResultLists.js";
 import { filterDisplayableCards, turnstyleItemCount } from "../lib/turnstyleItems.js";
 import AgentAvatar from "./AgentAvatar";
 import ReviewPromptCard from "./ReviewPromptCard";
@@ -12,6 +17,67 @@ import MessageText from "./MessageText";
 import ShareActionMenu from "./ShareActionMenu";
 import { chatMediaStripClassName } from "../lib/chatCardScroll.js";
 import { titleRefsFromBlocks } from "../lib/titleDigIn.js";
+
+function AgentResultListActions({ heading, items, handlers, disabled = false }) {
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+
+  async function openGrid() {
+    if (busy || disabled) return;
+    setBusy("grid");
+    setError("");
+    try {
+      await handlers.onOpenAsGrid?.({ heading, items });
+    } catch (err) {
+      setError(err.message || "Could not open these results as a grid.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  function createRail() {
+    if (busy || disabled) return;
+    handlers.onCreateRail?.({
+      heading,
+      items,
+      prompt: buildAgentRailPrompt({ heading, items }),
+    });
+  }
+
+  return (
+    <span className="agent-media-heading-tools" aria-label="Result list actions">
+      <button
+        type="button"
+        className="agent-media-heading-action"
+        aria-label="Create a rail from these results"
+        title="Create a rail"
+        disabled={disabled || Boolean(busy)}
+        onClick={createRail}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 6h13M4 12h13M4 18h9M20 4v6M17 7h6" />
+        </svg>
+      </button>
+      <button
+        type="button"
+        className="agent-media-heading-action"
+        aria-label="Open these results as a grid"
+        title="Open as grid"
+        disabled={disabled || Boolean(busy)}
+        onClick={openGrid}
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="4" y="4" width="6" height="6" rx="1" />
+          <rect x="14" y="4" width="6" height="6" rx="1" />
+          <rect x="4" y="14" width="6" height="6" rx="1" />
+          <rect x="14" y="14" width="6" height="6" rx="1" />
+        </svg>
+      </button>
+      {busy === "grid" ? <span className="sr-only" role="status">Opening grid…</span> : null}
+      {error ? <span className="agent-media-heading-error" role="alert">{error}</span> : null}
+    </span>
+  );
+}
 
 function renderBulkConfirmActions(message, handlers, showTokenConfirm, viewportBlock) {
   const { radarr, sonarr, seerr } = collectAddableFromMessage(message, {
@@ -103,11 +169,27 @@ function enrichTitleCard(item, reviewLookup = {}) {
 function renderBlock(block, handlers, role, message, blockIndex, blocks, streaming) {
   const titleRefs = handlers.titleRefs || titleRefsFromBlocks(blocks);
   if (block.type === "text") {
+    const nextBlock = blocks[blockIndex + 1];
+    const nextItems = nextBlock?.type === "title_cards"
+      ? filterDisplayableCards(nextBlock.items)
+      : [];
+    const heading = role === "assistant" && nextItems.length
+      ? lastMarkdownHeading(block.content)
+      : "";
     return (
       <MessageText
         content={block.content}
         markdown={role === "assistant"}
         titleRefs={titleRefs}
+        headingActionLabel={heading}
+        headingActions={heading ? (
+          <AgentResultListActions
+            heading={heading}
+            items={nextItems}
+            handlers={handlers}
+            disabled={streaming || handlers.actionsDisabled}
+          />
+        ) : null}
       />
     );
   }
@@ -138,8 +220,20 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks, streami
     const nextViewport = blocks.slice(blockIndex + 1).find(
       (entry) => entry.type === "action_prompt" && entry.action === "open_viewport"
     );
+    const precedingHeading = lastMarkdownHeading(blocks[blockIndex - 1]?.content);
     return (
       <>
+        {!precedingHeading && role === "assistant" ? (
+          <div className="agent-media-heading agent-media-heading-fallback">
+            <span>Results</span>
+            <AgentResultListActions
+              heading="Results"
+              items={items}
+              handlers={handlers}
+              disabled={streaming || handlers.actionsDisabled}
+            />
+          </div>
+        ) : null}
         <div className={chatMediaStripClassName("inline-cards", { streaming })}>
           {items.map((item) => (
             <TitleCard
@@ -164,6 +258,22 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks, streami
           ? renderBulkConfirmActions(message, handlers, handlers.pendingTokenCount >= 1, nextViewport)
           : null}
       </>
+    );
+  }
+  if (block.type === "persona_consult" && block.payload?.pending) {
+    const name = String(block.payload.persona || "Curator").trim() || "Curator";
+    return (
+      <aside
+        className="persona-consult-quote persona-consult-pending"
+        data-testid="persona-consult-pending"
+        data-persona={name}
+        aria-label={`Waiting on ${name}`}
+      >
+        <p className="persona-consult-lead">{`Left a message for ${name}…`}</p>
+        <p className="persona-consult-pending-copy">
+          They may call back here with a separate addendum.
+        </p>
+      </aside>
     );
   }
   if (block.type === "persona_consult" && block.payload?.answer) {
@@ -305,6 +415,8 @@ export default function ChatThread({
   draggableToDock = false,
   onSaveToLibrary,
   onSuggestedReply,
+  onCreateRail,
+  onOpenAsGrid,
 }) {
   const lastAssistantId = [...messages].reverse().find((message) => message.role === "assistant")?.id;
 
@@ -360,6 +472,8 @@ export default function ChatThread({
                       multiUserEnabled,
                       draggableToDock,
                       onSuggestedReply,
+                      onCreateRail,
+                      onOpenAsGrid,
                       titleRefs: titleRefsFromBlocks(message.blocks),
                     },
                     message.role,

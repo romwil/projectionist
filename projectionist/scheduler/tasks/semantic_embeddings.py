@@ -156,9 +156,9 @@ def register(scheduler: IdleScheduler) -> None:
             enabled=True,
             run_fn=run,
             description=(
-                "Builds semantic embeddings from plot summaries for similarity search and "
-                f"Plot Lab. Caps each run at {MAX_ITEMS_PER_CYCLE} titles so large libraries "
-                "catch up gradually without pegging the host (batch auto-tunes from history)."
+                "Builds the plot similarity index used for related-title discovery. "
+                f"Checks up to {MAX_ITEMS_PER_CYCLE} titles per run so large libraries "
+                "catch up gradually without overwhelming the server."
             ),
             items_per_cycle=MAX_ITEMS_PER_CYCLE,
             progress_scope="embeddings_pending",

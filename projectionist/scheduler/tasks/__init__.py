@@ -41,6 +41,8 @@ def register_all(scheduler: IdleScheduler) -> None:
         arrival_notifications,
         enthusiast_nudge,
         seasonal_rail,
+        watch_history_ingest,
+        year_in_review,
     )
 
     semantic_embeddings.register(scheduler)
@@ -69,3 +71,5 @@ def register_all(scheduler: IdleScheduler) -> None:
     arrival_notifications.register(scheduler)
     enthusiast_nudge.register(scheduler)
     seasonal_rail.register(scheduler)
+    watch_history_ingest.register(scheduler)
+    year_in_review.register(scheduler)

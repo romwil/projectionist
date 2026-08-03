@@ -38,9 +38,9 @@ export const KNOWLEDGE_COVERAGE_METRICS = [
   {
     id: "neighbors",
     pctKey: "with_neighbors_pct",
-    label: "Neighbors",
+    label: "Similar titles",
     detailKey: "neighbor_edges",
-    detailSuffix: " edges",
+    detailSuffix: " similarity links",
   },
   {
     id: "loglines",
@@ -112,7 +112,7 @@ export function buildKnowledgeCoverageRows(coverage) {
   return rows;
 }
 
-/** One-line honesty summary for Explore (e.g. "Motifs 99% · Neighbors 16%"). */
+/** One-line honesty summary for Explore (e.g. "Motifs 99% · Similar titles 16%"). */
 export function summarizeKnowledgeCoverage(coverage, { maxMetrics = 4 } = {}) {
   const rows = buildKnowledgeCoverageRows(coverage);
   if (!rows.length) return null;

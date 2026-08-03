@@ -20,7 +20,10 @@ describe("adminNav", () => {
     assert.equal(adminNavLinks().find((item) => item.id === "issues")?.badge, "openIssues");
     assert.equal(adminNavLinks().find((item) => item.id === "logs")?.to, "/admin/logs");
     assert.equal(adminNavLinks().find((item) => item.id === "tasks")?.label, "Tasks");
-    assert.equal(adminNavLinks().find((item) => item.id === "taxonomy")?.label, "Knowledge Ops");
+    assert.equal(
+      adminNavLinks().find((item) => item.id === "taxonomy")?.label,
+      "Library knowledge",
+    );
     assert.equal(adminNavLinks().find((item) => item.id === "taxonomy")?.to, "/admin/taxonomy");
     assert.equal(adminNavLinks().find((item) => item.id === "mail")?.label, "Mail");
     assert.equal(adminNavLinks().find((item) => item.id === "usage")?.label, "Usage");

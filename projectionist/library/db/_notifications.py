@@ -1,6 +1,7 @@
 """Per-user notification inbox (generalized kinds).
 
-Kinds: recommendation, arrival, access-request, digest, nudge, library-share.
+Kinds: recommendation, arrival, access-request, digest, nudge, library-share,
+year-in-review.
 """
 
 from __future__ import annotations
@@ -19,6 +20,7 @@ NOTIFICATION_KINDS = frozenset(
         "digest",
         "nudge",
         "library-share",
+        "year-in-review",
     }
 )
 

@@ -125,9 +125,9 @@ def register(scheduler: IdleScheduler) -> None:
             enabled=True,
             run_fn=run,
             description=(
-                "Caches plot-neighbor links and surprise scores from embeddings for Explore "
-                f"and Plot Lab. Prefers titles still missing neighbor rows, then rotates about "
-                f"{SEEDS_PER_CYCLE} seeds per run (batch auto-tunes from measured history)."
+                "Refreshes similar-title links from plot-similarity data. Starts with titles "
+                f"that have no matches yet, then revisits about {SEEDS_PER_CYCLE} titles per "
+                "run so large libraries catch up gradually."
             ),
             items_per_cycle=SEEDS_PER_CYCLE,
             progress_scope="neighbors_backlog",

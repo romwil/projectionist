@@ -11,6 +11,7 @@ import { useBulkActionProgress } from "../components/BulkActionProgress.jsx";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import MediaBrowseControls from "../components/MediaBrowseControls.jsx";
+import MediaBrowsePagination from "../components/MediaBrowsePagination.jsx";
 import MediaBrowseResults from "../components/MediaBrowseResults.jsx";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
@@ -52,71 +53,15 @@ function matchesBrowseFilters(item, query) {
   if (!matchesMediaBrowseWatchState(item, query.watch_state)) return false;
   if (query.genres?.length) {
     const itemGenres = (item?.genres || []).map((genre) => String(genre).toLowerCase());
-    if (!query.genres.some((genre) => itemGenres.includes(String(genre).toLowerCase()))) return false;
+    if (!query.genres.some((genre) => itemGenres.includes(String(genre).toLowerCase())))
+      return false;
   }
   return true;
 }
 
 function csvCell(value) {
   const text = Array.isArray(value) ? value.join(" · ") : String(value ?? "");
-  return `"${text.replaceAll("\"", "\"\"")}"`;
-}
-
-function SectionPagination({ summary, onPageChange, onPageSizeChange, pageSize, compact = false }) {
-  if (!summary.total && !summary.returned) return null;
-  const suffix = compact ? "-footer" : "";
-  return (
-    <div
-      className={`explore-section-pagination${compact ? " is-compact" : ""}`}
-      data-testid={`explore-section-pagination${suffix}`}
-    >
-      <p
-        className="explore-section-pagination-summary"
-        data-testid={`explore-section-page-summary${suffix}`}
-      >
-        Page {summary.page} of {summary.pageCount}
-        {summary.total ? ` · ${summary.total} titles` : ""}
-      </p>
-      <div className="explore-section-pagination-controls">
-        {compact ? null : (
-          <label className="explore-section-page-size">
-            <span>Per page</span>
-            <select
-              value={pageSize}
-              data-testid="explore-section-page-size"
-              onChange={(event) => onPageSizeChange(Number(event.target.value))}
-            >
-              {EXPLORE_PAGE_SIZES.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-        <div className="explore-section-page-nav">
-          <button
-            type="button"
-            className="ghost"
-            data-testid={`explore-section-prev${suffix}`}
-            disabled={!summary.hasPrev}
-            onClick={() => onPageChange(summary.page - 1)}
-          >
-            Previous
-          </button>
-          <button
-            type="button"
-            className="ghost"
-            data-testid={`explore-section-next${suffix}`}
-            disabled={!summary.hasMore}
-            onClick={() => onPageChange(summary.page + 1)}
-          >
-            Next
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
 export default function ExploreSectionPage() {
@@ -186,18 +131,24 @@ export default function ExploreSectionPage() {
   }, [config, query.limit, query.offset, query.mediaType]);
 
   const sortedItems = useMemo(
-    () => sortExploreSectionItems(
-      state.items.filter((item) => matchesBrowseFilters(item, query)),
-      query.sort,
-      query.sort_dir,
-    ),
+    () =>
+      sortExploreSectionItems(
+        state.items.filter((item) => matchesBrowseFilters(item, query)),
+        query.sort,
+        query.sort_dir,
+      ),
     [state.items, query],
   );
 
-  const filterOptions = useMemo(() => ({
-    years: [...new Set(state.items.map((item) => item.year).filter(Boolean))].sort((a, b) => b - a),
-    genres: [...new Set(state.items.flatMap((item) => item.genres || []).filter(Boolean))].sort(),
-  }), [state.items]);
+  const filterOptions = useMemo(
+    () => ({
+      years: [...new Set(state.items.map((item) => item.year).filter(Boolean))].sort(
+        (a, b) => b - a,
+      ),
+      genres: [...new Set(state.items.flatMap((item) => item.genres || []).filter(Boolean))].sort(),
+    }),
+    [state.items],
+  );
 
   const summary = useMemo(
     () => feedPaginationSummary(state.payload || { items: state.items, total: state.items.length }),
@@ -243,7 +194,9 @@ export default function ExploreSectionPage() {
 
   function exportCurrentPage(columns) {
     const header = columns.join(",");
-    const rows = sortedItems.map((item) => columns.map((column) => csvCell(item?.[column])).join(","));
+    const rows = sortedItems.map((item) =>
+      columns.map((column) => csvCell(item?.[column])).join(","),
+    );
     const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv;charset=utf-8" });
     const href = URL.createObjectURL(blob);
     const link = document.createElement("a");
@@ -277,7 +230,9 @@ export default function ExploreSectionPage() {
 
   async function handleBulkPin() {
     if (!selected.size || pinning) return;
-    const targets = sortedItems.filter((item) => selected.has(libraryBrowseItemKey(item)) && allowWatchlistPin(item));
+    const targets = sortedItems.filter(
+      (item) => selected.has(libraryBrowseItemKey(item)) && allowWatchlistPin(item),
+    );
     if (!targets.length) return;
     const progressId = start({
       label: "Pinning to watchlist",
@@ -304,11 +259,9 @@ export default function ExploreSectionPage() {
       }
     }
     setPinning(false);
-    const summary = (
-      failed
-        ? `Pinned ${ok}; ${failed} failed.`
-        : `Pinned ${ok} title${ok === 1 ? "" : "s"} to watchlist.`,
-    );
+    const summary = failed
+      ? `Pinned ${ok}; ${failed} failed.`
+      : `Pinned ${ok} title${ok === 1 ? "" : "s"} to watchlist.`;
     setActionStatus(summary);
     finish(progressId, { label: summary, state: failed ? "error" : "success" });
     setSelected(new Set());
@@ -358,7 +311,9 @@ export default function ExploreSectionPage() {
           return {
             ...prev,
             items: nextItems,
-            payload: prev.payload ? { ...prev.payload, items: nextItems, total: nextTotal } : prev.payload,
+            payload: prev.payload
+              ? { ...prev.payload, items: nextItems, total: nextTotal }
+              : prev.payload,
           };
         });
         setSelected(new Set());
@@ -401,8 +356,7 @@ export default function ExploreSectionPage() {
     );
   }
 
-  const activeTab =
-    MEDIA_TABS.find((tab) => tab.mediaType === query.mediaType)?.id || "all";
+  const activeTab = MEDIA_TABS.find((tab) => tab.mediaType === query.mediaType)?.id || "all";
   const showToolbarPagination = Boolean(summary.total || summary.returned);
 
   return (
@@ -412,7 +366,11 @@ export default function ExploreSectionPage() {
       variant="browse"
       leading={<BackLink fallbackTo={ROUTES.explore} testId="explore-section-back" />}
       actions={
-        <Link to={ROUTES.explore} className="app-topbar-link" data-testid="explore-section-hub-link">
+        <Link
+          to={ROUTES.explore}
+          className="app-topbar-link"
+          data-testid="explore-section-hub-link"
+        >
           Explore hub
         </Link>
       }
@@ -455,29 +413,26 @@ export default function ExploreSectionPage() {
           columnScope={`explore-${config.id}`}
           filterOptions={filterOptions}
           sortOptions={exploreSectionSortOptions(config.id)}
+          pageSizes={EXPLORE_PAGE_SIZES}
           exportItems
           onExport={exportCurrentPage}
         />
         <div className="explore-section-toolbar-row">
           <div className="explore-section-toolbar-primary">
             {showToolbarPagination ? (
-              <label className="explore-section-page-size">
-                <span>Per page</span>
-                <select
-                  value={query.limit}
-                  data-testid="explore-section-page-size"
-                  onChange={(event) => handlePageSizeChange(Number(event.target.value))}
-                >
-                  {EXPLORE_PAGE_SIZES.map((size) => (
-                    <option key={size} value={size}>
-                      {size}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <p
+                className="explore-section-pagination-summary"
+                data-testid="explore-section-page-summary"
+              >
+                Page {summary.page} of {summary.pageCount}
+                {summary.total ? ` · ${summary.total} titles` : ""}
+              </p>
             ) : null}
             {selected.size ? (
-              <p className="explore-section-selection-summary" data-testid="explore-section-selection-summary">
+              <p
+                className="explore-section-selection-summary"
+                data-testid="explore-section-selection-summary"
+              >
                 {selected.size} selected
                 {isOwner && deletePartition.unavailable.length
                   ? ` · ${deletePartition.unavailable.length} not deletable`
@@ -526,37 +481,12 @@ export default function ExploreSectionPage() {
             ) : null}
           </div>
         </div>
-        {showToolbarPagination ? (
-          <div className="explore-section-toolbar-row explore-section-toolbar-nav">
-            <p className="explore-section-pagination-summary" data-testid="explore-section-page-summary">
-              Page {summary.page} of {summary.pageCount}
-              {summary.total ? ` · ${summary.total} titles` : ""}
-            </p>
-            <div className="explore-section-page-nav">
-              <button
-                type="button"
-                className="ghost"
-                data-testid="explore-section-prev"
-                disabled={!summary.hasPrev}
-                onClick={() => handlePageChange(summary.page - 1)}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                data-testid="explore-section-next"
-                disabled={!summary.hasMore}
-                onClick={() => handlePageChange(summary.page + 1)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
       {actionStatus ? (
-        <p className="status status-secondary explore-section-action-status" data-testid="explore-section-pin-status">
+        <p
+          className="status status-secondary explore-section-action-status"
+          data-testid="explore-section-pin-status"
+        >
           {actionStatus}
         </p>
       ) : null}
@@ -582,13 +512,22 @@ export default function ExploreSectionPage() {
         ) : null}
       </section>
 
-      <SectionPagination
-        summary={summary}
-        pageSize={query.limit}
-        onPageChange={handlePageChange}
-        onPageSizeChange={handlePageSizeChange}
-        compact
-      />
+      {showToolbarPagination ? (
+        <MediaBrowsePagination
+          summary={`Page ${summary.page} of ${summary.pageCount}${
+            summary.total ? ` · ${summary.total} titles` : ""
+          }`}
+          pageSize={query.limit}
+          pageSizes={EXPLORE_PAGE_SIZES}
+          onPageSizeChange={handlePageSizeChange}
+          hasPrevious={summary.hasPrev}
+          hasNext={summary.hasMore}
+          onPrevious={() => handlePageChange(summary.page - 1)}
+          onNext={() => handlePageChange(summary.page + 1)}
+          testIdPrefix="explore-section"
+          testIdSuffix="-footer"
+        />
+      ) : null}
 
       {query.mediaType ? (
         <p className="explore-section-footer-links">

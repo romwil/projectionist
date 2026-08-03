@@ -1,6 +1,6 @@
 /**
  * Pure helpers for the generalized notifications inbox.
- * Kinds: recommendation | arrival | access-request | digest | nudge | library-share
+ * Kinds: recommendation | arrival | access-request | digest | nudge | library-share | year-in-review
  */
 
 import { isWatchPartyRecommendation, recommendationIntent } from "./householdSocial.js";
@@ -12,6 +12,7 @@ export const NOTIFICATION_KINDS = [
   "digest",
   "nudge",
   "library-share",
+  "year-in-review",
 ];
 
 /**
@@ -113,6 +114,7 @@ export function inboxHeadline(items = []) {
     if (kind === "access-request") return "Someone requested access";
     if (kind === "nudge") return "A curator nudge for you";
     if (kind === "library-share") return "Someone shared a saved page";
+    if (kind === "year-in-review") return "Your Year in Review is ready";
     if (kind === "recommendation" && isWatchPartyRecommendation(list[0])) {
       return "Someone invited you to watch together";
     }
@@ -238,6 +240,17 @@ export function eventPrimaryCta(item, { role } = {}) {
       testIdSuffix: "open-library",
     };
   }
+  if (kind === "year-in-review") {
+    const path =
+      item?.payload?.path ||
+      (item?.payload?.year ? `/year-in-review/${encodeURIComponent(item.payload.year)}` : null);
+    if (!path) return null;
+    return {
+      href: path,
+      label: "Open Year in Review",
+      testIdSuffix: "open-yir",
+    };
+  }
   return null;
 }
 
@@ -278,6 +291,14 @@ export function inboxCardCopy(item) {
       lead: title,
       note: item?.body || item?.message || null,
       path: item?.payload?.path || (item?.payload?.page_id ? `/library/${item.payload.page_id}` : null),
+    };
+  }
+  if (kind === "year-in-review") {
+    return {
+      eyebrow: "Year in Review",
+      lead: title,
+      note: firstSentence(item?.body || item?.message || "") || null,
+      path: item?.payload?.path || (item?.year ? `/year-in-review/${item.year}` : null),
     };
   }
   const watchParty = isWatchPartyRecommendation(item);

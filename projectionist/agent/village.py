@@ -9,15 +9,26 @@ guest fail closed; max one sibling call per turn.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
+import time
+import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 logger = logging.getLogger("projectionist.agent.village")
 
 CONSULT_TIMEOUT_S = 12.0
+CONSULT_HARD_TIMEOUT_S = 55.0
+CONSULT_PROMISE_WAIT_S = 60.0
+CONSULT_MAX_OUTSTANDING = 8
 CONSULT_MAX_ANSWER_CHARS = 900
+_OUTSTANDING_CONSULT_TASKS: Set[asyncio.Task[Any]] = set()
+_UNPROMISED_CONSULT_TASKS: Dict[
+    str,
+    Dict[str, Tuple[asyncio.Task[Any], asyncio.Task[Any]]],
+] = {}
 
 # Archetype aliases → builtin persona templates + living-room display names.
 # Keys are casefolded match tokens (id, name fragment, archetype label).
@@ -158,6 +169,59 @@ def consult_unavailable_payload(*, reason: str, code: str) -> Dict[str, Any]:
         "code": code,
         "quote_ok": False,
         "busy": code == "consult_timeout",
+    }
+
+
+def _consult_payload(
+    sibling: VillageSibling,
+    question: str,
+    answer: str,
+    *,
+    consult_id: Optional[str] = None,
+    source: str = "llm",
+    quote_lead: Optional[str] = None,
+) -> Dict[str, Any]:
+    payload = {
+        "ok": True,
+        "persona": sibling.display_name,
+        "persona_id": sibling.template_id,
+        "specialty": sibling.specialty,
+        "answer": answer,
+        "question": " ".join(str(question or "").split()).strip()[:500],
+        "quote_lead": quote_lead or f"I asked {sibling.display_name} and they said",
+        "quote_ok": True,
+        "source": source,
+    }
+    if consult_id:
+        payload["consult_id"] = consult_id
+    return payload
+
+
+def _pending_consult_payload(
+    sibling: VillageSibling,
+    question: str,
+    consult_id: str,
+) -> Dict[str, Any]:
+    return {
+        "ok": True,
+        "pending": True,
+        "code": "consult_pending",
+        "busy": False,
+        "quote_ok": False,
+        "consult_id": consult_id,
+        "persona": sibling.display_name,
+        "persona_id": sibling.template_id,
+        "specialty": sibling.specialty,
+        "question": " ".join(str(question or "").split()).strip()[:500],
+        "message": (
+            f"I left a message for {sibling.display_name}; they may call back in this thread. "
+            "Continue with your own clearly attributed take if useful."
+        ),
+        "note": (
+            f"Do not invent or paraphrase a quote from {sibling.display_name}. "
+            "You may lightly mention that you left them a note and that their callback "
+            "will appear as a separate addendum if it arrives."
+        ),
     }
 
 
@@ -417,6 +481,194 @@ def _extract_answer_text(response: Mapping[str, Any]) -> str:
     return " ".join((_extract_text(response) or "").split()).strip()
 
 
+def _thread_has_consult_promise(db: Any, session_id: str, consult_id: str) -> bool:
+    if not db.get_chat_thread(session_id):
+        return False
+    for message in db.chat_history(session_id, limit=50):
+        for block in message.get("blocks") or ():
+            if not isinstance(block, Mapping):
+                continue
+            payload = block.get("payload")
+            if (
+                block.get("type") == "persona_consult"
+                and isinstance(payload, Mapping)
+                and payload.get("pending")
+                and payload.get("consult_id") == consult_id
+            ):
+                return True
+    return False
+
+
+async def _persist_delayed_consult(
+    registry: Any,
+    sibling: VillageSibling,
+    *,
+    question: str,
+    session_id: str,
+    consult_id: str,
+    call_task: asyncio.Task[Mapping[str, Any]],
+    started_at: float,
+) -> None:
+    remaining = max(0.01, CONSULT_HARD_TIMEOUT_S - (time.monotonic() - started_at))
+    try:
+        response = await asyncio.wait_for(asyncio.shield(call_task), timeout=remaining)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "persona consult hard timeout persona=%s session_id=%s hard_timeout_s=%.1f",
+            sibling.display_name,
+            session_id,
+            CONSULT_HARD_TIMEOUT_S,
+        )
+        call_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await call_task
+        return
+    except Exception:
+        logger.exception(
+            "delayed persona consult failed persona=%s session_id=%s",
+            sibling.display_name,
+            session_id,
+        )
+        return
+
+    answer = _extract_answer_text(response)
+    if not answer:
+        logger.info(
+            "delayed persona consult returned no answer persona=%s session_id=%s",
+            sibling.display_name,
+            session_id,
+        )
+        return
+    if len(answer) > CONSULT_MAX_ANSWER_CHARS:
+        answer = answer[: CONSULT_MAX_ANSWER_CHARS - 1].rstrip() + "…"
+
+    promise_deadline = time.monotonic() + CONSULT_PROMISE_WAIT_S
+    while time.monotonic() < promise_deadline:
+        if not registry.db.get_chat_thread(session_id):
+            logger.info(
+                "discarding persona callback for deleted thread persona=%s session_id=%s",
+                sibling.display_name,
+                session_id,
+            )
+            return
+        if _thread_has_consult_promise(registry.db, session_id, consult_id):
+            break
+        await asyncio.sleep(0.1)
+    else:
+        logger.info(
+            "discarding unpromised persona callback persona=%s session_id=%s",
+            sibling.display_name,
+            session_id,
+        )
+        return
+
+    payload = _consult_payload(
+        sibling,
+        question,
+        answer,
+        consult_id=consult_id,
+        quote_lead=f"{sibling.display_name} called back and said",
+    )
+    block = quote_block_from_consult(payload)
+    if block is None or not registry.db.get_chat_thread(session_id):
+        return
+    try:
+        saved = registry.db.save_chat_message_if_thread_exists(
+            session_id,
+            f"persona-consult-{consult_id}",
+            "assistant",
+            [
+                {
+                    "type": "text",
+                    "content": f"**Addendum — {sibling.display_name} called back.**",
+                },
+                block,
+            ],
+            lens_id=registry.lens_id,
+        )
+        if not saved:
+            logger.info(
+                "discarding persona callback for deleted thread persona=%s session_id=%s",
+                sibling.display_name,
+                session_id,
+            )
+            return
+    except Exception:
+        if registry.db.get_chat_thread(session_id):
+            logger.exception(
+                "failed to persist persona callback persona=%s session_id=%s",
+                sibling.display_name,
+                session_id,
+            )
+        return
+    logger.info(
+        "persona consult callback persisted persona=%s session_id=%s consult_id=%s",
+        sibling.display_name,
+        session_id,
+        consult_id,
+    )
+
+
+def _retain_consult_task(
+    task: asyncio.Task[Any],
+    *,
+    call_task: asyncio.Task[Any],
+    session_id: str,
+    consult_id: str,
+) -> None:
+    _OUTSTANDING_CONSULT_TASKS.add(task)
+    _UNPROMISED_CONSULT_TASKS.setdefault(session_id, {})[consult_id] = (
+        call_task,
+        task,
+    )
+
+    def _done(done: asyncio.Task[Any]) -> None:
+        _OUTSTANDING_CONSULT_TASKS.discard(done)
+        session_tasks = _UNPROMISED_CONSULT_TASKS.get(session_id)
+        if session_tasks:
+            session_tasks.pop(consult_id, None)
+            if not session_tasks:
+                _UNPROMISED_CONSULT_TASKS.pop(session_id, None)
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            done.result()
+
+    task.add_done_callback(_done)
+
+
+def mark_persona_consults_promised(
+    session_id: str,
+    blocks: Sequence[Mapping[str, Any]],
+) -> None:
+    """Release persisted callbacks from client-disconnect cancellation."""
+    promised_ids = {
+        str(payload.get("consult_id"))
+        for block in blocks
+        if block.get("type") == "persona_consult"
+        for payload in [block.get("payload")]
+        if isinstance(payload, Mapping) and payload.get("pending") and payload.get("consult_id")
+    }
+    session_tasks = _UNPROMISED_CONSULT_TASKS.get(session_id)
+    if not session_tasks:
+        return
+    for consult_id in promised_ids:
+        session_tasks.pop(consult_id, None)
+    if not session_tasks:
+        _UNPROMISED_CONSULT_TASKS.pop(session_id, None)
+
+
+def cancel_unpromised_persona_consults(session_id: str) -> None:
+    """Cancel callbacks when SSE closes before their pending card is persisted."""
+    session_tasks = _UNPROMISED_CONSULT_TASKS.pop(session_id, {})
+    for consult_id, (call_task, callback_task) in session_tasks.items():
+        logger.info(
+            "cancelling unpromised persona callback session_id=%s consult_id=%s",
+            session_id,
+            consult_id,
+        )
+        call_task.cancel()
+        callback_task.cancel()
+
+
 async def run_persona_consult(
     registry: Any,
     sibling: VillageSibling,
@@ -426,7 +678,7 @@ async def run_persona_consult(
     specialty: Mapping[str, Any],
     session_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """One tool-free LLM round as the sibling persona; timeout → busy payload."""
+    """Run one sibling round; a soft timeout leaves a retained callback task."""
     from projectionist.agent.providers import LLMProviderError, get_chat_provider
     from projectionist.agent.tools import _persona_prompt_block
     from projectionist.telemetry.llm_track import tracked_chat
@@ -437,17 +689,12 @@ async def run_persona_consult(
         # Deterministic specialty-only fallback so households without LLM still
         # get a quoted village beat when specialty context was gathered.
         fallback = _deterministic_specialty_answer(sibling, specialty, question)
-        return {
-            "ok": True,
-            "persona": sibling.display_name,
-            "persona_id": sibling.template_id,
-            "specialty": sibling.specialty,
-            "answer": fallback,
-            "question": " ".join(str(question or "").split()).strip()[:500],
-            "quote_lead": f"I asked {sibling.display_name} and they said",
-            "quote_ok": True,
-            "source": "specialty_only",
-        }
+        return _consult_payload(
+            sibling,
+            question,
+            fallback,
+            source="specialty_only",
+        )
 
     provider = get_chat_provider(settings)
     persona_block = _persona_prompt_block(registry.db, persona_id=sibling.template_id)
@@ -479,16 +726,64 @@ async def run_persona_consult(
             meta={"village_consult": True, "specialty": sibling.specialty},
         )
 
+    started_at = time.monotonic()
+    call_task = asyncio.create_task(
+        _call(),
+        name=f"persona-consult-{sibling.template_id}",
+    )
     try:
-        response = await asyncio.wait_for(_call(), timeout=CONSULT_TIMEOUT_S)
-    except asyncio.TimeoutError:
-        return consult_unavailable_payload(
-            reason=(
-                f"{sibling.display_name} is busy right now — answer with your own take "
-                "and do not invent a quote from them."
-            ),
-            code="consult_timeout",
+        response = await asyncio.wait_for(
+            asyncio.shield(call_task),
+            timeout=CONSULT_TIMEOUT_S,
         )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "persona consult soft timeout persona=%s session_id=%s soft_timeout_s=%.1f "
+            "outstanding=%d",
+            sibling.display_name,
+            session_id,
+            CONSULT_TIMEOUT_S,
+            len(_OUTSTANDING_CONSULT_TASKS),
+        )
+        thread_exists = bool(session_id and registry.db.get_chat_thread(session_id))
+        at_capacity = len(_OUTSTANDING_CONSULT_TASKS) >= CONSULT_MAX_OUTSTANDING
+        if not thread_exists or at_capacity:
+            call_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await call_task
+            code = "consult_capacity" if at_capacity else "consult_no_thread"
+            return consult_unavailable_payload(
+                reason=(
+                    f"{sibling.display_name} could not take a callback message right now — "
+                    "answer with your own take and do not invent a quote from them."
+                ),
+                code=code,
+            )
+        consult_id = uuid.uuid4().hex
+        callback_task = asyncio.create_task(
+            _persist_delayed_consult(
+                registry,
+                sibling,
+                question=question,
+                session_id=session_id,
+                consult_id=consult_id,
+                call_task=call_task,
+                started_at=started_at,
+            ),
+            name=f"persona-consult-callback-{consult_id}",
+        )
+        _retain_consult_task(
+            callback_task,
+            call_task=call_task,
+            session_id=session_id,
+            consult_id=consult_id,
+        )
+        return _pending_consult_payload(sibling, question, consult_id)
+    except asyncio.CancelledError:
+        call_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await call_task
+        raise
     except LLMProviderError as exc:
         logger.info("persona consult provider error: %s", exc)
         return consult_unavailable_payload(
@@ -515,23 +810,14 @@ async def run_persona_consult(
     if len(answer) > CONSULT_MAX_ANSWER_CHARS:
         answer = answer[: CONSULT_MAX_ANSWER_CHARS - 1].rstrip() + "…"
 
-    return {
-        "ok": True,
-        "persona": sibling.display_name,
-        "persona_id": sibling.template_id,
-        "specialty": sibling.specialty,
-        "answer": answer,
-        "question": " ".join(str(question or "").split()).strip()[:500],
-        "quote_lead": f"I asked {sibling.display_name} and they said",
-        "quote_ok": True,
-        "source": "llm",
-        "note": (
+    payload = _consult_payload(sibling, question, answer)
+    payload["note"] = (
             "Quote this as a handoff in your reply — e.g. "
             f"\"I asked {sibling.display_name} and they said …\" — "
             "do not silently merge their words into your own voice. "
             "Confirm-before-fleet still applies to any confirmation_token in specialty context."
-        ),
-    }
+    )
+    return payload
 
 
 def _deterministic_specialty_answer(
@@ -596,6 +882,22 @@ def _deterministic_specialty_answer(
 
 def quote_block_from_consult(payload: Mapping[str, Any]) -> Optional[Dict[str, Any]]:
     """Build a chat block for the UI quote card."""
+    if payload.get("pending") and payload.get("consult_id"):
+        name = str(payload.get("persona") or "Curator").strip() or "Curator"
+        return {
+            "type": "persona_consult",
+            "payload": {
+                "consult_id": payload.get("consult_id"),
+                "pending": True,
+                "persona": name,
+                "persona_id": payload.get("persona_id"),
+                "specialty": payload.get("specialty"),
+                "question": " ".join(
+                    str(payload.get("question") or "").split()
+                ).strip()[:500],
+                "lead": f"Left a message for {name}",
+            },
+        }
     if not payload.get("quote_ok") or not payload.get("answer"):
         return None
     name = str(payload.get("persona") or "Curator").strip() or "Curator"
@@ -606,6 +908,7 @@ def quote_block_from_consult(payload: Mapping[str, Any]) -> Optional[Dict[str, A
             "persona": name,
             "persona_id": payload.get("persona_id"),
             "specialty": payload.get("specialty"),
+            "consult_id": payload.get("consult_id"),
             "lead": str(payload.get("quote_lead") or f"I asked {name} and they said"),
             "answer": str(payload.get("answer") or "").strip(),
             "question": question,

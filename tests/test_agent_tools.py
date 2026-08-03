@@ -593,7 +593,49 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             assert row is not None
             tool_item = _card_to_tool_item(row_to_title_card(row))
             self.assertEqual(tool_item["view_count"], 7)
+            self.assertEqual(tool_item["completed_watches"], 7)
+            self.assertEqual(tool_item["rewatch_count"], 6)
+            self.assertIsNone(tool_item["play_sessions"])
+            self.assertEqual(tool_item["watch_state"], "watched")
+            self.assertFalse(tool_item["partial"])
+            self.assertEqual(
+                tool_item["count_semantics"],
+                "plex_completed_or_marked_played",
+            )
             self.assertNotIn("total_episode_count", tool_item)
+
+    def test_query_item_to_tool_item_movie_exposes_partial_progress_not_a_play(self) -> None:
+        tool_item = _query_item_to_tool_item(
+            {
+                "title": "Zatoichi",
+                "media_type": "movie",
+                "view_count": 0,
+                "view_offset_ms": 1_200_000,
+                "duration_ms": 6_000_000,
+            }
+        )
+        self.assertEqual(tool_item["completed_watches"], 0)
+        self.assertEqual(tool_item["rewatch_count"], 0)
+        self.assertIsNone(tool_item["play_sessions"])
+        self.assertEqual(tool_item["watch_state"], "partial")
+        self.assertTrue(tool_item["partial"])
+        self.assertEqual(tool_item["watch_progress_percent"], 20)
+
+    def test_movie_can_have_prior_completion_and_current_partial_sitting(self) -> None:
+        tool_item = _query_item_to_tool_item(
+            {
+                "title": "Zatoichi Returns",
+                "media_type": "movie",
+                "view_count": 1,
+                "view_offset_ms": 1_200_000,
+                "duration_ms": 6_000_000,
+            }
+        )
+        self.assertEqual(tool_item["completed_watches"], 1)
+        self.assertEqual(tool_item["rewatch_count"], 0)
+        self.assertEqual(tool_item["watch_state"], "watched")
+        self.assertTrue(tool_item["partial"])
+        self.assertEqual(tool_item["watch_progress_percent"], 20)
 
     def test_query_item_to_tool_item_show_uses_episode_play_sum(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -627,6 +669,9 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
             prompt = build_system_prompt(db, lens_id=DEFAULT_LENS_ID)
             self.assertIn("total episode plays", prompt)
             self.assertIn("watch_state", prompt)
+            self.assertIn("completed_watches", prompt)
+            self.assertIn("not playback sessions", prompt)
+            self.assertIn("never infer favourite", prompt)
 
     @patch("projectionist.agent.tools.TMDBClient")
     async def test_find_collection_gaps_items_include_tmdb_id(self, mock_tmdb_cls) -> None:

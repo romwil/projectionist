@@ -1,5 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { getPersonaPresets, putPersona } from "../api/client";
+import {
+  CURATOR_CAPABILITIES,
+  curatorCapabilitiesIntro,
+} from "../lib/curatorCapabilities.js";
 import InlineAlert from "./InlineAlert";
 
 // Admin /api/persona (PersonaMetrics) only persists these three sliders.
@@ -11,7 +15,7 @@ const PERSONA_FIELDS = [
     low: "Bro",
     high: "Professorial",
     help:
-      "Controls word choice and film-literacy depth in the LLM prompt. Low = casual fan talk; high = movement, craft, and auteur vocabulary.",
+      "How film-literate the voice sounds. Low = casual fan talk; high = craft and auteur vocabulary.",
   },
   {
     key: "val_dipl_snark",
@@ -19,7 +23,7 @@ const PERSONA_FIELDS = [
     low: "Diplomatic",
     high: "Snarky",
     help:
-      "Controls how blunt recommendations and critiques are. Low = context-first, softened critiques; high = lead with verdicts and call out weak picks plainly.",
+      "How blunt recommendations and critiques are. Low = context-first; high = lead with verdicts.",
   },
   {
     key: "val_pass_auto",
@@ -27,7 +31,7 @@ const PERSONA_FIELDS = [
     low: "Passive",
     high: "Autonomous",
     help:
-      "Controls how proactively the curator proposes next steps. Low = suggest and wait; high = concrete queue/purge plans and pattern callouts.",
+      "How proactively the curator proposes next steps. Low = suggest and wait; high = concrete plans.",
   },
 ];
 
@@ -37,7 +41,7 @@ function sliderValue(persona, key) {
   return Number.isFinite(num) ? num : 0.5;
 }
 
-function isCustomMode(persona) {
+function hasLegacyCustomPrompt(persona) {
   return persona?.persona_mode === "custom" || Boolean(String(persona?.persona_prompt_override || "").trim());
 }
 
@@ -53,23 +57,14 @@ export default function PersonaSection({
   onCuratorNameBlur,
 }) {
   const [presets, setPresets] = useState([]);
-  const [editingBehavioral, setEditingBehavioral] = useState(false);
-  const [draftBehavioral, setDraftBehavioral] = useState("");
+  const [showCapabilities, setShowCapabilities] = useState(false);
   const [confirmAction, setConfirmAction] = useState(null);
 
-  const customMode = isCustomMode(persona);
+  const legacyCustom = hasLegacyCustomPrompt(persona);
 
   useEffect(() => {
     getPersonaPresets().then(setPresets).catch(console.error);
   }, []);
-
-  useEffect(() => {
-    if (!editingBehavioral && persona) {
-      setDraftBehavioral(persona.behavioral_prompt || "");
-    }
-  }, [persona?.behavioral_prompt, persona?.persona_mode, editingBehavioral]);
-
-  const assembledPreview = useMemo(() => persona?.assembled_prompt || "", [persona?.assembled_prompt]);
 
   async function persistPersona(payload, successMessage = "Persona updated.") {
     setSavingPersona(true);
@@ -101,7 +96,7 @@ export default function PersonaSection({
   }
 
   function handleSliderChange(key, value) {
-    if (customMode) {
+    if (legacyCustom) {
       setConfirmAction({ type: "slider", key, value });
       return;
     }
@@ -116,7 +111,6 @@ export default function PersonaSection({
         const { key, value } = confirmAction;
         setPersona({ ...persona, [key]: value, persona_mode: "sliders", persona_prompt_override: null });
         await applySliderChange(key, value, true);
-        setEditingBehavioral(false);
       } else if (type === "preset") {
         const { presetId } = confirmAction;
         const preset = presets.find((item) => item.id === presetId);
@@ -126,7 +120,6 @@ export default function PersonaSection({
           clear_persona_override: true,
         });
         setPersona(updated);
-        setEditingBehavioral(false);
       }
     } finally {
       setConfirmAction(null);
@@ -134,33 +127,19 @@ export default function PersonaSection({
   }
 
   function handlePresetSelect(presetId) {
-    if (customMode) {
+    if (legacyCustom) {
       setConfirmAction({ type: "preset", presetId });
       return;
     }
     persistPersona({ apply_preset: presetId });
   }
 
-  async function enterCustomMode() {
-    setEditingBehavioral(true);
-    setDraftBehavioral(persona.behavioral_prompt || "");
-  }
-
-  async function saveCustomBehavioral() {
-    const text = draftBehavioral.trim();
-    if (!text) {
-      setActionFeedback("persona", "error", "Behavioral prompt cannot be empty.");
-      return;
-    }
-    const updated = await persistPersona({ persona_prompt_override: text });
+  async function resetLegacyCustomPrompt() {
+    const updated = await persistPersona(
+      { clear_persona_override: true },
+      "Reset to preset sliders.",
+    );
     setPersona(updated);
-    setEditingBehavioral(false);
-  }
-
-  async function resetToSliders() {
-    const updated = await persistPersona({ clear_persona_override: true });
-    setPersona(updated);
-    setEditingBehavioral(false);
   }
 
   if (!persona) return null;
@@ -169,9 +148,39 @@ export default function PersonaSection({
     <section className="config-section persona-section" data-testid="persona-section">
       <h2>Curator persona</h2>
       <p className="wizard-note">
-        Shape how your curator talks and recommends. Write a short identity, try a preset, then fine-tune with
-        sliders. Your written identity stays unless you edit it — presets only fill it when empty.
+        Shape how your curator talks and recommends — name, identity, presets, and behavior sliders.
+        Capability wiring stays in Projectionist; you tune voice here, not internal prompts or tools.
       </p>
+
+      <div className="persona-capabilities" data-testid="persona-capabilities">
+        <div className="persona-capabilities-header">
+          <h3>What your curator can do</h3>
+          <button
+            type="button"
+            className="ghost persona-capabilities-toggle"
+            data-testid="persona-capabilities-toggle"
+            onClick={() => setShowCapabilities((open) => !open)}
+          >
+            {showCapabilities ? "Hide details" : "Show details"}
+          </button>
+        </div>
+        <p className="wizard-note">{curatorCapabilitiesIntro()}</p>
+        <ul className="persona-capabilities-list">
+          {CURATOR_CAPABILITIES.slice(0, showCapabilities ? undefined : 4).map((item) => (
+            <li key={item.id}>
+              <strong>{item.label}</strong>
+              {showCapabilities && item.detail ? (
+                <span className="persona-capability-detail">{item.detail}</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+        {!showCapabilities && CURATOR_CAPABILITIES.length > 4 ? (
+          <p className="wizard-note persona-capabilities-more">
+            Plus research, lists, collections, and more — expand for the full list.
+          </p>
+        ) : null}
+      </div>
 
       {showCuratorName ? (
         <label className="identity-field">
@@ -218,25 +227,22 @@ export default function PersonaSection({
               <strong>{preset.name}</strong>
               {preset.tagline ? <em className="preset-tagline">{preset.tagline}</em> : null}
               <span>{preset.description}</span>
-              {preset.behavioral_anchor ? (
-                <span className="preset-anchor-preview">{preset.behavioral_anchor}</span>
-              ) : null}
             </button>
           ))}
         </div>
       </div>
 
-      <div className={`persona-sliders ${customMode ? "persona-sliders-disabled" : ""}`}>
+      <div className={`persona-sliders ${legacyCustom ? "persona-sliders-disabled" : ""}`}>
         <div className="persona-sliders-header">
           <h3>Behavior sliders</h3>
-          {customMode ? (
-            <span className="persona-mode-badge" data-testid="persona-custom-badge">
-              Custom persona — reset sliders to re-enable
+          {legacyCustom ? (
+            <span className="persona-mode-badge" data-testid="persona-legacy-custom-badge">
+              Legacy custom prompt — reset to use sliders
             </span>
           ) : null}
         </div>
         <p className="wizard-note">
-          Each slider maps to multi-sentence behavioral guidance in the generated prompt (low / mid / high bands).
+          Each slider adjusts tone bands (low / mid / high). Changes apply on release — no prompt editing needed.
         </p>
         <div className="slider-grid">
           {PERSONA_FIELDS.map(({ key, label, low, high, help }) => (
@@ -263,14 +269,14 @@ export default function PersonaSection({
                 max="1"
                 step="0.01"
                 value={sliderValue(persona, key)}
-                disabled={customMode || savingPersona}
+                disabled={legacyCustom || savingPersona}
                 data-testid={`persona-slider-${key}`}
                 onChange={(event) => handleSliderChange(key, Number(event.target.value))}
                 onMouseUp={(event) => {
-                  if (!customMode) applySliderChange(key, Number(event.target.value));
+                  if (!legacyCustom) applySliderChange(key, Number(event.target.value));
                 }}
                 onTouchEnd={(event) => {
-                  if (!customMode) applySliderChange(key, Number(event.target.value));
+                  if (!legacyCustom) applySliderChange(key, Number(event.target.value));
                 }}
               />
               <div className="slider-range-labels">
@@ -280,63 +286,31 @@ export default function PersonaSection({
             </label>
           ))}
         </div>
-        {customMode ? (
-          <button type="button" className="ghost" data-testid="persona-reset-sliders" onClick={resetToSliders}>
-            Reset to slider-generated prompt
-          </button>
-        ) : null}
-      </div>
-
-      <div className="persona-behavioral">
-        <div className="persona-behavioral-header">
-          <h3>Behavioral prompt</h3>
-          {!editingBehavioral && !customMode ? (
-            <button type="button" className="ghost" data-testid="persona-edit-prompt" onClick={enterCustomMode}>
-              Edit prompt
-            </button>
-          ) : null}
-        </div>
-        {editingBehavioral || customMode ? (
-          <>
-            <textarea
-              data-testid="persona-behavioral-edit"
-              rows={8}
-              value={draftBehavioral}
+        {legacyCustom ? (
+          <div className="persona-legacy-reset">
+            <p className="wizard-note">
+              This install still has a legacy custom system prompt from an earlier version. Reset to presets and
+              sliders — editing raw prompts is no longer supported in Admin.
+            </p>
+            <button
+              type="button"
+              className="ghost"
+              data-testid="persona-reset-legacy-custom"
+              onClick={resetLegacyCustomPrompt}
               disabled={savingPersona}
-              onChange={(event) => setDraftBehavioral(event.target.value)}
-            />
-            <div className="persona-behavioral-actions">
-              <button type="button" onClick={saveCustomBehavioral} disabled={savingPersona}>
-                Save custom prompt
-              </button>
-              {!customMode ? (
-                <button type="button" className="ghost" onClick={() => setEditingBehavioral(false)}>
-                  Cancel
-                </button>
-              ) : null}
-            </div>
-          </>
-        ) : (
-          <pre className="persona-prompt-preview" data-testid="persona-behavioral-preview">
-            {persona.behavioral_prompt}
-          </pre>
-        )}
-      </div>
-
-      <div className="persona-live-preview">
-        <h3>Live assembled prompt</h3>
-        <p className="wizard-note">Identity + behavioral text as injected into the agent system prompt.</p>
-        <pre className="persona-prompt-preview persona-assembled-preview" data-testid="persona-assembled-preview">
-          {assembledPreview || "No persona prompt configured yet."}
-        </pre>
+            >
+              Reset to slider-based persona
+            </button>
+          </div>
+        ) : null}
       </div>
 
       {confirmAction ? (
         <div className="persona-confirm-banner" data-testid="persona-confirm-banner" role="alertdialog">
           <p>
             {confirmAction.type === "preset"
-              ? "Applying a preset will replace your custom behavioral prompt and update sliders. Your identity text is kept unless empty. Continue?"
-              : "Adjusting sliders will replace your custom behavioral prompt with the slider-generated default. Continue?"}
+              ? "Applying a preset will replace your legacy custom prompt and update sliders. Your identity text is kept unless empty. Continue?"
+              : "Adjusting sliders will replace your legacy custom prompt with the slider-generated default. Continue?"}
           </p>
           <div className="persona-confirm-actions">
             <button type="button" data-testid="persona-confirm-yes" onClick={confirmPendingAction}>

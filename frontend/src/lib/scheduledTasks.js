@@ -1,23 +1,23 @@
 /** Helpers for the admin Scheduled Tasks page. */
 
-const TASK_LABELS = {
+export const TASK_LABELS = {
   anniversary_scanner: "Anniversary scanner",
   enthusiast_nudge: "Enthusiast nudges",
   data_retention: "Data retention",
-  facet_taxonomy_audit: "Facet taxonomy audit",
-  coverage_deficit_audit: "Coverage deficit audit",
-  entity_memory_enrichment: "Entity memory enrichment",
+  facet_taxonomy_audit: "Review unrecognized genre/tag names",
+  coverage_deficit_audit: "Find missing plot knowledge",
+  entity_memory_enrichment: "Research missing title details",
   gap_analysis: "Gap analysis",
   health_metrics: "Health metrics",
   llm_logline_enrichment: "LLM logline enrichment",
   metadata_enrichment: "Metadata enrichment",
-  plot_neighbors: "Plot neighbors",
+  plot_neighbors: "Refresh similar titles",
   purge_candidates: "Purge candidates",
   recommendation_warmup: "Recommendation warmup",
-  semantic_embeddings: "Semantic embeddings",
-  summary_motifs: "Summary motifs",
+  semantic_embeddings: "Plot similarity index",
+  summary_motifs: "Find plot patterns",
   taste_refresh: "Taste refresh",
-  title_relations_refresh: "Title relations refresh",
+  title_relations_refresh: "Refresh title connections",
 };
 
 /** Cadence presets for the owner frequency control (seconds). */

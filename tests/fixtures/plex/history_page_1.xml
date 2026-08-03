@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<MediaContainer size="2" totalSize="2" offset="0">
+  <Video type="movie" ratingKey="movie-100" title="Inception" accountID="4242"
+         viewedAt="1704067200" duration="6000000" viewOffset="5400000" historyKey="hist-1"/>
+  <Video type="episode" ratingKey="ep-200" grandparentRatingKey="show-50"
+         title="The Pilot" accountID="4242" viewedAt="1704153600" duration="3600000"
+         historyKey="hist-2"/>
+</MediaContainer>

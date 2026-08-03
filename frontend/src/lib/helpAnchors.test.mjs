@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createSlugger, slugify, targetIdFromHash } from "./helpAnchors.js";
 
-test("slugify matches the legacy Help anchors used across the app", () => {
+test("slugify matches the Help anchors used across the app", () => {
   assert.equal(slugify("Start here"), "start-here");
   assert.equal(slugify("Chat"), "chat");
-  assert.equal(slugify("Plot Lab"), "plot-lab");
-  assert.equal(slugify("Why? on posters"), "why-on-posters");
+  assert.equal(slugify("Related titles"), "related-titles");
+  assert.equal(slugify("Tags"), "tags");
   assert.equal(slugify("Coverage over time"), "coverage-over-time");
-  assert.equal(slugify("Why motif walls feel sparse"), "why-motif-walls-feel-sparse");
+  assert.equal(
+    slugify("Refreshing plot patterns after an update"),
+    "refreshing-plot-patterns-after-an-update",
+  );
   assert.equal(slugify("Telemetry & tuning"), "telemetry--tuning");
   assert.equal(slugify("LLM vs free sources"), "llm-vs-free-sources");
   assert.equal(slugify("What knowledge coverage means"), "what-knowledge-coverage-means");

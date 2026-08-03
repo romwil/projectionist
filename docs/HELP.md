@@ -1,8 +1,8 @@
 # Help
 
-Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Live**, **Inbox**, **My Journey**, **Plot Lab**, and — for owners — idle curation and Live Channels craft.
+Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Live**, **Inbox**, **My Journey**, **Related titles**, and — for owners — idle curation and Live Channels craft.
 
-New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Live (when stations are on the air), Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Plot Lab, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
+New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Live (when stations are on the air), Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Related titles, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
 
 Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [Privacy](/privacy)
 
@@ -18,8 +18,8 @@ Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [P
 | Watch household Live TV | [Live](/live) (when the owner has stations on the air) |
 | Recommendations & notices | [Inbox](/inbox) |
 | Achievements & cinema pathways | [My Journey](/my-journey) |
-| Motif walls & surprising neighbors | [Plot Lab](/explore/plot-lab) |
-| Tag / keyword search | [Tags](/explore/tags) |
+| Follow and explain title connections | [Related titles](/explore/related) |
+| Browse by keyword | [Tags](/explore/tags) |
 | Pins | [Watchlist](/watchlist) |
 | Save a curator reply | **Save to library** below any curator response, then open [Library](/library) |
 | Curated shelves | [Lists & playlists](/lists) |
@@ -46,14 +46,23 @@ Try one of these — they're good first prompts because each exercises a differe
 > A short, finishable shortlist drawn from *your* shelves, each with a one-line "why this fits" and a **Play** button when the title has a Plex match.
 
 > **"More like *Michael Clayton* — but tenser."**
-> Neighbors and thematic cousins from your library, explained.
+> Similar titles and thematic cousins from your library, explained.
 
 > **"Which large files have I never watched?"**
 > Purge candidates ranked by size and neglect, so you can reclaim space with confidence.
 
 **How to read the answer.** When Chat discusses collection gaps, its poster strip mirrors the *missing* titles being discussed rather than the owned titles it used as context. A gap card is marked **new** or **queued** and can offer an allowed request/add action; **Play** appears only for a true in-library title with a playable Plex identity. The short **reply chips** under a useful response are suggested next turns — tap one (for example *"only comedies"* or *"go older"*) to send it as your next message without retyping.
 
-**Curator village.** Sometimes your active curator will ask a sibling for a short take — Scholar for cited depth, Companion for mood memory, Concierge for find→request paths, Enthusiast for tonight heat — and quote it as *“I asked {Name} and they said…”*. You stay in the same thread; you don't have to switch personas to taste those specialties. Youth and guest accounts don't get village consults.
+**Watch counts are Plex “marked played” events, not verified full viewings or every sitting.** A normal stop-and-resume before the played threshold usually produces one event when you eventually reach Plex's percentage/credits rule. But the counter can also include manual watched actions, synced watch-state changes, or duplicate client/server scrobbles around resumes and reconnects. The curator keeps an unfinished playhead as **In progress** and may describe a count above one as possible rewatches, but it cannot prove that you watched the film from beginning to end that many times—or infer a favourite—from this number alone.
+
+> **You ask:** “Did I really rewatch *Zatoichi* three times?”
+> The curator separates the current **In progress** state from Plex's completed/marked-played count, explains how many later completions the count could represent, and is explicit when session-by-session evidence is unavailable.
+
+**Take a result set with you.** Beside the heading for a poster strip, the small rail icon asks your curator to turn those exact title identities into a named curated-list rail; the grid icon saves the set and opens it at `/lists/:id`, with Projectionist's usual poster/list view, sorting, filters, columns, export, and pagination. For example, ask **“Give me ten rainy-night mysteries”**, then use the rail icon to shape a lasting shelf or the grid icon to compare and sort the picks. Results without a stable TMDB or TVDB identity are skipped when a grid is saved, so Projectionist does not guess at replacements.
+
+**How this works / why it matters:** grid view materializes a normal private list instead of a chat-only gallery. That keeps the result reusable from **Lists & playlists** and gives it the same browse controls as other list pages; it also means opening a grid creates a saved list you can rename or delete later.
+
+**Curator village.** Sometimes your active curator will ask a sibling for a short take — Scholar for cited depth, Companion for mood memory, Concierge for find→request paths, Enthusiast for tonight heat — and quote it as *“I asked {Name} and they said…”*. If the sibling needs longer, your curator leaves a message and keeps helping without inventing a quote; when the sibling calls back, their clearly labeled addendum appears in the same thread automatically. You don't have to switch personas to taste those specialties. Youth and guest accounts don't get village consults.
 
 **Slash commands** (instant, no LLM call): type `/help` for the list. The handy ones:
 
@@ -122,7 +131,7 @@ Tune the underlying weights under **Settings → Taste** — raise a cluster, lo
 
 ### Taste profile
 
-**Settings → Taste** shows the cluster tags Projectionist learned for you (genres, moods, eras). Drag a weight, lock it, or **Reset** an override to fall back to the household lens baseline.
+**Settings → Taste** shows the tags Projectionist learned for you (genres, moods, eras). Drag a weight, lock it, or **Reset** an override to fall back to the household taste baseline.
 
 **TV & mid-series stops.** When you rate or abandon a show partway through, Projectionist weighs earlier seasons more heavily than later ones you never watched. Episode ratings (when Plex has them) also nudge taste — so a beloved Season 1 that you dropped in Season 3 does not keep forcing “more like late-series” neighbors.
 
@@ -161,6 +170,7 @@ Under **Settings → Notifications** you can:
 - Opt into **Apprise alerts** and add your own Discord / Telegram / push destinations with the destination builder (**Self-serve**; optional household URLs can also be configured by the owner)
 - Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available). It usually arrives on the weekly schedule; the owner can also push one early from Admin.
 - Opt into **curator nudges** — occasional “you have to see this” picks (optionally reacting to what you recently watched / continue-watching). These are never live Plex session alerts.
+- Opt into **Year in Review** — a private year-end cinema reel built from *your* tracked finishes (not household Plex totals). Late December may tease the reel; early January drops the full link to your inbox (and email if you’ve enabled it).
 
 Dismiss a card when you’re done; **Dismiss all** clears the unread stack.
 
@@ -168,7 +178,7 @@ Dismiss a card when you’re done; **Dismiss all** clears the unread stack.
 
 ### Searching and browsing the library
 
-**[Search](/search)** is the top-level collection search. Explore’s search box sends you there. Browse filters, facets, and **Beyond your collection** live on the same page.
+**[Search](/search)** is the top-level collection search. Explore’s search box sends you there. Browse filters and **Beyond your collection** live on the same page.
 
 The **search bar** on Search (and the matching bar at the top of Explore) looks across your library by title and plot summary. On Search, results update **as you type** — no need to press Enter — and clearing the box restores the full library browse. Explore’s bar still sends you to Search with your query. You can also jump straight into a full, paginated list with the **Browse Movies** and **Browse TV** cards, or the *Movies* / *TV* links on the Recently Added and Recent Releases rails — these show your whole library of that type, not just recent additions.
 
@@ -192,28 +202,25 @@ Anything already in your library (or already queued to download) is shown with a
 
 ### What knowledge coverage means
 
-"Knowledge coverage" is an **honesty gauge, not a grade of your library.** It reports how much of each **plot-knowledge layer** the curator has filled in so far: overviews and keywords, semantic embeddings, plot motifs, plot-similarity neighbors, and optional LLM loglines (plus themes and long synopsis when those enrichers run). A high percentage means the curator has rich signals to reason over when it recommends, compares, or explains; a low percentage means idle enrichment still has work to do — recommendations may lean on thinner data until it catches up.
+"Knowledge coverage" is an **honesty gauge, not a grade of your library.** It reports how much of each **plot-knowledge layer** the curator has filled in so far: overviews and keywords, plot-similarity data, plot patterns, similar-title links, and optional AI-written loglines (plus themes and full synopses when those refreshes run). A high percentage means the curator has rich signals to reason over when it recommends, compares, or explains; a low percentage means the background refresh still has work to do — recommendations may lean on thinner data until it catches up.
 
-**Why it matters:** every "more like *X*", motif wall, and surprising-neighbor answer is only as deep as the layers behind it. Coverage climbs on its own as the container sits idle and the scheduler trickles metadata, embeddings, motifs, and neighbors. Sparse bars are **expected** right after a big import or an upgrade that improves extraction — they're a to-do list, not a fault. (Owners: nudge specific layers from [Scheduled Tasks](#refreshing-plot-lab-motifs-after-an-update) and read the full breakdown under [Coverage over time](#coverage-over-time).)
+**Why it matters:** every "more like *X*" and title-connection answer is only as deep as the layers behind it. Coverage climbs on its own as the server sits idle and background tasks refresh title details, plot-similarity data, plot patterns, and similar-title links. Sparse bars are **expected** right after a big import or an upgrade that improves extraction — they're a to-do list, not a fault. (Owners: nudge specific layers from [Scheduled Tasks](#refreshing-plot-patterns-after-an-update) and read the full breakdown under [Coverage over time](#coverage-over-time).)
 
-### Plot Lab
+### Related titles
 
-**[Plot Lab](/explore/plot-lab)** builds facet walls from the plot signals Projectionist has extracted. To get a wall:
+**[Related titles](/explore/related)** is a Connections hop explorer for your library. Start from one title, follow a connection to another, and keep the breadcrumb trail so you can step back through the route you took.
 
-1. Open **Plot Lab** from the nav menu or Explore.
-2. Tap one or more **motif chips**. Multiple chips mean **intersection (AND)** — titles that carry *all* selected signals.
-3. Choose **Multi-signal** (default) so each token can match via motif, keyword, or plot text — or **Motifs only** for pure facet walls.
-4. When theme enrichment has run, optional **theme chips** appear and AND with your motif selection.
-5. Open **Why?** on a poster to see which layer matched (motif / keyword / plot text) and summary excerpts.
-6. Seed a title under **Surprising neighbors** for narrative oddballs from the plot-similarity cache. Each card explains *why* it ranked — plot kinship plus how little genre/keyword/credit shelf it shares with the seed.
+1. Open **Related titles** from Explore or a title's **Connections** rail.
+2. Choose a starting title, then set the reach to **One hop** or **Two hops**.
+3. Filter by same collection, shared cast & crew, similar plot, or surprisingly similar.
+4. Read the reason first on every card — for example, the shared collection, filmmaker, genres, or plot kinship behind the edge.
+5. Choose **Follow connection** to make that card the new starting point. Use the breadcrumb trail to return to an earlier title.
 
-**Worked example:** tap `heist` + `betrayal` in **Multi-signal** mode → a wall of your library titles that carry both ideas, even when only one is a formal motif chip and the other lives in the plot text. Switch to **Motifs only** and the same wall tightens to titles where both are extracted facets.
+The explorer stays inside your library. A missing or short result set usually means the background refresh is still building title links; it does not mean the titles are unrelated.
 
-If chips are missing or a wall is empty, see [Why motif walls feel sparse](#why-motif-walls-feel-sparse) and the full [knowledge guide](CURATOR_KNOWLEDGE.md).
+### Tags
 
-### Why? on posters
-
-**Why?** explains a Plot Lab match and cites which layer hit each selected token (motif facet, keyword, or live plot text). It's provenance for the wall — not a spoiler essay.
+**[Tags](/explore/tags)** remains the keyword-browse surface. Pick a keyword to open a title wall for that term; use Related titles when you want to move from title to title and understand each connection.
 
 ### Browse controls, lists, and issue reports
 
@@ -235,7 +242,7 @@ Use the grip's **Add to list or playlist** chooser to place a title in more than
 
 ### Title detail — Plot knowledge
 
-On a library title, the **Plot knowledge** panel shows which plot layers are present (overview, tagline, logline, and long synopsis when that source exists), motif/keyword/theme chips, and neighbor-cache count. Sparse panels mean idle enrichment is still catching up — the same honesty gauge described under [What knowledge coverage means](#what-knowledge-coverage-means).
+On a library title, the **Plot knowledge** panel shows which plot layers are present (overview, tagline, logline, and full synopsis when that source exists), motif/keyword/theme chips, and similar-title count. Sparse panels mean the background refresh is still catching up — the same honesty gauge described under [What knowledge coverage means](#what-knowledge-coverage-means).
 
 ### What Projectionist remembers about you
 
@@ -262,35 +269,33 @@ If you don't have a link yet, use **Request access** on `/login`. The owner sees
 
 ---
 
-## Why motif walls feel sparse
-
-Plex/TMDB blurbs are short. Motifs are a **small lexical extract** from summary + overview (+ tagline / logline when present). A pure motif AND wall needs every chip present as a facet — so `bride` + `coma` can miss *Kill Bill* even when the free text contains both words, or when TMDB keywords already say `revenge` / `martial arts`.
-
-**Multi-signal** mode fixes that class of miss without inventing plot. Full case study: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md#case-study-kill-bill--bride--coma).
-
----
-
 ## For owners — curation & scheduler
 
 Owners (or single-workspace installs with no login) also configure sync and idle enrichment. This half is hidden from members and guests, so API and config depth is welcome here.
 
+### Curator persona (Admin → Persona)
+
+Tune **name**, **identity**, **presets**, and **behavior sliders** — how the curator sounds when it recommends from your library. This page is intentionally **not** a prompt editor: you cannot view or rewrite internal system prompts, tool lists, or function schemas from Admin. Capability wiring (search, gaps, acquisition, village consults, bad-media replace, etc.) is maintained in Projectionist releases.
+
+If an older install still has a legacy custom prompt, Admin shows a one-click **reset to slider-based persona** instead of exposing the raw text.
+
 ### After sync
 
 1. Run **Sync library** from Admin / Config (or `/sync` in chat when multi-user is off).
-2. Leave the container **idle** so the scheduler can trickle metadata, embeddings, motifs, and neighbors.
+2. Leave the server **idle** so scheduled tasks can refresh title details, plot-similarity data, plot patterns, and similar-title links.
 3. Open **Admin → Scheduled Tasks** (`/admin/tasks`) — confirm knowledge tasks are enabled; adjust cadence after large imports.
-4. Open **Admin → Knowledge Ops** (`/admin/taxonomy`) — review staged facet aliases, demand rows, and coverage gaps from the closed loop.
+4. Open **Admin → Library knowledge** (`/admin/taxonomy`) — review name mappings, requested title details, and missing plot knowledge.
 
-### Knowledge Operations (closed loop)
+### Library knowledge
 
-**Signal → stage → owner overlay.** When chat or Explore hits an unmapped facet token, Projectionist records a P1 miss in SQLite telemetry (never blocking the request). The `facet_taxonomy_audit` idle task stages high-hit tokens for your review. Approve maps the alias into `$DATA_DIR/taxonomy.json` — the packaged seed is never rewritten. Reject clears the candidate without changing runtime taxonomy.
+**Notice → review → improve.** When Chat or Explore repeatedly sees an unrecognized genre or tag name, Projectionist queues it for your review without interrupting the request. **Save mapping** teaches this installation the recognized name; **Reject** clears the suggestion without changing built-in definitions.
 
-The same dashboard lists **all staged work** (entity-memory demand, coverage deficits from theme/motif/metadata tasks) with honest empty states when signals have not crossed staging thresholds yet. **Facet** rows approve into the taxonomy overlay; **demand** and **coverage** rows expose act buttons that run real enrichment (repository research, motif/metadata/synopsis/embedding passes, or a theme-tagging queue for unmapped keywords) — never auto-mutating packaged seed.
+The same page lists **all reviews** for requested title details and missing plot knowledge, with honest empty states when nothing has appeared often enough to review. Name rows save a mapping; detail and coverage rows offer focused refreshes for trusted title details, plot patterns, full synopses, plot-similarity data, or themes from tags. Built-in definitions are never changed automatically.
 
-Plot Lab owners can mark a surprising neighbor as **Not a neighbor**; that removes the cached edge and emits `bad_neighbor_match` telemetry visible under Activity. Bulk vector edge-penalty tuning remains deferred.
+Related titles lets owners mark a surprising match as **Not similar**; Activity shows that event as **Marked not similar**. This removes the saved similarity link so a future refresh can learn from the correction.
 
 ```bash
-# Knowledge Ops summary (owner host)
+# Library knowledge summary (owner host)
 curl -s http://localhost:8788/api/admin/knowledge-ops/summary | python3 -m json.tool
 # Pending facet + all augmentations, 7/30d signal volume, funnel counts
 ```
@@ -341,6 +346,8 @@ Owned or already-queued titles are returned for context (so members see they exi
 
 When anyone in the household uses **Mark as watched / unwatched** from a poster's ⋮ grip (or the button on a title's detail page), Projectionist does two things: it updates the title's `view_count` / `last_viewed_at` in its own index, and it pushes the change to your Plex server. The Plex write uses the Plex "scrobble" endpoint (`/:/scrobble` to mark watched, `/:/unscrobble` to clear it) against the same server URL and token the connector already uses for sync and deep links — no new Plex credential is introduced.
 
+Plex's movie `viewCount` is a per-user **completed-or-marked-played event** counter. Organic playback is marked played at the server's configured completion rule (90% by default, or a configured credits marker), but manual/synced watched actions and duplicate scrobbles can also affect the count; `viewCount > 1` is therefore evidence of multiple Plex played events, not proof of multiple full rewatches. `viewOffset` is the current resume playhead, and `lastViewedAt` is only the latest timestamp. Projectionist syncs those three aggregate fields today, but does **not** ingest `/status/sessions/history/all`, so it cannot reconstruct starts, stops, correlate several sittings into one viewing, or detect duplicate events. Agent tool payloads expose the Plex-derived `completed_watches` and `rewatch_count` labels alongside `watch_state`, `partial`, and `watch_progress_percent`, while `play_sessions` remains unknown. TV keeps its separate `effective_view_count` behavior: synced shows report the sum of episode completion counters, not the coarse show-level value.
+
 Which Plex identity gets the write depends on how the member signed in: if they authenticated with **Sign in with Plex**, their own account token is used so the watched flag lands on *their* Plex profile. If no per-account token is available, Projectionist falls back to the server `plex_token`, which applies watched state to the admin/account that owns that token — effectively household-wide. Guests cannot change watched state while multi-user is on.
 
 If Plex is unreachable or not configured, the local index is still updated and the member sees an honest note (for example *"saved locally; Plex sync failed"*) rather than a silent failure.
@@ -355,9 +362,9 @@ curl -s "http://localhost:32400/:/scrobble?identifier=com.plexapp.plugins.librar
 | Signal | Expectation |
 |--------|-------------|
 | Overviews / keywords | Climb via sync + metadata trickle |
-| Embeddings | Trickle to near-full coverage |
+| Plot similarity data | Trickle to near-full coverage |
 | Motifs | Appear after `summary_motifs` runs; re-run it after upgrades that improve motif extraction |
-| Neighbor edges | Often lag embeddings — patience or a tighter `plot_neighbors` cadence |
+| Similar titles | Similarity links can lag plot-similarity data — patience or a tighter `plot_neighbors` cadence |
 | LLM loglines | Sparse by design |
 | Themes / long synopsis | Appear only after those optional enrichers run |
 
@@ -374,11 +381,11 @@ curl -s http://localhost:8788/api/library/knowledge-coverage | python3 -m json.t
 # → {"overview_pct": 98, "embeddings_pct": 91, "motifs_pct": 63, "neighbors_pct": 44, "loglines_pct": 7}
 ```
 
-(The same object is nested under `GET /api/library/stats`.) Honest empty "More Like This" / Plot Lab notes mean caches are cold. Owners get a deep link to Scheduled Tasks; members see the note only.
+(The same object is nested under `GET /api/library/stats`.) Honest empty **More Like This** or **Related titles** notes mean caches are cold. Owners get a deep link to Scheduled Tasks; members see the note only.
 
-### Refreshing Plot Lab motifs after an update
+### Refreshing plot patterns after an update
 
-Motifs are materialized facet rows, not live query results. When a release improves motif quality, open **Admin → Scheduled Tasks** (`/admin/tasks`) and run `summary_motifs` once (or wait for its next idle run). The task safely replaces only motif facets from the existing layered plot text; no full library reindex is needed.
+Plot patterns are materialized rows, not live query results. When a release improves their quality, open **Admin → Scheduled Tasks** (`/admin/tasks`) and run `summary_motifs` once (or wait for its next idle run). The task safely replaces only those derived rows from the existing layered plot text; no full library reindex is needed.
 
 ### Telemetry & tuning
 
@@ -464,7 +471,7 @@ curl -s -X POST http://localhost:8788/api/admin/grooming/actions/ACTION_ID/undo
 
 Use the **Purge candidates & index undo** panel on the Dashboard for the same thing without a terminal.
 
-**How it works / honest limits.** Undo restores Projectionist **index rows** from index-only purge deletes (metadata, knowledge, and neighbor edges); regenerable derived data such as embeddings is rebuilt by the normal idle tasks, so it is not snapshotted. Undo does **not** restore disk files or reverse a full purge — full remove already deleted media through Radarr/Sonarr. Once an action is undone it is marked `undone_at` and can't be undone twice.
+**How it works / honest limits.** Undo restores Projectionist **index rows** from index-only purge deletes (title details, plot knowledge, and similarity links); regenerable derived data such as plot-similarity data is rebuilt by the normal scheduled tasks, so it is not snapshotted. Undo does **not** restore disk files or reverse a full purge — full remove already deleted media through Radarr/Sonarr. Once an action is undone it is marked `undone_at` and can't be undone twice.
 
 ### Collections & courses (publish a list to members)
 
@@ -492,7 +499,7 @@ curl -s http://localhost:8788/api/collections | python3 -m json.tool
 
 Projectionist assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
 
-Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). Owners can push that newsletter early from **Admin → Mail → Weekly newsletter** (just me / selected members / everyone opted in), or send a self-only copy from **Settings → Notifications**. A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
+Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). Owners can push that newsletter early from **Admin → Mail → Weekly newsletter** (just me / selected members / everyone opted in), or send a self-only copy from **Settings → Notifications**. A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). Opt-in **Year in Review** rides late-December tease / early-January drop tasks (`year_in_review_tease`, `year_in_review_drop`); owners can generate a self reel from **Settings → Notifications**. The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
 
 ```bash
 curl -s -X POST http://localhost:8788/api/admin/weekly-rail/generate | python3 -m json.tool
@@ -508,6 +515,14 @@ curl -s -X POST http://localhost:8788/api/admin/weekly-newsletter/generate \
 curl -s -X POST http://localhost:8788/api/admin/weekly-newsletter/generate \
   -H 'Content-Type: application/json' \
   -d '{"scope":"self"}' | python3 -m json.tool
+
+# Generate + notify your own Year in Review (owner session; opt-in recommended)
+curl -s -X POST http://localhost:8788/api/admin/year-in-review/generate \
+  -H 'Content-Type: application/json' \
+  -d '{"scope":"self","notify":true}' | python3 -m json.tool
+
+# Watch-tracker health (no titles / identity keys)
+curl -s http://localhost:8788/api/admin/watch-tracker/status | python3 -m json.tool
 
 curl -s -X POST http://localhost:8788/api/admin/weekly-newsletter/generate \
   -H 'Content-Type: application/json' \
@@ -628,7 +643,7 @@ Wikipedia is the default long-synopsis source because it's free, needs no API ke
 - Default is already `wikipedia` when the setting is missing/unset.
 - To stop the trickle, set `long_synopsis_source` to `off` (or `PROJECTIONIST_LONG_SYNOPSIS_SOURCE=off`). Empty / `none` / `disabled` also disable it.
 - For OMDb (or `auto` fallback), set `omdb_api_key` / `OMDB_API_KEY` and `long_synopsis_source` to `omdb` or `auto`.
-- Themes: `keyword_theme_tagging` needs no key. Plot Lab shows theme chips once facets exist.
+- Themes: `keyword_theme_tagging` needs no key. Themes can enrich title knowledge and connection explanations once the task has run.
 
 **First-start bootstrap:** after the idle scheduler starts, never-run foundational tasks (`metadata_enrichment` if backlog, `summary_motifs`, `keyword_theme_tagging`, synopsis when enabled, embeddings only if the store is empty) run once in sequence so coverage doesn't wait days. See [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md#first-start-idle-bootstrap).
 
