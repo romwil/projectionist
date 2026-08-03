@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.31.3] — 2026-08-03
+
+Pin the optional MCP Python SDK to the v1 line so `mcp.server.fastmcp` keeps importing after `pip install mcp` started resolving to 2.x.
+
+### Highlights
+- **MCP tools stay loadable.** Docker and CI install an MCP SDK that still exposes FastMCP — the surface Projectionist’s stdio/HTTP MCP server uses today.
+- **No surprise 2.x pull.** Until Projectionist migrates off `mcp.server.fastmcp`, the dependency stays on `mcp>=1.28,<2`.
+
+### Fixed
+- `pyproject.toml` `[project.optional-dependencies].mcp` pins `mcp>=1.28.0,<2` (unbounded `>=1.0.0` pulled MCP SDK 2.0 and broke `from mcp.server.fastmcp import FastMCP` in CI and image builds).
+- `tests/test_mcp_library.py` uses the same `@skipUnless` import of `projectionist.mcp.server` as other MCP suites (bare `import mcp` is not enough on SDK 2.x).
+
+### Verification
+- `.venv/bin/ruff check .` — clean.
+- `tests/test_mcp_library.py` + affinity MCP test — pass on mcp 1.28.1.
+- `test_version` lockstep **1.31.3**.
+
 ## [1.31.2] — 2026-08-03
 
 Follow-up so GitHub Actions pytest matches the intended `.[web,dev,mcp]` install — the affinity privacy test no longer fails with `No module named 'mcp'`.
