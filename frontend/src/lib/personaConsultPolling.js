@@ -29,9 +29,11 @@ export function hasPendingPersonaConsult(messages) {
 }
 
 export function mergeThreadMessagesById(current, fetched) {
-  const nextById = new Map(
-    (Array.isArray(current) ? current : []).map((message) => [message.id, message]),
-  );
+  const nextById = new Map();
+  for (const message of Array.isArray(current) ? current : []) {
+    if (!message?.id) continue;
+    nextById.set(message.id, message);
+  }
   for (const message of Array.isArray(fetched) ? fetched : []) {
     if (!message?.id) continue;
     nextById.set(message.id, { ...nextById.get(message.id), ...message });
