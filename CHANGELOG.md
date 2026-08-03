@@ -40,6 +40,26 @@
 - History rows without a provider event id rely on the normalized fingerprint rather than a fabricated Plex id.
 - Database write failures are no longer misreported as duplicate events; only uniqueness violations count as deduplication.
 
+## [1.31.4] — 2026-08-03
+
+Playwright CA-layer specs catch up with 1.31.0 UI renames so GitHub Actions e2e is green again.
+
+### Highlights
+- **Explore e2e follows Related titles.** Hub cards and the old Plot Lab redirect are asserted against today’s navigation.
+- **Admin overview e2e matches Household health.** Specs wait on `household-health-hero` instead of the retired maintenance dashboard marker.
+- **Inbox and title cards match current click behavior.** Dismiss-all sends `all_unread`, and a plain title-card click opens the detail drawer.
+
+### Fixed
+- `e2e/explore.spec.ts` / `e2e/theme.spec.ts` — `explore-hub-related-titles`, `/explore/related`, plot-lab → related redirect.
+- `e2e/config-maintenance.spec.ts` / `e2e/ca-release.spec.ts` — `household-health-hero` + re-run wizard.
+- `e2e/recommendations-inbox.spec.ts` — dismiss-all payload `{ all_unread: true }`.
+- `e2e/title-cards.spec.ts` — title-card click opens `title-detail-drawer` on `/chat`.
+
+### Verification
+- Focused Playwright: config-maintenance, ca-release, explore, theme, recommendations-inbox, title-cards — 29 passed.
+- Prior gates from 1.31.1–1.31.3 remain: ruff clean, mypy ok, frontend unit 655, pytest 1793, mcp pin `<2`.
+- `test_version` lockstep **1.31.4**.
+
 ## [1.31.3] — 2026-08-03
 
 Pin the optional MCP Python SDK to the v1 line so `mcp.server.fastmcp` keeps importing after `pip install mcp` started resolving to 2.x.

@@ -59,5 +59,5 @@ test("inbox dismisses visible cards and exposes Play for library titles", async 
   await expect(inbox.getByTestId("recommendation-watch-plex")).toBeVisible();
 
   await inbox.getByTestId("recommendations-dismiss-all").click();
-  await expect.poll(() => dismissedPayloads).toEqual([{ ids: ["detailed", "other"] }]);
+  await expect.poll(() => dismissedPayloads).toEqual([{ all_unread: true }]);
 });

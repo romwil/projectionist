@@ -90,7 +90,7 @@ test.describe("Theme chrome", () => {
     await explore.click();
     await expect(page.getByTestId("explore-page")).toBeVisible();
     await expect(page.getByTestId("explore-section-recently-added")).toBeVisible();
-    await expect(page.getByTestId("explore-hub-plot-lab")).toBeVisible();
+    await expect(page.getByTestId("explore-hub-related-titles")).toBeVisible();
     await expect(page.getByTestId("explore-recently-added-rail")).toBeVisible();
     await expect(page.getByTestId("explore-pulse-grid")).toBeVisible();
   });
