@@ -2,6 +2,54 @@
 
 ## [Unreleased]
 
+## [1.31.5] — 2026-08-03
+
+Projectionist now turns live, webhook, manual, and Plex-history observations into private, confidence-labeled personal watch timelines.
+
+### Highlights
+- **Your watch history now explains itself.** Movie detail shows a personal completion timeline with confidence and “Why this count?”, while shows stay episode-first and cards use tracked counts only when coverage exists.
+- **Chat uses the strongest honest evidence available.** The curator prefers your tracker-backed completions, labels bare Plex played events, and falls back to the old aggregate without claiming uninterrupted viewing.
+- **Watch evidence follows your privacy choices.** Personal tracker events, sessions, and completions are included in account export and removed by purge or account deletion.
+- **Watch evidence now becomes an honest personal timeline.** Projectionist conservatively joins playback observations into logical movie or episode viewings, records confidence for each completion, and keeps TV totals episode-first.
+- **Your summaries stay yours.** Authenticated summary APIs return only the current user’s tracked evidence, while owner diagnostics explain correlation without exposing Plex account identifiers or raw payloads.
+- **Watch evidence now arrives while playback is happening.** Pause, stop, played, and privacy-minimized progress samples are recorded even when a title is below the rating-prompt threshold.
+- **Plex history ingestion is resumable and safe to replay.** Projectionist polls a bounded overlap window without inflating the evidence ledger, and a failed page never skips ahead.
+- **Account boundaries stay explicit.** History, live, webhook, and manual evidence maps only through exact Plex account ids; unknown accounts remain isolated instead of being guessed from names.
+- **Private health diagnostics.** Owners can inspect source freshness and mapping coverage without exposing titles, account identities, server ids, tokens, or raw Plex responses.
+
+### Added
+- `PlexClient.history_page` support for `/status/sessions/history/all`, including URL-encoded pagination, optional time filtering, malformed-row isolation, and movie/episode fixtures.
+- Focused Phase 1 coverage for migration shape, replay idempotency, household user isolation, overlap polling, cancellation/failure cursor safety, scheduler behavior, and owner-only status authorization.
+- A second Plex history fixture covering missing optional fields, unmapped accounts, and malformed rows.
+- Privacy-minimized `PlexClient.active_sessions` parsing plus an adaptive poller: 60-second progress samples while sessions exist and five-minute checks while idle or unavailable.
+- Phase 2 coverage for webhook progress below the prompt threshold, manual mark/unmark evidence, account fail-closed behavior, client hashing, reconnect/client-switch observations, adaptive cadence, and clean poller restart.
+- Deterministic Phase 3 session/completion materialization with `certain`, `likely`, and `plex_event_only` confidence; stable rebuild ids; reconnect, cross-source, and implausible-recompletion suppression; and manual-unscrobble correction handling.
+- Current-user movie/episode summary (`GET /api/watch-tracker/summary/{rating_key}`), current-user show episode rollup (`GET /api/watch-tracker/shows/{rating_key}/summary`), and owner-only sanitized evidence review (`GET /api/admin/watch-tracker/evidence`) APIs.
+- Focused Phase 3 coverage for multi-sitting viewings, client handoff, genuine rewatches, duplicate played events, manual corrections, user isolation, episode rollups, stable rebuilds, API authorization, and diagnostics redaction.
+- Phase 4 title/episode completion timelines, show rollups with repeat episode completions and recent activity, confidence explanations, and concise movie-card tracked counts.
+- Focused Phase 4 backend/frontend coverage for tracker-preferred agent payloads, no-coverage fallback, user-scoped timelines, and privacy export/purge/account deletion.
+
+### Changed
+- The 15-minute `watch_history_ingest` task now reads the flat Plex settings contract, reports unsupported/unavailable history as a degraded task outcome, and stores only a sanitized error category.
+- Owner watch-tracker status now includes per-source capability, cursor age, and mapped/unmapped event totals while preserving existing aggregate health fields.
+- Every successful watch-event batch now refreshes only the affected users’ or unmapped identities’ derivations; raw evidence remains append-only and user boundaries remain exact.
+- Supported Plex webhooks persist normalized evidence before the existing 85% rating-prompt decision; unknown Plex accounts remain unmapped and never receive personal prompts.
+- Successful manual watched/unwatched Plex writes append mapped correction evidence with only a token-source category—never the token.
+- Live, webhook, history, and manual observations share the same correlation path without changing legacy aggregate counts.
+- Agent payloads now keep `plex_played_event_count` beside user-scoped tracker fields; prompt policy prefers tracked evidence when coverage exists and uses `certain`, `likely`, and `plex_event_only` without treating any level as proof of uninterrupted viewing.
+- Personal data export/purge and household account deletion now include normalized watch evidence and derived sessions/completions.
+
+### Fixed
+- Paging advances by the number of rows Plex returned, not only rows that normalized successfully, preventing malformed entries from replaying the same page indefinitely.
+- History rows without a provider event id rely on the normalized fingerprint rather than a fabricated Plex id.
+- Database write failures are no longer misreported as duplicate events; only uniqueness violations count as deduplication.
+
+### Verification
+- Backend: 1,833 passed, 6 skipped, 29 subtests passed; 75.49% coverage (74% required).
+- Frontend unit: 660 passed, 0 failed.
+- ESLint: 0 errors; production Vite build passed.
+- Focused Playwright watch tracker: 2 passed.
+
 ## [1.31.4] — 2026-08-03
 
 Playwright CA-layer specs catch up with 1.31.0 UI renames so GitHub Actions e2e is green again.

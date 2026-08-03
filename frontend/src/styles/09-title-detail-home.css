@@ -355,6 +355,60 @@
   font-weight: 400;
 }
 
+.watch-history,
+.show-watch-summary {
+  padding: var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 92%, var(--accent) 8%);
+}
+
+.watch-history-summary,
+.show-watch-summary p {
+  margin: 0 0 var(--space-3);
+}
+
+.watch-history-timeline,
+.show-watch-summary ul {
+  display: grid;
+  gap: var(--space-3);
+  margin: var(--space-3) 0;
+  padding-left: var(--space-5);
+}
+
+.watch-history-timeline li {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.watch-history-date {
+  font-variant-numeric: tabular-nums;
+}
+
+.watch-confidence,
+.title-card-tracked-count {
+  color: var(--accent);
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+
+.watch-history details summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+
+.watch-history details p {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+}
+
+.show-watch-summary h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-base);
+}
+
 .title-why-card {
   position: relative;
   padding: var(--space-6);

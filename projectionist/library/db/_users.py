@@ -151,6 +151,8 @@ class UsersAuthMixin:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
             if existing is None:
                 raise ValueError("User not found")
+        self.purge_user_memory_and_chats(user_id)
+        with self.connect() as conn:
             conn.execute("DELETE FROM users WHERE id = ?", (user_id,))
 
     def update_user_seerr(
