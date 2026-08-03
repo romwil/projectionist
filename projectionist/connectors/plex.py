@@ -5,9 +5,12 @@ from __future__ import annotations
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from projectionist.connectors.http import merge_plex_provider_ids, optional_int, request_empty, request_xml
+
+if TYPE_CHECKING:
+    from projectionist.watch_tracker.plex_history import PlexHistoryPage
 
 PLEX_LIBRARY_IDENTIFIER = "com.plexapp.plugins.library"
 
@@ -352,6 +355,28 @@ class PlexClient:
     def friendly_name(self) -> str:
         _, name = self.server_identity()
         return name
+
+    def history_page(
+        self,
+        *,
+        start: int = 0,
+        size: int = 250,
+        since_ms: Optional[int] = None,
+    ) -> "PlexHistoryPage":
+        """Return one bounded page from Plex's played-history endpoint.
+
+        Importing locally keeps the connector's core dataclasses independent of
+        the watch-tracker adapter while exposing the plan's public client seam.
+        """
+        from projectionist.watch_tracker.plex_history import history_page
+
+        page, _events = history_page(
+            self,
+            start=start,
+            size=size,
+            since_ms=since_ms,
+        )
+        return page
 
     def set_user_rating(self, rating_key: str, stars: float | int) -> None:
         key = str(rating_key or "").strip()

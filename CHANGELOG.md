@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Highlights
+- **Plex history ingestion is resumable and safe to replay.** Projectionist polls a bounded overlap window without inflating the evidence ledger, and a failed page never skips ahead.
+- **Account boundaries stay explicit.** Played-history evidence maps only through exact Plex account ids; unknown accounts remain isolated instead of being guessed from names.
+- **Private health diagnostics.** Owners can inspect source freshness and mapping coverage without exposing titles, account identities, server ids, tokens, or raw Plex responses.
+
+### Added
+- `PlexClient.history_page` support for `/status/sessions/history/all`, including URL-encoded pagination, optional time filtering, malformed-row isolation, and movie/episode fixtures.
+- Focused Phase 1 coverage for migration shape, replay idempotency, household user isolation, overlap polling, cancellation/failure cursor safety, scheduler behavior, and owner-only status authorization.
+- A second Plex history fixture covering missing optional fields, unmapped accounts, and malformed rows.
+
+### Changed
+- The 15-minute `watch_history_ingest` task now reads the flat Plex settings contract, reports unsupported/unavailable history as a degraded task outcome, and stores only a sanitized error category.
+- Owner watch-tracker status now includes per-source capability, cursor age, and mapped/unmapped event totals while preserving existing aggregate health fields.
+- Plex history polling remains an evidence-only Phase 1 path; it no longer invokes session/completion correlation as part of page ingestion.
+
+### Fixed
+- Paging advances by the number of rows Plex returned, not only rows that normalized successfully, preventing malformed entries from replaying the same page indefinitely.
+- History rows without a provider event id rely on the normalized fingerprint rather than a fabricated Plex id.
+- Database write failures are no longer misreported as duplicate events; only uniqueness violations count as deduplication.
+
 ## [1.31.3] — 2026-08-03
 
 Pin the optional MCP Python SDK to the v1 line so `mcp.server.fastmcp` keeps importing after `pip install mcp` started resolving to 2.x.

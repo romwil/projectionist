@@ -55,6 +55,32 @@ Canonical Plex index enriched during sync and idle `metadata_enrichment`.
 
 **Indexes:** `tmdb_id`, `tvdb_id`, `media_type`, `added_at`, `release_date`, `tmdb_collection_id`.
 
+#### Plex watch evidence ledger
+
+Plex played history is stored as normalized, append-only evidence. This path is
+deliberately separate from `library_items.view_count`: replaying an ingest page is
+a no-op, and a history row is not treated as proof of an uninterrupted viewing.
+
+| Table | Purpose |
+|-------|---------|
+| `watch_ingest_cursors` | One high-water mark per source and Plex server. A failed or cancelled page leaves the previous mark intact. |
+| `watch_source_identities` | Stable source account → Projectionist user mapping. Plex accounts map only by exact `Account.id == users.plex_user_id`; unknown accounts remain isolated. |
+| `watch_events` | Normalized movie/episode evidence with source kind, account key, rating key, event time, optional progress/duration, and a deterministic payload hash. |
+
+The `watch_history_ingest` scheduled task runs every 15 minutes. Its first pass
+is bounded to the newest 90 days or 10,000 rows, then later passes replay a
+10-minute overlap around the stored high-water mark. Pages contain at most 250
+rows. Provider event ids and normalized fingerprints enforce idempotency.
+
+Only fields returned by Plex are normalized. Projectionist does not retain the
+history response body, Plex token, client IP, or transcode details. Missing
+account identity makes a row ineligible for personal mapping and is reported as
+source-quality diagnostics rather than guessed from a display name.
+
+This Phase 1 ingest path does not reinterpret Plex aggregate counts and does not
+claim a history event is a logical completion. Session/completion derivation is
+a separate evidence-processing concern.
+
 #### Provenance rules (dates & plot text)
 
 Projectionist treats missing metadata as a first-class state. Feeds and agent tools must not invent facts:

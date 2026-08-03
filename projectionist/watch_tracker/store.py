@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import sqlite3
 import time
 import uuid
 from typing import Any, Dict, Optional, Sequence
@@ -174,7 +175,9 @@ def ingest_watch_events(
                     )
                     local.inserted += 1
                     local.event_ids.append(event_id)
-                except Exception:  # noqa: BLE001 — unique constraint → dedupe
+                except sqlite3.IntegrityError as exc:
+                    if "UNIQUE constraint failed" not in str(exc):
+                        raise
                     local.deduped += 1
         return local
 
@@ -265,6 +268,7 @@ def set_ingest_cursor(
 
 def watch_tracker_status(db: Database) -> Dict[str, Any]:
     """Owner-facing health — no titles or source identity keys."""
+    now = time.time()
     with db.connect() as conn:
         total = conn.execute("SELECT COUNT(*) AS c FROM watch_events").fetchone()
         mapped = conn.execute(
@@ -284,12 +288,84 @@ def watch_tracker_status(db: Database) -> Dict[str, Any]:
             FROM watch_ingest_cursors
             """
         ).fetchall()
+        source_counts = conn.execute(
+            """
+            SELECT source, server_machine_id,
+                   COUNT(*) AS total,
+                   SUM(CASE WHEN user_id IS NOT NULL THEN 1 ELSE 0 END) AS mapped,
+                   SUM(CASE WHEN user_id IS NULL THEN 1 ELSE 0 END) AS unmapped
+            FROM watch_events
+            GROUP BY source, server_machine_id
+            """
+        ).fetchall()
+    counts_by_cursor = {
+        (str(row["source"]), str(row["server_machine_id"])): {
+            "events_total": int(row["total"] or 0),
+            "events_mapped": int(row["mapped"] or 0),
+            "events_unmapped": int(row["unmapped"] or 0),
+        }
+        for row in source_counts
+    }
+
+    def _source_status(row) -> Dict[str, Any]:
+        last_success = row["last_success_at"]
+        last_error_at = row["last_error_at"]
+        has_current_error = bool(row["last_error"]) and (
+            last_success is None
+            or (last_error_at is not None and float(last_error_at) > float(last_success))
+        )
+        capability = (
+            "degraded"
+            if has_current_error
+            else "available"
+            if last_success is not None
+            else "unknown"
+        )
+        return {
+            "source": str(row["source"]),
+            "capability": capability,
+            "cursor_age_seconds": (
+                max(0, int(now - float(last_success)))
+                if last_success is not None
+                else None
+            ),
+            "high_watermark_ms": row["high_watermark_ms"],
+            "last_success_at": last_success,
+            "last_error_at": last_error_at,
+            "last_error": str(row["last_error"]) if has_current_error else None,
+            **counts_by_cursor.get(
+                (str(row["source"]), str(row["server_machine_id"])),
+                {
+                    "events_total": 0,
+                    "events_mapped": 0,
+                    "events_unmapped": 0,
+                },
+            ),
+        }
+
+    sources = [_source_status(row) for row in cursors]
+    if not sources:
+        sources = [
+            {
+                "source": "plex_history",
+                "capability": "unknown",
+                "cursor_age_seconds": None,
+                "high_watermark_ms": None,
+                "last_success_at": None,
+                "last_error_at": None,
+                "last_error": None,
+                "events_total": 0,
+                "events_mapped": 0,
+                "events_unmapped": 0,
+            }
+        ]
     return {
         "events_total": int(total["c"] if total else 0),
         "events_mapped": int(mapped["c"] if mapped else 0),
         "events_unmapped": int(unmapped["c"] if unmapped else 0),
         "sessions": int(sessions["c"] if sessions else 0),
         "completions": int(completions["c"] if completions else 0),
+        "sources": sources,
         "cursors": [
             {
                 "source": str(row["source"]),

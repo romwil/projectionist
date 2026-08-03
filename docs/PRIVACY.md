@@ -49,6 +49,7 @@ When multi-user is enabled, these stay scoped to your user:
 - Ratings and review prompts tied to you
 - Preference / taste facts the curator keeps for you
 - Private memory notes (for example stated goals, watch intentions, callbacks/in-jokes, and external watches)
+- Normalized Plex played-history evidence that Plex attributed to your exact account id
 - **Preferred conversation name** — how the curator addresses you in chat (may differ from your Plex display name)
 - Voice toggles (listen / speak replies), when voice mode is available
 
@@ -125,6 +126,7 @@ Named lists you create in Projectionist (for example "Friday picks") are stored 
 - Your chat history and message feedback
 - Your pending *arr / Seerr confirmation tokens
 - Your watchlist and personal ratings (as personal records)
+- Your mapped Plex played-history evidence
 - Owner-only Admin: fleet URLs, API keys, MCP keys, household user management
 
 ### MCP and members
@@ -145,6 +147,38 @@ Stored under the app data directory (typically `/config` → `settings.json` and
 - Webhook secret, session secret material, feature flags
 
 **Who can view them in the UI:** owner Admin / Configuration only (not household members). Treat the Docker `/config` volume and backups as secret material. UI-saved keys in `settings.json` are encrypted at rest when a secrets key is available; still protect the volume and back up `PROJECTIONIST_SECRETS_KEY` with `/config`.
+
+### Plex history ledger health
+
+Every 15 minutes, the **Plex Watch History** scheduled task asks Plex for a
+bounded page of played-history evidence. Projectionist keeps normalized
+movie/episode identifiers, the stable Plex account id, event time, optional
+progress/duration, and a deterministic fingerprint. It does **not** keep the
+raw response, Plex token, client IP, or transcode details.
+
+Exact account mapping matters: an event maps to a household user only when
+Plex's stable account id exactly matches that user's linked Plex id. Unmapped
+events remain separate evidence. Display names are never used to guess
+ownership, and one history event does not prove an uninterrupted viewing.
+
+On a trusted single-owner installation, inspect freshness and mapping coverage:
+
+```bash
+# Run an ingest immediately (otherwise it runs every 15 minutes while idle)
+curl -s -X POST \
+  'http://localhost:8788/api/admin/scheduled-tasks/watch_history_ingest/run?wait=true' \
+  | python3 -m json.tool
+
+# Inspect the privacy-safe source health summary
+curl -s http://localhost:8788/api/admin/watch-tracker/status \
+  | python3 -m json.tool
+```
+
+The owner-only response contains source capability, cursor age, aggregate
+mapped/unmapped counts, and a sanitized last-error category. It returns no
+titles, rating keys, Plex account ids, server machine ids, tokens, or event
+rows. With household login enabled, use the signed-in owner Admin session;
+members receive `403 Forbidden`.
 
 ### MCP keys
 
