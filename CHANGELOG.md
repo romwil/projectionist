@@ -3,19 +3,25 @@
 ## [Unreleased]
 
 ### Highlights
+- **Watch evidence now arrives while playback is happening.** Pause, stop, played, and privacy-minimized progress samples are recorded even when a title is below the rating-prompt threshold.
 - **Plex history ingestion is resumable and safe to replay.** Projectionist polls a bounded overlap window without inflating the evidence ledger, and a failed page never skips ahead.
-- **Account boundaries stay explicit.** Played-history evidence maps only through exact Plex account ids; unknown accounts remain isolated instead of being guessed from names.
+- **Account boundaries stay explicit.** History, live, webhook, and manual evidence maps only through exact Plex account ids; unknown accounts remain isolated instead of being guessed from names.
 - **Private health diagnostics.** Owners can inspect source freshness and mapping coverage without exposing titles, account identities, server ids, tokens, or raw Plex responses.
 
 ### Added
 - `PlexClient.history_page` support for `/status/sessions/history/all`, including URL-encoded pagination, optional time filtering, malformed-row isolation, and movie/episode fixtures.
 - Focused Phase 1 coverage for migration shape, replay idempotency, household user isolation, overlap polling, cancellation/failure cursor safety, scheduler behavior, and owner-only status authorization.
 - A second Plex history fixture covering missing optional fields, unmapped accounts, and malformed rows.
+- Privacy-minimized `PlexClient.active_sessions` parsing plus an adaptive poller: 60-second progress samples while sessions exist and five-minute checks while idle or unavailable.
+- Phase 2 coverage for webhook progress below the prompt threshold, manual mark/unmark evidence, account fail-closed behavior, client hashing, reconnect/client-switch observations, adaptive cadence, and clean poller restart.
 
 ### Changed
 - The 15-minute `watch_history_ingest` task now reads the flat Plex settings contract, reports unsupported/unavailable history as a degraded task outcome, and stores only a sanitized error category.
 - Owner watch-tracker status now includes per-source capability, cursor age, and mapped/unmapped event totals while preserving existing aggregate health fields.
 - Plex history polling remains an evidence-only Phase 1 path; it no longer invokes session/completion correlation as part of page ingestion.
+- Supported Plex webhooks persist normalized evidence before the existing 85% rating-prompt decision; unknown Plex accounts remain unmapped and never receive personal prompts.
+- Successful manual watched/unwatched Plex writes append mapped correction evidence with only a token-source category—never the token.
+- Phase 2 remains observation-only: no new live, webhook, or manual event invokes logical session/completion correlation.
 
 ### Fixed
 - Paging advances by the number of rows Plex returned, not only rows that normalized successfully, preventing malformed entries from replaying the same page indefinitely.

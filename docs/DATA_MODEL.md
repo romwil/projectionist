@@ -57,9 +57,10 @@ Canonical Plex index enriched during sync and idle `metadata_enrichment`.
 
 #### Plex watch evidence ledger
 
-Plex played history is stored as normalized, append-only evidence. This path is
-deliberately separate from `library_items.view_count`: replaying an ingest page is
-a no-op, and a history row is not treated as proof of an uninterrupted viewing.
+Plex played history, live progress, webhook terminal signals, and manual watched
+changes are stored as normalized, append-only evidence. This path is deliberately
+separate from `library_items.view_count`: replaying an ingest page is a no-op, and
+an observation is not treated as proof of an uninterrupted viewing.
 
 | Table | Purpose |
 |-------|---------|
@@ -77,9 +78,18 @@ history response body, Plex token, client IP, or transcode details. Missing
 account identity makes a row ineligible for personal mapping and is reported as
 source-quality diagnostics rather than guessed from a display name.
 
-This Phase 1 ingest path does not reinterpret Plex aggregate counts and does not
-claim a history event is a logical completion. Session/completion derivation is
-a separate evidence-processing concern.
+Phase 2 also records `media.pause`, `media.stop`, and `media.scrobble` webhooks
+before applying the separate 85% rating-prompt rule. While Plex reports active
+sessions, a dedicated poller samples progress every 60 seconds; while idle or
+unavailable, it backs off to five minutes. The poller stores a one-way hash of a
+stable client identifier, never the device name, IP address, bandwidth, or raw
+session response. Manual watched/unwatched writes append correction observations
+only when the acting account has an exact linked Plex id; the token itself is
+never stored.
+
+These Phase 1–2 ingest paths do not reinterpret Plex aggregate counts or
+materialize logical sessions/completions. Correlation and confidence remain a
+separate Phase 3 evidence-processing concern.
 
 #### Provenance rules (dates & plot text)
 
