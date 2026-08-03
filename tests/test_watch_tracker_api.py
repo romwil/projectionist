@@ -236,6 +236,12 @@ class WatchTrackerApiTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["tracked_completions"], 1)
         self.assertEqual(body["completion_confidence"]["certain"], 1)
+        self.assertEqual(len(body["completion_timeline"]), 1)
+        self.assertEqual(body["completion_timeline"][0]["confidence"], "certain")
+        self.assertEqual(
+            body["completion_timeline"][0]["basis"],
+            "observed_threshold_crossing",
+        )
         self.assertNotIn("user-a", json.dumps(body))
         self.assertNotIn("4242", json.dumps(body))
 
@@ -250,6 +256,38 @@ class WatchTrackerApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["unique_episodes_completed"], 1)
         self.assertEqual(response.json()["total_episode_completions"], 1)
+        self.assertEqual(response.json()["repeat_episode_completions"], 0)
+        self.assertEqual(
+            response.json()["recent_activity"][0]["rating_key"],
+            "episode-1",
+        )
+        self.assertEqual(
+            response.json()["episode_completions"]["episode-1"]["tracked_completions"],
+            1,
+        )
+
+    def test_library_cards_adopt_only_current_users_tracker_summary(self) -> None:
+        self._enable_multi_user()
+        self._seed_user_summaries()
+        self.app_mod._db().upsert_library_item(
+            {
+                "rating_key": "movie-shared",
+                "media_type": "movie",
+                "title": "Shared Movie",
+                "view_count": 4,
+            }
+        )
+        member = TestClient(self.app_mod.app)
+        member.cookies.set(SESSION_COOKIE_NAME, create_session_token("user-b"))
+
+        response = member.get("/api/library/query", params={"query": "Shared Movie"})
+
+        self.assertEqual(response.status_code, 200)
+        item = response.json()["items"][0]
+        self.assertEqual(item["tracked_completions"], 1)
+        self.assertEqual(item["completion_confidence"]["certain"], 1)
+        self.assertEqual(item["plex_played_event_count"], 4)
+        self.assertNotIn("rating_key", item)
 
     def test_owner_evidence_diagnostics_are_sanitized_and_member_forbidden(self) -> None:
         self._enable_multi_user()

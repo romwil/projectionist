@@ -40,6 +40,7 @@ import { canWatchOnPlex, plexWatchUrl } from "../lib/titleLinks.js";
 import { chatAboutTitleHref, ROUTES } from "../lib/backNav.js";
 import ShowSeasonsPanel from "./ShowSeasonsPanel.jsx";
 import TitleSubtitlesPanel from "./TitleSubtitlesPanel.jsx";
+import WatchHistoryTimeline from "./WatchHistoryTimeline.jsx";
 
 const META_LINK_CLASS = "title-meta-link";
 const META_STATIC_CLASS = "title-meta-static";
@@ -434,6 +435,13 @@ export default function TitleDetailContent({
               <h2 className="title-detail-section-label">Synopsis</h2>
               <p className="title-detail-synopsis">{detail.overview}</p>
             </div>
+          ) : null}
+
+          {detail.in_library && detail.rating_key && detail.media_type === "movie" ? (
+            <WatchHistoryTimeline
+              ratingKey={detail.rating_key}
+              plexPlayedEventCount={detail.view_count}
+            />
           ) : null}
 
           <ShowSeasonsPanel

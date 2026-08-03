@@ -11,6 +11,7 @@ import {
 import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
 import { watchProgressState } from "../lib/watchProgress.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
+import { normalizeWatchSummary, trackedCompletionCardLabel } from "../lib/watchTracker.js";
 import PosterActionMenu from "./PosterActionMenu";
 import TitleDetailLink from "./TitleDetailLink";
 import WatchProgressBadge from "./WatchProgressBadge";
@@ -128,6 +129,10 @@ export default function TitleCard({
   const hasWhyDetail = Boolean(whyReason || facetMatches.length);
   const detailPath = titleDetailPath(item);
   const titleLabel = `${item.title || "Unknown title"}${item.year ? ` (${item.year})` : ""}`;
+  const trackedLabel =
+    item.media_type === "movie"
+      ? trackedCompletionCardLabel(normalizeWatchSummary(item))
+      : "";
 
   useEffect(() => {
     const provided = String(item?.plex_watch_url || "").trim();
@@ -383,6 +388,11 @@ export default function TitleCard({
         </h3>
         {item.rating ? <p className="rating">★ {item.rating.toFixed(1)}</p> : null}
         {userStars ? <p className="user-review-stars" data-testid="user-review-stars">Your rating: {Number(userStars) % 1 === 0 ? "★".repeat(userStars) : `${userStars}★`}</p> : null}
+        {trackedLabel ? (
+          <p className="title-card-tracked-count" data-testid="title-card-tracked-count">
+            {trackedLabel}
+          </p>
+        ) : null}
         {item.genres?.length ? <p className="genres">{item.genres.slice(0, 3).join(" · ")}</p> : null}
         {item.runtime_minutes ? (
           <p className={`runtime ${item.runtime_minutes < 100 ? "runtime-emphasis" : ""}`}>

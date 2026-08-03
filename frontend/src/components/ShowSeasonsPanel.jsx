@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getShowSeasons, removeTvScope } from "../api/client";
+import { getShowSeasons, getShowWatchSummary, removeTvScope } from "../api/client";
 import { canOwnerDeleteLibraryTitle } from "../lib/bulkLibraryDelete.js";
 import {
   formatEpisodeCode,
@@ -8,6 +8,11 @@ import {
   normalizeShowSeasonsPayload,
   showSeasonsSummaryLine,
 } from "../lib/showSeasons.js";
+import {
+  completionConfidenceLabel,
+  formatTrackedDate,
+  normalizeWatchSummary,
+} from "../lib/watchTracker.js";
 import RemovalSummaryDialog from "./RemovalSummaryDialog.jsx";
 import ScopedTvRemoveDialog from "./ScopedTvRemoveDialog.jsx";
 
@@ -28,6 +33,7 @@ export default function ShowSeasonsPanel({
   const [removing, setRemoving] = useState(false);
   const [removeError, setRemoveError] = useState("");
   const [removalSummary, setRemovalSummary] = useState(null);
+  const [watchSummary, setWatchSummary] = useState(null);
 
   const showId = detail?.library_item_id ?? null;
   const tmdbId = detail?.tmdb_id ?? null;
@@ -65,6 +71,24 @@ export default function ShowSeasonsPanel({
     load();
   }, [load]);
 
+  useEffect(() => {
+    const ratingKey = String(detail?.rating_key || "").trim();
+    if (!inLibrary || detail?.media_type !== "show" || !ratingKey) {
+      return undefined;
+    }
+    let cancelled = false;
+    getShowWatchSummary(ratingKey)
+      .then((payload) => {
+        if (!cancelled) setWatchSummary(normalizeWatchSummary(payload));
+      })
+      .catch(() => {
+        if (!cancelled) setWatchSummary(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detail?.media_type, detail?.rating_key, inLibrary]);
+
   if (!inLibrary || detail?.media_type !== "show") return null;
 
   async function handleConfirmRemove() {
@@ -98,6 +122,16 @@ export default function ShowSeasonsPanel({
   }
 
   const summary = data ? showSeasonsSummaryLine(data) : "";
+  const episodesByRatingKey = new Map(
+    (data?.seasons || []).flatMap((season) =>
+      (season.episodes || []).map((episode) => [String(episode.rating_key || ""), episode]),
+    ),
+  );
+  const episodeActivityLabel = (activity) => {
+    const episode = episodesByRatingKey.get(String(activity?.rating_key || ""));
+    if (!episode) return "";
+    return `${formatEpisodeCode(episode.season_number, episode.episode_number)} · ${episode.title} · `;
+  };
 
   return (
     <section
@@ -117,6 +151,34 @@ export default function ShowSeasonsPanel({
           </button>
         ) : null}
       </div>
+
+      {watchSummary?.hasCoverage ? (
+        <div className="show-watch-summary" data-testid="show-watch-summary">
+          <h3>Your episode history</h3>
+          <p>
+            {watchSummary.unique_episodes_completed} episodes completed ·{" "}
+            {watchSummary.total_episode_completions} tracked episode completions
+            {watchSummary.repeat_episode_completions
+              ? ` · ${watchSummary.repeat_episode_completions} repeat episode completions`
+              : ""}
+          </p>
+          {watchSummary.timeline.length ? (
+            <ul aria-label="Recent episode completion activity">
+              {watchSummary.timeline.slice(0, 5).map((activity, index) => (
+                <li key={`${activity.rating_key}-${activity.completed_at_ms}-${index}`}>
+                  {episodeActivityLabel(activity)}
+                  {formatTrackedDate(activity.completed_at_ms)} ·{" "}
+                  {completionConfidenceLabel(activity.confidence)}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <p className="status status-secondary">
+            Shows stay episode-first: Projectionist never turns these into “show watched N
+            times.”
+          </p>
+        </div>
+      ) : null}
 
       {loading ? (
         <p className="status status-secondary">Loading seasons…</p>
@@ -180,6 +242,8 @@ export default function ShowSeasonsPanel({
                   <ul className="show-episode-list">
                     {season.episodes.map((ep) => {
                       const epSize = formatShowBytes(ep.file_size);
+                      const tracked =
+                        watchSummary?.episode_completions?.[String(ep.rating_key || "")] || null;
                       return (
                         <li
                           key={ep.rating_key || `${ep.season_number}-${ep.episode_number}`}
@@ -198,6 +262,14 @@ export default function ShowSeasonsPanel({
                             ) : null}
                             {epSize ? <span>{epSize}</span> : null}
                             <span>{ep.unwatched ? "Unwatched" : "Watched"}</span>
+                            {tracked?.tracked_completions > 0 ? (
+                              <span className="watch-confidence" data-testid="episode-tracked-count">
+                                {tracked.tracked_completions} tracked{" "}
+                                {tracked.tracked_completions === 1
+                                  ? "completion"
+                                  : "completions"}
+                              </span>
+                            ) : null}
                             {canDelete && ep.rating_key ? (
                               <button
                                 type="button"

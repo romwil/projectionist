@@ -1409,6 +1409,16 @@ export async function getTvProgress() {
   return api("/library/tv/progress");
 }
 
+/** Current signed-in user's tracker-backed summary for a movie or episode. */
+export async function getWatchSummary(ratingKey) {
+  return api(`/watch-tracker/summary/${encodeURIComponent(ratingKey)}`);
+}
+
+/** Current signed-in user's episode-first rollup for a show. */
+export async function getShowWatchSummary(ratingKey) {
+  return api(`/watch-tracker/shows/${encodeURIComponent(ratingKey)}/summary`);
+}
+
 /** Seasons + nested episodes for a library show (title detail). */
 export async function getShowSeasons({
   showId = null,
