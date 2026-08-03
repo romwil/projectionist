@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-import time
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -41,6 +40,14 @@ def _event_sort_key(row: Any) -> Tuple[Any, ...]:
         int(row["occurred_at_ms"]),
         str(row["id"]),
     )
+
+
+_DERIVATION_NAMESPACE = uuid.UUID("dc472216-ceec-4acd-853b-b47de69bad12")
+
+
+def _stable_id(kind: str, *parts: object) -> str:
+    material = "\x1f".join([kind, *(str(part) for part in parts)])
+    return str(uuid.uuid5(_DERIVATION_NAMESPACE, material))
 
 
 def rebuild_watch_derivations(
@@ -92,21 +99,51 @@ def rebuild_watch_derivations(
                 conn.execute("DELETE FROM watch_completions")
                 conn.execute("DELETE FROM watch_sessions")
 
-            sessions_built = 0
-            completions_built = 0
+            built_sessions: List[Tuple[Dict[str, Any], List[Any]]] = []
             current: Optional[Dict[str, Any]] = None
             current_events: List[Any] = []
 
             def flush() -> None:
-                nonlocal sessions_built, completions_built, current, current_events
+                nonlocal current, current_events
                 if current is None or not current_events:
                     current = None
                     current_events = []
                     return
-                session_id = str(uuid.uuid4())
-                now = time.time()
-                first = current_events[0]
-                last = current_events[-1]
+                built_sessions.append((current, list(current_events)))
+                current = None
+                current_events = []
+
+            for row in rows:
+                if current is None:
+                    current = _new_session_state(row)
+                    current_events = [row]
+                    continue
+                if _can_merge(current, row):
+                    _merge_into(current, row)
+                    current_events.append(row)
+                else:
+                    flush()
+                    current = _new_session_state(row)
+                    current_events = [row]
+            flush()
+
+            sessions_built = 0
+            completions_built = 0
+            last_completion: Dict[Tuple[str, str, str], Dict[str, Any]] = {}
+            for state, session_events in built_sessions:
+                first = session_events[0]
+                last = session_events[-1]
+                session_id = _stable_id(
+                    "session",
+                    algorithm_version,
+                    state["server_machine_id"],
+                    state["source_user_key"],
+                    state["rating_key"],
+                    first["id"],
+                    last["id"],
+                )
+                created_at = min(float(event["ingested_at"]) for event in session_events)
+                updated_at = max(float(event["ingested_at"]) for event in session_events)
                 conn.execute(
                     """
                     INSERT INTO watch_sessions (
@@ -119,28 +156,28 @@ def rebuild_watch_derivations(
                     """,
                     (
                         session_id,
-                        current.get("user_id"),
-                        current["source_user_key"],
-                        current["rating_key"],
-                        current.get("parent_rating_key"),
-                        current["media_type"],
-                        current["started_at_ms"],
-                        current.get("ended_at_ms"),
-                        current.get("start_progress_ms"),
-                        current.get("max_progress_ms"),
-                        current.get("duration_ms"),
+                        state.get("user_id"),
+                        state["source_user_key"],
+                        state["rating_key"],
+                        state.get("parent_rating_key"),
+                        state["media_type"],
+                        state["started_at_ms"],
+                        state.get("ended_at_ms"),
+                        state.get("start_progress_ms"),
+                        state.get("max_progress_ms"),
+                        state.get("duration_ms"),
                         str(first["id"]),
                         str(last["id"]),
-                        current.get("primary_client_key"),
-                        current.get("client_count", 1),
-                        len(current_events),
-                        current.get("terminal_reason"),
+                        state.get("primary_client_key"),
+                        state.get("client_count", 1),
+                        len(session_events),
+                        state.get("terminal_reason"),
                         algorithm_version,
-                        now,
-                        now,
+                        created_at,
+                        updated_at,
                     ),
                 )
-                for ordinal, ev in enumerate(current_events):
+                for ordinal, ev in enumerate(session_events):
                     conn.execute(
                         """
                         INSERT INTO watch_session_events (session_id, event_id, ordinal)
@@ -149,8 +186,21 @@ def rebuild_watch_derivations(
                         (session_id, str(ev["id"]), ordinal),
                     )
                 sessions_built += 1
-                completion = _derive_completion(current, current_events)
+                completion = _derive_completion(state, session_events)
+                completion_key = (
+                    state["server_machine_id"],
+                    state["source_user_key"],
+                    state["rating_key"],
+                )
+                prior = last_completion.get(completion_key)
+                if completion and prior and _is_implausible_recompletion(
+                    state, completion, prior
+                ):
+                    completion = None
                 if completion:
+                    completion_id = _stable_id(
+                        "completion", algorithm_version, session_id, completion["evidence_event_id"]
+                    )
                     conn.execute(
                         """
                         INSERT INTO watch_completions (
@@ -161,49 +211,26 @@ def rebuild_watch_derivations(
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
                         """,
                         (
-                            str(uuid.uuid4()),
+                            completion_id,
                             session_id,
-                            current.get("user_id"),
-                            current["rating_key"],
-                            current.get("parent_rating_key"),
-                            current["media_type"],
+                            state.get("user_id"),
+                            state["rating_key"],
+                            state.get("parent_rating_key"),
+                            state["media_type"],
                             completion["completed_at_ms"],
                             completion["confidence"],
                             completion["basis"],
                             COMPLETION_THRESHOLD_PCT,
                             completion["evidence_event_id"],
                             algorithm_version,
-                            now,
+                            updated_at,
                         ),
                     )
                     completions_built += 1
-                current = None
-                current_events = []
-
-            last_completion_at: Dict[Tuple[str, str], int] = {}
-
-            for row in rows:
-                if current is None:
-                    current = _new_session_state(row)
-                    current_events = [row]
-                    continue
-                if _can_merge(current, row, last_completion_at):
-                    _merge_into(current, row)
-                    current_events.append(row)
-                else:
-                    flush()
-                    current = _new_session_state(row)
-                    current_events = [row]
-                # Track provisional completions for restart detection within rebuild.
-                pct = _progress_pct(row["progress_ms"], row["duration_ms"])
-                kind = str(row["source_event_kind"])
-                if (
-                    (pct is not None and pct >= COMPLETION_THRESHOLD_PCT)
-                    or kind in {"history_played", "plex_scrobble", "manual_scrobble"}
-                ):
-                    key = (str(row["source_user_key"]), str(row["rating_key"]))
-                    last_completion_at[key] = int(row["occurred_at_ms"])
-            flush()
+                    last_completion[completion_key] = {
+                        "completed_at_ms": completion["completed_at_ms"],
+                        "duration_ms": state.get("duration_ms"),
+                    }
             return {
                 "sessions": sessions_built,
                 "completions": completions_built,
@@ -241,6 +268,8 @@ def _new_session_state(row: Any) -> Dict[str, Any]:
         "has_progress": row["progress_ms"] is not None,
         "manual_only": bool(row["manual"]) and str(row["source_event_kind"]) == "manual_scrobble",
         "kinds": {str(row["source_event_kind"])},
+        "crossing_event_id": None,
+        "crossing_at_ms": None,
     }
 
 
@@ -265,6 +294,9 @@ def _merge_into(current: Dict[str, Any], row: Any) -> None:
         if pct < COMPLETION_THRESHOLD_PCT:
             current["saw_below_threshold"] = True
         if pct >= COMPLETION_THRESHOLD_PCT:
+            if current.get("saw_below_threshold") and not current.get("crossing_event_id"):
+                current["crossing_event_id"] = str(row["id"])
+                current["crossing_at_ms"] = int(row["occurred_at_ms"])
             current["saw_at_or_above_threshold"] = True
     current["kinds"].add(str(row["source_event_kind"]))
     if not (bool(row["manual"]) and str(row["source_event_kind"]) == "manual_scrobble"):
@@ -274,7 +306,6 @@ def _merge_into(current: Dict[str, Any], row: Any) -> None:
 def _can_merge(
     current: Dict[str, Any],
     row: Any,
-    last_completion_at: Dict[Tuple[str, str], int],
 ) -> bool:
     if str(row["server_machine_id"]) != current["server_machine_id"]:
         return False
@@ -287,20 +318,9 @@ def _can_merge(
     gap = int(row["occurred_at_ms"]) - int(current["ended_at_ms"])
     if gap > SESSION_GAP_MS:
         return False
-    # Restart after completion at/below 15%.
-    key = (current["source_user_key"], current["rating_key"])
-    prior_complete = last_completion_at.get(key)
     pct = _progress_pct(row["progress_ms"], row["duration_ms"] or current.get("duration_ms"))
-    if prior_complete and prior_complete <= int(current["ended_at_ms"]):
-        if pct is not None and pct <= RESTART_PROGRESS_PCT:
-            return False
-        elapsed = int(row["occurred_at_ms"]) - prior_complete
-        duration = current.get("duration_ms") or row["duration_ms"]
-        min_gap = max(IMPLAUSIBLE_RECOMPLETE_MS, int(float(duration or 0) * 0.75))
-        kind = str(row["source_event_kind"])
-        if kind in {"history_played", "plex_scrobble"} and elapsed < min_gap:
-            # Likely duplicate terminal within implausible window — merge as evidence.
-            return True
+    if current.get("saw_at_or_above_threshold") and pct is not None and pct <= RESTART_PROGRESS_PCT:
+        return False
     # Progress monotonicity (skip for pure terminal history/scrobble without progress).
     if row["progress_ms"] is not None and current.get("max_progress_ms") is not None:
         tol = _rewind_tolerance_ms(row["duration_ms"] or current.get("duration_ms"))
@@ -331,7 +351,15 @@ def _derive_completion(
     completed_at = int(current.get("ended_at_ms") or last["occurred_at_ms"])
     evidence_id = str(last["id"])
 
-    if current.get("manual_only"):
+    if (
+        "manual_unscrobble" in kinds
+        and "manual_scrobble" in kinds
+        and not (kinds & {"history_played", "plex_scrobble"})
+        and not current.get("saw_at_or_above_threshold")
+    ):
+        return None
+
+    if "manual_scrobble" in kinds:
         return {
             "completed_at_ms": completed_at,
             "confidence": "plex_event_only",
@@ -339,12 +367,16 @@ def _derive_completion(
             "evidence_event_id": evidence_id,
         }
 
-    if current.get("saw_below_threshold") and current.get("saw_at_or_above_threshold"):
+    if (
+        current.get("user_id")
+        and current.get("saw_below_threshold")
+        and current.get("saw_at_or_above_threshold")
+    ):
         return {
-            "completed_at_ms": completed_at,
+            "completed_at_ms": int(current.get("crossing_at_ms") or completed_at),
             "confidence": "certain",
             "basis": "observed_threshold_crossing",
-            "evidence_event_id": evidence_id,
+            "evidence_event_id": str(current.get("crossing_event_id") or evidence_id),
         }
 
     max_pct = _progress_pct(current.get("max_progress_ms"), current.get("duration_ms"))
@@ -357,6 +389,14 @@ def _derive_completion(
             "evidence_event_id": evidence_id,
         }
 
+    if "history_played" in kinds and current.get("has_progress"):
+        return {
+            "completed_at_ms": completed_at,
+            "confidence": "likely",
+            "basis": "history_linked_progress",
+            "evidence_event_id": evidence_id,
+        }
+
     if kinds & {"history_played", "plex_scrobble"}:
         return {
             "completed_at_ms": completed_at,
@@ -365,25 +405,46 @@ def _derive_completion(
             "evidence_event_id": evidence_id,
         }
 
-    if max_pct is not None and max_pct >= COMPLETION_THRESHOLD_PCT:
-        return {
-            "completed_at_ms": completed_at,
-            "confidence": "likely",
-            "basis": "progress_at_threshold",
-            "evidence_event_id": evidence_id,
-        }
     return None
 
 
-def correlate_after_ingest(db: Database, *, user_ids: Optional[Sequence[str]] = None) -> Dict[str, Any]:
+def _is_implausible_recompletion(
+    current: Dict[str, Any],
+    completion: Dict[str, Any],
+    prior: Dict[str, Any],
+) -> bool:
+    if completion["confidence"] != "plex_event_only":
+        return False
+    start_pct = _progress_pct(current.get("start_progress_ms"), current.get("duration_ms"))
+    if start_pct is not None and start_pct <= RESTART_PROGRESS_PCT:
+        return False
+    elapsed = int(completion["completed_at_ms"]) - int(prior["completed_at_ms"])
+    duration = current.get("duration_ms") or prior.get("duration_ms") or 0
+    floor = max(IMPLAUSIBLE_RECOMPLETE_MS, int(float(duration) * 0.75))
+    return elapsed < floor
+
+
+def correlate_after_ingest(
+    db: Database,
+    *,
+    user_ids: Optional[Sequence[str]] = None,
+    source_user_keys: Optional[Sequence[str]] = None,
+) -> Dict[str, Any]:
     """Rebuild derivations for affected users (or full ledger when unspecified)."""
-    if not user_ids:
+    if not user_ids and not source_user_keys:
         return rebuild_watch_derivations(db)
     totals = {"sessions": 0, "completions": 0, "events": 0}
-    for uid in user_ids:
+    for uid in user_ids or ():
         if not uid:
             continue
         part = rebuild_watch_derivations(db, user_id=str(uid))
+        totals["sessions"] += int(part.get("sessions") or 0)
+        totals["completions"] += int(part.get("completions") or 0)
+        totals["events"] += int(part.get("events") or 0)
+    for source_key in source_user_keys or ():
+        if not source_key:
+            continue
+        part = rebuild_watch_derivations(db, source_user_key=str(source_key))
         totals["sessions"] += int(part.get("sessions") or 0)
         totals["completions"] += int(part.get("completions") or 0)
         totals["events"] += int(part.get("events") or 0)

@@ -102,6 +102,7 @@ from projectionist.library.relations import list_relations_for_item, walk_relati
 from projectionist.library.search import row_to_title_card
 from projectionist.library.titles import get_title_detail
 from projectionist.library.watch_state import set_library_item_watched, sync_watched_to_plex
+from projectionist.watch_tracker.api import register_watch_tracker_routes
 from projectionist.watch_tracker.live_sessions import LiveSessionPoller
 from projectionist.models.schemas import (
     ActionConfirmRequest,
@@ -6798,3 +6799,6 @@ def dismiss_review_prompt(
             detail=_safe_error_detail(error, "Prompt not found"),
         ) from error
     return RatingPrompt(**saved)
+
+
+register_watch_tracker_routes(app, db_factory=_db)
