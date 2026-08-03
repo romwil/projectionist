@@ -631,10 +631,10 @@ Expected: API authorization passes; data model and privacy limits are both prese
 - Test: `tests/test_webhooks.py`
 - Test: `tests/test_watch_state.py`
 
-- [ ] Make event persistence independent of the 85% rating-prompt gate.
-- [ ] Include pause/stop/scrobble progress observations and exact Plex account mapping.
-- [ ] Record manual scrobble/unscrobble with the acting user and token source.
-- [ ] Keep prompts behavior-compatible until completion derivation ships.
+- [x] Make event persistence independent of the 85% rating-prompt gate.
+- [x] Include pause/stop/scrobble progress observations and exact Plex account mapping.
+- [x] Record manual scrobble/unscrobble with the acting user and token source.
+- [x] Keep prompts behavior-compatible until completion derivation ships.
 
 ### Task 6: Add live-session polling
 
@@ -643,9 +643,9 @@ Expected: API authorization passes; data model and privacy limits are both prese
 - Modify: `projectionist/connectors/plex.py`
 - Test: `tests/test_watch_live_sessions.py`
 
-- [ ] Probe active sessions and normalize progress without storing sensitive network fields.
-- [ ] Poll at adaptive 60-second/5-minute intervals.
-- [ ] Verify stop/restart, pause/resume, reconnect, client switch, and Plex outage fixtures.
+- [x] Probe active sessions and normalize progress without storing sensitive network fields.
+- [x] Poll at adaptive 60-second/5-minute intervals.
+- [x] Verify stop/restart, pause/resume, reconnect, client switch, and Plex outage fixtures.
 
 ### Task 7: Materialize sessions and completions
 

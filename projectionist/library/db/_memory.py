@@ -217,6 +217,50 @@ class MemoryMixin:
                 ).fetchall()
                 preference_facts = [dict(row) for row in pref_rows]
 
+            watch_events = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT id, source, source_event_kind, rating_key,
+                           parent_rating_key, media_type, occurred_at_ms,
+                           progress_ms, duration_ms, completion_pct, terminal, manual
+                    FROM watch_events
+                    WHERE user_id = ?
+                    ORDER BY occurred_at_ms ASC, id ASC
+                    """,
+                    (user_id,),
+                ).fetchall()
+            ]
+            watch_sessions = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT id, rating_key, parent_rating_key, media_type,
+                           started_at_ms, ended_at_ms, start_progress_ms,
+                           max_progress_ms, duration_ms, client_count, event_count,
+                           terminal_reason, algorithm_version
+                    FROM watch_sessions
+                    WHERE user_id = ?
+                    ORDER BY started_at_ms ASC, id ASC
+                    """,
+                    (user_id,),
+                ).fetchall()
+            ]
+            watch_completions = [
+                dict(row)
+                for row in conn.execute(
+                    """
+                    SELECT id, session_id, rating_key, parent_rating_key, media_type,
+                           completed_at_ms, confidence, basis, threshold_pct,
+                           superseded_by_completion_id, algorithm_version
+                    FROM watch_completions
+                    WHERE user_id = ?
+                    ORDER BY completed_at_ms ASC, id ASC
+                    """,
+                    (user_id,),
+                ).fetchall()
+            ]
+
             conn.execute(
                 "INSERT INTO user_memory_events (id, user_id, event_type, created_at) VALUES (?, ?, 'export', ?)",
                 (uuid.uuid4().hex, user_id, now),
@@ -228,6 +272,11 @@ class MemoryMixin:
             "chat_threads": chat_threads,
             "saved_library_pages": saved_library_pages,
             "preference_facts": preference_facts,
+            "watch_tracker": {
+                "events": watch_events,
+                "sessions": watch_sessions,
+                "completions": watch_completions,
+            },
         }
 
     def purge_user_memory_and_chats(self, user_id: str) -> Dict[str, int]:
@@ -258,8 +307,42 @@ class MemoryMixin:
                 if pref_has_user
                 else 0
             )
+            watch_events = _count(
+                "SELECT COUNT(*) AS count FROM watch_events WHERE user_id = ?"
+            )
+            watch_sessions = _count(
+                "SELECT COUNT(*) AS count FROM watch_sessions WHERE user_id = ?"
+            )
+            watch_completions = _count(
+                "SELECT COUNT(*) AS count FROM watch_completions WHERE user_id = ?"
+            )
+            watch_identities = _count(
+                "SELECT COUNT(*) AS count FROM watch_source_identities WHERE user_id = ?"
+            )
 
             # Delete children before parents (cascade is dormant without the pragma).
+            conn.execute(
+                """
+                DELETE FROM watch_completions
+                WHERE user_id = ?
+                """,
+                (user_id,),
+            )
+            conn.execute(
+                """
+                DELETE FROM watch_session_events
+                WHERE session_id IN (
+                    SELECT id FROM watch_sessions WHERE user_id = ?
+                )
+                """,
+                (user_id,),
+            )
+            conn.execute("DELETE FROM watch_sessions WHERE user_id = ?", (user_id,))
+            conn.execute("DELETE FROM watch_events WHERE user_id = ?", (user_id,))
+            conn.execute(
+                "DELETE FROM watch_source_identities WHERE user_id = ?",
+                (user_id,),
+            )
             conn.execute(
                 "DELETE FROM chat_messages "
                 "WHERE session_id IN (SELECT id FROM chat_sessions WHERE user_id = ?)",
@@ -280,6 +363,10 @@ class MemoryMixin:
             "chat_messages_deleted": messages,
             "saved_library_pages_deleted": saved,
             "preference_facts_deleted": prefs,
+            "watch_events_deleted": watch_events,
+            "watch_sessions_deleted": watch_sessions,
+            "watch_completions_deleted": watch_completions,
+            "watch_source_identities_deleted": watch_identities,
         }
 
     def save_repository_research(

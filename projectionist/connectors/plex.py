@@ -5,9 +5,12 @@ from __future__ import annotations
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 from projectionist.connectors.http import merge_plex_provider_ids, optional_int, request_empty, request_xml
+
+if TYPE_CHECKING:
+    from projectionist.watch_tracker.plex_history import PlexHistoryPage
 
 PLEX_LIBRARY_IDENTIFIER = "com.plexapp.plugins.library"
 
@@ -163,6 +166,21 @@ class PlexOnDeckItem:
     episode_number: Optional[int] = None
     tmdb_id: Optional[str] = None
     tvdb_id: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class PlexActiveSession:
+    """Privacy-minimized playable row from Plex's active sessions endpoint."""
+
+    source_user_key: str
+    rating_key: str
+    media_type: str  # movie | episode
+    parent_rating_key: Optional[str] = None
+    progress_ms: Optional[int] = None
+    duration_ms: Optional[int] = None
+    client_identifier: Optional[str] = None
+    session_key: Optional[str] = None
+    state: str = ""
 
 
 @dataclass
@@ -352,6 +370,86 @@ class PlexClient:
     def friendly_name(self) -> str:
         _, name = self.server_identity()
         return name
+
+    def history_page(
+        self,
+        *,
+        start: int = 0,
+        size: int = 250,
+        since_ms: Optional[int] = None,
+    ) -> "PlexHistoryPage":
+        """Return one bounded page from Plex's played-history endpoint.
+
+        Importing locally keeps the connector's core dataclasses independent of
+        the watch-tracker adapter while exposing the plan's public client seam.
+        """
+        from projectionist.watch_tracker.plex_history import history_page
+
+        page, _events = history_page(
+            self,
+            start=start,
+            size=size,
+            since_ms=since_ms,
+        )
+        return page
+
+    def active_sessions(self) -> List[PlexActiveSession]:
+        """Return privacy-minimized active movie/episode sessions."""
+        root = self._request_xml("/status/sessions")
+        sessions: List[PlexActiveSession] = []
+        for element in self._container_children(root, "Video"):
+            media_type = str(element.attrib.get("type") or "").strip().lower()
+            if media_type not in {"movie", "episode"}:
+                continue
+            rating_key = str(element.attrib.get("ratingKey") or "").strip()
+            user = element.find("User")
+            source_user_key = (
+                str(user.attrib.get("id") or "").strip()
+                if user is not None
+                else ""
+            )
+            if not rating_key or not source_user_key:
+                continue
+            player = element.find("Player")
+            session = element.find("Session")
+            sessions.append(
+                PlexActiveSession(
+                    source_user_key=source_user_key,
+                    rating_key=rating_key,
+                    media_type=media_type,
+                    parent_rating_key=(
+                        str(
+                            element.attrib.get("grandparentRatingKey")
+                            or element.attrib.get("parentRatingKey")
+                            or ""
+                        ).strip()
+                        or None
+                    ),
+                    progress_ms=optional_int(element.attrib.get("viewOffset")),
+                    duration_ms=optional_int(element.attrib.get("duration")),
+                    client_identifier=(
+                        str(
+                            player.attrib.get("machineIdentifier")
+                            or player.attrib.get("uuid")
+                            or ""
+                        ).strip()
+                        or None
+                        if player is not None
+                        else None
+                    ),
+                    session_key=(
+                        str(session.attrib.get("id") or "").strip() or None
+                        if session is not None
+                        else None
+                    ),
+                    state=(
+                        str(player.attrib.get("state") or "").strip().lower()
+                        if player is not None
+                        else ""
+                    ),
+                )
+            )
+        return sessions
 
     def set_user_rating(self, rating_key: str, stars: float | int) -> None:
         key = str(rating_key or "").strip()

@@ -55,6 +55,42 @@ Canonical Plex index enriched during sync and idle `metadata_enrichment`.
 
 **Indexes:** `tmdb_id`, `tvdb_id`, `media_type`, `added_at`, `release_date`, `tmdb_collection_id`.
 
+#### Plex watch evidence ledger
+
+Plex played history, live progress, webhook terminal signals, and manual watched
+changes are stored as normalized, append-only evidence. This path is deliberately
+separate from `library_items.view_count`: replaying an ingest page is a no-op, and
+an observation is not treated as proof of an uninterrupted viewing.
+
+| Table | Purpose |
+|-------|---------|
+| `watch_ingest_cursors` | One high-water mark per source and Plex server. A failed or cancelled page leaves the previous mark intact. |
+| `watch_source_identities` | Stable source account → Projectionist user mapping. Plex accounts map only by exact `Account.id == users.plex_user_id`; unknown accounts remain isolated. |
+| `watch_events` | Normalized movie/episode evidence with source kind, account key, rating key, event time, optional progress/duration, and a deterministic payload hash. |
+
+The `watch_history_ingest` scheduled task runs every 15 minutes. Its first pass
+is bounded to the newest 90 days or 10,000 rows, then later passes replay a
+10-minute overlap around the stored high-water mark. Pages contain at most 250
+rows. Provider event ids and normalized fingerprints enforce idempotency.
+
+Only fields returned by Plex are normalized. Projectionist does not retain the
+history response body, Plex token, client IP, or transcode details. Missing
+account identity makes a row ineligible for personal mapping and is reported as
+source-quality diagnostics rather than guessed from a display name.
+
+Phase 2 also records `media.pause`, `media.stop`, and `media.scrobble` webhooks
+before applying the separate 85% rating-prompt rule. While Plex reports active
+sessions, a dedicated poller samples progress every 60 seconds; while idle or
+unavailable, it backs off to five minutes. The poller stores a one-way hash of a
+stable client identifier, never the device name, IP address, bandwidth, or raw
+session response. Manual watched/unwatched writes append correction observations
+only when the acting account has an exact linked Plex id; the token itself is
+never stored.
+
+These Phase 1–2 ingest paths do not reinterpret Plex aggregate counts or
+materialize logical sessions/completions. Correlation and confidence remain a
+separate Phase 3 evidence-processing concern.
+
 #### Provenance rules (dates & plot text)
 
 Projectionist treats missing metadata as a first-class state. Feeds and agent tools must not invent facts:

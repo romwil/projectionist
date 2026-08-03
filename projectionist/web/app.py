@@ -102,6 +102,8 @@ from projectionist.library.relations import list_relations_for_item, walk_relati
 from projectionist.library.search import row_to_title_card
 from projectionist.library.titles import get_title_detail
 from projectionist.library.watch_state import set_library_item_watched, sync_watched_to_plex
+from projectionist.watch_tracker.api import register_watch_tracker_routes
+from projectionist.watch_tracker.live_sessions import LiveSessionPoller
 from projectionist.models.schemas import (
     ActionConfirmRequest,
     ActiveLensPayload,
@@ -352,6 +354,15 @@ async def lifespan(_app: FastAPI):
     app.state.idle_scheduler = idle_scheduler
     logger.info("Startup: idle task scheduler ready (%d tasks)", len(idle_scheduler._definitions))
 
+    logger.info("Startup: starting watch live-session poller…")
+    live_session_poller = LiveSessionPoller(
+        db_factory=lambda: manager.db,
+        settings_factory=_settings,
+    )
+    live_session_poller.start()
+    app.state.live_session_poller = live_session_poller
+    logger.info("Startup: watch live-session poller ready")
+
     # Bind closed-loop miss telemetry so facet resolve can fire-and-forget P1 events.
     try:
         from projectionist.facets.closed_loop import bind_closed_loop_database
@@ -367,6 +378,7 @@ async def lifespan(_app: FastAPI):
         bind_closed_loop_database(None)
     except Exception:  # noqa: BLE001
         pass
+    live_session_poller.stop()
     idle_scheduler.stop()
     get_stream_warm_scheduler().stop()
     get_sync_scheduler().stop()
@@ -1035,7 +1047,14 @@ def _maybe_emit_explore_miss(payload: Any) -> None:
 
 def _sanitize_library_payload(payload: Any, user) -> Any:
     settings = _settings()
-    sanitized = sanitize_library_payload(payload, settings=settings, user=user)
+    from projectionist.watch_tracker.store import attach_user_watch_summaries
+
+    tracker_adopted = attach_user_watch_summaries(
+        _db(),
+        payload,
+        user_id=str(getattr(user, "id", "") or ""),
+    )
+    sanitized = sanitize_library_payload(tracker_adopted, settings=settings, user=user)
     from projectionist.youth.apply import filter_payload_for_youth
 
     filtered = filter_payload_for_youth(sanitized, user=user, settings=settings)
@@ -6787,3 +6806,6 @@ def dismiss_review_prompt(
             detail=_safe_error_detail(error, "Prompt not found"),
         ) from error
     return RatingPrompt(**saved)
+
+
+register_watch_tracker_routes(app, db_factory=_db)

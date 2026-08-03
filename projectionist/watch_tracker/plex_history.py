@@ -34,6 +34,31 @@ class PlexHistoryPage:
     total_size: Optional[int]
     size: int
     start: int
+    skipped: int = 0
+    missing_identity: int = 0
+
+
+def normalize_plex_history(
+    row: PlexHistoryItem,
+    *,
+    server_machine_id: str,
+) -> WatchEventInput:
+    """Normalize a parsed Plex history row without inventing absent fields."""
+    return WatchEventInput(
+        source="plex_history",
+        source_event_id=row.history_key,
+        source_event_kind="history_played",
+        server_machine_id=server_machine_id,
+        source_user_key=row.account_id,
+        rating_key=row.rating_key,
+        parent_rating_key=row.parent_rating_key,
+        media_type=row.media_type,  # type: ignore[arg-type]
+        occurred_at_ms=row.viewed_at_ms,
+        progress_ms=row.progress_ms,
+        duration_ms=row.duration_ms,
+        terminal=True,
+        manual=False,
+    )
 
 
 def normalize_plex_history_element(
@@ -58,8 +83,7 @@ def normalize_plex_history_element(
     # Plex viewedAt is usually epoch seconds.
     occurred_at_ms = int(viewed_at) * 1000 if viewed_at < 10_000_000_000 else int(viewed_at)
     parent = str(attrib.get("grandparentRatingKey") or attrib.get("parentRatingKey") or "").strip() or None
-    history_key = str(attrib.get("historyKey") or "").strip() or None
-    source_event_id = history_key or f"{account_id}:{rating_key}:{occurred_at_ms}"
+    source_event_id = str(attrib.get("historyKey") or "").strip() or None
     return WatchEventInput(
         source="plex_history",
         source_event_id=source_event_id,
@@ -89,11 +113,21 @@ def parse_history_page(
     total_size = optional_int(container.attrib.get("totalSize"))
     items: List[PlexHistoryItem] = []
     events: List[WatchEventInput] = []
-    for element in list(container):
-        if element.tag not in {"Video", "Directory"}:
-            continue
+    skipped = 0
+    missing_identity = 0
+    history_rows = [
+        element for element in list(container) if element.tag in {"Video", "Directory"}
+    ]
+    for element in history_rows:
         event = normalize_plex_history_element(element, server_machine_id=server_machine_id)
         if event is None:
+            skipped += 1
+            if not str(
+                element.attrib.get("accountID")
+                or element.attrib.get("accountId")
+                or ""
+            ).strip():
+                missing_identity += 1
             continue
         events.append(event)
         items.append(
@@ -112,8 +146,12 @@ def parse_history_page(
     page = PlexHistoryPage(
         items=items,
         total_size=total_size,
-        size=len(items),
+        # Advance by rows returned by Plex, not rows we could normalize. A
+        # malformed row must not make the next request replay this page forever.
+        size=optional_int(container.attrib.get("size")) or len(history_rows),
         start=start,
+        skipped=skipped,
+        missing_identity=missing_identity,
     )
     return page, events
 

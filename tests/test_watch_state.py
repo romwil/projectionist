@@ -15,7 +15,11 @@ from fastapi.testclient import TestClient
 from projectionist.config_store import FeatureFlags, Settings
 from projectionist.connectors.plex import PlexClient
 from projectionist.library.db import Database
-from projectionist.library.watch_state import set_library_item_watched, sync_watched_to_plex
+from projectionist.library.watch_state import (
+    record_manual_watch_observation,
+    set_library_item_watched,
+    sync_watched_to_plex,
+)
 from projectionist.web.auth import SESSION_COOKIE_NAME, clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache, create_session_token
@@ -71,6 +75,74 @@ class WatchStateStoreTests(unittest.TestCase):
             ).fetchone()
         self.assertIsNone(row["last_viewed_at"])
         self.assertIsInstance(row["updated_at"], float)
+
+    def test_manual_mark_and_unmark_are_append_only_mapped_observations(self) -> None:
+        user = self.db.upsert_plex_user(
+            user_id="plex-user-42",
+            display_name="Member",
+            email=None,
+            plex_user_id="42",
+            role="member",
+        )
+
+        watched = record_manual_watch_observation(
+            self.db,
+            "movie-1",
+            watched=True,
+            user_id=user["id"],
+            token_source="plex_token_enc",
+            server_machine_id="server-1",
+            occurred_at_ms=1_700_000_000_000,
+        )
+        unwatched = record_manual_watch_observation(
+            self.db,
+            "movie-1",
+            watched=False,
+            user_id=user["id"],
+            token_source="plex_token_enc",
+            server_machine_id="server-1",
+            occurred_at_ms=1_700_000_001_000,
+        )
+
+        self.assertTrue(watched)
+        self.assertTrue(unwatched)
+        with self.db.connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT source, source_event_kind, source_user_key, user_id, manual
+                FROM watch_events
+                ORDER BY occurred_at_ms
+                """
+            ).fetchall()
+        self.assertEqual(
+            [row["source_event_kind"] for row in rows],
+            ["manual_scrobble", "manual_unscrobble"],
+        )
+        self.assertEqual({row["source"] for row in rows}, {"plex_manual_account"})
+        self.assertEqual({row["source_user_key"] for row in rows}, {"42"})
+        self.assertEqual({row["user_id"] for row in rows}, {user["id"]})
+        self.assertEqual({row["manual"] for row in rows}, {1})
+
+    def test_manual_observation_fails_closed_without_plex_identity(self) -> None:
+        self.db.create_local_user(
+            user_id="local-user",
+            display_name="Local",
+            password_hash="not-used",
+        )
+
+        recorded = record_manual_watch_observation(
+            self.db,
+            "movie-1",
+            watched=True,
+            user_id="local-user",
+            token_source="server_plex_token",
+            server_machine_id="server-1",
+        )
+
+        self.assertFalse(recorded)
+        with self.db.connect() as conn:
+            count = conn.execute("SELECT COUNT(*) AS c FROM watch_events").fetchone()
+        self.assertEqual(count["c"], 0)
 
 
 class PlexScrobbleClientTests(unittest.TestCase):

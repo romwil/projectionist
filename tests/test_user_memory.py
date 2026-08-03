@@ -8,6 +8,8 @@ from pathlib import Path
 
 from projectionist.library.db import Database
 from projectionist.memory import MemoryAccessError, UserMemoryService
+from projectionist.watch_tracker.models import WatchEventInput
+from projectionist.watch_tracker.store import ingest_watch_events
 
 
 class UserMemoryTests(unittest.TestCase):
@@ -20,6 +22,43 @@ class UserMemoryTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
+
+    def _seed_watch_history(self, user_id: str = "adult-a") -> None:
+        with self.db.connect() as conn:
+            conn.execute(
+                "UPDATE users SET plex_user_id = ? WHERE id = ?",
+                (f"plex-{user_id}", user_id),
+            )
+        ingest_watch_events(
+            self.db,
+            [
+                WatchEventInput(
+                    source="plex_session",
+                    source_event_id=f"{user_id}-low",
+                    source_event_kind="session_progress",
+                    server_machine_id="server",
+                    source_user_key=f"plex-{user_id}",
+                    rating_key="private-movie",
+                    media_type="movie",
+                    occurred_at_ms=1_704_067_200_000,
+                    progress_ms=100_000,
+                    duration_ms=1_000_000,
+                ),
+                WatchEventInput(
+                    source="plex_session",
+                    source_event_id=f"{user_id}-done",
+                    source_event_kind="session_stop",
+                    server_machine_id="server",
+                    source_user_key=f"plex-{user_id}",
+                    rating_key="private-movie",
+                    media_type="movie",
+                    occurred_at_ms=1_704_067_800_000,
+                    progress_ms=950_000,
+                    duration_ms=1_000_000,
+                    terminal=True,
+                ),
+            ],
+        )
 
     def test_adults_are_fail_closed_from_each_other_and_owner(self) -> None:
         self.service.remember(caller_id="adult-a", kind="self_disclosure", text="private A")
@@ -35,6 +74,7 @@ class UserMemoryTests(unittest.TestCase):
         self.assertEqual([note["text"] for note in notes], ["learn animation"])
 
     def test_purge_removes_private_notes_and_chats(self) -> None:
+        self._seed_watch_history()
         self.service.remember(caller_id="adult-a", kind="preference", text="no horror")
         self.db.ensure_chat_session("a-chat", user_id="adult-a")
         self.db.save_chat_message("a-chat", "m1", "user", [{"type": "text", "content": "hello"}])
@@ -57,6 +97,9 @@ class UserMemoryTests(unittest.TestCase):
         self.assertEqual(result["chat_messages_deleted"], 1)
         self.assertEqual(result["saved_library_pages_deleted"], 1)
         self.assertEqual(result["preference_facts_deleted"], 1)
+        self.assertEqual(result["watch_events_deleted"], 2)
+        self.assertEqual(result["watch_sessions_deleted"], 1)
+        self.assertEqual(result["watch_completions_deleted"], 1)
 
         self.assertEqual(self.db.list_user_memory_notes("adult-a"), [])
         self.assertIsNone(self.db.get_chat_thread("a-chat", user_id="adult-a"))
@@ -85,10 +128,18 @@ class UserMemoryTests(unittest.TestCase):
                     ).fetchone()["c"],
                     0,
                 )
+            self.assertEqual(
+                conn.execute(
+                    "SELECT COUNT(*) AS c FROM watch_events WHERE user_id = ?",
+                    ("adult-a",),
+                ).fetchone()["c"],
+                0,
+            )
 
     def test_export_includes_threads_pages_and_preferences(self) -> None:
         """Export mirrors exactly what purge deletes: notes, chat transcripts,
         saved library pages, and preference facts."""
+        self._seed_watch_history()
         self.service.remember(caller_id="adult-a", kind="preference", text="loves noir")
         self.db.ensure_chat_session("a-chat", user_id="adult-a")
         self.db.save_chat_message("a-chat", "m1", "user", [{"type": "text", "content": "hello noir"}])
@@ -115,6 +166,29 @@ class UserMemoryTests(unittest.TestCase):
 
         self.assertEqual(len(export["preference_facts"]), 1)
         self.assertEqual(export["preference_facts"][0]["text"], "no gore")
+        self.assertEqual(len(export["watch_tracker"]["events"]), 2)
+        self.assertEqual(len(export["watch_tracker"]["sessions"]), 1)
+        self.assertEqual(len(export["watch_tracker"]["completions"]), 1)
+        self.assertNotIn("source_user_key", str(export["watch_tracker"]))
+
+    def test_account_delete_purges_watch_tracker_identity_and_derivations(self) -> None:
+        self._seed_watch_history()
+
+        self.db.delete_user("adult-a")
+
+        with self.db.connect() as conn:
+            for table in (
+                "watch_events",
+                "watch_sessions",
+                "watch_completions",
+                "watch_source_identities",
+            ):
+                self.assertEqual(
+                    conn.execute(
+                        f"SELECT COUNT(*) AS c FROM {table}",
+                    ).fetchone()["c"],
+                    0,
+                )
 
     def test_legacy_null_owner_threads_are_owner_review_only(self) -> None:
         """Members (scoped user_id, include_orphans=False) never see legacy

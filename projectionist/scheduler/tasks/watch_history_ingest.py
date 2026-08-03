@@ -9,8 +9,7 @@ from typing import Any, Callable, Dict, Optional
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
-from projectionist.watch_tracker.correlate import correlate_after_ingest
-from projectionist.watch_tracker.plex_history import history_page
+from projectionist.watch_tracker.plex_history import normalize_plex_history
 from projectionist.watch_tracker.store import get_ingest_cursor, ingest_watch_events, set_ingest_cursor
 
 logger = logging.getLogger(__name__)
@@ -23,9 +22,8 @@ INITIAL_LOOKBACK_MS = 90 * 86400 * 1000
 
 
 def _plex_client(settings: Settings):
-    plex = settings.plex
-    base = str(getattr(plex, "base_url", "") or "").strip()
-    token = str(getattr(plex, "token", "") or "").strip()
+    base = str(settings.plex_url or "").strip()
+    token = str(settings.plex_token or "").strip()
     if not base or not token:
         return None
     from projectionist.connectors.plex import PlexClient
@@ -33,12 +31,12 @@ def _plex_client(settings: Settings):
     return PlexClient(
         base_url=base,
         token=token,
-        movie_section=getattr(plex, "movie_section", None),
-        tv_section=getattr(plex, "tv_section", None),
+        movie_section=settings.plex_movie_section or None,
+        tv_section=settings.plex_tv_section or None,
     )
 
 
-async def run(
+def run_history_ingest(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
     if should_stop():
@@ -65,39 +63,33 @@ async def run(
     deduped = 0
     mapped = 0
     unmapped = 0
+    skipped = 0
+    missing_identity = 0
     max_seen = high_water or 0
-    affected_users: set[str] = set()
 
     try:
         start = 0
         for _ in range(MAX_PAGES):
             if should_stop():
                 return {"status": "interrupted", "fetched": fetched, "inserted": inserted}
-            page, events = history_page(client, start=start, size=PAGE_SIZE, since_ms=since_ms)
-            if not events:
+            page = client.history_page(start=start, size=PAGE_SIZE, since_ms=since_ms)
+            events = [
+                normalize_plex_history(item, server_machine_id=machine_id)
+                for item in page.items
+            ]
+            fetched += page.size
+            skipped += page.skipped
+            missing_identity += page.missing_identity
+            if page.size <= 0:
                 break
-            result = ingest_watch_events(db, events)
-            fetched += result.fetched
-            inserted += result.inserted
-            deduped += result.deduped
-            mapped += result.mapped
-            unmapped += result.unmapped
-            for ev in events:
-                max_seen = max(max_seen, int(ev.occurred_at_ms))
-                # user mapping happens inside ingest; collect from DB after batch if needed
-            # Collect mapped user ids for correlation
-            with db.connect() as conn:
+            if events:
+                result = ingest_watch_events(db, events)
+                inserted += result.inserted
+                deduped += result.deduped
+                mapped += result.mapped
+                unmapped += result.unmapped
                 for ev in events:
-                    row = conn.execute(
-                        """
-                        SELECT user_id FROM watch_events
-                        WHERE source = 'plex_history' AND source_event_id = ?
-                        LIMIT 1
-                        """,
-                        (ev.source_event_id,),
-                    ).fetchone()
-                    if row and row["user_id"]:
-                        affected_users.add(str(row["user_id"]))
+                    max_seen = max(max_seen, int(ev.occurred_at_ms))
             start += page.size
             if page.size < PAGE_SIZE:
                 break
@@ -111,7 +103,6 @@ async def run(
             high_watermark_ms=max_seen or now_ms,
             success=True,
         )
-        corr = correlate_after_ingest(db, user_ids=sorted(affected_users) or None)
         return {
             "status": "ok",
             "source": "plex_history",
@@ -120,19 +111,49 @@ async def run(
             "deduped": deduped,
             "mapped": mapped,
             "unmapped": unmapped,
+            "skipped": skipped,
+            "missing_identity": missing_identity,
             "high_watermark_ms": max_seen or now_ms,
-            "correlation": corr,
         }
     except Exception as exc:  # noqa: BLE001
         logger.exception("watch history ingest failed")
+        raw_error = str(exc)
+        unsupported = "HTTP 404" in raw_error or "HTTP 405" in raw_error
+        safe_error = (
+            "Plex history endpoint is unsupported"
+            if unsupported
+            else f"Plex history page failed ({type(exc).__name__})"
+        )
         set_ingest_cursor(
             db,
             source="plex_history",
             server_machine_id=machine_id,
-            last_error=str(exc),
+            last_error=safe_error,
             success=False,
         )
-        return {"status": "error", "error": str(exc), "fetched": fetched, "inserted": inserted}
+        return {
+            "status": "degraded",
+            "source": "plex_history",
+            "reason": (
+                "history_endpoint_unsupported"
+                if unsupported
+                else "history_page_failed"
+            ),
+            "error": safe_error,
+            "fetched": fetched,
+            "inserted": inserted,
+            "deduped": deduped,
+            "mapped": mapped,
+            "unmapped": unmapped,
+            "skipped": skipped,
+            "missing_identity": missing_identity,
+        }
+
+
+async def run(
+    db: Database, settings: Settings, should_stop: Callable[[], bool]
+) -> Dict[str, Any]:
+    return run_history_ingest(db, settings, should_stop)
 
 
 def register(scheduler: IdleScheduler) -> None:

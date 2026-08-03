@@ -49,6 +49,7 @@ When multi-user is enabled, these stay scoped to your user:
 - Ratings and review prompts tied to you
 - Preference / taste facts the curator keeps for you
 - Private memory notes (for example stated goals, watch intentions, callbacks/in-jokes, and external watches)
+- Normalized Plex played-history, live-progress, webhook, and manual watched-state evidence that Plex attributed to your exact account id
 - **Preferred conversation name** — how the curator addresses you in chat (may differ from your Plex display name)
 - Voice toggles (listen / speak replies), when voice mode is available
 
@@ -69,9 +70,10 @@ Projectionist can hand you a full **export** of your account data, or permanentl
 | **Message transcripts** — every message in your threads | Yes | Yes | `chat_messages` |
 | **Saved library pages** — your saved curator responses | Yes | Yes | `saved_library_pages` |
 | **Preference / taste facts** | Yes | Yes | `preference_facts` |
+| **Personal watch evidence and derivations** — normalized events, logical sessions, and completion confidence | Yes | Yes | `watch_events`, `watch_sessions`, `watch_completions` |
 | Shared, sanitized media research (titles/people/companies) | No | No | Repository knowledge — not tied to any account |
 
-The export is a single JSON (or Markdown) document containing your notes, your chat threads with their full message transcripts, your saved pages, and your preference facts. **Purge is permanent — export first if you want a copy.** Both actions record a small event (`export` / `purge`) so the account has an audit trail that it happened.
+The export is a single JSON (or Markdown) document containing your notes, chat threads with their full message transcripts, saved pages, preference facts, and privacy-minimized watch events plus their derived sessions/completions. Provider account keys, payload hashes, server ids, tokens, and raw Plex payloads are excluded. **Purge is permanent — export first if you want a copy.** Removing a household account runs the same purge before deleting its profile. Both export and purge record a small audit event.
 
 Curator research about titles, people, and production companies is **shared repository knowledge** drawn from configured official media APIs. It's kept separate from account memory, and the idle refresh task never reads private notes or chats — so purging your account never erases (and never leaks) that shared media knowledge.
 
@@ -125,6 +127,7 @@ Named lists you create in Projectionist (for example "Friday picks") are stored 
 - Your chat history and message feedback
 - Your pending *arr / Seerr confirmation tokens
 - Your watchlist and personal ratings (as personal records)
+- Your mapped Plex played-history evidence
 - Owner-only Admin: fleet URLs, API keys, MCP keys, household user management
 
 ### MCP and members
@@ -145,6 +148,54 @@ Stored under the app data directory (typically `/config` → `settings.json` and
 - Webhook secret, session secret material, feature flags
 
 **Who can view them in the UI:** owner Admin / Configuration only (not household members). Treat the Docker `/config` volume and backups as secret material. UI-saved keys in `settings.json` are encrypted at rest when a secrets key is available; still protect the volume and back up `PROJECTIONIST_SECRETS_KEY` with `/config`.
+
+### Plex watch evidence health
+
+Every 15 minutes, the **Plex Watch History** scheduled task asks Plex for a
+bounded page of played-history evidence. Projectionist keeps normalized
+movie/episode identifiers, the stable Plex account id, event time, optional
+progress/duration, and a deterministic fingerprint. It does **not** keep the
+raw response, Plex token, client IP, or transcode details.
+
+Webhooks add pause, stop, and played signals immediately, including progress
+below the separate rating-prompt threshold. Active playback is sampled once per
+minute while sessions exist and every five minutes while idle; an unavailable
+Plex server makes the poller back off rather than blocking startup. Projectionist
+keeps only a one-way client hash for those samples—not the device name, address,
+bandwidth, or raw session payload. Marking a title watched or unwatched records
+an append-only manual correction only for an exactly linked Plex account.
+
+Exact account mapping matters: an event maps to a household user only when
+Plex's stable account id exactly matches that user's linked Plex id. Unmapped
+events remain separate evidence. Display names are never used to guess
+ownership, and one history event does not prove an uninterrupted viewing.
+The tracker conservatively correlates mapped observations into logical movie or
+episode viewings. A completion is `certain` when progress directly crosses the
+90% boundary, `likely` when strong terminal evidence reconstructs the crossing,
+or `plex_event_only` when Plex reported played without enough progress detail.
+These are evidence-confidence labels, not proof of uninterrupted playback,
+attention, or who was in front of the screen. Member summaries always use the
+current signed-in user; show totals roll up episodes rather than inventing a
+show-level viewing count.
+
+On a trusted single-owner installation, inspect freshness and mapping coverage:
+
+```bash
+# Run an ingest immediately (otherwise it runs every 15 minutes while idle)
+curl -s -X POST \
+  'http://localhost:8788/api/admin/scheduled-tasks/watch_history_ingest/run?wait=true' \
+  | python3 -m json.tool
+
+# Inspect the privacy-safe source health summary
+curl -s http://localhost:8788/api/admin/watch-tracker/status \
+  | python3 -m json.tool
+```
+
+The owner-only response contains source capability, cursor age, aggregate
+mapped/unmapped counts, and a sanitized last-error category. It returns no
+titles, rating keys, Plex account ids, server machine ids, tokens, or event
+rows. With household login enabled, use the signed-in owner Admin session;
+members receive `403 Forbidden`.
 
 ### MCP keys
 

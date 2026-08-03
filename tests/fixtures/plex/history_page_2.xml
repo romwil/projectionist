@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<MediaContainer size="3" totalSize="5" offset="2">
+  <Video type="movie" ratingKey="movie-300" accountID="9999"
+         viewedAt="1704240000" historyKey="hist-3"/>
+  <Video type="episode" ratingKey="ep-400" grandparentRatingKey="show-60"
+         accountID="unknown-account" viewedAt="1704326400" duration="2700000"/>
+  <Video type="movie" ratingKey="malformed-no-account" viewedAt="1704412800"/>
+</MediaContainer>
