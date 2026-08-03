@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { before, describe, it } from "node:test";
 import {
   tonightHabitChrome,
   tonightOneLiner,
@@ -15,6 +15,26 @@ import {
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();
+
+/** Minimal sessionStorage for node:test (no DOM). */
+before(() => {
+  if (typeof globalThis.sessionStorage !== "undefined") return;
+  const store = new Map();
+  globalThis.sessionStorage = {
+    getItem(key) {
+      return store.has(key) ? store.get(key) : null;
+    },
+    setItem(key, value) {
+      store.set(String(key), String(value));
+    },
+    removeItem(key) {
+      store.delete(key);
+    },
+    clear() {
+      store.clear();
+    },
+  };
+});
 
 describe("tonightOneLiner", () => {
   it("uses youth-safe empty copy", () => {

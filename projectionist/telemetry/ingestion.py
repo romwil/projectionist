@@ -297,7 +297,7 @@ class TelemetryIngester:
                 logger.debug("LLM usage write failed for %s", cleaned_purpose, exc_info=True)
 
         if self._is_enabled():
-            thread = threading.Thread(target=_write, daemon=True, name=f"telemetry-llm_usage")
+            thread = threading.Thread(target=_write, daemon=True, name="telemetry-llm_usage")
             thread.start()
             self._emit(
                 "llm_usage",

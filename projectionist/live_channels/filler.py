@@ -13,7 +13,7 @@ import random
 import re
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.connectors.tunarr import TunarrClient
 

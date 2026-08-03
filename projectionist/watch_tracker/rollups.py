@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from projectionist.library.db import Database
 from projectionist.watch_tracker.models import TitleRollup, YearRollup
@@ -135,7 +135,6 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
             unique_episodes.add(rating_key)
             show_key = str(parent or meta.get("parent_rating_key") or rating_key)
             unique_titles.add(show_key)
-            show_meta = _library_title(db, show_key, "movie") if parent else meta
             # Prefer show title from library_items
             with db.connect() as conn:
                 show_row = conn.execute(

@@ -9,7 +9,7 @@ multiplier for taste refresh / preference facts.
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, Mapping, Optional, Sequence
 
 
 # Seasons beyond the last meaningfully watched season decay with this half-life.

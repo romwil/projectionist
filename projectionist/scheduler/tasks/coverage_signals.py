@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Dict, Iterable, List, Mapping
+from typing import Any, Iterable, Mapping
 
 from projectionist.library.db import Database
 from projectionist.library.theme_map import KEYWORD_TO_THEME, normalize_keyword, parse_keywords

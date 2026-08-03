@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Mapping, Optional, Tuple
+from typing import Any, Mapping, Optional
 
 from projectionist.watch_tracker.models import WatchEventInput
 

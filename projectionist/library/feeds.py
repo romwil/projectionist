@@ -19,8 +19,6 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence
 from projectionist.connectors.plex import PlexClient, PlexOnDeckItem
 from projectionist.library.db import Database
 from projectionist.library.holidays import (
-    FIXED_HOLIDAYS,
-    HOLIDAY_WINDOW_DAYS,
     SEASONAL_FALLBACKS as _SEASONAL_FALLBACK_ROWS,
     compose_rail_items,
     resolve_seasonal_context,
