@@ -17,6 +17,7 @@ from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.theme_map import extract_theme_rows
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.tasks.coverage_signals import emit_unmapped_keyword_signals
 
 logger = logging.getLogger(__name__)
 
@@ -41,16 +42,19 @@ async def run(
 
     count = db.replace_facets_of_type("theme", rows)
     unique_items = len({r[0] for r in rows})
+    signals = emit_unmapped_keyword_signals(items)
     logger.info(
-        "Keyword theme tagging: wrote %s theme facet rows across %s titles",
+        "Keyword theme tagging: wrote %s theme facet rows across %s titles; emitted %s keyword signals",
         count,
         unique_items,
+        signals,
     )
     return {
         "status": "completed",
         "themes": count,
         "unique_items": unique_items,
         "library_size": len(items),
+        "coverage_signals": signals,
     }
 
 

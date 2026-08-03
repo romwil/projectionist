@@ -5,6 +5,8 @@ const TASK_LABELS = {
   enthusiast_nudge: "Enthusiast nudges",
   data_retention: "Data retention",
   facet_taxonomy_audit: "Facet taxonomy audit",
+  coverage_deficit_audit: "Coverage deficit audit",
+  entity_memory_enrichment: "Entity memory enrichment",
   gap_analysis: "Gap analysis",
   health_metrics: "Health metrics",
   llm_logline_enrichment: "LLM logline enrichment",

@@ -669,6 +669,45 @@ export async function rejectStagedAugmentation(rowId) {
   });
 }
 
+export async function dismissPlotNeighbor(itemId, neighborId) {
+  return api(
+    `/library/neighbors/${encodeURIComponent(itemId)}/${encodeURIComponent(neighborId)}/dismiss`,
+    { method: "POST" },
+  );
+}
+
+export async function getKnowledgeOpsSummary() {
+  return api("/admin/knowledge-ops/summary");
+}
+
+export async function getKnowledgeOpsFunnel({ min_hit_count } = {}) {
+  const search = new URLSearchParams();
+  if (min_hit_count != null) search.set("min_hit_count", String(min_hit_count));
+  return api(`/admin/knowledge-ops/funnel${search.toString() ? `?${search}` : ""}`);
+}
+
+export async function getKnowledgeOpsTaxonomyRegistry() {
+  return api("/admin/knowledge-ops/taxonomy-registry");
+}
+
+export async function getKnowledgeOpsTelemetryTrend({ days } = {}) {
+  const search = new URLSearchParams();
+  if (days != null) search.set("days", String(days));
+  return api(`/admin/knowledge-ops/telemetry/trend${search.toString() ? `?${search}` : ""}`);
+}
+
+export async function getKnowledgeOpsTelemetryTopEvents({ event_type, entity_type, limit } = {}) {
+  const search = new URLSearchParams();
+  if (event_type) search.set("event_type", event_type);
+  if (entity_type) search.set("entity_type", entity_type);
+  if (limit != null) search.set("limit", String(limit));
+  return api(`/admin/knowledge-ops/telemetry/top-events${search.toString() ? `?${search}` : ""}`);
+}
+
+export async function getKnowledgeOpsStagedAggregates() {
+  return api("/admin/knowledge-ops/staged-aggregates");
+}
+
 export async function updateMediaIssue(issueId, payload) {
   return api(`/media-issues/${encodeURIComponent(issueId)}`, {
     method: "PATCH",
@@ -1296,6 +1335,14 @@ export async function deleteLibraryItems(ratingKeys, { mode = "index" } = {}) {
   return api("/library/items/delete", {
     method: "POST",
     body: JSON.stringify({ rating_keys: ratingKeys, mode }),
+  });
+}
+
+/** Owner-only: delete bad file(s) in *arr and search for replacements (no exclusion). */
+export async function markBadMedia(payload) {
+  return api("/library/items/mark-bad-media", {
+    method: "POST",
+    body: JSON.stringify({ confirm: true, ...(payload || {}) }),
   });
 }
 

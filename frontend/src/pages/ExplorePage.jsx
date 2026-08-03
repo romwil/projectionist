@@ -17,6 +17,7 @@ import {
 } from "../api/client";
 import HelpHint from "../components/HelpHint";
 import KnowledgeCoverageCard from "../components/KnowledgeCoverageCard";
+import LibrarySearchBar from "../components/LibrarySearchBar.jsx";
 import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
@@ -375,27 +376,12 @@ export default function ExplorePage() {
       eyebrow="Your cinema"
     >
       <main className="explore-main">
-        <form
-          className="explore-search"
-          data-testid="explore-search"
-          role="search"
+        <LibrarySearchBar
+          testId="explore-search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
           onSubmit={handleSearchSubmit}
-        >
-          <label className="library-search library-search--hero">
-            <span className="material-symbols-outlined" aria-hidden="true">search</span>
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search your library by title or plot…"
-              aria-label="Search your library"
-              data-testid="explore-search-input"
-            />
-          </label>
-          <button type="submit" className="explore-search-submit" data-testid="explore-search-submit">
-            Search
-          </button>
-        </form>
+        />
 
         <section className="explore-hub-links" data-testid="explore-hub-links">
           <Link

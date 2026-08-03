@@ -305,13 +305,17 @@ class FacetOverlayPromoteTests(unittest.TestCase):
         from fastapi import HTTPException
 
         with self.assertRaises(HTTPException) as bare_exc:
-            routes.approve_staged_augmentation(
-                bare_id, routes.ApproveStagedPayload(), user={"role": "owner"}
+            asyncio.run(
+                routes.approve_staged_augmentation(
+                    bare_id, routes.ApproveStagedPayload(), user={"role": "owner"}
+                )
             )
         self.assertEqual(bare_exc.exception.status_code, 400)
 
-        body = routes.approve_staged_augmentation(
-            row_id, routes.ApproveStagedPayload(), user={"role": "owner"}
+        body = asyncio.run(
+            routes.approve_staged_augmentation(
+                row_id, routes.ApproveStagedPayload(), user={"role": "owner"}
+            )
         )
         self.assertEqual(body["item"]["status"], "approved")
         self.assertTrue(Path(body["overlay_path"]).is_file())
@@ -320,8 +324,10 @@ class FacetOverlayPromoteTests(unittest.TestCase):
 
         # Double-approve is a conflict, not a silent re-write.
         with self.assertRaises(HTTPException) as again:
-            routes.approve_staged_augmentation(
-                row_id, routes.ApproveStagedPayload(), user={"role": "owner"}
+            asyncio.run(
+                routes.approve_staged_augmentation(
+                    row_id, routes.ApproveStagedPayload(), user={"role": "owner"}
+                )
             )
         self.assertEqual(again.exception.status_code, 409)
 

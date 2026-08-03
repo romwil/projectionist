@@ -279,8 +279,22 @@ Owners (or single-workspace installs with no login) also configure sync and idle
 1. Run **Sync library** from Admin / Config (or `/sync` in chat when multi-user is off).
 2. Leave the container **idle** so the scheduler can trickle metadata, embeddings, motifs, and neighbors.
 3. Open **Admin → Scheduled Tasks** (`/admin/tasks`) — confirm knowledge tasks are enabled; adjust cadence after large imports.
+4. Open **Admin → Knowledge Ops** (`/admin/taxonomy`) — review staged facet aliases, demand rows, and coverage gaps from the closed loop.
 
-### Application logs
+### Knowledge Operations (closed loop)
+
+**Signal → stage → owner overlay.** When chat or Explore hits an unmapped facet token, Projectionist records a P1 miss in SQLite telemetry (never blocking the request). The `facet_taxonomy_audit` idle task stages high-hit tokens for your review. Approve maps the alias into `$DATA_DIR/taxonomy.json` — the packaged seed is never rewritten. Reject clears the candidate without changing runtime taxonomy.
+
+The same dashboard lists **all staged work** (entity-memory demand, coverage deficits from theme/motif/metadata tasks) with honest empty states when signals have not crossed staging thresholds yet. **Facet** rows approve into the taxonomy overlay; **demand** and **coverage** rows expose act buttons that run real enrichment (repository research, motif/metadata/synopsis/embedding passes, or a theme-tagging queue for unmapped keywords) — never auto-mutating packaged seed.
+
+Plot Lab owners can mark a surprising neighbor as **Not a neighbor**; that removes the cached edge and emits `bad_neighbor_match` telemetry visible under Activity. Bulk vector edge-penalty tuning remains deferred.
+
+```bash
+# Knowledge Ops summary (owner host)
+curl -s http://localhost:8788/api/admin/knowledge-ops/summary | python3 -m json.tool
+# Pending facet + all augmentations, 7/30d signal volume, funnel counts
+```
+
 
 Owners can live-tail the durable application log from **Admin → Logs** (`/admin/logs`). Filter by level (DEBUG / INFO / WARNING / ERROR) or logger name (for example `projectionist.web` or `uvicorn`), and use **Follow** to auto-scroll — scrolling up pauses the tail so you can read older lines.
 

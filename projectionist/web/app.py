@@ -200,6 +200,7 @@ from projectionist.web.library_privacy import (
 )
 from projectionist.web.webhooks import register_webhook_routes
 from projectionist.web.augmentation_routes import register_augmentation_routes
+from projectionist.web.knowledge_ops_routes import register_knowledge_ops_routes
 from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
 from projectionist.web.setup import (
@@ -792,6 +793,18 @@ class RevealSecretPayload(BaseModel):
     field: str = Field(min_length=1)
 
 
+class MarkBadMediaPayload(BaseModel):
+    confirm: bool = False
+    rating_key: Optional[str] = None
+    tmdb_id: Optional[int] = None
+    tvdb_id: Optional[int] = None
+    media_type: Optional[str] = None
+    episode_rating_key: Optional[str] = None
+    season_number: Optional[int] = None
+    episode_number: Optional[int] = None
+    note: str = Field(default="", max_length=2000)
+
+
 class TvRemovePayload(BaseModel):
     scope: str = Field(min_length=1)
     show_id: Optional[int] = None
@@ -982,12 +995,41 @@ def _idle_scheduler() -> Optional[IdleScheduler]:
     return getattr(app.state, "idle_scheduler", None)
 
 
+def _maybe_emit_explore_miss(payload: Any) -> None:
+    """Fire-and-forget telemetry when Explore feeds or neighbors return empty."""
+    if not isinstance(payload, dict):
+        return
+    if payload.get("items"):
+        return
+    note = payload.get("note")
+    if not note:
+        return
+    feed_id = str(payload.get("feed") or "")
+    if not feed_id and "item_id" in payload:
+        feed_id = f"neighbors:{payload.get('mode', 'similar')}"
+    if not feed_id:
+        feed_id = str(payload.get("scope_id") or "explore")
+    try:
+        from projectionist.telemetry.explore import schedule_explore_miss
+
+        schedule_explore_miss(
+            feed_id=feed_id,
+            entity_key=feed_id,
+            context_source="explore_feed",
+            extra={"note": str(note)[:200]},
+        )
+    except Exception:  # noqa: BLE001 — never break feed responses
+        pass
+
+
 def _sanitize_library_payload(payload: Any, user) -> Any:
     settings = _settings()
     sanitized = sanitize_library_payload(payload, settings=settings, user=user)
     from projectionist.youth.apply import filter_payload_for_youth
 
-    return filter_payload_for_youth(sanitized, user=user, settings=settings)
+    filtered = filter_payload_for_youth(sanitized, user=user, settings=settings)
+    _maybe_emit_explore_miss(filtered)
+    return filtered
 
 
 def _apply_youth_filters(filters, user):
@@ -1648,8 +1690,22 @@ register_live_channels_routes(
     safe_error_detail=_safe_error_detail,
     data_dir=DATA_DIR,
 )
+def _scheduler_trigger_background(name: str) -> Dict[str, Any]:
+    scheduler = _idle_scheduler()
+    if scheduler is None:
+        return {"error": "Scheduler not available"}
+    return scheduler.trigger_task_background(name)
+
+
 register_holidays_routes(app, db_factory=_db)
-register_augmentation_routes(app, db_factory=_db, data_dir=DATA_DIR)
+register_augmentation_routes(
+    app,
+    db_factory=_db,
+    data_dir=DATA_DIR,
+    settings_factory=_settings,
+    scheduler_trigger=_scheduler_trigger_background,
+)
+register_knowledge_ops_routes(app, db_factory=_db, data_dir=DATA_DIR)
 
 
 @app.get("/api/admin/access-requests")
@@ -2400,6 +2456,45 @@ def delete_library_items(
     deleted = db.delete_library_items_by_rating_keys(keys)
     drop_cached_purge_keys(db, keys)
     return {"mode": "index", "deleted": deleted}
+
+
+@app.post("/api/library/items/mark-bad-media")
+def mark_bad_media_endpoint(
+    payload: MarkBadMediaPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner-only: ask Radarr/Sonarr to delete bad file(s) and search for replacements.
+
+    Does **not** add import or acquisition exclusions — the title stays wanted.
+    """
+    del user
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Marking bad media requires confirm=true",
+        )
+    from projectionist.library.bad_media import BadMediaError, mark_bad_media
+
+    try:
+        return mark_bad_media(
+            _db(),
+            _settings(),
+            rating_key=payload.rating_key,
+            tmdb_id=payload.tmdb_id,
+            tvdb_id=payload.tvdb_id,
+            media_type=payload.media_type,
+            episode_rating_key=payload.episode_rating_key,
+            season_number=payload.season_number,
+            episode_number=payload.episode_number,
+            note=payload.note,
+        )
+    except BadMediaError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RuntimeError as error:
+        raise HTTPException(
+            status_code=400,
+            detail=_safe_error_detail(error, "Could not mark media for replacement"),
+        ) from error
 
 
 @app.post("/api/library/items/watched")
@@ -3271,6 +3366,33 @@ def library_neighbors_endpoint(
         neighbors_payload(_db(), item_id, mode=mode, limit=limit),
         user,
     )
+
+
+@app.post("/api/library/neighbors/{item_id}/{neighbor_id}/dismiss")
+def dismiss_plot_neighbor(
+    item_id: int,
+    neighbor_id: int,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Remove a cached neighbor edge and emit bad-match telemetry (Plot Lab)."""
+    del user
+    db = _db()
+    removed = db.remove_neighbor_edge(int(item_id), int(neighbor_id))
+    if not removed:
+        raise HTTPException(status_code=404, detail="Neighbor edge not found")
+
+    from projectionist.telemetry.explore import schedule_bad_neighbor_match
+
+    schedule_bad_neighbor_match(
+        seed_item_id=int(item_id),
+        neighbor_item_id=int(neighbor_id),
+        context_source="plot_lab",
+    )
+    return {
+        "removed": True,
+        "item_id": int(item_id),
+        "neighbor_id": int(neighbor_id),
+    }
 
 
 @app.get("/api/library/motifs")
@@ -5853,6 +5975,8 @@ _AUTO_REPAIR_CODES = {"wrong_language", "bad_video", "bad_audio"}
 
 def _run_media_issue_repair(issue: Dict[str, Any]) -> Dict[str, Any]:
     """Execute only documented, identity-bound *arr actions and persist an honest outcome."""
+    from projectionist.library.bad_media import BadMediaError, mark_bad_media_for_issue
+
     db = _db()
     now = time.time()
     code = str(issue["code"])
@@ -5865,31 +5989,18 @@ def _run_media_issue_repair(issue: Dict[str, Any]) -> Dict[str, Any]:
         return updated
     settings = _settings()
     try:
-        if issue["media_type"] == "movie":
-            if not settings.radarr_url or not settings.radarr_api_key or not issue.get("tmdb_id"):
-                raise LookupError("Radarr is not configured or the issue has no TMDB id.")
-            client = RadarrClient(settings.radarr_url, settings.radarr_api_key)
-            movie = client.movie_by_tmdb_id(int(issue["tmdb_id"]))
-            if movie is None:
-                raise LookupError("Title is not managed by Radarr.")
-            if movie.movie_file_id is not None:
-                client.mark_movie_file_failed(movie.movie_file_id)
-            command = client.search_movie(movie.id)
-            action = "radarr delete-file-and-search" if movie.movie_file_id is not None else "radarr search"
-        else:
-            if not settings.sonarr_url or not settings.sonarr_api_key or not issue.get("tvdb_id"):
-                raise LookupError("Sonarr is not configured or the issue has no TVDB id.")
-            client = SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
-            series = client.series_by_tvdb_id(int(issue["tvdb_id"]))
-            if series is None:
-                raise LookupError("Title is not managed by Sonarr.")
-            command = client.search_series(series.id)
-            action = "sonarr search"
+        result = mark_bad_media_for_issue(db, settings, issue)
         updated = db.update_media_issue(
-            issue["id"], status="resolved", repair_action=action,
-            repair_log_entry={"at": now, "outcome": "started", "action": action, "command": command},
+            issue["id"], status="resolved", repair_action=str(result.get("action") or "replace"),
+            repair_log_entry={
+                "at": now,
+                "outcome": "started",
+                "action": result.get("action"),
+                "command": result.get("command"),
+                "files_removed": result.get("files_removed"),
+            },
         )
-    except LookupError as error:
+    except BadMediaError as error:
         updated = db.update_media_issue(
             issue["id"], status="approved", repair_action="skipped",
             repair_log_entry={"at": now, "outcome": "skipped", "reason": str(error)},

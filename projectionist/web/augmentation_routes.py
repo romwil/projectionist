@@ -1,4 +1,4 @@
-"""Admin closed-loop staged augmentation review (Phase B facet promote)."""
+"""Admin closed-loop staged augmentation review (facet + non-facet promote/act)."""
 
 from __future__ import annotations
 
@@ -10,8 +10,10 @@ from typing import Any, Callable, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
+from projectionist.config_store import Settings
 from projectionist.facets.overlay import promote_facet_alias_to_overlay
 from projectionist.web.auth import require_role
+from projectionist.web.staged_augmentation_promote import promote_staged_row
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +21,8 @@ router = APIRouter(tags=["augmentations"])
 
 _db_factory: Optional[Callable[[], Any]] = None
 _data_dir: Optional[Path] = None
+_settings_factory: Optional[Callable[[], Settings]] = None
+_scheduler_trigger: Optional[Callable[[str], Dict[str, Any]]] = None
 
 
 def _db():
@@ -76,12 +80,12 @@ def list_staged_augmentations_endpoint(
 
 
 @router.post("/api/admin/staged-augmentations/{row_id}/approve")
-def approve_staged_augmentation(
+async def approve_staged_augmentation(
     row_id: int,
     payload: Optional[ApproveStagedPayload] = None,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Approve a staged facet alias → write DATA_DIR taxonomy overlay (not seed)."""
+    """Approve staged work: facet alias → overlay, or run enrichment for demand/coverage rows."""
     del user
     body = payload or ApproveStagedPayload()
     db = _db()
@@ -91,11 +95,34 @@ def approve_staged_augmentation(
     if str(row.get("status") or "") != "pending":
         raise HTTPException(status_code=409, detail=f"Already {row.get('status')}")
 
-    if str(row.get("target_entity_type") or "") != "facet":
-        raise HTTPException(
-            status_code=400,
-            detail="Only facet staged augmentations can be promoted in Phase B",
+    entity_type = str(row.get("target_entity_type") or "")
+    task_name = str(row.get("task_name") or "")
+
+    if entity_type != "facet":
+        if task_name not in {"entity_memory_enrichment", "coverage_deficit_audit"}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Task {task_name!r} does not support promote/act",
+            )
+        settings = _settings_factory() if _settings_factory else Settings()
+        act_result = await promote_staged_row(
+            row,
+            db=db,
+            settings=settings,
+            scheduler_trigger=_scheduler_trigger,
         )
+        candidate = _parse_candidate(row)
+        candidate["act_result"] = act_result
+        candidate["action"] = act_result.get("action")
+        updated = db.update_staged_augmentation_status(
+            int(row_id),
+            status="approved",
+            candidate_data_json=json.dumps(candidate, default=str, separators=(",", ":")),
+        )
+        return {
+            "item": _serialize_staged(updated or row),
+            "acted": act_result,
+        }
 
     candidate = _parse_candidate(row)
     alias = str(candidate.get("alias") or row.get("target_entity_id") or "").strip()
@@ -171,8 +198,12 @@ def register_augmentation_routes(
     *,
     db_factory: Callable[[], Any],
     data_dir: Path,
+    settings_factory: Optional[Callable[[], Settings]] = None,
+    scheduler_trigger: Optional[Callable[[str], Dict[str, Any]]] = None,
 ) -> None:
-    global _db_factory, _data_dir
+    global _db_factory, _data_dir, _settings_factory, _scheduler_trigger
     _db_factory = db_factory
     _data_dir = Path(data_dir)
+    _settings_factory = settings_factory
+    _scheduler_trigger = scheduler_trigger
     app.include_router(router)

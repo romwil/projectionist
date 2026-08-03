@@ -35,6 +35,7 @@ from projectionist.library.embeddings import (
 )
 from projectionist.scheduler.autotune import resolve_batch_size
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
+from projectionist.scheduler.tasks.coverage_signals import emit_embedding_backlog_signals
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,7 @@ async def run(
         return {"status": "completed", "embedded": 0, "skipped": 0}
 
     cycle_cap = resolve_batch_size(db, TASK_NAME, MAX_ITEMS_PER_CYCLE)
+    coverage_signals = emit_embedding_backlog_signals(db, limit=cycle_cap)
     existing_hashes = db.embedding_content_hashes()
     embedded = 0
     skipped = 0
@@ -142,6 +144,7 @@ async def run(
         "total": total,
         "batch_size": cycle_cap,
         "has_more": db.count_items_needing_embeddings() > 0,
+        "coverage_signals": coverage_signals,
     }
 
 

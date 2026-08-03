@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import BulkLibraryDeleteDialog from "./BulkLibraryDeleteDialog.jsx";
+import MarkBadMediaDialog from "./MarkBadMediaDialog.jsx";
 import RecommendModal from "./RecommendModal";
 import RemovalSummaryDialog from "./RemovalSummaryDialog.jsx";
 import TitleDetailContent from "./TitleDetailContent";
@@ -226,12 +227,15 @@ function getFocusableElements(root) {
                   watchStatus={interactions.watchStatus}
                   watchMessage={interactions.watchMessage}
                   deleting={interactions.deleting}
+                  markingBadMedia={interactions.badMediaLoading}
+                  badMediaMessage={interactions.badMediaMessage}
                   onRequestAdd={interactions.handleRequestAdd}
                   onToggleWatched={interactions.handleToggleWatched}
                   onOpenTrailer={() => setTrailerOpen(true)}
                   onOpenReview={() => setReviewOpen(true)}
                   onOpenRecommend={() => setRecommendOpen(true)}
                   onOpenDelete={interactions.openLibraryDelete}
+                  onOpenMarkBadMedia={interactions.openMarkBadMedia}
                 />
               ) : null}
             </div>
@@ -325,6 +329,19 @@ function getFocusableElements(root) {
           interactions.setDeleteError("");
         }}
         onConfirm={interactions.handleLibraryDeleteConfirm}
+      />
+
+      <MarkBadMediaDialog
+        open={interactions.badMediaOpen}
+        title={detail?.title || "Untitled"}
+        mediaType={detail?.media_type || "movie"}
+        loading={interactions.badMediaLoading}
+        error={interactions.badMediaError}
+        onCancel={() => {
+          if (interactions.badMediaLoading) return;
+          interactions.setBadMediaOpen(false);
+        }}
+        onConfirm={interactions.handleMarkBadMediaConfirm}
       />
 
       <RemovalSummaryDialog

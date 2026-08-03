@@ -17,6 +17,10 @@ from projectionist.library.embeddings import (
     semantic_search,
 )
 from projectionist.library.facets import library_facet_catalog
+from projectionist.library.play_counts import (
+    EFFECTIVE_VIEW_COUNT_SQL,
+    effective_view_count,
+)
 
 MAX_QUERY_LIMIT = 100
 DEFAULT_QUERY_LIMIT = 25
@@ -368,7 +372,7 @@ def row_to_query_item(row: Mapping[str, Any]) -> Dict[str, Any]:
         "directors": _parse_json_list(row["directors"]) if "directors" in keys else [],
         "cast": _parse_json_list(row["cast"]) if "cast" in keys else [],
         "keywords": _parse_json_list(row["keywords"]) if "keywords" in keys else [],
-        "view_count": int(row["view_count"] or 0),
+        "view_count": effective_view_count(row),
         "view_offset_ms": (
             int(row["view_offset_ms"])
             if "view_offset_ms" in keys and row["view_offset_ms"] is not None
@@ -474,10 +478,10 @@ def _build_where(filters: LibraryFilters) -> Tuple[str, List[Any]]:
             ")"
         )
     if filters.min_view_count is not None:
-        clauses.append("view_count >= ?")
+        clauses.append(f"({EFFECTIVE_VIEW_COUNT_SQL}) >= ?")
         params.append(filters.min_view_count)
     if filters.max_view_count is not None:
-        clauses.append("view_count <= ?")
+        clauses.append(f"({EFFECTIVE_VIEW_COUNT_SQL}) <= ?")
         params.append(filters.max_view_count)
     if filters.stale_days is not None:
         cutoff = int(time.time()) - filters.stale_days * 86400
@@ -624,7 +628,7 @@ def _sort_clause(sort: SortField, sort_dir: Literal["asc", "desc"] | None = None
         return f"{prefix}{sort} {direction}, title ASC"
     mapping = {
         "year": "year IS NULL, year DESC, title ASC",
-        "view_count": "view_count DESC, title ASC",
+        "view_count": f"({EFFECTIVE_VIEW_COUNT_SQL}) DESC, title ASC",
         "file_size": "file_size DESC, title ASC",
         "vote_average": "vote_average IS NULL, vote_average DESC, title ASC",
         "runtime_minutes": "runtime_minutes IS NULL, runtime_minutes ASC, title ASC",
@@ -669,7 +673,9 @@ def _fetch_rows(
             """,
             [*params, *id_params, limit, offset],
         ).fetchall()
-    return int(total), list(rows)
+    from projectionist.library.play_counts import enrich_rows_with_episode_play_sums
+
+    return int(total), enrich_rows_with_episode_play_sums(db, rows)
 
 
 async def query_library_async(
@@ -737,7 +743,10 @@ async def query_library_async(
             ).fetchall()
         row_by_id = {int(r["id"]): r for r in rows}
         ordered_rows = [row_by_id[item_id] for item_id in page_ids if item_id in row_by_id]
-        items = [row_to_query_item(row) for row in ordered_rows]
+        from projectionist.library.play_counts import enrich_rows_with_episode_play_sums
+
+        enriched_rows = enrich_rows_with_episode_play_sums(db, ordered_rows)
+        items = [row_to_query_item(row) for row in enriched_rows]
         if filters.motifs:
             attach_motif_why(db, items, filters.motifs)
         returned = len(items)

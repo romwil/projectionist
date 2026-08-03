@@ -347,26 +347,34 @@ async def gather_specialty_context(
                 logger.debug("enthusiast tonight picks failed", exc_info=True)
             # Continue-watching style heat from library (no live session polling).
             try:
+                from projectionist.library.play_counts import (
+                    EFFECTIVE_VIEW_COUNT_SQL,
+                    effective_view_count,
+                    enrich_rows_with_episode_play_sums,
+                )
+
                 with registry.db.connect() as conn:
                     rows = conn.execute(
-                        """
-                        SELECT title, year, media_type, tmdb_id, view_count, last_viewed_at
+                        f"""
+                        SELECT title, year, media_type, tmdb_id, view_count, last_viewed_at,
+                               total_episode_count, id
                         FROM library_items
-                        WHERE COALESCE(view_count, 0) > 0
-                          AND last_viewed_at IS NOT NULL
+                        WHERE last_viewed_at IS NOT NULL
+                          AND ({EFFECTIVE_VIEW_COUNT_SQL}) > 0
                         ORDER BY last_viewed_at DESC
                         LIMIT 4
                         """
                     ).fetchall()
+                enriched = enrich_rows_with_episode_play_sums(registry.db, rows)
                 heat["continue_watching"] = [
                     {
                         "title": r["title"],
                         "year": r["year"],
                         "media_type": r["media_type"],
                         "tmdb_id": r["tmdb_id"],
-                        "view_count": r["view_count"],
+                        "view_count": effective_view_count(r),
                     }
-                    for r in rows
+                    for r in enriched
                 ]
             except Exception:
                 logger.debug("enthusiast continue-watching failed", exc_info=True)

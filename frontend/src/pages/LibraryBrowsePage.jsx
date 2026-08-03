@@ -63,6 +63,7 @@ import {
   nextBrowseSearchQuery,
   setBrowseSearchQueryParam,
 } from "../lib/progressiveBrowseSearch.js";
+import LibrarySearchBar from "../components/LibrarySearchBar.jsx";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
 
 function itemKey(item) {
@@ -480,29 +481,13 @@ export default function LibraryBrowsePage() {
         <p className="person-eyebrow">{isSearchRoute ? "Search" : "Explore"}</p>
         <h1 data-testid="library-browse-title">{browseHeading(browse.media_type, q)}</h1>
         <p className="explore-section-subtitle">{browseSubtitle(browse.media_type, q)}</p>
-        <form
-          className="explore-search library-browse-search"
-          data-testid="library-browse-search"
-          role="search"
+        <LibrarySearchBar
+          className="library-browse-search"
+          testId="library-browse-search"
+          value={draftQ}
+          onChange={(event) => setDraftQ(event.target.value)}
           onSubmit={handleSearchSubmit}
-        >
-          <label className="library-search library-search--hero">
-            <span className="material-symbols-outlined" aria-hidden="true">
-              search
-            </span>
-            <input
-              type="search"
-              value={draftQ}
-              onChange={(event) => setDraftQ(event.target.value)}
-              placeholder="Search your library by title or plot…"
-              aria-label="Search your library"
-              data-testid="library-browse-search-input"
-            />
-          </label>
-          <button type="submit" className="explore-search-submit" data-testid="library-browse-search-submit">
-            Search
-          </button>
-        </form>
+        />
       </section>
 
       <div className="explore-section-toolbar" data-testid="library-browse-toolbar">

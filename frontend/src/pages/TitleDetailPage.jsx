@@ -3,6 +3,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import BackLink from "../components/BackLink";
 import { api, queryLibrary } from "../api/client";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
+import MarkBadMediaDialog from "../components/MarkBadMediaDialog.jsx";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import PosterOverlayControls from "../components/PosterOverlayControls";
 import RecommendModal from "../components/RecommendModal";
@@ -200,12 +201,15 @@ export default function TitleDetailPage() {
         watchStatus={interactions.watchStatus}
         watchMessage={interactions.watchMessage}
         deleting={interactions.deleting}
+        markingBadMedia={interactions.badMediaLoading}
+        badMediaMessage={interactions.badMediaMessage}
         onRequestAdd={interactions.handleRequestAdd}
         onToggleWatched={interactions.handleToggleWatched}
         onOpenTrailer={() => setTrailerOpen(true)}
         onOpenReview={() => setReviewOpen(true)}
         onOpenRecommend={() => setRecommendOpen(true)}
         onOpenDelete={interactions.openLibraryDelete}
+        onOpenMarkBadMedia={interactions.openMarkBadMedia}
       />
 
       {collectionPeers.length ? (
@@ -379,6 +383,19 @@ export default function TitleDetailPage() {
           interactions.setDeleteError("");
         }}
         onConfirm={interactions.handleLibraryDeleteConfirm}
+      />
+
+      <MarkBadMediaDialog
+        open={interactions.badMediaOpen}
+        title={detail?.title || "Untitled"}
+        mediaType={detail?.media_type || "movie"}
+        loading={interactions.badMediaLoading}
+        error={interactions.badMediaError}
+        onCancel={() => {
+          if (interactions.badMediaLoading) return;
+          interactions.setBadMediaOpen(false);
+        }}
+        onConfirm={interactions.handleMarkBadMediaConfirm}
       />
 
       <RemovalSummaryDialog

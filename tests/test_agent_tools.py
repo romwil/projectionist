@@ -14,6 +14,7 @@ from projectionist.agent.tools import (
     ToolRegistry,
     _append_recommendation_cards,
     _card_to_tool_item,
+    _query_item_to_tool_item,
     _rank_tmdb_search_results,
     build_system_prompt,
     build_tool_definitions,
@@ -22,6 +23,8 @@ from projectionist.config_store import FeatureFlags, Settings
 from projectionist.connectors.arr_errors import ArrTitleNotFoundError
 from projectionist.connectors.radarr import RadarrMovie
 from projectionist.library.db import DEFAULT_LENS_ID, Database
+from projectionist.library.query import query_library, row_to_query_item
+from projectionist.library.search import row_to_title_card
 from projectionist.models.schemas import TitleCard
 
 
@@ -502,6 +505,100 @@ class ToolRegistryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(show_item["tvdb_id"], 79126)
         self.assertEqual(owned_item["rating_key"], "rk-1")
         self.assertNotIn("tmdb_id", owned_item)
+
+    def _seed_big_train_show(self, db: Database) -> int:
+        """Big Train-style fixture: show view_count=1, 12/12 watched, episode plays sum=19."""
+        show_id = db.upsert_library_item(
+            {
+                "rating_key": "show-big-train",
+                "media_type": "show",
+                "title": "Big Train",
+                "year": 1998,
+                "genres": ["Comedy"],
+                "view_count": 1,
+            }
+        )
+        episode_plays = [2, 1, 3, 1, 2, 1, 1, 2, 1, 2, 2, 1]
+        for idx, plays in enumerate(episode_plays, start=1):
+            db.upsert_library_episode(
+                {
+                    "show_item_id": show_id,
+                    "rating_key": f"bt-ep-{idx}",
+                    "season_number": 1,
+                    "episode_number": idx,
+                    "title": f"Episode {idx}",
+                    "view_count": plays,
+                }
+            )
+        db.update_show_episode_rollups(show_id)
+        return show_id
+
+    def test_card_to_tool_item_show_uses_total_episode_plays(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = self._seed_big_train_show(db)
+            row = db.library_item_by_id(show_id)
+            assert row is not None
+            card = row_to_title_card(row)
+            tool_item = _card_to_tool_item(card)
+
+            self.assertEqual(tool_item["view_count"], 19)
+            self.assertEqual(tool_item["total_episode_count"], 12)
+            self.assertEqual(tool_item["unwatched_episode_count"], 0)
+            self.assertEqual(tool_item["watched_episode_count"], 12)
+            self.assertEqual(tool_item["watch_state"], "watched")
+
+    def test_card_to_tool_item_movie_view_count_unchanged(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            movie_id = db.upsert_library_item(
+                {
+                    "rating_key": "movie-blade",
+                    "media_type": "movie",
+                    "title": "Blade Runner",
+                    "year": 1982,
+                    "genres": ["Sci-Fi"],
+                    "view_count": 7,
+                }
+            )
+            row = db.library_item_by_id(movie_id)
+            assert row is not None
+            tool_item = _card_to_tool_item(row_to_title_card(row))
+            self.assertEqual(tool_item["view_count"], 7)
+            self.assertNotIn("total_episode_count", tool_item)
+
+    def test_query_item_to_tool_item_show_uses_episode_play_sum(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            show_id = self._seed_big_train_show(db)
+            row = db.library_item_by_id(show_id)
+            assert row is not None
+            query_item = row_to_query_item(row)
+            tool_item = _query_item_to_tool_item(query_item)
+
+            self.assertEqual(query_item["view_count"], 19)
+            self.assertEqual(tool_item["view_count"], 19)
+            self.assertEqual(tool_item["watch_state"], "watched")
+
+    def test_query_library_show_view_count_is_episode_play_sum(self) -> None:
+        from projectionist.library.query import LibraryFilters
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            self._seed_big_train_show(db)
+            result = query_library(db, LibraryFilters(query="Big Train", limit=5))
+            self.assertEqual(result["total_matched"], 1)
+            item = result["items"][0]
+            self.assertEqual(item["view_count"], 19)
+            self.assertEqual(item["total_episode_count"], 12)
+            self.assertEqual(item["unwatched_episode_count"], 0)
+
+    def test_system_prompt_documents_tv_view_count_semantics(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            prompt = build_system_prompt(db, lens_id=DEFAULT_LENS_ID)
+            self.assertIn("total episode plays", prompt)
+            self.assertIn("watch_state", prompt)
 
     @patch("projectionist.agent.tools.TMDBClient")
     async def test_find_collection_gaps_items_include_tmdb_id(self, mock_tmdb_cls) -> None:

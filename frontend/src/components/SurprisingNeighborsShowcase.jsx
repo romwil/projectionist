@@ -16,6 +16,9 @@ export default function SurprisingNeighborsShowcase({
   seedGenres = [],
   showIntro = true,
   testId = "explore-neighbors-rail",
+  seedItemId = null,
+  onDismissNeighbor = null,
+  dismissBusyId = null,
 }) {
   const [expanded, setExpanded] = useState(false);
   const seedKey = Array.isArray(items)
@@ -98,6 +101,17 @@ export default function SurprisingNeighborsShowcase({
                   <p className="surprise-showcase-cell-why" data-testid={`${testId}-why`}>
                     {why.detail}
                   </p>
+                ) : null}
+                {onDismissNeighbor && seedItemId && item?.id ? (
+                  <button
+                    type="button"
+                    className="ghost surprise-showcase-dismiss"
+                    disabled={dismissBusyId === item.id}
+                    data-testid={`${testId}-dismiss-${item.id}`}
+                    onClick={() => onDismissNeighbor(item)}
+                  >
+                    Not a neighbor
+                  </button>
                 ) : null}
               </div>
             );

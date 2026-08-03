@@ -42,9 +42,14 @@ class LibraryLookupMixin:
             ).fetchone()
 
     def library_item_by_id(self, item_id: int) -> Optional[sqlite3.Row]:
+        from projectionist.library.play_counts import library_items_with_episode_plays_select
+
         with self.connect() as conn:
             return conn.execute(
-                "SELECT * FROM library_items WHERE id = ?",
+                f"""
+                {library_items_with_episode_plays_select(alias="li")}
+                WHERE li.id = ?
+                """,
                 (item_id,),
             ).fetchone()
 
@@ -623,6 +628,24 @@ class LibraryLookupMixin:
                 (show_item_id,),
             ).fetchone()
         return int(row["total"] or 0), int(row["viewed"] or 0)
+
+    def show_episode_play_sums(self, show_item_ids: Sequence[int]) -> Dict[int, int]:
+        """Return total episode plays (SUM view_count) keyed by show library item id."""
+        ids = [int(item_id) for item_id in show_item_ids if item_id is not None]
+        if not ids:
+            return {}
+        placeholders = ",".join("?" for _ in ids)
+        with self.connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT show_item_id, SUM(COALESCE(view_count, 0)) AS episode_play_sum
+                FROM library_episodes
+                WHERE show_item_id IN ({placeholders})
+                GROUP BY show_item_id
+                """,
+                ids,
+            ).fetchall()
+        return {int(row["show_item_id"]): int(row["episode_play_sum"] or 0) for row in rows}
 
     def _update_show_episode_rollups_on_conn(
         self, conn: sqlite3.Connection, show_item_id: int

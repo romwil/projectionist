@@ -4,6 +4,7 @@ import {
   deleteLibraryItems,
   formatApiError,
   getFeatures,
+  markBadMedia,
   proposeAction,
   setLibraryItemWatched,
 } from "../api/client";
@@ -54,6 +55,10 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDel
   const [deleteError, setDeleteError] = useState("");
   const [removalSummary, setRemovalSummary] = useState(null);
   const [pendingDeletedPayload, setPendingDeletedPayload] = useState(null);
+  const [badMediaOpen, setBadMediaOpen] = useState(false);
+  const [badMediaLoading, setBadMediaLoading] = useState(false);
+  const [badMediaError, setBadMediaError] = useState("");
+  const [badMediaMessage, setBadMediaMessage] = useState("");
   const [watchStatus, setWatchStatus] = useState(null);
   const [watchMessage, setWatchMessage] = useState("");
   const deleteInFlightRef = useRef(false);
@@ -84,6 +89,10 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDel
     setDeleteError("");
     setRemovalSummary(null);
     setPendingDeletedPayload(null);
+    setBadMediaOpen(false);
+    setBadMediaLoading(false);
+    setBadMediaError("");
+    setBadMediaMessage("");
     setWatchStatus(null);
     setWatchMessage("");
   }, [detail?.rating_key, detail?.tmdb_id, detail?.title]);
@@ -188,6 +197,41 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDel
     if (payload) onDeleted?.(payload);
   }
 
+  function openMarkBadMedia() {
+    if (!canOwnerDeleteLibraryTitle(detail, { role: userRole, multiUserEnabled })) return;
+    setBadMediaError("");
+    setBadMediaMessage("");
+    setBadMediaOpen(true);
+  }
+
+  async function handleMarkBadMediaConfirm() {
+    if (badMediaLoading) return;
+    if (!canOwnerDeleteLibraryTitle(detail, { role: userRole, multiUserEnabled })) return;
+    const ratingKey = libraryItemRatingKey(detail);
+    setBadMediaLoading(true);
+    setBadMediaError("");
+    try {
+      const result = await markBadMedia({
+        rating_key: ratingKey || undefined,
+        tmdb_id: detail?.tmdb_id ?? undefined,
+        tvdb_id: detail?.tvdb_id ?? undefined,
+        media_type: detail?.media_type || undefined,
+      });
+      setBadMediaOpen(false);
+      const action = String(result?.action || "replace");
+      const files = Number(result?.files_removed) || 0;
+      setBadMediaMessage(
+        files > 0
+          ? `Asked ${detail?.media_type === "show" ? "Sonarr" : "Radarr"} to replace the bad file (${action}). No exclusion added.`
+          : `Asked ${detail?.media_type === "show" ? "Sonarr" : "Radarr"} to search for a replacement (${action}). No exclusion added.`,
+      );
+    } catch (err) {
+      setBadMediaError(formatApiError(err) || "Could not mark media for replacement.");
+    } finally {
+      setBadMediaLoading(false);
+    }
+  }
+
   async function handleToggleWatched() {
     if (!canMarkTitleWatched(detail, { role: userRole, multiUserEnabled })) return;
     const ratingKey = libraryItemRatingKey(detail);
@@ -237,6 +281,13 @@ export function useTitleDetailInteractions({ detail, setDetail, onDeleted, onDel
     setDeleteError,
     removalSummary,
     dismissRemovalSummary,
+    badMediaOpen,
+    setBadMediaOpen,
+    badMediaLoading,
+    badMediaError,
+    badMediaMessage,
+    openMarkBadMedia,
+    handleMarkBadMediaConfirm,
     watchStatus,
     watchMessage,
     handleRequestAdd,

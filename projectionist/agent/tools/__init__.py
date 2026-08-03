@@ -47,6 +47,7 @@ from projectionist.library.external_search import (  # re-exported: preserves im
     external_tmdb_search,
 )
 from projectionist.library.facets import library_facet_catalog
+from projectionist.library.play_counts import effective_view_count, enrich_rows_with_episode_play_sums
 from projectionist.library.query import (
     LibraryFilters,
     _build_where,
@@ -62,6 +63,7 @@ from projectionist.library.query import (
 )
 from projectionist.library.search import exact_title_cards, row_to_title_card, search_library
 from projectionist.library.titles import get_title_detail
+from projectionist.library.watch_progress import watch_progress_state
 from projectionist.models.recommendation import sanitize_recommendation_reason
 from projectionist.models.schemas import TitleCard
 from projectionist.preferences.purge import suggest_purge_candidates
@@ -455,14 +457,26 @@ def _seerr_search_item_to_tool_item(item: Mapping[str, Any], media_type: str) ->
 
 
 def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
+    card_data = card.model_dump()
+    view_count = effective_view_count(card_data)
     item: Dict[str, Any] = {
         "title": card.title,
         "year": card.year,
         "media_type": card.media_type,
         "genres": list(card.genres or []),
-        "view_count": getattr(card, "view_count", 0),
+        "view_count": view_count,
         "in_library": card.in_library,
     }
+    if card.media_type == "show":
+        if card.total_episode_count is not None:
+            item["total_episode_count"] = card.total_episode_count
+        if card.unwatched_episode_count is not None:
+            item["unwatched_episode_count"] = card.unwatched_episode_count
+            if card.total_episode_count is not None:
+                item["watched_episode_count"] = max(
+                    0, int(card.total_episode_count) - int(card.unwatched_episode_count)
+                )
+        item["watch_state"] = watch_progress_state({**card_data, "view_count": view_count})
     if card.tmdb_id:
         item["tmdb_id"] = card.tmdb_id
     if card.tvdb_id:
@@ -487,6 +501,7 @@ def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
 
 
 def _query_item_to_tool_item(item: Mapping[str, Any]) -> Dict[str, Any]:
+    view_count = effective_view_count(item)
     payload: Dict[str, Any] = {
         "title": item.get("title"),
         "year": item.get("year"),
@@ -495,7 +510,7 @@ def _query_item_to_tool_item(item: Mapping[str, Any]) -> Dict[str, Any]:
         "directors": item.get("directors") or [],
         "cast": item.get("cast") or [],
         "keywords": item.get("keywords") or [],
-        "view_count": item.get("view_count"),
+        "view_count": view_count,
         "runtime_minutes": item.get("runtime_minutes"),
         "vote_average": item.get("vote_average"),
         "content_rating": item.get("content_rating"),
@@ -503,6 +518,12 @@ def _query_item_to_tool_item(item: Mapping[str, Any]) -> Dict[str, Any]:
         "total_episode_count": item.get("total_episode_count"),
         "in_library": True,
     }
+    if item.get("media_type") == "show":
+        total_eps = item.get("total_episode_count")
+        unwatched_eps = item.get("unwatched_episode_count")
+        if total_eps is not None and unwatched_eps is not None:
+            payload["watched_episode_count"] = max(0, int(total_eps) - int(unwatched_eps))
+        payload["watch_state"] = watch_progress_state({**dict(item), "view_count": view_count})
     if item.get("tmdb_id"):
         payload["tmdb_id"] = item["tmdb_id"]
     if item.get("tvdb_id"):
@@ -819,6 +840,7 @@ class ToolRegistry:
             "request_via_seerr",
             "approve_seerr_request",
             "remove_from_arr",
+            "mark_bad_media",
             "create_plex_collection",
             "add_to_plex_collection",
             "confirm_pending_action",
@@ -2173,6 +2195,42 @@ class ToolRegistry:
             }
         )
 
+    async def _tool_mark_bad_media(self, args: Mapping[str, Any]) -> str:
+        from projectionist.library.bad_media import BadMediaError, mark_bad_media
+
+        try:
+            result = mark_bad_media(
+                self.db,
+                self.settings,
+                rating_key=str(args.get("rating_key") or "") or None,
+                tmdb_id=int(args["tmdb_id"]) if args.get("tmdb_id") is not None else None,
+                tvdb_id=int(args["tvdb_id"]) if args.get("tvdb_id") is not None else None,
+                media_type=str(args.get("media_type") or "") or None,
+                episode_rating_key=str(args.get("episode_rating_key") or "") or None,
+                season_number=int(args["season_number"]) if args.get("season_number") is not None else None,
+                episode_number=int(args["episode_number"]) if args.get("episode_number") is not None else None,
+                note=str(args.get("note") or ""),
+            )
+        except BadMediaError as error:
+            return json.dumps({"error": str(error)})
+        except RuntimeError as error:
+            from projectionist.connectors.arr_errors import format_arr_http_error
+
+            return json.dumps({"error": format_arr_http_error(error)})
+        return json.dumps(
+            {
+                "ok": True,
+                "title": result.get("title"),
+                "action": result.get("action"),
+                "files_removed": result.get("files_removed", 0),
+                "add_exclusion": False,
+                "message": (
+                    "Asked Radarr/Sonarr to replace the bad file. "
+                    "No import exclusion was added — the title stays wanted."
+                ),
+            }
+        )
+
     async def _tool_search_tmdb(self, args: Mapping[str, Any]) -> str:
         raw_tmdb_id = args.get("tmdb_id")
         raw_year = args.get("year")
@@ -2384,14 +2442,15 @@ class ToolRegistry:
             cards = await search_library(self.db, self.settings, mood, media_type=media_type, limit=limit * 2)
         else:
             candidates: List[tuple[int, TitleCard]] = []
-            for row in self.db.all_library_items():
+            rows = enrich_rows_with_episode_play_sums(self.db, self.db.all_library_items())
+            for row in rows:
                 if media_type and row["media_type"] != media_type:
                     continue
-                view_count = int(row["view_count"] or 0)
+                view_count = effective_view_count(row)
                 if view_count > 2:
                     continue
                 score = (3 - view_count) * 10
-                if row["last_viewed_at"]:
+                if row.get("last_viewed_at"):
                     score -= 2
                 candidates.append((score, row_to_title_card(row, reason="Good pick for tonight")))
             candidates.sort(key=lambda item: item[0], reverse=True)
@@ -2423,11 +2482,12 @@ class ToolRegistry:
                 f"SELECT * FROM library_items WHERE {where_sql}",
                 params,
             ).fetchall()
+        rows = enrich_rows_with_episode_play_sums(self.db, rows)
         for row in rows:
             total_items += 1
-            views = int(row["view_count"] or 0)
+            views = effective_view_count(row)
             total_views += views
-            if views == 0:
+            if watch_progress_state(row) == "unwatched":
                 unwatched += 1
             last = row["last_viewed_at"]
             if last and (now - int(last)) > 365 * 24 * 3600:
@@ -3924,8 +3984,14 @@ def build_system_prompt(
         "or set_recommendation_reasons — never leave Why this? as a pipeline label. "
         "After a useful recommendation or gap response, call suggest_follow_ups with 2-4 concise, safe next user turns. "
         "For movies use tmdb_id with add_to_radarr; for shows use tvdb_id with add_to_sonarr.\n"
+        "When a file is corrupted or the wrong download but the owner still wants the title, "
+        "use mark_bad_media (replace/redownload) — not remove_from_arr or library delete, "
+        "which add import exclusions and mean 'never get this again'.\n"
         "When Seerr is enabled for household members, use request_via_seerr instead of add_to_radarr/add_to_sonarr.\n"
         "Star ratings accept half-stars (e.g. 4.5); never ask users to round fractional ratings.\n"
+        "For TV shows, view_count in tool items is total episode plays (sum of per-episode Plex viewCounts), "
+        "not the coarse show-level counter — use total_episode_count, unwatched_episode_count, and watch_state "
+        "for completion; do not claim a show was watched once from a low show-level leftover.\n"
         "Working narration: short pre-tool and between-tool asides (when you stream them) must stay in this persona's "
         "voice — calm when the persona is calm, wry when wry. Prefer brief grounded lines over generic hype, "
         "exclamation-stacking, scout-cheer, or 'hitting a wall' improvisation. Do not narrate raw tool names or "

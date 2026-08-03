@@ -271,6 +271,192 @@ class TelemetryConfigMixin:
 
         return self.run_write(_write, label="update_staged_augmentation_status")
 
+    def staged_augmentations_aggregates(self) -> Dict[str, Any]:
+        """Group staged rows by task, tier, and status for Knowledge Ops."""
+        rows = self._query(
+            """
+            SELECT task_name, priority_tier, status, COUNT(*) AS count
+            FROM staged_augmentations
+            GROUP BY task_name, priority_tier, status
+            ORDER BY task_name, priority_tier, status
+            """
+        )
+        by_task: Dict[str, Dict[str, int]] = {}
+        by_tier: Dict[str, Dict[str, int]] = {}
+        by_status: Dict[str, int] = {}
+        for row in rows:
+            task = str(row["task_name"] or "")
+            tier = str(row["priority_tier"] or "")
+            status = str(row["status"] or "")
+            count = int(row["count"] or 0)
+            task_bucket = by_task.setdefault(task, {})
+            task_bucket[status] = task_bucket.get(status, 0) + count
+            tier_bucket = by_tier.setdefault(tier, {})
+            tier_bucket[status] = tier_bucket.get(status, 0) + count
+            by_status[status] = by_status.get(status, 0) + count
+        return {
+            "by_task": by_task,
+            "by_tier": by_tier,
+            "by_status": by_status,
+            "pending_total": int(by_status.get("pending", 0)),
+        }
+
+    def closed_loop_funnel_stats(self, *, min_hit_count: int = 3) -> Dict[str, Any]:
+        """Funnel counts: observed → threshold → staged → approved/rejected."""
+        threshold = max(1, int(min_hit_count))
+        with self.connect() as conn:
+            observed = int(
+                conn.execute("SELECT COUNT(*) FROM telemetry_events").fetchone()[0] or 0
+            )
+            at_threshold = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM telemetry_events WHERE hit_count >= ?",
+                    (threshold,),
+                ).fetchone()[0]
+                or 0
+            )
+            staged_total = int(
+                conn.execute("SELECT COUNT(*) FROM staged_augmentations").fetchone()[0] or 0
+            )
+            staged_pending = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM staged_augmentations WHERE status = 'pending'"
+                ).fetchone()[0]
+                or 0
+            )
+            staged_approved = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM staged_augmentations WHERE status = 'approved'"
+                ).fetchone()[0]
+                or 0
+            )
+            staged_rejected = int(
+                conn.execute(
+                    "SELECT COUNT(*) FROM staged_augmentations WHERE status = 'rejected'"
+                ).fetchone()[0]
+                or 0
+            )
+        return {
+            "min_hit_count": threshold,
+            "observed": observed,
+            "at_threshold": at_threshold,
+            "staged_total": staged_total,
+            "staged_pending": staged_pending,
+            "staged_approved": staged_approved,
+            "staged_rejected": staged_rejected,
+        }
+
+    def closed_loop_knowledge_ops_summary(self) -> Dict[str, Any]:
+        """Dashboard strip: pending counts, signal volume, approve/reject rates."""
+        staged = self.staged_augmentations_aggregates()
+        funnel = self.closed_loop_funnel_stats()
+        with self.connect() as conn:
+            signals_7d = int(
+                conn.execute(
+                    """
+                    SELECT COALESCE(SUM(hit_count), 0)
+                    FROM telemetry_events
+                    WHERE updated_at >= datetime('now', '-7 days')
+                    """
+                ).fetchone()[0]
+                or 0
+            )
+            signals_30d = int(
+                conn.execute(
+                    """
+                    SELECT COALESCE(SUM(hit_count), 0)
+                    FROM telemetry_events
+                    WHERE updated_at >= datetime('now', '-30 days')
+                    """
+                ).fetchone()[0]
+                or 0
+            )
+            reviewed = conn.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM staged_augmentations
+                WHERE status IN ('approved', 'rejected')
+                  AND updated_at >= datetime('now', '-30 days')
+                GROUP BY status
+                """
+            ).fetchall()
+        reviewed_map = {str(row["status"]): int(row["count"] or 0) for row in reviewed}
+        approved_30d = reviewed_map.get("approved", 0)
+        rejected_30d = reviewed_map.get("rejected", 0)
+        reviewed_total = approved_30d + rejected_30d
+        approve_rate = (
+            round(approved_30d / reviewed_total, 3) if reviewed_total else None
+        )
+        reject_rate = (
+            round(rejected_30d / reviewed_total, 3) if reviewed_total else None
+        )
+        facet_pending = int(
+            staged["by_task"].get("facet_taxonomy_audit", {}).get("pending", 0)
+        )
+        return {
+            "pending_facet_candidates": facet_pending,
+            "pending_all_augmentations": staged["pending_total"],
+            "signals_7d": signals_7d,
+            "signals_30d": signals_30d,
+            "approve_rate_30d": approve_rate,
+            "reject_rate_30d": reject_rate,
+            "funnel": funnel,
+            "staged": staged,
+        }
+
+    def closed_loop_telemetry_trend(self, *, days: int = 30) -> List[Dict[str, Any]]:
+        """Daily closed-loop signal volume grouped by event_type."""
+        window = max(1, min(int(days or 30), 90))
+        rows = self._query(
+            """
+            SELECT date(updated_at) AS day,
+                   event_type,
+                   SUM(hit_count) AS signal_volume
+            FROM telemetry_events
+            WHERE updated_at >= datetime('now', ?)
+            GROUP BY day, event_type
+            ORDER BY day ASC, signal_volume DESC
+            """,
+            (f"-{window} days",),
+        )
+        return [
+            {
+                "day": str(row["day"] or ""),
+                "event_type": str(row["event_type"] or ""),
+                "signal_volume": int(row["signal_volume"] or 0),
+            }
+            for row in rows
+        ]
+
+    def top_closed_loop_events(
+        self,
+        *,
+        event_type: Optional[str] = None,
+        entity_type: Optional[str] = None,
+        limit: int = 20,
+    ) -> List[Dict[str, Any]]:
+        """Top unresolved closed-loop events by hit_count."""
+        clauses: List[str] = []
+        params: List[Any] = []
+        if event_type:
+            clauses.append("event_type = ?")
+            params.append(event_type)
+        if entity_type:
+            clauses.append("entity_type = ?")
+            params.append(entity_type)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        params.append(max(1, min(int(limit), 100)))
+        rows = self._query(
+            f"""
+            SELECT * FROM telemetry_events
+            {where}
+            ORDER BY hit_count DESC, updated_at DESC
+            LIMIT ?
+            """,
+            tuple(params),
+        )
+        return [dict(row) for row in rows]
+
     def _query(self, sql: str, params=()) -> List[sqlite3.Row]:
         with self.connect() as conn:
             return conn.execute(sql, params).fetchall()

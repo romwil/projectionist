@@ -23,6 +23,7 @@ from projectionist.library.db import Database
 from projectionist.scheduler.autotune import resolve_batch_size
 from projectionist.scheduler.engine import IdleScheduler, TaskDefinition
 from projectionist.scheduler.run_log import emit_task_event
+from projectionist.scheduler.tasks.coverage_signals import emit_synopsis_backlog_signals
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +129,7 @@ async def run(
 
     batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
     backlog = db.items_needing_long_synopsis(limit=batch_size)
+    coverage_signals = emit_synopsis_backlog_signals(db, limit=batch_size)
     if not backlog:
         return {"status": "completed", "enriched": 0, "remaining": 0}
 
@@ -199,6 +201,7 @@ async def run(
         "batch_size": batch_size,
         "source": source,
         "has_more": remaining > 0,
+        "coverage_signals": coverage_signals,
     }
 
 

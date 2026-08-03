@@ -9,9 +9,19 @@ Closed-loop augmentation helpers (``schedule_closed_loop_event`` /
 used by ``BaseAugmentationTask`` — separate from the interaction stream.
 """
 
+from projectionist.telemetry.coverage import (
+    EVENT_COVERAGE_DEFICIT,
+    schedule_coverage_deficit,
+)
 from projectionist.telemetry.demand import (
     EVENT_METADATA_DEMAND,
     schedule_metadata_demand,
+)
+from projectionist.telemetry.explore import (
+    EVENT_BAD_NEIGHBOR,
+    EVENT_EXPLORE_MISS,
+    schedule_bad_neighbor_match,
+    schedule_explore_miss,
 )
 from projectionist.telemetry.ingestion import (
     TelemetryIngester,
@@ -32,9 +42,15 @@ from projectionist.telemetry.llm_usage import (
 
 __all__ = [
     "TelemetryIngester",
+    "EVENT_COVERAGE_DEFICIT",
     "EVENT_METADATA_DEMAND",
+    "EVENT_EXPLORE_MISS",
+    "EVENT_BAD_NEIGHBOR",
     "schedule_closed_loop_event",
+    "schedule_coverage_deficit",
     "schedule_metadata_demand",
+    "schedule_explore_miss",
+    "schedule_bad_neighbor_match",
     "scrub_closed_loop_payload",
     "upsert_closed_loop_event",
     "upsert_closed_loop_event_sync",
