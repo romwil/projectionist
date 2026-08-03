@@ -38,6 +38,8 @@ export const EXPLORE_SECTIONS = {
     defaultDays: 30,
     supportsMediaType: true,
     feed: "recently-added",
+    /** Server feed order (added_at DESC) — label shown instead of opaque "Default". */
+    defaultSortLabel: "Date added",
   },
   "recent-releases": {
     id: "recent-releases",
@@ -46,6 +48,8 @@ export const EXPLORE_SECTIONS = {
     defaultDays: 90,
     supportsMediaType: true,
     feed: "recent-releases",
+    /** Server feed order (release/first-air date DESC). */
+    defaultSortLabel: "Release date",
   },
 };
 
@@ -79,6 +83,15 @@ export const EXPLORE_SECTION_SORTS = [
   { id: "year", label: "Year" },
   { id: "rating", label: "Rating" },
 ];
+
+/** Sort dropdown options for an Explore section page (section-specific default label). */
+export function exploreSectionSortOptions(sectionId) {
+  const config = getExploreSectionConfig(sectionId);
+  const defaultLabel = config?.defaultSortLabel || "Feed order";
+  return EXPLORE_SECTION_SORTS.map((option) =>
+    option.id === "default" ? { ...option, label: defaultLabel } : option,
+  );
+}
 
 export function normalizeSectionSort(raw) {
   const value = String(raw || "").trim().toLowerCase();

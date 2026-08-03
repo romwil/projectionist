@@ -2,6 +2,40 @@
 
 ## [Unreleased]
 
+## [1.30.7] — 2026-08-03
+
+Explore feed polish, honest TV watch badges, and library sync cleanup after Plex rematches.
+
+### Highlights
+- **Sort labels that match the feed.** Recently Added and Recent Releases show **Date added** and **Release date** in the sort menu instead of opaque "Default".
+- **Movies and TV stay in Recently Added.** Explore hub Movies/TV links open the recently-added section filtered by type — not generic library browse.
+- **No more phantom duplicates.** Library sync prunes stale index rows after Plex rematches (e.g. duplicate "72 Hours" cards). Run a library sync to clean orphans.
+- **Honest watch badges for TV.** Shows with episode totals but no synced unwatched count no longer display **Watched**.
+
+### Added
+- `libraryBrowseItemKey` — stable React/selection keys prefer `rating_key` over shared `tmdb_id`.
+- `exploreSectionSortOptions` — section-specific default sort labels on Explore section pages.
+- `prune_library_items_not_in_plex_scan` — post-enrich cleanup drops library rows not seen in the current Plex scan; sync reports `items_pruned`.
+
+### Changed
+- Explore Recently Added Movies/TV chips link to `exploreSectionPath("recently-added", { mediaType })`.
+- `watch_progress_state` / frontend `watchProgressState` — missing `unwatched_episode_count` with known `total_episode_count` → `unwatched` (not watched).
+- `watched_episode_count` / agent tool payloads omit inferred watched counts when unwatched is unknown.
+
+### Fixed
+- React key collisions when sorting Explore grids where multiple Plex items share a TMDB id.
+- False **Watched** badges when episode progress was never synced.
+
+### Verification
+- `tests/test_watch_progress.py` — unsynced unwatched count semantics.
+- `tests/test_agent_tools.py` — tool items omit watched count when unwatched unknown.
+- `tests/test_explore_wave3.py` — feed order + distinct rating keys for shared TMDB.
+- `tests/test_library_sync_enrich.py` — stale rating key prune after Plex rematch.
+- `frontend/src/lib/bulkLibraryDelete.test.mjs`, `watchProgress.test.mjs`, `exploreFeeds.test.mjs`.
+- `cd frontend && npm run test:unit` — browse key, watch progress, explore feeds suites green.
+- `cd frontend && npm run lint` — 0 errors; `npm run build` — production build.
+- `test_version` lockstep **1.30.7**.
+
 ## [1.30.6] — 2026-08-02
 
 Knowledge Operations dashboard, mark-bad-media replace flow, honest TV play counts for chat, and a shared full-width library search bar on Explore and Search.

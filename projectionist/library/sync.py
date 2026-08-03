@@ -638,6 +638,7 @@ async def sync_library(
     movie_count = int(checkpoint.get("movies") or 0) if checkpoint else 0
     show_count = int(checkpoint.get("shows") or 0) if checkpoint else 0
     skipped_no_rating_key = 0
+    items_pruned = 0
     facet_count = 0
     fts_count = 0
     episode_stats: dict = {}
@@ -776,7 +777,18 @@ async def sync_library(
                 _emit_enrich_progress(completed)
 
         _flush_pending_rows()
-        clock.finish(extra=f"{count} titles saved")
+        seen_rating_keys = {
+            str(getattr(item, "rating_key", "") or "").strip()
+            for item in plex_items
+            if str(getattr(item, "rating_key", "") or "").strip()
+        }
+        items_pruned = db.prune_library_items_not_in_plex_scan(seen_rating_keys)
+        if items_pruned:
+            logger.info(
+                "Library sync: pruned %s stale index row(s) absent from Plex scan",
+                items_pruned,
+            )
+        clock.finish(extra=f"{count} titles saved, pruned={items_pruned}")
         with db.connect() as conn:
             items_with_tmdb = conn.execute(
                 "SELECT COUNT(*) AS cnt FROM library_items WHERE tmdb_id IS NOT NULL"
@@ -886,6 +898,7 @@ async def sync_library(
                 "fts": fts_count,
                 "episodes": episode_stats,
                 "rating_prompts": rating_prompts,
+                "items_pruned": items_pruned,
                 "resumed_after": resume_after,
                 "timestamp": time.time(),
             }
@@ -908,5 +921,6 @@ async def sync_library(
         "fts": fts_count,
         "episodes": episode_stats,
         "rating_prompts": rating_prompts,
+        "items_pruned": items_pruned,
         "resumed_after": resume_after,
     }

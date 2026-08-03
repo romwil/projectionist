@@ -58,6 +58,24 @@ test("show falls back to view_count without episode totals", () => {
   assert.equal(watchProgressState({ media_type: "show", view_count: 0 }), "unwatched");
 });
 
+test("show unwatched when total known but unwatched count not synced", () => {
+  assert.equal(
+    watchProgressState({
+      media_type: "show",
+      total_episode_count: 12,
+      unwatched_episode_count: null,
+    }),
+    "unwatched",
+  );
+  assert.equal(
+    watchProgressState({
+      media_type: "show",
+      total_episode_count: 12,
+    }),
+    "unwatched",
+  );
+});
+
 test("watchProgressLabel covers badge copy", () => {
   assert.equal(watchProgressLabel("watched"), "Watched");
   assert.equal(watchProgressLabel("partial"), "In progress");

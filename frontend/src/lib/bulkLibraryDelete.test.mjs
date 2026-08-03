@@ -22,6 +22,7 @@ import {
   isBulkDeleteConfirmPhrase,
   libraryDeleteModeLabel,
   libraryDeleteNoticeFromState,
+  libraryBrowseItemKey,
   libraryItemRatingKey,
   LIBRARY_DELETE_NOTICE_KEY,
   normalizeLibraryDeleteMode,
@@ -31,9 +32,24 @@ import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();
 
-function itemKey(item) {
-  return `${item?.media_type || ""}:${item?.tmdb_id || item?.rating_key || item?.title || ""}`;
-}
+describe("libraryBrowseItemKey", () => {
+  it("prefers rating_key over shared tmdb_id", () => {
+    const a = { media_type: "movie", tmdb_id: 999, rating_key: "plex-a", title: "72 Hours" };
+    const b = { media_type: "movie", tmdb_id: 999, rating_key: "plex-b", title: "72 Hours" };
+    const keyA = libraryBrowseItemKey(a);
+    const keyB = libraryBrowseItemKey(b);
+    assert.notEqual(keyA, keyB);
+    assert.match(keyA, /plex-a$/);
+    assert.match(keyB, /plex-b$/);
+  });
+
+  it("falls back to tmdb_id for external-only cards", () => {
+    assert.equal(
+      libraryBrowseItemKey({ media_type: "movie", tmdb_id: 42, title: "External" }),
+      "movie:tmdb:42",
+    );
+  });
+});
 
 describe("bulkLibraryDelete eligibility", () => {
   it("reads rating_key / plex_rating_key", () => {
@@ -56,8 +72,8 @@ describe("bulkLibraryDelete eligibility", () => {
       { media_type: "movie", title: "TMDB only", tmdb_id: 2, in_library: false },
       { media_type: "show", title: "Also keep", plex_rating_key: "rk-3", tmdb_id: 3 },
     ];
-    const selected = new Set(items.map(itemKey));
-    const part = partitionBulkDeleteSelection(items, selected, itemKey);
+    const selected = new Set(items.map(libraryBrowseItemKey));
+    const part = partitionBulkDeleteSelection(items, selected, libraryBrowseItemKey);
     assert.equal(part.deletable.length, 2);
     assert.equal(part.unavailable.length, 1);
     assert.deepEqual(part.ratingKeys, ["rk-1", "rk-3"]);

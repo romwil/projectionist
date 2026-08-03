@@ -20,12 +20,13 @@ import {
   BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   formatBulkLibraryDeleteResultMessage,
   hasRemovalSummary,
+  libraryBrowseItemKey,
   partitionBulkDeleteSelection,
 } from "../lib/bulkLibraryDelete.js";
 import {
   EXPLORE_PAGE_SIZES,
-  EXPLORE_SECTION_SORTS,
   buildExploreSectionQuery,
+  exploreSectionSortOptions,
   feedPaginationSummary,
   getExploreSectionConfig,
   normalizeFeed,
@@ -45,10 +46,6 @@ const MEDIA_TABS = [
   { id: "movie", label: "Movies", mediaType: "movie" },
   { id: "show", label: "TV", mediaType: "show" },
 ];
-
-function itemKey(item) {
-  return `${item?.media_type || ""}:${item?.tmdb_id || item?.rating_key || item?.title || ""}`;
-}
 
 function matchesBrowseFilters(item, query) {
   if (query.year && String(item?.year || "") !== String(query.year)) return false;
@@ -208,12 +205,12 @@ export default function ExploreSectionPage() {
   );
 
   const pinnableKeys = useMemo(
-    () => new Set(sortedItems.filter(allowWatchlistPin).map(itemKey)),
+    () => new Set(sortedItems.filter(allowWatchlistPin).map(libraryBrowseItemKey)),
     [sortedItems],
   );
 
   const deletePartition = useMemo(
-    () => partitionBulkDeleteSelection(sortedItems, selected, itemKey),
+    () => partitionBulkDeleteSelection(sortedItems, selected, libraryBrowseItemKey),
     [sortedItems, selected],
   );
 
@@ -258,7 +255,7 @@ export default function ExploreSectionPage() {
 
   function toggleSelect(item) {
     if (deleteOpen || deleting) return;
-    const key = itemKey(item);
+    const key = libraryBrowseItemKey(item);
     if (!pinnableKeys.has(key)) return;
     setSelected((prev) => {
       const next = new Set(prev);
@@ -280,7 +277,7 @@ export default function ExploreSectionPage() {
 
   async function handleBulkPin() {
     if (!selected.size || pinning) return;
-    const targets = sortedItems.filter((item) => selected.has(itemKey(item)) && allowWatchlistPin(item));
+    const targets = sortedItems.filter((item) => selected.has(libraryBrowseItemKey(item)) && allowWatchlistPin(item));
     if (!targets.length) return;
     const progressId = start({
       label: "Pinning to watchlist",
@@ -457,7 +454,7 @@ export default function ExploreSectionPage() {
           onColumnsChange={setColumns}
           columnScope={`explore-${config.id}`}
           filterOptions={filterOptions}
-          sortOptions={EXPLORE_SECTION_SORTS}
+          sortOptions={exploreSectionSortOptions(config.id)}
           exportItems
           onExport={exportCurrentPage}
         />
@@ -580,7 +577,7 @@ export default function ExploreSectionPage() {
             selectable
             selected={selected}
             onToggleSelect={toggleSelect}
-            getItemKey={itemKey}
+            getItemKey={libraryBrowseItemKey}
           />
         ) : null}
       </section>

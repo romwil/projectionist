@@ -38,6 +38,20 @@ export function libraryItemRatingKey(item) {
   return text;
 }
 
+/** Stable React/selection key for library browse grids — one row per index record. */
+export function libraryBrowseItemKey(item) {
+  const mediaType = item?.media_type || "";
+  const ratingKey = libraryItemRatingKey(item);
+  if (ratingKey) return `${mediaType}:rk:${ratingKey}`;
+  const id = item?.id;
+  if (id != null && String(id).trim()) return `${mediaType}:id:${id}`;
+  const tmdbId = item?.tmdb_id;
+  if (tmdbId != null && String(tmdbId).trim()) return `${mediaType}:tmdb:${tmdbId}`;
+  const tvdbId = item?.tvdb_id;
+  if (tvdbId != null && String(tvdbId).trim()) return `${mediaType}:tvdb:${tvdbId}`;
+  return `${mediaType}:title:${item?.title || ""}`;
+}
+
 /**
  * Library-index deletable: has a stable rating_key and is not an explicit
  * non-library / TMDB-only card.

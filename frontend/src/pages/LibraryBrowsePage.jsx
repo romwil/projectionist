@@ -48,6 +48,7 @@ import {
   BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   formatBulkLibraryDeleteResultMessage,
   hasRemovalSummary,
+  libraryBrowseItemKey,
   partitionBulkDeleteSelection,
 } from "../lib/bulkLibraryDelete.js";
 import {
@@ -65,10 +66,6 @@ import {
 } from "../lib/progressiveBrowseSearch.js";
 import LibrarySearchBar from "../components/LibrarySearchBar.jsx";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
-
-function itemKey(item) {
-  return `${item?.media_type || ""}:${item?.tmdb_id || item?.rating_key || item?.title || ""}`;
-}
 
 function browseHeading(mediaType, q) {
   if (q) return `Search: ${q}`;
@@ -243,12 +240,12 @@ export default function LibraryBrowsePage() {
   }, [browse, q, isAll]);
 
   const pinnableKeys = useMemo(
-    () => new Set(state.items.filter(allowWatchlistPin).map(itemKey)),
+    () => new Set(state.items.filter(allowWatchlistPin).map(libraryBrowseItemKey)),
     [state.items],
   );
 
   const deletePartition = useMemo(
-    () => partitionBulkDeleteSelection(state.items, selected, itemKey),
+    () => partitionBulkDeleteSelection(state.items, selected, libraryBrowseItemKey),
     [state.items, selected],
   );
 
@@ -284,7 +281,7 @@ export default function LibraryBrowsePage() {
 
   function toggleSelect(item) {
     if (deleteOpen || deleting) return;
-    const key = itemKey(item);
+    const key = libraryBrowseItemKey(item);
     if (!pinnableKeys.has(key)) return;
     setSelected((prev) => {
       const next = new Set(prev);
@@ -306,7 +303,7 @@ export default function LibraryBrowsePage() {
 
   async function handleBulkPin() {
     if (!selected.size || pinning) return;
-    const targets = state.items.filter((item) => selected.has(itemKey(item)) && allowWatchlistPin(item));
+    const targets = state.items.filter((item) => selected.has(libraryBrowseItemKey(item)) && allowWatchlistPin(item));
     if (!targets.length) return;
     const progressId = start({ label: "Pinning to watchlist", total: targets.length, asynchronous: true });
     setPinning(true);
@@ -609,7 +606,7 @@ export default function LibraryBrowsePage() {
             selectable
             selected={selected}
             onToggleSelect={toggleSelect}
-            getItemKey={itemKey}
+            getItemKey={libraryBrowseItemKey}
             cardProps={{ testId: "library-browse-card", ...recommendProps }}
           />
         ) : null}
