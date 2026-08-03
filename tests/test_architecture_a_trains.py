@@ -8,7 +8,7 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
+from unittest import mock, skipUnless
 
 from projectionist.agent.tools import ToolRegistry
 from projectionist.config_store import (
@@ -225,6 +225,15 @@ class AgentWriteGateTests(unittest.TestCase):
             self.assertIn("pin", payload)
 
 
+try:
+    from projectionist.mcp import server as _mcp_server  # noqa: F401
+
+    _HAS_MCP = True
+except Exception:  # noqa: BLE001
+    _HAS_MCP = False
+
+
+@skipUnless(_HAS_MCP, "mcp package not installed")
 class PrivacyMcpAffinityTests(unittest.TestCase):
     def test_affinity_tools_require_full_mode(self) -> None:
         from projectionist.mcp import server as mcp_server
