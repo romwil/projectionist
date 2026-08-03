@@ -11,9 +11,9 @@ test.describe("Admin maintenance dashboard", () => {
 
   test("shows overview when onboarding is complete", async ({ page }) => {
     await page.goto("/admin/overview");
-    await page.getByTestId("maintenance-dashboard").waitFor();
+    await page.getByTestId("household-health-hero").waitFor();
     await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
-    await expect(page.getByTestId("maintenance-dashboard")).toBeVisible();
+    await expect(page.getByTestId("household-health-hero")).toBeVisible();
     await expect(page.getByTestId("wizard-nav")).toHaveCount(0);
     await expect(page.getByTestId("admin-rail")).toBeVisible();
   });
@@ -25,7 +25,7 @@ test.describe("Admin maintenance dashboard", () => {
 
   test("can re-run onboarding wizard from overview", async ({ page }) => {
     await page.goto("/admin/overview");
-    await page.getByTestId("maintenance-dashboard").waitFor();
+    await page.getByTestId("household-health-hero").waitFor();
     await page.getByTestId("rerun-wizard").click();
     await expect(page.getByRole("heading", { name: "First-run setup" })).toBeVisible();
     await expect(page.getByTestId("wizard-nav")).toBeVisible();
