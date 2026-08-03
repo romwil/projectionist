@@ -21,7 +21,9 @@ import {
 } from "../../api/client";
 import {
   buildCraftFiltersPayload,
+  collectionPublishButtonLabel,
   craftDraftFromStation,
+  findLiveCollection,
 } from "../../lib/liveChannelsCraft.js";
 import {
   CREATE_STATION_MODES,
@@ -61,6 +63,75 @@ export function LiveReadyBadge({ ready, label = "Ready", testId }) {
     <span className="certified-badge certified-badge-ok" data-testid={testId}>
       ✓ {label}
     </span>
+  );
+}
+
+function LiveChannelsCollectionPicker({
+  collections = [],
+  filteredCollections = [],
+  collectionFilter,
+  onCollectionFilterChange,
+  collectionId,
+  onCollectionSelect,
+  collectionsTotal,
+  collectionsEmptyHint,
+  collectionsError,
+  filterTestId,
+  selectTestId,
+  emptyTestId,
+  countTestId,
+  pickerTestId,
+}) {
+  return (
+    <label
+      className="live-channels-craft-collection"
+      data-testid={pickerTestId}
+    >
+      Collection
+      <input
+        type="search"
+        className="live-channels-collection-filter"
+        data-testid={filterTestId}
+        placeholder="Search collections…"
+        value={collectionFilter}
+        onChange={(event) => onCollectionFilterChange(event.target.value)}
+        autoComplete="off"
+      />
+      <select
+        data-testid={selectTestId}
+        className="live-channels-collection-select"
+        value={collectionId}
+        onChange={(event) => onCollectionSelect(event.target.value)}
+      >
+        <option value="">Select a collection…</option>
+        {filteredCollections.map((row) => (
+          <option key={row.id || row.title} value={row.id} title={row.label}>
+            {row.label}
+            {row.source === "plex" ? " · Plex" : ""}
+            {row.source === "published" ? " · Published" : ""}
+            {row.item_count ? ` (${row.item_count})` : ""}
+          </option>
+        ))}
+      </select>
+      {!collections.length ? (
+        <p className="wizard-note" data-testid={emptyTestId}>
+          {collectionsEmptyHint ||
+            collectionsError ||
+            "No collections loaded. Create one in Plex, or publish a Projectionist list."}
+        </p>
+      ) : (
+        <p
+          className="wizard-note live-channels-collection-count"
+          data-testid={countTestId}
+        >
+          {collectionFilter.trim()
+            ? `${filteredCollections.length} match${
+                filteredCollections.length === 1 ? "" : "es"
+              } of ${collectionsTotal} collections`
+            : `${collectionsTotal} collection${collectionsTotal === 1 ? "" : "s"} available`}
+        </p>
+      )}
+    </label>
   );
 }
 
@@ -141,6 +212,38 @@ export default function LiveChannelsSection({
   const setupSteps = liveSetupStepNumbers({ dockerOrchestration });
   const [createStationMode, setCreateStationMode] = useState("custom");
   const [healthDetailsOpen, setHealthDetailsOpen] = useState(false);
+  const craftCollections = liveCraftOptions?.collections || [];
+  const selectedCraftCollection = findLiveCollection(
+    craftCollections,
+    liveCraft.collection_id,
+  );
+
+  async function proposeStarterPack() {
+    setLiveBusy("starters");
+    try {
+      const pack = await getLiveChannelsStarterPack();
+      setLiveStarters(pack);
+      const next = {};
+      for (const proposal of pack.proposals || []) {
+        next[`${proposal.number}:${proposal.name}`] = true;
+      }
+      setSelectedStarters(next);
+    } catch (error) {
+      setActionFeedback("live-channels", "error", error.message, { block: "starters" });
+    } finally {
+      setLiveBusy(null);
+    }
+  }
+
+  function handleCollectionSelect(collectionId) {
+    const match = findLiveCollection(craftCollections, collectionId);
+    setLiveCraft((prev) => ({
+      ...prev,
+      collection_id: collectionId,
+      collection_title: match?.title || "",
+      name: prev.name || match?.title || "",
+    }));
+  }
 
   return (
 <section
@@ -1019,33 +1122,6 @@ export default function LiveChannelsSection({
                         ) : null}
                         <h3>Create a station</h3>
                       </div>
-                      {createStationMode === "starters" || !liveLaunched ? (
-                      <button
-                        type="button"
-                        className="ghost"
-                        data-testid="live-channels-load-starters"
-                        disabled={liveBusy === "starters"}
-                        onClick={async () => {
-                          setCreateStationMode("starters");
-                          setLiveBusy("starters");
-                          try {
-                            const pack = await getLiveChannelsStarterPack();
-                            setLiveStarters(pack);
-                            const next = {};
-                            for (const proposal of pack.proposals || []) {
-                              next[`${proposal.number}:${proposal.name}`] = true;
-                            }
-                            setSelectedStarters(next);
-                          } catch (error) {
-                            setActionFeedback("live-channels", "error", error.message, { block: "connection" });
-                          } finally {
-                            setLiveBusy(null);
-                          }
-                        }}
-                      >
-                        {liveBusy === "starters" ? "Loading…" : "Propose starters"}
-                      </button>
-                      ) : null}
                     </div>
                     <p className="wizard-note">
                       Pick how to build a station. Publish fills lineups from your library and skips
@@ -1242,68 +1318,22 @@ export default function LiveChannelsSection({
                           </label>
                         ) : null}
                         {liveCraft.source === "collection" ? (
-                          <label className="live-channels-craft-collection">
-                            Collection
-                            <input
-                              type="search"
-                              className="live-channels-collection-filter"
-                              data-testid="live-channels-craft-collection-filter"
-                              placeholder="Search collections…"
-                              value={collectionFilter}
-                              onChange={(event) => setCollectionFilter(event.target.value)}
-                              autoComplete="off"
-                            />
-                            <select
-                              data-testid="live-channels-craft-collection"
-                              className="live-channels-collection-select"
-                              value={liveCraft.collection_id}
-                              onChange={(event) => {
-                                const id = event.target.value;
-                                const match = (liveCraftOptions?.collections || []).find(
-                                  (row) => row.id === id,
-                                );
-                                setLiveCraft((prev) => ({
-                                  ...prev,
-                                  collection_id: id,
-                                  collection_title: match?.title || "",
-                                  name: prev.name || match?.title || "",
-                                }));
-                              }}
-                            >
-                              <option value="">Select a collection…</option>
-                              {filteredLiveCollections.map((row) => (
-                                <option key={row.id || row.title} value={row.id} title={row.label}>
-                                  {row.label}
-                                  {row.source === "plex" ? " · Plex" : ""}
-                                  {row.source === "published" ? " · Published" : ""}
-                                  {row.item_count ? ` (${row.item_count})` : ""}
-                                </option>
-                              ))}
-                            </select>
-                            {!(liveCraftOptions?.collections || []).length ? (
-                              <p
-                                className="wizard-note"
-                                data-testid="live-channels-craft-collections-empty"
-                              >
-                                {liveCraftOptions?.collections_empty_hint ||
-                                  liveCraftOptions?.collections_error ||
-                                  "No collections loaded. Create one in Plex, or publish a Projectionist list."}
-                              </p>
-                            ) : (
-                              <p
-                                className="wizard-note live-channels-collection-count"
-                                data-testid="live-channels-craft-collections-count"
-                              >
-                                {collectionFilter.trim()
-                                  ? `${filteredLiveCollections.length} match${
-                                      filteredLiveCollections.length === 1 ? "" : "es"
-                                    } of ${liveCraftOptions.collections_total} collections`
-                                  : `${liveCraftOptions.collections_total} collection${
-                                      liveCraftOptions.collections_total === 1 ? "" : "s"
-                                    } available`}
-                              </p>
-                            )}
-                          </label>
+                          <LiveChannelsCollectionPicker
+                            collections={craftCollections}
+                            filteredCollections={filteredLiveCollections}
+                            collectionFilter={collectionFilter}
+                            onCollectionFilterChange={setCollectionFilter}
+                            collectionId={liveCraft.collection_id}
+                            onCollectionSelect={handleCollectionSelect}
+                            collectionsTotal={liveCraftOptions?.collections_total ?? craftCollections.length}
+                            collectionsEmptyHint={liveCraftOptions?.collections_empty_hint}
+                            collectionsError={liveCraftOptions?.collections_error}
+                            filterTestId="live-channels-craft-collection-filter"
+                            selectTestId="live-channels-craft-collection"
+                            emptyTestId="live-channels-craft-collections-empty"
+                            countTestId="live-channels-craft-collections-count"
+                            pickerTestId="live-channels-craft-collection-picker"
+                          />
                         ) : null}
                         <details
                           className="live-channels-craft-filters live-channels-advanced"
@@ -1522,57 +1552,77 @@ export default function LiveChannelsSection({
                         list. Sequential keeps collection order; Shuffle randomizes the
                         full resolved pool.
                       </p>
-                      {liveCraftOptions?.collections_error ? (
-                        <p
-                          className="wizard-note"
-                          data-testid="live-channels-collections-error"
-                        >
-                          {liveCraftOptions.collections_error}
-                        </p>
-                      ) : null}
-                      {!(liveCraftOptions?.collections || []).length ? (
-                        <p
-                          className="wizard-note"
-                          data-testid="live-channels-collections-empty"
-                        >
-                          {liveCraftOptions?.collections_empty_hint ||
-                            "No collections available yet. Create one in Plex, or publish a list under Collections."}
-                        </p>
-                      ) : null}
-                      <label className="field">
-                        <span>Play order</span>
-                        <select
-                          data-testid="live-channels-collection-mode"
-                          value={liveCraft.programming_mode || "sequential"}
-                          onChange={(event) =>
-                            setLiveCraft((prev) => ({
-                              ...prev,
-                              programming_mode: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="sequential">Sequential — collection order</option>
-                          <option value="shuffle">Shuffle — full pool of this collection</option>
-                        </select>
-                      </label>
+                      <div className="service-fields live-channels-craft-fields">
+                        <label>
+                          Media
+                          <select
+                            data-testid="live-channels-collection-media-scope"
+                            value={liveCraft.media_scope || "both"}
+                            onChange={(event) =>
+                              setLiveCraft((prev) => ({
+                                ...prev,
+                                media_scope: event.target.value,
+                                collection_id: "",
+                                collection_title: "",
+                              }))
+                            }
+                          >
+                            {(liveCraftOptions?.media_scopes || [
+                              { id: "tv", label: "TV" },
+                              { id: "movies", label: "Movies" },
+                              { id: "both", label: "Both" },
+                            ]).map((scope) => (
+                              <option key={scope.id} value={scope.id}>
+                                {scope.label}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <LiveChannelsCollectionPicker
+                          collections={craftCollections}
+                          filteredCollections={filteredLiveCollections}
+                          collectionFilter={collectionFilter}
+                          onCollectionFilterChange={setCollectionFilter}
+                          collectionId={liveCraft.collection_id}
+                          onCollectionSelect={handleCollectionSelect}
+                          collectionsTotal={liveCraftOptions?.collections_total ?? craftCollections.length}
+                          collectionsEmptyHint={liveCraftOptions?.collections_empty_hint}
+                          collectionsError={liveCraftOptions?.collections_error}
+                          filterTestId="live-channels-collection-filter"
+                          selectTestId="live-channels-collection-picker"
+                          emptyTestId="live-channels-collections-empty"
+                          countTestId="live-channels-collections-count"
+                          pickerTestId="live-channels-collection-picker-wrap"
+                        />
+                        <label>
+                          Play order
+                          <select
+                            data-testid="live-channels-collection-mode"
+                            value={liveCraft.programming_mode || "sequential"}
+                            onChange={(event) =>
+                              setLiveCraft((prev) => ({
+                                ...prev,
+                                programming_mode: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="sequential">Sequential — collection order</option>
+                            <option value="shuffle">Shuffle — full pool of this collection</option>
+                          </select>
+                        </label>
+                      </div>
                       <div className="wizard-actions">
                         <button
                           type="button"
-                          className="ghost"
+                          className="primary"
                           data-testid="live-channels-publish-collection"
                           disabled={
                             liveBusy === "collection" ||
-                            !(liveCraftOptions?.collections || []).length
+                            !selectedCraftCollection
                           }
                           onClick={async () => {
-                            const first = (liveCraftOptions?.collections || [])[0];
-                            if (!first) return;
-                            const picked =
-                              (liveCraft.collection_id &&
-                                (liveCraftOptions?.collections || []).find(
-                                  (row) => row.id === liveCraft.collection_id,
-                                )) ||
-                              first;
+                            const picked = selectedCraftCollection;
+                            if (!picked) return;
                             const mode =
                               liveCraft.programming_mode === "shuffle"
                                 ? "shuffle"
@@ -1604,19 +1654,13 @@ export default function LiveChannelsSection({
                             );
                           }}
                         >
-                          {liveBusy === "collection"
-                            ? "Publishing…"
-                            : (liveCraftOptions?.collections || []).length
-                              ? `Publish “${
-                                  (
-                                    (liveCraft.collection_id &&
-                                      (liveCraftOptions?.collections || []).find(
-                                        (row) => row.id === liveCraft.collection_id,
-                                      )) ||
-                                    liveCraftOptions.collections[0]
-                                  )?.title
-                                }”`
-                              : "No collections available"}
+                          {collectionPublishButtonLabel({
+                            selected: selectedCraftCollection,
+                            busy: liveBusy === "collection",
+                            emptyLabel: craftCollections.length
+                              ? "Select a collection to publish"
+                              : "No collections available",
+                          })}
                         </button>
                       </div>
                       {renderPublishProgress("collection")}
@@ -1630,6 +1674,17 @@ export default function LiveChannelsSection({
                         Propose 2–4 library-aware stations, then publish the ones you want.
                         Re-running is additive — existing channel numbers keep their stations.
                       </p>
+                      <div className="wizard-actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="live-channels-propose-starters"
+                          disabled={liveBusy === "starters"}
+                          onClick={proposeStarterPack}
+                        >
+                          {liveBusy === "starters" ? "Loading…" : "Propose starters"}
+                        </button>
+                      </div>
                     {liveStarters?.proposals?.length ? (
                       <>
                         <ul className="wizard-note" data-testid="live-channels-starter-list">
@@ -1660,6 +1715,7 @@ export default function LiveChannelsSection({
                         <div className="wizard-actions">
                           <button
                             type="button"
+                            className="primary"
                             data-testid="live-channels-publish-starters"
                             disabled={liveBusy === "publish"}
                             onClick={async () => {
@@ -1699,11 +1755,11 @@ export default function LiveChannelsSection({
                         </div>
                         {renderLiveBlockAlert("publish")}
                       </>
-                    ) : (
-                      <p className="wizard-note">
-                        Click Propose starters above for 2–4 stations from your library signals.
+                    ) : liveBusy !== "starters" ? (
+                      <p className="wizard-note" data-testid="live-channels-starters-empty">
+                        Propose starters to get 2–4 station ideas from your library signals.
                       </p>
-                    )}
+                    ) : null}
                     </div>
                     ) : null}
                   </div>

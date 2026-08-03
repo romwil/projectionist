@@ -31,6 +31,25 @@ def _movie(rating_key: str, title: str, *, tmdb_id: str | None = "1") -> PlexLib
     )
 
 
+class PruneLibraryItemsTests(unittest.TestCase):
+    def test_prune_refuses_empty_seen_set(self) -> None:
+        """Belt-and-suspenders: empty seen_rating_keys must never delete rows."""
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "lib.db")
+            db.upsert_library_item(
+                {
+                    "rating_key": "rk-survive",
+                    "media_type": "movie",
+                    "title": "Should Stay",
+                    "year": 2020,
+                    "tmdb_id": 1,
+                }
+            )
+            pruned = db.prune_library_items_not_in_plex_scan([])
+            self.assertEqual(pruned, 0)
+            self.assertEqual(len(db.all_library_items()), 1)
+
+
 class ResolveEnrichWorkersTests(unittest.TestCase):
     def test_default_and_clamp(self) -> None:
         self.assertEqual(_resolve_enrich_workers(Settings()), DEFAULT_LIBRARY_ENRICH_WORKERS)
@@ -282,6 +301,61 @@ class ParallelEnrichSyncTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result["items_pruned"], 1)
             self.assertEqual(len(rows), 1)
             self.assertEqual(str(rows[0]["rating_key"]), "rk-new")
+
+    async def test_sync_does_not_prune_when_plex_scan_empty(self) -> None:
+        """Failed or empty Plex scan must not wipe existing library index rows."""
+        existing_rows = [
+            {
+                "rating_key": "rk-keep-1",
+                "media_type": "movie",
+                "title": "Saved One",
+                "year": 2020,
+                "tmdb_id": 101,
+                "added_at": int(time.time()) - 86400,
+            },
+            {
+                "rating_key": "rk-keep-2",
+                "media_type": "movie",
+                "title": "Saved Two",
+                "year": 2021,
+                "tmdb_id": 102,
+                "added_at": int(time.time()) - 43200,
+            },
+        ]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "lib.db")
+            for row in existing_rows:
+                db.upsert_library_item(row)
+            self.assertEqual(len(db.all_library_items()), 2)
+
+            settings = Settings(
+                plex_url="http://plex.test:32400",
+                plex_token="token",
+                library_enrich_workers=1,
+            )
+            with patch.object(PlexClient, "movie_items", return_value=[]), patch.object(
+                PlexClient, "show_items", return_value=[]
+            ), patch(
+                "projectionist.library.sync.rebuild_embeddings",
+                new=AsyncMock(return_value=0),
+            ), patch(
+                "projectionist.library.sync.sync_tv_episodes",
+                return_value={"shows_synced": 0, "episodes_synced": 0},
+            ), patch(
+                "projectionist.library.sync.scan_for_rating_prompts",
+                return_value=0,
+            ):
+                result = await sync_library(db, settings)
+
+            rows = db.all_library_items()
+            self.assertEqual(result["items_pruned"], 0)
+            self.assertEqual(result["items_synced"], 0)
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(
+                {str(row["rating_key"]) for row in rows},
+                {"rk-keep-1", "rk-keep-2"},
+            )
 
 
 if __name__ == "__main__":

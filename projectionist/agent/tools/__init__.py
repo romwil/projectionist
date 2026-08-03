@@ -47,7 +47,11 @@ from projectionist.library.external_search import (  # re-exported: preserves im
     external_tmdb_search,
 )
 from projectionist.library.facets import library_facet_catalog
-from projectionist.library.play_counts import effective_view_count, enrich_rows_with_episode_play_sums
+from projectionist.library.play_counts import (
+    effective_view_count,
+    enrich_rows_with_episode_play_sums,
+    watch_activity_fields,
+)
 from projectionist.library.query import (
     LibraryFilters,
     _build_where,
@@ -467,6 +471,7 @@ def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
         "view_count": view_count,
         "in_library": card.in_library,
     }
+    item.update(watch_activity_fields({**card_data, "view_count": view_count}))
     if card.media_type == "show":
         if card.total_episode_count is not None:
             item["total_episode_count"] = card.total_episode_count
@@ -476,7 +481,6 @@ def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
                 item["watched_episode_count"] = max(
                     0, int(card.total_episode_count) - int(card.unwatched_episode_count)
                 )
-        item["watch_state"] = watch_progress_state({**card_data, "view_count": view_count})
     if card.tmdb_id:
         item["tmdb_id"] = card.tmdb_id
     if card.tvdb_id:
@@ -518,12 +522,12 @@ def _query_item_to_tool_item(item: Mapping[str, Any]) -> Dict[str, Any]:
         "total_episode_count": item.get("total_episode_count"),
         "in_library": True,
     }
+    payload.update(watch_activity_fields({**dict(item), "view_count": view_count}))
     if item.get("media_type") == "show":
         total_eps = item.get("total_episode_count")
         unwatched_eps = item.get("unwatched_episode_count")
         if total_eps is not None and unwatched_eps is not None:
             payload["watched_episode_count"] = max(0, int(total_eps) - int(unwatched_eps))
-        payload["watch_state"] = watch_progress_state({**dict(item), "view_count": view_count})
     if item.get("tmdb_id"):
         payload["tmdb_id"] = item["tmdb_id"]
     if item.get("tvdb_id"):
@@ -1015,7 +1019,7 @@ class ToolRegistry:
             specialty=specialty,
             session_id=self.session_id,
         )
-        if payload.get("quote_ok"):
+        if payload.get("quote_ok") or payload.get("pending"):
             self._persona_consults.append(dict(payload))
         return json.dumps(payload)
 
@@ -2471,7 +2475,8 @@ class ToolRegistry:
         filters = filters_from_mapping(args)
         where_sql, params = _build_where_for_patterns(filters)
         genre_counts: Dict[str, int] = {}
-        total_views = 0
+        movie_completed_watches = 0
+        episode_completed_plays = 0
         unwatched = 0
         stale = 0
         decade_counts: Dict[int, int] = {}
@@ -2486,7 +2491,10 @@ class ToolRegistry:
         for row in rows:
             total_items += 1
             views = effective_view_count(row)
-            total_views += views
+            if str(row["media_type"] or "").lower() == "show":
+                episode_completed_plays += views
+            else:
+                movie_completed_watches += views
             if watch_progress_state(row) == "unwatched":
                 unwatched += 1
             last = row["last_viewed_at"]
@@ -2504,7 +2512,13 @@ class ToolRegistry:
         ]
         summary = {
             "total_items": total_items,
-            "total_plays": total_views,
+            "movie_completed_watches": movie_completed_watches,
+            "episode_completed_plays": episode_completed_plays,
+            "total_completed_units": movie_completed_watches + episode_completed_plays,
+            "count_note": (
+                "Movie counts are Plex completed-or-marked-played records; TV counts are "
+                "completed-or-marked-played episode sums, not playback sessions."
+            ),
             "unwatched_count": unwatched,
             "stale_count": stale,
             "top_genres": [{"genre": g, "weight": c} for g, c in top_genres],
@@ -3989,6 +4003,15 @@ def build_system_prompt(
         "which add import exclusions and mean 'never get this again'.\n"
         "When Seerr is enabled for household members, use request_via_seerr instead of add_to_radarr/add_to_sonarr.\n"
         "Star ratings accept half-stars (e.g. 4.5); never ask users to round fractional ratings.\n"
+        "For movies, Plex view_count is a per-user completed-or-marked-played counter, not playback sessions. "
+        "Use completed_watches, rewatch_count, watch_state, partial, and watch_progress_percent from tool items. "
+        "play_sessions=null means Projectionist has no per-session history evidence. A partial sitting may leave "
+        "only a playhead and must not be called a completed play or rewatch; partial may be true alongside "
+        "watch_state=watched when an earlier completion exists. Say “Plex has marked this played N times” when "
+        "the distinction matters; only call a movie a rewatch when completed_watches >= 2, and describe the count "
+        "as one initial completion plus rewatch_count later completions. Because Plex may mark played at its "
+        "configured threshold/credits marker or by a manual/synced watched action, never infer favourite status "
+        "or uninterrupted full viewings from the counter alone.\n"
         "For TV shows, view_count in tool items is total episode plays (sum of per-episode Plex viewCounts), "
         "not the coarse show-level counter — use total_episode_count, unwatched_episode_count, and watch_state "
         "for completion; do not claim a show was watched once from a low show-level leftover.\n"
@@ -4000,7 +4023,9 @@ def build_system_prompt(
         "mood/comfort → Companion; acquire → Concierge; heat/tonight energy → Enthusiast), you may call "
         "consult_persona once per turn. Quote the handoff explicitly as \"I asked {Name} and they said …\" — "
         "never silently merge their words into your voice. Do not consult every turn; skip when you can answer "
-        "yourself. If consult returns busy/unavailable, give your own take without inventing a quote. "
+        "yourself. If a consult is pending, you may say you left them a message and continue with your own "
+        "clearly attributed take; never invent their quote, and do not promise exact callback timing. "
+        "If a consult is unavailable, give your own take without inventing a quote. "
         "Confirm-before-fleet still applies to any confirmation_token from a Concierge consult.\n"
         f"{queued_block}"
         f"{overview_block}\n"

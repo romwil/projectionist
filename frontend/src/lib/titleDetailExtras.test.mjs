@@ -7,6 +7,7 @@ import {
   formatTvProgress,
   isTitleWatched,
   reviewsCtaForDetail,
+  titleWatchCountLabel,
   watchedCtaLabel,
 } from "./titleDetailExtras.js";
 
@@ -46,6 +47,11 @@ describe("titleDetailExtras", () => {
       label: "7/10 watched · 3 left",
     });
     assert.equal(formatTvProgress({ total_episode_count: 0 }), null);
+  });
+
+  it("labels movie completions separately from TV episode plays", () => {
+    assert.equal(titleWatchCountLabel({ media_type: "movie" }), "Completed watches");
+    assert.equal(titleWatchCountLabel({ media_type: "show" }), "Episode plays");
   });
 
   it("filters collection peers excluding self", () => {

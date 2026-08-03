@@ -69,6 +69,9 @@ def household_tool_summary(raw: Any, *, limit: int = 160) -> str:
             if payload.get("quote_ok") and payload.get("persona"):
                 name = str(payload.get("persona") or "sibling").strip() or "sibling"
                 return f"Asked {name}"
+            if payload.get("pending") and payload.get("persona"):
+                name = str(payload.get("persona") or "sibling").strip() or "sibling"
+                return f"Left {name} a message"
             if payload.get("code") == "consult_timeout" or payload.get("busy"):
                 return "Sibling busy"
             if str(payload.get("code") or "").startswith("consult_"):
@@ -398,6 +401,9 @@ class CuratorAgent:
             )
             self.db.maybe_auto_title_thread(session_id, user_message)
             self.db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=self.lens_id)
+            from projectionist.agent.village import mark_persona_consults_promised
+
+            mark_persona_consults_promised(session_id, blocks)
             context_label = _sync_thread_context_label(self.db, session_id, registry.turn_audit_label)
             return {
                 "session_id": session_id,
@@ -573,6 +579,9 @@ class CuratorAgent:
         )
         self.db.maybe_auto_title_thread(session_id, user_message)
         self.db.save_chat_message(session_id, assistant_id, "assistant", blocks, lens_id=self.lens_id)
+        from projectionist.agent.village import mark_persona_consults_promised
+
+        mark_persona_consults_promised(session_id, blocks)
         context_label = _sync_thread_context_label(self.db, session_id, registry.turn_audit_label)
 
         return {
@@ -935,6 +944,9 @@ async def stream_agent(
         resolved_lens,
         registry.turn_audit_label,
     )
+    from projectionist.agent.village import mark_persona_consults_promised
+
+    mark_persona_consults_promised(session_id, blocks)
 
     yield json.dumps({
         "type": "done",
@@ -1033,6 +1045,9 @@ async def _emit_buffered(
         lens_id,
         registry.turn_audit_label,
     )
+    from projectionist.agent.village import mark_persona_consults_promised
+
+    mark_persona_consults_promised(session_id, blocks)
 
     yield json.dumps({
         "type": "done",

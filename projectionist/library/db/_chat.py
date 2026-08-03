@@ -321,6 +321,45 @@ class ChatThreadsMixin:
 
         self.run_write(_write, label="save_chat_message")
 
+    def save_chat_message_if_thread_exists(
+        self,
+        session_id: str,
+        message_id: str,
+        role: str,
+        blocks: Iterable[Mapping[str, Any]],
+        lens_id: str = DEFAULT_LENS_ID,
+    ) -> bool:
+        """Atomically append a late message without recreating a deleted thread."""
+        now = time.time()
+        resolved = lens_id or DEFAULT_LENS_ID
+        payload = json.dumps(list(blocks))
+
+        def _write() -> bool:
+            with self.connect() as conn:
+                cursor = conn.execute(
+                    """
+                    INSERT INTO chat_messages (
+                        id, session_id, role, blocks_json, created_at, lens_id
+                    )
+                    SELECT ?, id, ?, ?, ?, ?
+                    FROM chat_sessions
+                    WHERE id = ?
+                    """,
+                    (message_id, role, payload, now, resolved, session_id),
+                )
+                if cursor.rowcount != 1:
+                    return False
+                conn.execute(
+                    "UPDATE chat_sessions SET updated_at = ?, lens_id = ? WHERE id = ?",
+                    (now, resolved, session_id),
+                )
+                return True
+
+        return self.run_write(
+            _write,
+            label="save_chat_message_if_thread_exists",
+        )
+
     def chat_history(
         self,
         session_id: str,

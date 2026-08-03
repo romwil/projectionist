@@ -2,6 +2,50 @@
 
 ## [Unreleased]
 
+## [1.31.0] — 2026-08-03
+
+Year in Review cinema reels from your personal watch tracker, plus Related titles that keep the “why” next to every hop.
+
+### Highlights
+- **Your year, as a private reel.** Opt in under Settings → Notifications and Projectionist builds a guided Year in Review from *your* tracked finishes — not household Plex totals — with an inbox deep link when it drops.
+- **Honest counting.** Chapters say tracked completions and confidence in plain language; they never pretend a Plex played event proved an uninterrupted rewatch.
+- **Follow connections, with the reason up front.** Start from a title, inspect collection, cast/crew, and plot links, then hop to the next title without losing your breadcrumb trail.
+- **Turn chat picks into something reusable.** Subtle controls beside an agent result heading can start a curated rail or save the exact set into a full sortable, filterable list grid.
+
+### Added
+- Watch tracker foundation: append-only `watch_events`, derived `watch_sessions` / `watch_completions`, Plex history ingest task, webhook observation ingest, year-scoped per-user rollups, and owner `GET /api/admin/watch-tracker/status`.
+- Year in Review snapshot program: adaptive chapter registry, `year_in_review_snapshots`, opt-in pref, tease/drop scheduler tasks, owner self generate/send, member `GET /api/year-in-review/{year}`, cinema reel page `/year-in-review/:year`, inbox kind `year-in-review`, and share-beat copy.
+- Async curator-village callbacks: a slow sibling consult now leaves an honest pending note, continues under a bounded hard deadline, and posts a labeled `persona_consult` addendum to the original thread when the sibling calls back.
+- `GET /api/title/{media_type}/{item_id}/relations` and `/relations/walk` — library-only relation edges with structured `why` payloads and one/two-hop traversal.
+- `/explore/related` — Connections hop explorer with relation filters, breadcrumb navigation, reach control, and why-first cards.
+- Related-title rails on title detail for collection, shared filmmaker, similar-plot, and surprising connections.
+- Agent result-list heading actions for **Create a rail** and **Open as grid**; grids materialize as private curated lists at `/lists/{listId}`.
+
+### Changed
+- Chat lightly polls only while a sibling callback is outstanding, merging thread messages by id so late addenda appear without a refresh; consult soft/hard timeouts are now logged for diagnosis.
+- Explore and navigation label the graph surface **Related titles**; legacy `/explore/plot-lab` redirects to `/explore/related`.
+- Plot Lab's motif-wall workflow is no longer a primary Explore surface; Tags remains the keyword-browse destination.
+- Scheduled-task, knowledge-activity, coverage, Help, and persona copy use curator-facing display names and plain-language outcomes.
+- Curated list pages now expose standard page-size controls and previous/next pagination alongside their existing sort, filter, view, column, and CSV controls.
+- Movie tool items now expose Plex's aggregate as `completed_watches` / `rewatch_count`, keep `play_sessions` explicitly unknown, and include partial-progress fields; TV's episode-sum `effective_view_count` semantics are unchanged.
+- Plex webhooks persist normalized watch observations even below the rating-prompt threshold.
+
+### Fixed
+- Agent and title-detail copy no longer presents Plex movie completion counters as generic views or playback sessions, and the agent cannot infer “favourite” or “most rewatched” from a raw count alone.
+
+### Verification
+- `tests/test_watch_tracker.py` and `tests/test_year_in_review.py` — ingest idempotency, user isolation, certain completions, year rollups, reel chapters, guest skip, opt-in delivery.
+- `frontend/src/lib/yearInReview.test.mjs` — reel player helpers (duration, advance, reduced motion, share text).
+- `tests/test_persona_village.py` and `frontend/src/lib/personaConsultPolling.test.mjs` — shielded soft-timeout completion, callback persistence, and id-stable poll merging.
+- `tests/test_relations_api.py` — relation edge reasons, filters, library scoping, and one/two-hop walk behavior.
+- `frontend/src/lib/relationUx.test.mjs` — hop breadcrumbs, why-first copy, relation filters, and stable Related titles paths.
+- `frontend/src/lib/displayNames.test.mjs` and related knowledge/task suites — owner-facing display-name maps.
+- `frontend/src/lib/agentResultLists.test.mjs` — heading detection, exact rail prompts, saved-list materialization, and pagination.
+- `tests/test_agent_tools.py`, `tests/test_agent_tools_validation.py`, and `frontend/src/lib/titleDetailExtras.test.mjs` — movie completion semantics, partial progress, watch-pattern totals, prompt guardrails, and UI labels.
+- `cd frontend && npm run test:unit` — green including Year in Review helpers.
+- `cd frontend && npm run lint` / `npm run build` — release gate.
+- `test_version` lockstep **1.31.0**.
+
 ## [1.30.7] — 2026-08-03
 
 Explore feed polish, honest TV watch badges, and library sync cleanup after Plex rematches.

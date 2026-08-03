@@ -189,6 +189,7 @@ class UsersAuthMixin:
         notify_channel_email: Any = ...,
         newsletter_opt_in: Any = ...,
         nudge_opt_in: Any = ...,
+        year_in_review_opt_in: Any = ...,
         notify_channel_apprise: Any = ...,
         apprise_urls: Any = ...,
     ) -> Dict[str, Any]:
@@ -239,6 +240,9 @@ class UsersAuthMixin:
             if nudge_opt_in is not ... and "nudge_opt_in" in cols:
                 updates.append("nudge_opt_in = ?")
                 params.append(1 if nudge_opt_in else 0)
+            if year_in_review_opt_in is not ... and "year_in_review_opt_in" in cols:
+                updates.append("year_in_review_opt_in = ?")
+                params.append(1 if year_in_review_opt_in else 0)
             if notify_channel_apprise is not ... and "notify_channel_apprise" in cols:
                 updates.append("notify_channel_apprise = ?")
                 params.append(1 if notify_channel_apprise else 0)
@@ -480,6 +484,9 @@ class UsersAuthMixin:
         nudge_opt_in = False
         if "nudge_opt_in" in keys and row["nudge_opt_in"] is not None:
             nudge_opt_in = bool(int(row["nudge_opt_in"]))
+        year_in_review_opt_in = False
+        if "year_in_review_opt_in" in keys and row["year_in_review_opt_in"] is not None:
+            year_in_review_opt_in = bool(int(row["year_in_review_opt_in"]))
         notify_channel_apprise = False
         if "notify_channel_apprise" in keys and row["notify_channel_apprise"] is not None:
             notify_channel_apprise = bool(int(row["notify_channel_apprise"]))
@@ -498,6 +505,7 @@ class UsersAuthMixin:
             "notify_channel_email": notify_channel_email,
             "newsletter_opt_in": newsletter_opt_in,
             "nudge_opt_in": nudge_opt_in,
+            "year_in_review_opt_in": year_in_review_opt_in,
             "notify_channel_apprise": notify_channel_apprise,
             "apprise_urls": apprise_urls,
             "role": str(row["role"]),

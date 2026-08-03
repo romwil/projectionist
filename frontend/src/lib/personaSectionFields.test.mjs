@@ -19,4 +19,14 @@ describe("PersonaSection admin slider fields", () => {
     assert.ok(source.includes("sliderValue(persona, key).toFixed(2)"));
     assert.ok(!source.includes("persona[key].toFixed(2)"));
   });
+
+  it("does not expose behavioral or assembled prompt editing UI", () => {
+    assert.ok(!source.includes("persona-edit-prompt"));
+    assert.ok(!source.includes("persona-behavioral-preview"));
+    assert.ok(!source.includes("persona-assembled-preview"));
+    assert.ok(!source.includes("Edit prompt"));
+    assert.ok(!source.includes("Save custom prompt"));
+    assert.ok(!source.includes("Live assembled prompt"));
+    assert.ok(source.includes("persona-capabilities"));
+  });
 });

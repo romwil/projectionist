@@ -561,7 +561,11 @@ class TestAnalyzeWatchPatternsValues(unittest.IsolatedAsyncioTestCase):
             result = json.loads(await registry.execute("analyze_watch_patterns", {}))
 
             self.assertEqual(result["total_items"], 4)
-            self.assertEqual(result["total_plays"], 4)  # 3 + 1 + 0 + 0
+            self.assertNotIn("total_plays", result)
+            self.assertEqual(result["movie_completed_watches"], 4)
+            self.assertEqual(result["episode_completed_plays"], 0)
+            self.assertEqual(result["total_completed_units"], 4)
+            self.assertIn("not playback sessions", result["count_note"])
             self.assertEqual(result["unwatched_count"], 2)
             self.assertEqual(result["stale_count"], 1)  # only "Watched Long Ago"
 

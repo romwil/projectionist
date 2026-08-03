@@ -22,6 +22,7 @@ import {
   formatTvProgress,
   isTitleWatched,
   reviewsCtaForDetail,
+  titleWatchCountLabel,
   watchedCtaLabel,
 } from "../lib/titleDetailExtras.js";
 import {
@@ -652,7 +653,7 @@ export default function TitleDetailContent({
             ) : null}
             <MetaTile label="Size" value={sizeLabel} />
             <MetaTile
-              label="Views"
+              label={titleWatchCountLabel(detail)}
               value={detail.view_count > 0 ? String(detail.view_count) : null}
             />
           </div>

@@ -548,6 +548,39 @@ a.title-credit-link:hover {
   padding: 0 var(--gutter) var(--space-8);
 }
 
+.title-relations-entry {
+  width: min(var(--reading-column-max), 100%);
+  margin: 0 auto;
+  padding: 0 var(--gutter) var(--space-6);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.title-relations-entry h2 {
+  margin: 0;
+  font-family: var(--font-display);
+}
+
+.title-relations-entry p,
+.title-relations-cold-note {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.title-relations-cta {
+  flex-shrink: 0;
+  padding: 10px 18px;
+}
+
+.title-relations-cold-note {
+  width: min(var(--reading-column-max), 100%);
+  margin: calc(-1 * var(--space-4)) auto var(--space-6);
+  padding: 0 var(--gutter);
+}
+
 .title-neighbors-header {
   display: flex;
   align-items: center;
@@ -642,6 +675,11 @@ a.title-credit-link:hover {
   .title-detail-hero {
     min-height: 68vh;
     padding-bottom: var(--space-6);
+  }
+
+  .title-relations-entry {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 

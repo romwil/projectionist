@@ -40,10 +40,8 @@ function PersonaModal({ persona, onSave, onDelete, onCancel }) {
     val_obscurity: persona?.val_obscurity ?? 0.5,
     val_verbosity: persona?.val_verbosity ?? 0.5,
     val_formality: persona?.val_formality ?? 0.5,
-    system_prompt_override: persona?.system_prompt_override || "",
     accent_color: persona?.accent_color || "",
   });
-  const [showAdvanced, setShowAdvanced] = useState(Boolean(form.system_prompt_override));
   const isBuiltin = persona?.visibility === "builtin";
 
   const set = (key, val) => setForm((prev) => ({ ...prev, [key]: val }));
@@ -74,24 +72,6 @@ function PersonaModal({ persona, onSave, onDelete, onCancel }) {
             />
           ))}
         </div>
-
-        <button
-          type="button"
-          className="ghost persona-advanced-toggle"
-          onClick={() => setShowAdvanced(!showAdvanced)}
-        >
-          {showAdvanced ? "Hide Advanced" : "Show Advanced"}
-        </button>
-
-        {showAdvanced && (
-          <textarea
-            className="persona-prompt-textarea"
-            placeholder="Custom system prompt override (optional)"
-            value={form.system_prompt_override}
-            onChange={(e) => set("system_prompt_override", e.target.value)}
-            rows={5}
-          />
-        )}
 
         <div className="persona-modal-actions">
           {!isNew && !isBuiltin && onDelete && (

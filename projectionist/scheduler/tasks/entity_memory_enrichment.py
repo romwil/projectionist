@@ -328,10 +328,9 @@ def register(scheduler: IdleScheduler) -> None:
         run_fn=run,
         run_interval_seconds=INTERVAL_SECONDS,
         description=(
-            "P2 pilot: prioritizes repository-memory refresh from closed-loop "
-            "metadata_demand telemetry, stages high-hit demand for Admin visibility, "
-            "then refreshes a five-entity batch via official APIs. Private user "
-            "memory is never read or written. Taxonomy auto-commit remains off."
+            "Researches missing title, person, or studio details through trusted media "
+            "sources. Frequently requested subjects move to the front of each small "
+            "batch. Private member notes are never read or changed."
         ),
         items_per_cycle=DEFAULT_BATCH_SIZE,
     )

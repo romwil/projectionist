@@ -98,6 +98,7 @@ from projectionist.library.query import (
     query_library,
     query_library_async,
 )
+from projectionist.library.relations import list_relations_for_item, walk_relations
 from projectionist.library.search import row_to_title_card
 from projectionist.library.titles import get_title_detail
 from projectionist.library.watch_state import set_library_item_watched, sync_watched_to_plex
@@ -594,6 +595,7 @@ class AuthMeUpdatePayload(BaseModel):
     notify_channel_email: Optional[bool] = None
     newsletter_opt_in: Optional[bool] = None
     nudge_opt_in: Optional[bool] = None
+    year_in_review_opt_in: Optional[bool] = None
     notify_channel_apprise: Optional[bool] = None
     apprise_urls: Optional[str] = Field(default=None, max_length=4000)
 
@@ -658,6 +660,15 @@ class WeeklyNewsletterGeneratePayload(BaseModel):
 
     scope: Literal["self", "users", "all"] = "all"
     user_ids: List[str] = Field(default_factory=list)
+
+
+class YearInReviewGeneratePayload(BaseModel):
+    """Owner on-demand Year in Review generate/notify (v1: self scope)."""
+
+    scope: Literal["self"] = "self"
+    year: Optional[int] = None
+    notify: bool = True
+    status_hint: Literal["ready", "tease"] = "ready"
 
 
 class SavedLibraryPagePayload(BaseModel):
@@ -1405,6 +1416,8 @@ def patch_auth_me(
         updates["newsletter_opt_in"] = payload.newsletter_opt_in
     if "nudge_opt_in" in fields_set:
         updates["nudge_opt_in"] = payload.nudge_opt_in
+    if "year_in_review_opt_in" in fields_set:
+        updates["year_in_review_opt_in"] = payload.year_in_review_opt_in
     if "notify_channel_apprise" in fields_set:
         updates["notify_channel_apprise"] = payload.notify_channel_apprise
     if "apprise_urls" in fields_set:
@@ -4754,6 +4767,7 @@ async def chat_stream(
     scoped = _scoped_user_id(user)
 
     async def event_generator():
+        completed = False
         try:
             async for chunk in stream_agent(
                 _db(),
@@ -4782,10 +4796,19 @@ async def chat_stream(
                         "data": json.dumps(payload),
                     }
                 else:
+                    if event_type == "done":
+                        completed = True
                     yield {"event": event_type, "data": chunk.strip()}
         except Exception as error:  # noqa: BLE001
             safe_msg = _safe_error_detail(error, "Chat stream failed")
             yield {"event": "error", "data": json.dumps({"error": safe_msg})}
+        finally:
+            if not completed:
+                from projectionist.agent.village import (
+                    cancel_unpromised_persona_consults,
+                )
+
+                cancel_unpromised_persona_consults(sid)
 
     return EventSourceResponse(event_generator())
 
@@ -4814,6 +4837,83 @@ def title_detail(
     if not title_allowed_for_user(dumped, user=user, settings=settings):
         raise HTTPException(status_code=404, detail="Title not available")
     return _sanitize_library_payload(dumped, user)
+
+
+def _relation_seed_row(db, media_type: str, item_id: str, id_type: str):
+    try:
+        if id_type == "rating_key":
+            row = db.library_item_by_rating_key(item_id)
+        elif media_type == "show" and id_type == "tvdb":
+            row = db.library_item_by_tvdb(int(item_id))
+        else:
+            row = db.library_item_by_tmdb(int(item_id), media_type)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=404, detail="Title not found") from None
+    if row is None or str(row["media_type"] or "") != media_type:
+        raise HTTPException(status_code=404, detail="Title not found")
+    return row
+
+
+def _member_relation_payload(payload: Dict[str, Any], *, user, settings: Settings) -> Dict[str, Any]:
+    from projectionist.youth.apply import title_allowed_for_user
+
+    items = [
+        edge
+        for edge in payload.get("items", [])
+        if title_allowed_for_user(edge.get("peer", {}), user=user, settings=settings)
+    ]
+    return _sanitize_library_payload(
+        {
+            **payload,
+            "items": items,
+            "returned": len(items),
+        },
+        user,
+    )
+
+
+@app.get("/api/title/{media_type}/{item_id}/relations")
+def title_relations(
+    media_type: str,
+    item_id: str,
+    id_type: str = "tmdb",
+    relation: Optional[Literal["collection", "shared_crew", "neighbor"]] = None,
+    limit: int = Query(default=25, ge=1, le=50),
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    db = _db()
+    settings = _settings()
+    seed = _relation_seed_row(db, media_type, item_id, id_type)
+    payload = list_relations_for_item(
+        db,
+        int(seed["id"]),
+        relation=relation,
+        limit=limit,
+    )
+    return _member_relation_payload(payload, user=user, settings=settings)
+
+
+@app.get("/api/title/{media_type}/{item_id}/relations/walk")
+def title_relations_walk(
+    media_type: str,
+    item_id: str,
+    id_type: str = "tmdb",
+    relation: Optional[Literal["collection", "shared_crew", "neighbor"]] = None,
+    depth: int = Query(default=1, ge=1, le=2),
+    limit: int = Query(default=25, ge=1, le=50),
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    db = _db()
+    settings = _settings()
+    seed = _relation_seed_row(db, media_type, item_id, id_type)
+    payload = walk_relations(
+        db,
+        int(seed["id"]),
+        relation=relation,
+        depth=depth,
+        limit=limit,
+    )
+    return _member_relation_payload(payload, user=user, settings=settings)
 
 
 def _library_titles_for_person_payload(
@@ -5559,6 +5659,74 @@ def generate_weekly_newsletters(
 
     result = deliver_weekly_newsletters(_db(), _settings(), user_ids=target_ids)
     return {"scope": scope, **result}
+
+
+@app.get("/api/admin/watch-tracker/status")
+def admin_watch_tracker_status(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Owner health for the watch ledger — no titles or identity keys."""
+    del user
+    from projectionist.watch_tracker.store import watch_tracker_status
+
+    return watch_tracker_status(_db())
+
+
+@app.get("/api/year-in-review/{year}")
+def get_year_in_review(year: int, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    """Return the signed-in member's Year in Review reel for a calendar year."""
+    if str(getattr(user, "role", "") or "") == "guest":
+        raise HTTPException(status_code=403, detail="Guests do not have Year in Review")
+    if year < 2000 or year > 2100:
+        raise HTTPException(status_code=400, detail="Invalid year")
+    from projectionist.year_in_review.snapshot import get_snapshot
+
+    snap = get_snapshot(_db(), user_id=str(user.id), year=year)
+    if snap is None or snap.get("status") == "empty":
+        raise HTTPException(status_code=404, detail="Year in Review not available yet")
+    reel = snap.get("reel") or {}
+    return {
+        "year": year,
+        "status": snap.get("status"),
+        "generated_at": snap.get("generated_at"),
+        "reel": reel,
+    }
+
+
+@app.post("/api/admin/year-in-review/generate")
+def generate_year_in_review(
+    payload: YearInReviewGeneratePayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Owner self-generate (and optionally notify) Year in Review for testing."""
+    from projectionist.year_in_review.delivery import (
+        deliver_year_in_review,
+        prior_calendar_year,
+    )
+    from projectionist.year_in_review.snapshot import build_reel_for_user
+
+    year = int(payload.year) if payload.year else prior_calendar_year()
+    if payload.scope != "self":
+        raise HTTPException(status_code=400, detail="v1 only supports scope=self")
+    if payload.notify:
+        result = deliver_year_in_review(
+            _db(),
+            _settings(),
+            year=year,
+            user_ids=[str(user.id)],
+            status_hint=payload.status_hint,
+            force=True,
+        )
+        return {"scope": "self", **result}
+    snap = build_reel_for_user(
+        _db(), user_id=str(user.id), year=year, status_hint=payload.status_hint
+    )
+    return {
+        "scope": "self",
+        "year": year,
+        "generated": 1,
+        "delivered": 0,
+        "status": snap.get("status"),
+        "path": f"/year-in-review/{year}",
+    }
 
 
 @app.get("/api/watchlist", response_model=WatchlistListResponse)

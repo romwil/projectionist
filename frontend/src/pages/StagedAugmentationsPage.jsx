@@ -20,13 +20,18 @@ import {
   actLabelForStagedItem,
   canActOnStagedItem,
 } from "../lib/knowledgeOpsActions.js";
+import {
+  knowledgeEventDisplayName,
+  knowledgeGapDisplayName,
+  knowledgeTaskDisplayName,
+} from "../lib/knowledgeOpsDisplay.js";
 
 const TABS = [
-  { id: "taxonomy", label: "Taxonomy" },
-  { id: "demand", label: "Demand" },
-  { id: "coverage", label: "Coverage" },
+  { id: "taxonomy", label: "Name mappings" },
+  { id: "demand", label: "Requested details" },
+  { id: "coverage", label: "Missing knowledge" },
   { id: "activity", label: "Activity" },
-  { id: "all", label: "All staged work" },
+  { id: "all", label: "All reviews" },
 ];
 
 const TASK_FILTERS = {
@@ -70,50 +75,50 @@ function SummaryStrip({ summary, loading }) {
       <div className="knowledge-ops-stat-grid">
         <div className="dash-stat-card" data-testid="knowledge-ops-stat-facet-pending">
           <span className="dash-stat-value">{summary.pending_facet_candidates ?? 0}</span>
-          <span className="dash-stat-label">Pending facet aliases</span>
+          <span className="dash-stat-label">Name mappings to review</span>
         </div>
         <div className="dash-stat-card" data-testid="knowledge-ops-stat-all-pending">
           <span className="dash-stat-value">{summary.pending_all_augmentations ?? 0}</span>
-          <span className="dash-stat-label">Pending all augmentations</span>
+          <span className="dash-stat-label">All reviews waiting</span>
         </div>
         <div className="dash-stat-card" data-testid="knowledge-ops-stat-signals-7d">
           <span className="dash-stat-value">{summary.signals_7d ?? 0}</span>
-          <span className="dash-stat-label">Signals (7d)</span>
+          <span className="dash-stat-label">Findings (7d)</span>
         </div>
         <div className="dash-stat-card" data-testid="knowledge-ops-stat-signals-30d">
           <span className="dash-stat-value">{summary.signals_30d ?? 0}</span>
-          <span className="dash-stat-label">Signals (30d)</span>
+          <span className="dash-stat-label">Findings (30d)</span>
         </div>
         <div className="dash-stat-card" data-testid="knowledge-ops-stat-approve-rate">
           <span className="dash-stat-value">{formatRate(summary.approve_rate_30d)}</span>
-          <span className="dash-stat-label">Approve rate (30d)</span>
+          <span className="dash-stat-label">Saved (30d)</span>
         </div>
         <div className="dash-stat-card" data-testid="knowledge-ops-stat-reject-rate">
           <span className="dash-stat-value">{formatRate(summary.reject_rate_30d)}</span>
-          <span className="dash-stat-label">Reject rate (30d)</span>
+          <span className="dash-stat-label">Dismissed (30d)</span>
         </div>
       </div>
       <div className="knowledge-ops-funnel" data-testid="knowledge-ops-funnel">
-        <h3 className="knowledge-ops-section-title">Closed-loop funnel</h3>
-        <FunnelBar label="observed" value={funnel.observed ?? 0} max={funnel.observed ?? 1} />
+        <h3 className="knowledge-ops-section-title">Review progress</h3>
+        <FunnelBar label="noticed" value={funnel.observed ?? 0} max={funnel.observed ?? 1} />
         <FunnelBar
-          label="at-threshold"
+          label="ready for review"
           value={funnel.at_threshold ?? 0}
           max={funnel.observed ?? 1}
         />
         <FunnelBar
-          label="staged-pending"
+          label="waiting"
           value={funnel.staged_pending ?? 0}
           max={funnel.observed ?? 1}
         />
         <FunnelBar
-          label="approved"
+          label="saved"
           value={funnel.staged_approved ?? 0}
           max={funnel.observed ?? 1}
           accent="var(--success, #6bcf7f)"
         />
         <FunnelBar
-          label="rejected"
+          label="dismissed"
           value={funnel.staged_rejected ?? 0}
           max={funnel.observed ?? 1}
           accent="var(--muted)"
@@ -173,27 +178,27 @@ function ContextPanel({ item, onClose }) {
       <dl className="knowledge-ops-context-list">
         <div>
           <dt>Task</dt>
-          <dd>{item.task_name}</dd>
+          <dd>{knowledgeTaskDisplayName(item.task_name)}</dd>
         </div>
         <div>
-          <dt>Tier</dt>
+          <dt>Priority</dt>
           <dd>{item.priority_tier}</dd>
         </div>
         <div>
-          <dt>Entity</dt>
+          <dt>Library item</dt>
           <dd>
             {item.target_entity_type}:{item.target_entity_id}
           </dd>
         </div>
         {candidate.alias ? (
           <div>
-            <dt>Alias token</dt>
+            <dt>Unrecognized name</dt>
             <dd>{candidate.alias}</dd>
           </div>
         ) : null}
         {candidate.suggested_concept_id ? (
           <div>
-            <dt>Suggested concept</dt>
+            <dt>Suggested known group</dt>
             <dd>{candidate.suggested_concept_id}</dd>
           </div>
         ) : null}
@@ -211,8 +216,8 @@ function ContextPanel({ item, onClose }) {
         ) : null}
         {candidate.deficit_kind ? (
           <div>
-            <dt>Deficit</dt>
-            <dd>{candidate.deficit_kind}</dd>
+            <dt>Missing</dt>
+            <dd>{knowledgeGapDisplayName(candidate.deficit_kind)}</dd>
           </div>
         ) : null}
         {candidate.reason ? (
@@ -229,8 +234,8 @@ function ContextPanel({ item, onClose }) {
         ) : null}
         {candidate.overlay_path || candidate.promoted_concept_id ? (
           <div>
-            <dt>Overlay</dt>
-            <dd>{candidate.overlay_path || candidate.promoted_concept_id || "—"}</dd>
+            <dt>Saved mapping</dt>
+            <dd>{candidate.promoted_concept_id || "Saved"}</dd>
           </div>
         ) : null}
         {candidate.action || candidate.act_result?.action ? (
@@ -295,8 +300,10 @@ function StagedRow({
           {candidate.hit_count != null ? ` · ${candidate.hit_count} hits` : ""}
         </strong>
         <p>
-          {item.task_name}
-          {candidate.deficit_kind ? ` · ${candidate.deficit_kind}` : ""}
+          {knowledgeTaskDisplayName(item.task_name)}
+          {candidate.deficit_kind
+            ? ` · ${knowledgeGapDisplayName(candidate.deficit_kind)}`
+            : ""}
           {" · confidence "}
           {(Number(item.confidence_score) || 0).toFixed(2)}
           {suggested ? ` · suggested ${suggested}` : ""}
@@ -311,7 +318,7 @@ function StagedRow({
             {isFacet ? (
               <>
                 <label className="tag-sort-control">
-                  <span>Concept id</span>
+                  <span>Known group ID</span>
                   <input
                     type="text"
                     placeholder={candidate.suggested_concept_id || "science_fiction"}
@@ -324,7 +331,7 @@ function StagedRow({
                   />
                 </label>
                 <label className="tag-sort-control">
-                  <span>Or TMDB name</span>
+                  <span>Or standard genre name</span>
                   <input
                     type="text"
                     placeholder={candidate.suggested_canonical_name || "Science Fiction"}
@@ -345,7 +352,7 @@ function StagedRow({
                   }}
                   data-testid={`taxonomy-approve-${item.id}`}
                 >
-                  Approve → overlay
+                  Save mapping
                 </button>
               </>
             ) : actLabel ? (
@@ -382,8 +389,8 @@ function StagedRow({
 }
 
 /**
- * Admin → Knowledge Ops: closed-loop telemetry, staged work, facet approve/reject.
- * Route stays `/admin/taxonomy`; approve writes DATA_DIR/taxonomy.json overlay only.
+ * Admin → Library knowledge: activity, queued reviews, and saved name mappings.
+ * Route and backend identifiers stay stable; only owner-facing copy is translated.
  */
 export default function StagedAugmentationsPage() {
   const [tab, setTab] = useState("taxonomy");
@@ -423,7 +430,7 @@ export default function StagedAugmentationsPage() {
       setTopEvents(topData?.items || []);
     } catch (err) {
       setSummary(null);
-      setError(err.message || "Could not load Knowledge Ops summary.");
+      setError(err.message || "Could not load library knowledge summary.");
     }
   }, []);
 
@@ -476,16 +483,16 @@ export default function StagedAugmentationsPage() {
       if (ov.canonical_name.trim()) payload.canonical_name = ov.canonical_name.trim();
       const result = await approveStagedAugmentation(item.id, payload);
       if (result?.acted?.action) {
-        setFeedback(`Acted: ${result.acted.action}.`);
+        setFeedback("Knowledge refresh started.");
       } else if (result?.promoted?.alias) {
         const alias = result.promoted.alias || item.candidate?.alias || item.target_entity_id;
-        setFeedback(`Approved “${alias}” into the DATA_DIR taxonomy overlay.`);
+        setFeedback(`Saved “${alias}” as a recognized name.`);
       } else {
-        setFeedback("Approved staged candidate.");
+        setFeedback("Saved review.");
       }
       await Promise.all([reloadItems(), reloadSummary()]);
     } catch (err) {
-      setError(err.message || "Approve failed.");
+      setError(err.message || "Could not save this review.");
     } finally {
       setBusyId(null);
     }
@@ -510,17 +517,17 @@ export default function StagedAugmentationsPage() {
 
   return (
     <div className="settings-stack knowledge-ops-page" data-testid="admin-taxonomy">
-      <SettingsPageHeader title="Knowledge Operations">
-        Closed-loop knowledge: signals accumulate in telemetry, high-confidence gaps stage for
-        review, and facet aliases promote into your DATA_DIR overlay — never the packaged seed.
+      <SettingsPageHeader title="Library knowledge">
+        Review names the library does not recognize, fill missing title details, and see how much
+        plot knowledge is ready for discovery.
       </SettingsPageHeader>
 
-      <SectionHelp label="How the closed loop works" testId="knowledge-ops-loop-help">
+      <SectionHelp label="How library knowledge improves" testId="knowledge-ops-loop-help">
         <p>
-          <strong>Signal → stage → owner overlay.</strong> Chat, Explore, and idle tasks emit
-          misses and coverage gaps into SQLite telemetry. Audit tasks stage candidates when hit
-          counts cross confidence thresholds. You approve facet aliases into{" "}
-          <code>$DATA_DIR/taxonomy.json</code>; packaged seed is never auto-mutated. Fail closed.
+          <strong>Notice → review → improve.</strong> Chat, Explore, and background tasks notice
+          repeated unknown names or missing title details. Frequent findings appear here for your
+          review. Saving a name mapping teaches this installation without changing Projectionist’s
+          built-in definitions.
         </p>
       </SectionHelp>
 
@@ -537,7 +544,7 @@ export default function StagedAugmentationsPage() {
 
       <SummaryStrip summary={summary} loading={!summary && !error} />
 
-      <nav className="knowledge-ops-tabs" aria-label="Knowledge Ops sections" data-testid="knowledge-ops-tabs">
+      <nav className="knowledge-ops-tabs" aria-label="Library knowledge sections" data-testid="knowledge-ops-tabs">
         {TABS.map((entry) => (
           <button
             key={entry.id}
@@ -557,31 +564,31 @@ export default function StagedAugmentationsPage() {
       {tab === "taxonomy" ? (
         <>
           <SettingsPanel
-            title="Registry snapshot"
-            lead="Packaged concepts/aliases/packs plus your overlay merge at boot."
+            title="Recognized names"
+            lead="Built-in genre and tag names, plus the mappings you have saved."
             testId="knowledge-ops-registry-panel"
           >
             <ul className="knowledge-ops-meta-list" data-testid="knowledge-ops-registry-counts">
-              <li>Concepts: {registry?.registry?.concept_count ?? "—"}</li>
-              <li>Aliases: {registry?.registry?.alias_count ?? "—"}</li>
-              <li>Packs: {registry?.registry?.pack_count ?? "—"}</li>
-              <li>Overlay aliases: {registry?.registry?.overlay_alias_count ?? 0}</li>
+              <li>Known groups: {registry?.registry?.concept_count ?? "—"}</li>
+              <li>Recognized names: {registry?.registry?.alias_count ?? "—"}</li>
+              <li>Built-in sets: {registry?.registry?.pack_count ?? "—"}</li>
+              <li>Your saved mappings: {registry?.registry?.overlay_alias_count ?? 0}</li>
               <li>
-                Overlay:{" "}
+                Saved-name file:{" "}
                 {registry?.registry?.overlay_exists
-                  ? registry?.registry?.overlay_path || "present"
-                  : "none yet"}
+                  ? "ready"
+                  : "not created yet"}
               </li>
             </ul>
           </SettingsPanel>
           <SettingsPanel
-            title="Top unresolved facets"
-            lead="Highest-hit unmapped facet tokens from closed-loop telemetry."
+            title="Names to review"
+            lead="Frequently seen genre or tag names that are not recognized yet."
             testId="knowledge-ops-top-facets-panel"
           >
             {topFacets.length === 0 ? (
               <p className="status status-secondary" data-testid="knowledge-ops-top-facets-empty">
-                No unresolved facet signals yet — aliases you approve will shrink this list.
+                No unrecognized names yet. Saved mappings will keep this list tidy.
               </p>
             ) : (
               <ul className="knowledge-ops-hit-list" data-testid="knowledge-ops-top-facets">
@@ -602,22 +609,22 @@ export default function StagedAugmentationsPage() {
 
       {tab === "demand" ? (
         <SettingsPanel
-          title="Entity memory demand"
-          lead="P2 metadata_demand signals staged by entity_memory_enrichment."
+          title="Requested title details"
+          lead="Titles that would benefit from another trusted-source lookup."
           testId="knowledge-ops-demand-panel"
         >
           <p className="status status-secondary">
-            Demand rows appear below with task <code>entity_memory_enrichment</code>.
-            Use <strong>Run enrichment</strong> to refresh repository-memory research for the
-            entity, or Reject to clear without side effects.
+            Requests appear below when title details are too thin. Use{" "}
+            <strong>Refresh details</strong> to look again, or Reject to clear the request without
+            changing the title.
           </p>
         </SettingsPanel>
       ) : null}
 
       {tab === "coverage" ? (
         <SettingsPanel
-          title="Library coverage deficits"
-          lead="Honest % from idle enrichment; gaps emit coverage_deficit telemetry."
+          title="Missing library knowledge"
+          lead="An honest view of which plot and title details are still filling in."
           testId="knowledge-ops-coverage-panel"
         >
           {coverageSummary ? (
@@ -639,17 +646,17 @@ export default function StagedAugmentationsPage() {
 
       {tab === "activity" ? (
         <>
-          <SettingsPanel title="Signal trend (30d)" testId="knowledge-ops-trend-panel">
+          <SettingsPanel title="Activity trend (30d)" testId="knowledge-ops-trend-panel">
             <Sparkline series={trend} />
           </SettingsPanel>
-          <SettingsPanel title="Top telemetry events" testId="knowledge-ops-top-events-panel">
+          <SettingsPanel title="Most common findings" testId="knowledge-ops-top-events-panel">
             {topEvents.length === 0 ? (
-              <p className="status status-secondary">No closed-loop events recorded yet.</p>
+              <p className="status status-secondary">No library-knowledge activity recorded yet.</p>
             ) : (
               <ul className="knowledge-ops-hit-list" data-testid="knowledge-ops-top-events">
                 {topEvents.map((row) => (
                   <li key={`${row.event_type}:${row.entity_type}:${row.entity_key}`}>
-                    <strong>{row.event_type}</strong>
+                    <strong>{knowledgeEventDisplayName(row.event_type)}</strong>
                     <span>
                       {row.entity_type}:{row.entity_key} · {row.hit_count} hits
                     </span>
@@ -681,27 +688,27 @@ export default function StagedAugmentationsPage() {
             <SettingsPanel
               title={
                 tab === "all"
-                  ? "All staged work"
+                  ? "All reviews"
                   : tab === "taxonomy"
-                    ? "Staged facet aliases"
+                    ? "Name mappings"
                     : tab === "demand"
-                      ? "Staged demand"
-                      : "Staged coverage gaps"
+                      ? "Requested details"
+                      : "Missing knowledge"
               }
               lead={
                 tab === "taxonomy"
-                  ? "Map tokens to concept ids or live TMDB genre names, then approve into overlay."
+                  ? "Match each unrecognized name to a known group, then save the mapping."
                   : tab === "demand"
-                    ? "Approve runs repository-memory enrichment for the entity — never writes taxonomy overlay."
-                    : "Approve runs targeted enrichment for the gap kind — never auto-mutates packaged seed."
+                    ? "Refresh trusted title details, or dismiss requests that no longer need work."
+                    : "Run the focused refresh for each missing detail; built-in definitions stay unchanged."
               }
               testId="taxonomy-staged-panel"
             >
               {loading ? <p className="status status-secondary">Loading…</p> : null}
               {!loading && items.length === 0 ? (
                 <p className="status status-secondary" data-testid="taxonomy-empty">
-                  No staged candidates for this filter — empty means signals have not crossed staging
-                  thresholds yet.
+                  Nothing is waiting for this filter. Findings appear after the same need is noticed
+                  often enough to merit review.
                 </p>
               ) : null}
               <ul className="media-issues-list" data-testid="taxonomy-staged-list">

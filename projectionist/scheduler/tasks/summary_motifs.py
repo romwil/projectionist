@@ -393,8 +393,8 @@ def register(scheduler: IdleScheduler) -> None:
             enabled=True,
             run_fn=run,
             description=(
-                "Extracts motif facets from plot summaries across the whole library in "
-                "one pass and writes them for Plot Lab / Explore motif walls."
+                "Finds recurring plot patterns in available summaries across the whole "
+                "library so discovery filters can group titles by story ideas."
             ),
         )
     )

@@ -15,6 +15,7 @@ import {
 test("friendlyProgressMessage maps snake_case keys", () => {
   assert.equal(friendlyProgressMessage("scanning_plex"), "Scanning Plex library…");
   assert.equal(friendlyProgressMessage("", "enriching"), "Enriching metadata…");
+  assert.equal(friendlyProgressMessage("facets"), "Building browse indexes…");
   assert.equal(friendlyProgressMessage("library_sync", "", "library_sync"), "Library sync");
 });
 

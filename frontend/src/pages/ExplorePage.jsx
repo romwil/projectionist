@@ -400,13 +400,17 @@ export default function ExplorePage() {
             <h2>TV</h2>
             <p>Page through every series with sort, filters, and columns</p>
           </Link>
-          <Link to={ROUTES.plotLab} className="explore-hub-card" data-testid="explore-hub-plot-lab">
-            <h2>Plot Lab</h2>
-            <p>Motifs, poster walls, and surprising narrative neighbors</p>
+          <Link
+            to={ROUTES.relatedTitles}
+            className="explore-hub-card"
+            data-testid="explore-hub-related-titles"
+          >
+            <h2>Related titles</h2>
+            <p>Start with one title, follow its connections, and see why each match belongs</p>
           </Link>
           <Link to={ROUTES.tags} className="explore-hub-card" data-testid="explore-hub-tags">
-            <h2>Tag search</h2>
-            <p>Find keyword tags across your full library index</p>
+            <h2>Tags</h2>
+            <p>Browse keyword tags across your full library</p>
           </Link>
         </section>
 

@@ -681,7 +681,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                 "Browse titles the user already owns with rich filters. "
                 "Supports year/decade, genre, director, cast, keywords, runtime, ratings, "
                 "date added (added_from, added_to, recently_added_days, sort=added_at), "
-                "watch history (last_viewed_from/to, stale_days, view_count), file_size for purge, "
+                "watch state (last_viewed_from/to, stale_days, Plex completion-count view_count), file_size for purge, "
                 "Radarr/Sonarr presence (in_radarr, in_sonarr), "
                 "semantic_query, fts_query, and TV progress fields. Returns total_matched and has_more."
             ),
@@ -702,8 +702,20 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                     "fts_query": {"type": "string", "description": "Full-text search across metadata"},
                     "semantic_query": {"type": "string", "description": "Mood/theme semantic search"},
                     "unwatched_only": {"type": "boolean"},
-                    "min_view_count": {"type": "integer", "description": "Minimum play count"},
-                    "max_view_count": {"type": "integer", "description": "Maximum play count (0 = never watched)"},
+                    "min_view_count": {
+                        "type": "integer",
+                        "description": (
+                            "Minimum Plex completed/marked-played count for movies; "
+                            "minimum completed episode-play sum for synced shows"
+                        ),
+                    },
+                    "max_view_count": {
+                        "type": "integer",
+                        "description": (
+                            "Maximum Plex completed/marked-played count (0 = never completed); "
+                            "not a playback-session count"
+                        ),
+                    },
                     "stale_days": {
                         "type": "integer",
                         "description": "Not watched in this many days (includes never watched)",
@@ -965,7 +977,10 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "type": "function",
         "function": {
             "name": "analyze_watch_patterns",
-            "description": "Summarize viewing habits: top genres, stale titles, binge patterns.",
+            "description": (
+                "Summarize watch-state patterns: top genres, stale titles, movie completion "
+                "counts, and TV episode-completion counts. Does not report playback sessions."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -1473,7 +1488,9 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                 "acquire/where-to-get → Concierge; heat/tonight energy → Enthusiast. "
                 "Max ONE consult per user turn; never nest consults. Quote the reply as "
                 "\"I asked {Name} and they said …\" — do not silently merge. "
-                "Unavailable for youth/guest. Timeout returns busy — use your own take."
+                "Unavailable for youth/guest. A pending result means you left a message: "
+                "you may continue with your own take, but never invent their quote; any "
+                "callback appears later as a separate addendum."
             ),
             "parameters": {
                 "type": "object",

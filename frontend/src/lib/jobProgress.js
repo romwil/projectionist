@@ -8,7 +8,7 @@ const FRIENDLY_PROGRESS = {
   scanning_plex: "Scanning Plex library…",
   enriching: "Enriching metadata…",
   indexing: "Building search indexes…",
-  facets: "Building search facets…",
+  facets: "Building browse indexes…",
   fts: "Building search index…",
   episodes: "Syncing TV episodes…",
   finishing: "Finishing up…",

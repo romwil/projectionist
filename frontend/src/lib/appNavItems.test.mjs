@@ -40,7 +40,7 @@ describe("buildAppNavItems", () => {
       "settings",
     ]);
     assert.deepEqual(moreBlock(items), [
-      "plot-lab",
+      "related-titles",
       "tags",
       "watchlist",
       "library",
@@ -143,7 +143,7 @@ describe("buildAppNavItems", () => {
     );
     assert.ok(ids.indexOf("heading-more") > adminIdx);
     assert.deepEqual(moreBlock(items), [
-      "plot-lab",
+      "related-titles",
       "tags",
       "watchlist",
       "library",
@@ -168,6 +168,10 @@ describe("buildAppNavItems", () => {
   });
 
   it("keeps core browse destinations stable", () => {
+    assert.equal(
+      APP_NAV_CORE_ITEMS.find((item) => item.id === "related-titles")?.to,
+      ROUTES.relatedTitles,
+    );
     assert.equal(APP_NAV_CORE_ITEMS.find((item) => item.id === "watchlist")?.kind, "watchlist");
     assert.equal(APP_NAV_CORE_ITEMS.find((item) => item.id === "library")?.to, ROUTES.library);
   });

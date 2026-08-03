@@ -167,8 +167,8 @@ def register(scheduler: IdleScheduler) -> None:
         priority="P1",
         run_fn=run,
         description=(
-            "P1 Facet taxonomy audit: aggregates unmapped facet tokens from "
-            "telemetry_events and stages alias candidates for Admin approve → "
-            "DATA_DIR overlay (never auto-merges into the packaged seed)."
+            "Finds frequently used genre or tag names the library does not recognize "
+            "and queues suggested mappings for owner review. Saving a mapping affects "
+            "only this installation; built-in definitions stay unchanged."
         ),
     )

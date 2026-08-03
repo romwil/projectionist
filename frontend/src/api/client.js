@@ -207,6 +207,19 @@ export async function generateWeeklyNewsletter(payload = {}) {
   });
 }
 
+/** Member: fetch own Year in Review reel for a calendar year. */
+export async function getYearInReview(year) {
+  return api(`/year-in-review/${encodeURIComponent(year)}`);
+}
+
+/** Owner-only: generate (and optionally notify) own Year in Review. */
+export async function generateYearInReview(payload = {}) {
+  return api("/admin/year-in-review/generate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function startPlexPinLogin({ inviteToken } = {}) {
   const search = new URLSearchParams();
   if (inviteToken) search.set("invite_token", inviteToken);
@@ -1250,6 +1263,37 @@ export async function getLibraryNeighbors(itemId, { mode = "similar", limit = 12
     limit: String(limit),
   });
   return api(`/library/neighbors/${encodeURIComponent(itemId)}?${params}`);
+}
+
+export async function getTitleRelations(
+  mediaType,
+  itemId,
+  { idType = "tmdb", relation = "", limit = 50 } = {},
+) {
+  const params = new URLSearchParams({
+    id_type: String(idType || "tmdb"),
+    limit: String(limit),
+  });
+  if (relation) params.set("relation", String(relation));
+  return api(
+    `/title/${encodeURIComponent(mediaType)}/${encodeURIComponent(itemId)}/relations?${params}`,
+  );
+}
+
+export async function walkTitleRelations(
+  mediaType,
+  itemId,
+  { idType = "tmdb", relation = "", depth = 1, limit = 50 } = {},
+) {
+  const params = new URLSearchParams({
+    id_type: String(idType || "tmdb"),
+    depth: String(depth === 2 ? 2 : 1),
+    limit: String(limit),
+  });
+  if (relation && relation !== "surprising") params.set("relation", String(relation));
+  return api(
+    `/title/${encodeURIComponent(mediaType)}/${encodeURIComponent(itemId)}/relations/walk?${params}`,
+  );
 }
 
 export async function queryLibrary(filters = {}) {

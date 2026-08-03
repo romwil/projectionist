@@ -328,26 +328,28 @@ test("getExploreSectionConfig resolves known sections", () => {
 });
 
 test("ownerEmptyStateCta deep-links owners to Scheduled Tasks for cold caches", () => {
-  assert.equal(ownerEmptyStateCta("Empty — plot_neighbors cache not built yet for this title."), null);
+  const similarTitlesNote =
+    "No similar titles yet — plot-similarity data is still filling in for this title.";
+  assert.equal(ownerEmptyStateCta(similarTitlesNote), null);
   assert.deepEqual(
-    ownerEmptyStateCta("Empty — plot_neighbors cache not built yet for this title.", {
+    ownerEmptyStateCta(similarTitlesNote, {
       isOwner: true,
     }),
-    { label: "Warm Explore", href: ADMIN_TASKS_PATH },
+    { label: "Refresh similar titles", href: ADMIN_TASKS_PATH },
   );
   assert.deepEqual(
     ownerEmptyStateCta(
       "No release_date/first_air_date enriched yet — run library sync or metadata_enrichment.",
       { isOwner: true },
     ),
-    { label: "Run enrichment", href: ADMIN_TASKS_PATH },
+    { label: "Refresh title details", href: ADMIN_TASKS_PATH },
   );
   assert.deepEqual(
     ownerEmptyStateCta(
-      "No plot motifs yet — summary_motifs idle task has not populated facets.",
+      "No plot patterns yet — the background library refresh is still filling them in.",
       { isOwner: true },
     ),
-    { label: "Run enrichment", href: ADMIN_TASKS_PATH },
+    { label: "Refresh plot patterns", href: ADMIN_TASKS_PATH },
   );
   assert.equal(
     ownerEmptyStateCta("No titles match the selected motifs.", { isOwner: true }),

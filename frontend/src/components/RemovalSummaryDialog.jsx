@@ -63,14 +63,6 @@ export default function RemovalSummaryDialog({ open, result = null, onClose }) {
               </p>
             </SectionHelp>
           </div>
-          <button
-            type="button"
-            className="ghost"
-            data-testid="removal-summary-close"
-            onClick={onClose}
-          >
-            Close
-          </button>
         </header>
 
         <div className="removal-summary-totals" data-testid="removal-summary-totals">

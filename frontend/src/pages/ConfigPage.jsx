@@ -50,6 +50,7 @@ import {
 } from "../lib/jobProgress.js";
 import { liveChannelsStartTimeoutAlertType } from "../lib/liveChannelsEngineFeedback.js";
 import { craftSoftCapHonestyNote, liveOnboardingTip } from "../lib/liveChannelsCopy.js";
+import { filterLiveCollections } from "../lib/liveChannelsCraft.js";
 import { buildHouseholdHealthChips } from "../lib/householdHealth.js";
 import {
   canToggleSecretVisibility,
@@ -381,8 +382,8 @@ const OPTIONAL_SERVICES = [
 
 function wizardPersonaPreview(persona) {
   if (!persona) return "";
-  if (persona.assembled_prompt) return persona.assembled_prompt;
-  return `Hello, I'm ${persona.curator_name}. I'll curate your library with a balanced voice.`;
+  const name = String(persona.curator_name || "Curator").trim() || "Curator";
+  return `Hello, I'm ${name}. I'll curate your library with a balanced voice.`;
 }
 
 function stepUnlocked(stepIndex, verification) {
@@ -533,42 +534,20 @@ export default function ConfigPage() {
     [liveChannelsStatus, liveEngineProgress],
   );
   const effectiveLiveTab = liveChannelsTab || (liveLaunched ? "stations" : "setup");
-  const filteredLiveCollections = useMemo(() => {
-    const rows = liveCraftOptions?.collections || [];
-    const scope = liveCraft.media_scope || "both";
-    const scopeFiltered =
-      scope === "both"
-        ? rows
-        : rows.filter((row) => {
-            const mt = String(row.media_type || "").toLowerCase();
-            if (!mt) return true;
-            if (scope === "tv") return mt === "show" || mt === "shows" || mt === "tv";
-            if (scope === "movies") return mt === "movie" || mt === "movies";
-            return true;
-          });
-    const q = collectionFilter.trim().toLowerCase();
-    const filtered = !q
-      ? scopeFiltered
-      : scopeFiltered.filter((row) => {
-          const hay = `${row.title || ""} ${row.label || ""} ${row.source || ""}`.toLowerCase();
-          return hay.includes(q);
-        });
-    // Keep the current selection visible even if it does not match the filter.
-    const selectedId = liveCraft.collection_id;
-    if (
-      selectedId &&
-      !filtered.some((row) => row.id === selectedId)
-    ) {
-      const selected = rows.find((row) => row.id === selectedId);
-      if (selected) return [selected, ...filtered];
-    }
-    return filtered;
-  }, [
-    liveCraftOptions?.collections,
-    collectionFilter,
-    liveCraft.collection_id,
-    liveCraft.media_scope,
-  ]);
+  const filteredLiveCollections = useMemo(
+    () =>
+      filterLiveCollections(liveCraftOptions?.collections, {
+        mediaScope: liveCraft.media_scope || "both",
+        filterQuery: collectionFilter,
+        selectedId: liveCraft.collection_id,
+      }),
+    [
+      liveCraftOptions?.collections,
+      collectionFilter,
+      liveCraft.collection_id,
+      liveCraft.media_scope,
+    ],
+  );
   const fillerBinds = settings?.tunarr?.filler_binds || [];
 
   function applyCertifications(certMap) {
@@ -678,8 +657,6 @@ export default function ConfigPage() {
           number: prev.number || String(opts.next_channel_number || 100),
           motif: prev.motif || opts.motifs?.[0]?.value || "",
           cluster_tag: prev.cluster_tag || opts.taste_clusters?.[0]?.cluster_tag || "",
-          collection_id: prev.collection_id || opts.collections?.[0]?.id || "",
-          collection_title: prev.collection_title || opts.collections?.[0]?.title || "",
         }));
         if (opts?.pad_flex_max_minutes != null) {
           setPadFlexDraft((prev) => (prev === "" ? String(opts.pad_flex_max_minutes) : prev));

@@ -3,7 +3,9 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   api,
   addWatchlistPin,
+  addCuratedListItem,
   confirmAction,
+  createCuratedList,
   createThread,
   deleteThread,
   dismissReviewPrompt,
@@ -60,9 +62,18 @@ import {
   tokenConfirmSuccessMessage,
 } from "./lib/addActions.js";
 import { blendAmbientAccent } from "./lib/ambientAccent.js";
+import { materializeAgentResultList } from "./lib/agentResultLists.js";
 import { shouldSubmitComposerOnEnter } from "./lib/composerKeyboard.js";
 import { createId } from "./lib/id.js";
 import { mergeStreamedBlocks } from "./lib/mergeStreamedBlocks.js";
+import {
+  hasPendingPersonaConsult,
+  mergeThreadMessagesById,
+  PERSONA_CONSULT_FIRST_POLL_MS,
+  PERSONA_CONSULT_POLL_MS,
+  PERSONA_CONSULT_POLL_WINDOW_MS,
+  shouldSchedulePersonaConsultPoll,
+} from "./lib/personaConsultPolling.js";
 import { executeSlashCommand, parseSlashCommand } from "./lib/slashCommands.js";
 import {
   normalizeQuickPickError,
@@ -372,6 +383,47 @@ export default function App() {
       return false;
     }
   }, [loadThreadFeedback]);
+
+  const personaConsultPending = useMemo(
+    () => hasPendingPersonaConsult(messages),
+    [messages],
+  );
+
+  useEffect(() => {
+    if (!personaConsultPending || loading || !activeSessionId) return undefined;
+    let stopped = false;
+    let timer;
+    const deadline = Date.now() + PERSONA_CONSULT_POLL_WINDOW_MS;
+
+    const poll = async () => {
+      const pollStartedAt = Date.now();
+      try {
+        const data = await getThreadMessages(activeSessionId);
+        if (!stopped) {
+          setMessages((current) =>
+            mergeThreadMessagesById(current, data.messages || []),
+          );
+        }
+      } catch (error) {
+        if (!error.message?.includes("Thread not found")) {
+          console.error(error);
+        }
+      } finally {
+        if (
+          !stopped &&
+          shouldSchedulePersonaConsultPoll({ pollStartedAt, deadline })
+        ) {
+          timer = setTimeout(poll, PERSONA_CONSULT_POLL_MS);
+        }
+      }
+    };
+
+    timer = setTimeout(poll, PERSONA_CONSULT_FIRST_POLL_MS);
+    return () => {
+      stopped = true;
+      clearTimeout(timer);
+    };
+  }, [activeSessionId, loading, personaConsultPending]);
 
   const switchThread = useCallback(
     async (session) => {
@@ -831,6 +883,17 @@ export default function App() {
     } finally {
       setQuickPickLoading(false);
     }
+  }
+
+  async function handleOpenAgentResultsGrid({ heading, items }) {
+    const result = await materializeAgentResultList({
+      heading,
+      items,
+      createList: createCuratedList,
+      addItem: addCuratedListItem,
+    });
+    navigate(`/lists/${encodeURIComponent(result.list.id)}`);
+    return result;
   }
 
   async function sendMessage(text) {
@@ -1626,6 +1689,8 @@ export default function App() {
               onReviewConflictResolved={handleReviewConflictResolved}
               onSaveToLibrary={handleSaveToLibrary}
               onSuggestedReply={sendMessage}
+              onCreateRail={({ prompt }) => sendMessage(prompt)}
+              onOpenAsGrid={handleOpenAgentResultsGrid}
             />
             {loading || agentActivityLog.length > 0 ? (
               <TypingIndicator

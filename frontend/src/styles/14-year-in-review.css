@@ -1,0 +1,201 @@
+/* Year in Review cinema reel */
+
+.yir-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) var(--margin-mobile) var(--space-8);
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, var(--accent-soft), transparent 55%),
+    linear-gradient(165deg, var(--workspace-wash-a), var(--workspace-base) 45%, var(--workspace-wash-b));
+  color: var(--text);
+}
+
+.yir-chrome {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.yir-brand {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  color: var(--accent);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.yir-back,
+.yir-pause,
+.yir-controls button,
+.yir-share button {
+  font-family: var(--font-body);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+
+.yir-back {
+  text-decoration: none;
+}
+
+.yir-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.yir-card {
+  width: 100%;
+  padding: var(--space-7) var(--space-5);
+  animation: yir-fade-up 0.7s ease both;
+}
+
+.yir-reduced .yir-card {
+  animation: none;
+}
+
+@keyframes yir-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.yir-kicker {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  margin: 0 0 var(--space-3);
+}
+
+.yir-title {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  font-weight: 500;
+  line-height: var(--leading-tight);
+  margin: 0 0 var(--space-4);
+  color: var(--text);
+}
+
+.yir-body {
+  font-size: var(--text-lg);
+  line-height: var(--leading-body);
+  margin: 0 0 var(--space-5);
+  max-width: 36em;
+}
+
+.yir-stats {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-5);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  color: var(--accent);
+  font-family: var(--font-display);
+}
+
+.yir-posters {
+  display: flex;
+  gap: var(--space-3);
+  overflow: hidden;
+}
+
+.yir-poster {
+  width: 72px;
+  height: 108px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-xs);
+  text-align: center;
+  padding: 4px;
+}
+
+.yir-poster img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.yir-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.yir-dots {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.yir-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: var(--border);
+  cursor: pointer;
+}
+
+.yir-dot.is-active {
+  background: var(--accent);
+  transform: scale(1.25);
+}
+
+.yir-share {
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  text-align: center;
+}
+
+.yir-footnote {
+  max-width: 720px;
+  margin: var(--space-4) auto 0;
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.yir-empty {
+  max-width: 28rem;
+  margin: 15vh auto;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .yir-card {
+    animation: none;
+  }
+}

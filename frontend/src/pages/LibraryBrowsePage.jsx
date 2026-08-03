@@ -15,6 +15,7 @@ import { useBulkActionProgress } from "../components/BulkActionProgress.jsx";
 import BulkLibraryDeleteDialog from "../components/BulkLibraryDeleteDialog.jsx";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import MediaBrowseControls from "../components/MediaBrowseControls";
+import MediaBrowsePagination from "../components/MediaBrowsePagination.jsx";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
 import TitleCard from "../components/TitleCard";
@@ -253,6 +254,11 @@ export default function LibraryBrowsePage() {
   const page = isAll ? 1 : Math.floor(state.offset / pageSize) + 1;
   const pageCount = isAll ? 1 : Math.max(1, Math.ceil(state.total / pageSize));
   const capped = isAll && state.total > state.returned;
+  const paginationSummary = isAll
+    ? capped
+      ? `Showing first ${state.returned} of ${state.total} titles`
+      : `${state.total} title${state.total === 1 ? "" : "s"}`
+    : `Page ${page} of ${pageCount}${state.total ? ` · ${state.total} titles` : ""}`;
 
   function commitBrowseQuery(draft, { resetOffset = true } = {}) {
     const next = nextBrowseSearchQuery(draft, q);
@@ -303,9 +309,15 @@ export default function LibraryBrowsePage() {
 
   async function handleBulkPin() {
     if (!selected.size || pinning) return;
-    const targets = state.items.filter((item) => selected.has(libraryBrowseItemKey(item)) && allowWatchlistPin(item));
+    const targets = state.items.filter(
+      (item) => selected.has(libraryBrowseItemKey(item)) && allowWatchlistPin(item),
+    );
     if (!targets.length) return;
-    const progressId = start({ label: "Pinning to watchlist", total: targets.length, asynchronous: true });
+    const progressId = start({
+      label: "Pinning to watchlist",
+      total: targets.length,
+      asynchronous: true,
+    });
     setPinning(true);
     setActionStatus("");
     let ok = 0;
@@ -462,13 +474,15 @@ export default function LibraryBrowsePage() {
       title={isSearchRoute ? "Search" : undefined}
       eyebrow={isSearchRoute ? "Your collection and beyond" : undefined}
       leading={
-        isSearchRoute ? null : (
-          <BackLink fallbackTo={ROUTES.explore} testId="library-browse-back" />
-        )
+        isSearchRoute ? null : <BackLink fallbackTo={ROUTES.explore} testId="library-browse-back" />
       }
       actions={
         isSearchRoute ? null : (
-          <Link to={ROUTES.explore} className="app-topbar-link" data-testid="library-browse-hub-link">
+          <Link
+            to={ROUTES.explore}
+            className="app-topbar-link"
+            data-testid="library-browse-hub-link"
+          >
             Explore hub
           </Link>
         )
@@ -500,14 +514,13 @@ export default function LibraryBrowsePage() {
         <div className="explore-section-toolbar-row">
           <div className="explore-section-toolbar-primary">
             <p className="explore-section-pagination-summary" data-testid="library-browse-summary">
-              {isAll
-                ? capped
-                  ? `Showing first ${state.returned} of ${state.total} titles`
-                  : `${state.total} title${state.total === 1 ? "" : "s"}`
-                : `Page ${page} of ${pageCount}${state.total ? ` · ${state.total} titles` : ""}`}
+              {paginationSummary}
             </p>
             {selected.size ? (
-              <p className="explore-section-selection-summary" data-testid="library-browse-selection-summary">
+              <p
+                className="explore-section-selection-summary"
+                data-testid="library-browse-selection-summary"
+              >
                 {selected.size} selected
                 {isOwner && deletePartition.unavailable.length
                   ? ` · ${deletePartition.unavailable.length} not deletable`
@@ -556,34 +569,13 @@ export default function LibraryBrowsePage() {
             ) : null}
           </div>
         </div>
-        {!isAll && (state.hasMore || state.offset > 0) ? (
-          <div className="explore-section-toolbar-row explore-section-toolbar-nav">
-            <div className="explore-section-page-nav">
-              <button
-                type="button"
-                className="ghost"
-                data-testid="library-browse-prev"
-                disabled={state.offset <= 0}
-                onClick={() => handleOffset(state.offset - pageSize)}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                className="ghost"
-                data-testid="library-browse-next"
-                disabled={!state.hasMore}
-                onClick={() => handleOffset(state.offset + pageSize)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        ) : null}
       </div>
 
       {actionStatus ? (
-        <p className="status status-secondary explore-section-action-status" data-testid="library-browse-action-status">
+        <p
+          className="status status-secondary explore-section-action-status"
+          data-testid="library-browse-action-status"
+        >
           {actionStatus}
         </p>
       ) : null}
@@ -593,9 +585,7 @@ export default function LibraryBrowsePage() {
         {state.error ? <p className="error">{state.error}</p> : null}
         {!state.loading && !state.error && !state.items.length ? (
           <p className="explore-empty status status-secondary" data-testid="library-browse-empty">
-            {q
-              ? `No library titles match “${q}”.`
-              : "No titles match these filters yet."}
+            {q ? `No library titles match “${q}”.` : "No titles match these filters yet."}
           </p>
         ) : null}
         {state.items.length ? (
@@ -611,6 +601,20 @@ export default function LibraryBrowsePage() {
           />
         ) : null}
       </section>
+
+      {!state.loading && !state.error && state.items.length ? (
+        <MediaBrowsePagination
+          summary={paginationSummary}
+          pageSize={isAll ? "all" : pageSize}
+          pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+          onPageSizeChange={(limit) => updateBrowse({ limit, offset: 0 })}
+          hasPrevious={!isAll && state.offset > 0}
+          hasNext={!isAll && state.hasMore}
+          onPrevious={() => handleOffset(state.offset - pageSize)}
+          onNext={() => handleOffset(state.offset + pageSize)}
+          testIdPrefix="library-browse"
+        />
+      ) : null}
 
       {showBeyondAffordance ? (
         <section
@@ -670,7 +674,10 @@ export default function LibraryBrowsePage() {
                 </p>
               ) : null}
               {beyond.status === BEYOND_STATUS.loaded ? (
-                <div className="inline-cards explore-beyond-grid" data-testid="explore-beyond-results">
+                <div
+                  className="inline-cards explore-beyond-grid"
+                  data-testid="explore-beyond-results"
+                >
                   {beyond.items.map((item) => (
                     <TitleCard
                       key={`beyond-${item.media_type}-${item.tmdb_id || item.tvdb_id || item.title}`}
