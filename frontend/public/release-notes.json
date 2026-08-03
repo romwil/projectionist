@@ -1,6 +1,32 @@
 {
-  "generated_at": "2026-08-03T04:07:38Z",
+  "generated_at": "2026-08-03T04:18:19Z",
   "releases": [
+    {
+      "version": "1.31.2",
+      "date": "2026-08-03",
+      "summary": "Follow-up so GitHub Actions pytest matches the intended `.[web,dev,mcp]` install — the affinity privacy test no longer fails with `No module named 'mcp'`.",
+      "highlights": [
+        "**CI pytest installs the MCP extra.** Architecture affinity checks that import the MCP server run in Actions the same way they do in a full local venv.",
+        "**Safer when MCP isn’t installed.** The affinity suite skips cleanly instead of erroring if the optional `mcp` package is absent."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`.github/workflows/ci.yml` installs `.[web,dev,mcp]` (was `.[web,dev]`), unmasking MCP-dependent tests after the 1.31.1 frontend unit fix.",
+            "`PrivacyMcpAffinityTests` uses the same `@skipUnless(HAS_MCP)` pattern as other MCP suites."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "`tests/test_architecture_a_trains.py::PrivacyMcpAffinityTests` — passes with mcp installed.",
+            "`.venv/bin/ruff check .` — clean.",
+            "`test_version` lockstep **1.31.2**."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.31.1",
       "date": "2026-08-03",
