@@ -30,7 +30,7 @@ describe("adminNav", () => {
     assert.equal(adminNavLinks().find((item) => item.id === "usage")?.to, "/admin/usage");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.label, "Holidays");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.to, "/admin/holidays");
-    assert.equal(adminNavLinks().length, 19);
+    assert.equal(adminNavLinks().length, 18);
   });
 
   it("groups the dense rail with Home / Household / Ops headings", () => {
@@ -44,11 +44,16 @@ describe("adminNav", () => {
     );
     assert.equal(
       groups.reduce((sum, group) => sum + group.links.length, 0),
-      19,
+      18,
     );
     assert.deepEqual(
       groups[0].links.map((item) => item.id),
-      ["overview", "connections", "libraries", "sync"],
+      ["overview", "connections", "libraries"],
+    );
+    assert.equal(
+      adminNavLinks().some((item) => item.id === "sync"),
+      false,
+      "Sync library lives on Libraries; Sync is not a nav item",
     );
     assert.ok(groups[2].links.some((item) => item.id === "taxonomy"));
   });

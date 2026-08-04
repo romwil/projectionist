@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useAnchoredPopover } from "../hooks/useAnchoredPopover";
+import { personaChipLabel, personaDropdownLabel } from "../lib/personaLabels";
 
 const SLIDER_LABELS = [
   { key: "val_bro_prof", lo: "Casual", hi: "Professorial" },
@@ -152,7 +153,7 @@ export default function PersonaSelector({
         {p.accent_color && (
           <span className="persona-dot" style={{ background: p.accent_color }} />
         )}
-        <span className="persona-item-name">{p.name}</span>
+        <span className="persona-item-name">{personaDropdownLabel(p)}</span>
         {isDefault && <span className="persona-default-badge" title="Default">★</span>}
         {p.visibility !== "builtin" && (
           <button
@@ -185,18 +186,21 @@ export default function PersonaSelector({
     );
   };
 
+  const activeLabel = active ? personaDropdownLabel(active) : "Persona";
+  const activeChip = active ? personaChipLabel(active) : "Persona";
+
   return (
     <div className="persona-selector" ref={rootRef}>
       <button
         type="button"
         className="persona-trigger selectable-oval"
         onClick={() => setOpen(!open)}
-        title={active ? `Persona: ${active.name}` : "Select persona"}
+        title={active ? `Persona: ${activeLabel}` : "Select persona"}
       >
         {active?.accent_color && (
           <span className="persona-dot" style={{ background: active.accent_color }} />
         )}
-        <span className="persona-trigger-label">{active?.name || "Persona"}</span>
+        <span className="persona-trigger-label">{activeChip}</span>
         <span className="persona-trigger-chevron material-symbols-outlined" aria-hidden="true">expand_more</span>
       </button>
 

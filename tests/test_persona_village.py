@@ -26,11 +26,13 @@ from projectionist.telemetry.llm_usage import PURPOSE_PERSONA_CONSULT, VALID_PUR
 class TestVillageResolve(unittest.TestCase):
     def test_resolves_archetype_aliases(self) -> None:
         for raw, expected_id, expected_name in (
-            ("Scholar", "academic-critic", "Scholar"),
-            ("enthusiast", "enthusiastic-scout", "Enthusiast"),
-            ("Concierge", "classic-curator", "Concierge"),
-            ("Companion", "night-owl-host", "Companion"),
-            ("academic-critic", "academic-critic", "Scholar"),
+            ("Scholar", "academic-critic", "The Professor"),
+            ("enthusiast", "enthusiastic-scout", "Spark"),
+            ("Concierge", "classic-curator", "The Steward"),
+            ("Companion", "night-owl-host", "The Host"),
+            ("academic-critic", "academic-critic", "The Professor"),
+            ("The Professor", "academic-critic", "The Professor"),
+            ("Spark", "enthusiastic-scout", "Spark"),
         ):
             sibling = resolve_village_sibling(raw)
             self.assertIsNotNone(sibling)
@@ -247,7 +249,7 @@ class TestConsultPersonaTool(unittest.IsolatedAsyncioTestCase):
                 )
             )
             self.assertTrue(result.get("quote_ok"))
-            self.assertEqual(result.get("persona"), "Enthusiast")
+            self.assertEqual(result.get("persona"), "Spark")
             self.assertEqual(result.get("source"), "specialty_only")
             self.assertTrue(result.get("answer"))
 

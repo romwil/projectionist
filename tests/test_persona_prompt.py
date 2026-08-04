@@ -288,6 +288,9 @@ class PersonaApiTests(unittest.TestCase):
         self.assertIn("composer_placeholders", classic)
         self.assertIn("welcome_greeting", classic)
         self.assertIn("accent_hue", classic)
+        self.assertEqual(classic["nickname"], "The Steward")
+        professor = next(item for item in presets if item["id"] == "academic-critic")
+        self.assertEqual(professor["nickname"], "The Professor")
 
     def test_custom_override_blocks_slider_change_until_confirmed(self) -> None:
         put = self.client.put(

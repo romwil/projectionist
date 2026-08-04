@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   generateWeeklyNewsletter,
+  generateYearInReview,
   getSettings,
   listUsers,
   saveSettings,
@@ -74,6 +76,10 @@ export default function MailSettingsPage() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [sendingNewsletter, setSendingNewsletter] = useState(false);
   const [newsletterStatus, setNewsletterStatus] = useState(null);
+  const [sendingYir, setSendingYir] = useState(false);
+  const [yirNotify, setYirNotify] = useState(true);
+  const [yirStatus, setYirStatus] = useState(null);
+  const [yirPath, setYirPath] = useState(null);
 
   useEffect(() => {
     getSettings()
@@ -205,6 +211,45 @@ export default function MailSettingsPage() {
       });
     } finally {
       setSendingNewsletter(false);
+    }
+  }
+
+  async function handleGenerateYir() {
+    if (
+      !window.confirm(
+        yirNotify
+          ? "Generate your Year in Review reel now and notify your inbox (and email if enabled)?"
+          : "Generate your Year in Review reel now without sending a notification?",
+      )
+    ) {
+      return;
+    }
+    setSendingYir(true);
+    setYirStatus(null);
+    setYirPath(null);
+    try {
+      const result = await generateYearInReview({ scope: "self", notify: Boolean(yirNotify) });
+      const year = result?.year;
+      const path = year ? `/year-in-review/${year}` : null;
+      const delivered = Number(result?.delivered) || 0;
+      setYirPath(path);
+      setYirStatus({
+        type: "success",
+        message: path
+          ? yirNotify
+            ? `Ready — delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}.`
+            : "Ready — open your reel below."
+          : yirNotify
+            ? `Generated. Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}.`
+            : "Generated.",
+      });
+    } catch (error) {
+      setYirStatus({
+        type: "error",
+        message: error.message || "Could not generate Year in Review.",
+      });
+    } finally {
+      setSendingYir(false);
     }
   }
 
@@ -616,6 +661,46 @@ export default function MailSettingsPage() {
           testId="mail-newsletter-status"
           onDismiss={() => setNewsletterStatus(null)}
         />
+      </SettingsPanel>
+
+      <SettingsPanel
+        title="Year in Review"
+        lead="Generate your own year-end cinema reel for a quick test. Member opt-in stays under Settings → Notifications."
+        testId="mail-yir-panel"
+      >
+        <SettingsToggle
+          id="mail-yir-notify"
+          checked={yirNotify}
+          onChange={setYirNotify}
+          label="Notify my inbox when ready"
+          help="Uses your notification channels. Requires Year in Review opt-in under Settings → Notifications."
+          testId="mail-yir-notify-toggle"
+        />
+        <div className="settings-actions">
+          <button
+            type="button"
+            className="primary"
+            onClick={handleGenerateYir}
+            disabled={sendingYir}
+            data-testid="mail-yir-self-generate"
+          >
+            {sendingYir ? "Generating…" : "Generate my Year in Review"}
+          </button>
+        </div>
+        <InlineAlert
+          type={yirStatus?.type}
+          message={yirStatus?.message}
+          testId="mail-yir-status"
+          onDismiss={() => {
+            setYirStatus(null);
+            setYirPath(null);
+          }}
+        />
+        {yirPath && yirStatus?.type === "success" ? (
+          <p className="settings-field-hint" data-testid="mail-yir-link">
+            <Link to={yirPath}>Open Year in Review</Link>
+          </p>
+        ) : null}
       </SettingsPanel>
     </div>
   );

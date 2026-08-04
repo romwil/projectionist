@@ -247,6 +247,7 @@ def _build_migrations() -> List[Migration]:
         (44, "watch_event_ledger", wrap("_migrate_watch_event_ledger")),
         (45, "watch_sessions_completions", wrap("_migrate_watch_sessions_completions")),
         (46, "year_in_review", wrap("_migrate_year_in_review")),
+        (47, "persona_nicknames", wrap("_migrate_persona_nicknames")),
     ]
 
 
@@ -267,6 +268,9 @@ def run_migrations(db: "SchemaMigrationsMixin", conn: sqlite3.Connection) -> Non
         _record_version(conn, version, name)
         applied.add(version)
     db._seed_defaults(conn)
+    # Idempotent: insert missing builtins and repair nickname/name from seeds.
+    # INSERT OR IGNORE alone leaves stale nicknames after seed updates.
+    db._seed_builtin_persona_templates(conn)
     # Idempotent data backfill: custom singleton persona → shared template.
     # Must run every boot (not only migration 18) so values written after the
     # first open still migrate on the next Database() open.

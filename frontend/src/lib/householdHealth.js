@@ -97,7 +97,7 @@ export function buildHouseholdHealthChips({
       detail: stats.last_sync
         ? `${num(stats.movies)} movies · ${num(stats.shows)} shows`
         : "Run Sync library after Plex is connected",
-      to: "/admin/sync",
+      to: "/admin/libraries",
       tone: total ? "neutral" : "warn",
     },
     {

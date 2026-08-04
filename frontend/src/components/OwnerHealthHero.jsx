@@ -4,11 +4,10 @@ import { getLibraryKnowledgeCoverage, listMediaIssues } from "../api/client";
 import { buildHealthHeroTiles } from "../lib/ownerHealth.js";
 
 /**
- * At-a-glance owner "Library health" hero. Reuses the dashboard's existing
- * health/streak fetches (passed as props) and adds only knowledge coverage +
- * open-issue count so it doesn't duplicate data fetching.
+ * At-a-glance owner health tiles. Reuses the dashboard's existing health fetch
+ * (passed as a prop) and adds only knowledge coverage + open-issue count.
  */
-export default function OwnerHealthHero({ health, streak }) {
+export default function OwnerHealthHero({ health }) {
   const [coverage, setCoverage] = useState(null);
   const [openIssues, setOpenIssues] = useState(null);
 
@@ -29,24 +28,14 @@ export default function OwnerHealthHero({ health, streak }) {
     };
   }, []);
 
-  const streakCount =
-    streak?.streak ?? streak?.session_count_30d ?? streak?.count ?? streak?.sessions ?? 0;
-
   const tiles = buildHealthHeroTiles({
     health,
     coverage,
-    streak: streakCount,
     openIssues,
   });
 
   return (
-    <section className="owner-health-hero" data-testid="owner-health-hero">
-      <div className="owner-health-hero-head">
-        <div>
-          <p className="eyebrow">At a glance</p>
-          <h2 className="dash-title">Library health</h2>
-        </div>
-      </div>
+    <section className="owner-health-hero" data-testid="owner-health-hero" aria-label="Library health">
       <div className="owner-health-grid">
         {tiles.map((tile) => (
           <Link

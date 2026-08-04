@@ -47,10 +47,9 @@ export default function WatchHistoryTimeline({ ratingKey, plexPlayedEventCount =
       ) : !summary.hasCoverage ? (
         <>
           <p data-testid="watch-history-fallback">{summary.fallbackLabel}</p>
-          <p className="status status-secondary">
-            Projectionist has no user-scoped tracker coverage for this title yet, so this is
-            the older Plex aggregate—not a playback-session count.
-          </p>
+          {Number(summary.plex_played_event_count || 0) > 0 ? (
+            <p className="status status-secondary">Plex aggregate, not tracked sessions.</p>
+          ) : null}
         </>
       ) : (
         <>

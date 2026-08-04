@@ -95,7 +95,7 @@ test("formatStatsMessage parses last_sync JSON timestamp", () => {
 test("formatSyncDeniedMessage explains owner-only sync", () => {
   const text = formatSyncDeniedMessage();
   assert.match(text, /owner-only/i);
-  assert.match(text, /Config/);
+  assert.match(text, /Admin → Libraries/);
 });
 
 test("formatPurgeMessage summarizes purge candidates", () => {

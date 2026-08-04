@@ -103,6 +103,7 @@ createRoot(document.getElementById("root")).render(
             <Route path="mail" element={<MailSettingsPage />} />
             <Route path="logs" element={<LogsPage />} />
             <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
+            <Route path="sync" element={<Navigate to="/admin/libraries" replace />} />
             <Route path=":section" element={<ConfigPage />} />
           </Route>
           <Route path="/settings" element={<SettingsLayout />}>

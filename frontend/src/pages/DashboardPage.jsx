@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   getLibraryOverview,
   getLibraryAggregate,
@@ -7,7 +8,6 @@ import {
   getPurgeCandidates,
   refreshPurgeCandidates,
   enrichPurgeCandidates,
-  getEngagementStreak,
   listReviews,
   deletePurgeCandidates,
   dismissPurgeCandidates,
@@ -22,7 +22,6 @@ import OwnerHealthHero from "../components/OwnerHealthHero";
 import OwnerNowPlayingBreakdown from "../components/OwnerNowPlayingBreakdown";
 import RemovalSummaryDialog from "../components/RemovalSummaryDialog.jsx";
 import SectionHelp from "../components/SectionHelp.jsx";
-import OnNowPanel from "../components/OnNowPanel";
 import WeeklyDigestPanel from "../components/WeeklyDigestPanel";
 import GroomingUndoPanel from "../components/GroomingUndoPanel";
 import TitleDetailDrawer from "../components/TitleDetailDrawer";
@@ -551,7 +550,6 @@ const fetchOverview = () => getLibraryOverview();
 const fetchHealth = () => getLibraryHealth();
 const fetchStats = () => getLibraryStats();
 const fetchPurge = () => getPurgeCandidates();
-const fetchStreak = () => getEngagementStreak();
 const fetchReviews = () => listReviews({ limit: 10, sort: "newest" });
 const fetchRuntimeAgg = () => getLibraryAggregate("runtime_bucket");
 const fetchDecadeAgg = () => getLibraryAggregate("decade");
@@ -564,7 +562,6 @@ export default function DashboardPage() {
   const health = useDashData(fetchHealth);
   const stats = useDashData(fetchStats);
   const purge = useDashData(fetchPurge);
-  const streak = useDashData(fetchStreak);
   const reviews = useDashData(fetchReviews);
   const runtimeAgg = useDashData(fetchRuntimeAgg);
   const decadeAgg = useDashData(fetchDecadeAgg);
@@ -584,7 +581,6 @@ export default function DashboardPage() {
     health.reload();
     stats.reload();
     purge.reload();
-    streak.reload();
     reviews.reload();
     runtimeAgg.reload();
     decadeAgg.reload();
@@ -609,8 +605,7 @@ export default function DashboardPage() {
   const unwatchedPct = hlth?.unwatched_pct ?? ov?.unwatched_pct ?? 0;
   const staleAdds = hlth?.stale_adds ?? 0;
   const ratingCoverage = hlth?.rating_coverage_pct ?? 0;
-
-  const streakCount = streak.data?.streak ?? streak.data?.session_count_30d ?? streak.data?.count ?? streak.data?.sessions ?? 0;
+  const ratingCoverageNote = hlth?.rating_coverage_note || null;
 
   const purgeCandidates = Array.isArray(purge.data)
     ? purge.data
@@ -633,25 +628,18 @@ export default function DashboardPage() {
     <div className="dash-page" data-testid="dashboard-page">
       <header className="dash-header">
         <div>
-          <p className="eyebrow">Owner Dashboard</p>
-          <h2 className="dash-title">Library Intelligence</h2>
+          <h1 className="dash-title">Library intelligence</h1>
         </div>
         <button type="button" className="ghost" onClick={refreshAll}>
           Refresh
         </button>
       </header>
 
-      {/* ─── At-a-glance owner health hero (M4) ─── */}
-      <OwnerHealthHero health={hlth} streak={streak.data} />
+      <OwnerHealthHero health={hlth} />
 
-      {/* ─── Owner live now-playing (Phase A / P1.0) ─── */}
       <OwnerNowPlayingBreakdown />
 
-      {/* ─── Weekly digest + household On now preview ─── */}
-      <div className="dash-delight-row">
-        <WeeklyDigestPanel />
-        <OnNowPanel />
-      </div>
+      <WeeklyDigestPanel />
 
       {/* ─── Panel 1: Library Composition ─── */}
       <div className="dash-grid">
@@ -726,36 +714,50 @@ export default function DashboardPage() {
       </div>
       <KnowledgeCoverageCard variant="panel" />
 
-      {/* ─── Panel 2: Health & Engagement ─── */}
-      <h2 className="dash-section-title">Health &amp; Engagement</h2>
+      {/* ─── Panel 2: Health ─── */}
+      <h2 className="dash-section-title">Library health</h2>
       <div className="dash-grid">
         <Panel title="Unwatched" loading={health.loading} error={health.error}>
-          <Gauge value={unwatchedPct} label="Unwatched titles" />
+          <Link
+            className="dash-metric-link"
+            to="/explore/browse?watch_state=unwatched&sort=added_at&sort_dir=asc"
+            data-testid="dash-health-unwatched"
+          >
+            <Gauge value={unwatchedPct} label="Unwatched titles" />
+          </Link>
         </Panel>
 
         <Panel title="Stale Adds" loading={health.loading} error={health.error}>
-          <StatCard
-            value={staleAdds}
-            label="Stale titles"
-            detail="Added 90+ days ago, never watched"
-          />
+          <Link
+            className="dash-metric-link"
+            to="/explore/browse?watch_state=unwatched&sort=added_at&sort_dir=asc"
+            data-testid="dash-health-stale"
+          >
+            <StatCard
+              value={staleAdds}
+              label="Stale titles"
+              detail="Added 90+ days ago, never watched"
+            />
+          </Link>
         </Panel>
 
         <Panel title="Rating Coverage" loading={health.loading} error={health.error}>
-          <Gauge value={ratingCoverage} label="Watched titles rated" invert />
-        </Panel>
-
-        <Panel title="Curator Streak" loading={streak.loading} error={streak.error}>
-          <StatCard
-            value={streakCount}
-            label="Sessions in 30 days"
-            accent="var(--accent)"
-          />
+          <Link
+            className="dash-metric-link"
+            to="/explore/browse?watch_state=watched"
+            data-testid="dash-health-rating"
+          >
+            <Gauge
+              value={ratingCoverage}
+              label={ratingCoverageNote || "Watched titles rated"}
+              invert
+            />
+          </Link>
         </Panel>
       </div>
 
       {/* ─── Panel 3: Storage Intelligence ─── */}
-      <div className="dash-section-heading">
+      <div className="dash-section-heading" id="storage-intelligence">
         <h2 className="dash-section-title">Storage Intelligence</h2>
         <SectionHelp label="About Storage Intelligence" testId="purge-section-help">
           <p>
@@ -783,9 +785,9 @@ export default function DashboardPage() {
       {/* ─── Purge candidate refresh + index-only undo (below the grid) ─── */}
       <GroomingUndoPanel key={groomingEpoch} onChanged={purge.reload} />
 
-      {/* ─── Panel 4: Taste Profile ─── */}
-      <h2 className="dash-section-title">Taste Profile</h2>
-      <Panel title="Recent Preference Signals" loading={reviews.loading} error={reviews.error}>
+      {/* ─── Panel 4: Taste ─── */}
+      <h2 className="dash-section-title">Taste</h2>
+      <Panel title="Recent ratings" loading={reviews.loading} error={reviews.error}>
         {recentReviews.length ? (
           <ul className="dash-timeline">
             {recentReviews.slice(0, 10).map((r, i) => {
@@ -813,7 +815,7 @@ export default function DashboardPage() {
             })}
           </ul>
         ) : (
-          <p className="dash-empty">No recent preference signals.</p>
+          <p className="dash-empty">No recent ratings yet.</p>
         )}
       </Panel>
     </div>

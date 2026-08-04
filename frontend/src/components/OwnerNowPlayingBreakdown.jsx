@@ -11,6 +11,9 @@ const POLL_MS = 20_000;
 /**
  * Owner ops-grade “What’s currently playing” — all stations, progress, next wall
  * time, health. Admin Overview + Live Channels → Stations.
+ *
+ * Dig in defaults to Watch only (dashboard). Pass digInExtras for Guide /
+ * Stations / Settings on Live Channels admin.
  */
 export default function OwnerNowPlayingBreakdown({
   status: statusProp = null,
@@ -18,6 +21,7 @@ export default function OwnerNowPlayingBreakdown({
   onOpenStationSettings = null,
   poll = true,
   compact = false,
+  digInExtras = false,
 }) {
   const [status, setStatus] = useState(statusProp);
   const [loading, setLoading] = useState(!statusProp);
@@ -83,8 +87,9 @@ export default function OwnerNowPlayingBreakdown({
           <p className="eyebrow">Live Channels</p>
           <h3 className="dash-panel-title">What’s currently playing</h3>
           <p className="owner-now-playing-meta">
-            All stations — now, progress, next wall time, and health. Dig in to Watch,
-            Guide, or station settings.
+            {digInExtras
+              ? "All stations — now, progress, next wall time, and health. Dig in to Watch, Guide, or station settings."
+              : "All stations — now, progress, next wall time, and health. Open Watch for any station."}
           </p>
         </div>
         <button
@@ -196,31 +201,35 @@ export default function OwnerNowPlayingBreakdown({
                       >
                         Watch
                       </Link>
-                      <Link
-                        className="ghost"
-                        to={ROUTES.live}
-                        data-testid="owner-now-playing-guide"
-                      >
-                        Guide
-                      </Link>
-                      {typeof onOpenStationSettings === "function" ? (
-                        <button
-                          type="button"
-                          className="ghost"
-                          data-testid="owner-now-playing-settings"
-                          onClick={() => onOpenStationSettings(row.id)}
-                        >
-                          Settings
-                        </button>
-                      ) : (
-                        <Link
-                          className="ghost"
-                          to="/admin/live-channels"
-                          data-testid="owner-now-playing-admin"
-                        >
-                          Stations
-                        </Link>
-                      )}
+                      {digInExtras ? (
+                        <>
+                          <Link
+                            className="ghost"
+                            to={ROUTES.live}
+                            data-testid="owner-now-playing-guide"
+                          >
+                            Guide
+                          </Link>
+                          {typeof onOpenStationSettings === "function" ? (
+                            <button
+                              type="button"
+                              className="ghost"
+                              data-testid="owner-now-playing-settings"
+                              onClick={() => onOpenStationSettings(row.id)}
+                            >
+                              Settings
+                            </button>
+                          ) : (
+                            <Link
+                              className="ghost"
+                              to="/admin/live-channels"
+                              data-testid="owner-now-playing-admin"
+                            >
+                              Stations
+                            </Link>
+                          )}
+                        </>
+                      ) : null}
                     </div>
                   </td>
                 </tr>

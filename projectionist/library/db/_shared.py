@@ -37,6 +37,7 @@ BUILTIN_PERSONA_SEEDS: list[dict[str, object]] = [
     {
         "id": "classic-curator",
         "name": "Classic Curator",
+        "nickname": "The Steward",
         "val_bro_prof": 0.45, "val_dipl_snark": 0.28, "val_pass_auto": 0.42,
         "val_depth": 0.6, "val_obscurity": 0.4, "val_verbosity": 0.6, "val_formality": 0.5,
         "accent_color": "#8B6914",
@@ -44,6 +45,7 @@ BUILTIN_PERSONA_SEEDS: list[dict[str, object]] = [
     {
         "id": "blunt-archivist",
         "name": "Blunt Archivist",
+        "nickname": "The Ledger",
         "val_bro_prof": 0.78, "val_dipl_snark": 0.82, "val_pass_auto": 0.75,
         "val_depth": 0.8, "val_obscurity": 0.3, "val_verbosity": 0.3, "val_formality": 0.7,
         "accent_color": "#4A6178",
@@ -51,6 +53,7 @@ BUILTIN_PERSONA_SEEDS: list[dict[str, object]] = [
     {
         "id": "enthusiastic-scout",
         "name": "Enthusiastic Scout",
+        "nickname": "Spark",
         "val_bro_prof": 0.22, "val_dipl_snark": 0.35, "val_pass_auto": 0.68,
         "val_depth": 0.4, "val_obscurity": 0.5, "val_verbosity": 0.7, "val_formality": 0.2,
         "accent_color": "#C45224",
@@ -58,6 +61,7 @@ BUILTIN_PERSONA_SEEDS: list[dict[str, object]] = [
     {
         "id": "academic-critic",
         "name": "Academic Critic",
+        "nickname": "The Professor",
         "val_bro_prof": 0.92, "val_dipl_snark": 0.55, "val_pass_auto": 0.38,
         "val_depth": 0.9, "val_obscurity": 0.7, "val_verbosity": 0.8, "val_formality": 0.8,
         "accent_color": "#6B3FA0",
@@ -65,6 +69,7 @@ BUILTIN_PERSONA_SEEDS: list[dict[str, object]] = [
     {
         "id": "night-owl-host",
         "name": "Night Owl Host",
+        "nickname": "The Host",
         "val_bro_prof": 0.25, "val_dipl_snark": 0.40, "val_pass_auto": 0.55,
         "val_depth": 0.3, "val_obscurity": 0.3, "val_verbosity": 0.4, "val_formality": 0.1,
         "accent_color": "#5C4FA0",
@@ -242,6 +247,7 @@ CREATE TABLE IF NOT EXISTS system_telemetry_stream (
 CREATE TABLE IF NOT EXISTS persona_templates (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
+    nickname TEXT,
     visibility TEXT NOT NULL CHECK (visibility IN ('builtin', 'shared', 'private')),
     owner_user_id TEXT,
     val_bro_prof REAL DEFAULT 0.5,

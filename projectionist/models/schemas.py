@@ -165,6 +165,7 @@ class PersonaPresetSummary(BaseModel):
     name: str
     description: str
     tagline: str = ""
+    nickname: Optional[str] = None
     val_bro_prof: float
     val_dipl_snark: float
     val_pass_auto: float
@@ -473,6 +474,7 @@ class PersonaTemplate(BaseModel):
 
     id: str
     name: str
+    nickname: Optional[str] = None
     visibility: str
     owner_user_id: Optional[str] = None
     val_bro_prof: float = Field(default=0.5, ge=0.0, le=1.0)

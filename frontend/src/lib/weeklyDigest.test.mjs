@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { formatDigestTitle, normalizeWeeklyDigest } from "./weeklyDigest.js";
+import { dedupeDigestTitles, formatDigestTitle, normalizeWeeklyDigest } from "./weeklyDigest.js";
 import { readAllStyles } from "./readStyles.mjs";
 
 const styles = readAllStyles();
@@ -11,7 +11,7 @@ describe("normalizeWeeklyDigest", () => {
     assert.equal(normalizeWeeklyDigest(undefined), null);
   });
 
-  it("maps a digest payload into a display model", () => {
+  it("maps a digest payload into a display model with drill-in links", () => {
     const model = normalizeWeeklyDigest({
       generated_at: 1000,
       week_start: 900,
@@ -31,12 +31,34 @@ describe("normalizeWeeklyDigest", () => {
     assert.equal(model.library.total, 500);
     assert.equal(model.newCount, 4);
     assert.equal(model.newTitles.length, 1);
-    const stats = Object.fromEntries(model.stats.map((s) => [s.id, s.value]));
-    assert.equal(stats.new, "4");
-    assert.equal(stats["open-issues"], "2");
-    assert.equal(stats.unwatched, "62%");
-    assert.equal(stats.coverage, "89%");
-    assert.equal(stats.purge, "6");
+    const stats = Object.fromEntries(model.stats.map((s) => [s.id, s]));
+    assert.equal(stats.new.value, "4");
+    assert.equal(stats.new.to, "/explore/section/recently-added");
+    assert.equal(stats["open-issues"].value, "2");
+    assert.equal(stats["open-issues"].to, "/admin/issues");
+    assert.equal(stats.unwatched.value, "62%");
+    assert.match(stats.unwatched.to, /watch_state=unwatched/);
+    assert.equal(stats.coverage.value, "89%");
+    assert.equal(stats.coverage.to, "/admin/taxonomy");
+    assert.equal(stats.purge.value, "6");
+    assert.equal(stats.purge.to, "/admin/dashboard#storage-intelligence");
+  });
+
+  it("dedupes new-addition chips by tmdb or title+year", () => {
+    const model = normalizeWeeklyDigest({
+      generated_at: 1,
+      payload: {
+        new_this_week: {
+          count: 3,
+          titles: [
+            { title: "72 Hours", year: 2026, tmdb_id: 99, media_type: "movie" },
+            { title: "72 Hours", year: 2026, tmdb_id: 99, media_type: "movie" },
+            { title: "72 Hours", year: 2026, media_type: "movie" },
+          ],
+        },
+      },
+    });
+    assert.equal(model.newTitles.length, 2);
   });
 
   it("tolerates empty payloads", () => {
@@ -45,6 +67,18 @@ describe("normalizeWeeklyDigest", () => {
     assert.equal(model.newTitles.length, 0);
     const stats = Object.fromEntries(model.stats.map((s) => [s.id, s.value]));
     assert.equal(stats.coverage, "—");
+  });
+});
+
+describe("dedupeDigestTitles", () => {
+  it("keeps the first title per identity key", () => {
+    const out = dedupeDigestTitles([
+      { title: "A", year: 2020 },
+      { title: "A", year: 2020 },
+      { title: "B", year: 2021, tmdb_id: 1 },
+      { title: "B rematch", year: 2021, tmdb_id: 1, media_type: "movie" },
+    ]);
+    assert.equal(out.length, 3);
   });
 });
 

@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { relativeTime } from "../api/client";
 import { filterThreads } from "../lib/threadFilter.js";
+import { personaChipLabel } from "../lib/personaLabels";
 
 export default function ThreadList({
   threads = [],
@@ -112,7 +113,7 @@ export default function ThreadList({
                           {persona.accent_color && (
                             <span className="persona-dot-sm" style={{ background: persona.accent_color }} />
                           )}
-                          {persona.name}
+                          {personaChipLabel(persona)}
                         </span>
                       ) : null}
                       {thread.preview ? <span className="thread-item-preview">{thread.preview}</span> : null}

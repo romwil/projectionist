@@ -64,7 +64,6 @@ const ADMIN_SECTIONS = new Set([
   "overview",
   "connections",
   "libraries",
-  "sync",
   "persona",
   "household",
   "seerr",
@@ -76,7 +75,6 @@ const SECTION_TITLES = {
   overview: "Overview",
   connections: "Connections",
   libraries: "Libraries",
-  sync: "Library sync",
   persona: "Persona",
   household: "Household",
   seerr: "Seerr",
@@ -315,6 +313,16 @@ function CertifiedBadge({ certified, testing, serviceId }) {
       Not connected
     </span>
   );
+}
+
+/** Prefer the Connected pill; only surface InlineAlert for errors or non-Connected feedback. */
+function connectionStatusAlert(actionAlert, area, result, certified) {
+  if (actionAlert?.area === area) {
+    return { type: actionAlert.type, message: actionAlert.message };
+  }
+  if (!result?.message) return { type: null, message: null };
+  if (result.state === "success" && certified) return { type: null, message: null };
+  return { type: result.state, message: result.message };
 }
 
 /** Engine up + at least one station → maintenance-first UI (not the setup journey). */
@@ -2530,89 +2538,6 @@ export default function ConfigPage() {
         </section>
         ) : null}
 
-        {showSection("sync") ? (
-        <section className="config-section" data-testid="library-sync-card">
-          <h2>Library sync</h2>
-          <p>
-            Refresh Projectionist from your Plex libraries. The first sync can take a few minutes while titles
-            are indexed and enriched.
-          </p>
-          <div className="config-actions">
-            <button type="button" data-testid="library-sync-button" onClick={handleLibrarySync} disabled={syncingLibrary}>
-              {syncingLibrary ? "Syncing…" : "Sync library"}
-            </button>
-          </div>
-          {(() => {
-            const details = formatSyncJobDetails(activeSyncJob, libraryStats);
-            if (!details) return null;
-            if (details.state === "running" || syncingLibrary) {
-              const live = details.state === "running" ? details : formatSyncJobDetails(
-                { ...(activeSyncJob || {}), status: "running", progress: activeSyncJob?.progress || { phase: "preparing", message: "Starting…" } },
-                libraryStats,
-              );
-              return (
-                <div className="library-sync-progress" data-testid="library-sync-job-status">
-                  <p className="library-sync-progress-headline">
-                    <strong>{live.headline}</strong>
-                    {typeof live.percent === "number" ? ` · ${live.percent}%` : ""}
-                  </p>
-                  <p className="library-sync-progress-detail status status-secondary">
-                    {live.detail}
-                    {live.countHint && !String(live.detail || "").includes(String(activeSyncJob?.progress?.current ?? ""))
-                      ? ` · ${live.countHint}`
-                      : ""}
-                  </p>
-                  {typeof live.percent === "number" ? (
-                    <div
-                      className="library-sync-progress-bar"
-                      role="progressbar"
-                      aria-valuenow={live.percent}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
-                      <span className="library-sync-progress-fill" style={{ width: `${live.percent}%` }} />
-                    </div>
-                  ) : null}
-                </div>
-              );
-            }
-            if (details.state === "failed") {
-              return (
-                <p className="status status-error" data-testid="library-sync-job-status">
-                  Sync failed: {details.detail}
-                </p>
-              );
-            }
-            if (details.state === "completed" && trackedSyncJobIdRef.current === activeSyncJob?.id) {
-              return (
-                <p className="status" data-testid="library-sync-job-status">
-                  {details.headline}
-                </p>
-              );
-            }
-            return null;
-          })()}
-          {libraryStats ? (
-            <p className="status status-secondary" data-testid="library-sync-stats">
-              {libraryStats.movies} movies · {libraryStats.shows} shows
-              {libraryStats.last_sync
-                ? ` · Last synced ${formatLastSync(libraryStats.last_sync)}`
-                : syncingLibrary
-                  ? " · Syncing…"
-                  : " · Never synced"}
-            </p>
-          ) : (
-            <p className="status status-secondary" data-testid="library-sync-stats">
-              No library indexed yet — run Sync library after Plex is connected.
-            </p>
-          )}
-          <InlineAlert
-            type={actionAlert?.area === "library-sync" ? actionAlert.type : null}
-            message={actionAlert?.area === "library-sync" ? actionAlert.message : null}
-          />
-        </section>
-        ) : null}
-
         {showSection("overview")
           ? (() => {
               const tip = liveOnboardingTip({
@@ -2708,7 +2633,7 @@ export default function ConfigPage() {
         <section className="config-section">
           <h2>Language model</h2>
           <p className="wizard-note">The AI that powers chat recommendations. Bring your own key or run Ollama locally.</p>
-          <div className="wizard-fields">
+          <div className="connections-field-grid" data-testid="connections-llm-fields">
             <label>
               <span>Provider</span>
               <ProviderSelect
@@ -2733,17 +2658,72 @@ export default function ConfigPage() {
             </label>
             <label>
               <span>Model name</span>
-              {renderModelPicker({ listId: "llm-model-options-connections" })}
+              <input
+                type="text"
+                list="llm-model-options-connections"
+                value={settings.llm_model ?? ""}
+                onChange={(event) => updateSettings({ llm_model: event.target.value })}
+                placeholder={LLM_MODEL_DEFAULTS[settings.llm_provider] || "gpt-4o-mini"}
+                data-testid="llm-model-input-llm-model-options-connections"
+              />
+              <datalist id="llm-model-options-connections">
+                {modelPickerOptions().map((row) => (
+                  <option key={row.id} value={row.id}>
+                    {row.hint === "cheaper-tier" ? "cheaper tier" : row.hint === "standard-tier" ? "standard" : ""}
+                  </option>
+                ))}
+              </datalist>
             </label>
           </div>
-          <button type="button" onClick={() => runTest("llm")} disabled={testing === "llm"}>
-            Test connection
-          </button>
-          <CertifiedBadge certified={certifications.llm?.certified} testing={testing === "llm"} serviceId="llm" />
-          <InlineAlert
-            type={actionAlert?.area === "llm" ? actionAlert.type : testResults.llm?.state}
-            message={actionAlert?.area === "llm" ? actionAlert.message : testResults.llm?.message}
-          />
+          {(() => {
+            const options = modelPickerOptions();
+            const cheaper = options.filter((row) => row.hint === "cheaper-tier").slice(0, 4);
+            return (
+              <>
+                {cheaper.length ? (
+                  <div className="llm-cheaper-picks" data-testid="llm-cheaper-picks-llm-model-options-connections">
+                    {cheaper.map((row) => (
+                      <button
+                        key={row.id}
+                        type="button"
+                        className="ghost"
+                        onClick={() => updateSettings({ llm_model: row.id })}
+                      >
+                        {row.id}
+                        <span className="llm-model-hint">cheaper</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <p className="llm-model-catalog-note">
+                  {modelCatalogLoading
+                    ? "Loading provider model list…"
+                    : modelCatalog?.source === "pinned"
+                      ? modelCatalog?.note || modelCatalog?.error || "Showing pinned model options."
+                      : `Loaded ${options.length} models from ${modelCatalog?.source || "provider"}.`}
+                  {" "}
+                  <button type="button" className="ghost" onClick={() => refreshModelCatalog()} disabled={modelCatalogLoading}>
+                    Refresh models
+                  </button>
+                </p>
+              </>
+            );
+          })()}
+          <div className="connections-llm-actions">
+            <button type="button" onClick={() => runTest("llm")} disabled={testing === "llm"}>
+              Test connection
+            </button>
+            <CertifiedBadge certified={certifications.llm?.certified} testing={testing === "llm"} serviceId="llm" />
+          </div>
+          {(() => {
+            const alert = connectionStatusAlert(
+              actionAlert,
+              "llm",
+              testResults.llm,
+              certifications.llm?.certified,
+            );
+            return <InlineAlert type={alert.type} message={alert.message} />;
+          })()}
         </section>
 
         <section className="config-section">
@@ -2793,12 +2773,20 @@ export default function ConfigPage() {
                       </label>
                     ))}
                   </div>
-                  {result?.message ? (
-                    <InlineAlert
-                      type={actionAlert?.area === id ? actionAlert.type : result.state}
-                      message={actionAlert?.area === id ? actionAlert.message : result.message}
-                    />
-                  ) : null}
+                  {(() => {
+                    const alert = connectionStatusAlert(
+                      actionAlert,
+                      id,
+                      result,
+                      certifications[id]?.certified,
+                    );
+                    return alert.message ? (
+                      <InlineAlert
+                        type={alert.type}
+                        message={alert.message}
+                      />
+                    ) : null;
+                  })()}
                 </div>
               );
             })}
@@ -2849,12 +2837,20 @@ export default function ConfigPage() {
                       </label>
                     ))}
                   </div>
-                  {result?.message ? (
-                    <InlineAlert
-                      type={actionAlert?.area === id ? actionAlert.type : result.state}
-                      message={actionAlert?.area === id ? actionAlert.message : result.message}
-                    />
-                  ) : null}
+                  {(() => {
+                    const alert = connectionStatusAlert(
+                      actionAlert,
+                      id,
+                      result,
+                      certifications[id]?.certified,
+                    );
+                    return alert.message ? (
+                      <InlineAlert
+                        type={alert.type}
+                        message={alert.message}
+                      />
+                    ) : null;
+                  })()}
                 </div>
               );
             })}
@@ -3079,6 +3075,88 @@ export default function ConfigPage() {
 
 
         {showSection("libraries") ? (
+        <>
+        <section className="config-section" data-testid="library-sync-card" id="library-sync">
+          <h2>Sync library</h2>
+          <p>
+            Refresh Projectionist from your Plex libraries. The first sync can take a few minutes while titles
+            are indexed and enriched.
+          </p>
+          <div className="config-actions">
+            <button type="button" data-testid="library-sync-button" onClick={handleLibrarySync} disabled={syncingLibrary}>
+              {syncingLibrary ? "Syncing…" : "Sync library"}
+            </button>
+          </div>
+          {(() => {
+            const details = formatSyncJobDetails(activeSyncJob, libraryStats);
+            if (!details) return null;
+            if (details.state === "running" || syncingLibrary) {
+              const live = details.state === "running" ? details : formatSyncJobDetails(
+                { ...(activeSyncJob || {}), status: "running", progress: activeSyncJob?.progress || { phase: "preparing", message: "Starting…" } },
+                libraryStats,
+              );
+              return (
+                <div className="library-sync-progress" data-testid="library-sync-job-status">
+                  <p className="library-sync-progress-headline">
+                    <strong>{live.headline}</strong>
+                    {typeof live.percent === "number" ? ` · ${live.percent}%` : ""}
+                  </p>
+                  <p className="library-sync-progress-detail status status-secondary">
+                    {live.detail}
+                    {live.countHint && !String(live.detail || "").includes(String(activeSyncJob?.progress?.current ?? ""))
+                      ? ` · ${live.countHint}`
+                      : ""}
+                  </p>
+                  {typeof live.percent === "number" ? (
+                    <div
+                      className="library-sync-progress-bar"
+                      role="progressbar"
+                      aria-valuenow={live.percent}
+                      aria-valuemin={0}
+                      aria-valuemax={100}
+                    >
+                      <span className="library-sync-progress-fill" style={{ width: `${live.percent}%` }} />
+                    </div>
+                  ) : null}
+                </div>
+              );
+            }
+            if (details.state === "failed") {
+              return (
+                <p className="status status-error" data-testid="library-sync-job-status">
+                  Sync failed: {details.detail}
+                </p>
+              );
+            }
+            if (details.state === "completed" && trackedSyncJobIdRef.current === activeSyncJob?.id) {
+              return (
+                <p className="status" data-testid="library-sync-job-status">
+                  {details.headline}
+                </p>
+              );
+            }
+            return null;
+          })()}
+          {libraryStats ? (
+            <p className="status status-secondary" data-testid="library-sync-stats">
+              {libraryStats.movies} movies · {libraryStats.shows} shows
+              {libraryStats.last_sync
+                ? ` · Last synced ${formatLastSync(libraryStats.last_sync)}`
+                : syncingLibrary
+                  ? " · Syncing…"
+                  : " · Never synced"}
+            </p>
+          ) : (
+            <p className="status status-secondary" data-testid="library-sync-stats">
+              No library indexed yet — run Sync library after Plex is connected.
+            </p>
+          )}
+          <InlineAlert
+            type={actionAlert?.area === "library-sync" ? actionAlert.type : null}
+            message={actionAlert?.area === "library-sync" ? actionAlert.message : null}
+          />
+        </section>
+
         <section className="config-section" data-testid="plex-library-mapping">
           <h2>Plex libraries</h2>
           <p className="wizard-note">Choose which movie and TV libraries Projectionist indexes. Update these if you rename or add libraries in Plex.</p>
@@ -3195,6 +3273,7 @@ export default function ConfigPage() {
             message={actionAlert?.area === "plex-sections" ? actionAlert.message : null}
           />
         </section>
+        </>
         ) : null}
 
         {showSection("advanced") ? (
@@ -3233,7 +3312,7 @@ export default function ConfigPage() {
     <div className={`config-page admin-config-page ${showWizard ? "config-wizard-mode" : ""}`}>
       <header className="topbar admin-section-topbar">
         <div>
-          <p className="eyebrow">{showWizard ? "Configuration" : "Admin"}</p>
+          {showWizard ? <p className="eyebrow">Configuration</p> : null}
           <h1>{showWizard ? "First-run setup" : SECTION_TITLES[section] || "Admin"}</h1>
         </div>
         {showWizard ? (

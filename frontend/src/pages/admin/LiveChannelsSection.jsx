@@ -468,6 +468,7 @@ export default function LiveChannelsSection({
                     <OwnerNowPlayingBreakdown
                       status={liveChannelsStatus}
                       compact
+                      digInExtras
                       onRefreshStatus={async () => {
                         setLiveBusy("status");
                         try {

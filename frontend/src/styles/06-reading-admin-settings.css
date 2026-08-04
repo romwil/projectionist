@@ -1479,6 +1479,8 @@
   gap: 0.35rem;
 }
 
+/* Transparent list buttons must not inherit global button accent-text
+   (near-black on dark backgrounds — unreadable in Lights Down). */
 .holidays-list-item {
   width: 100%;
   text-align: left;
@@ -1489,16 +1491,41 @@
   border-radius: 0.5rem;
   border: 1px solid transparent;
   background: transparent;
+  color: var(--text);
+  font-weight: 500;
   min-height: 44px;
+}
+
+.holidays-list-item:hover:not(:disabled),
+.holidays-list-item:focus-visible {
+  filter: none;
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+  color: var(--text);
+}
+
+.holidays-list-item strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.holidays-list-item .muted {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: var(--text-sm);
 }
 
 .holidays-list-item.is-active {
   border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+}
+
+.holidays-list-item.is-disabled {
+  opacity: 0.72;
 }
 
 .holidays-list-item.is-disabled strong {
-  opacity: 0.65;
+  color: var(--muted);
 }
 
 .holidays-grounding {

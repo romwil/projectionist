@@ -83,7 +83,7 @@ export function formatSyncDeniedMessage() {
   return [
     "**Library sync is owner-only**",
     "",
-    "Multi-user mode is enabled. Start sync from **Config → Sync library** while signed in as the library owner.",
+    "Multi-user mode is enabled. Start sync from **Admin → Libraries** while signed in as the library owner.",
   ].join("\n");
 }
 

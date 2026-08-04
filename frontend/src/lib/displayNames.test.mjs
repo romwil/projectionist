@@ -9,6 +9,7 @@ import {
 import {
   actDescriptionForStagedItem,
   actLabelForStagedItem,
+  stagedItemDisplayTitle,
 } from "./knowledgeOpsActions.js";
 import { taskDisplayName } from "./scheduledTasks.js";
 
@@ -38,14 +39,40 @@ test("knowledge actions describe outcomes without backend jargon", () => {
     candidate: { alias: "sci fi" },
   };
   assert.equal(actLabelForStagedItem(facet), "Save mapping");
+  assert.equal(stagedItemDisplayTitle(facet), "sci fi");
 
   const memory = {
     task_name: "entity_memory_enrichment",
     candidate: { name: "Heat" },
   };
+  assert.equal(actLabelForStagedItem(memory), "Refresh synopsis");
   assert.equal(
     actDescriptionForStagedItem(memory),
     "Refresh trusted title details for “Heat”.",
+  );
+
+  const coverage = {
+    task_name: "coverage_deficit_audit",
+    target_entity_id: "42",
+    candidate: { title: "Heat", deficit_kind: "synopsis" },
+  };
+  assert.equal(stagedItemDisplayTitle(coverage), "Heat");
+  assert.equal(actLabelForStagedItem(coverage), "Refresh synopsis");
+
+  // Prefer human title fields; never fall back to bare library item ids.
+  assert.equal(
+    stagedItemDisplayTitle({
+      target_entity_id: "rk-999",
+      candidate: {},
+    }),
+    "",
+  );
+  assert.equal(
+    stagedItemDisplayTitle({
+      target_entity_id: "rk-999",
+      candidate: { keyword: "neo-noir" },
+    }),
+    "neo-noir",
   );
 
   const motif = {

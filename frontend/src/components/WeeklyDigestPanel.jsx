@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { generateWeeklyDigest, getWeeklyDigest } from "../api/client";
 import TitleDetailLink from "./TitleDetailLink";
 import { titleDetailPath } from "../lib/titleLinks.js";
@@ -50,7 +51,6 @@ export default function WeeklyDigestPanel() {
     <section className="weekly-digest" data-testid="weekly-digest">
       <div className="weekly-digest-head">
         <div>
-          <p className="eyebrow">Weekly digest</p>
           <h3 className="dash-panel-title">This week in your library</h3>
           {generatedLabel ? (
             <p className="weekly-digest-meta">Snapshot from {generatedLabel}</p>
@@ -79,14 +79,15 @@ export default function WeeklyDigestPanel() {
         <>
           <div className="weekly-digest-stats">
             {model.stats.map((stat) => (
-              <div
+              <Link
                 key={stat.id}
+                to={stat.to}
                 className="weekly-digest-stat"
                 data-testid={`weekly-digest-stat-${stat.id}`}
               >
                 <span className="weekly-digest-stat-value">{stat.value}</span>
                 <span className="weekly-digest-stat-label">{stat.label}</span>
-              </div>
+              </Link>
             ))}
           </div>
           {model.newTitles.length ? (

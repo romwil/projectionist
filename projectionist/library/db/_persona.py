@@ -153,16 +153,22 @@ class PersonaLensesMixin:
     # --- Persona Templates ---
 
     _PERSONA_TEMPLATE_COLS = (
-        "id, name, visibility, owner_user_id, "
+        "id, name, nickname, visibility, owner_user_id, "
         "val_bro_prof, val_dipl_snark, val_pass_auto, "
         "val_depth, val_obscurity, val_verbosity, val_formality, "
         "system_prompt_override, accent_color, is_default, created_at"
     )
 
     def _row_to_persona_template(self, row: sqlite3.Row) -> Dict[str, Any]:
+        keys = set(row.keys())
+        nickname = None
+        if "nickname" in keys and row["nickname"] is not None:
+            cleaned = str(row["nickname"]).strip()
+            nickname = cleaned or None
         return {
             "id": str(row["id"]),
             "name": str(row["name"]),
+            "nickname": nickname,
             "visibility": str(row["visibility"]),
             "owner_user_id": row["owner_user_id"],
             "val_bro_prof": float(row["val_bro_prof"]),
