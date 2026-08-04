@@ -43,11 +43,38 @@ class PersonaTemplateDbTests(unittest.TestCase):
                 template = self.db.get_persona_template(str(seed["id"]))
                 self.assertIsNotNone(template)
                 self.assertEqual(template["name"], seed["name"])
+                self.assertEqual(template["nickname"], seed["nickname"])
                 self.assertAlmostEqual(template["val_bro_prof"], float(seed["val_bro_prof"]))
                 self.assertAlmostEqual(template["val_depth"], float(seed["val_depth"]))
                 self.assertAlmostEqual(template["val_obscurity"], float(seed["val_obscurity"]))
                 self.assertAlmostEqual(template["val_verbosity"], float(seed["val_verbosity"]))
                 self.assertAlmostEqual(template["val_formality"], float(seed["val_formality"]))
+
+    def test_builtin_nicknames_locked(self) -> None:
+        expected = {
+            "academic-critic": "The Professor",
+            "enthusiastic-scout": "Spark",
+            "classic-curator": "The Steward",
+            "night-owl-host": "The Host",
+            "blunt-archivist": "The Ledger",
+        }
+        for persona_id, nickname in expected.items():
+            with self.subTest(persona_id):
+                template = self.db.get_persona_template(persona_id)
+                self.assertIsNotNone(template)
+                self.assertEqual(template["nickname"], nickname)
+
+    def test_builtin_nickname_repair_on_reopen(self) -> None:
+        """INSERT OR IGNORE leaves stale rows; boot repair must rewrite nicknames."""
+        with self.db.connect() as conn:
+            conn.execute(
+                "UPDATE persona_templates SET nickname = NULL WHERE id = ?",
+                ("academic-critic",),
+            )
+        self.db.ensure_seed_data()
+        template = self.db.get_persona_template("academic-critic")
+        self.assertIsNotNone(template)
+        self.assertEqual(template["nickname"], "The Professor")
 
     def test_builtin_has_seven_slider_dimensions(self) -> None:
         template = self.db.get_persona_template("classic-curator")

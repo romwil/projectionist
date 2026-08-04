@@ -1,3 +1,19 @@
+/* Drill-in wrappers for health gauges / stat cards */
+.dash-metric-link {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+  border-radius: 8px;
+}
+.dash-metric-link:hover {
+  outline: 1px solid var(--accent);
+  outline-offset: 4px;
+}
+.dash-metric-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 4px;
+}
+
 /* Stat cards */
 .dash-stat-card {
   display: grid;
@@ -1423,7 +1439,16 @@ a.on-this-day-item:focus-visible {
 
 .llm-usage-filters span {
   font-size: 0.78rem;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--text) 72%, var(--muted));
+}
+
+.llm-usage-table th {
+  color: color-mix(in srgb, var(--text) 78%, var(--muted));
+  font-weight: 600;
+}
+
+.llm-usage-page .muted {
+  color: color-mix(in srgb, var(--text) 72%, var(--muted));
 }
 
 .llm-usage-grid {

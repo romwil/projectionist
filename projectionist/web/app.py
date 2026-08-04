@@ -3986,6 +3986,7 @@ def get_persona_presets() -> List[PersonaPresetSummary]:
         PersonaPresetSummary(
             id=preset.id,
             name=preset.name,
+            nickname=preset.nickname or None,
             description=preset.description,
             tagline=preset.tagline,
             val_bro_prof=preset.val_bro_prof,

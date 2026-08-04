@@ -1,9 +1,11 @@
 """Curator village — cross-persona consults with quoted handoffs.
 
-Active curator may ask one sibling (Scholar / Enthusiast / Concierge / Companion)
+Active curator may ask one sibling (The Professor / Spark / The Steward / The Host)
 for a short answer. Answers carry shared household context and may exercise that
 sibling's specialty features. Consults are quoted, never silent merges; youth and
 guest fail closed; max one sibling call per turn.
+
+Legacy consult aliases (Scholar / Enthusiast / Concierge / Companion) still resolve.
 """
 
 from __future__ import annotations
@@ -32,72 +34,103 @@ _UNPROMISED_CONSULT_TASKS: Dict[
 
 # Archetype aliases → builtin persona templates + living-room display names.
 # Keys are casefolded match tokens (id, name fragment, archetype label).
+# display_name is the village nickname; legacy aliases (scholar, …) still resolve.
 VILLAGE_SIBLINGS: Dict[str, Dict[str, str]] = {
     "scholar": {
         "template_id": "academic-critic",
-        "display_name": "Scholar",
+        "display_name": "The Professor",
         "specialty": "citations",
     },
     "academic-critic": {
         "template_id": "academic-critic",
-        "display_name": "Scholar",
+        "display_name": "The Professor",
         "specialty": "citations",
     },
     "academic critic": {
         "template_id": "academic-critic",
-        "display_name": "Scholar",
+        "display_name": "The Professor",
+        "specialty": "citations",
+    },
+    "the professor": {
+        "template_id": "academic-critic",
+        "display_name": "The Professor",
+        "specialty": "citations",
+    },
+    "professor": {
+        "template_id": "academic-critic",
+        "display_name": "The Professor",
         "specialty": "citations",
     },
     "enthusiast": {
         "template_id": "enthusiastic-scout",
-        "display_name": "Enthusiast",
+        "display_name": "Spark",
         "specialty": "heat",
     },
     "enthusiastic-scout": {
         "template_id": "enthusiastic-scout",
-        "display_name": "Enthusiast",
+        "display_name": "Spark",
         "specialty": "heat",
     },
     "enthusiastic scout": {
         "template_id": "enthusiastic-scout",
-        "display_name": "Enthusiast",
+        "display_name": "Spark",
+        "specialty": "heat",
+    },
+    "spark": {
+        "template_id": "enthusiastic-scout",
+        "display_name": "Spark",
         "specialty": "heat",
     },
     "concierge": {
         "template_id": "classic-curator",
-        "display_name": "Concierge",
+        "display_name": "The Steward",
         "specialty": "acquire",
     },
     "classic-curator": {
         "template_id": "classic-curator",
-        "display_name": "Concierge",
+        "display_name": "The Steward",
         "specialty": "acquire",
     },
     "classic curator": {
         "template_id": "classic-curator",
-        "display_name": "Concierge",
+        "display_name": "The Steward",
+        "specialty": "acquire",
+    },
+    "the steward": {
+        "template_id": "classic-curator",
+        "display_name": "The Steward",
+        "specialty": "acquire",
+    },
+    "steward": {
+        "template_id": "classic-curator",
+        "display_name": "The Steward",
         "specialty": "acquire",
     },
     "companion": {
         "template_id": "night-owl-host",
-        "display_name": "Companion",
+        "display_name": "The Host",
         "specialty": "mood",
     },
     "night-owl-host": {
         "template_id": "night-owl-host",
-        "display_name": "Companion",
+        "display_name": "The Host",
         "specialty": "mood",
     },
     "night owl host": {
         "template_id": "night-owl-host",
-        "display_name": "Companion",
+        "display_name": "The Host",
+        "specialty": "mood",
+    },
+    "the host": {
+        "template_id": "night-owl-host",
+        "display_name": "The Host",
         "specialty": "mood",
     },
 }
 
 SPECIALTY_INSTRUCTIONS: Dict[str, str] = {
     "citations": (
-        "You are the Scholar. Prefer cited neighbors and syllabus-style framing. "
+        "You are The Professor. Prefer cited neighbors and syllabus-style framing. "
         "When the specialty context includes citations or course hints, weave 1–2 into "
         "your answer with footnote-style markdown (`claim[^1]` + `[^1]: …`) when you can. "
         "For Live schedule or collection-composition asks, cite guide/collection/tool provenance "
@@ -106,18 +139,18 @@ SPECIALTY_INSTRUCTIONS: Dict[str, str] = {
         "(\"much like the other director we were discussing\")."
     ),
     "heat": (
-        "You are the Enthusiast. Lean into heat — continue-watching pull, tonight energy, "
+        "You are Spark. Lean into heat — continue-watching pull, tonight energy, "
         "why this pick hits now. Use the heat/on-deck specialty context when present. "
         "Stay grounded in the household library; no live Plex session claims."
     ),
     "acquire": (
-        "You are the Concierge. Focus on find → availability → request when acquisition "
+        "You are The Steward. Focus on find → availability → request when acquisition "
         "is in scope. If a confirmation_token appears in specialty context, explain the "
         "path and that the household must confirm before anything is requested — never "
         "claim the add already happened."
     ),
     "mood": (
-        "You are the Companion. Use mood memory and callback notes from specialty context. "
+        "You are The Host. Use mood memory and callback notes from specialty context. "
         "Warm, personal, brief — recall comfort patterns without inventing private facts. "
         "When a callback note includes title_card or deep_link, name that title so dig-in works and "
         "softly invite Chat about this."
@@ -338,7 +371,7 @@ async def gather_specialty_context(
                         courses.append({"id": row.get("id"), "name": name[:120]})
                 if courses:
                     out["syllabus_hint"] = {
-                        "note": "Published cinema courses the Scholar may nod to",
+                        "note": "Published cinema courses The Professor may nod to",
                         "courses": courses,
                     }
 
@@ -862,7 +895,7 @@ def _deterministic_specialty_answer(
                 "but it still needs your confirmation before anything is requested."
             )
         return (
-            f"For {q}, the Concierge path is find → check availability → request with consent — "
+            f"For {q}, The Steward path is find → check availability → request with consent — "
             "never a silent add."
         )
     if sibling.specialty == "heat":

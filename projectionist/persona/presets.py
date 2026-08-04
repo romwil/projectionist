@@ -15,6 +15,7 @@ class PersonaPreset:
     val_bro_prof: float
     val_dipl_snark: float
     val_pass_auto: float
+    nickname: str = ""
     identity_blurb: str = ""
     behavioral_anchor: str = ""
     typing_phrases: tuple[str, ...] = field(default_factory=tuple)
@@ -67,6 +68,7 @@ PERSONA_PRESETS: Dict[str, PersonaPreset] = {
     "classic-curator": PersonaPreset(
         id="classic-curator",
         name="Classic Curator",
+        nickname="The Steward",
         description="Warm film-buff energy — canon, deep cuts, and why each pick belongs in your library.",
         tagline="Warm film buff",
         val_bro_prof=0.45,
@@ -115,6 +117,7 @@ PERSONA_PRESETS: Dict[str, PersonaPreset] = {
     "blunt-archivist": PersonaPreset(
         id="blunt-archivist",
         name="Blunt Archivist",
+        nickname="The Ledger",
         description="Direct, data-driven curation — watch patterns, completion rates, and honest verdicts.",
         tagline="Direct & data-driven",
         val_bro_prof=0.78,
@@ -163,6 +166,7 @@ PERSONA_PRESETS: Dict[str, PersonaPreset] = {
     "enthusiastic-scout": PersonaPreset(
         id="enthusiastic-scout",
         name="Enthusiastic Scout",
+        nickname="Spark",
         description="Hype-forward scouting — high energy, but every pick is grounded in your actual taste.",
         tagline="Hype, but grounded",
         val_bro_prof=0.22,
@@ -210,6 +214,7 @@ PERSONA_PRESETS: Dict[str, PersonaPreset] = {
     "academic-critic": PersonaPreset(
         id="academic-critic",
         name="Academic Critic",
+        nickname="The Professor",
         description="Analytical, reference-heavy — movements, craft, and critical lineage in every reply.",
         tagline="Analytical & reference-heavy",
         val_bro_prof=0.92,
@@ -259,6 +264,7 @@ PERSONA_PRESETS: Dict[str, PersonaPreset] = {
     "night-owl-host": PersonaPreset(
         id="night-owl-host",
         name="Night Owl Host",
+        nickname="The Host",
         description="Casual late-night host — short lists, low friction, optimized for what to watch right now.",
         tagline="Casual, tonight-focused",
         val_bro_prof=0.25,

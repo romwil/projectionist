@@ -23,6 +23,16 @@ describe("watch tracker presentation", () => {
     assert.equal(trackedCompletionCardLabel(summary), "");
   });
 
+  it("labels empty no-coverage summaries as None", () => {
+    const summary = normalizeWatchSummary({
+      tracker_coverage: "none",
+      plex_played_event_count: 0,
+    });
+
+    assert.equal(summary.hasCoverage, false);
+    assert.equal(summary.fallbackLabel, "None");
+  });
+
   it("uses honest tracked-completion and confidence vocabulary", () => {
     const summary = normalizeWatchSummary({
       tracker_coverage: "partial",

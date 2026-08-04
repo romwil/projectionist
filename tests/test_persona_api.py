@@ -48,6 +48,15 @@ class PersonaApiTests(unittest.TestCase):
         for builtin_id in BUILTIN_PERSONA_IDS:
             self.assertIn(builtin_id, ids)
 
+    def test_list_personas_includes_builtin_nicknames(self) -> None:
+        resp = self.client.get("/api/personas")
+        body = {p["id"]: p for p in resp.json()}
+        self.assertEqual(body["academic-critic"]["nickname"], "The Professor")
+        self.assertEqual(body["enthusiastic-scout"]["nickname"], "Spark")
+        self.assertEqual(body["classic-curator"]["nickname"], "The Steward")
+        self.assertEqual(body["night-owl-host"]["nickname"], "The Host")
+        self.assertEqual(body["blunt-archivist"]["nickname"], "The Ledger")
+
     def test_list_personas_includes_seven_sliders(self) -> None:
         resp = self.client.get("/api/personas")
         body = resp.json()

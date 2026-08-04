@@ -11,7 +11,6 @@ export const ADMIN_NAV = [
   { to: "/admin/overview", id: "overview", label: "Overview" },
   { to: "/admin/connections", id: "connections", label: "Connections" },
   { to: "/admin/libraries", id: "libraries", label: "Libraries" },
-  { to: "/admin/sync", id: "sync", label: "Sync" },
   { kind: "heading", id: "heading-household", label: "Household" },
   { to: "/admin/persona", id: "persona", label: "Persona" },
   { to: "/admin/household", id: "household", label: "Members" },

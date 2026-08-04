@@ -36,7 +36,7 @@ export function normalizeWatchSummary(raw = {}) {
     fallbackLabel:
       plexCount > 0
         ? `Plex marked played ${plural(plexCount, "time")}`
-        : "No personal watch evidence tracked yet",
+        : "None",
   };
 }
 

@@ -32,7 +32,7 @@ export default function BarChart({ data = [], accent = "var(--accent)", barHeigh
               y={y + barHeight / 2}
               textAnchor="end"
               dominantBaseline="central"
-              fill="var(--muted)"
+              fill="color-mix(in srgb, var(--text) 78%, var(--muted))"
               fontSize="11"
               fontFamily="var(--font-body)"
             >

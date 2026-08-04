@@ -64,7 +64,9 @@ Try one of these — they're good first prompts because each exercises a differe
 
 **How this works / why it matters:** grid view materializes a normal private list instead of a chat-only gallery. That keeps the result reusable from **Lists & playlists** and gives it the same browse controls as other list pages; it also means opening a grid creates a saved list you can rename or delete later.
 
-**Curator village.** Sometimes your active curator will ask a sibling for a short take — Scholar for cited depth, Companion for mood memory, Concierge for find→request paths, Enthusiast for tonight heat — and quote it as *“I asked {Name} and they said…”*. If the sibling needs longer, your curator leaves a message and keeps helping without inventing a quote; when the sibling calls back, their clearly labeled addendum appears in the same thread automatically. You don't have to switch personas to taste those specialties. Youth and guest accounts don't get village consults.
+**Curator personas have nicknames.** The persona picker shows **Nickname — Name** for builtins (for example **The Professor — Academic Critic**). Thread chips and village consults use the nickname only — **The Professor**, **Spark**, **The Steward**, **The Host** — so peer chatter stays short.
+
+**Curator village.** Sometimes your active curator will ask a sibling for a short take — The Professor for cited depth, The Host for mood memory, The Steward for find→request paths, Spark for tonight heat — and quote it as *“I asked {Nickname} and they said…”*. If the sibling needs longer, your curator leaves a message and keeps helping without inventing a quote; when the sibling calls back, their clearly labeled addendum appears in the same thread automatically. You don't have to switch personas to taste those specialties. Youth and guest accounts don't get village consults.
 
 **Slash commands** (instant, no LLM call): type `/help` for the list. The handy ones:
 
@@ -154,7 +156,7 @@ Youth-mode accounts see youth-safe achievements only. Member-facing copy never s
 
 **Scholar footnotes in chat.** When the curator cites sources with footnote-style markdown (`claim[^1]` plus `[^1]: source` definitions), chat renders them as theme-safe footnote refs under the reply.
 
-**Ask to acquire a title.** In chat you can ask the Concierge to walk find → availability → Seerr request with explicit steps. Nothing is requested until you confirm.
+**Ask to acquire a title.** In chat you can ask The Steward (or your active curator) to walk find → availability → Seerr request with explicit steps. Nothing is requested until you confirm.
 
 **Where can I watch this?** On title detail (and on chat recommendation posters) Projectionist shows a compact availability line: **In your library ✓**, **Requestable** (when Seerr is your request path), or **Not here yet**. It does not look up Netflix, Max, or other external streamers.
 
@@ -277,22 +279,22 @@ Owners (or single-workspace installs with no login) also configure sync and idle
 
 ### Curator persona (Admin → Persona)
 
-Tune **name**, **identity**, **presets**, and **behavior sliders** — how the curator sounds when it recommends from your library. This page is intentionally **not** a prompt editor: you cannot view or rewrite internal system prompts, tool lists, or function schemas from Admin. Capability wiring (search, gaps, acquisition, village consults, bad-media replace, etc.) is maintained in Projectionist releases.
+Tune **name**, **identity**, **presets**, and **behavior sliders** — how the curator sounds when it recommends from your library. Builtin presets carry locked **nicknames** (The Professor, Spark, The Steward, The Host, The Ledger); the picker and Admin cards show **Nickname — Name**. This page is intentionally **not** a prompt editor: you cannot view or rewrite internal system prompts, tool lists, or function schemas from Admin. Capability wiring (search, gaps, acquisition, village consults, bad-media replace, etc.) is maintained in Projectionist releases.
 
 If an older install still has a legacy custom prompt, Admin shows a one-click **reset to slider-based persona** instead of exposing the raw text.
 
 ### After sync
 
-1. Run **Sync library** from Admin / Config (or `/sync` in chat when multi-user is off).
+1. Run **Sync library** from **Admin → Libraries** (`/admin/libraries`) — library sources and the refresh control live on the same page. Bookmarks to `/admin/sync` redirect there. (Or type `/sync` in chat when multi-user is off.)
 2. Leave the server **idle** so scheduled tasks can refresh title details, plot-similarity data, plot patterns, and similar-title links.
 3. Open **Admin → Scheduled Tasks** (`/admin/tasks`) — confirm knowledge tasks are enabled; adjust cadence after large imports.
-4. Open **Admin → Library knowledge** (`/admin/taxonomy`) — review name mappings, requested title details, and missing plot knowledge.
+4. Open **Admin → Library knowledge** (`/admin/taxonomy`) — start with **name mappings**; treat missing knowledge / requested details as titled exceptions.
 
 ### Library knowledge
 
-**Notice → review → improve.** When Chat or Explore repeatedly sees an unrecognized genre or tag name, Projectionist queues it for your review without interrupting the request. **Save mapping** teaches this installation the recognized name; **Reject** clears the suggestion without changing built-in definitions.
+**Name mappings are the human queue.** When Chat or Explore repeatedly sees an unrecognized genre or tag name, Projectionist queues it for your review without interrupting the request. Rows lead with the **human title** (never a bare library id). **Save mapping** teaches this installation the recognized name; **Reject** clears the suggestion without changing built-in definitions.
 
-The same page lists **all reviews** for requested title details and missing plot knowledge, with honest empty states when nothing has appeared often enough to review. Name rows save a mapping; detail and coverage rows offer focused refreshes for trusted title details, plot patterns, full synopses, plot-similarity data, or themes from tags. Built-in definitions are never changed automatically.
+**Missing knowledge** and **Requested details** are titled exceptions — idle enrichment fills most gaps in the background. Use **Refresh synopsis** (or the matching verb for themes / plot patterns / similarity) when a title is stuck, or **Reject** to clear the exception. Built-in definitions are never changed automatically.
 
 Related titles lets owners mark a surprising match as **Not similar**; Activity shows that event as **Marked not similar**. This removes the saved similarity link so a future refresh can learn from the correction.
 
@@ -403,7 +405,7 @@ The safety model is deliberately conservative: auto-repair is an owner policy ov
 
 ### Library-health hero & issue badge
 
-The **Admin → Dashboard** now opens with a **library-health hero**: at-a-glance tiles for overall health, knowledge coverage, chat streak, and the count of **open issues**, each linking into the page that fixes it. The Admin rail carries the same open-issue count as a badge next to **Issues**, so you can see the queue is backing up without opening it.
+The **Admin → Dashboard** (**Library intelligence**) opens with a **library-health hero**: at-a-glance tiles for title count, unwatched share, knowledge coverage, **rating coverage** (watched titles you’ve rated — with an honest note when ratings aren’t linked to watched titles yet), and **open issues**, each linking into the page that fixes it. Weekly digest stat cards are drillable the same way. The Admin rail carries the open-issue count as a badge next to **Issues**.
 
 The hero reuses the same aggregations the rest of the Dashboard already loads — nothing new is fetched per tile. The open-issue count comes from the existing queue:
 
@@ -503,7 +505,7 @@ curl -s http://localhost:8788/api/collections | python3 -m json.tool
 
 Projectionist assembles an in-app **weekly digest** — new additions, library counts, knowledge coverage, open issues, and purge-candidate pressure — as a snapshot you can read on the Dashboard. A scheduled `weekly_digest` task refreshes it once per weekly bucket; you can also **Generate now**.
 
-Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). Owners can push that newsletter early from **Admin → Mail → Weekly newsletter** (just me / selected members / everyone opted in), or send a self-only copy from **Settings → Notifications**. A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). Opt-in **Year in Review** rides late-December tease / early-January drop tasks (`year_in_review_tease`, `year_in_review_drop`); owners can generate a self reel from **Settings → Notifications**. The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
+Members who opt in under **Settings → Notifications** also get a personalized **weekly newsletter** (inbox + email when mail is configured). Owners can push that newsletter early from **Admin → Mail → Weekly newsletter** (just me / selected members / everyone opted in), or send a self-only copy from **Settings → Notifications**. A separate **monthly collection-curation** update goes to owners on the same transport. Gap / watchlist **arrival** notifications fire when matching titles land in the library. Opt-in **enthusiast nudges** ride a weekly `enthusiast_nudge` task (same transport; requires `nudge_opt_in`). Opt-in **Year in Review** rides late-December tease / early-January drop tasks (`year_in_review_tease`, `year_in_review_drop`); members turn opt-in on under **Settings → Notifications**, and owners can generate a self-only test reel from **Admin → Mail → Year in Review** (or the same generate control under Settings → Notifications). The **member weekly For-you rail** rides the same weekly cadence (`member_weekly_rail`); owners can force a rebuild:
 
 ```bash
 curl -s -X POST http://localhost:8788/api/admin/weekly-rail/generate | python3 -m json.tool

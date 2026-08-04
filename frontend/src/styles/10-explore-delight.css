@@ -1928,6 +1928,17 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   border-radius: 10px;
   background: var(--surface-2);
   border: 1px solid var(--border-subtle);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+a.weekly-digest-stat:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+a.weekly-digest-stat:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .weekly-digest-stat-value {
   font-size: var(--text-xl);

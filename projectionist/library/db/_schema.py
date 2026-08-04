@@ -904,6 +904,7 @@ class SchemaMigrationsMixin:
             CREATE TABLE IF NOT EXISTS persona_templates (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                nickname TEXT,
                 visibility TEXT NOT NULL CHECK (visibility IN ('builtin', 'shared', 'private')),
                 owner_user_id TEXT,
                 val_bro_prof REAL DEFAULT 0.5,
@@ -1461,30 +1462,79 @@ class SchemaMigrationsMixin:
             conn.execute("ALTER TABLE saved_library_pages ADD COLUMN summary TEXT")
 
     def _seed_builtin_persona_templates(self, conn: sqlite3.Connection) -> None:
-        """Insert the 5 built-in persona presets into persona_templates if absent."""
+        """Insert the 5 built-in persona presets into persona_templates if absent.
+
+        Also repairs nickname (and name) on existing builtin rows — INSERT OR IGNORE
+        alone would leave stale values after seed updates.
+        """
+        cols = self._table_columns(conn, "persona_templates")
+        has_nickname = "nickname" in cols
         for seed in BUILTIN_PERSONA_SEEDS:
-            conn.execute(
-                """
-                INSERT OR IGNORE INTO persona_templates (
-                    id, name, visibility, owner_user_id,
-                    val_bro_prof, val_dipl_snark, val_pass_auto,
-                    val_depth, val_obscurity, val_verbosity, val_formality,
-                    accent_color
-                ) VALUES (?, ?, 'builtin', NULL, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    seed["id"],
-                    seed["name"],
-                    seed["val_bro_prof"],
-                    seed["val_dipl_snark"],
-                    seed["val_pass_auto"],
-                    seed["val_depth"],
-                    seed["val_obscurity"],
-                    seed["val_verbosity"],
-                    seed["val_formality"],
-                    seed.get("accent_color"),
-                ),
-            )
+            nickname = str(seed.get("nickname") or "") or None
+            if has_nickname:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO persona_templates (
+                        id, name, nickname, visibility, owner_user_id,
+                        val_bro_prof, val_dipl_snark, val_pass_auto,
+                        val_depth, val_obscurity, val_verbosity, val_formality,
+                        accent_color
+                    ) VALUES (?, ?, ?, 'builtin', NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        seed["id"],
+                        seed["name"],
+                        nickname,
+                        seed["val_bro_prof"],
+                        seed["val_dipl_snark"],
+                        seed["val_pass_auto"],
+                        seed["val_depth"],
+                        seed["val_obscurity"],
+                        seed["val_verbosity"],
+                        seed["val_formality"],
+                        seed.get("accent_color"),
+                    ),
+                )
+                conn.execute(
+                    """
+                    UPDATE persona_templates
+                    SET name = ?, nickname = ?
+                    WHERE id = ? AND visibility = 'builtin'
+                    """,
+                    (seed["name"], nickname, seed["id"]),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO persona_templates (
+                        id, name, visibility, owner_user_id,
+                        val_bro_prof, val_dipl_snark, val_pass_auto,
+                        val_depth, val_obscurity, val_verbosity, val_formality,
+                        accent_color
+                    ) VALUES (?, ?, 'builtin', NULL, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        seed["id"],
+                        seed["name"],
+                        seed["val_bro_prof"],
+                        seed["val_dipl_snark"],
+                        seed["val_pass_auto"],
+                        seed["val_depth"],
+                        seed["val_obscurity"],
+                        seed["val_verbosity"],
+                        seed["val_formality"],
+                        seed.get("accent_color"),
+                    ),
+                )
+
+    def _migrate_persona_nicknames(self, conn: sqlite3.Connection) -> None:
+        """Add nickname column to persona_templates and backfill builtin seeds."""
+        cols = self._table_columns(conn, "persona_templates")
+        if not cols:
+            return
+        if "nickname" not in cols:
+            conn.execute("ALTER TABLE persona_templates ADD COLUMN nickname TEXT")
+        self._seed_builtin_persona_templates(conn)
 
     def _migrate_legacy_persona_to_template(self, conn: sqlite3.Connection) -> None:
         """Copy existing singleton persona metrics into a shared persona template.

@@ -241,8 +241,8 @@ export default function HolidaysPage() {
   return (
     <div className="settings-stack holidays-page" data-testid="admin-holidays">
       <SettingsPageHeader title="Holidays">
-        Tune the household calendar that drives Explore’s seasonal rail — grounding day, how long
-        before and after it should linger, and which titles belong on the shelf.
+        Household calendar for Explore’s seasonal rail — grounding day, shoulder windows, and which
+        titles belong on the shelf.
       </SettingsPageHeader>
 
       {status ? (
@@ -312,7 +312,7 @@ export default function HolidaysPage() {
             testId="holidays-editor-panel"
           >
             {!creating && !selected ? (
-              <p className="muted">Select a holiday or add a family day.</p>
+              <p className="muted">Pick an observance on the left, or add a family day.</p>
             ) : (
               <>
                 <label className="settings-field">

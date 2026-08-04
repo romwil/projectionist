@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getPersonaPresets, putPersona } from "../api/client";
+import { personaDropdownLabel } from "../lib/personaLabels";
 import {
   CURATOR_CAPABILITIES,
   curatorCapabilitiesIntro,
@@ -224,7 +225,7 @@ export default function PersonaSection({
               disabled={savingPersona}
               onClick={() => handlePresetSelect(preset.id)}
             >
-              <strong>{preset.name}</strong>
+              <strong>{personaDropdownLabel(preset)}</strong>
               {preset.tagline ? <em className="preset-tagline">{preset.tagline}</em> : null}
               <span>{preset.description}</span>
             </button>

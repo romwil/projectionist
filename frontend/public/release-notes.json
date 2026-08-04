@@ -1,6 +1,54 @@
 {
-  "generated_at": "2026-08-03T05:20:50Z",
+  "generated_at": "2026-08-04T03:32:05Z",
   "releases": [
+    {
+      "version": "1.32.0",
+      "date": "2026-08-04",
+      "summary": "Persona nicknames, clearer Library knowledge review, and a quieter owner Dashboard — plus Sync on Libraries and Year in Review where owners already look for mail tools.",
+      "highlights": [
+        "**Curators have nicknames.** The picker shows **The Professor — Academic Critic** (and friends); village consults and thread chips use the short nickname.",
+        "**Library knowledge leads with titles.** Name mappings stay the human queue; missing knowledge and requested details are titled exceptions with verbs like **Save mapping** and **Refresh synopsis**.",
+        "**Dashboard health makes sense.** Rating coverage explains when ratings aren’t linked to watched titles; Curator streak is gone; weekly digest stats and health tiles drill into the data they represent.",
+        "**Admin paths match the work.** **Sync library** lives on **Libraries**; generate a Year in Review test from **Admin → Mail** (opt-in stays under **Settings → Notifications**)."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Builtin persona `nickname` on seeds/presets and `GET /api/personas`; boot/migrate repair for existing DBs.",
+            "`personaDropdownLabel` / `personaChipLabel` helpers; village `display_name` prefers nicknames (legacy consult aliases kept).",
+            "Owner Year in Review generate panel on Admin → Mail (self scope only), mirroring the Settings → Notifications control.",
+            "Honest `rating_coverage_note` when reviews exist but none join watched titles."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Library knowledge IA: name mappings primary; Missing knowledge / Requested details as titled exceptions; row titles from `candidate.title` (never bare ids); action verbs on buttons.",
+            "Owner Dashboard: single **Library intelligence** header; remove Curator streak and duplicate On-now Live widget; Dig in → Watch only; weekly digest chips deduped; Taste panel retitled to Recent ratings; health/digest metrics drillable.",
+            "Admin nav: Sync removed; Sync library + status on Libraries; `/admin/sync` redirects to `/admin/libraries`.",
+            "Connections Language model field grid alignment; Holidays observances (and Usage chart labels) dark-mode contrast.",
+            "Empty personal watch history falls back to **None** instead of a long architecture note.",
+            "HELP: nicknames, Library knowledge framing, Sync → Libraries, Dashboard health copy, Year in Review Mail vs Notifications."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Rating coverage join prefers TMDB + media type so rematched titles still count; silent 0% with unlinked ratings surfaces a sublabel."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend: 1,838 passed, 6 skipped, 34 subtests passed; 75.74% coverage (74% required).",
+            "Frontend unit: 668 passed, 0 failed.",
+            "ESLint: 0 errors (warnings pre-existing); production Vite build passed.",
+            "Focused: persona + library health pytest (86); knowledge/persona/dashboard frontend helpers."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.31.5",
       "date": "2026-08-03",

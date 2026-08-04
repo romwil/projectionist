@@ -152,6 +152,10 @@ a {
   color: var(--accent);
 }
 
+.muted {
+  color: var(--muted);
+}
+
 .font-mono,
 .command-input {
   font-family: var(--font-mono);

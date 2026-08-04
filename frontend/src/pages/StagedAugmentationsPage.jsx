@@ -19,6 +19,7 @@ import {
   actDescriptionForStagedItem,
   actLabelForStagedItem,
   canActOnStagedItem,
+  stagedItemDisplayTitle,
 } from "../lib/knowledgeOpsActions.js";
 import {
   knowledgeEventDisplayName,
@@ -31,7 +32,7 @@ const TABS = [
   { id: "demand", label: "Requested details" },
   { id: "coverage", label: "Missing knowledge" },
   { id: "activity", label: "Activity" },
-  { id: "all", label: "All reviews" },
+  { id: "all", label: "All exceptions" },
 ];
 
 const TASK_FILTERS = {
@@ -79,7 +80,7 @@ function SummaryStrip({ summary, loading }) {
         </div>
         <div className="dash-stat-card" data-testid="knowledge-ops-stat-all-pending">
           <span className="dash-stat-value">{summary.pending_all_augmentations ?? 0}</span>
-          <span className="dash-stat-label">All reviews waiting</span>
+          <span className="dash-stat-label">Pending exceptions</span>
         </div>
         <div className="dash-stat-card" data-testid="knowledge-ops-stat-signals-7d">
           <span className="dash-stat-value">{summary.signals_7d ?? 0}</span>
@@ -167,6 +168,7 @@ function ContextPanel({ item, onClose }) {
   if (!item) return null;
   const candidate = item.candidate || {};
   const isFacet = item.target_entity_type === "facet";
+  const displayTitle = stagedItemDisplayTitle(item);
   return (
     <aside className="knowledge-ops-context" data-testid="knowledge-ops-context">
       <div className="knowledge-ops-context-header">
@@ -184,13 +186,19 @@ function ContextPanel({ item, onClose }) {
           <dt>Priority</dt>
           <dd>{item.priority_tier}</dd>
         </div>
+        {displayTitle ? (
+          <div>
+            <dt>Title</dt>
+            <dd>{displayTitle}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>Library item</dt>
           <dd>
             {item.target_entity_type}:{item.target_entity_id}
           </dd>
         </div>
-        {candidate.alias ? (
+        {candidate.alias && candidate.alias !== displayTitle ? (
           <div>
             <dt>Unrecognized name</dt>
             <dd>{candidate.alias}</dd>
@@ -226,7 +234,7 @@ function ContextPanel({ item, onClose }) {
             <dd>{candidate.reason}</dd>
           </div>
         ) : null}
-        {candidate.name ? (
+        {candidate.name && candidate.name !== displayTitle ? (
           <div>
             <dt>Name</dt>
             <dd>{candidate.name}</dd>
@@ -252,7 +260,7 @@ function ContextPanel({ item, onClose }) {
         ) : !isFacet ? (
           <div>
             <dt>Note</dt>
-            <dd>Reject clears this candidate without side effects.</dd>
+            <dd>Reject clears this exception without side effects.</dd>
           </div>
         ) : null}
       </dl>
@@ -278,11 +286,7 @@ function StagedRow({
   const isFacet = item.target_entity_type === "facet";
   const actLabel = actLabelForStagedItem(item);
   const actDescription = actDescriptionForStagedItem(item);
-  const title =
-    candidate.alias ||
-    candidate.name ||
-    candidate.keyword ||
-    item.target_entity_id;
+  const title = stagedItemDisplayTitle(item) || "Untitled";
   return (
     <li>
       <article
@@ -485,14 +489,17 @@ export default function StagedAugmentationsPage() {
       if (result?.acted?.action) {
         setFeedback("Knowledge refresh started.");
       } else if (result?.promoted?.alias) {
-        const alias = result.promoted.alias || item.candidate?.alias || item.target_entity_id;
+        const alias =
+          result.promoted.alias ||
+          stagedItemDisplayTitle(item) ||
+          "name";
         setFeedback(`Saved “${alias}” as a recognized name.`);
       } else {
-        setFeedback("Saved review.");
+        setFeedback("Saved mapping.");
       }
       await Promise.all([reloadItems(), reloadSummary()]);
     } catch (err) {
-      setError(err.message || "Could not save this review.");
+      setError(err.message || "Could not save this mapping.");
     } finally {
       setBusyId(null);
     }
@@ -503,7 +510,8 @@ export default function StagedAugmentationsPage() {
     setFeedback("");
     try {
       await rejectStagedAugmentation(item.id);
-      setFeedback(`Rejected “${item.candidate?.alias || item.target_entity_id}”.`);
+      const label = stagedItemDisplayTitle(item) || "item";
+      setFeedback(`Rejected “${label}”.`);
       if (selected?.id === item.id) setSelected(null);
       await Promise.all([reloadItems(), reloadSummary()]);
     } catch (err) {
@@ -518,16 +526,17 @@ export default function StagedAugmentationsPage() {
   return (
     <div className="settings-stack knowledge-ops-page" data-testid="admin-taxonomy">
       <SettingsPageHeader title="Library knowledge">
-        Review names the library does not recognize, fill missing title details, and see how much
-        plot knowledge is ready for discovery.
+        Save name mappings when genres or tags are unrecognized. Missing synopses and plot details
+        usually fill in during idle enrichment — only stuck exceptions need a force refresh here.
       </SettingsPageHeader>
 
       <SectionHelp label="How library knowledge improves" testId="knowledge-ops-loop-help">
         <p>
-          <strong>Notice → review → improve.</strong> Chat, Explore, and background tasks notice
-          repeated unknown names or missing title details. Frequent findings appear here for your
-          review. Saving a name mapping teaches this installation without changing Projectionist’s
-          built-in definitions.
+          <strong>Name mappings are the human review queue.</strong> Unrecognized genre and tag
+          names wait under Name mappings so you can save an overlay for this installation (built-in
+          definitions stay unchanged). Requested details and Missing knowledge are titled
+          exceptions — idle enrichment fills most gaps; use Refresh synopsis or Reject when
+          something is stuck.
         </p>
       </SectionHelp>
 
@@ -610,13 +619,13 @@ export default function StagedAugmentationsPage() {
       {tab === "demand" ? (
         <SettingsPanel
           title="Requested title details"
-          lead="Titles that would benefit from another trusted-source lookup."
+          lead="Exceptions only — idle enrichment usually fills these on its own."
           testId="knowledge-ops-demand-panel"
         >
           <p className="status status-secondary">
-            Requests appear below when title details are too thin. Use{" "}
-            <strong>Refresh details</strong> to look again, or Reject to clear the request without
-            changing the title.
+            Rows below are titled exceptions that still need a forced lookup. Use{" "}
+            <strong>Refresh synopsis</strong> to look again, or Reject to clear the exception
+            without changing the title.
           </p>
         </SettingsPanel>
       ) : null}
@@ -624,7 +633,7 @@ export default function StagedAugmentationsPage() {
       {tab === "coverage" ? (
         <SettingsPanel
           title="Missing library knowledge"
-          lead="An honest view of which plot and title details are still filling in."
+          lead="Coverage snapshot plus titled exceptions you can force-refresh or dismiss."
           testId="knowledge-ops-coverage-panel"
         >
           {coverageSummary ? (
@@ -688,7 +697,7 @@ export default function StagedAugmentationsPage() {
             <SettingsPanel
               title={
                 tab === "all"
-                  ? "All reviews"
+                  ? "All exceptions"
                   : tab === "taxonomy"
                     ? "Name mappings"
                     : tab === "demand"
@@ -697,18 +706,21 @@ export default function StagedAugmentationsPage() {
               }
               lead={
                 tab === "taxonomy"
-                  ? "Match each unrecognized name to a known group, then save the mapping."
+                  ? "Primary review: match each unrecognized name to a known group, then Save mapping."
                   : tab === "demand"
-                    ? "Refresh trusted title details, or dismiss requests that no longer need work."
-                    : "Run the focused refresh for each missing detail; built-in definitions stay unchanged."
+                    ? "Titled exceptions — Refresh synopsis or Reject. Idle enrichment handles most requests."
+                    : tab === "all"
+                      ? "Name mappings need review; other rows are titled exceptions for refresh or reject."
+                      : "Titled coverage exceptions — Refresh synopsis or Reject; background fill is primary."
               }
               testId="taxonomy-staged-panel"
             >
               {loading ? <p className="status status-secondary">Loading…</p> : null}
               {!loading && items.length === 0 ? (
                 <p className="status status-secondary" data-testid="taxonomy-empty">
-                  Nothing is waiting for this filter. Findings appear after the same need is noticed
-                  often enough to merit review.
+                  {tab === "taxonomy"
+                    ? "No name mappings waiting. Unrecognized genres and tags appear here after they are noticed often enough to merit review."
+                    : "No titled exceptions for this filter. Idle enrichment fills most gaps; stuck items appear here for a force refresh or reject."}
                 </p>
               ) : null}
               <ul className="media-issues-list" data-testid="taxonomy-staged-list">
