@@ -33,6 +33,45 @@ class TitleResearchTests(unittest.TestCase):
         self.assertEqual(len(left["filmography"]), 2)
         self.assertEqual(comparison["shared_credits"], 1)
         self.assertEqual(comparison["left_only"], 1)
+        self.assertFalse(left["filmography"][0]["in_library"])
+
+    @patch("projectionist.research.title_research.TMDBClient")
+    def test_person_filmography_annotates_library_ownership(self, tmdb_cls) -> None:
+        from projectionist.library.db import Database
+        from projectionist.research.title_research import research_person
+        import tempfile
+        from pathlib import Path
+
+        tmdb_cls.return_value.person_details.return_value = {
+            "id": 1,
+            "name": "Guest",
+            "combined_credits": {
+                "cast": [
+                    {"id": 10, "media_type": "movie", "title": "Owned Guest"},
+                    {"id": 11, "media_type": "movie", "title": "Missing Guest"},
+                ],
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            db.upsert_library_items(
+                [
+                    {
+                        "rating_key": "rk-10",
+                        "media_type": "movie",
+                        "title": "Owned Guest",
+                        "tmdb_id": 10,
+                        "in_radarr": 0,
+                    }
+                ]
+            )
+            result = research_person(
+                Settings(tmdb_api_key="configured"), name="Guest", tmdb_id=1, db=db
+            )
+        by_id = {entry["tmdb_id"]: entry for entry in result["filmography"]}
+        self.assertTrue(by_id[10]["in_library"])
+        self.assertFalse(by_id[10]["in_radarr"])
+        self.assertFalse(by_id[11]["in_library"])
 
     @patch("projectionist.research.title_research.TMDBClient")
     def test_company_research_requires_an_exact_provider_id(self, tmdb_cls) -> None:

@@ -220,6 +220,19 @@ export async function generateYearInReview(payload = {}) {
   });
 }
 
+/** Owner: list Plex movies missing from Radarr. */
+export async function listRadarrOwnedNotIndexed(limit = 50) {
+  return api(`/admin/radarr/owned-not-indexed?limit=${encodeURIComponent(limit)}`);
+}
+
+/** Owner: register on-disk movies into Radarr without download search. */
+export async function registerRadarrExisting(payload = {}) {
+  return api("/admin/radarr/register-existing", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function startPlexPinLogin({ inviteToken } = {}) {
   const search = new URLSearchParams();
   if (inviteToken) search.set("invite_token", inviteToken);

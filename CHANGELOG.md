@@ -2,6 +2,33 @@
 
 ## [Unreleased]
 
+## [1.32.1] — 2026-08-06
+
+Chat rails harvest the right gap titles, agent list copy says Projectionist, and Plex movies missing from Radarr can be registered without kicking off a download search.
+
+### Highlights
+- **Gap rails stay on gaps.** The rail/grid icons under “not in the library” headings no longer package In library posters.
+- **Named lists say Projectionist.** The curator no longer offers a “CuratorX list.”
+- **Register what’s already on disk.** Owned-not-in-Radarr adds skip the download search; Libraries can register a batch into Radarr.
+
+### Added
+- Heading-aware rail/grid harvest (`harvestResultListItems`) — gap headings keep only `in_library=false` cards; empty set disables the control.
+- Section-scoped `title_cards` blocks with optional headings; person filmography annotated with `in_library` / `in_radarr` and gap cards pushed into discussed cards.
+- `add_to_radarr` `search_for_movie` (defaults false for owned-not-in-Radarr); confirm/propose carry the flag.
+- Admin **Libraries**: register up to 25 on-disk movies into Radarr; `GET/POST /api/admin/radarr/owned-not-indexed` and `register-existing`.
+
+### Changed
+- List tools + system identity prompts: CuratorX → Projectionist (prompts only; storage/MIME aliases unchanged).
+
+### Fixed
+- Rail/grid under notable-gaps headings harvesting owned filmography cards (and wrong same-name hits from that set).
+
+### Verification
+- Backend: 1,841 passed, 6 skipped, 34 subtests passed; ~75.6% coverage (74% required).
+- Frontend unit: 670 passed, 0 failed.
+- ESLint: 0 errors (warnings pre-existing); production Vite build passed.
+- Focused: agentResultLists harvest; radarr register-existing + title research ownership.
+
 ## [1.32.0] — 2026-08-04
 
 Persona nicknames, clearer Library knowledge review, and a quieter owner Dashboard — plus Sync on Libraries and Year in Review where owners already look for mail tools.

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   buildAgentRailPrompt,
+  harvestResultListItems,
+  isGapResultHeading,
   lastMarkdownHeading,
   materializeAgentResultList,
   pageAgentListItems,
@@ -71,5 +73,34 @@ describe("agent result list actions", () => {
     assert.equal(page.hasPrevious, true);
     assert.equal(page.hasNext, false);
     assert.equal(items[0].title, "Title 1");
+  });
+
+  it("detects gap/missing headings for harvest filtering", () => {
+    assert.equal(isGapResultHeading("Notable gaps from his filmography (not in the library)"), true);
+    assert.equal(isGapResultHeading("Missing from disk"), true);
+    assert.equal(isGapResultHeading("Tonight's tense picks"), false);
+  });
+
+  it("harvests only not-in-library cards under gap headings", () => {
+    const mixed = [
+      { title: "Hell Is a City", tmdb_id: 1, in_library: false },
+      { title: "Enemy", tmdb_id: 2, in_library: true },
+      { title: "Expresso Bongo", tmdb_id: 3, in_library: false },
+    ];
+    const harvested = harvestResultListItems(
+      "Notable gaps from his filmography (not in the library)",
+      mixed,
+    );
+    assert.deepEqual(
+      harvested.map((item) => item.title),
+      ["Hell Is a City", "Expresso Bongo"],
+    );
+    assert.equal(harvestResultListItems("Tonight's picks", mixed).length, 3);
+    assert.equal(
+      harvestResultListItems("Notable gaps (not in the library)", [
+        { title: "Owned only", tmdb_id: 9, in_library: true },
+      ]).length,
+      0,
+    );
   });
 });

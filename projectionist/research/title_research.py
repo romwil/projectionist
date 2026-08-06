@@ -222,9 +222,48 @@ def _filmography(credits: Mapping[str, Any]) -> list[Dict[str, Any]]:
                     "year": str(entry.get("release_date") or entry.get("first_air_date") or "")[:4],
                     "credit_type": credit_type,
                     "role": str(entry.get("character") or entry.get("job") or ""),
+                    "in_library": False,
+                    "in_radarr": False,
+                    "in_sonarr": False,
                 }
             )
     return sorted(entries, key=lambda item: (item["year"], item["title"]), reverse=True)
+
+
+def _annotate_filmography_ownership(db: Optional[Database], filmography: list[Dict[str, Any]]) -> list[Dict[str, Any]]:
+    """Attach in_library / in_radarr / in_sonarr flags from the local library index."""
+    if db is None or not filmography:
+        return filmography
+    owned_movies = db.owned_tmdb_ids("movie")
+    owned_shows = db.owned_tmdb_ids("show")
+    radarr_ids: set[int] = set()
+    sonarr_by_tmdb: set[int] = set()
+    with db.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT tmdb_id, media_type, in_radarr, in_sonarr
+            FROM library_items
+            WHERE tmdb_id IS NOT NULL
+            """
+        ).fetchall()
+        for row in rows:
+            tid = int(row["tmdb_id"])
+            if str(row["media_type"] or "") == "movie" and int(row["in_radarr"] or 0):
+                radarr_ids.add(tid)
+            if str(row["media_type"] or "") == "show" and int(row["in_sonarr"] or 0):
+                sonarr_by_tmdb.add(tid)
+    for entry in filmography:
+        tid = int(entry.get("tmdb_id") or 0)
+        media_type = str(entry.get("media_type") or "movie")
+        if media_type == "show":
+            entry["in_library"] = tid in owned_shows
+            entry["in_sonarr"] = tid in sonarr_by_tmdb
+            entry["in_radarr"] = False
+        else:
+            entry["in_library"] = tid in owned_movies
+            entry["in_radarr"] = tid in radarr_ids
+            entry["in_sonarr"] = False
+    return filmography
 
 
 def research_person(
@@ -256,7 +295,9 @@ def research_person(
             "birthday": str(details.get("birthday") or ""),
             "place_of_birth": str(details.get("place_of_birth") or ""),
         }
-        result["filmography"] = _filmography(details.get("combined_credits") or {})
+        result["filmography"] = _annotate_filmography_ownership(
+            db, _filmography(details.get("combined_credits") or {})
+        )
         result["sources_checked"]["tmdb"] = _source("ok")
     except (RuntimeError, ValueError, KeyError):
         result["sources_checked"]["tmdb"] = _source("unavailable")

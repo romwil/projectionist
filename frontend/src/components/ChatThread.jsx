@@ -2,6 +2,7 @@ import { useState } from "react";
 import { collectAddableFromMessage } from "../lib/addActions";
 import {
   buildAgentRailPrompt,
+  harvestResultListItems,
   lastMarkdownHeading,
 } from "../lib/agentResultLists.js";
 import { filterDisplayableCards, turnstyleItemCount } from "../lib/turnstyleItems.js";
@@ -21,13 +22,19 @@ import { titleRefsFromBlocks } from "../lib/titleDigIn.js";
 function AgentResultListActions({ heading, items, handlers, disabled = false }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const harvestItems = harvestResultListItems(heading, items);
+  const harvestDisabled = harvestItems.length === 0;
+  const controlDisabled = disabled || Boolean(busy) || harvestDisabled;
+  const emptyGapHint = harvestDisabled
+    ? "No gap cards to save — ask the agent to show missing titles as cards."
+    : "";
 
   async function openGrid() {
-    if (busy || disabled) return;
+    if (busy || disabled || harvestDisabled) return;
     setBusy("grid");
     setError("");
     try {
-      await handlers.onOpenAsGrid?.({ heading, items });
+      await handlers.onOpenAsGrid?.({ heading, items: harvestItems });
     } catch (err) {
       setError(err.message || "Could not open these results as a grid.");
     } finally {
@@ -36,11 +43,11 @@ function AgentResultListActions({ heading, items, handlers, disabled = false }) 
   }
 
   function createRail() {
-    if (busy || disabled) return;
+    if (busy || disabled || harvestDisabled) return;
     handlers.onCreateRail?.({
       heading,
-      items,
-      prompt: buildAgentRailPrompt({ heading, items }),
+      items: harvestItems,
+      prompt: buildAgentRailPrompt({ heading, items: harvestItems }),
     });
   }
 
@@ -50,8 +57,8 @@ function AgentResultListActions({ heading, items, handlers, disabled = false }) 
         type="button"
         className="agent-media-heading-action"
         aria-label="Create a rail from these results"
-        title="Create a rail"
-        disabled={disabled || Boolean(busy)}
+        title={emptyGapHint || "Create a rail"}
+        disabled={controlDisabled}
         onClick={createRail}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -62,8 +69,8 @@ function AgentResultListActions({ heading, items, handlers, disabled = false }) 
         type="button"
         className="agent-media-heading-action"
         aria-label="Open these results as a grid"
-        title="Open as grid"
-        disabled={disabled || Boolean(busy)}
+        title={emptyGapHint || "Open as grid"}
+        disabled={controlDisabled}
         onClick={openGrid}
       >
         <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -74,6 +81,9 @@ function AgentResultListActions({ heading, items, handlers, disabled = false }) 
         </svg>
       </button>
       {busy === "grid" ? <span className="sr-only" role="status">Opening grid…</span> : null}
+      {harvestDisabled ? (
+        <span className="agent-media-heading-error" role="status">{emptyGapHint}</span>
+      ) : null}
       {error ? <span className="agent-media-heading-error" role="alert">{error}</span> : null}
     </span>
   );
@@ -174,7 +184,7 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks, streami
       ? filterDisplayableCards(nextBlock.items)
       : [];
     const heading = role === "assistant" && nextItems.length
-      ? lastMarkdownHeading(block.content)
+      ? (String(nextBlock.heading || "").trim() || lastMarkdownHeading(block.content))
       : "";
     return (
       <MessageText
@@ -220,14 +230,20 @@ function renderBlock(block, handlers, role, message, blockIndex, blocks, streami
     const nextViewport = blocks.slice(blockIndex + 1).find(
       (entry) => entry.type === "action_prompt" && entry.action === "open_viewport"
     );
-    const precedingHeading = lastMarkdownHeading(blocks[blockIndex - 1]?.content);
+    const prevBlock = blocks[blockIndex - 1];
+    const sectionHeading = String(block.heading || "").trim();
+    const precedingHeading = lastMarkdownHeading(prevBlock?.content);
+    const actionHeading = sectionHeading || precedingHeading || "Results";
+    // Text blocks already mount rail/grid on the following cards; only show chrome for
+    // orphan / subsequent section-scoped card strips.
+    const showActionsChrome = role === "assistant" && prevBlock?.type !== "text";
     return (
       <>
-        {!precedingHeading && role === "assistant" ? (
+        {showActionsChrome ? (
           <div className="agent-media-heading agent-media-heading-fallback">
-            <span>Results</span>
+            <span>{actionHeading}</span>
             <AgentResultListActions
-              heading="Results"
+              heading={actionHeading}
               items={items}
               handlers={handlers}
               disabled={streaming || handlers.actionsDisabled}

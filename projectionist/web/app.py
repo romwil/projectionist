@@ -34,6 +34,7 @@ from projectionist.agent.tools import (
     execute_confirmed_action,
     mark_in_radarr,
     mark_in_sonarr,
+    resolve_radarr_search_for_movie,
 )
 from projectionist.config_store import (
     ANTHROPIC_MODEL_OPTIONS,
@@ -59,6 +60,7 @@ from projectionist.config_store import (
     validate_arr_root_folder,
     validate_llm_settings,
 )
+from projectionist.connectors.arr_errors import ArrTitleExistsError
 from projectionist.connectors.plex import PlexClient, cached_machine_identifier, cached_plex_friendly_name
 from projectionist.connectors.plex_collections import list_collections as list_plex_collections
 from projectionist.connectors.radarr import RadarrClient
@@ -5214,19 +5216,31 @@ def propose_action(payload: Dict[str, Any], user=Depends(get_current_user_dep)) 
             )
             return existing
         token = uuid_mod.uuid4().hex
+        explicit_search = payload.get("search_for_movie")
+        search_for_movie = resolve_radarr_search_for_movie(
+            _db(),
+            tmdb_id,
+            explicit=None if explicit_search is None else bool(explicit_search),
+        )
         _db().save_pending_action(
             token,
             "add_radarr",
-            {"action": "add_radarr", "tmdb_id": tmdb_id, "title": payload.get("title", "")},
+            {
+                "action": "add_radarr",
+                "tmdb_id": tmdb_id,
+                "title": payload.get("title", ""),
+                "search_for_movie": search_for_movie,
+            },
             user_id=scoped,
         )
         logger.info(
-            "Proposed add_radarr tmdb_id=%s title=%r token=%s",
+            "Proposed add_radarr tmdb_id=%s title=%r search_for_movie=%s token=%s",
             payload["tmdb_id"],
             payload.get("title", ""),
+            search_for_movie,
             token[:8],
         )
-        return {"confirmation_token": token}
+        return {"confirmation_token": token, "search_for_movie": search_for_movie}
     if action == "add_sonarr":
         settings = _settings()
         config_error = sonarr_add_configuration_error(settings)
@@ -5746,6 +5760,155 @@ def generate_year_in_review(
         "delivered": 0,
         "status": snap.get("status"),
         "path": f"/year-in-review/{year}",
+    }
+
+
+@app.get("/api/admin/radarr/owned-not-indexed")
+def admin_radarr_owned_not_indexed(
+    limit: int = 50,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """List Plex-owned movies missing from Radarr (in_radarr=false with a TMDB id)."""
+    del user
+    lim = min(max(1, int(limit or 50)), 200)
+    db = _db()
+    with db.connect() as conn:
+        needs_rematch = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt FROM library_items
+            WHERE media_type = 'movie' AND COALESCE(in_radarr, 0) = 0
+              AND (tmdb_id IS NULL OR tmdb_id = 0)
+            """
+        ).fetchone()["cnt"]
+        total = conn.execute(
+            """
+            SELECT COUNT(*) AS cnt FROM library_items
+            WHERE media_type = 'movie' AND COALESCE(in_radarr, 0) = 0
+              AND tmdb_id IS NOT NULL AND tmdb_id != 0
+            """
+        ).fetchone()["cnt"]
+        rows = conn.execute(
+            """
+            SELECT id, title, year, tmdb_id
+            FROM library_items
+            WHERE media_type = 'movie' AND COALESCE(in_radarr, 0) = 0
+              AND tmdb_id IS NOT NULL AND tmdb_id != 0
+            ORDER BY title COLLATE NOCASE
+            LIMIT ?
+            """,
+            (lim,),
+        ).fetchall()
+    return {
+        "total": int(total),
+        "needs_rematch": int(needs_rematch),
+        "items": [
+            {
+                "id": int(row["id"]),
+                "title": str(row["title"] or ""),
+                "year": int(row["year"]) if row["year"] is not None else None,
+                "tmdb_id": int(row["tmdb_id"]),
+            }
+            for row in rows
+        ],
+    }
+
+
+@app.post("/api/admin/radarr/register-existing")
+def admin_radarr_register_existing(
+    payload: Optional[Dict[str, Any]] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Register Plex-owned movies into Radarr without starting download searches."""
+    del user
+    body = payload or {}
+    lim = min(max(1, int(body.get("limit") or 25)), 200)
+    dry_run = bool(body.get("dry_run"))
+    settings = _settings()
+    config_error = radarr_add_configuration_error(settings)
+    if config_error:
+        raise HTTPException(status_code=400, detail=config_error)
+    client = RadarrClient(settings.radarr_url, settings.radarr_api_key)
+    root_error = validate_arr_root_folder(
+        "Radarr",
+        resolve_radarr_root_folder(settings),
+        client.root_folders(),
+    )
+    if root_error:
+        raise HTTPException(status_code=400, detail=root_error)
+
+    db = _db()
+    with db.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, title, year, tmdb_id
+            FROM library_items
+            WHERE media_type = 'movie' AND COALESCE(in_radarr, 0) = 0
+              AND tmdb_id IS NOT NULL AND tmdb_id != 0
+            ORDER BY title COLLATE NOCASE
+            LIMIT ?
+            """,
+            (lim,),
+        ).fetchall()
+
+    registered = 0
+    already = 0
+    failed: List[Dict[str, Any]] = []
+    preview = [
+        {
+            "id": int(row["id"]),
+            "title": str(row["title"] or ""),
+            "year": int(row["year"]) if row["year"] is not None else None,
+            "tmdb_id": int(row["tmdb_id"]),
+        }
+        for row in rows
+    ]
+    if dry_run:
+        return {
+            "dry_run": True,
+            "limit": lim,
+            "candidate_count": len(preview),
+            "items": preview,
+            "registered": 0,
+            "already": 0,
+            "failed": [],
+        }
+
+    for row in rows:
+        tmdb_id = int(row["tmdb_id"])
+        title = str(row["title"] or "")
+        try:
+            existing = check_radarr_already_exists(client, tmdb_id, title=title)
+            if existing:
+                mark_in_radarr(db, tmdb_id, title=title)
+                already += 1
+                continue
+            client.add_movie(
+                tmdb_id,
+                root_folder=resolve_radarr_root_folder(settings),
+                quality_profile_id=settings.radarr_quality_profile_id,
+                search_for_movie=False,
+            )
+            mark_in_radarr(db, tmdb_id, title=title)
+            registered += 1
+        except ArrTitleExistsError as error:
+            mark_in_radarr(db, tmdb_id, title=title or error.title)
+            already += 1
+        except Exception as error:  # noqa: BLE001 — continue batch
+            failed.append({"tmdb_id": tmdb_id, "title": title, "error": str(error)})
+            logger.warning(
+                "Radarr register-existing failed tmdb_id=%s title=%r: %s",
+                tmdb_id,
+                title,
+                error,
+            )
+
+    return {
+        "dry_run": False,
+        "limit": lim,
+        "candidate_count": len(preview),
+        "registered": registered,
+        "already": already,
+        "failed": failed,
     }
 
 

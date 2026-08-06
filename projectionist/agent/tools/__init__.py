@@ -1085,6 +1085,7 @@ class ToolRegistry:
             return json.dumps({"error": "tmdb_id must be an integer"})
         result = research_person(self.settings, name=name, tmdb_id=tmdb_id, db=self.db)
         self._note_research_activity(result)
+        self._register_filmography_gap_cards(result)
         return json.dumps(result)
 
     async def _tool_research_company(self, args: Mapping[str, Any]) -> str:
@@ -1125,6 +1126,37 @@ class ToolRegistry:
                 self.db.record_entity_discussion(entity_id)
         except Exception:
             logger.debug("Could not record research activity", exc_info=True)
+
+    def _register_filmography_gap_cards(self, result: Mapping[str, Any]) -> None:
+        """Push missing filmography titles into discussed cards for section-aware rails."""
+        filmography = result.get("filmography") if isinstance(result.get("filmography"), list) else []
+        gap_cards: List[TitleCard] = []
+        for entry in filmography:
+            if not isinstance(entry, Mapping):
+                continue
+            if entry.get("in_library"):
+                continue
+            tmdb_id = entry.get("tmdb_id")
+            if tmdb_id is None:
+                continue
+            year_raw = str(entry.get("year") or "").strip()
+            year = int(year_raw) if year_raw.isdigit() else None
+            media_type = "show" if str(entry.get("media_type") or "") == "show" else "movie"
+            gap_cards.append(
+                TitleCard(
+                    media_type=media_type,
+                    title=str(entry.get("title") or "Untitled"),
+                    year=year,
+                    tmdb_id=int(tmdb_id),
+                    in_library=False,
+                    in_radarr=bool(entry.get("in_radarr")),
+                    in_sonarr=bool(entry.get("in_sonarr")),
+                )
+            )
+            if len(gap_cards) >= 40:
+                break
+        if gap_cards:
+            _append_recommendation_cards(self, gap_cards)
 
     async def _tool_recall_repo_memory(self, args: Mapping[str, Any]) -> str:
         """Return the latest cited snapshot, insights, and freshness for a known entity."""
@@ -2009,18 +2041,32 @@ class ToolRegistry:
         if existing:
             mark_in_radarr(self.db, tmdb_id, title=str(args.get("title") or ""))
             return json.dumps(existing)
+        explicit_search = args.get("search_for_movie")
+        if explicit_search is None and "register_existing" in args:
+            explicit_search = not bool(args.get("register_existing"))
+        search_for_movie = resolve_radarr_search_for_movie(
+            self.db,
+            tmdb_id,
+            explicit=None if explicit_search is None else bool(explicit_search),
+        )
         token = uuid.uuid4().hex
         payload = {
             "action": "add_radarr",
             "tmdb_id": tmdb_id,
             "title": str(args.get("title") or ""),
+            "search_for_movie": search_for_movie,
         }
         self.db.save_pending_action(token, "add_radarr", payload, user_id=self.user_id)
         self._register_pending_token(token, "add_radarr")
+        mode = "register existing on disk" if not search_for_movie else "search for download"
         return json.dumps(
             {
                 "confirmation_token": token,
-                "message": f"Awaiting user confirmation to add to Radarr. {_PENDING_CONFIRM_HINT}",
+                "search_for_movie": search_for_movie,
+                "message": (
+                    f"Awaiting user confirmation to add to Radarr ({mode}). "
+                    f"{_PENDING_CONFIRM_HINT}"
+                ),
             }
         )
 
@@ -3390,6 +3436,28 @@ def mark_in_radarr(db: Database, tmdb_id: int, *, title: str = "", session_id: O
     )
 
 
+def resolve_radarr_search_for_movie(
+    db: Database,
+    tmdb_id: int,
+    *,
+    explicit: Optional[bool] = None,
+) -> bool:
+    """Return whether Radarr should search for a download on add.
+
+    Owned-not-in-Radarr (library row present, in_radarr false) defaults to register-existing
+    (search_for_movie=False). Explicit tool/API values always win. Missing TMDB library match
+    keeps the download-search default.
+    """
+    if explicit is not None:
+        return bool(explicit)
+    row = db.library_item_by_tmdb(int(tmdb_id), "movie")
+    if row is None:
+        return True
+    if int(row["in_radarr"] or 0):
+        return True
+    return False
+
+
 def mark_in_sonarr(db: Database, tvdb_id: int, *, title: str = "", session_id: Optional[str] = None) -> None:
     db.set_arr_presence(tvdb_id=tvdb_id, in_sonarr=True)
     db.record_arr_queue(
@@ -3527,16 +3595,20 @@ async def execute_confirmed_action(
                 "and will not be re-added"
             )
         try:
+            search_for_movie = bool(payload.get("search_for_movie", True))
+            if "search_for_movie" not in payload:
+                search_for_movie = resolve_radarr_search_for_movie(db, tmdb_id)
             result = client.add_movie(
                 tmdb_id,
                 root_folder=resolve_radarr_root_folder(settings),
                 quality_profile_id=settings.radarr_quality_profile_id,
+                search_for_movie=search_for_movie,
             )
         except ArrTitleExistsError as error:
             mark_in_radarr(db, tmdb_id, title=title or error.title)
             return _already_exists_response(action, error)
         mark_in_radarr(db, tmdb_id, title=title)
-        return {"action": action, "result": result}
+        return {"action": action, "result": result, "search_for_movie": search_for_movie}
     if action == "add_sonarr":
         config_error = sonarr_add_configuration_error(settings)
         if config_error:
@@ -3951,7 +4023,7 @@ def build_system_prompt(
         )
 
     return (
-        f"You are {curator_name}, an expert movie and TV collection curator for CuratorX. "
+        f"You are {curator_name}, an expert movie and TV collection curator for Projectionist. "
         "You know the user's Plex library and help them discover what to add, what to watch tonight, "
         "and what to purge to save drive space. Use tools to ground recommendations in their actual library. "
         "Never add or remove titles without confirmation tokens. "
@@ -4011,7 +4083,10 @@ def build_system_prompt(
         "When recommending external titles, set a specific taste-based reason via search_tmdb(reason=…) "
         "or set_recommendation_reasons — never leave Why this? as a pipeline label. "
         "After a useful recommendation or gap response, call suggest_follow_ups with 2-4 concise, safe next user turns. "
-        "For movies use tmdb_id with add_to_radarr; for shows use tvdb_id with add_to_sonarr.\n"
+        "For movies use tmdb_id with add_to_radarr; for shows use tvdb_id with add_to_sonarr. "
+        "When a movie is already in the Plex library but not in Radarr (Owned not in Radarr / "
+        "in_radarr=false), call add_to_radarr with search_for_movie=false to register the existing "
+        "file — do not offer a download search for titles already on disk.\n"
         "When a file is corrupted or the wrong download but the owner still wants the title, "
         "use mark_bad_media (replace/redownload) — not remove_from_arr or library delete, "
         "which add import exclusions and mean 'never get this again'.\n"
