@@ -607,6 +607,7 @@ class ApiContractTests(unittest.TestCase):
             603,
             root_folder="/media/movies",
             quality_profile_id=1,
+            search_for_movie=True,
         )
 
     def test_propose_add_radarr_already_exists(self) -> None:

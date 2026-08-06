@@ -170,6 +170,67 @@ def _cards_for_response(registry: ToolRegistry) -> List[TitleCard]:
     return _displayable_cards(cards)
 
 
+def _title_card_blocks(registry: ToolRegistry) -> List[Dict[str, Any]]:
+    """Emit one or more title_cards blocks, section-scoped when gaps and owned both appear."""
+    displayable = _displayable_cards(registry.cards)
+    response_cards = _cards_for_response(registry)
+    if not response_cards and not displayable:
+        return []
+
+    if registry.recommendation_context and response_cards:
+        return [
+            {
+                "type": "title_cards",
+                "heading": "Notable gaps (not in the library)",
+                "items": [card.model_dump() for card in response_cards],
+            }
+        ]
+
+    gaps = [card for card in displayable if not card.in_library]
+    owned = [card for card in displayable if card.in_library]
+    if gaps and owned:
+        return [
+            {
+                "type": "title_cards",
+                "heading": "Notable gaps (not in the library)",
+                "items": [card.model_dump() for card in gaps],
+            },
+            {
+                "type": "title_cards",
+                "heading": "Already in library",
+                "items": [card.model_dump() for card in owned],
+            },
+        ]
+    items = response_cards or displayable
+    if not items:
+        return []
+    return [{"type": "title_cards", "items": [card.model_dump() for card in items]}]
+
+
+def _append_title_card_response_blocks(
+    blocks: List[Dict[str, Any]],
+    registry: ToolRegistry,
+    *,
+    default_viewport_title: str = "Results",
+) -> None:
+    card_blocks = _title_card_blocks(registry)
+    if not card_blocks:
+        return
+    blocks.extend(card_blocks)
+    first_items = card_blocks[0].get("items") or []
+    viewport_title = (
+        str(card_blocks[0].get("heading") or "").strip()
+        or ("Recommendations" if registry.recommendation_context else default_viewport_title)
+    )
+    blocks.append(
+        {
+            "type": "action_prompt",
+            "action": "open_viewport",
+            "payload": {"title": viewport_title, "items": first_items},
+        }
+    )
+
+
 def _extract_tool_calls(response: Mapping[str, Any]) -> List[Mapping[str, Any]]:
     if "choices" in response:
         message = response["choices"][0]["message"]
@@ -379,16 +440,7 @@ class CuratorAgent:
             text = await self._fallback_run(registry, user_message)
             blocks: List[Dict[str, Any]] = [{"type": "text", "content": text}]
             if registry.cards:
-                cards = _cards_for_response(registry)
-                if cards:
-                    blocks.append({"type": "title_cards", "items": [card.model_dump() for card in cards]})
-                    blocks.append(
-                        {
-                            "type": "action_prompt",
-                            "action": "open_viewport",
-                            "payload": {"title": "Results", "items": [c.model_dump() for c in cards]},
-                        }
-                    )
+                _append_title_card_response_blocks(blocks, registry)
             _append_persona_consult_blocks(blocks, registry)
             _append_review_prompt_blocks(blocks, registry)
             _append_review_conflict_blocks(blocks, registry)
@@ -555,17 +607,7 @@ class CuratorAgent:
                 }
             )
         if registry.cards:
-            cards = _cards_for_response(registry)
-            if cards:
-                viewport_title = "Recommendations" if registry.recommendation_context else "Results"
-                blocks.append({"type": "title_cards", "items": [card.model_dump() for card in cards]})
-                blocks.append(
-                    {
-                        "type": "action_prompt",
-                        "action": "open_viewport",
-                        "payload": {"title": viewport_title, "items": [c.model_dump() for c in cards]},
-                    }
-                )
+            _append_title_card_response_blocks(blocks, registry)
         _append_persona_consult_blocks(blocks, registry)
         _append_review_prompt_blocks(blocks, registry)
         _append_review_conflict_blocks(blocks, registry)
@@ -915,15 +957,7 @@ async def stream_agent(
         )
 
     if registry.cards:
-        cards = _cards_for_response(registry)
-        if cards:
-            viewport_title = "Recommendations" if registry.recommendation_context else "Results"
-            blocks.append({"type": "title_cards", "items": [card.model_dump() for card in cards]})
-            blocks.append({
-                "type": "action_prompt",
-                "action": "open_viewport",
-                "payload": {"title": viewport_title, "items": [c.model_dump() for c in cards]},
-            })
+        _append_title_card_response_blocks(blocks, registry)
 
     _append_persona_consult_blocks(blocks, registry)
     _append_review_prompt_blocks(blocks, registry)
@@ -1018,14 +1052,7 @@ async def _emit_buffered(
 
     blocks: List[Dict[str, Any]] = [{"type": "text", "content": text}]
     if registry.cards:
-        cards = _cards_for_response(registry)
-        if cards:
-            blocks.append({"type": "title_cards", "items": [card.model_dump() for card in cards]})
-            blocks.append({
-                "type": "action_prompt",
-                "action": "open_viewport",
-                "payload": {"title": "Results", "items": [c.model_dump() for c in cards]},
-            })
+        _append_title_card_response_blocks(blocks, registry)
     _append_persona_consult_blocks(blocks, registry)
     _append_review_prompt_blocks(blocks, registry)
     _append_review_conflict_blocks(blocks, registry)

@@ -1,5 +1,8 @@
 const MAX_RESULT_ITEMS = 100;
 
+const GAP_HEADING_RE =
+  /\b(gaps?|missing|not\s+in\s+(the\s+)?library|not\s+owned|not\s+here\s+yet|absent\s+from)\b/i;
+
 function cleanText(value, max = 120) {
   return String(value || "").replace(/\s+/g, " ").trim().slice(0, max);
 }
@@ -13,6 +16,22 @@ function stableResultItems(items) {
 export function lastMarkdownHeading(content) {
   const matches = [...String(content || "").matchAll(/^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/gm)];
   return cleanText(matches.at(-1)?.[1] || "");
+}
+
+/** True when a result-list heading describes gaps / missing / not-owned titles. */
+export function isGapResultHeading(heading = "") {
+  return GAP_HEADING_RE.test(String(heading || ""));
+}
+
+/**
+ * Harvest set for rail/grid icons.
+ * Gap headings only keep cards that are not already in the library; if none remain,
+ * returns an empty list so the UI can disable the control.
+ */
+export function harvestResultListItems(heading = "", items = []) {
+  const source = Array.isArray(items) ? items : [];
+  if (!isGapResultHeading(heading)) return source;
+  return source.filter((item) => item && item.in_library !== true);
 }
 
 export function buildAgentRailPrompt({ heading = "", items = [] } = {}) {

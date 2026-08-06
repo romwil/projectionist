@@ -105,7 +105,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "recall_repo_memory",
             "description": (
-                "Recall what CuratorX already knows about a title, person, or company from its "
+                "Recall what Projectionist already knows about a title, person, or company from its "
                 "persistent, source-cited repository memory: the latest research snapshot, when it "
                 "was first known and last refreshed, saved insights, and how often it has come up. "
                 "Call this BEFORE declaring you have no information — the store may already hold a "
@@ -372,11 +372,26 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
             "name": "add_to_radarr",
             "description": (
                 "Propose adding a movie to Radarr. Returns a confirmation_token. "
-                "After the user affirms, call confirm_pending_action with that token."
+                "After the user affirms, call confirm_pending_action with that token. "
+                "For titles already in the Plex library but missing from Radarr "
+                "(in_library / Owned not in Radarr), set search_for_movie=false to register "
+                "the existing file without starting a download search. True gaps (not on disk) "
+                "should keep search_for_movie=true (default)."
             ),
             "parameters": {
                 "type": "object",
-                "properties": {"tmdb_id": {"type": "integer"}, "title": {"type": "string"}},
+                "properties": {
+                    "tmdb_id": {"type": "integer"},
+                    "title": {"type": "string"},
+                    "search_for_movie": {
+                        "type": "boolean",
+                        "description": (
+                            "When false, register an on-disk title in Radarr without searching "
+                            "for a download. Defaults to false automatically when the title is "
+                            "already in the library and not in Radarr."
+                        ),
+                    },
+                },
                 "required": ["tmdb_id"],
             },
         },
@@ -1179,7 +1194,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "list_lists",
             "description": (
-                "List the user's named CuratorX curated lists (local shelves; not Plex Lists). "
+                "List the user's named Projectionist curated lists (local shelves; not Plex Lists). "
                 "Returns id, name, description, and item_count."
             ),
             "parameters": {
@@ -1193,7 +1208,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "create_list",
             "description": (
-                "Create a named curated list on CuratorX (local only; Plex Lists publish is not available). "
+                "Create a named curated list in Projectionist (local only; Plex Lists publish is not available). "
                 "No confirmation token required."
             ),
             "parameters": {
@@ -1211,7 +1226,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "add_to_list",
             "description": (
-                "Add a title to a named CuratorX curated list by list_id or list_name. "
+                "Add a title to a named Projectionist curated list by list_id or list_name. "
                 "Requires title + media_type and tmdb_id or tvdb_id. No confirmation token."
             ),
             "parameters": {
@@ -1233,7 +1248,7 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
         "function": {
             "name": "remove_from_list",
             "description": (
-                "Remove a title from a named CuratorX curated list by item_id or tmdb/tvdb identity. "
+                "Remove a title from a named Projectionist curated list by item_id or tmdb/tvdb identity. "
                 "Identify the list with list_id or list_name. No confirmation token."
             ),
             "parameters": {

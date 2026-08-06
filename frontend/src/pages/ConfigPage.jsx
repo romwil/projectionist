@@ -32,6 +32,8 @@ import {
   postLiveChannelsLifecycle,
   putPersona,
   putSystemConfig,
+  registerRadarrExisting,
+  listRadarrOwnedNotIndexed,
   resolveModelForProvider,
   revealSettingsSecret,
   rotateMcpKey,
@@ -468,6 +470,8 @@ export default function ConfigPage() {
   const [exportingCorpus, setExportingCorpus] = useState(false);
   const [exportingSnapshot, setExportingSnapshot] = useState(false);
   const [syncingLibrary, setSyncingLibrary] = useState(false);
+  const [registeringRadarr, setRegisteringRadarr] = useState(false);
+  const [radarrGapStats, setRadarrGapStats] = useState(null);
   const [activeSyncJob, setActiveSyncJob] = useState(null);
   const [featureFlags, setFeatureFlags] = useState(null);
   const [appVersion, setAppVersion] = useState("");
@@ -761,6 +765,9 @@ export default function ConfigPage() {
     api("/library/health")
       .then(setLibraryHealth)
       .catch(() => setLibraryHealth(null));
+    listRadarrOwnedNotIndexed(5)
+      .then(setRadarrGapStats)
+      .catch(() => setRadarrGapStats(null));
   }, [showWizard]);
 
   useEffect(() => {
@@ -2433,6 +2440,30 @@ export default function ConfigPage() {
     }
   }
 
+  async function handleRegisterRadarrExisting() {
+    setRegisteringRadarr(true);
+    setActionFeedback("radarr-register", null);
+    try {
+      const result = await registerRadarrExisting({ limit: 25, dry_run: false });
+      const failed = Array.isArray(result.failed) ? result.failed.length : 0;
+      setActionFeedback("radarr-register", {
+        type: failed && !result.registered ? "error" : "success",
+        message: `Registered ${result.registered || 0} · already tracked ${result.already || 0}${
+          failed ? ` · ${failed} failed` : ""
+        }.`,
+      });
+      const refreshed = await listRadarrOwnedNotIndexed(5);
+      setRadarrGapStats(refreshed);
+    } catch (error) {
+      setActionFeedback("radarr-register", {
+        type: "error",
+        message: error.message || "Could not register titles in Radarr.",
+      });
+    } finally {
+      setRegisteringRadarr(false);
+    }
+  }
+
   function formatLastSync(lastSync) {
     return formatLastSyncRelative(lastSync);
   }
@@ -3154,6 +3185,37 @@ export default function ConfigPage() {
           <InlineAlert
             type={actionAlert?.area === "library-sync" ? actionAlert.type : null}
             message={actionAlert?.area === "library-sync" ? actionAlert.message : null}
+          />
+        </section>
+
+        <section className="config-section" data-testid="radarr-register-existing-card">
+          <h2>Radarr — register on disk</h2>
+          <p>
+            Movies already in Plex but missing from Radarr can be registered without starting a
+            download search. Titles without a TMDB id need a Plex rematch first.
+          </p>
+          <p className="status status-secondary" data-testid="radarr-owned-not-indexed-stats">
+            {radarrGapStats
+              ? `${radarrGapStats.total} ready to register${
+                  radarrGapStats.needs_rematch
+                    ? ` · ${radarrGapStats.needs_rematch} need rematch`
+                    : ""
+                }`
+              : "Checking Radarr gaps…"}
+          </p>
+          <div className="config-actions">
+            <button
+              type="button"
+              data-testid="radarr-register-existing-button"
+              onClick={handleRegisterRadarrExisting}
+              disabled={registeringRadarr || !radarrGapStats?.total}
+            >
+              {registeringRadarr ? "Registering…" : "Register up to 25 in Radarr"}
+            </button>
+          </div>
+          <InlineAlert
+            type={actionAlert?.area === "radarr-register" ? actionAlert.type : null}
+            message={actionAlert?.area === "radarr-register" ? actionAlert.message : null}
           />
         </section>
 
