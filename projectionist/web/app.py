@@ -365,6 +365,33 @@ async def lifespan(_app: FastAPI):
     app.state.live_session_poller = live_session_poller
     logger.info("Startup: watch live-session poller ready")
 
+    def _repair_watch_identities() -> None:
+        try:
+            settings = _settings()
+            if not str(settings.plex_url or "").strip() or not str(
+                settings.plex_token or ""
+            ).strip():
+                logger.info("Startup: watch identity repair skipped (plex not configured)")
+                return
+            from projectionist.watch_tracker.identity import sync_plex_watch_identities
+
+            logger.info("Startup: background watch identity alias + attribution repair…")
+            result = sync_plex_watch_identities(
+                manager.db,
+                plex_url=str(settings.plex_url or ""),
+                plex_token=str(settings.plex_token or ""),
+                repair=True,
+            )
+            logger.info("Startup: watch identity repair done (%s)", result)
+        except Exception:  # noqa: BLE001
+            logger.exception("Startup: watch identity repair failed (non-fatal)")
+
+    threading.Thread(
+        target=_repair_watch_identities,
+        daemon=True,
+        name="watch-identity-repair",
+    ).start()
+
     # Bind closed-loop miss telemetry so facet resolve can fire-and-forget P1 events.
     try:
         from projectionist.facets.closed_loop import bind_closed_loop_database
@@ -5703,6 +5730,22 @@ def admin_watch_tracker_status(user=Depends(require_role("owner"))) -> Dict[str,
 
     return watch_tracker_status(_db())
 
+
+@app.post("/api/admin/watch-tracker/repair-identities")
+def admin_repair_watch_identities(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Refresh Plex server-owner account aliases and attribute NULL ledger rows."""
+    del user
+    settings = _settings()
+    if not str(settings.plex_url or "").strip() or not str(settings.plex_token or "").strip():
+        return {"status": "skipped", "reason": "plex_not_configured"}
+    from projectionist.watch_tracker.identity import sync_plex_watch_identities
+
+    return sync_plex_watch_identities(
+        _db(),
+        plex_url=str(settings.plex_url or ""),
+        plex_token=str(settings.plex_token or ""),
+        repair=True,
+    )
 
 @app.get("/api/year-in-review/{year}")
 def get_year_in_review(year: int, user=Depends(get_current_user_dep)) -> Dict[str, Any]:

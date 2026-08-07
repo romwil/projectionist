@@ -49,6 +49,19 @@ def run_history_ingest(
     except Exception as exc:  # noqa: BLE001
         return {"status": "degraded", "reason": "plex_unreachable", "error": str(exc)}
 
+    try:
+        from projectionist.watch_tracker.identity import sync_plex_watch_identities
+
+        sync_plex_watch_identities(
+            db,
+            plex_url=str(settings.plex_url or ""),
+            plex_token=str(settings.plex_token or ""),
+            server_machine_id=machine_id,
+            repair=True,
+        )
+    except Exception:  # noqa: BLE001
+        logger.exception("watch identity alias refresh failed (continuing ingest)")
+
     cursor = get_ingest_cursor(db, source="plex_history", server_machine_id=machine_id)
     now_ms = int(time.time() * 1000)
     high_water = int(cursor["high_watermark_ms"]) if cursor and cursor.get("high_watermark_ms") else None

@@ -65,7 +65,7 @@ an observation is not treated as proof of an uninterrupted viewing.
 | Table | Purpose |
 |-------|---------|
 | `watch_ingest_cursors` | One high-water mark per source and Plex server. A failed or cancelled page leaves the previous mark intact. |
-| `watch_source_identities` | Stable source account → Projectionist user mapping. Plex accounts map only by exact `Account.id == users.plex_user_id`; unknown accounts remain isolated. |
+| `watch_source_identities` | Stable source account → Projectionist user mapping. Exact `source_user_key == users.plex_user_id` (plex.tv id) maps as `plex_account_id`. The server-owner PMS local `/accounts` id (often `1`) is aliased to the linked owner when the account name matches the PLEX_TOKEN plex.tv username (`plex_server_account`). Unknown shared accounts stay `unmapped` / `user_id` NULL. |
 | `watch_events` | Normalized movie/episode evidence with source kind, account key, rating key, event time, optional progress/duration, and a deterministic payload hash. |
 
 The `watch_history_ingest` scheduled task runs every 15 minutes. Its first pass
