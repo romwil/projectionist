@@ -169,6 +169,14 @@ class PlexOnDeckItem:
 
 
 @dataclass(frozen=True)
+class PlexServerAccount:
+    """Local PMS ``/accounts`` row (id is often ≠ plex.tv user id for the owner)."""
+
+    account_id: str
+    name: str
+
+
+@dataclass(frozen=True)
 class PlexActiveSession:
     """Privacy-minimized playable row from Plex's active sessions endpoint."""
 
@@ -370,6 +378,18 @@ class PlexClient:
     def friendly_name(self) -> str:
         _, name = self.server_identity()
         return name
+
+    def accounts(self) -> List[PlexServerAccount]:
+        """Return local PMS accounts (``id`` + ``name``) used by history/session keys."""
+        root = self._request_xml("/accounts")
+        rows: List[PlexServerAccount] = []
+        for element in self._container_children(root, "Account"):
+            account_id = str(element.attrib.get("id") or "").strip()
+            name = str(element.attrib.get("name") or "").strip()
+            if not account_id:
+                continue
+            rows.append(PlexServerAccount(account_id=account_id, name=name))
+        return rows
 
     def history_page(
         self,

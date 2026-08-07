@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [1.32.3] — 2026-08-07
+
+Server-owner Plex watches finally attribute to the linked Projectionist account, so Year in Review and per-user rollups see real finishes instead of an empty year.
+
+### Highlights
+- **Your finishes count again.** Watches under the Plex server’s local owner account map to your Projectionist profile.
+- **Honest about the rest.** Shared-library accounts that never signed in stay unmapped — we don’t guess.
+- **Repair without a wipe.** Startup (and history ingest) backfills existing NULL attributions where the mapping is safe.
+
+### Fixed
+- P0: PMS history/session keys for the server owner use the local `/accounts` id (often `1`) while auth stores plex.tv `id` on `users.plex_user_id` — exact-match-only resolution left all owner completions `user_id=NULL`. Alias the owner’s local account when the PMS account name matches the PLEX_TOKEN plex.tv username (`mapping_method=plex_server_account`); repair NULL events/sessions/completions idempotently without reassigning unknown keys.
+- Owner admin `POST /api/admin/watch-tracker/repair-identities` for a one-shot sync + repair (also runs on startup / history ingest).
+
+### Added
+- `tests/test_watch_identity_mapping.py` — exact match, owner local-id failure mode, unknown shared keys stay NULL, idempotent repair, YIR floor smoke for attributed vs NULL-only finishes.
+
+### Changed
+- Docs: `docs/DATA_MODEL.md` identity mapping; `docs/ops/AUTOMAT.md` repair ops note.
+
+### Verification
+- Backend: 1,864 passed, 6 skipped, 34 subtests passed; ~75.7% coverage (74% required).
+- Frontend unit: 674 passed, 0 failed.
+- ESLint: 0 errors (warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_watch_identity_mapping.py` + watch history/tracker/live sessions.
+- Prod DB copy dry-run (Automat): 2026 completions before 671 NULL / 0 attributed → after 571 NULL / **100** attributed to owner (`source_user_key=1`); remaining NULL are unlinked shared accounts.
+
 ## [1.32.2] — 2026-08-07
 
 Owners push weekly newsletters and Year in Review tests from **Ops → Newsletters**, Year in Review generate uses the current year (year to date) with a durable inbox item, and double-feature / anniversary “why” copy finally names real pairing reasons.

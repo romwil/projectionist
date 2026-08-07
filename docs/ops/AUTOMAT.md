@@ -98,6 +98,23 @@ Maintainer QA scripts and dated run artifacts live on the host under `/Volumes/a
 
 ---
 
+## Watch identity attribution (Plex owner local account)
+
+PMS history `accountID` / session `User.id` for the **server owner** is often the local `/accounts` id (commonly `1`), while Projectionist stores plex.tv `id` on `users.plex_user_id`. Shared users usually already use their plex.tv id as the PMS account id.
+
+On startup and each history ingest, Projectionist aliases the local owner account (name match to the PLEX_TOKEN plex.tv username) and repairs NULL `user_id` on events/sessions/completions for mapped keys only. Shared accounts without a linked Projectionist user stay NULL (fail closed).
+
+Owner one-shot (LAN prod, authenticated as owner):
+
+```bash
+curl -s -X POST -b "curatorx_session=…" \
+  http://10.10.1.202:8788/api/admin/watch-tracker/repair-identities
+```
+
+Or wait for the next container start / history ingest after upgrading to **1.32.3+**. Do not wipe `watch_*` tables.
+
+---
+
 ## See also
 
 - `.cursor/rules/automat-environments.mdc` — always-on agent summary of this runbook

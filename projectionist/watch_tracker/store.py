@@ -11,6 +11,10 @@ import uuid
 from typing import Any, Dict, Mapping, Optional, Sequence
 
 from projectionist.library.db import Database
+from projectionist.watch_tracker.identity import (
+    MAPPING_UNMAPPED,
+    resolve_user_id as _resolve_user_id_with_method,
+)
 from projectionist.watch_tracker.models import IngestResult, SOURCE_EVENT_KINDS, WatchEventInput
 
 logger = logging.getLogger(__name__)
@@ -42,13 +46,8 @@ def payload_hash_for(event: WatchEventInput) -> str:
 
 
 def _resolve_user_id(db: Database, source_user_key: str) -> Optional[str]:
-    key = str(source_user_key or "").strip()
-    if not key:
-        return None
-    row = db.get_user_by_plex_id(key)
-    if row is None:
-        return None
-    return str(row["id"])
+    user_id, _method = _resolve_user_id_with_method(db, source_user_key)
+    return user_id
 
 
 def _upsert_identity(
@@ -59,9 +58,14 @@ def _upsert_identity(
     source_user_key: str,
     user_id: Optional[str],
     display_name: Optional[str],
+    mapping_method: str,
     now: float,
 ) -> None:
-    mapping_method = "plex_account_id" if user_id else "unmapped"
+    method = str(mapping_method or MAPPING_UNMAPPED).strip() or MAPPING_UNMAPPED
+    if user_id and method == MAPPING_UNMAPPED:
+        method = "plex_account_id"
+    if not user_id:
+        method = MAPPING_UNMAPPED
     conn.execute(
         """
         INSERT INTO watch_source_identities (
@@ -83,7 +87,7 @@ def _upsert_identity(
             source_user_key,
             user_id,
             display_name,
-            mapping_method,
+            method,
             now,
             now,
         ),
@@ -120,7 +124,7 @@ def ingest_watch_events(
                 if event.media_type not in {"movie", "episode"}:
                     local.deduped += 1
                     continue
-                user_id = _resolve_user_id(db, source_user_key)
+                user_id, mapping_method = _resolve_user_id_with_method(db, source_user_key)
                 if user_id:
                     local.mapped += 1
                 else:
@@ -132,6 +136,7 @@ def ingest_watch_events(
                     source_user_key=source_user_key,
                     user_id=user_id,
                     display_name=names.get(source_user_key),
+                    mapping_method=mapping_method,
                     now=now,
                 )
                 digest = payload_hash_for(event)
