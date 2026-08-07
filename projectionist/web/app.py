@@ -1272,6 +1272,12 @@ def about_page() -> HTMLResponse:
     return _serve_index()
 
 
+@app.get("/year-in-review/{year}", response_class=HTMLResponse)
+def year_in_review_page(year: str) -> HTMLResponse:
+    del year
+    return _serve_index()
+
+
 @app.get("/help", response_class=HTMLResponse)
 def help_page() -> HTMLResponse:
     return _serve_index()

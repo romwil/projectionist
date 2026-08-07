@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [1.32.5] — 2026-08-07
+
+Year in Review deep links load again — cold opens of `/year-in-review/{year}` serve the app shell instead of a JSON 404.
+
+### Highlights
+- **Open the reel from a link.** Inbox / pasted `/year-in-review/2026` URLs load the cinema reel on a fresh tab, not a bare “Not Found.”
+
+### Fixed
+- Register SPA HTML route `GET /year-in-review/{year}` (same pattern as `/about`, `/admin/…`) so deep links don’t fall through to FastAPI JSON 404.
+
+### Verification
+- Focused: `tests/test_year_in_review.py` (16 passed) including SPA deep-link smoke.
+- Backend coverage floor unchanged (74%); prior 1.32.4 suite was green at ~75.8%.
+
 ## [1.32.4] — 2026-08-07
 
 Year in Review stops romanticizing tracker noise: rewatches need distinct days, ratings name their source, busy months list real titles, and the honesty beat is plain English.
