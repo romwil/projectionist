@@ -148,6 +148,60 @@ def _release_iso(row: Mapping[str, Any]) -> str:
     return ""
 
 
+def _is_anniversary_rail_mode(mode: str, label: str) -> bool:
+    """True when a seasonal snapshot/rail is an anniversary shelf (not holiday keywords)."""
+    mode_l = str(mode or "").strip().lower()
+    if mode_l in {"weekend_anniversary", "holiday_anniversary"}:
+        return True
+    label_l = str(label or "").casefold()
+    return "anniversar" in label_l or "on this day" in label_l
+
+
+def _revalidate_anniversary_snapshot_items(
+    db: Database,
+    items: Sequence[Mapping[str, Any]],
+    selected_day: date,
+    *,
+    limit: int,
+) -> List[Dict[str, Any]]:
+    """Drop poisoned anniversary snapshot rows that lack a real month+day match.
+
+    Watched-anniversary rows (``anniversary_text`` starts with \"Watched\") are kept.
+    Release rows must join a library item whose release/air date matches
+    ``selected_day``'s month+day. Year-only or wrong-day junk is discarded so a
+    stale snapshot cannot serve an alphabetical library dump.
+    """
+    capped = _cap_limit(limit)
+    ids: List[int] = []
+    for item in items:
+        try:
+            ids.append(int(item["id"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    by_id = db.get_library_items_by_ids(ids)
+    kept: List[Dict[str, Any]] = []
+    for item in items:
+        try:
+            item_id = int(item["id"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        text = str(item.get("anniversary_text") or "")
+        if text.casefold().startswith("watched"):
+            kept.append(dict(item))
+        else:
+            lib = by_id.get(item_id)
+            if lib is None:
+                continue
+            release = _parse_iso_date(_release_iso(lib))
+            if release is None:
+                continue
+            if release.month == selected_day.month and release.day == selected_day.day:
+                kept.append(dict(item))
+        if len(kept) >= capped:
+            break
+    return kept
+
+
 def _feed_item(row: Mapping[str, Any], **extra: Any) -> Dict[str, Any]:
     item = row_to_query_item(row)
     release = _release_iso(row)
@@ -362,21 +416,49 @@ def feed_seasonal_spotlight(
         except Exception:  # noqa: BLE001
             snapshot = None
         if snapshot and isinstance(snapshot.get("items"), list) and snapshot["items"]:
-            items = list(snapshot["items"])[:capped]
-            return {
-                "feed": "seasonal-spotlight",
-                "date": selected_day.isoformat(),
-                "label": str(snapshot.get("label") or label),
-                "mode": str(snapshot.get("mode") or mode),
-                "scope_id": str(snapshot.get("scope_id") or scope_id),
-                "grounding_date": context.get("grounding_date"),
-                "pre_shoulder_days": context.get("pre_shoulder_days"),
-                "post_shoulder_days": context.get("post_shoulder_days"),
-                "items": items,
-                "total": len(items),
-                "note": None,
-                "from_schedule": True,
-            }
+            snap_label = str(snapshot.get("label") or label)
+            snap_mode = str(snapshot.get("mode") or mode)
+            raw_items = list(snapshot["items"])
+            # Anniversary snapshots can be poisoned by a stale year-only scanner;
+            # re-validate against library release dates before serving.
+            if _is_anniversary_rail_mode(snap_mode, snap_label):
+                items = _revalidate_anniversary_snapshot_items(
+                    db, raw_items, selected_day, limit=capped
+                )
+                if not items:
+                    # Fall through to live computation — do not return alpha dump.
+                    pass
+                else:
+                    return {
+                        "feed": "seasonal-spotlight",
+                        "date": selected_day.isoformat(),
+                        "label": snap_label,
+                        "mode": snap_mode,
+                        "scope_id": str(snapshot.get("scope_id") or scope_id),
+                        "grounding_date": context.get("grounding_date"),
+                        "pre_shoulder_days": context.get("pre_shoulder_days"),
+                        "post_shoulder_days": context.get("post_shoulder_days"),
+                        "items": items,
+                        "total": len(items),
+                        "note": None,
+                        "from_schedule": True,
+                    }
+            else:
+                items = raw_items[:capped]
+                return {
+                    "feed": "seasonal-spotlight",
+                    "date": selected_day.isoformat(),
+                    "label": snap_label,
+                    "mode": snap_mode,
+                    "scope_id": str(snapshot.get("scope_id") or scope_id),
+                    "grounding_date": context.get("grounding_date"),
+                    "pre_shoulder_days": context.get("pre_shoulder_days"),
+                    "post_shoulder_days": context.get("post_shoulder_days"),
+                    "items": items,
+                    "total": len(items),
+                    "note": None,
+                    "from_schedule": True,
+                }
 
     anniversary_items: List[Mapping[str, Any]] = []
     if is_weekend or mode == "holiday":
@@ -395,15 +477,32 @@ def feed_seasonal_spotlight(
                         ORDER BY a.id ASC
                         LIMIT ?
                         """,
-                        (selected_day.isoformat(), capped),
+                        (selected_day.isoformat(), max(capped * 4, 48)),
                     ).fetchall()
-                    anniversary_items = list(rows)
+                    # Re-validate release anniversaries against real month+day so a
+                    # stale scanner table (year-only false positives) cannot fill the rail.
+                    kept: List[Mapping[str, Any]] = []
+                    for row in rows:
+                        ann_type = str(row["anniversary_type"] or "")
+                        if ann_type == "watched_anniversary":
+                            kept.append(row)
+                            continue
+                        if ann_type != "release_anniversary":
+                            continue
+                        release = _parse_iso_date(_release_iso(row))
+                        if release is None:
+                            continue
+                        if release.month == selected_day.month and release.day == selected_day.day:
+                            kept.append(row)
+                        if len(kept) >= capped:
+                            break
+                    anniversary_items = kept
         except Exception:  # noqa: BLE001
             anniversary_items = []
 
     if anniversary_items:
-        items = [_feed_item(row) for row in anniversary_items]
-        for item, row in zip(items, anniversary_items):
+        items = [_feed_item(row) for row in anniversary_items[:capped]]
+        for item, row in zip(items, anniversary_items[:capped]):
             try:
                 item["anniversary_text"] = str(row["anniversary_text"] or "")
             except (TypeError, KeyError, IndexError):

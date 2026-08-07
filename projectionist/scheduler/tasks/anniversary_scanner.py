@@ -1,8 +1,12 @@
 """Idle task: scan for release-date anniversaries and "watched on this day".
 
-Finds library items whose release month+day matches today, producing
+Finds library items whose **actual** release/air month+day matches today, producing
 "On This Day" entries like "Released 10 years ago today."  Also detects
 "You watched X exactly N months ago today."
+
+Year-only rows (no ``release_date`` / ``first_air_date``) cannot be release
+anniversaries — inventing today's month/day from the year alone falsely marks
+nearly the entire library.
 
 Results are stored in a ``daily_anniversaries`` table, cleared and rebuilt
 each run for the current date.
@@ -15,7 +19,7 @@ from __future__ import annotations
 import logging
 import time
 from datetime import date, datetime
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
@@ -46,14 +50,30 @@ def _ensure_table(db: Database) -> None:
         )
 
 
-def _parse_year_from_item(row: Any) -> int | None:
-    """Extract release year from the library item."""
-    y = row["year"]
-    if y is not None:
-        try:
-            return int(y)
-        except (ValueError, TypeError):
-            pass
+def _parse_iso_date(value: Any) -> Optional[date]:
+    raw = str(value or "").strip()[:10]
+    if len(raw) < 10:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _item_release_date(row: Any) -> Optional[date]:
+    """Prefer full release/air dates; year alone is not enough for month+day match."""
+    keys = row.keys() if hasattr(row, "keys") else ()
+    media = str(row["media_type"] or "") if "media_type" in keys else ""
+    if media == "show" and "first_air_date" in keys:
+        parsed = _parse_iso_date(row["first_air_date"])
+        if parsed is not None:
+            return parsed
+    if "release_date" in keys:
+        parsed = _parse_iso_date(row["release_date"])
+        if parsed is not None:
+            return parsed
+    if "first_air_date" in keys:
+        return _parse_iso_date(row["first_air_date"])
     return None
 
 
@@ -73,6 +93,7 @@ def _months_ago(today: date, months: int) -> date:
 async def run(
     db: Database, settings: Settings, should_stop: Callable[[], bool]
 ) -> Dict[str, Any]:
+    del settings
     _ensure_table(db)
     today = date.today()
     scanned_date = today.isoformat()
@@ -91,16 +112,12 @@ async def run(
             return {"status": "interrupted", "found": len(anniversaries)}
 
         item_id = int(row["id"])
-        year = _parse_year_from_item(row)
 
-        # Release date anniversary (month+day match, different year).
-        if year is not None and year != today.year:
-            try:
-                release = date(year, today.month, today.day)
-            except ValueError:
-                release = None
-            if release is not None and release.month == today.month and release.day == today.day:
-                age = today.year - year
+        # Release / first-air anniversary (real month+day match, different year).
+        release = _item_release_date(row)
+        if release is not None and release.year != today.year:
+            if release.month == today.month and release.day == today.day:
+                age = today.year - release.year
                 label = f"Released {age} year{'s' if age != 1 else ''} ago today"
                 anniversaries.append(
                     {

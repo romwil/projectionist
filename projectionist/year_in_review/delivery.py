@@ -36,6 +36,12 @@ def in_drop_window(now: Optional[float] = None) -> bool:
     return dt.month == 1 and dt.day <= 14
 
 
+def _ready_path(year: int, status: Optional[str]) -> Optional[str]:
+    if status in ("ready", "tease"):
+        return f"/year-in-review/{int(year)}"
+    return None
+
+
 def deliver_year_in_review(
     db: Database,
     settings: Settings,
@@ -46,7 +52,12 @@ def deliver_year_in_review(
     force: bool = False,
     now: Optional[float] = None,
 ) -> Dict[str, Any]:
-    """Generate snapshots and notify opted-in non-guest users with Plex mapping."""
+    """Generate snapshots and notify opted-in non-guest users with Plex mapping.
+
+    When ``force`` is True (owner self-test), skip opt-in / Plex-mapping gates and
+    still create the inbox notification so the test path matches production delivery.
+    """
+    _ = now  # reserved for clock injection by callers / tests
     skipped_disabled = 0
     skipped_opt_out = 0
     skipped_guest = 0
@@ -57,6 +68,8 @@ def deliver_year_in_review(
     emailed = 0
     generated = 0
     targeted = 0
+    last_status: Optional[str] = None
+    last_path: Optional[str] = None
 
     candidates: List[Dict[str, Any]] = []
     if user_ids is None:
@@ -95,11 +108,10 @@ def deliver_year_in_review(
             logger.exception("YIR generate failed for %s", uid)
             continue
         generated += 1
+        last_status = str(snap.get("status") or "")
+        last_path = _ready_path(year, last_status)
         if snap.get("status") == "empty":
             skipped_empty += 1
-            continue
-        if not user.get("year_in_review_opt_in"):
-            # force generate without notify
             continue
         preferred = str(user.get("preferred_name") or user.get("display_name") or "there").strip()
         path = f"/year-in-review/{int(year)}"
@@ -129,6 +141,7 @@ def deliver_year_in_review(
             related_id=f"yir-{year}",
             email_subject=title,
             year=int(year),
+            force_inbox=force,
         )
         if result.get("notification"):
             delivered += 1
@@ -139,6 +152,8 @@ def deliver_year_in_review(
     return {
         "year": int(year),
         "status_hint": status_hint,
+        "status": last_status,
+        "path": last_path,
         "generated": generated,
         "delivered": delivered,
         "emailed": emailed,

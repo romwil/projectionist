@@ -248,8 +248,32 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **roles:** `owner`
 - **tags:** `notifications`, `admin`
 - **source:** `frontend/src/pages/MailSettingsPage.jsx`, `frontend/src/layouts/AdminLayout.jsx`
-- **steps:** Open Admin → Mail & alerts (`admin-nav-mail` / `/admin/mail`). Inspect Outbound email (`mail-transport-panel`: enable toggle, provider, from fields when open) and Weekly newsletter scope (`mail-newsletter-scope`). Do **not** save destructive mail changes or send newsletter unless explicitly requested.
-- **pass:** `admin-mail` loads; transport controls + newsletter scope select visible. Member navigating to `/admin/mail` still redirects away (covered by `nav.admin-redirect`).
+- **steps:** Open Admin → Mail (`admin-nav-mail` / `/admin/mail`). Inspect Outbound email (`mail-transport-panel`: enable toggle, provider, from fields when open). Confirm page copy points newsletter / Year in Review push to Ops → Newsletters (link to `/admin/newsletters`). Do **not** save destructive mail changes unless explicitly requested.
+- **pass:** `admin-mail` loads; transport controls visible. Weekly newsletter scope / YIR generate controls are **not** on Mail (they live on Newsletters). Member navigating to `/admin/mail` still redirects away (covered by `nav.admin-redirect`).
+
+### `admin.newsletters-surface`
+
+- **roles:** `owner`
+- **tags:** `notifications`, `admin`, `newsletter`, `yir`
+- **source:** `frontend/src/pages/NewslettersPage.jsx`, `frontend/src/components/admin/WeeklyNewsletterPanel.jsx`, `frontend/src/components/admin/YearInReviewAdminPanel.jsx`, `frontend/src/lib/adminNav.js`
+- **steps:** From Admin rail, open Ops → Newsletters (`admin-nav-newsletters` / `/admin/newsletters`). Confirm page chrome (`admin-newsletters`) and both panels: weekly newsletter (`newsletters-newsletter-scope` + `newsletters-newsletter-send`) and Year in Review (`newsletters-yir-panel`, `newsletters-yir-self-generate`, `newsletters-yir-notify-toggle`). Scroll the full page; confirm no sticky admin chrome pins content off-screen on a narrow viewport (~390px width) if available.
+- **pass:** Both panels always visible (not gated behind mail-configured). Scope select + send control present; YIR notify toggle + generate button present. Do **not** confirm send/generate dialogs in this ID (presence only). Member hitting `/admin/newsletters` redirects (covered by `nav.admin-redirect`).
+
+### `admin.newsletters-yir-generate-inbox`
+
+- **roles:** `owner`
+- **tags:** `notifications`, `admin`, `yir`, `inbox`
+- **source:** `frontend/src/components/admin/YearInReviewAdminPanel.jsx`, `frontend/src/pages/InboxPage.jsx`, `projectionist/year_in_review/delivery.py`
+- **steps:** On `/admin/newsletters`, leave `newsletters-yir-notify-toggle` on. Click `newsletters-yir-self-generate` and **confirm** the dialog. Wait for `newsletters-yir-status`. If status is success with `newsletters-yir-link`, follow the link (or open Inbox). If status reports not enough finishes / empty, record N/A for reel open but still open `/inbox` and note whether a YIR card appeared.
+- **pass:** Generate completes without crash. On ready: status success, optional reel link only when ready, and Inbox shows a durable Year in Review item (or reel opens at `/year-in-review/{year}`). Empty-year is PASS with honest empty copy (not a silent failure). Canceling the confirm dialog without generating is not this ID — re-run with confirm.
+
+### `settings.notifications-yir-opt-in`
+
+- **roles:** `owner`, `member`
+- **tags:** `notifications`, `settings`, `yir`
+- **source:** `frontend/src/pages/settings/NotificationsSettingsPage.jsx`
+- **steps:** Open Settings → Notifications. Locate Year in Review opt-in / self-generate controls when present. Confirm owner can see generate-self affordance; toggle opt-in once and save, then restore.
+- **pass:** YIR preference controls render without crash; save persists. Do not leave the account permanently changed from its prior opt-in state.
 
 ### `journey.list-filter`
 
@@ -1010,6 +1034,9 @@ after direct URL navigation.
 | `settings.notifications-prefs` | member, owner, youth |
 | `settings.notifications-owner-self-send` | owner |
 | `admin.mail-notify-surface` | owner |
+| `admin.newsletters-surface` | owner |
+| `admin.newsletters-yir-generate-inbox` | owner |
+| `settings.notifications-yir-opt-in` | owner, member |
 | `admin.tasks-detail-controls` | owner |
 | `admin.tasks-execution-log` | owner |
 | `admin.tasks-next-run-sort` | owner |

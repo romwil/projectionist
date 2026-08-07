@@ -100,20 +100,31 @@ test("double feature finds shared genres", () => {
   assert.ok(shared.has("Thriller"));
 });
 
-test("double feature bridge text varies by year gap", () => {
-  const shared = ["Drama"];
-  const yearGap = 30;
+test("double feature bridge text cites shared genre, years, and runtime", () => {
+  // Mirrors projectionist.library.double_feature.build_pairing_why (server-owned copy).
+  const shared = ["Comedy"];
+  const yearA = 2014;
+  const yearB = 2022;
+  const yearGap = Math.abs(yearA - yearB);
+  const combined = 73 + 139;
 
   let bridge;
   if (shared.length && yearGap > 15) {
-    bridge = `Both explore ${shared.join(", ").toLowerCase()} territory, but ${yearGap} years apart`;
+    bridge = `Shared ${shared.join(" / ").toLowerCase()} · ${yearGap} years apart (${yearA} & ${yearB})`;
   } else if (shared.length) {
-    bridge = `A ${shared.join(", ").toLowerCase()} pairing from the same era`;
+    bridge = `Shared ${shared.join(" / ").toLowerCase()} · close in time (${yearA} & ${yearB})`;
   } else {
-    bridge = "Two different angles on cinema — contrast and compare";
+    bridge = "Contrast pairing from your shelves";
   }
+  const hours = Math.floor(combined / 60);
+  const mins = combined % 60;
+  bridge = `${bridge} · ~${hours}h ${mins}m night`;
 
-  assert.ok(bridge.includes("30 years apart"));
+  assert.ok(bridge.toLowerCase().includes("shared comedy"));
+  assert.ok(bridge.includes("2014"));
+  assert.ok(bridge.includes("2022"));
+  assert.ok(bridge.includes("~3h 32m"));
+  assert.equal(bridge.toLowerCase().includes("same era"), false);
 });
 
 test("double feature combined runtime sums correctly", () => {

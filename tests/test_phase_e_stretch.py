@@ -11,7 +11,11 @@ from unittest import mock
 
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
-from projectionist.library.double_feature import suggest_tonight_double_feature
+from projectionist.library.double_feature import (
+    build_pairing_why,
+    build_title_why,
+    suggest_tonight_double_feature,
+)
 from projectionist.live_channels.airing_why import (
     pick_youth_safe_live_station,
     station_airing_why,
@@ -82,24 +86,85 @@ class DoubleFeatureTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "t.db")
             with db.connect() as conn:
-                for title, year, genres in (
-                    ("Heat", 1995, '["Crime","Drama"]'),
-                    ("The Departed", 2006, '["Crime","Thriller"]'),
-                    ("My Neighbor Totoro", 1988, '["Animation","Family"]'),
+                for title, year, genres, runtime in (
+                    ("Heat", 1995, '["Crime","Drama"]', 170),
+                    ("The Departed", 2006, '["Crime","Thriller"]', 151),
+                    ("My Neighbor Totoro", 1988, '["Animation","Family"]', 86),
                 ):
                     conn.execute(
                         """
                         INSERT INTO library_items (
                             rating_key, media_type, title, year, genres, view_count,
-                            added_at, updated_at
-                        ) VALUES (?, 'movie', ?, ?, ?, 0, 1, 1)
+                            runtime_minutes, added_at, updated_at
+                        ) VALUES (?, 'movie', ?, ?, ?, 0, ?, 1, 1)
                         """,
-                        (title.lower().replace(" ", "-"), title, year, genres),
+                        (title.lower().replace(" ", "-"), title, year, genres, runtime),
                     )
             payload = suggest_tonight_double_feature(db)
             self.assertEqual(payload["feed"], "tonight-double-feature")
             self.assertEqual(len(payload["items"]), 2)
             self.assertTrue(payload["bridge_text"])
+            bridge = payload["bridge_text"].casefold()
+            self.assertNotIn("from the same era", bridge)
+            self.assertNotIn("first half", bridge)
+            for item in payload["items"]:
+                why = str(item.get("why") or item.get("recommendation_reason") or "")
+                self.assertTrue(why)
+                self.assertNotIn("first half", why.casefold())
+                self.assertNotIn("second half", why.casefold())
+                self.assertEqual(item.get("why"), item.get("recommendation_reason"))
+
+    def test_pairing_why_cites_shared_genre_years_and_runtime(self) -> None:
+        bridge = build_pairing_why(
+            shared_genres={"Comedy"},
+            year_a=2014,
+            year_b=2022,
+            year_gap=8,
+            runtime_a=73,
+            runtime_b=139,
+        )
+        self.assertIn("shared comedy", bridge.casefold())
+        self.assertIn("2014", bridge)
+        self.assertIn("2022", bridge)
+        self.assertIn("~3h 32m", bridge)
+        self.assertNotIn("same era", bridge.casefold())
+
+    def test_pairing_why_cites_year_gap_and_same_director(self) -> None:
+        bridge = build_pairing_why(
+            shared_genres={"Crime", "Drama"},
+            shared_directors={"Michael Mann"},
+            year_a=1995,
+            year_b=2023,
+            year_gap=28,
+            runtime_a=170,
+            runtime_b=150,
+        )
+        self.assertIn("Michael Mann", bridge)
+        self.assertIn("28 years apart", bridge)
+
+    def test_title_why_uses_unwatched_genre_and_runtime(self) -> None:
+        why = build_title_why(
+            {
+                "view_count": 0,
+                "genres": '["Comedy","Mystery"]',
+                "runtime_minutes": 139,
+            },
+            half="opening",
+            shared_genres={"Comedy"},
+        )
+        self.assertIn("Still unwatched", why)
+        self.assertIn("comedy", why.casefold())
+        self.assertIn("139 min", why)
+        self.assertNotIn("first half", why.casefold())
+
+    def test_title_why_rewatch_signal(self) -> None:
+        why = build_title_why(
+            {"view_count": 2, "genres": '["Documentary"]', "runtime_minutes": 73},
+            half="closing",
+            shared_genres=set(),
+        )
+        self.assertIn("Rewatch-friendly", why)
+        self.assertIn("2 plays", why)
 
 
 class BackupSnapshotTests(unittest.TestCase):

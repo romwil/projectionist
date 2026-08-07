@@ -65,6 +65,7 @@ from projectionist.library.query import (
     query_library_async,
     row_to_query_item,
 )
+from projectionist.library.double_feature import suggest_tonight_double_feature
 from projectionist.library.search import exact_title_cards, row_to_title_card, search_library
 from projectionist.library.titles import get_title_detail
 from projectionist.library.watch_progress import watch_progress_state
@@ -458,6 +459,38 @@ def _seerr_search_item_to_tool_item(item: Mapping[str, Any], media_type: str) ->
     if tvdb_id is not None:
         payload["tvdb_id"] = int(tvdb_id)
     return payload
+
+
+def _feed_item_to_title_card(item: Mapping[str, Any]) -> TitleCard:
+    """Build a TitleCard from an Explore feed item (genres already a list)."""
+    genres = item.get("genres") or []
+    if isinstance(genres, str):
+        genres_json = genres
+    else:
+        genres_json = json.dumps(list(genres))
+    row = {
+        "media_type": item.get("media_type") or "movie",
+        "title": item.get("title") or "",
+        "year": item.get("year"),
+        "tmdb_id": item.get("tmdb_id"),
+        "tvdb_id": item.get("tvdb_id"),
+        "rating_key": item.get("rating_key") or "",
+        "poster_url": item.get("poster_url") or "",
+        "backdrop_url": item.get("backdrop_url") or "",
+        "summary": item.get("overview") or item.get("summary") or "",
+        "genres": genres_json,
+        "in_radarr": bool(item.get("in_radarr")),
+        "in_sonarr": bool(item.get("in_sonarr")),
+        "content_rating": item.get("content_rating") or "",
+        "runtime_minutes": item.get("runtime_minutes"),
+        "view_count": item.get("view_count"),
+        "view_offset_ms": item.get("view_offset_ms"),
+        "duration_ms": item.get("duration_ms"),
+        "total_episode_count": item.get("total_episode_count"),
+        "unwatched_episode_count": item.get("unwatched_episode_count"),
+    }
+    reason = str(item.get("recommendation_reason") or item.get("why") or "").strip()
+    return row_to_title_card(row, reason=reason)
 
 
 def _card_to_tool_item(card: TitleCard) -> Dict[str, Any]:
@@ -3272,81 +3305,39 @@ class ToolRegistry:
 
     async def _tool_suggest_double_feature(self, args: Mapping[str, Any]) -> str:
         """Pick two complementary library titles for a double feature pairing."""
-        import random
-
         theme = str(args.get("theme") or "").strip().lower()
-
-        where_clause = "media_type = 'movie' AND view_count >= 0"
-        params: List[Any] = []
-        if theme:
-            where_clause += " AND LOWER(genres) LIKE ?"
-            params.append(f"%{theme}%")
-
-        with self.db.connect() as conn:
-            rows = conn.execute(
-                f"""
-                SELECT id, rating_key, media_type, title, year, genres, poster_url,
-                       backdrop_url, view_count, last_viewed_at, tmdb_id, tvdb_id,
-                       runtime_minutes, summary, in_radarr, in_sonarr, content_rating
-                FROM library_items
-                WHERE {where_clause}
-                ORDER BY RANDOM()
-                LIMIT 20
-                """,
-                params,
-            ).fetchall()
-
-        candidates = [dict(r) for r in rows]
+        youth_ceiling = None
         if self.is_youth:
-            candidates = [
-                row for row in candidates if self._card_allowed(row_to_title_card(row))
-            ]
-        if len(candidates) < 2:
+            from projectionist.youth.rating_gate import resolve_youth_max_rating
+
+            youth_ceiling = resolve_youth_max_rating(self.settings)
+
+        payload = suggest_tonight_double_feature(
+            self.db,
+            theme=theme,
+            youth_max_rating=youth_ceiling,
+        )
+        item_a = payload.get("title_a")
+        item_b = payload.get("title_b")
+        if not item_a or not item_b:
             return json.dumps({"error": "Not enough titles to form a double feature."})
 
-        random.shuffle(candidates)
+        card_a = _feed_item_to_title_card(item_a)
+        card_b = _feed_item_to_title_card(item_b)
+        if self.is_youth and (
+            not self._card_allowed(card_a) or not self._card_allowed(card_b)
+        ):
+            return json.dumps({"error": "Not enough titles to form a double feature."})
 
-        title_a_row = candidates[0]
-        title_b_row = None
-        for candidate in candidates[1:]:
-            shared_genres = set(json.loads(title_a_row.get("genres") or "[]")) & set(
-                json.loads(candidate.get("genres") or "[]")
-            )
-            if shared_genres:
-                title_b_row = candidate
-                break
-
-        if title_b_row is None:
-            title_b_row = candidates[1]
-
-        genres_a = set(json.loads(title_a_row.get("genres") or "[]"))
-        genres_b = set(json.loads(title_b_row.get("genres") or "[]"))
-        shared = genres_a & genres_b
-        year_a = title_a_row.get("year") or 0
-        year_b = title_b_row.get("year") or 0
-        year_gap = abs(year_a - year_b)
-
-        if shared and year_gap > 15:
-            bridge = f"Both explore {', '.join(sorted(shared)[:2]).lower()} territory, but {year_gap} years apart"
-        elif shared:
-            bridge = f"A {', '.join(sorted(shared)[:2]).lower()} pairing from the same era"
-        else:
-            bridge = f"Two different angles on cinema — contrast and compare"
-
-        card_a = row_to_title_card(title_a_row, reason="Double feature — first half")
-        card_b = row_to_title_card(title_b_row, reason="Double feature — second half")
         self._offer_card(card_a)
         self._offer_card(card_b)
-
-        runtime_a = title_a_row.get("runtime_minutes") or 0
-        runtime_b = title_b_row.get("runtime_minutes") or 0
 
         return json.dumps({
             "double_feature": True,
             "title_a": _card_to_tool_item(card_a),
             "title_b": _card_to_tool_item(card_b),
-            "bridge_text": bridge,
-            "combined_runtime": runtime_a + runtime_b,
+            "bridge_text": payload.get("bridge_text") or "",
+            "combined_runtime": int(payload.get("combined_runtime") or 0),
         })
 
     async def _tool_quick_pick_roulette(self, args: Mapping[str, Any]) -> str:

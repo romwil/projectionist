@@ -86,6 +86,7 @@ def deliver_notification(
     email_subject: Optional[str] = None,
     force_email: bool = False,
     force_apprise: bool = False,
+    force_inbox: bool = False,
 ) -> Dict[str, Any]:
     """Create an inbox notification and optionally email / Apprise the member."""
     user = _user_dict(db, user_id)
@@ -99,7 +100,7 @@ def deliver_notification(
         "apprised": False,
         "apprise_error": None,
     }
-    if user_wants_channel(user, kind=kind, channel="inbox"):
+    if force_inbox or user_wants_channel(user, kind=kind, channel="inbox"):
         result["notification"] = db.create_notification(
             notification_id=str(uuid.uuid4()),
             user_id=user_id,

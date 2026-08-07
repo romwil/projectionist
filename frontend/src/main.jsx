@@ -38,6 +38,7 @@ import LibraryPage from "./pages/LibraryPage";
 import MediaIssuesPage from "./pages/MediaIssuesPage";
 import YouthReviewPage from "./pages/YouthReviewPage";
 import MailSettingsPage from "./pages/MailSettingsPage";
+import NewslettersPage from "./pages/NewslettersPage";
 import AccessRequestsPage from "./pages/AccessRequestsPage";
 import LogsPage from "./pages/LogsPage";
 import HolidaysPage from "./pages/HolidaysPage";
@@ -101,6 +102,7 @@ createRoot(document.getElementById("root")).render(
             <Route path="taxonomy" element={<StagedAugmentationsPage />} />
             <Route path="access" element={<AccessRequestsPage />} />
             <Route path="mail" element={<MailSettingsPage />} />
+            <Route path="newsletters" element={<NewslettersPage />} />
             <Route path="logs" element={<LogsPage />} />
             <Route path="scheduled-tasks" element={<Navigate to="/admin/tasks" replace />} />
             <Route path="sync" element={<Navigate to="/admin/libraries" replace />} />

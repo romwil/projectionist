@@ -18,6 +18,7 @@ import {
   newsletterConfirmMessage,
   newsletterResultMessage,
 } from "../../lib/weeklyNewsletter.js";
+import { yirPathFromGenerateResult } from "../../lib/yearInReview.js";
 
 function ChannelRequirementBadge({ requiresOwner, available, ownerConfigured }) {
   if (requiresOwner) {
@@ -165,14 +166,23 @@ export default function NotificationsSettingsPage() {
     try {
       const result = await generateYearInReview({ scope: "self", notify: true });
       const year = result?.year;
-      const path = year ? `/year-in-review/${year}` : null;
+      const path = yirPathFromGenerateResult(result);
       const delivered = Number(result?.delivered) || 0;
-      setYirStatus({
-        type: "success",
-        message: path
-          ? `Ready — delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}. Open ${path}.`
-          : `Generated. Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}.`,
-      });
+      if (result?.status === "empty" || (!path && Number(result?.skipped_empty) > 0)) {
+        setYirStatus({
+          type: "error",
+          message: year
+            ? `Not enough tracked finishes for ${year} yet (year to date).`
+            : "Not enough tracked finishes for this year yet.",
+        });
+      } else {
+        setYirStatus({
+          type: path || delivered > 0 ? "success" : "error",
+          message: path
+            ? `Ready for ${year} — delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}. Reopen from Inbox or ${path}.`
+            : `Generated. Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}. Check Inbox for the link.`,
+        });
+      }
     } catch (error) {
       setYirStatus({
         type: "error",
@@ -321,8 +331,8 @@ export default function NotificationsSettingsPage() {
       {isOwner ? (
         <SettingsPanel title="Send me this week’s newsletter">
           <p className="settings-field-hint">
-            Owners can also push to selected members or everyone under Admin → Mail. This only
-            sends to you, and only if Weekly newsletter is on.
+            Owners can also push to selected members or everyone under Admin → Newsletters. This
+            only sends to you, and only if Weekly newsletter is on.
           </p>
           <button
             type="button"
@@ -347,9 +357,10 @@ export default function NotificationsSettingsPage() {
       {isOwner ? (
         <SettingsPanel title="Generate my Year in Review">
           <p className="settings-field-hint">
-            Builds a private reel from your watch-tracker completions for the prior calendar year
-            and notifies your inbox. Requires Year in Review opt-in and a mapped Plex identity with
-            enough tracked finishes.
+            Builds a private reel from your watch-tracker completions for the current calendar year
+            (year to date) and notifies your inbox with a durable link — same shape as scheduled
+            delivery. Requires Year in Review opt-in and a mapped Plex identity with enough tracked
+            finishes. Owners can also generate from Admin → Newsletters.
           </p>
           <button
             type="button"
