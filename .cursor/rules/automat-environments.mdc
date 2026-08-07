@@ -1,0 +1,35 @@
+---
+description: Automat Unraid LAN hosts, rollout paths, UI verification — never trust the public hostname for version/health truth
+alwaysApply: true
+---
+
+# Automat environments (maintainer LAN)
+
+Authoritative hosts for the Automat Unraid deployment. Full human runbook:
+[docs/ops/AUTOMAT.md](../../docs/ops/AUTOMAT.md).
+
+## Source of truth (version / health / admin UI)
+
+| Role | URL | Notes |
+|------|-----|--------|
+| **Prod** | `http://10.10.1.202:8788` | Authoritative for version, health, and admin UI checks |
+| **QA sidecar** | `http://10.10.1.202:8790` | Maintainer QA only |
+| **Not truth** | `https://projectionist.automat.vip` (or ad-hoc SSH tunnels) | CDN/proxy lag; agents wrongly read stale versions here |
+
+- Local `localhost:8788` is often an **SSH tunnel to prod** — not local dev; never use for e2e (see [e2e-port-8788.mdc](e2e-port-8788.mdc)).
+- Appdata / rollout kit: `/mnt/user/appdata/projectionist` (Unraid); often mounted as `/Volumes/appdata/projectionist`.
+- Rollout: `cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z` — keep `rollout.sh` synced from `scripts/unraid-rollout.sh`.
+
+## UI verification
+
+When the user reports UI missing/broken — **especially with a screenshot** — verify with **cursor-ide-browser** against the correct LAN host above. Do **not** argue from bundle string greps or “you didn’t scroll.” Trust scrolled-to-bottom + screenshot reports.
+
+Interactive UI QA campaigns: [interactive-ui-qa skill](../skills/interactive-ui-qa/SKILL.md) → target **`:8790`**, never prod `:8788`.
+
+## Ops UI (post-1.32.2)
+
+Weekly newsletter + Year in Review admin: **Admin → Ops → Newsletters** (`/admin/newsletters`). Mail = SMTP/Resend/Apprise transport only. See runbook for the historical Mail sticky-bar / iPad Safari footgun and YIR year defaults.
+
+## Release lifecycle
+
+Follow [release.mdc](release.mdc) / [docs/RELEASE.md](../../docs/RELEASE.md). After Hub publish, spin down QA `:8790` unless a campaign is active. **Never** stop prod `projectionist` / `:8788`.
