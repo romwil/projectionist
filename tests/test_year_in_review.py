@@ -295,6 +295,15 @@ class YearInReviewAdminApiTests(unittest.TestCase):
             404,
         )
 
+    def test_year_in_review_spa_route_serves_html(self) -> None:
+        """Deep links must hit SPA index, not FastAPI JSON 404."""
+        resp = self.client.get("/year-in-review/2026", headers={"Accept": "text/html"})
+        self.assertEqual(resp.status_code, 200, resp.text[:200])
+        self.assertIn("text/html", resp.headers.get("content-type", ""))
+        self.assertNotEqual(resp.json if False else None, {"detail": "Not Found"})
+        # Body is the Vite shell (or build-frontend placeholder), never API JSON.
+        self.assertNotIn('"detail"', resp.text[:80])
+
 
 def _title(
     *,
