@@ -77,7 +77,7 @@ stop_rm_container() {
   if ! docker inspect "$CONTAINER_NAME" >/dev/null 2>&1; then
     return 0
   fi
-  log "Stopping and removing container '$CONTAINER_NAME' (config bind mount preserved)…"
+  log "Stopping and removing container '$CONTAINER_NAME' (config bind mount preserved)..."
   docker stop "$CONTAINER_NAME" >/dev/null || true
   docker rm "$CONTAINER_NAME" >/dev/null
   log "Removed container '$CONTAINER_NAME'."
@@ -113,7 +113,7 @@ ENV_KEYS=(
 run_plain_docker() {
   export IMAGE_TAG
   log "Using plain Docker CLI (compose not available)."
-  log "Pulling $IMAGE…"
+  log "Pulling $IMAGE..."
   docker pull "$IMAGE"
 
   stop_rm_container
@@ -157,7 +157,7 @@ run_plain_docker() {
     run_args+=(-e TZ=UTC)
   fi
 
-  log "Starting container…"
+  log "Starting container..."
   docker run "${run_args[@]}" "$IMAGE"
 }
 
@@ -182,9 +182,9 @@ run_compose() {
   fi
 
   log "Using ${COMPOSE[*]}."
-  log "Pulling image…"
+  log "Pulling image..."
   "${COMPOSE[@]}" pull projectionist
-  log "Recreating container (force-recreate; config untouched)…"
+  log "Recreating container (force-recreate; config untouched)..."
   "${COMPOSE[@]}" up -d --force-recreate --remove-orphans projectionist
 }
 
@@ -265,10 +265,10 @@ else
   run_plain_docker
 fi
 
-log "Waiting for startup confirmation…"
+log "Waiting for startup confirmation..."
 wait_for_startup_log
 
-log "Smoke check…"
+log "Smoke check..."
 smoke_health
 
 if docker exec "$CONTAINER_NAME" cat /app/.build-info >/dev/null 2>&1; then
