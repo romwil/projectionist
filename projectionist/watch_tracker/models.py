@@ -71,6 +71,14 @@ class TitleRollup:
     completions: int
     confidence: Dict[str, int]
     last_completed_at_ms: int
+    # Distinct UTC calendar days with a finish — not raw completion rows
+    # (pause/restart fragments of one sitting collapse to one day).
+    distinct_days: int = 1
+
+    @property
+    def is_rewatch(self) -> bool:
+        """True only when finishes landed on ≥2 distinct calendar days."""
+        return int(self.distinct_days) >= 2
 
 
 @dataclass(frozen=True)
@@ -87,6 +95,7 @@ class YearRollup:
     top_movies: Sequence[TitleRollup]
     top_shows: Sequence[TitleRollup]
     monthly_counts: Dict[int, int]  # 1-12
+    peak_month_titles: Sequence[TitleRollup]
     first_completion_at_ms: Optional[int]
     last_completion_at_ms: Optional[int]
     has_enough_data: bool
@@ -103,6 +112,8 @@ class YearRollup:
                 "completions": t.completions,
                 "confidence": dict(t.confidence),
                 "last_completed_at_ms": t.last_completed_at_ms,
+                "distinct_days": int(t.distinct_days),
+                "is_rewatch": t.is_rewatch,
             }
 
         return {
@@ -118,6 +129,7 @@ class YearRollup:
             "top_movies": [_title(t) for t in self.top_movies],
             "top_shows": [_title(t) for t in self.top_shows],
             "monthly_counts": {str(k): v for k, v in self.monthly_counts.items()},
+            "peak_month_titles": [_title(t) for t in self.peak_month_titles],
             "first_completion_at_ms": self.first_completion_at_ms,
             "last_completion_at_ms": self.last_completion_at_ms,
             "has_enough_data": self.has_enough_data,

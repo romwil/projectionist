@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Set
 
 from projectionist.library.db import Database
 from projectionist.watch_tracker.models import TitleRollup, YearRollup
 
 # Soft floor so YIR does not tease empty years.
 MIN_COMPLETIONS_FOR_YIR = 3
+PEAK_MONTH_TITLE_LIMIT = 8
 
 
 def year_bounds_ms(year: int) -> tuple[int, int]:
@@ -63,12 +64,46 @@ def _library_title(db: Database, rating_key: str, media_type: str) -> Dict[str, 
     }
 
 
+def _empty_bucket(
+    *,
+    rating_key: str,
+    media_type: str,
+    parent_rating_key: Optional[str],
+    title: str,
+    year: Optional[int],
+    poster_url: Optional[str],
+    completed_at: int,
+) -> Dict[str, Any]:
+    return {
+        "rating_key": rating_key,
+        "media_type": media_type,
+        "parent_rating_key": parent_rating_key,
+        "title": title,
+        "year": year,
+        "poster_url": poster_url,
+        "completions": 0,
+        "confidence": {"certain": 0, "likely": 0, "plex_event_only": 0},
+        "last_completed_at_ms": completed_at,
+        "days": set(),
+    }
+
+
+def _touch_bucket(bucket: Dict[str, Any], *, conf: str, completed_at: int, day: str) -> None:
+    bucket["completions"] += 1
+    bucket["confidence"][conf] += 1
+    bucket["last_completed_at_ms"] = max(bucket["last_completed_at_ms"], completed_at)
+    days: Set[str] = bucket["days"]
+    days.add(day)
+
+
 def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
     """Aggregate accepted completions for one user in one calendar year (UTC)."""
     uid = str(user_id or "").strip()
     start_ms, end_ms = year_bounds_ms(int(year))
     confidence = {"certain": 0, "likely": 0, "plex_event_only": 0}
     monthly = {m: 0 for m in range(1, 13)}
+    # month -> title_key -> bucket (movies + shows, not individual episodes)
+    monthly_titles: Dict[int, Dict[str, Dict[str, Any]]] = {m: {} for m in range(1, 13)}
 
     with db.connect() as conn:
         rows = conn.execute(
@@ -104,7 +139,9 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
         first_at = completed_at if first_at is None else min(first_at, completed_at)
         last_at = completed_at if last_at is None else max(last_at, completed_at)
         dt = datetime.fromtimestamp(completed_at / 1000.0, tz=timezone.utc)
-        monthly[int(dt.month)] = monthly.get(int(dt.month), 0) + 1
+        month = int(dt.month)
+        day = dt.strftime("%Y-%m-%d")
+        monthly[month] = monthly.get(month, 0) + 1
         sittings += int(row["sittings"] or 1)
         media_type = str(row["media_type"])
         rating_key = str(row["rating_key"])
@@ -115,21 +152,30 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
             unique_titles.add(rating_key)
             bucket = by_movie.setdefault(
                 rating_key,
-                {
-                    "rating_key": rating_key,
-                    "media_type": "movie",
-                    "parent_rating_key": None,
-                    "title": meta["title"],
-                    "year": meta["year"],
-                    "poster_url": meta["poster_url"],
-                    "completions": 0,
-                    "confidence": {"certain": 0, "likely": 0, "plex_event_only": 0},
-                    "last_completed_at_ms": completed_at,
-                },
+                _empty_bucket(
+                    rating_key=rating_key,
+                    media_type="movie",
+                    parent_rating_key=None,
+                    title=str(meta["title"]),
+                    year=meta["year"],
+                    poster_url=meta["poster_url"],
+                    completed_at=completed_at,
+                ),
             )
-            bucket["completions"] += 1
-            bucket["confidence"][conf] += 1
-            bucket["last_completed_at_ms"] = max(bucket["last_completed_at_ms"], completed_at)
+            _touch_bucket(bucket, conf=conf, completed_at=completed_at, day=day)
+            month_bucket = monthly_titles[month].setdefault(
+                f"movie:{rating_key}",
+                _empty_bucket(
+                    rating_key=rating_key,
+                    media_type="movie",
+                    parent_rating_key=None,
+                    title=str(meta["title"]),
+                    year=meta["year"],
+                    poster_url=meta["poster_url"],
+                    completed_at=completed_at,
+                ),
+            )
+            _touch_bucket(month_bucket, conf=conf, completed_at=completed_at, day=day)
         else:
             episode_completions += 1
             unique_episodes.add(rating_key)
@@ -146,23 +192,33 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
             poster = show_row["poster_url"] if show_row else meta["poster_url"]
             bucket = by_show.setdefault(
                 show_key,
-                {
-                    "rating_key": show_key,
-                    "media_type": "episode",
-                    "parent_rating_key": show_key,
-                    "title": title,
-                    "year": year_val,
-                    "poster_url": poster,
-                    "completions": 0,
-                    "confidence": {"certain": 0, "likely": 0, "plex_event_only": 0},
-                    "last_completed_at_ms": completed_at,
-                },
+                _empty_bucket(
+                    rating_key=show_key,
+                    media_type="episode",
+                    parent_rating_key=show_key,
+                    title=title,
+                    year=year_val,
+                    poster_url=poster,
+                    completed_at=completed_at,
+                ),
             )
-            bucket["completions"] += 1
-            bucket["confidence"][conf] += 1
-            bucket["last_completed_at_ms"] = max(bucket["last_completed_at_ms"], completed_at)
+            _touch_bucket(bucket, conf=conf, completed_at=completed_at, day=day)
+            month_bucket = monthly_titles[month].setdefault(
+                f"show:{show_key}",
+                _empty_bucket(
+                    rating_key=show_key,
+                    media_type="episode",
+                    parent_rating_key=show_key,
+                    title=title,
+                    year=year_val,
+                    poster_url=poster,
+                    completed_at=completed_at,
+                ),
+            )
+            _touch_bucket(month_bucket, conf=conf, completed_at=completed_at, day=day)
 
     def _to_title(d: Dict[str, Any]) -> TitleRollup:
+        days = d.get("days") or set()
         return TitleRollup(
             rating_key=d["rating_key"],
             media_type=d["media_type"],
@@ -173,10 +229,27 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
             completions=int(d["completions"]),
             confidence=dict(d["confidence"]),
             last_completed_at_ms=int(d["last_completed_at_ms"]),
+            distinct_days=max(1, len(days)),
         )
 
-    top_movies = sorted(by_movie.values(), key=lambda d: (-d["completions"], -d["last_completed_at_ms"]))[:8]
-    top_shows = sorted(by_show.values(), key=lambda d: (-d["completions"], -d["last_completed_at_ms"]))[:8]
+    def _rank_key(d: Dict[str, Any]) -> tuple:
+        # Prefer true multi-day rewatches over same-day completion noise.
+        return (-len(d.get("days") or ()), -int(d["completions"]), -int(d["last_completed_at_ms"]))
+
+    top_movies = sorted(by_movie.values(), key=_rank_key)[:8]
+    top_shows = sorted(by_show.values(), key=_rank_key)[:8]
+
+    peak = peak_month(monthly)
+    peak_titles: list[TitleRollup] = []
+    if peak:
+        peak_m, _ = peak
+        peak_titles = [
+            _to_title(d)
+            for d in sorted(monthly_titles.get(peak_m, {}).values(), key=_rank_key)[
+                :PEAK_MONTH_TITLE_LIMIT
+            ]
+        ]
+
     total = len(rows)
     return YearRollup(
         user_id=uid,
@@ -191,6 +264,7 @@ def build_year_rollup(db: Database, *, user_id: str, year: int) -> YearRollup:
         top_movies=[_to_title(d) for d in top_movies],
         top_shows=[_to_title(d) for d in top_shows],
         monthly_counts=monthly,
+        peak_month_titles=peak_titles,
         first_completion_at_ms=first_at,
         last_completion_at_ms=last_at,
         has_enough_data=total >= MIN_COMPLETIONS_FOR_YIR,
