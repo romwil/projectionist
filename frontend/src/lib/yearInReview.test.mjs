@@ -7,6 +7,7 @@ import {
   shareCardText,
   shouldAutoAdvance,
   yirPath,
+  yirPathFromGenerateResult,
   YIR_DEFAULT_DURATION_MS,
 } from "./yearInReview.js";
 
@@ -29,5 +30,19 @@ describe("yearInReview helpers", () => {
     assert.equal(shouldAutoAdvance({ paused: true, prefersReducedMotion: false }), false);
     assert.equal(shouldAutoAdvance({ paused: false, prefersReducedMotion: true }), false);
     assert.equal(yirPath(2024), "/year-in-review/2024");
+  });
+
+  it("only links generate results that are ready", () => {
+    assert.equal(
+      yirPathFromGenerateResult({ year: 2026, status: "ready", path: "/year-in-review/2026" }),
+      "/year-in-review/2026",
+    );
+    assert.equal(yirPathFromGenerateResult({ year: 2026, status: "empty" }), null);
+    assert.equal(yirPathFromGenerateResult({ year: 2026, status: "empty", path: null }), null);
+    assert.equal(
+      yirPathFromGenerateResult({ year: 2026, status: "tease", delivered: 1 }),
+      "/year-in-review/2026",
+    );
+    assert.equal(yirPathFromGenerateResult({ year: 2026 }), null);
   });
 });

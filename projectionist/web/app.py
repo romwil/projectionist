@@ -5730,14 +5730,18 @@ def generate_year_in_review(
     payload: YearInReviewGeneratePayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Owner self-generate (and optionally notify) Year in Review for testing."""
+    """Owner self-generate (and optionally notify) Year in Review for testing.
+
+    Defaults to the current calendar year (YTD) so mid-year test sends have data;
+    scheduled Jan drop still uses the prior year via the idle task.
+    """
     from projectionist.year_in_review.delivery import (
+        current_calendar_year,
         deliver_year_in_review,
-        prior_calendar_year,
     )
     from projectionist.year_in_review.snapshot import build_reel_for_user
 
-    year = int(payload.year) if payload.year else prior_calendar_year()
+    year = int(payload.year) if payload.year else current_calendar_year()
     if payload.scope != "self":
         raise HTTPException(status_code=400, detail="v1 only supports scope=self")
     if payload.notify:
@@ -5753,13 +5757,15 @@ def generate_year_in_review(
     snap = build_reel_for_user(
         _db(), user_id=str(user.id), year=year, status_hint=payload.status_hint
     )
+    status = snap.get("status")
+    path = f"/year-in-review/{year}" if status in ("ready", "tease") else None
     return {
         "scope": "self",
         "year": year,
         "generated": 1,
         "delivered": 0,
-        "status": snap.get("status"),
-        "path": f"/year-in-review/{year}",
+        "status": status,
+        "path": path,
     }
 
 

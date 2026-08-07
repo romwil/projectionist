@@ -26,11 +26,16 @@ describe("adminNav", () => {
     );
     assert.equal(adminNavLinks().find((item) => item.id === "taxonomy")?.to, "/admin/taxonomy");
     assert.equal(adminNavLinks().find((item) => item.id === "mail")?.label, "Mail");
+    assert.equal(adminNavLinks().find((item) => item.id === "newsletters")?.label, "Newsletters");
+    assert.equal(
+      adminNavLinks().find((item) => item.id === "newsletters")?.to,
+      "/admin/newsletters",
+    );
     assert.equal(adminNavLinks().find((item) => item.id === "usage")?.label, "Usage");
     assert.equal(adminNavLinks().find((item) => item.id === "usage")?.to, "/admin/usage");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.label, "Holidays");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.to, "/admin/holidays");
-    assert.equal(adminNavLinks().length, 18);
+    assert.equal(adminNavLinks().length, 19);
   });
 
   it("groups the dense rail with Home / Household / Ops headings", () => {
@@ -44,7 +49,7 @@ describe("adminNav", () => {
     );
     assert.equal(
       groups.reduce((sum, group) => sum + group.links.length, 0),
-      18,
+      19,
     );
     assert.deepEqual(
       groups[0].links.map((item) => item.id),
@@ -56,6 +61,13 @@ describe("adminNav", () => {
       "Sync library lives on Libraries; Sync is not a nav item",
     );
     assert.ok(groups[2].links.some((item) => item.id === "taxonomy"));
+    const opsIds = groups[2].links.map((item) => item.id);
+    assert.ok(opsIds.includes("mail"), "Mail stays under Ops");
+    assert.ok(opsIds.includes("newsletters"), "Newsletters is under Ops with Mail");
+    assert.ok(
+      opsIds.indexOf("newsletters") === opsIds.indexOf("mail") + 1,
+      "Newsletters sits next to Mail in Ops",
+    );
   });
 
   it("detects /admin paths", () => {

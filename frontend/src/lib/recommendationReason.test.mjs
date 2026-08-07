@@ -17,5 +17,7 @@ describe("displayRecommendationReason", () => {
     assert.equal(displayRecommendationReason("TMDb title match"), "");
     assert.equal(displayRecommendationReason("tmdb search"), "");
     assert.equal(displayRecommendationReason("Missing from your collection"), "");
+    assert.equal(displayRecommendationReason("Double feature — first half"), "");
+    assert.equal(displayRecommendationReason("Double feature — second half"), "");
   });
 });

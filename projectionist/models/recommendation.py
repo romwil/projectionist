@@ -8,6 +8,11 @@ PIPELINE_RECOMMENDATION_REASONS = frozenset(
         "tmdb title match",
         "tmdb search",
         "missing from your collection",
+        # Legacy double-feature slot labels — never useful as "Why this?".
+        "double feature — first half",
+        "double feature — second half",
+        "double feature - first half",
+        "double feature - second half",
     }
 )
 

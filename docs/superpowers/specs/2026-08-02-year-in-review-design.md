@@ -152,7 +152,7 @@ Guests never generate or receive YIR.
 - Tokens: Fraunces + amber from `01-tokens.css`; ambient motion respects `prefers-reduced-motion`.
 - Share card: canvas/DOM capture of current beat → download PNG / copy image when supported — no public URL.
 - Settings → Notifications: Year in Review opt-in toggle.
-- Admin → Mail (or Notifications): Generate my Year in Review (mirror weekly newsletter self scope).
+- Admin → Newsletters (or Settings → Notifications): Generate my Year in Review (mirror weekly newsletter self scope).
 - Inbox: deep-link CTA for `year-in-review` kind.
 
 ---

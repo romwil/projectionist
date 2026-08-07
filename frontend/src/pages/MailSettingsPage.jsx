@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
-  generateWeeklyNewsletter,
-  generateYearInReview,
   getSettings,
-  listUsers,
   saveSettings,
   testAppriseSend,
   testMailSend,
@@ -19,11 +16,6 @@ import {
   mailTestResultMessage,
   savedSecretLabel,
 } from "../lib/mailSettingsUi.js";
-import {
-  NEWSLETTER_SCOPES,
-  newsletterConfirmMessage,
-  newsletterResultMessage,
-} from "../lib/weeklyNewsletter.js";
 
 const PROVIDERS = [
   { value: "off", label: "Off" },
@@ -71,15 +63,6 @@ export default function MailSettingsPage() {
   const [testing, setTesting] = useState(false);
   const [testingApprise, setTestingApprise] = useState(false);
   const [ready, setReady] = useState(false);
-  const [newsletterScope, setNewsletterScope] = useState("self");
-  const [members, setMembers] = useState([]);
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [sendingNewsletter, setSendingNewsletter] = useState(false);
-  const [newsletterStatus, setNewsletterStatus] = useState(null);
-  const [sendingYir, setSendingYir] = useState(false);
-  const [yirNotify, setYirNotify] = useState(true);
-  const [yirStatus, setYirStatus] = useState(null);
-  const [yirPath, setYirPath] = useState(null);
 
   useEffect(() => {
     getSettings()
@@ -92,18 +75,6 @@ export default function MailSettingsPage() {
         setSaveStatus({ type: "error", message: error.message || "Could not load settings." });
         setReady(true);
       });
-    listUsers()
-      .then((data) => {
-        const items = Array.isArray(data?.items) ? data.items : Array.isArray(data) ? data : [];
-        setMembers(
-          items.filter((u) => u && !u.disabled).map((u) => ({
-            id: String(u.id),
-            label: u.preferred_name || u.display_name || u.email || String(u.id),
-            optedIn: Boolean(u.newsletter_opt_in),
-          })),
-        );
-      })
-      .catch(() => setMembers([]));
   }, []);
 
   function patchMail(patch) {
@@ -112,10 +83,6 @@ export default function MailSettingsPage() {
 
   function patchApprise(patch) {
     setApprise((prev) => ({ ...prev, ...patch }));
-  }
-
-  function toggleMember(id) {
-    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   async function handleSave(event) {
@@ -186,73 +153,6 @@ export default function MailSettingsPage() {
     }
   }
 
-  async function handleSendNewsletter() {
-    if (newsletterScope === "users" && selectedIds.length === 0) {
-      setNewsletterStatus({ type: "error", message: "Select at least one member." });
-      return;
-    }
-    const confirmed = window.confirm(
-      newsletterConfirmMessage(newsletterScope, selectedIds.length),
-    );
-    if (!confirmed) return;
-    setSendingNewsletter(true);
-    setNewsletterStatus(null);
-    try {
-      const payload =
-        newsletterScope === "users"
-          ? { scope: "users", user_ids: selectedIds }
-          : { scope: newsletterScope };
-      const result = await generateWeeklyNewsletter(payload);
-      setNewsletterStatus({ type: "success", message: newsletterResultMessage(result) });
-    } catch (error) {
-      setNewsletterStatus({
-        type: "error",
-        message: error.message || "Could not send the weekly newsletter.",
-      });
-    } finally {
-      setSendingNewsletter(false);
-    }
-  }
-
-  async function handleGenerateYir() {
-    if (
-      !window.confirm(
-        yirNotify
-          ? "Generate your Year in Review reel now and notify your inbox (and email if enabled)?"
-          : "Generate your Year in Review reel now without sending a notification?",
-      )
-    ) {
-      return;
-    }
-    setSendingYir(true);
-    setYirStatus(null);
-    setYirPath(null);
-    try {
-      const result = await generateYearInReview({ scope: "self", notify: Boolean(yirNotify) });
-      const year = result?.year;
-      const path = year ? `/year-in-review/${year}` : null;
-      const delivered = Number(result?.delivered) || 0;
-      setYirPath(path);
-      setYirStatus({
-        type: "success",
-        message: path
-          ? yirNotify
-            ? `Ready — delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}.`
-            : "Ready — open your reel below."
-          : yirNotify
-            ? `Generated. Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}.`
-            : "Generated.",
-      });
-    } catch (error) {
-      setYirStatus({
-        type: "error",
-        message: error.message || "Could not generate Year in Review.",
-      });
-    } finally {
-      setSendingYir(false);
-    }
-  }
-
   if (!ready) {
     return (
       <div className="settings-stack" data-testid="admin-mail">
@@ -266,7 +166,8 @@ export default function MailSettingsPage() {
   return (
     <div className="settings-stack" data-testid="admin-mail">
       <SettingsPageHeader title="Mail & alerts">
-        Household email and installation Apprise. Members choose channels under Settings →
+        Household email and installation Apprise. Weekly newsletter and Year in Review live under{" "}
+        <Link to="/admin/newsletters">Newsletters</Link>. Members choose channels under Settings →
         Notifications.
       </SettingsPageHeader>
 
@@ -597,111 +498,6 @@ export default function MailSettingsPage() {
           </div>
         </div>
       </form>
-
-      <SettingsPanel
-        title="Weekly newsletter"
-        lead="Push this week’s personalized newsletter now — same content as the scheduled send. Only opted-in members are included."
-        testId="mail-newsletter-panel"
-      >
-        <label className="settings-field">
-          <span>Send to</span>
-          <select
-            value={newsletterScope}
-            onChange={(e) => setNewsletterScope(e.target.value)}
-            data-testid="mail-newsletter-scope"
-          >
-            {NEWSLETTER_SCOPES.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {newsletterScope === "users" ? (
-          <fieldset className="settings-field" data-testid="mail-newsletter-members">
-            <legend>Members</legend>
-            {members.length === 0 ? (
-              <p className="settings-field-hint">No household members loaded.</p>
-            ) : (
-              <ul className="settings-checklist">
-                {members.map((member) => (
-                  <li key={member.id}>
-                    <label>
-                      <input
-                        type="checkbox"
-                        checked={selectedIds.includes(member.id)}
-                        onChange={() => toggleMember(member.id)}
-                        data-testid={`mail-newsletter-member-${member.id}`}
-                      />
-                      <span>
-                        {member.label}
-                        {member.optedIn ? "" : " (not opted in)"}
-                      </span>
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </fieldset>
-        ) : null}
-        <div className="settings-actions">
-          <button
-            type="button"
-            className="primary"
-            onClick={handleSendNewsletter}
-            disabled={sendingNewsletter}
-            data-testid="mail-newsletter-send"
-          >
-            {sendingNewsletter ? "Sending…" : "Send weekly newsletter now"}
-          </button>
-        </div>
-        <InlineAlert
-          type={newsletterStatus?.type}
-          message={newsletterStatus?.message}
-          testId="mail-newsletter-status"
-          onDismiss={() => setNewsletterStatus(null)}
-        />
-      </SettingsPanel>
-
-      <SettingsPanel
-        title="Year in Review"
-        lead="Generate your own year-end cinema reel for a quick test. Member opt-in stays under Settings → Notifications."
-        testId="mail-yir-panel"
-      >
-        <SettingsToggle
-          id="mail-yir-notify"
-          checked={yirNotify}
-          onChange={setYirNotify}
-          label="Notify my inbox when ready"
-          help="Uses your notification channels. Requires Year in Review opt-in under Settings → Notifications."
-          testId="mail-yir-notify-toggle"
-        />
-        <div className="settings-actions">
-          <button
-            type="button"
-            className="primary"
-            onClick={handleGenerateYir}
-            disabled={sendingYir}
-            data-testid="mail-yir-self-generate"
-          >
-            {sendingYir ? "Generating…" : "Generate my Year in Review"}
-          </button>
-        </div>
-        <InlineAlert
-          type={yirStatus?.type}
-          message={yirStatus?.message}
-          testId="mail-yir-status"
-          onDismiss={() => {
-            setYirStatus(null);
-            setYirPath(null);
-          }}
-        />
-        {yirPath && yirStatus?.type === "success" ? (
-          <p className="settings-field-hint" data-testid="mail-yir-link">
-            <Link to={yirPath}>Open Year in Review</Link>
-          </p>
-        ) : null}
-      </SettingsPanel>
     </div>
   );
 }

@@ -201,12 +201,34 @@ class SeasonalAnniversaryTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
+        # 2026-07-18 is a Saturday; seed a real month+day match so re-validation keeps it.
         self.db.upsert_library_item(
             {
                 "rating_key": "rk-ann",
                 "media_type": "movie",
                 "title": "Anniversary Pick",
                 "year": 2010,
+                "release_date": "2010-07-18",
+                "view_count": 0,
+            }
+        )
+        # Year-only / wrong-day junk must not appear on the weekend anniversary rail.
+        self.db.upsert_library_item(
+            {
+                "rating_key": "rk-year-only",
+                "media_type": "movie",
+                "title": "10 Cloverfield Lane",
+                "year": 2016,
+                "view_count": 0,
+            }
+        )
+        self.db.upsert_library_item(
+            {
+                "rating_key": "rk-wrong-day",
+                "media_type": "movie",
+                "title": "Wrong Day Film",
+                "year": 2010,
+                "release_date": "2010-03-01",
                 "view_count": 0,
             }
         )
@@ -222,27 +244,95 @@ class SeasonalAnniversaryTests(unittest.TestCase):
                 )
                 """
             )
-            item = conn.execute(
-                "SELECT id FROM library_items WHERE rating_key = 'rk-ann'"
-            ).fetchone()
-            assert item is not None
-            conn.execute(
-                """
-                INSERT INTO daily_anniversaries
-                    (item_id, anniversary_type, anniversary_text, scanned_date)
-                VALUES (?, 'release_anniversary', 'Released 16 years ago today', ?)
-                """,
-                (int(item["id"]), "2026-07-18"),
-            )
+            rows = {
+                str(r["rating_key"]): int(r["id"])
+                for r in conn.execute(
+                    "SELECT id, rating_key FROM library_items"
+                ).fetchall()
+            }
+            for rating_key, text in (
+                ("rk-ann", "Released 16 years ago today"),
+                ("rk-year-only", "Released 10 years ago today"),
+                ("rk-wrong-day", "Released 16 years ago today"),
+            ):
+                conn.execute(
+                    """
+                    INSERT INTO daily_anniversaries
+                        (item_id, anniversary_type, anniversary_text, scanned_date)
+                    VALUES (?, 'release_anniversary', ?, ?)
+                    """,
+                    (rows[rating_key], text, "2026-07-18"),
+                )
 
     def tearDown(self) -> None:
         self._tmpdir.cleanup()
 
     def test_weekend_uses_anniversary_rows(self) -> None:
-        payload = feed_seasonal_spotlight(self.db, today=date(2026, 7, 18), limit=6)
+        payload = feed_seasonal_spotlight(
+            self.db, today=date(2026, 7, 18), limit=6, prefer_snapshot=False
+        )
         self.assertEqual(payload["mode"], "weekend_anniversary")
         titles = [item.get("title") for item in payload["items"]]
         self.assertIn("Anniversary Pick", titles)
+        self.assertNotIn("10 Cloverfield Lane", titles)
+        self.assertNotIn("Wrong Day Film", titles)
+
+    def test_stale_year_only_anniversaries_do_not_fill_rail(self) -> None:
+        """Poisoned daily_anniversaries without matching release_date must not win the rail."""
+        with self.db.connect() as conn:
+            conn.execute("DELETE FROM daily_anniversaries")
+            junk = conn.execute(
+                "SELECT id FROM library_items WHERE rating_key = 'rk-year-only'"
+            ).fetchone()
+            assert junk is not None
+            conn.execute(
+                """
+                INSERT INTO daily_anniversaries
+                    (item_id, anniversary_type, anniversary_text, scanned_date)
+                VALUES (?, 'release_anniversary', 'Released 10 years ago today', ?)
+                """,
+                (int(junk["id"]), "2026-07-18"),
+            )
+        payload = feed_seasonal_spotlight(
+            self.db, today=date(2026, 7, 18), limit=6, prefer_snapshot=False
+        )
+        self.assertNotEqual(payload["mode"], "weekend_anniversary")
+        titles = [item.get("title") for item in payload["items"]]
+        self.assertNotIn("10 Cloverfield Lane", titles)
+
+    def test_poisoned_anniversary_snapshot_falls_through(self) -> None:
+        """Stale weekend_anniversary snapshot without real dates must not serve filler."""
+        junk_id = None
+        for row in self.db.all_library_items():
+            if str(row["rating_key"]) == "rk-year-only":
+                junk_id = int(row["id"])
+                break
+        assert junk_id is not None
+        self.db.save_seasonal_rail_snapshot(
+            snapshot_date="2026-07-18",
+            scope_id="season:summer",
+            label="Weekend anniversaries",
+            mode="weekend_anniversary",
+            items=[
+                {
+                    "id": junk_id,
+                    "title": "10 Cloverfield Lane",
+                    "year": 2016,
+                    "media_type": "movie",
+                    "anniversary_text": "Released 10 years ago today",
+                }
+            ],
+        )
+        # Clear live anniversaries so fall-through cannot rebuild from the same junk.
+        with self.db.connect() as conn:
+            conn.execute("DELETE FROM daily_anniversaries")
+        payload = feed_seasonal_spotlight(
+            self.db, today=date(2026, 7, 18), limit=6, prefer_snapshot=True
+        )
+        self.assertFalse(payload.get("from_schedule"))
+        self.assertNotEqual(payload["mode"], "weekend_anniversary")
+        titles = [item.get("title") for item in payload["items"]]
+        self.assertNotIn("10 Cloverfield Lane", titles)
 
 
 class MoodQuickPickApiTests(unittest.TestCase):

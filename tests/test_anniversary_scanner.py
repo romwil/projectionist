@@ -4,10 +4,8 @@ import asyncio
 import tempfile
 import time
 import unittest
-from datetime import date, timedelta
+from datetime import date
 from pathlib import Path
-from typing import Any, Callable, Dict
-from unittest.mock import patch
 
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
@@ -26,11 +24,16 @@ def _never_stop() -> bool:
     return False
 
 
+def _today_release_iso(*, years_ago: int) -> str:
+    today = date.today()
+    return date(today.year - years_ago, today.month, today.day).isoformat()
+
+
 class AnniversaryDetectionTests(unittest.TestCase):
     def test_release_anniversary_detected(self) -> None:
         """A movie released exactly N years ago today should be detected."""
         today = date.today()
-        release_year = today.year - 5
+        release_iso = _today_release_iso(years_ago=5)
         with tempfile.TemporaryDirectory() as tmp:
             db = _make_db(tmp)
             db.upsert_library_item(
@@ -38,7 +41,8 @@ class AnniversaryDetectionTests(unittest.TestCase):
                     "rating_key": "1",
                     "media_type": "movie",
                     "title": "Anniversary Film",
-                    "year": release_year,
+                    "year": today.year - 5,
+                    "release_date": release_iso,
                     "view_count": 3,
                 }
             )
@@ -54,31 +58,73 @@ class AnniversaryDetectionTests(unittest.TestCase):
                 self.assertTrue(any("5 years ago" in str(r["anniversary_text"]) for r in rows))
 
     def test_no_anniversary_different_day(self) -> None:
-        """A movie released on a different month+day should not be detected."""
+        """Year-only or wrong month+day must not create a release anniversary."""
         today = date.today()
         other_month = (today.month % 12) + 1
+        other_day = min(today.day, 28)
+        wrong_iso = date(today.year - 3, other_month, other_day).isoformat()
         with tempfile.TemporaryDirectory() as tmp:
             db = _make_db(tmp)
             db.upsert_library_item(
                 {
-                    "rating_key": "2",
+                    "rating_key": "2a",
                     "media_type": "movie",
-                    "title": "No Anniversary",
+                    "title": "Year Only",
                     "year": today.year - 3,
                     "view_count": 1,
                 }
             )
-            # Year matches but month doesn't — only the year column matters here.
-            # The scanner checks if month+day of release matches today.
-            # Since year is all we have, release month+day == today's month+day
-            # only if the item's year field allows date(year, today.month, today.day).
+            db.upsert_library_item(
+                {
+                    "rating_key": "2b",
+                    "media_type": "movie",
+                    "title": "Wrong Day",
+                    "year": today.year - 3,
+                    "release_date": wrong_iso,
+                    "view_count": 1,
+                }
+            )
             result = asyncio.run(anniversary_run(db, _settings(), _never_stop))
-            # Should still find this since we only have year (not full date),
-            # and year != today's year, so date(year, today.month, today.day) will match.
             self.assertEqual(result["status"], "completed")
+            with db.connect() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM daily_anniversaries
+                    WHERE scanned_date = ? AND anniversary_type = 'release_anniversary'
+                    """,
+                    (today.isoformat(),),
+                ).fetchall()
+                self.assertEqual(len(rows), 0)
+
+    def test_year_only_not_release_anniversary(self) -> None:
+        """Year alone must never invent today's month+day as a release anniversary."""
+        today = date.today()
+        with tempfile.TemporaryDirectory() as tmp:
+            db = _make_db(tmp)
+            db.upsert_library_item(
+                {
+                    "rating_key": "2c",
+                    "media_type": "movie",
+                    "title": "Year Only Explicit",
+                    "year": today.year - 7,
+                    "view_count": 2,
+                }
+            )
+            result = asyncio.run(anniversary_run(db, _settings(), _never_stop))
+            self.assertEqual(result["status"], "completed")
+            self.assertEqual(result["found"], 0)
+            with db.connect() as conn:
+                rows = conn.execute(
+                    """
+                    SELECT * FROM daily_anniversaries
+                    WHERE scanned_date = ? AND anniversary_type = 'release_anniversary'
+                    """,
+                    (today.isoformat(),),
+                ).fetchall()
+                self.assertEqual(len(rows), 0)
 
     def test_same_year_not_anniversary(self) -> None:
-        """A movie released this year should not be an anniversary."""
+        """A movie released this year (even matching month+day) is not an anniversary."""
         today = date.today()
         with tempfile.TemporaryDirectory() as tmp:
             db = _make_db(tmp)
@@ -88,6 +134,7 @@ class AnniversaryDetectionTests(unittest.TestCase):
                     "media_type": "movie",
                     "title": "This Year Film",
                     "year": today.year,
+                    "release_date": today.isoformat(),
                     "view_count": 0,
                 }
             )
@@ -183,7 +230,7 @@ class EdgeCaseTests(unittest.TestCase):
     def test_clears_previous_results_for_today(self) -> None:
         """Running twice on the same day should not duplicate results."""
         today = date.today()
-        release_year = today.year - 10
+        release_iso = _today_release_iso(years_ago=10)
         with tempfile.TemporaryDirectory() as tmp:
             db = _make_db(tmp)
             db.upsert_library_item(
@@ -191,7 +238,8 @@ class EdgeCaseTests(unittest.TestCase):
                     "rating_key": "6",
                     "media_type": "movie",
                     "title": "Double Run",
-                    "year": release_year,
+                    "year": today.year - 10,
+                    "release_date": release_iso,
                     "view_count": 1,
                 }
             )
@@ -205,6 +253,7 @@ class EdgeCaseTests(unittest.TestCase):
                 # Should not have duplicates.
                 item_ids = [int(r["item_id"]) for r in rows if r["anniversary_type"] == "release_anniversary"]
                 self.assertEqual(len(item_ids), len(set(item_ids)))
+                self.assertEqual(len(item_ids), 1)
 
     def test_interruption(self) -> None:
         """Scanner should return interrupted status when should_stop returns True."""

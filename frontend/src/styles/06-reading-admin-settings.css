@@ -669,8 +669,27 @@
   z-index: 2;
 }
 
+/*
+ * iPad / mobile Safari: sticky bottom:0 on the Mail form has been observed to
+ * trap or obscure siblings that follow the form (Weekly newsletter / Year in
+ * Review on 1.32.x). Keep the save bar in normal document flow on tablet and
+ * phone widths so later panels remain reachable at the true page bottom.
+ */
+@media (max-width: 1024px) {
+  .mail-settings-save-bar {
+    position: static;
+    z-index: auto;
+    background: transparent;
+  }
+}
+
 .mail-settings-save-bar .settings-actions {
   align-items: baseline;
+}
+
+/* Ops → Newsletters: room below YIR for iOS home indicator / bottom chrome */
+.settings-stack[data-testid="admin-newsletters"] {
+  padding-bottom: max(var(--space-8), env(safe-area-inset-bottom, 0px));
 }
 
 .settings-checklist {

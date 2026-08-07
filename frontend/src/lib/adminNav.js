@@ -21,6 +21,7 @@ export const ADMIN_NAV = [
   { to: "/admin/tasks", id: "tasks", label: "Tasks" },
   { to: "/admin/taxonomy", id: "taxonomy", label: "Library knowledge" },
   { to: "/admin/mail", id: "mail", label: "Mail" },
+  { to: "/admin/newsletters", id: "newsletters", label: "Newsletters" },
   { to: "/admin/access", id: "access", label: "Access" },
   { to: "/admin/dashboard", id: "dashboard", label: "Dashboard" },
   { to: "/admin/usage", id: "usage", label: "Usage" },

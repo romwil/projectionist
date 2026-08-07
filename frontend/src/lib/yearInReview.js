@@ -54,3 +54,22 @@ export function shouldAutoAdvance({ paused, prefersReducedMotion }) {
 export function yirPath(year) {
   return `/year-in-review/${Number(year) || ""}`;
 }
+
+/**
+ * Durable reel path from an admin generate response — only when the snapshot is viewable.
+ * Prefer API `path`; never invent a link for empty / not-ready status.
+ * @param {{ path?: string|null, year?: number, status?: string, delivered?: number }|null|undefined} result
+ */
+export function yirPathFromGenerateResult(result) {
+  if (!result || typeof result !== "object") return null;
+  const status = result.status != null ? String(result.status) : "";
+  if (status === "empty") return null;
+  const explicit = result.path != null ? String(result.path).trim() : "";
+  if (explicit.startsWith("/year-in-review/")) return explicit;
+  if (status && status !== "ready" && status !== "tease") return null;
+  const year = Number(result.year);
+  if (!Number.isFinite(year) || year < 2000) return null;
+  // Without a status, only trust a successful inbox delivery.
+  if (!status && !(Number(result.delivered) > 0)) return null;
+  return yirPath(year);
+}
