@@ -42,3 +42,17 @@ own port, which proxies `/api` to `:8788`).
 `tearDown` so cumulative `POST /api/auth/plex` calls do not trip the in-process 10/60s limiter.
 If you add suites that hit rate-limited auth routes heavily, clear the limiter between tests the
 same way — otherwise later cases can see 429 and missing `user` keys.
+
+### Automat maintainer LAN (version / health / UI truth)
+When checking the live Automat Unraid stack, use LAN hosts — **not** the public hostname:
+
+| Role | URL |
+|------|-----|
+| Prod | `http://10.10.1.202:8788` |
+| QA sidecar | `http://10.10.1.202:8790` |
+
+Do **not** treat `https://projectionist.automat.vip` (or ad-hoc SSH tunnels / `localhost:8788` tunnels)
+as authoritative for version or admin UI. Rollout kit: `/mnt/user/appdata/projectionist` (often
+`/Volumes/appdata/projectionist`). Full runbook: [docs/ops/AUTOMAT.md](docs/ops/AUTOMAT.md).
+Agent rule: `.cursor/rules/automat-environments.mdc`. Interactive UI QA → `:8790` only
+(`.cursor/skills/interactive-ui-qa/SKILL.md`).

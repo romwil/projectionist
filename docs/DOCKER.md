@@ -157,6 +157,9 @@ cd /mnt/user/appdata/projectionist
 # ./unraid-force-pull.sh latest
 ```
 
+Maintainer Automat LAN hosts, version-truth rules, and QA teardown:
+[ops/AUTOMAT.md](ops/AUTOMAT.md).
+
 `rollout.sh` uses plain Docker CLI on Unraid (Compose is usually absent). If `docker compose` / `docker-compose` is available it prefers that instead. Same-named containers are stop/rm only — `./config` is never wiped. Optional seed env: copy `.env.example` → `.env` (secrets usually already live in `config/`).
 
 ---

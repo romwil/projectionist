@@ -4,7 +4,7 @@ Step-by-step maintainer / agent guide for shipping a Projectionist version. Foll
 
 **Audience:** developers and agents. Voice: direct and technical ([DOCS_STYLE.md](DOCS_STYLE.md) developer column).
 
-**Related:** [DOCKER.md](DOCKER.md) (image publish details) · [TESTING.md](TESTING.md) (CA / e2e layers) · [DOCS_STYLE.md](DOCS_STYLE.md) (Highlights voice) · host-local QA lifecycle (`/Volumes/appdata/projectionist-qa-scripts/qa-runs/QA-LIFECYCLE.md`)
+**Related:** [DOCKER.md](DOCKER.md) (image publish details) · [TESTING.md](TESTING.md) (CA / e2e layers) · [DOCS_STYLE.md](DOCS_STYLE.md) (Highlights voice) · [ops/AUTOMAT.md](ops/AUTOMAT.md) (Automat LAN / version truth / QA teardown) · host-local QA lifecycle (`/Volumes/appdata/projectionist-qa-scripts/qa-runs/QA-LIFECYCLE.md`)
 
 ---
 
