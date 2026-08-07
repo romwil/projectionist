@@ -2,6 +2,35 @@
 
 ## [Unreleased]
 
+## [1.32.4] — 2026-08-07
+
+Year in Review stops romanticizing tracker noise: rewatches need distinct days, ratings name their source, busy months list real titles, and the honesty beat is plain English.
+
+### Highlights
+- **Rewatches mean days, not pauses.** “Movies that stuck” only fires when you finished a title on different calendar days — same-day restart fragments stay ordinary finishes.
+- **Stars say where they came from.** Projectionist notes and Plex library stars on titles you finished both show up, with honest copy when only one source exists.
+- **Busy months name names.** Peak-month beats list the films and shows in the mix, not just a meh count.
+- **How we counted, simply.** One clear sentence plus a short plain-language breakdown — no jargon stack.
+
+### Fixed
+- YIR top-movies copy no longer calls single finishes (or same-day completion noise) a “revisit” / affection signal; multi-day finishes use distinct UTC days.
+- Ratings chapter no longer implies a complete rating picture from Projectionist-only notes; merges Plex `plex_user_rating_stars` for titles finished this year when present.
+- Monthly peak chapter surfaces concrete titles (and posters) from that month’s finishes.
+- Honesty chapter + reel footnote rewritten for plain, short methodology language.
+
+### Changed
+- Reel schema version → 2 (`distinct_days` / `peak_month_titles` on rollups).
+- Volume / overture copy slightly tightened.
+
+### Added
+- `tests/test_year_in_review.py` polish cases: same-day ≠ rewatch, multi-day rewatch, busy-month titles, Plex+Projectionist ratings, projectionist-only honesty, plain methodology copy.
+
+### Verification
+- Backend: 1,870 passed, 6 skipped, 34 subtests passed; ~75.8% coverage (74% required).
+- Frontend unit: 674 passed, 0 failed.
+- ESLint: 0 errors (warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_year_in_review.py` + watch tracker / identity mapping.
+
 ## [1.32.3] — 2026-08-07
 
 Server-owner Plex watches finally attribute to the linked Projectionist account, so Year in Review and per-user rollups see real finishes instead of an empty year.

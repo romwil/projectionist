@@ -153,13 +153,9 @@ def build_reel_for_user(
         "display_name": display_name,
         "status": status,
         "honesty": {
-            "footnote": (
-                "These chapters use Projectionist's tracked completions for you — "
-                "not household Plex totals."
-            ),
+            "footnote": "Finishes attributed to you — not the whole household.",
             "confidence_note": (
-                "Some finishes are reconstructed from Plex history when progress "
-                "wasn't observed live."
+                "Some finishes come from Plex ‘played’ marks when we didn’t see progress."
             ),
         },
         "rollup": rollup.as_dict(),
