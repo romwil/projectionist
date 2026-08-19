@@ -93,21 +93,26 @@ def full_confirm_allowed() -> bool:
     return full_mode_allowed() and full_confirm_scope_enabled()
 
 
+_HTTP_UNAUTHORIZED: Tuple[Optional[McpMode], Optional[str], int] = (
+    None,
+    "Unauthorized",
+    401,
+)
+
+
 def resolve_http_mcp_auth(provided: str) -> Tuple[Optional[McpMode], Optional[str], int]:
     """Map a presented key to a mode.
 
     Returns (mode, error_detail, http_status). mode is None on failure.
+    Unauthenticated and disabled HTTP MCP always fail closed as generic 401 —
+    never 503, and never name environment variables.
     """
     privacy = privacy_api_key()
     full = full_api_key()
     if not privacy and not full:
-        return None, (
-            "MCP HTTP transport disabled. Set PROJECTIONIST_MCP_API_KEY "
-            "and/or PROJECTIONIST_MCP_FULL_API_KEY to enable /mcp "
-            "(CURATORX_* aliases still work)."
-        ), 503
+        return _HTTP_UNAUTHORIZED
     if not provided:
-        return None, "Invalid MCP API key", 401
+        return _HTTP_UNAUTHORIZED
 
     # Prefer exact full-key match first when both configured and distinct.
     if full and _secret_eq(provided, full):
@@ -116,10 +121,7 @@ def resolve_http_mcp_auth(provided: str) -> Tuple[Optional[McpMode], Optional[st
         # Keys collide / misconfigured — fall through to privacy if it matches.
         if privacy and _secret_eq(provided, privacy):
             return "privacy", None, 200
-        return None, (
-            "Full MCP mode refused: PROJECTIONIST_MCP_FULL_API_KEY must differ "
-            "from PROJECTIONIST_MCP_API_KEY."
-        ), 503
+        return _HTTP_UNAUTHORIZED
 
     if privacy and _secret_eq(provided, privacy):
         return "privacy", None, 200
@@ -127,10 +129,10 @@ def resolve_http_mcp_auth(provided: str) -> Tuple[Optional[McpMode], Optional[st
     # Only full key configured.
     if full and not privacy and _secret_eq(provided, full):
         if not full_mode_allowed():
-            return None, "Full MCP mode misconfigured", 503
+            return _HTTP_UNAUTHORIZED
         return "full", None, 200
 
-    return None, "Invalid MCP API key", 401
+    return _HTTP_UNAUTHORIZED
 
 
 def resolve_stdio_mcp_mode() -> McpMode:

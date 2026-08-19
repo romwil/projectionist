@@ -78,7 +78,7 @@ test("badges reflect library/queue/new state", () => {
   assert.equal(beyondItemBadge({ tmdb_id: 9 }), "New");
 });
 
-test("owners/members can acquire new titles; guests are info-only", () => {
+test("owners/members can acquire new titles; legacy guest maps to member", () => {
   const item = { tmdb_id: 1, media_type: "movie" };
   const owner = resolveAddCapability({ role: "owner", requestPath: "arr" });
   const member = resolveAddCapability({ role: "member", requestPath: "seerr" });
@@ -86,7 +86,7 @@ test("owners/members can acquire new titles; guests are info-only", () => {
 
   assert.equal(beyondItemShowsAcquire(item, owner), true);
   assert.equal(beyondItemShowsAcquire(item, member), true);
-  assert.equal(beyondItemShowsAcquire(item, guest), false);
+  assert.equal(beyondItemShowsAcquire(item, guest), true);
 
   // Even owners get no acquire control for an already-owned title.
   assert.equal(beyondItemShowsAcquire({ ...item, in_library: true }, owner), false);

@@ -205,7 +205,6 @@ export default function AccessRequestsPage() {
               onChange={(e) => setCreateRole(e.target.value)}
             >
               <option value="member">Member</option>
-              <option value="guest">Guest</option>
             </select>
           </label>
           <label className="config-toggle">
@@ -321,7 +320,6 @@ export default function AccessRequestsPage() {
                           onChange={(e) => patchOptions(item.id, { role: e.target.value })}
                         >
                           <option value="member">Member</option>
-                          <option value="guest">Guest</option>
                         </select>
                       </label>
                       <label className="config-toggle">

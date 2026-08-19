@@ -40,13 +40,16 @@ describe("posterWatchAction", () => {
     );
   });
 
-  it("hides the action from guests while multi-user is on", () => {
-    assert.equal(
+  it("treats a legacy guest role like a member when multi-user is on", () => {
+    assert.deepEqual(
       posterWatchAction(
         { in_library: true, rating_key: "rk-1" },
         { role: "guest", multiUserEnabled: true },
       ),
-      null,
+      posterWatchAction(
+        { in_library: true, rating_key: "rk-1" },
+        { role: "member", multiUserEnabled: true },
+      ),
     );
   });
 

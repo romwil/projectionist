@@ -110,11 +110,14 @@ class UsersAuthMixin:
         return [self._row_to_user(row) for row in rows]
 
     def update_user_role(self, user_id: str, role: str) -> Dict[str, Any]:
+        cleaned = str(role or "").strip().lower()
+        if cleaned not in {"owner", "member"}:
+            raise ValueError("role must be owner or member")
         with self.connect() as conn:
             existing = conn.execute("SELECT id FROM users WHERE id = ?", (user_id,)).fetchone()
             if existing is None:
                 raise ValueError("User not found")
-            conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+            conn.execute("UPDATE users SET role = ? WHERE id = ?", (cleaned, user_id))
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         assert row is not None
         return self._row_to_user(row)
@@ -126,12 +129,46 @@ class UsersAuthMixin:
             if existing is None:
                 raise ValueError("User not found")
             conn.execute(
-                "UPDATE users SET password_hash = ? WHERE id = ?",
+                "UPDATE users SET password_hash = ?, session_epoch = COALESCE(session_epoch, 0) + 1 WHERE id = ?",
                 (password_hash, user_id),
             )
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         assert row is not None
         return self._row_to_user(row)
+
+    def revoke_session_jti(self, jti_hash: str, *, expires_at: float) -> None:
+        """Record a hashed session jti so the cookie cannot be replayed."""
+        digest = str(jti_hash or "").strip()
+        if not digest:
+            return
+        now = time.time()
+
+        def _write() -> None:
+            with self.connect() as conn:
+                conn.execute(
+                    "DELETE FROM session_revocations WHERE expires_at < ?",
+                    (now,),
+                )
+                conn.execute(
+                    """
+                    INSERT OR IGNORE INTO session_revocations (jti_hash, expires_at)
+                    VALUES (?, ?)
+                    """,
+                    (digest, float(expires_at)),
+                )
+
+        self.run_write(_write, label="revoke_session_jti")
+
+    def is_session_jti_revoked(self, jti_hash: str) -> bool:
+        digest = str(jti_hash or "").strip()
+        if not digest:
+            return False
+        with self.connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM session_revocations WHERE jti_hash = ? AND expires_at >= ?",
+                (digest, time.time()),
+            ).fetchone()
+        return row is not None
 
     def set_user_disabled(self, user_id: str, disabled: bool) -> Dict[str, Any]:
         with self.connect() as conn:
@@ -258,6 +295,47 @@ class UsersAuthMixin:
                     f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
                     tuple(params),
                 )
+            row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+        assert row is not None
+        return self._row_to_user(row)
+
+    def bind_plex_user_id(
+        self,
+        user_id: str,
+        *,
+        plex_user_id: str,
+        email: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Attach a Plex identity to an existing local user. No display-name matching."""
+        plex_clean = str(plex_user_id or "").strip()
+        if not plex_clean:
+            raise ValueError("plex_user_id is required")
+        now = time.time()
+        with self.connect() as conn:
+            existing = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+            if existing is None:
+                raise ValueError("User not found")
+            claimed = conn.execute(
+                "SELECT id FROM users WHERE plex_user_id = ? AND id != ?",
+                (plex_clean, user_id),
+            ).fetchone()
+            if claimed is not None:
+                raise ValueError("This Plex account is already linked to another member")
+            try:
+                conn.execute(
+                    """
+                    UPDATE users
+                    SET plex_user_id = ?,
+                        email = COALESCE(?, email),
+                        avatar_url = COALESCE(?, avatar_url),
+                        last_login_at = ?
+                    WHERE id = ?
+                    """,
+                    (plex_clean, email, avatar_url, now, user_id),
+                )
+            except sqlite3.IntegrityError as error:
+                raise ValueError("This Plex account is already linked to another member") from error
             row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         assert row is not None
         return self._row_to_user(row)
@@ -522,6 +600,11 @@ class UsersAuthMixin:
                 "plex_token_enc" in keys and row["plex_token_enc"]
             ),
             "auth_method": str(row["auth_method"]) if "auth_method" in keys and row["auth_method"] is not None else "plex",
+            "session_epoch": (
+                int(row["session_epoch"])
+                if "session_epoch" in keys and row["session_epoch"] is not None
+                else 0
+            ),
             "created_at": float(row["created_at"]),
             "last_login_at": float(row["last_login_at"]) if row["last_login_at"] is not None else None,
         }
@@ -654,6 +737,7 @@ class UsersAuthMixin:
         conn.execute(f"PRAGMA busy_timeout = {int(SQLITE_BUSY_TIMEOUT_MS)}")
         # WAL lets readers proceed while a writer commits; persistent on the DB file.
         conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA wal_autocheckpoint=1000")
         # NORMAL with WAL is a common Unraid/NAS tradeoff: much less fsync cost than
         # FULL, with only a small window of loss on abrupt power failure mid-commit.
         conn.execute(f"PRAGMA synchronous={SQLITE_SYNCHRONOUS}")

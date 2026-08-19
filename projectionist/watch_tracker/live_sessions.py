@@ -9,6 +9,11 @@ import time
 from typing import Any, Callable, Dict, Optional
 
 from projectionist.config_store import Settings
+from projectionist.circuit_breaker import (
+    CircuitOpenError,
+    circuit_backoff_seconds,
+    is_host_circuit_open,
+)
 from projectionist.connectors.plex import PlexActiveSession, PlexClient
 from projectionist.library.db import Database
 from projectionist.watch_tracker.models import WatchEventInput
@@ -89,6 +94,12 @@ def poll_active_sessions(
 
 def poll_interval_seconds(result: Dict[str, Any]) -> int:
     """Use a one-minute cadence only while Plex reports active sessions."""
+    remaining = result.get("circuit_remaining_seconds")
+    if remaining is not None:
+        try:
+            return max(IDLE_POLL_SECONDS, int(float(remaining)))
+        except (TypeError, ValueError):
+            pass
     if result.get("status") == "ok" and int(result.get("active_sessions") or 0) > 0:
         return LIVE_POLL_SECONDS
     return IDLE_POLL_SECONDS
@@ -156,14 +167,23 @@ class LiveSessionPoller:
     @staticmethod
     def poll_once(db: Database, settings: Settings) -> Dict[str, Any]:
         """Poll once, returning sanitized degraded/skipped outcomes."""
-        if not str(settings.plex_url or "").strip() or not str(
-            settings.plex_token or ""
-        ).strip():
+        plex_url = str(settings.plex_url or "").strip()
+        if not plex_url or not str(settings.plex_token or "").strip():
             return {
                 "status": "skipped",
                 "source": "plex_sessions",
                 "active_sessions": 0,
                 "reason": "plex_not_configured",
+            }
+        if is_host_circuit_open(plex_url):
+            return {
+                "status": "degraded",
+                "source": "plex_sessions",
+                "active_sessions": 0,
+                "reason": "circuit_open",
+                "circuit_remaining_seconds": circuit_backoff_seconds(
+                    plex_url, floor=IDLE_POLL_SECONDS
+                ),
             }
         try:
             client = PlexClient(
@@ -179,6 +199,16 @@ class LiveSessionPoller:
                 client,
                 server_machine_id=server_machine_id,
             )
+        except CircuitOpenError:
+            return {
+                "status": "degraded",
+                "source": "plex_sessions",
+                "active_sessions": 0,
+                "reason": "circuit_open",
+                "circuit_remaining_seconds": circuit_backoff_seconds(
+                    plex_url, floor=IDLE_POLL_SECONDS
+                ),
+            }
         except Exception as error:  # noqa: BLE001
             logger.warning(
                 "Plex live-session polling unavailable (%s)",
@@ -189,4 +219,9 @@ class LiveSessionPoller:
                 "source": "plex_sessions",
                 "active_sessions": 0,
                 "reason": type(error).__name__,
+                "circuit_remaining_seconds": (
+                    circuit_backoff_seconds(plex_url, floor=IDLE_POLL_SECONDS)
+                    if is_host_circuit_open(plex_url)
+                    else None
+                ),
             }

@@ -53,7 +53,7 @@ from ._recommendations import RecommendationsMixin
 from ._notifications import NotificationsMixin
 from ._engagement import EngagementMixin
 from ._access_requests import AccessRequestsMixin
-from ._invites import InvitesMixin
+from ._invites import InviteConflict, InvitesMixin
 from ._curated_lists import CuratedListsMixin
 from ._holidays import HolidaysMixin
 from ._media_issues import MediaIssuesMixin
@@ -93,6 +93,7 @@ class Database(
 
 __all__ = [
     "Database",
+    "InviteConflict",
     "run_with_db_lock_retry",
     "T",
     "_is_db_locked",

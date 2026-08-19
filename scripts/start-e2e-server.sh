@@ -12,6 +12,8 @@ export DATA_DIR
 export PORT
 export PROJECTIONIST_SKIP_DOTENV=1
 export CURATORX_SKIP_DOTENV=1
+# Mocked e2e is an already-provisioned LAN app, not first-boot SETUP_MODE.
+export PROJECTIONIST_SETUP_STATE="${PROJECTIONIST_SETUP_STATE:-active}"
 
 if [[ ! -d "$ROOT/frontend/dist" ]]; then
   echo "Building frontend for E2E..."

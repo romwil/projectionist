@@ -1500,9 +1500,9 @@ export default function App() {
 
   return (
     <div
-      className={`app-root workspace${isYouth ? " app-root--youth youth-shell" : ""}${userRole === "guest" ? " app-root--guest guest-shell" : ""}`}
+      className={`app-root workspace${isYouth ? " app-root--youth youth-shell" : ""}`}
       style={{ "--ambient-accent": ambientAccent }}
-      data-shell={isYouth ? "youth" : userRole === "guest" ? "guest" : "default"}
+      data-shell={isYouth ? "youth" : "default"}
     >
       <PrimaryTopbar
         showNavToggle
@@ -1519,7 +1519,7 @@ export default function App() {
         inboxUnreadCount={inboxUnreadCount}
         uiTheme={uiTheme}
         onThemeChange={setUiTheme}
-        className={`${nightOwl ? "night-owl" : ""} ${isYouth ? "youth-shell-topbar" : ""} ${userRole === "guest" ? "guest-shell-topbar" : ""}`}
+        className={`${nightOwl ? "night-owl" : ""} ${isYouth ? "youth-shell-topbar" : ""}`}
         leadingExtra={
           <button
             type="button"

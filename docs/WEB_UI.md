@@ -245,8 +245,9 @@ The curator can also propose **Plex collection** create/add actions; those requi
 | GET | `/api/features` | Feature flags (multi-user, Seerr, auth modes) |
 | GET | `/api/auth/me` | Current user when multi-user auth is enabled |
 | POST | `/api/auth/plex/pin` | Start Plex PIN / link login |
-| GET | `/api/auth/plex/pin/{id}` | Poll PIN; sets HttpOnly session cookie when authorized |
-| POST | `/api/auth/plex` | Advanced token login (sets HttpOnly session cookie) |
+| GET | `/api/auth/plex/pin/{id}` | Default poll (login/join) completes the household session; `?peek=1` never binds |
+| POST | `/api/auth/plex/link` | Bind Plex to the current local-password user (`pin_id` + password) |
+| POST | `/api/auth/plex` | Existing Plex users (recovery token path); new identity without invite → 403 |
 | POST | `/api/auth/logout` | Sign out |
 | GET | `/api/users` | Household user list (owner only) |
 | PATCH | `/api/users/{id}` | Update user role (owner only) |
@@ -265,7 +266,7 @@ When `features.multi_user_enabled` is `true` in settings:
 
 1. The app loads `GET /api/features` and `GET /api/auth/me`.
 2. If features show multi-user mode and `/api/auth/me` returns **401**, the browser redirects to **`/login`**. API middleware also requires a session for almost all `/api/*` (see [SECURITY.md](SECURITY.md)).
-3. Sign in with a configured method (**Plex PIN**, **local password**, and/or **OIDC**). For Plex, Projectionist starts an Overseerr-style plex.tv PIN flow. Approve in the Plex window; Projectionist polls until authorized and stores a signed **HttpOnly** session cookie. Token paste is an advanced fallback only.
+3. Sign in with a configured method (**Plex PIN**, **local password**, and/or **OIDC**). For Plex, Projectionist starts an Overseerr-style plex.tv PIN flow. Approve in the Plex window; the default PIN poll completes the household session (HttpOnly cookie + user) even with a leftover cookie. Link Plex on Profile polls `?peek=1` (never binds); bind is `POST /api/auth/plex/link`. There is no guest tour.
 4. After login, the main chat UI loads. The top bar shows an avatar menu with display name, role, **Help**, and **Sign out**. Help / Privacy / About remain in the footer.
 5. **Owners** manage household users and the dashboard under **Admin**. **Members** use **Settings** for personal prefs (including font size); Seerr request buttons appear instead of Radarr/Sonarr adds when Seerr is enabled.
 
@@ -313,7 +314,7 @@ Anyone may send a typed **Report issue** from the grip. Reports go to `/api/medi
 | Admin → Scheduled Tasks | Owners | Coverage strip + cadence, measured rate, ETA; deep-linked from Help and cold Explore empty states |
 | Explore hub | Everyone | Compact knowledge-coverage honesty strip |
 
-Jump links on Help highlight **Owners**, Coverage, Dashboard, and Scheduled Tasks for owners; members/guests see browse/chat guidance and are pointed at the server owner for sync.
+Jump links on Help highlight **Owners**, Coverage, Dashboard, and Scheduled Tasks for owners; members see browse/chat guidance and are pointed at the server owner for sync.
 
 **Deep-linkable Help.** Every Help heading (h2/h3/h4) is auto-assigned a stable GitHub-style anchor id from its text — no hand-maintained lookup — so any section is addressable as `/help#section-slug`. `HelpPage` scrolls to `location.hash` after the markdown paints (with a `scroll-margin-top` so the sticky header clears). Wire contextual "learn more" links with the shared `helpAnchor(slug)` builder (`src/lib/backNav.js`) or the unobtrusive `HelpHint` component (`src/components/HelpHint.jsx`), which renders a subtle "?" icon or a small text link that jumps straight to the right section. Current contextual entry points: the knowledge-coverage strip/panel, Explore's **Library Pulse**, title-detail **Plot knowledge**, and Plot Lab's sparse-wall note. Slugs are unit-tested in `src/lib/helpAnchors.test.mjs`.
 

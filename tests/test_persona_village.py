@@ -186,19 +186,34 @@ class TestConsultPersonaTool(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(result.get("code"), "consult_privacy")
             self.assertEqual(registry.persona_consults, [])
 
-    async def test_guest_fail_closed(self) -> None:
+    async def test_legacy_guest_role_is_not_fail_closed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             registry = ToolRegistry(
                 db, Settings(), DEFAULT_LENS_ID, user_id="guest-1", user_role="guest"
             )
-            result = json.loads(
-                await registry.execute(
-                    "consult_persona",
-                    {"persona": "Companion", "question": "What mood fits tonight?"},
+            with patch(
+                "projectionist.agent.village.run_persona_consult",
+                new_callable=AsyncMock,
+            ) as mock_run:
+                mock_run.return_value = {
+                    "ok": True,
+                    "persona": "Companion",
+                    "persona_id": "night-owl-host",
+                    "specialty": "mood",
+                    "answer": "Something cozy.",
+                    "quote_lead": "I asked Companion and they said",
+                    "quote_ok": True,
+                    "source": "llm",
+                }
+                result = json.loads(
+                    await registry.execute(
+                        "consult_persona",
+                        {"persona": "Companion", "question": "What mood fits tonight?"},
+                    )
                 )
-            )
-            self.assertEqual(result.get("code"), "consult_privacy")
+            self.assertNotEqual(result.get("code"), "consult_privacy")
+            mock_run.assert_called_once()
 
     async def test_max_one_consult_per_turn(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

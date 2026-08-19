@@ -22,7 +22,7 @@ from projectionist.youth.rating_gate import (
 )
 from projectionist.youth.apply import apply_youth_gate_to_filters
 from projectionist.access_requests import approve_access_request, notify_owners_of_access_request
-from projectionist.web.auth import clear_pin_bindings
+from projectionist.web.auth import _hash_password, clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
 
@@ -404,6 +404,7 @@ class YouthChatHistoryReadTests(unittest.TestCase):
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-youth-history-session-secret"
+        os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
@@ -445,16 +446,24 @@ class YouthChatHistoryReadTests(unittest.TestCase):
             "LLM_PROVIDER",
             "CURATORX_SESSION_SECRET",
             "DATA_DIR",
+            "PROJECTIONIST_SETUP_STATE",
         ):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
 
-    def _register(self, username: str, password: str) -> None:
-        resp = self.client.post(
-            "/api/auth/local/register",
-            json={"username": username, "password": password},
+    def _create_local(self, username: str, password: str, *, role: str = "owner") -> str:
+        user_id = f"local-{username}"
+        self.db.create_local_user(
+            user_id=user_id,
+            display_name=username,
+            password_hash=_hash_password(password),
+            role=role,
         )
-        self.assertEqual(resp.status_code, 200, resp.text)
+        return user_id
+
+    def _register(self, username: str, password: str) -> None:
+        self._create_local(username, password, role="owner")
+        self._login(username, password)
 
     def _login(self, username: str, password: str) -> None:
         self.client.cookies.clear()
@@ -495,14 +504,7 @@ class YouthChatHistoryReadTests(unittest.TestCase):
         self._register("owner", "password123")
         owner_cookie = self.client.cookies.get(SESSION_COOKIE_NAME)
         self.assertIsNotNone(owner_cookie)
-        # Owner creates a second local member.
-        create = self.client.post(
-            "/api/auth/local/register",
-            json={"username": "youth", "password": "password123"},
-            headers={"Cookie": f"{SESSION_COOKIE_NAME}={owner_cookie}"},
-        )
-        self.assertEqual(create.status_code, 200, create.text)
-        youth_id = create.json()["user"]["id"]
+        youth_id = self._create_local("youth", "password123", role="member")
         self.db.set_user_youth(youth_id, True)
 
         session_id = "youth-hist-1"

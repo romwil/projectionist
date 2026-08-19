@@ -8,7 +8,7 @@ Each ID:
 | Field | Meaning |
 |-------|---------|
 | **roles** | Who must run this ID (`member`, `owner`, `youth`, `guest`, `guest-tour`, or `*`) |
-| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `shell`, `login`, `tour`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`) |
+| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `shell`, `login`, `tour`, `invite`, `access-request`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`) |
 | **source** | Primary frontend file(s) |
 | **steps** | Required interactions (page-load alone ≠ pass) |
 | **pass** | Observable pass criteria |
@@ -27,13 +27,101 @@ Target: `http://10.10.1.202:8790`. Creds: `projectionist-qa-scripts/.env.qa`.
 - **steps:** Open `/login`. Confirm local Username + Password fields (`data-testid="local-username"`, `local-password`) are visible **before** submit. Sign in with the role’s `QA_*` creds.
 - **pass:** Fields visible pre-submit; successful submit lands on chat (`/chat` or `/`); no silent blank form.
 
+### `login.glass-door`
+
+- **roles:** `*` (logged-out)
+- **tags:** `login`, `gating`
+- **source:** `frontend/src/pages/LoginPage.jsx`, `frontend/src/components/GlassDoor.jsx`
+- **steps:** Open `/login` logged out. Confirm `data-testid="login-page"` glass-door chrome (wordmark / Sign in). Confirm **Sign in with Plex** (`sign-in-with-plex`) and/or local form. Confirm **Need an invite?** (`need-invite-toggle`) when access requests are on. Confirm no signup card and no raw Plex token paste.
+- **pass:** Cinematic gate renders; Plex and/or password paths present; no register / token-paste / tour CTA.
+
+### `login.honeypot-hidden`
+
+- **roles:** `*` (logged-out)
+- **tags:** `login`
+- **source:** `frontend/src/pages/LoginPage.jsx`
+- **steps:** On `/login`, expand **Need an invite?** (`need-invite-toggle`). Inspect `data-testid="access-request-honeypot"` (`name="organization_url"`).
+- **pass:** Field exists in the DOM, is not visible (`display: none` / `.hp-field`), `aria-hidden="true"`, and is skipped in tab order (`tabIndex=-1`). Do not submit a filled honeypot against prod.
+
+### `login.no-tour`
+
+- **roles:** `*` (logged-out)
+- **tags:** `login`, `tour`
+- **source:** `frontend/src/pages/LoginPage.jsx`, `frontend/src/main.jsx`
+- **steps:** On `/login`, confirm `login-take-tour` is absent. Navigate to `/tour`.
+- **pass:** No Take a Tour CTA. `/tour` redirects to `/login`. FAIL if a public tour shell renders.
+
+### `join.glass-door`
+
+- **roles:** `*` (logged-out)
+- **tags:** `login`, `gating`
+- **source:** `frontend/src/pages/JoinPage.jsx`
+- **steps:** Open `/join` without a token (do **not** redeem a live invite). Confirm `data-testid="join-page"` glass-door copy (“You’re invited” / Join this household).
+- **pass:** Join gate renders with invite-specific copy; missing/invalid token does not create a user. Do not burn a real household invite.
+
+### `setup.skip-when-active`
+
+- **roles:** `owner` (QA sidecar already provisioned)
+- **tags:** `login`, `gating`, `admin`
+- **source:** `frontend/src/pages/SetupWizardPage.jsx`
+- **steps:** Open `/setup` on QA. If `setup_state` is `active`, confirm redirect to `/login` or chat. Do **not** submit `setup-commit`.
+- **pass:** Wizard does not re-open; no recovery-key screen; no new owner. If handshake `setup-steps` is visible, record N/A and stop — do not commit.
+
+### `settings.link-plex`
+
+- **roles:** `member`, `owner` (local-password user without `plex_user_id`)
+- **tags:** `settings`, `login`
+- **source:** `frontend/src/pages/settings/ProfilePage.jsx`
+- **steps:** Open **Settings**. If `settings-link-plex` is present, confirm **Link Plex** (`link-plex-start`) and that waiting copy says poll does not attach. Do **not** complete a live Plex bind unless a disposable QA local user exists.
+- **pass:** Panel present for unlinked local users **or** `settings-plex-linked` for already-linked accounts (note which). Password confirm (`link-plex-password`) is required before bind. N/A if the role is already Plex-native.
+
 ### `login.take-tour-link`
 
-- **roles:** `guest-tour` (also spot-check from logged-out `/login`)
+- **roles:** `guest-tour` (legacy; tour is removed)
 - **tags:** `login`, `tour`
 - **source:** `frontend/src/pages/LoginPage.jsx`
-- **steps:** On `/login` with guest tour enabled, click `data-testid="login-take-tour"`.
-- **pass:** Navigates to `/tour` (or tour is disabled → link absent; note N/A).
+- **steps:** On `/login`, look for `data-testid="login-take-tour"`. Navigate to `/tour`.
+- **pass:** Link absent; `/tour` redirects to `/login`. Same as `login.no-tour`.
+
+### `login.access-request-submit`
+
+- **roles:** `*` (logged-out)
+- **tags:** `login`, `access-request`
+- **source:** `frontend/src/pages/LoginPage.jsx`
+- **steps:** On `/login`, expand **Need an invite?** (`need-invite-toggle`). Leave the honeypot empty. Fill `access-request-name` with a disposable QA marker (e.g. `QA UI request`). Optionally add a short `access-request-message`. Submit `access-request-submit`. Do **not** fill `access-request-honeypot`.
+- **pass:** `access-request-status` shows success copy. Session stays logged out (still on `/login`). Does not mint a join token by itself.
+
+### `invite.owner-mint`
+
+- **roles:** `owner`
+- **tags:** `invite`, `admin`, `login`, `gating`
+- **source:** `frontend/src/pages/AccessRequestsPage.jsx`
+- **steps:** Sign in as owner. Open **Admin → Access** (`/admin/access`, `access-requests-page`). On `access-create-invite`, leave role **Member**, leave Youth off, skip email. Submit `invite-create-submit`. Read `access-join-link-input` (copy via `access-join-link-copy` is optional). Confirm a pending row appears in `invite-list`.
+- **pass:** Feedback reports invite created (not emailed unless Mail is configured). Join link contains `/join?token=` with a non-empty token. Pending list shows the new invite. Use this token only for `join.redeem-token-ui` on QA; do not share off-LAN.
+
+### `join.redeem-token-ui`
+
+- **roles:** `*` (logged-out)
+- **tags:** `invite`, `login`, `gating`
+- **source:** `frontend/src/pages/JoinPage.jsx`
+- **steps:** After `invite.owner-mint`, sign out. Open the minted `/join?token=…` URL. Confirm `join-page` glass-door and `join-invite-summary` (household member, one-time). If local is allowed, click `join-local-toggle` and confirm `join-username` / `join-password` / `join-local-submit` appear. Do **not** submit `join-local-submit` and do **not** complete a live Plex bind (avoid extra QA users). Then open `/join?token=not-a-real-token` and confirm `join-error`.
+- **pass:** Valid token shows invite chrome + method controls without creating a user. Invalid token shows `join-error` and no `join-local-form`. Revoke leftover pending invite via `invite.revoke`.
+
+### `invite.revoke`
+
+- **roles:** `owner`
+- **tags:** `invite`, `admin`
+- **source:** `frontend/src/pages/AccessRequestsPage.jsx`
+- **steps:** After `join.redeem-token-ui`, sign in as owner on `/admin/access`. Click **Revoke** (`invite-revoke-*`) on the pending QA invite from `invite.owner-mint`.
+- **pass:** Feedback reports revoked; the invite leaves the pending `invite-list` (or the row is gone after reload).
+
+### `invite.access-queue`
+
+- **roles:** `owner`
+- **tags:** `invite`, `admin`, `access-request`
+- **source:** `frontend/src/pages/AccessRequestsPage.jsx`
+- **steps:** As owner on `/admin/access`, inspect **Access requests** (`access-request-list`). If `login.access-request-submit` ran this campaign, find that pending row. Approve is optional (creates a join invite — prefer **Deny** `access-deny-*` to clean up QA). If the queue is empty, `access-requests-empty` is PASS.
+- **pass:** Queue renders without crash. Pending QA request visible when submitted this run, or honest empty copy. Do not leave an approved live invite hanging.
 
 ---
 
@@ -991,7 +1079,9 @@ after direct URL navigation.
 | `help` | SectionHelp popovers on admin/library panels |
 | `shell` | youth / guest / default shell classes |
 | `login` | Local form fields |
-| `tour` | Public guest tour |
+| `tour` | Public guest tour (removed; `/tour` → `/login`) |
+| `invite` | Owner mint / revoke join links; `/join?token=` redeem chrome |
+| `access-request` | Login request-access form; owner Access queue |
 | `persona` | Curator preset grid / select-persist / deterministic welcome / boundaries |
 | `library` | Browse posters / sort / filter+reset / pagination / saved items / role actions |
 | `youth` | Fail-closed rating gate: browse/TV/search/rails/detail/chat/aggregates/watchlist |
@@ -1007,7 +1097,18 @@ after direct URL navigation.
 | ID | Roles |
 |----|-------|
 | `login.local-form` | * |
-| `login.take-tour-link` | guest-tour |
+| `login.glass-door` | * (logged-out) |
+| `login.honeypot-hidden` | * (logged-out) |
+| `login.no-tour` | * (logged-out) |
+| `join.glass-door` | * (logged-out) |
+| `setup.skip-when-active` | owner |
+| `settings.link-plex` | member, owner |
+| `login.take-tour-link` | guest-tour (removed; same as login.no-tour) |
+| `login.access-request-submit` | * (logged-out) |
+| `invite.owner-mint` | owner |
+| `join.redeem-token-ui` | * (logged-out) |
+| `invite.revoke` | owner |
+| `invite.access-queue` | owner |
 | `nav.peers-member` | member |
 | `nav.no-admin` | member, youth |
 | `nav.admin-redirect` | member, youth, guest |

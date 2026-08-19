@@ -50,6 +50,9 @@ _SECRET_PAYLOAD_KEYS = frozenset(
 )
 _MAX_ENTITY_KEY_LEN = 512
 _MAX_PAYLOAD_CHARS = 8_192
+_CLOSED_LOOP_MAX_INFLIGHT = 32
+_closed_loop_inflight: set = set()
+_closed_loop_thread_slots = threading.BoundedSemaphore(_CLOSED_LOOP_MAX_INFLIGHT)
 
 # Canonical event classes — keep in sync with the telemetry API docs.
 EVENT_CHAT_MESSAGE = "chat_message"
@@ -436,12 +439,37 @@ def schedule_closed_loop_event(
     try:
         loop = asyncio.get_running_loop()
     except RuntimeError:
+        if not _closed_loop_thread_slots.acquire(blocking=False):
+            logger.warning(
+                "Closed-loop telemetry dropped (thread ceiling) type=%s entity=%s",
+                event_type,
+                entity_type,
+            )
+            return
+
+        def _thread_write() -> None:
+            try:
+                _safe_write()
+            finally:
+                _closed_loop_thread_slots.release()
+
         thread = threading.Thread(
-            target=_safe_write,
+            target=_thread_write,
             daemon=True,
             name=f"closed-loop-{event_type}",
         )
         thread.start()
+        return
+
+    live = {task for task in _closed_loop_inflight if not task.done()}
+    _closed_loop_inflight.clear()
+    _closed_loop_inflight.update(live)
+    if len(_closed_loop_inflight) >= _CLOSED_LOOP_MAX_INFLIGHT:
+        logger.warning(
+            "Closed-loop telemetry dropped (inflight ceiling) type=%s entity=%s",
+            event_type,
+            entity_type,
+        )
         return
 
     async def _runner() -> None:
@@ -456,7 +484,9 @@ def schedule_closed_loop_event(
             )
 
     try:
-        loop.create_task(_runner(), name=f"closed-loop-{event_type}")
+        task = loop.create_task(_runner(), name=f"closed-loop-{event_type}")
     except TypeError:
         # Python <3.11: create_task has no name=
-        loop.create_task(_runner())
+        task = loop.create_task(_runner())
+    _closed_loop_inflight.add(task)
+    task.add_done_callback(_closed_loop_inflight.discard)

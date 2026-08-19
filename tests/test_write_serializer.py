@@ -79,3 +79,38 @@ class WriteSerializerTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             self.db.run_write(_boom, label="boom")
+
+    def test_try_run_drops_when_queue_is_full(self) -> None:
+        import threading
+        import time
+
+        from projectionist.library.db._write_serializer import WriteSerializer
+
+        ser = WriteSerializer(maxsize=1)
+        release = threading.Event()
+        started = threading.Event()
+
+        def hold() -> None:
+            started.set()
+            release.wait(timeout=3)
+
+        holder = threading.Thread(target=lambda: ser.run(hold, label="hold"), daemon=True)
+        holder.start()
+        self.assertTrue(started.wait(timeout=2))
+
+        queued = threading.Event()
+
+        def park() -> None:
+            queued.set()
+            ser.run(lambda: None, label="park")
+
+        parker = threading.Thread(target=park, daemon=True)
+        parker.start()
+        self.assertTrue(queued.wait(timeout=2))
+        time.sleep(0.05)
+        dropped = ser.try_run(lambda: None, label="drop-me")
+        self.assertFalse(dropped)
+        release.set()
+        holder.join(timeout=2)
+        parker.join(timeout=2)
+        ser.shutdown(timeout=2)

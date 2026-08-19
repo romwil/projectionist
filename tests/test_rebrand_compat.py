@@ -51,7 +51,7 @@ class EnvCompatTests(unittest.TestCase):
 
     def test_guest_tour_legacy_env(self) -> None:
         os.environ["CURATORX_GUEST_TOUR_ENABLED"] = "1"
-        self.assertTrue(resolve_guest_tour_enabled(Settings()))
+        self.assertFalse(resolve_guest_tour_enabled(Settings()))
         os.environ["CURATORX_GUEST_TOUR_ENABLED"] = "0"
         self.assertFalse(resolve_guest_tour_enabled(Settings()))
 

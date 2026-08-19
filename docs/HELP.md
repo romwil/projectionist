@@ -174,7 +174,7 @@ Under **Settings → Notifications** you can:
 - Opt into **Apprise alerts** and add your own Discord / Telegram / push destinations with the destination builder (**Self-serve**; optional household URLs can also be configured by the owner)
 - Subscribe to the **weekly newsletter** — a short, personalized note in your default curator’s voice (guest accounts get a guest-friendly voice when available). It usually arrives on the weekly schedule; the owner can also push one early from Admin.
 - Opt into **curator nudges** — occasional “you have to see this” picks (optionally reacting to what you recently watched / continue-watching). These are never live Plex session alerts.
-- Opt into **Year in Review** — a private year-end cinema reel built from *your* tracked finishes (not household Plex totals). Late December may tease the reel; early January drops the full link to your inbox (and email if you’ve enabled it).
+- Opt into **Year in Review** — a private year-end recap built from *your* tracked finishes (not household Plex totals). You get a short reel, then a linger sheet: totals, top movie genre vs top TV genre, catalog hours, and the titles that defined the year. Late December may tease the reel; early January drops the full link to your inbox (and email if you’ve enabled it).
 
 Dismiss a card when you’re done; **Dismiss all** clears the unread stack.
 
@@ -261,15 +261,13 @@ The curator keeps two kinds of memory:
 
 If your account has **Youth mode** on, Projectionist uses a distinct big-poster layout. The top bar keeps **Ask**, **Browse**, **Inbox**, and **My Journey** (plus Search and Settings). The hamburger lists those same destinations under **Navigate**, plus **My list** under **More**. Explore and Chat only show titles with a content rating at or below the owner's max — **unrated titles stay hidden**. Ask the curator stays friendly and age-aware. Try **Pick for me** on Explore for a quick surprise from safe shelves.
 
-### Guest tour
-
-When the owner enables **Take a Tour** (Admin household toggle, or env `PROJECTIONIST_GUEST_TOUR_ENABLED`), the login page offers a public tour at **/tour** — no hamburger chrome. Signed-in **guests** also get a tour shell. Open **What's great** for published collections your host shared, then browse or ask without destructive actions.
-
 ### Joining the household
 
-Households are **invite-only by default**. The owner creates a one-time **join link** under **Admin → Access** (or approves your **Request access** form on the login page, which creates the same kind of invite). Open the link at **/join** and finish with Plex, SSO, or a local password — whichever the invite allows. The link works once.
+Households that chose **Public Household** during setup are **invite-only**. Private (LAN) households stay open unless the owner turns invite-only on. The owner creates a one-time **join link** under **Admin → Access** (or approves your **Need an invite?** / **Request access** form on the login page, which creates the same kind of invite). Open the link at **/join** and finish with Plex first, or a username and password on the same token. The link works once.
 
-If you don't have a link yet, use **Request access** on `/login`. The owner sees it in their inbox and in **Admin → Access**.
+There is no public guest tour and no self-serve signup. `/tour` sends you back to sign-in.
+
+If you don't have a link yet, use **Need an invite?** on `/login`. The owner sees it in their inbox and in **Admin → Access**.
 
 ---
 

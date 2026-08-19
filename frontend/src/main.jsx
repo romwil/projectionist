@@ -45,7 +45,7 @@ import HolidaysPage from "./pages/HolidaysPage";
 import StagedAugmentationsPage from "./pages/StagedAugmentationsPage";
 import LlmUsagePage from "./pages/LlmUsagePage";
 import JoinPage from "./pages/JoinPage";
-import GuestTourPage from "./pages/GuestTourPage";
+import SetupWizardPage from "./pages/SetupWizardPage";
 import YearInReviewPage from "./pages/YearInReviewPage";
 import { BulkActionProgressProvider } from "./components/BulkActionProgress";
 import { TitleDetailOverlayProvider } from "./components/TitleDetailOverlayProvider";
@@ -84,7 +84,8 @@ createRoot(document.getElementById("root")).render(
           <Route path="/lists/:listId" element={<ListsPage />} />
           <Route path="/collections" element={<CollectionsPage />} />
           <Route path="/collections/:listId" element={<CollectionsPage />} />
-          <Route path="/tour" element={<GuestTourPage />} />
+          <Route path="/tour" element={<Navigate to="/login" replace />} />
+          <Route path="/setup" element={<SetupWizardPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/join" element={<JoinPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />

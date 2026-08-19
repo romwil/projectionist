@@ -12,6 +12,7 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from typing import Any, Mapping, Optional
 
+from projectionist.circuit_breaker import host_circuits
 from projectionist.logging_config import sanitize_log_message, sanitize_url
 
 logger = logging.getLogger(__name__)
@@ -91,6 +92,54 @@ def hosts_match(left_url: str, right_url: str) -> bool:
     return left_host == right_host
 
 
+def _http_status_trips_breaker(status: int) -> bool:
+    return status >= 500 or status == 429
+
+
+def _execute_request(
+    url: str,
+    *,
+    method: str,
+    headers: Optional[Mapping[str, str]],
+    data: Optional[bytes],
+    timeout: int,
+    max_bytes: Optional[int] = None,
+) -> bytes:
+    """urlopen with the shared per-host circuit breaker."""
+    host_circuits.before_request(url)
+    request = urllib.request.Request(url, data=data, method=method, headers=dict(headers or {}))
+    safe_url = sanitize_url(url)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read(max_bytes) if max_bytes is not None else response.read()
+        host_circuits.record_success(url)
+        return body
+    except urllib.error.HTTPError as error:
+        detail = sanitize_log_message(error.read().decode("utf-8", errors="replace"))
+        logger.warning("HTTP %s %s from %s: %s", method, error.code, safe_url, detail[:500])
+        if _http_status_trips_breaker(int(error.code)):
+            host_circuits.record_failure(url, f"HTTP {error.code}")
+        else:
+            host_circuits.record_success(url)
+        raise RuntimeError(f"HTTP {error.code} from {safe_url}: {detail}") from error
+    except urllib.error.URLError as error:
+        reason = error.reason
+        if isinstance(reason, socket.timeout):
+            logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
+        else:
+            logger.warning("Request failed %s %s: %s", method, safe_url, reason)
+        host_circuits.record_failure(url, str(reason))
+        raise RuntimeError(f"Request failed for {safe_url}: {reason}") from error
+    except TimeoutError as error:
+        logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
+        host_circuits.record_failure(url, "timeout")
+        raise RuntimeError(f"Timeout requesting {safe_url}") from error
+    except OSError as error:
+        logger.warning("Request failed %s %s: %s", method, safe_url, error)
+        host_circuits.record_failure(url, str(error))
+        raise RuntimeError(f"Request failed for {safe_url}: {error}") from error
+
+
 def request_json(
     url: str,
     *,
@@ -104,28 +153,16 @@ def request_json(
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         req_headers.setdefault("Content-Type", "application/json")
-    request = urllib.request.Request(url, data=data, method=method, headers=req_headers)
-    safe_url = sanitize_url(url)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read().decode("utf-8")
-            if not raw.strip():
-                return None
-            return json.loads(raw)
-    except urllib.error.HTTPError as error:
-        detail = sanitize_log_message(error.read().decode("utf-8", errors="replace"))
-        logger.warning("HTTP %s %s from %s: %s", method, error.code, safe_url, detail[:500])
-        raise RuntimeError(f"HTTP {error.code} from {safe_url}: {detail}") from error
-    except urllib.error.URLError as error:
-        reason = error.reason
-        if isinstance(reason, socket.timeout):
-            logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
-        else:
-            logger.warning("Request failed %s %s: %s", method, safe_url, reason)
-        raise RuntimeError(f"Request failed for {safe_url}: {reason}") from error
-    except TimeoutError as error:
-        logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
-        raise RuntimeError(f"Timeout requesting {safe_url}") from error
+    raw = _execute_request(
+        url,
+        method=method,
+        headers=req_headers,
+        data=data,
+        timeout=timeout,
+    ).decode("utf-8")
+    if not raw.strip():
+        return None
+    return json.loads(raw)
 
 
 def request_empty(
@@ -135,25 +172,32 @@ def request_empty(
     headers: Optional[Mapping[str, str]] = None,
     timeout: int = 30,
 ) -> None:
-    request = urllib.request.Request(url, method=method, headers=dict(headers or {}))
-    safe_url = sanitize_url(url)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            response.read()
-    except urllib.error.HTTPError as error:
-        detail = sanitize_log_message(error.read().decode("utf-8", errors="replace"))
-        logger.warning("HTTP %s %s from %s: %s", method, error.code, safe_url, detail[:500])
-        raise RuntimeError(f"HTTP {error.code} from {safe_url}: {detail}") from error
-    except urllib.error.URLError as error:
-        reason = error.reason
-        if isinstance(reason, socket.timeout):
-            logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
-        else:
-            logger.warning("Request failed %s %s: %s", method, safe_url, reason)
-        raise RuntimeError(f"Request failed for {safe_url}: {reason}") from error
-    except TimeoutError as error:
-        logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
-        raise RuntimeError(f"Timeout requesting {safe_url}") from error
+    _execute_request(
+        url,
+        method=method,
+        headers=headers,
+        data=None,
+        timeout=timeout,
+    )
+
+
+def request_bytes(
+    url: str,
+    *,
+    method: str = "GET",
+    headers: Optional[Mapping[str, str]] = None,
+    timeout: int = 30,
+    max_bytes: Optional[int] = None,
+) -> bytes:
+    """GET/POST raw bytes through the shared host circuit breaker."""
+    return _execute_request(
+        url,
+        method=method,
+        headers=headers,
+        data=None,
+        timeout=timeout,
+        max_bytes=max_bytes,
+    )
 
 
 def request_xml(
@@ -163,25 +207,15 @@ def request_xml(
     headers: Optional[Mapping[str, str]] = None,
     timeout: int = 30,
 ) -> ET.Element:
-    request = urllib.request.Request(url, method=method, headers=dict(headers or {}))
-    safe_url = sanitize_url(url)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return ET.fromstring(response.read())
-    except urllib.error.HTTPError as error:
-        detail = sanitize_log_message(error.read().decode("utf-8", errors="replace"))
-        logger.warning("HTTP %s %s from %s: %s", method, error.code, safe_url, detail[:500])
-        raise RuntimeError(f"HTTP {error.code} from {safe_url}: {detail}") from error
-    except urllib.error.URLError as error:
-        reason = error.reason
-        if isinstance(reason, socket.timeout):
-            logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
-        else:
-            logger.warning("Request failed %s %s: %s", method, safe_url, reason)
-        raise RuntimeError(f"Request failed for {safe_url}: {reason}") from error
-    except TimeoutError as error:
-        logger.warning("Timeout %s %s (timeout=%ss)", method, safe_url, timeout)
-        raise RuntimeError(f"Timeout requesting {safe_url}") from error
+    return ET.fromstring(
+        _execute_request(
+            url,
+            method=method,
+            headers=headers,
+            data=None,
+            timeout=timeout,
+        )
+    )
 
 
 def optional_int(value: Optional[str]) -> Optional[int]:

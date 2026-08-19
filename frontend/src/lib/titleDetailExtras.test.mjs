@@ -93,7 +93,7 @@ describe("titleDetailExtras", () => {
         { in_library: true, rating_key: "1" },
         { role: "guest", multiUserEnabled: true },
       ),
-      false,
+      true,
     );
     assert.equal(
       canMarkTitleWatched(

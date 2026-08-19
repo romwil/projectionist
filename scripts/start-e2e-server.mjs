@@ -53,6 +53,8 @@ const env = {
   PORT,
   PROJECTIONIST_SKIP_DOTENV: "1",
   CURATORX_SKIP_DOTENV: "1",
+  // Mocked e2e is an already-provisioned LAN app, not first-boot SETUP_MODE.
+  PROJECTIONIST_SETUP_STATE: process.env.PROJECTIONIST_SETUP_STATE || "active",
 };
 
 console.log(`Starting CuratorX E2E server on :${PORT} (DATA_DIR=${DATA_DIR})`);

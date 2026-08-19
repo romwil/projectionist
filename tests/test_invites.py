@@ -33,11 +33,31 @@ class InviteRequiredHelperTests(unittest.TestCase):
         settings = Settings(features=FeatureFlags(multi_user_enabled=True))
         self.assertTrue(invite_required_for_new_users(settings))
 
-    def test_open_auto_provision_disables_gate(self) -> None:
+    def test_open_auto_provision_requires_allow_open_join_env(self) -> None:
         settings = Settings(
             features=FeatureFlags(multi_user_enabled=True, open_auto_provision=True)
         )
-        self.assertFalse(invite_required_for_new_users(settings))
+        self.assertTrue(invite_required_for_new_users(settings))
+        os.environ["PROJECTIONIST_ALLOW_OPEN_JOIN"] = "1"
+        try:
+            self.assertFalse(invite_required_for_new_users(settings))
+        finally:
+            os.environ.pop("PROJECTIONIST_ALLOW_OPEN_JOIN", None)
+
+    def test_public_profile_always_invite_only(self) -> None:
+        os.environ["PROJECTIONIST_ALLOW_OPEN_JOIN"] = "1"
+        try:
+            settings = Settings(
+                features=FeatureFlags(
+                    multi_user_enabled=True,
+                    household_profile="public",
+                    invite_only=False,
+                    open_auto_provision=True,
+                )
+            )
+            self.assertTrue(invite_required_for_new_users(settings))
+        finally:
+            os.environ.pop("PROJECTIONIST_ALLOW_OPEN_JOIN", None)
 
     def test_invite_only_off_disables_gate(self) -> None:
         settings = Settings(
@@ -49,6 +69,9 @@ class InviteRequiredHelperTests(unittest.TestCase):
 class InviteDbTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
+        os.environ["DATA_DIR"] = self._tmpdir.name
+        os.environ["CURATORX_SESSION_SECRET"] = "test-invite-db-session-secret-xx"
+        clear_session_secret_cache()
         self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.db.create_local_user(
             user_id="owner-1",
@@ -58,6 +81,9 @@ class InviteDbTests(unittest.TestCase):
         )
 
     def tearDown(self) -> None:
+        clear_session_secret_cache()
+        os.environ.pop("DATA_DIR", None)
+        os.environ.pop("CURATORX_SESSION_SECRET", None)
         self._tmpdir.cleanup()
 
     def test_create_lookup_redeem_replay(self) -> None:
@@ -85,6 +111,56 @@ class InviteDbTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             lookup_pending_invite(self.db, raw)
 
+    def test_concurrent_local_redeem_one_wins(self) -> None:
+        import threading
+
+        from projectionist.library.db import InviteConflict
+
+        created = create_household_invite(
+            self.db,
+            Settings(),
+            owner_id="owner-1",
+            role="member",
+            allowed_methods=["local"],
+            send_email=False,
+        )
+        invite_id = str(created["invite"]["id"])
+        wins: list[int] = []
+        conflicts: list[int] = []
+        unexpected: list[BaseException] = []
+
+        def worker(index: int) -> None:
+            try:
+                self.db.create_local_user_and_redeem_invite(
+                    invite_id=invite_id,
+                    user_id=f"local-race-{index}",
+                    display_name=f"racer{index}",
+                    password_hash="ab$cd",
+                    role="member",
+                )
+                wins.append(index)
+            except InviteConflict:
+                conflicts.append(index)
+            except BaseException as error:  # noqa: BLE001
+                unexpected.append(error)
+
+        threads = [threading.Thread(target=worker, args=(i,)) for i in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=15)
+        self.assertEqual(unexpected, [])
+        self.assertEqual(len(wins), 1)
+        self.assertEqual(len(conflicts), 7)
+        users = [
+            user
+            for user in self.db.list_users(limit=50)
+            if str(user.get("display_name") or "").startswith("racer")
+        ]
+        self.assertEqual(len(users), 1)
+        invite = self.db.get_invite(invite_id)
+        self.assertEqual(invite["status"], "redeemed")
+
     def test_denied_email_soft_blocks(self) -> None:
         row = self.db.create_access_request(display_name="No", email="blocked@example.com")
         self.db.resolve_access_request(row["id"], status="denied", resolved_by="owner-1")
@@ -105,6 +181,23 @@ class InviteDbTests(unittest.TestCase):
                 password="password123",
             )
         self.assertIn("denied", str(ctx.exception).lower())
+
+    def test_garbage_hmac_fails_closed(self) -> None:
+        with self.assertRaises(ValueError):
+            lookup_pending_invite(self.db, "not-a-real-token")
+        with self.assertRaises(ValueError):
+            lookup_pending_invite(self.db, "deadbeef.raw.badmac")
+
+    def test_guest_role_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            create_household_invite(
+                self.db,
+                Settings(),
+                owner_id="owner-1",
+                role="guest",
+                allowed_methods=["local"],
+                send_email=False,
+            )
 
 
 class InviteApiTests(unittest.TestCase):
@@ -167,8 +260,16 @@ class InviteApiTests(unittest.TestCase):
         self._tmpdir.cleanup()
 
     def _register_owner(self) -> None:
+        from projectionist.web.auth import _hash_password
+
+        self.db.create_local_user(
+            user_id="local-owner-invite",
+            display_name="owner",
+            password_hash=_hash_password("password123"),
+            role="owner",
+        )
         resp = self.client.post(
-            "/api/auth/local/register",
+            "/api/auth/local/login",
             json={"username": "owner", "password": "password123"},
         )
         self.assertEqual(resp.status_code, 200, resp.text)
@@ -190,7 +291,7 @@ class InviteApiTests(unittest.TestCase):
         self.assertEqual(login.status_code, 200, login.text)
         created = self.client.post(
             "/api/admin/invites",
-            json={"role": "guest", "is_youth": True, "allowed_methods": ["local"]},
+            json={"role": "member", "is_youth": True, "allowed_methods": ["local"]},
         )
         self.assertEqual(created.status_code, 200, created.text)
         body = created.json()
@@ -224,7 +325,19 @@ class InviteApiTests(unittest.TestCase):
             "/api/invites/redeem/local",
             json={"token": token, "username": "alex2", "password": "password123"},
         )
-        self.assertEqual(replay.status_code, 400, replay.text)
+        self.assertEqual(replay.status_code, 409, replay.text)
+
+    def test_garbage_token_validate_fails_closed(self) -> None:
+        resp = self.client.get("/api/invites/validate", params={"token": "garbage.not.real"})
+        self.assertEqual(resp.status_code, 400)
+
+    def test_guest_invite_rejected(self) -> None:
+        self._register_owner()
+        created = self.client.post(
+            "/api/admin/invites",
+            json={"role": "guest", "allowed_methods": ["local"]},
+        )
+        self.assertIn(created.status_code, (400, 422), created.text)
 
     def test_denied_cannot_redeem(self) -> None:
         self._register_owner()
@@ -298,9 +411,11 @@ class InviteApiTests(unittest.TestCase):
         self.assertEqual(replay.status_code, 403, replay.text)
 
     def test_open_auto_provision_preserves_upsert(self) -> None:
+        os.environ["PROJECTIONIST_ALLOW_OPEN_JOIN"] = "1"
         path = Path(self._tmpdir.name) / "settings.json"
         data = json.loads(path.read_text(encoding="utf-8"))
         data["features"]["open_auto_provision"] = True
+        data["features"]["household_profile"] = "private"
         path.write_text(json.dumps(data), encoding="utf-8")
         self._register_owner()
         self.client.cookies.clear()
@@ -309,6 +424,7 @@ class InviteApiTests(unittest.TestCase):
             return_value={"id": "plex-open-1", "title": "OpenUser", "email": "o@ex.com"},
         ):
             resp = self.client.post("/api/auth/plex", json={"auth_token": "fake-token"})
+        os.environ.pop("PROJECTIONIST_ALLOW_OPEN_JOIN", None)
         self.assertEqual(resp.status_code, 200, resp.text)
         self.assertEqual(resp.json()["user"]["role"], "member")
 

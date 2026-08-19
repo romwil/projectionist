@@ -67,7 +67,8 @@ Regression suite for multi-user API enforcement (`tests/test_api_authz.py`). Whe
 | Settings write gated | `PUT /api/settings` | **401** |
 | Chat gated | `POST /api/chat` | **401** |
 | Action confirm gated | `POST /api/actions/confirm` | **401** |
-| Allowlist still public | `GET /api/health`, `GET /api/features`, `/api/auth/*` | **200** / auth flow as designed |
+| Allowlist still public | Exhaustive handshake in [SECURITY.md](SECURITY.md) (`PUBLIC_HANDSHAKE_EXACT`: health, features, access-requests, invite validate/redeem, local login, Plex PIN + poll, Plex login, OIDC, logout). Not `/api/auth/*` prefix. | **200** / 4xx from the handler — never **401** |
+| Closed by default | `GET /api/auth/me`, `POST /api/auth/local/register`, `GET /api/guest/tour` | **401** / **403** / **404** |
 | Webhook allowlist | `POST /api/webhooks/plex` (with valid secret when required) | Not forced through session auth |
 
 When multi-user is **off**, preserve trusted-LAN single-owner behavior (bootstrap owner; existing

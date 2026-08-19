@@ -28,3 +28,5 @@ docs/**
 tests/
 unraid/
 templates/
+qa-runs/
+scripts/security/pentest/qa-live/

@@ -6,6 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Sequence
 
 from projectionist.watch_tracker.models import TitleRollup, YearRollup
 from projectionist.watch_tracker.rollups import month_label, peak_month
+from projectionist.year_in_review.recap import format_catalog_hours, ranked_names
 
 ChapterBuilder = Callable[[YearRollup, Dict[str, Any]], Optional[Dict[str, Any]]]
 
@@ -23,8 +24,9 @@ def _chapter(
     posters: Optional[List[Dict[str, Any]]] = None,
     shareable: bool = True,
     duration_ms: int = 5500,
+    hero: Optional[Dict[str, str]] = None,
 ) -> Dict[str, Any]:
-    return {
+    payload = {
         "id": id,
         "kind": kind,
         "title": title,
@@ -34,6 +36,9 @@ def _chapter(
         "shareable": shareable,
         "duration_ms": duration_ms,
     }
+    if hero:
+        payload["hero"] = hero
+    return payload
 
 
 def _poster_from_title(t: Any) -> Optional[Dict[str, Any]]:
@@ -61,6 +66,19 @@ def _join_titles(titles: Sequence[str]) -> str:
     return ", ".join(clean[:-1]) + f", and {clean[-1]}"
 
 
+def _hero_from_rollup(rollup: YearRollup) -> Dict[str, str]:
+    if rollup.catalog_minutes > 0:
+        return {
+            "value": format_catalog_hours(rollup.catalog_minutes),
+            "label": "hours in the catalog",
+        }
+    n = int(rollup.movie_completions or rollup.completion_count)
+    return {
+        "value": str(n),
+        "label": "movies finished" if rollup.movie_completions else "finishes",
+    }
+
+
 def build_overture(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if rollup.completion_count <= 0:
         return None
@@ -69,11 +87,9 @@ def build_overture(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str
     return _chapter(
         id="overture",
         kind="overture",
-        title=f"{year}, on your screen",
-        body=(
-            f"Hey {name} — here’s a short walk through the finishes we could "
-            f"attribute to you in {year}."
-        ),
+        title=f"Your {year}",
+        body=f"{name}, this is the year on your screen — the finishes we can put on you, not the household.",
+        hero=_hero_from_rollup(rollup),
         duration_ms=6000,
     )
 
@@ -81,23 +97,66 @@ def build_overture(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str
 def build_volume(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     if rollup.completion_count <= 0:
         return None
-    n = rollup.completion_count
     movies = rollup.movie_completions
-    episodes = rollup.episode_completions
-    body = (
-        f"You wrapped {n} finish{'es' if n != 1 else ''} this year — "
-        f"{movies} movie{'s' if movies != 1 else ''} and {episodes} episode"
-        f"{'s' if episodes != 1 else ''}."
-    )
+    episodes = rollup.unique_episodes or rollup.episode_completions
+    shows = rollup.unique_shows
+    lines = [
+        f"{movies} movie{'s' if movies != 1 else ''}",
+        f"{episodes} episode{'s' if episodes != 1 else ''}",
+    ]
+    if shows:
+        lines.append(f"{shows} show{'s' if shows != 1 else ''}")
+    if rollup.catalog_minutes > 0:
+        lines.append(f"{format_catalog_hours(rollup.catalog_minutes)} catalog hours")
+    body = f"You closed {movies} movie{'s' if movies != 1 else ''} and {episodes} episode{'s' if episodes != 1 else ''}."
+    if shows:
+        body += f" Across {shows} series."
     return _chapter(
         id="volume",
         kind="volume",
-        title="The tally, gently",
+        title="The totals",
         body=body,
-        stat_lines=[
-            f"{n} finishes",
-            f"{rollup.unique_titles} distinct titles",
-        ],
+        stat_lines=lines,
+        hero={
+            "value": str(movies),
+            "label": "movies finished",
+        },
+    )
+
+
+def build_movie_genre(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    ranked = ranked_names(rollup.movie_genre_counts, limit=2)
+    if not ranked:
+        return None
+    top = ranked[0]
+    body = f"Your movie year was {top['name']} — {top['count']} finish{'es' if top['count'] != 1 else ''}."
+    if len(ranked) > 1:
+        body += f" Runner-up: {ranked[1]['name']}."
+    return _chapter(
+        id="movie-genre",
+        kind="movie_genre",
+        title=str(top["name"]),
+        body=body,
+        hero={"value": str(top["name"]), "label": "top movie genre"},
+        stat_lines=[f"{top['count']} {top['name']} finishes"],
+    )
+
+
+def build_tv_genre(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    ranked = ranked_names(rollup.tv_genre_counts, limit=2)
+    if not ranked:
+        return None
+    top = ranked[0]
+    body = f"On TV, {top['name']} led — {top['count']} episode finish{'es' if top['count'] != 1 else ''}."
+    if len(ranked) > 1:
+        body += f" Then {ranked[1]['name']}."
+    return _chapter(
+        id="tv-genre",
+        kind="tv_genre",
+        title=str(top["name"]),
+        body=body,
+        hero={"value": str(top["name"]), "label": "top TV genre"},
+        stat_lines=[f"{top['count']} {top['name']} episodes"],
     )
 
 
@@ -123,15 +182,14 @@ def build_top_movies(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[s
             posters=posters,
         )
 
-    # No multi-day rewatches — showcase finishes without inventing affection.
     showcase = list(rollup.top_movies[:4])
     names = _join_titles([t.title for t in showcase])
-    body = f"Among the movie finishes we tracked: {names}."
+    body = f"Movies that defined the year: {names}."
     posters = [p for p in (_poster_from_title(t) for t in showcase) if p]
     return _chapter(
         id="top-movies",
         kind="top_movies",
-        title="Movies you finished",
+        title="The movies",
         body=body,
         posters=posters,
     )
@@ -141,19 +199,17 @@ def build_tv_depth(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str
     if not rollup.top_shows or rollup.episode_completions <= 0:
         return None
     top = rollup.top_shows[0]
-    body = (
-        f"On the series side, {top.title} led with {top.completions} episode "
-        f"finish{'es' if top.completions != 1 else ''}."
-    )
+    body = f"{top.title} was the binge — {top.completions} episode finish{'es' if top.completions != 1 else ''}."
     if rollup.unique_episodes:
-        body += f" Across everything, that’s {rollup.unique_episodes} unique episodes."
+        body += f" {rollup.unique_episodes} unique episodes across everything."
     posters = [p for p in (_poster_from_title(t) for t in rollup.top_shows[:4]) if p]
     return _chapter(
         id="tv-depth",
         kind="tv_depth",
-        title="Series nights",
+        title="The binge",
         body=body,
         posters=posters,
+        hero={"value": str(top.completions), "label": f"episodes of {top.title}"},
     )
 
 
@@ -178,9 +234,10 @@ def build_monthly_rhythm(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Di
     return _chapter(
         id="monthly-rhythm",
         kind="monthly_rhythm",
-        title="A busy month",
+        title=label,
         body=body,
         posters=posters,
+        hero={"value": str(count), "label": f"finishes in {label}"},
         stat_lines=[f"{label}: {count} finishes"],
     )
 
@@ -267,28 +324,16 @@ def build_live(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str, An
 
 
 def build_honesty(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Kept for tests and recap reuse; not in the default reel (recap owns the footnote)."""
     if rollup.completion_count <= 0:
         return None
-    c = rollup.confidence
-    certain = int(c.get("certain") or 0)
-    likely = int(c.get("likely") or 0)
-    plex_only = int(c.get("plex_event_only") or 0)
+    from projectionist.year_in_review.recap import honesty_footnote
 
-    body = "We counted finishes attributed to you — not everyone else’s Plex plays."
-    bits: List[str] = []
-    if certain:
-        bits.append(f"{certain} with live progress")
-    if likely:
-        bits.append(f"{likely} reconstructed from progress")
-    if plex_only:
-        bits.append(f"{plex_only} marked played in Plex without progress data")
-    if bits:
-        body += " " + "; ".join(bits) + "."
     return _chapter(
         id="honesty",
         kind="honesty",
         title="How we counted",
-        body=body,
+        body=honesty_footnote(rollup),
         shareable=False,
         duration_ms=5500,
     )
@@ -301,18 +346,17 @@ def build_closing(rollup: YearRollup, ctx: Dict[str, Any]) -> Optional[Dict[str,
     return _chapter(
         id="closing",
         kind="closing",
-        title="Lights up",
-        body=(
-            f"That’s your {rollup.year}, {name}. Whenever you’re ready for the next reel, "
-            "the curator’s still in the booth."
-        ),
-        duration_ms=6500,
+        title="Your recap",
+        body=f"That’s the reel, {name}. Linger on the numbers — copy them, screenshot them, argue about the genre crown.",
+        duration_ms=5000,
     )
 
 
 CORE_BUILDERS: Sequence[ChapterBuilder] = (
     build_overture,
     build_volume,
+    build_movie_genre,
+    build_tv_genre,
     build_top_movies,
     build_tv_depth,
     build_monthly_rhythm,
@@ -324,10 +368,7 @@ OPTIONAL_BUILDERS: Sequence[ChapterBuilder] = (
     build_live,
 )
 
-CLOSING_BUILDERS: Sequence[ChapterBuilder] = (
-    build_honesty,
-    build_closing,
-)
+CLOSING_BUILDERS: Sequence[ChapterBuilder] = ()
 
 
 def assemble_chapters(rollup: YearRollup, ctx: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -339,7 +380,7 @@ def assemble_chapters(rollup: YearRollup, ctx: Optional[Dict[str, Any]] = None) 
         if ch:
             chapters.append(ch)
     for builder in OPTIONAL_BUILDERS:
-        if len(chapters) >= MAX_CHAPTERS - len(CLOSING_BUILDERS):
+        if len(chapters) >= MAX_CHAPTERS:
             break
         ch = builder(rollup, context)
         if ch:

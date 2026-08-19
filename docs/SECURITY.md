@@ -13,7 +13,7 @@ Living pen-test brief for operators on the current Projectionist product surface
 | Dual-mode MCP + library privacy sanitizers | |
 | Default Docker / Unraid packaging assumptions (non-root `curatorx`) | |
 
-**Trust assumption:** Projectionist is a single-owner homelab app. With multi-user **off**, there is no login — anyone who can reach the HTTP port is an effective admin. With multi-user **on**, configured auth methods (Plex PIN / local / OIDC), session cookies, API middleware, and per-user chat/actions partitioning apply — still assume a trusted LAN for default single-owner mode.
+**Trust assumption:** TLS encrypts the pipe; it does not replace household auth. Fresh installs start in **SETUP_MODE** (cinematic wizard only). After the wizard commits, **ACTIVE_MODE** is permanent: unauthenticated callers get the exhaustive public handshake below — not library browse, not guest tour, not self-serve signup. Single-owner anonymous admin remains LAN-only and is blocked by the **WAN interlock** when the visible client IP is public. `ipaddress.is_private` is not proof of LAN (Docker `172.16.0.0/12` is RFC1918) and is not proof of WAN (RFC 6598 `100.64.0.0/10` Tailscale/CGNAT).
 
 ## Threat model
 
@@ -27,16 +27,52 @@ Guest SSID clients that share L2/L3 with the host are the same as LAN attackers 
 
 ### Accidental WAN
 
-Port-forwarding or exposing `8788` (or a reverse proxy without auth) exposes the control plane: settings, library sync, chat (LLM spend), *arr propose/confirm when tokens are known, and setup tests that can use stored secrets. Session forging is trivial if `PROJECTIONIST_SESSION_SECRET` is left at the public development default (S2 mitigated via auto-bootstrap + refuse-on-default).
+Port-forwarding or exposing `8788` (or a reverse proxy without auth) used to expose the control plane: settings, library sync, chat (LLM spend), *arr propose/confirm when tokens are known, and setup tests that can use stored secrets. Session forging is trivial if `PROJECTIONIST_SESSION_SECRET` is left at the public development default (S2 mitigated via auto-bootstrap + refuse-on-default).
+
+**Runtime WAN interlock (ACTIVE_MODE, single-owner):** lock `/api/*` except `GET /api/health` and `GET /api/features` when the **visible client IP is public** (not RFC1918 / unique-local / loopback / link-local / RFC 6598 `100.64.0.0/10`). Docker-bridge peers such as `172.17.0.1` on a `0.0.0.0` bind are **not** a runtime lock — Unraid/Docker NAT would otherwise brick LAN single-owner. Tailscale/CGNAT (`100.64.0.0/10`) is also **not** a visible public peer (`is_private` disagrees across CPython 3.12 vs 3.13+). Trusted `X-Forwarded-Proto: https` alone is **not** WAN. A trusted proxy (`PROJECTIONIST_TRUST_PROXY_HEADERS=1`) that reports a public `X-Forwarded-For` **is** WAN. Untrusted forwarded headers never unlock and never set `Secure` cookies (S14).
+
+**Setup handshake is stricter than runtime:** `0.0.0.0` + peer in `172.16.0.0/12` + no trusted proxy → **Public Household** wizard posture (`public_failsafe`). Visible public peer → halt owner create (`halt_wan`): `POST /api/setup/commit` from a raw public client is **403** even with `profile=public` — wizard hide is not the only gate. RFC 6598 `100.64.0.0/10` does not halt. Detection snapshots store bind/peer socket tuples and booleans only — never `Authorization`, cookies, `X-Plex-Token`, or forwarded header values.
+
+### Public household perimeter (ACTIVE_MODE)
+
+There is **no** `/api/auth/` prefix leak. Ingress matches **explicit method+path pairs** in `PUBLIC_HANDSHAKE_EXACT` (`projectionist/web/auth.py`). If a route is not on this list, it needs a session.
+
+**Exhaustive unauthenticated handshake:**
+
+| Method | Path | Notes |
+|--------|------|--------|
+| `GET` | `/api/health` | Liveness |
+| `GET` | `/api/features` | Stripped flags (no guest/tour) |
+| `POST` | `/api/access-requests` | Queue only; **3 / IP / hour**; honeypot below |
+| `GET` | `/api/invites/validate` | HMAC-verified token; fail closed |
+| `POST` | `/api/invites/redeem/local` | Local fallback on the same invite |
+| `POST` | `/api/auth/local/login` | Existing local users only |
+| `POST` | `/api/auth/plex/pin` | Start PIN; nonce cookie |
+| `GET` | `/api/auth/plex/pin/{id}` | Default poll (login/join) completes the household session (cookie + user) even with a leftover cookie. `?peek=1` (Link Plex / ProfilePage) never binds; bind is `POST /api/auth/plex/link`. New Plex identity without invite → **403** |
+| `POST` | `/api/auth/plex` | Existing Plex users; new identity without invite → **403** join-link copy |
+| `GET` | `/api/auth/oidc/authorize` | If OIDC enabled |
+| `GET` | `/api/auth/oidc/callback` | If OIDC enabled |
+| `POST` | `/api/auth/logout` | Clears cookie |
+
+Not public: `GET /api/auth/me`, `POST /api/auth/local/register`, `GET /api/guest/tour` (404), whole `/api/auth/` prefix, setup wizard endpoints after ACTIVE_MODE (404). `/api/webhooks/*` stays **secret-gated** (S8). `/mcp` stays **API-key-gated** — do not publish MCP on the WAN hostname.
+
+**Honeypot (`organization_url` on access requests):** hidden field (`display: none`, `aria-hidden`, `tabIndex=-1`). Any non-empty value → **200** with the same `{ "request": { "id", "status", "created_at" } }` shape as a real insert, throwaway UUID **not** written to SQLite, structured log of a ping (peer class / bind — **not** the filled value), **no** owner alert. Bots that fill it never join the queue.
+
+**Invites:** URL token is `invite_id.raw.hmac` (HMAC over session secret). Raw material is hashed at rest. Garbage tokens fail closed without a DB timing oracle. Member insert and `status='redeemed'` happen in **one SQLite transaction**; concurrent double-redeem has one winner. Roles are **owner | member** (+ youth flag). Legacy `guest` rows migrate to `member`.
+
+**Invite-only defaults:** Public Household commit **always** sets invite-only on. Private Household defaults **off** unless the operator explicitly opts in. Private Household commit forces `trust_proxy=false` and clears a sticky TLS-proxy / `household_domain` (choosing Private is not a leftover Public checkbox). `open_auto_provision` is off after wizard commit; lab/CI may set `PROJECTIONIST_ALLOW_OPEN_JOIN=1` for synthetic Plex identities — never the public default.
+
+**Link Plex:** ProfilePage polls `GET /api/auth/plex/pin/{id}?peek=1` (status only — no cookie, no bind). Bind is `POST /api/auth/plex/link` with `{ pin_id, password }` in one payload. Claimed `plex_user_id` is rejected. No display-name matching.
+
+```text
+SPA AuthGate ──no session──► /login (glass door) or /join?token=
+SETUP_MODE     ──/api/*──► handshake + wizard complete only
+ACTIVE_MODE    ──no session──► exhaustive handshake; else 401
+```
 
 ### Multi-user household
 
-When multi-user is enabled, middleware requires a session for almost all `/api/*` (allowlist: health, features, access-requests, invite validate/redeem, auth, webhooks). Chat, pending actions, watchlist, reviews, and preferences are scoped by `user_id`. Owner-only routes cover settings, setup tests, sync mutate, and persona/lens writes. Guests cannot request media / *arr writes. The shared library catalog remains household-wide; members see a public-content library browse schema. Login may use Plex PIN, local password (PBKDF2), and/or OIDC depending on `auth_*` flags; `GET /api/features` exposes `auth_methods`. **New** Plex/OIDC identities require a `/join` invite by default (`features.invite_only`); opt into LAN-open auto-provision with `features.open_auto_provision`.
-
-```text
-SPA AuthGate ──no session──► /login
-Most /api/*  ──no session──► 401 when multi_user_enabled
-```
+Chat, pending actions, watchlist, reviews, and preferences are scoped by `user_id`. Owner-only routes cover settings, remaining setup tests, sync mutate, and persona/lens writes. The shared library catalog remains household-wide; members see a public-content library browse schema. Login may use Plex PIN, local password (PBKDF2), and/or OIDC depending on `auth_*` flags; `GET /api/features` exposes `auth_methods`. **New** Plex/OIDC identities require a `/join` invite when `features.invite_only` is on (always for Public Household).
 
 ### MCP & privacy (dual-mode)
 
@@ -57,15 +93,15 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
 | ID | Severity | Location | Exploit one-liner | Status | Residual risk |
 |----|----------|----------|-------------------|--------|---------------|
-| **S1** | Critical | Control-plane routes historically lacked session deps. | With `multi_user_enabled=true`, unauthenticated `curl` to settings/chat/sync/confirm. | **Mitigated** | When multi-user is off, the control plane remains open on the LAN by design. |
+| **S1** | Critical | Control-plane routes historically lacked session deps. | With `multi_user_enabled=true`, unauthenticated `curl` to settings/chat/sync/confirm. | **Mitigated** | Explicit handshake allowlist; wildcard `/api/auth/` is gone. Single-owner remains LAN-open unless the WAN interlock sees a public client IP. |
 | **S2** | Critical | Session secret fell back to a public dev default. | Forge `curatorx_session` cookies for any `user_id`. | **Mitigated** | Auto-generated DATA_DIR secret + refuse enable on public default; still set `PROJECTIONIST_SESSION_SECRET` in production. |
 | **S3** | Critical | App binds `0.0.0.0:8788` in Docker / Unraid packaging. | Reach the control plane from any host interface / accidental WAN map. | **Open** | Do not port-forward bare 8788; bind/firewall to LAN or put behind an authenticated reverse proxy. |
 | **S4** | High | Plex PIN create/poll without binding / rate limits. | Create/poll unbound PINs; race another client’s PIN once authorized. | **Mitigated** | PIN nonce cookie + per-IP rate limits; residual race risk on shared browser profiles. |
 | **S5** | High | Setup tests filled secrets and fetched operator URLs (SSRF). | Hit link-local/metadata URLs with attached saved tokens. | **Mitigated** | Owner-gated + host-matched secrets + link-local/metadata blocks; private LAN targets still allowed for *arr. |
 | **S6** | High | Chat threads not filtered by `user_id`. | Read/delete another user’s messages. | **Mitigated** | Chat threads scoped by `user_id` when multi-user is on. |
 | **S7** | High | Pending *arr confirms by opaque token only. | Steal/guess a confirmation token and confirm writes. | **Mitigated** | Pending actions store `user_id`; confirm pops only matching tokens. |
-| **S8** | High | Empty webhook secret accepted any Plex webhook POST. | Spoof webhook events to queue sync/side effects. | **Mitigated** | Empty webhook secret → 503; header required when configured. |
-| **S9** | Medium | Session cookie lacked `Secure` behind HTTPS proxies. | Weaker cookie story on HTTPS / CSRF edge cases. | **Mitigated** | `Secure` cookie when `X-Forwarded-Proto=https`. |
+| **S8** | High | Empty webhook secret accepted any Plex webhook POST. | Spoof webhook events to queue sync/side effects. | **Mitigated** | Unconfigured or invalid secret → generic 401 (no env var names); header compared with `secrets.compare_digest` when configured. |
+| **S9** | Medium | Session cookie lacked `Secure` behind HTTPS proxies. | Weaker cookie story on HTTPS / CSRF edge cases. | **Mitigated** | `Secure` + HSTS only when the request is actually HTTPS (`request.url.scheme` or **trusted** forwarded proto). Untrusted `X-Forwarded-Proto` is ignored. |
 | **S10** | Medium | Seerr path could skip confirmation. | Tool args submit Seerr requests immediately. | **Mitigated** | Seerr tool path always returns a confirmation token. |
 | **S11** | Medium | Settings JSON stores API keys in plaintext under `/config`. | Read volume / backup / host filesystem → fleet credentials. | **Mitigated** | File mode `0600` on every save. **H4 Hybrid:** UI-persisted secrets are encrypted at rest (`PROJECTIONIST_SECRETS_KEY` or material derived from the session secret); env-supplied secrets still win and are not written back as plaintext. Back up the secrets key with `/config` (see [Rotating secrets & keys](#rotating-secrets--keys) and [DOCKER.md](DOCKER.md) backups). |
 | **S12** | Low | Docs understated multi-user API enforcement. | Operators misread network-peer risk. | **Mitigated** | Docs + middleware aligned for multi-user. |
@@ -79,19 +115,26 @@ See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 | **P5** | Medium | Authenticated members received owner-grade library JSON. | Member curls dump rating keys, sizes, arr flags. | **Mitigated** | Member browse uses public-content sanitizer when multi-user is on. |
 | **P6** | Medium | Full MCP / stdio without a distinct full secret. | Accidental escalate to propose tools. | **Mitigated** | Stdio full requires distinct full key; HTTP maps key → mode. |
 | **S16** | Medium | Shared repository memory/research returned into any user's LLM context unfenced (stored prompt injection). | Poison a global insight/snapshot; steer another user's tool calls. | **Mitigated** | Tool/memory results fenced as untrusted DATA (`wrap_untrusted_data`); system-prompt clause; CI `tests/test_prompt_injection.py`; pentest `TC-PROMPT-01` runs that suite. Residual: model may still mis-follow fenced text; *arr writes stay confirm-gated. |
+| **S17** | High | Docker NAT (`172.17.0.1`) classified as LAN via `is_private`. | Silent Private Household / single-owner on a public VPS bind. | **Mitigated** | Setup handshake treats `0.0.0.0` + `172.16.0.0/12` as Public fail-safe. Runtime WAN interlock **does not** lock Docker-bridge peers (Unraid). RFC 6598 `100.64.0.0/10` (Tailscale/CGNAT) is LAN, not a visible public peer. |
+| **S18** | High | Invite redeem created the user then burned the token in a second write. | Crash window: unburned token or orphan user; replay. | **Mitigated** | HMAC on the URL token; hash at rest; insert + redeem in one transaction. |
+| **S19** | Medium | Guest role + public `/tour` + open register. | Unauthenticated library browse; third anonymous-ish class. | **Mitigated** | No guest/tour; register 403 for anonymous; `/tour` redirects to `/login`. |
+| **S20** | Medium | Access-request form without bot trap / loose rate limit. | Queue flooding; scraper retune. | **Mitigated** | 3/IP/hour; `organization_url` honeypot returns identical 200 JSON, no SQLite row, no owner alert. |
+| **S21** | Medium | Two-step Plex link (poll then attach). | Race: bind without password confirm. | **Mitigated** | Single `POST /api/auth/plex/link` with `pin_id` + password; `?peek=1` poll never binds. Default login/join poll still completes the session. |
 
 ---
 
 ## Operator guidance
 
-1. **Do not expose `8788` to the internet.** Use LAN-only or an authenticated reverse proxy.
-2. Set **`PROJECTIONIST_SESSION_SECRET`** to a long random value before enabling multi-user (or accept auto-generated secret under Config).
-3. Set a non-empty **webhook secret** if anything outside the host can POST `/api/webhooks/plex`.
-4. Keep the host on a **trusted LAN segment**; multi-user is household identity, not internet multi-tenant isolation.
-5. Restrict who can mount/read the `/config` volume.
-6. Prefer a **privacy MCP key** for shared/third-party clients; only mint `PROJECTIONIST_MCP_FULL_API_KEY` for trusted in-stack automation (keys must differ).
-7. Leave **`PROJECTIONIST_TRUST_PROXY_HEADERS` unset** on direct LAN binds; enable only when a trusted reverse proxy sets client IP headers.
-8. Keep **`PROJECTIONIST_EXPOSE_OPENAPI` unset** in production; use it only for local API exploration.
+1. **Do not expose bare `8788` to the internet.** Put TLS on Caddy/NPM/Cloudflare Tunnel in front; complete the wizard as **Public Household**.
+2. Set **`PROJECTIONIST_TRUST_PROXY_HEADERS=1` only behind that trusted proxy.** The wizard “TLS edge” confirm writes the same flag. Untrusted `X-Forwarded-*` is ignored for client IP, rate limits, `Secure` cookies, and WAN unlock.
+3. Set **`PROJECTIONIST_SESSION_SECRET`** to a long random value (or accept auto-generated secret under Config). Invite HMACs use this secret.
+4. Set a non-empty **webhook secret** if anything outside the host can POST `/api/webhooks/plex`.
+5. **Do not publish `/mcp` on the WAN hostname.** Prefer a privacy MCP key for shared clients; full key must differ.
+6. Public Household is **invite-only**; mint join links from Admin Access. Private Household invite-only stays off unless you opt in.
+7. Restrict who can mount/read the `/config` volume (encrypted secrets + session secret + recovery-key hash).
+8. Keep **`PROJECTIONIST_EXPOSE_OPENAPI` unset** in production.
+9. After ACTIVE_MODE, setup endpoints **404**. Recovery is owner login + Admin, or `PROJECTIONIST_OWNER_PASSWORD` on LAN — not the wizard.
+10. Automat LAN hosts and QA vs prod: [ops/AUTOMAT.md](ops/AUTOMAT.md).
 
 ## Rotating secrets & keys
 

@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import logging
 import secrets
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 from urllib.parse import urljoin
 
 from projectionist.config_store import Settings, invite_required_for_new_users
 from projectionist.library.db import Database
 from projectionist.mail import MailSendError, mail_configured, send_mail
 from projectionist.web.auth import _hash_password, row_to_current_user_from_dict
+from projectionist.web.ingress import JOIN_LINK_DETAIL
+from projectionist.web.session_tokens import resolve_session_secret
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +27,28 @@ def hash_invite_token(raw_token: str) -> str:
 
 def generate_invite_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def _invite_hmac(invite_id: str, raw: str) -> str:
+    secret = resolve_session_secret().encode("utf-8")
+    return hmac.new(secret, f"{invite_id}.{raw}".encode("utf-8"), hashlib.sha256).hexdigest()
+
+
+def encode_invite_token(invite_id: str, raw: str) -> str:
+    return f"{invite_id}.{raw}.{_invite_hmac(invite_id, raw)}"
+
+
+def parse_invite_token(token: str) -> Tuple[str, str]:
+    """Verify HMAC and return (invite_id, raw). Fail closed without a DB lookup."""
+    cleaned = str(token or "").strip()
+    parts = cleaned.split(".")
+    if len(parts) != 3 or not all(parts):
+        raise ValueError("Invite not found")
+    invite_id, raw, mac = parts
+    expected = _invite_hmac(invite_id, raw)
+    if not hmac.compare_digest(mac, expected):
+        raise ValueError("Invite not found")
+    return invite_id, raw
 
 
 def public_invite_view(invite: Dict[str, Any]) -> Dict[str, Any]:
@@ -57,14 +82,19 @@ def create_household_invite(
 ) -> Dict[str, Any]:
     """Create a pending invite; returns invite + one-time raw token + join URL."""
     import time
+    import uuid
 
+    cleaned_role = str(role or "member").strip().lower()
+    if cleaned_role != "member":
+        raise ValueError("role must be member")
+    invite_id = uuid.uuid4().hex
     raw = generate_invite_token()
     token_hash = hash_invite_token(raw)
     expires_at = time.time() + max(3600, int(expires_in_seconds))
     invite = db.create_invite(
         token_hash=token_hash,
         created_by=owner_id,
-        role=role,
+        role="member",
         is_youth=is_youth,
         allowed_methods=allowed_methods,
         expires_at=expires_at,
@@ -72,23 +102,29 @@ def create_household_invite(
         expected_plex_user_id=expected_plex_user_id,
         expected_oidc_sub=expected_oidc_sub,
         access_request_id=access_request_id,
+        invite_id=invite_id,
     )
-    join_path = f"/join?token={raw}"
-    join_url = urljoin(str(base_url or "").rstrip("/") + "/", join_path.lstrip("/")) if base_url else join_path
+    signed = encode_invite_token(str(invite["id"]), raw)
+    domain = str(getattr(settings, "household_domain", "") or "").strip()
+    origin = str(base_url or "").rstrip("/")
+    if domain and not origin:
+        origin = domain if domain.startswith("http") else f"https://{domain}"
+    join_path = f"/join?token={signed}"
+    join_url = urljoin(origin + "/", join_path.lstrip("/")) if origin else join_path
     mailed = False
     if send_email and email and mail_configured(settings):
         try:
             send_mail(
                 settings,
                 to=str(email),
-                subject="You're invited to join CuratorX",
+                subject="You're invited to join Projectionist",
                 text=(
-                    "You've been invited to join a CuratorX household.\n\n"
+                    "You've been invited to join a Projectionist household.\n\n"
                     f"Open this link to finish joining:\n{join_url}\n\n"
                     "If you did not expect this, you can ignore the message."
                 ),
                 html=(
-                    "<p>You've been invited to join a CuratorX household.</p>"
+                    "<p>You've been invited to join a Projectionist household.</p>"
                     f'<p><a href="{join_url}">Open your invite</a></p>'
                     "<p>If you did not expect this, you can ignore the message.</p>"
                 ),
@@ -101,7 +137,7 @@ def create_household_invite(
 
     return {
         "invite": public_invite_view(invite),
-        "token": raw,
+        "token": signed,
         "join_path": join_path,
         "join_url": join_url,
         "emailed": mailed,
@@ -112,11 +148,9 @@ def lookup_pending_invite(db: Database, raw_token: str) -> Dict[str, Any]:
     """Validate a raw token and return the pending invite or raise ValueError."""
     import time
 
-    cleaned = str(raw_token or "").strip()
-    if not cleaned:
-        raise ValueError("Invite token is required")
-    invite = db.get_invite_by_token_hash(hash_invite_token(cleaned))
-    if invite is None:
+    invite_id, raw = parse_invite_token(raw_token)
+    invite = db.get_invite_by_token_hash(hash_invite_token(raw))
+    if invite is None or str(invite["id"]) != invite_id:
         raise ValueError("Invite not found")
     if invite["status"] == "revoked":
         raise ValueError("Invite has been revoked")
@@ -154,8 +188,8 @@ def redeem_local_invite(
     username: str,
     password: str,
 ) -> Dict[str, Any]:
-    """Create a local-password member/guest from a pending invite."""
-    del settings  # reserved for future mail/welcome hooks
+    """Create a local-password member from a pending invite in one transaction."""
+    del settings
     invite = lookup_pending_invite(db, raw_token)
     assert_method_allowed(invite, "local")
     assert_identity_not_denied(db, email=invite.get("email"))
@@ -169,22 +203,18 @@ def redeem_local_invite(
         raise ValueError("Username already taken")
 
     user_id = f"local-{secrets.token_hex(12)}"
-    user = db.create_local_user(
+    result = db.create_local_user_and_redeem_invite(
+        invite_id=str(invite["id"]),
         user_id=user_id,
         display_name=name,
         password_hash=_hash_password(password),
-        role=str(invite["role"]),
+        role="member",
         email=invite.get("email"),
+        is_youth=bool(invite.get("is_youth")),
     )
-    if invite.get("is_youth"):
-        try:
-            user = db.set_user_youth(user_id, True)
-        except Exception:  # noqa: BLE001
-            logger.debug("Could not set youth on invite redeem", exc_info=True)
-    redeemed = db.redeem_invite(invite["id"], redeemed_user_id=user_id)
     return {
-        "invite": public_invite_view(redeemed),
-        "user": row_to_current_user_from_dict(user).to_dict(),
+        "invite": public_invite_view(result["invite"]),
+        "user": row_to_current_user_from_dict(result["user"]).to_dict(),
     }
 
 
@@ -219,36 +249,21 @@ def provision_from_invite(
     if expected_oidc and oidc_sub and str(expected_oidc) != str(oidc_sub):
         raise ValueError("This invite is for a different SSO account")
 
-    role = str(invite["role"])
-    if plex_user_id:
-        user = db.upsert_plex_user(
-            user_id=user_id,
-            display_name=display_name,
-            email=email,
-            plex_user_id=plex_user_id,
-            role=role,
-            avatar_url=avatar_url,
-            seerr_user_id=seerr_user_id,
-            seerr_permissions=seerr_permissions,
-        )
-    elif oidc_sub:
-        user = db.upsert_oidc_user(
-            oidc_sub=oidc_sub,
-            display_name=display_name,
-            email=email,
-            role=role,
-        )
-    else:
-        raise ValueError("Plex or OIDC identity is required")
-
-    if invite.get("is_youth"):
-        try:
-            user = db.set_user_youth(str(user["id"]), True)
-        except Exception:  # noqa: BLE001
-            logger.debug("Could not set youth on invite redeem", exc_info=True)
-
-    redeemed = db.redeem_invite(invite["id"], redeemed_user_id=str(user["id"]))
-    return {"invite": redeemed, "user": user}
+    result = db.upsert_identity_and_redeem_invite(
+        invite_id=str(invite["id"]),
+        method=method,
+        user_id=user_id,
+        display_name=display_name,
+        email=email,
+        role="member",
+        plex_user_id=plex_user_id,
+        oidc_sub=oidc_sub,
+        avatar_url=avatar_url,
+        seerr_user_id=seerr_user_id,
+        seerr_permissions=seerr_permissions,
+        is_youth=bool(invite.get("is_youth")),
+    )
+    return {"invite": result["invite"], "user": result["user"]}
 
 
 def require_invite_or_open(
@@ -262,9 +277,7 @@ def require_invite_or_open(
     if not invite_required_for_new_users(settings):
         return None
     if not raw_token:
-        raise ValueError(
-            "An invite is required to join this household. Ask the owner for a /join link."
-        )
+        raise ValueError(JOIN_LINK_DETAIL)
     invite = lookup_pending_invite(db, raw_token)
     assert_method_allowed(invite, method)
     return invite

@@ -73,7 +73,18 @@ class FullModeAuthTests(unittest.TestCase):
             mode2, detail, status2 = resolve_http_mcp_auth("not-a-key")
             self.assertIsNone(mode2)
             self.assertEqual(status2, 401)
-            self.assertIn("Invalid", detail or "")
+            self.assertEqual(detail, "Unauthorized")
+
+    def test_disabled_http_mcp_is_generic_401(self) -> None:
+        with patch("projectionist.mcp.mode.privacy_api_key", return_value=""), patch(
+            "projectionist.mcp.mode.full_api_key", return_value=""
+        ):
+            mode, detail, status = resolve_http_mcp_auth("anything")
+            self.assertIsNone(mode)
+            self.assertEqual(status, 401)
+            self.assertEqual(detail, "Unauthorized")
+            self.assertNotIn("PROJECTIONIST_", detail or "")
+            self.assertNotIn("CURATORX_", detail or "")
 
 
 class FullSchemaTests(unittest.TestCase):

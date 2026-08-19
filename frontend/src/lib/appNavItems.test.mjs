@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 import { ROUTES } from "./backNav.js";
 import {
   APP_NAV_CORE_ITEMS,
-  GUEST_NAV_ITEMS,
   YOUTH_NAV_ITEMS,
   buildAppNavItems,
 } from "./appNavItems.js";
@@ -184,17 +183,13 @@ describe("buildAppNavItems", () => {
     assert.equal(navigateBlock(items).includes("my-journey"), true);
   });
 
-  it("uses a guest tour nav with only the peers guests may see", () => {
+  it("legacy guest role uses the member drawer, not a tour nav", () => {
     const items = buildAppNavItems({ role: "guest" });
-    assert.deepEqual(navigateBlock(items), ["search", "chat", "explore"]);
-    assert.deepEqual(moreBlock(items), [
-      ...GUEST_NAV_ITEMS.map((item) => item.id),
-      "help",
-      "about",
-    ]);
+    assert.deepEqual(navigateBlock(items), navigateBlock(buildAppNavItems({ role: "member" })));
+    assert.deepEqual(moreBlock(items), moreBlock(buildAppNavItems({ role: "member" })));
     const ids = items.map((item) => item.id);
-    assert.equal(ids.includes("settings"), false);
-    assert.equal(ids.includes("inbox"), false);
-    assert.equal(ids.includes("my-journey"), false);
+    assert.equal(ids.includes("tour"), false);
+    assert.equal(ids.includes("inbox"), true);
+    assert.equal(ids.includes("my-journey"), true);
   });
 });

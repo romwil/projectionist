@@ -26,7 +26,7 @@ export const ROUTES = {
   liveWatch: "/live/watch",
   watchlist: "/watchlist",
   library: "/library",
-  tour: "/tour",
+  tour: "/login",
   /** Sync/token settings only — browse pins on /watchlist. */
   watchlistSettings: "/settings/watchlist",
   settings: "/settings",

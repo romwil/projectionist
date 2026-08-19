@@ -2,6 +2,6 @@
 
 from __future__ import annotations
 
-REEL_SCHEMA_VERSION = 2
+REEL_SCHEMA_VERSION = 3
 
 __all__ = ["REEL_SCHEMA_VERSION"]

@@ -47,10 +47,12 @@ class DatabaseTests(unittest.TestCase):
                 journal = conn.execute("PRAGMA journal_mode").fetchone()[0]
                 busy = conn.execute("PRAGMA busy_timeout").fetchone()[0]
                 sync = conn.execute("PRAGMA synchronous").fetchone()[0]
+                autocheckpoint = conn.execute("PRAGMA wal_autocheckpoint").fetchone()[0]
             self.assertEqual(str(journal).lower(), "wal")
             self.assertEqual(int(busy), SQLITE_BUSY_TIMEOUT_MS)
             # NORMAL == 1
             self.assertEqual(int(sync), 1)
+            self.assertEqual(int(autocheckpoint), 1000)
 
     def test_upsert_library_items_batches_one_commit(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

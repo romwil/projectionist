@@ -101,9 +101,6 @@ export function primaryNavVisibleIds({
     return [];
   }
   const normalized = String(role || "owner").toLowerCase();
-  if (normalized === "guest") {
-    return ["search", "chat", "explore"];
-  }
   const ids = ["search", "chat", "explore", "inbox", "my-journey", "settings"];
   if (liveChannelsReady) {
     // Live sits after Explore — living-room peer, not Admin utility.

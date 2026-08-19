@@ -277,7 +277,6 @@ def _empty_gaps_payload(
     companies_unresolved: Optional[List[str]] = None,
     genres_unresolved: Optional[List[str]] = None,
     genres_candidates: Optional[List[Any]] = None,
-    suggested_fallback: Optional[Mapping[str, Any]] = None,
     stop_retrying: bool = True,
 ) -> str:
     payload: Dict[str, Any] = {
@@ -296,8 +295,6 @@ def _empty_gaps_payload(
     }
     if genres_candidates:
         payload["genres_candidates"] = list(genres_candidates)
-    if suggested_fallback:
-        payload["suggested_fallback"] = dict(suggested_fallback)
     return json.dumps(payload)
 
 
@@ -399,37 +396,6 @@ def _merge_tmdb_results_by_id(
         seen.add(tid)
         merged.append(item)
     return merged
-
-
-def _build_gaps_suggested_fallback(args: Mapping[str, Any]) -> Dict[str, Any]:
-    """Broader structured recipe for one retry before tools are stripped."""
-    media_type = str(args.get("media_type") or "movie")
-    fallback: Dict[str, Any] = {
-        "media_type": media_type,
-        "is_fallback_attempt": True,
-    }
-    year_from = args.get("year_from")
-    year_to = args.get("year_to")
-    if year_from is not None:
-        fallback["year_from"] = year_from
-    if year_to is not None:
-        fallback["year_to"] = year_to
-    without_genres = str(args.get("without_genres") or "").strip()
-    if without_genres:
-        fallback["without_genres"] = without_genres
-    without_keywords = str(args.get("without_keywords") or "").strip()
-    if without_keywords:
-        fallback["without_keywords"] = without_keywords
-
-    genres = str(args.get("genres") or "").strip()
-    if media_type == "show":
-        tv_type = str(args.get("tv_type") or "").strip() or "miniseries"
-        fallback["tv_type"] = tv_type
-        # History aliases to War & Politics on TV (+ keyword union in the tool).
-        fallback["genres"] = genres or "History"
-    else:
-        fallback["genres"] = genres or "Documentary"
-    return fallback
 
 
 def _seerr_result_year(item: Mapping[str, Any]) -> Optional[int]:
@@ -871,19 +837,6 @@ class ToolRegistry:
             self._turn_audit_label = cleaned
 
     async def execute(self, name: str, arguments: Mapping[str, Any]) -> str:
-        guest_denied = {
-            "add_to_radarr",
-            "add_to_sonarr",
-            "request_via_seerr",
-            "approve_seerr_request",
-            "remove_from_arr",
-            "mark_bad_media",
-            "create_plex_collection",
-            "add_to_plex_collection",
-            "confirm_pending_action",
-        }
-        if self.user_role == "guest" and name in guest_denied:
-            return json.dumps({"error": "Guests cannot request or modify media"})
         handler: Optional[Callable] = getattr(self, f"_tool_{name}", None)
         if handler is None:
             logger.warning("Unknown agent tool requested: %s", name)
@@ -1001,11 +954,11 @@ class ToolRegistry:
             run_persona_consult,
         )
 
-        if self.is_youth or self.user_role == "guest":
+        if self.is_youth:
             return json.dumps(
                 consult_unavailable_payload(
                     reason=(
-                        "Village consults are unavailable for youth and guest accounts "
+                        "Village consults are unavailable for youth accounts "
                         "(shared memory scope is fail-closed)."
                     ),
                     code="consult_privacy",
@@ -1557,7 +1510,6 @@ class ToolRegistry:
             return json.dumps({"error": "TMDB API key not configured"})
         tmdb = TMDBClient(self.settings.tmdb_api_key)
         owned = _excluded_add_tmdb_ids(self.db, media_type)
-        is_fallback_attempt = bool(args.get("is_fallback_attempt"))
         year_from = args.get("year_from")
         year_to = args.get("year_to")
         with_type = _normalize_tv_type(args.get("tv_type")) if media_type == "show" else None
@@ -1597,15 +1549,8 @@ class ToolRegistry:
                     genres_candidates=genres_candidates,
                     stop_retrying=False,
                 )
-            # Fail closed: invented facets must not fall through to unfiltered discover.
-            # Exception: TV History pack — TMDB has no TV History genre; continue and
-            # union pack keyword queries below instead of an empty wall.
-            history_tv_pack = (
-                match_facet_pack(genres, pack_id="history_tv")
-                if media_type == "show"
-                else None
-            )
-            if not genre_ids and not (history_tv_pack is not None and not ambiguous):
+            # Fail closed: empty resolve_genre_ids is the only authority — no pack/regex rescue.
+            if not genre_ids:
                 return _empty_gaps_payload(
                     note=(
                         "Could not resolve genres to TMDB genre ids "
@@ -1617,10 +1562,6 @@ class ToolRegistry:
                     genres_unresolved=genres_unresolved,
                     genres_candidates=genres_candidates or None,
                 )
-            if not genre_ids and history_tv_pack is not None:
-                genres_unresolved = [
-                    g for g in genres_unresolved if not re.search(r"\bhistor", str(g), re.I)
-                ]
 
         without_genres_text = str(args.get("without_genres") or "").strip()
         without_genre_ids = ""
@@ -1773,36 +1714,29 @@ class ToolRegistry:
                 with_companies=company_ids,
             )
         else:
-            history_pack = match_facet_pack(genres, pack_id="history_tv")
-            history_tv = history_pack is not None
-            # Unfiltered TV discover (no genre/keyword) dumps popular junk — skip when
-            # History rematerializes to keywords only.
-            if history_tv and not genre_ids and not keyword_ids and not company_ids:
-                results = []
-            else:
-                results = tmdb.discover_tv(
-                    year_from=year_from,
-                    year_to=year_to,
-                    with_genres=genre_ids or None,
-                    without_genres=without_genre_ids or None,
-                    with_keywords=keyword_ids,
-                    without_keywords=without_keyword_ids,
-                    with_companies=company_ids,
-                    with_type=with_type,
+            results = tmdb.discover_tv(
+                year_from=year_from,
+                year_to=year_to,
+                with_genres=genre_ids or None,
+                without_genres=without_genre_ids or None,
+                with_keywords=keyword_ids,
+                without_keywords=without_keyword_ids,
+                with_companies=company_ids,
+                with_type=with_type,
+            )
+            # Optional pack enrichment from taxonomy.json only (never inlined here).
+            facet_pack = match_facet_pack(genres) if genres else None
+            if facet_pack and facet_pack.keyword_queries:
+                pack_kw = _resolve_tmdb_keyword_ids(
+                    tmdb, ", ".join(facet_pack.keyword_queries)
                 )
-            # TV History pack: War & Politics discover misses Drama-only history
-            # miniseries (Chernobyl). Union pack keyword queries + theme filter.
-            if history_pack and history_pack.keyword_queries:
-                hist_kw = _resolve_tmdb_keyword_ids(
-                    tmdb, ", ".join(history_pack.keyword_queries)
-                )
-                hist_kw_ids = hist_kw.get("keyword_ids")
-                if hist_kw_ids and hist_kw_ids != keyword_ids:
+                pack_kw_ids = pack_kw.get("keyword_ids")
+                if pack_kw_ids and pack_kw_ids != keyword_ids:
                     extra = tmdb.discover_tv(
                         year_from=year_from,
                         year_to=year_to,
                         without_genres=without_genre_ids or None,
-                        with_keywords=str(hist_kw_ids),
+                        with_keywords=str(pack_kw_ids),
                         without_keywords=without_keyword_ids,
                         with_type=with_type,
                     )
@@ -1810,10 +1744,10 @@ class ToolRegistry:
                         results = _merge_tmdb_results_by_id(
                             results if isinstance(results, list) else [],
                             filter_pack_keyword_hits(
-                                extra, history_pack, genre_list=genre_list
+                                extra, facet_pack, genre_list=genre_list
                             ),
                         )
-                    for entry in hist_kw.get("resolved") or []:
+                    for entry in pack_kw.get("resolved") or []:
                         if entry not in (keyword_meta.get("resolved") or []):
                             keyword_meta.setdefault("resolved", []).append(entry)
 
@@ -1881,17 +1815,12 @@ class ToolRegistry:
             )
             stop_retrying = True
         elif not allowed and themed:
-            if is_fallback_attempt:
-                note = (
-                    "No confident missing titles matched these filters after the structured fallback. "
-                    "Tell the user honestly — do not invent titles, do not broaden to unfiltered discover, "
-                    "and at most try one search_tmdb with a concrete title+year you already know."
-                )
-                stop_retrying = True
-            else:
-                # Run the structured discover recipe server-side once so the rail gets
-                # real History/miniseries IDs (or an honest empty) without a model retry.
-                return await self._tool_find_collection_gaps(_build_gaps_suggested_fallback(args))
+            note = (
+                "No confident missing titles matched these filters. "
+                "Tell the user honestly — do not invent titles, do not broaden to unfiltered discover, "
+                "and at most try one search_tmdb with a concrete title+year you already know."
+            )
+            stop_retrying = True
         elif keyword_meta.get("unresolved") or company_meta.get("unresolved") or genres_unresolved:
             note += (
                 " Some filters were dropped as unresolved; only confident matches are shown. "

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import threading
 import time
 from collections import defaultdict, deque
@@ -46,11 +47,24 @@ def trust_proxy_headers() -> bool:
 
     Without this flag, ``X-Forwarded-For`` is ignored for rate limiting so
     clients cannot rotate spoofed IPs to bypass auth throttles on a direct
-    LAN bind (default homelab deployment).
+    LAN bind (default homelab deployment). Wizard confirm writes the same
+    flag into settings; env still wins when set.
     """
     from projectionist.envcompat import branded_env
 
-    return (branded_env("TRUST_PROXY_HEADERS") or "").strip().lower() in _TRUTHY
+    env_raw = (branded_env("TRUST_PROXY_HEADERS") or "").strip().lower()
+    if env_raw:
+        return env_raw in _TRUTHY
+    try:
+        from pathlib import Path
+
+        from projectionist.config_store import load_merged_settings
+
+        data_dir = Path(os.environ.get("DATA_DIR", "/config"))
+        flags = load_merged_settings(data_dir).features
+        return bool(getattr(flags, "trust_proxy_headers", False))
+    except Exception:
+        return False
 
 
 def client_ip(request: Request) -> str:

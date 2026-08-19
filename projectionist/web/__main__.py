@@ -12,6 +12,10 @@ logger = logging.getLogger(__name__)
 # Hostnames that resolve to the local loopback interface only.
 _LOOPBACK_HOSTNAMES = frozenset({"localhost", "ip6-localhost"})
 
+# Bare uvicorn (QA :8790 has no Caddy) must drop Slowloris / incomplete clients.
+UVICORN_TIMEOUT_KEEP_ALIVE = 5
+UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE = 16 * 1024
+
 
 def resolve_host() -> str:
     """Bind host for the server.
@@ -98,6 +102,8 @@ def main() -> None:
         port=port,
         reload=False,
         log_level=logging.getLevelName(level).lower(),
+        timeout_keep_alive=UVICORN_TIMEOUT_KEEP_ALIVE,
+        h11_max_incomplete_event_size=UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE,
     )
 
 

@@ -24,6 +24,8 @@ class AuthTests(unittest.TestCase):
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-auth-session-secret-value"
+        os.environ["PROJECTIONIST_ALLOW_OPEN_JOIN"] = "1"
+        os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
@@ -45,6 +47,8 @@ class AuthTests(unittest.TestCase):
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
         os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_ALLOW_OPEN_JOIN", None)
+        os.environ.pop("PROJECTIONIST_SETUP_STATE", None)
         self._tmpdir.cleanup()
 
     def _enable_multi_user(self, *, seerr: bool = False) -> None:
@@ -242,9 +246,11 @@ class AuthTests(unittest.TestCase):
             plex_user_id="20",
             role="member",
         )
-        updated = self.client.patch(f"/api/users/{member_id}", json={"role": "guest"})
+        rejected = self.client.patch(f"/api/users/{member_id}", json={"role": "guest"})
+        self.assertIn(rejected.status_code, (400, 422))
+        updated = self.client.patch(f"/api/users/{member_id}", json={"disabled": False})
         self.assertEqual(updated.status_code, 200)
-        self.assertEqual(updated.json()["user"]["role"], "guest")
+        self.assertEqual(updated.json()["user"]["role"], "member")
         listed_after = self.client.get("/api/users")
         self.assertEqual(listed_after.status_code, 200)
         member_item = next(item for item in listed_after.json()["items"] if item["id"] == member_id)

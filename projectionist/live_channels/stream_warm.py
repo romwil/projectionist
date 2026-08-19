@@ -23,6 +23,11 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from projectionist.config_store import load_merged_settings
+from projectionist.circuit_breaker import (
+    CircuitOpenError,
+    circuit_backoff_seconds,
+    is_host_circuit_open,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,21 +74,37 @@ class StreamWarmScheduler:
     def _loop(self) -> None:
         self._stop.wait(timeout=WARM_INITIAL_DELAY_SECONDS)
         while not self._stop.is_set():
+            delay = float(WARM_POLL_SECONDS)
             try:
-                self._tick()
+                delay = float(self._tick())
             except Exception as error:  # noqa: BLE001
                 logger.exception("Live Channels stream-warm tick failed: %s", error)
-            self._stop.wait(timeout=WARM_POLL_SECONDS)
+            self._stop.wait(timeout=max(float(WARM_POLL_SECONDS), delay))
 
-    def _tick(self) -> None:
+    def _tick(self) -> float:
         settings = load_merged_settings(self.data_dir)
         features = getattr(settings, "features", None)
         if not bool(getattr(features, "live_channels_enabled", False)):
-            return
+            return float(WARM_POLL_SECONDS)
         tunarr = getattr(settings, "tunarr", None)
         url = str(getattr(tunarr, "url", "") or "").strip() if tunarr else ""
         if not url:
-            return
+            return float(WARM_POLL_SECONDS)
+        if is_host_circuit_open(url):
+            delay = circuit_backoff_seconds(url, floor=WARM_POLL_SECONDS)
+            self._last_run_at = time.time()
+            self._last_result = {
+                "ok": False,
+                "skipped": True,
+                "reason": "circuit_open",
+                "circuit_remaining_seconds": delay,
+                "message": "Tunarr circuit open; skipping stream-warm tick.",
+            }
+            logger.warning(
+                "Live Channels stream-warm skipped: circuit open (%ss remaining)",
+                delay,
+            )
+            return float(delay)
         from projectionist.connectors.tunarr import TunarrClient
         from projectionist.live_channels.publish import (
             prepare_channels_for_playback,
@@ -109,8 +130,37 @@ class StreamWarmScheduler:
                 start = self._warm_cursor % len(listed)
                 channel_ids = listed[start:] + listed[:start]
                 self._warm_cursor = (start + WARM_MAX_CHANNELS_PER_TICK) % len(listed)
-        except Exception:  # noqa: BLE001
-            channel_ids = []
+        except CircuitOpenError:
+            delay = circuit_backoff_seconds(url, floor=WARM_POLL_SECONDS)
+            self._last_run_at = time.time()
+            self._last_result = {
+                "ok": False,
+                "skipped": True,
+                "reason": "circuit_open",
+                "circuit_remaining_seconds": delay,
+                "message": "Tunarr circuit open; skipping stream-warm tick.",
+            }
+            logger.warning(
+                "Live Channels stream-warm skipped: circuit open (%ss remaining)",
+                delay,
+            )
+            return float(delay)
+        except Exception as error:  # noqa: BLE001
+            # Do not fall through to prepare_channels_for_playback — an empty
+            # channel_ids list becomes None (warm all) and hammers Tunarr again.
+            self._last_run_at = time.time()
+            self._last_result = {
+                "ok": False,
+                "skipped": True,
+                "reason": "tunarr_unreachable",
+                "message": str(error)[:200],
+            }
+            logger.warning("Live Channels stream-warm skipped: Tunarr unreachable: %s", error)
+            return float(
+                circuit_backoff_seconds(url, floor=WARM_POLL_SECONDS)
+                if is_host_circuit_open(url)
+                else WARM_POLL_SECONDS
+            )
 
         result = prepare_channels_for_playback(
             client,
@@ -140,6 +190,7 @@ class StreamWarmScheduler:
             result.get("count_warmed_ok"),
             result.get("count_warmed_skipped"),
         )
+        return float(WARM_POLL_SECONDS)
 
 
 def get_stream_warm_scheduler() -> StreamWarmScheduler:

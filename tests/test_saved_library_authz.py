@@ -29,6 +29,8 @@ class SavedLibraryAuthzTests(unittest.TestCase):
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-saved-library-authz-secret-value"
+        os.environ["PROJECTIONIST_ALLOW_OPEN_JOIN"] = "1"
+        os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
         clear_rate_limits()
         import projectionist.web.jobs as jobs
@@ -51,6 +53,8 @@ class SavedLibraryAuthzTests(unittest.TestCase):
             "LLM_PROVIDER",
             "CURATORX_SESSION_SECRET",
             "DATA_DIR",
+            "PROJECTIONIST_ALLOW_OPEN_JOIN",
+            "PROJECTIONIST_SETUP_STATE",
         ):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()

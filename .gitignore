@@ -51,3 +51,5 @@ e2e/.auth/
 # Interactive UI QA run reports live on the host under
 # curatorx-qa-scripts/qa-runs/ — ignore if mirrored into this tree.
 qa-runs/
+# Maintainer live QA pentest kit (canonical: projectionist-qa-scripts/pentest on automat).
+scripts/security/pentest/qa-live/

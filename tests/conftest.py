@@ -202,7 +202,21 @@ async def execute_tool(
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture
-def fresh_db(tmp_path: Path) -> Database:
-    """Ephemeral SQLite DB with schema bootstrapped."""
-    return Database(tmp_path / "test.db")
+@pytest.fixture(autouse=True)
+def _default_setup_active(monkeypatch):
+    """Existing tests assume ACTIVE_MODE. SETUP_MODE cases set the env themselves."""
+    import os
+
+    if os.environ.get("PROJECTIONIST_SETUP_STATE") or os.environ.get("CURATORX_SETUP_STATE"):
+        return
+    monkeypatch.setenv("PROJECTIONIST_SETUP_STATE", "active")
+
+
+@pytest.fixture(autouse=True)
+def _reset_host_circuits():
+    """Keep per-host HTTP breakers from leaking across tests."""
+    from projectionist.circuit_breaker import reset_host_circuits
+
+    reset_host_circuits()
+    yield
+    reset_host_circuits()

@@ -174,22 +174,14 @@ def register_webhook_routes(
     async def plex_webhook(request: Request) -> Dict[str, Any]:
         settings = settings_factory()
         secret = str(settings.webhook_secret or "").strip()
-        if not secret:
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Webhook secret is not configured. Set PROJECTIONIST_WEBHOOK_SECRET "
-                    "(or legacy CURATORX_WEBHOOK_SECRET) or webhook_secret in settings "
-                    "before enabling Plex webhooks."
-                ),
-            )
         provided = str(
             request.headers.get("X-Projectionist-Webhook-Secret")
             or request.headers.get("X-CuratorX-Webhook-Secret")
             or ""
         ).strip()
-        if not provided or not secrets.compare_digest(provided, secret):
-            raise HTTPException(status_code=401, detail="Invalid webhook secret")
+        # Unconfigured and invalid both fail closed as generic 401 — no env names.
+        if not secret or not provided or not secrets.compare_digest(provided, secret):
+            raise HTTPException(status_code=401, detail="Unauthorized")
         payload = await parse_plex_webhook_payload(request)
         # Offload sync sqlite (user lookup + prompt enqueue) from the event loop.
         result = await run_db(handle_plex_webhook, db_factory(), payload)

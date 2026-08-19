@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+## [1.33.0] — 2026-08-19
+
+The public face of a household is a glass door: sign in, request access, or redeem an invite. The guest tour is gone, jobs stay owner-only, and the login/webhook/MCP edges fail closed without leaking config.
+
+### Highlights
+- **A front door, not a lobby.** Visitors see sign-in, an access request, or a join link — not a passwordless tour of the library.
+- **Invites are the only way in.** Public households stay invite-only; anonymous register stays closed.
+- **Logout really logs out.** Signing out (and rotating a password) invalidates the old session cookie on the server, not just in the browser.
+
+### Security
+- Unauthenticated `POST /mcp` and `/mcp/` return generic **401** (no slash-redirect before the key check; no env var names).
+- Unconfigured or invalid Plex webhook secret → generic **401** (S8); bodies never include `PROJECTIONIST_` / `CURATORX_` / `webhook_secret`.
+- Invite redeem dual-write uses `BEGIN IMMEDIATE`; concurrent or replayed redeem is **409**, not 500/`database is locked`.
+- Public handshake JSON bodies clamped at 64 KiB (**413**).
+- Uvicorn keep-alive + incomplete-event timeouts (Slowloris bound on bare `:8790`).
+- Closed-loop telemetry drops when the write queue or inflight-task ceiling is full; `telemetry_events` unique keys are capped.
+- Session cookies carry `jti` + `sv`; logout records a hashed jti denylist; password hash updates bump `users.session_epoch`.
+- Unknown/disabled local logins still run dummy PBKDF2 (600k) then the same **401** `Invalid username or password`.
+- WAL `wal_autocheckpoint=1000` set explicitly; connections still close per request.
+- Member `GET /api/jobs` is owner-only (**403**).
+
+### Changed
+- `GET /tour` and `/tour/` redirect to `/login`. Guest tour UI removed.
+- Schema version 49: `users.session_epoch` + `session_revocations`.
+
+### Verification
+- Backend: 1,954 passed, 6 skipped, 34 subtests passed; 76.33% coverage (74% required).
+- Frontend unit: 681 passed, 0 failed.
+- ESLint: 0 errors (134 warnings pre-existing); production Vite build passed.
+- In-process pentest checklist: `python3 scripts/security/pentest/run-checklist.py` — 38 passed, 0 failed.
+- Focused: MCP/webhook 401, invite race 409, login dummy-hash, session revoke, 413 body clamp, WAL pragma.
+
 ## [1.32.5] — 2026-08-07
 
 Year in Review deep links load again — cold opens of `/year-in-review/{year}` serve the app shell instead of a JSON 404.

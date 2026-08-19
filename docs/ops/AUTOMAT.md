@@ -32,6 +32,22 @@ curl -s http://10.10.1.202:8788/api/health
 
 ---
 
+## Public SSL / household perimeter
+
+Automat members reach the household at `https://projectionist.automat.vip`. That hostname is **TLS + reverse proxy**, not an extra auth layer. Treat every inbound packet as hostile; follow [SECURITY.md](../SECURITY.md).
+
+| Topic | Automat note |
+|-------|----------------|
+| **Bind** | Prod/QA listen on `0.0.0.0:8788` / `:8790` inside Docker. `172.17.0.1` is the bridge — **setup** pre-selects Public Household; **runtime WAN interlock** does **not** lock that peer (would brick Unraid single-owner). RFC 6598 `100.64.0.0/10` (Tailscale/CGNAT) is **not** a visible public peer — runtime WAN interlock and setup halt treat it as LAN. |
+| **WAN lock** | Blocks only a **visible public client IP**. Docker-bridge and Tailscale/CGNAT (`100.64.0.0/10`) peers are not WAN. Trusted `X-Forwarded-Proto: https` alone is not WAN. Spoofed forwarded headers without `PROJECTIONIST_TRUST_PROXY_HEADERS` are ignored. |
+| **Proxy trust** | Set `PROJECTIONIST_TRUST_PROXY_HEADERS=1` (or the wizard TLS-edge confirm) **only** on the container behind Caddy/NPM. Never on a laptop tunnel. |
+| **Bare 8788** | Do not port-forward prod `:8788` to the internet. Public DNS should hit the proxy, not the app port. |
+| **MCP** | Keep `/mcp` off the WAN hostname. |
+| **SETUP_MODE** | Existing Automat installs already have an owner → `setup_state=active`. Wizard endpoints 404. Do not re-run `/api/setup/commit` against prod. |
+| **QA** | Glass-door `/login` / `/join`, honeypot, no `/tour`: Interactive UI QA on **`:8790` only**. |
+
+---
+
 ## Rollout / appdata
 
 | Path | Where |
@@ -96,6 +112,19 @@ Member-facing copy and owner API examples: in-app `/help` and [HELP.md](../HELP.
 
 Maintainer QA scripts and dated run artifacts live on the host under `/Volumes/appdata/projectionist-qa-scripts/` (not in this git tree). Lifecycle notes there: `qa-runs/QA-LIFECYCLE.md` when present.
 
+### Maintainer pentest (QA `:8790` only)
+
+Authorized campaign against the maintainer’s own QA sidecar — not a general exploit pack, not prod.
+
+```bash
+# Sidecar is idle-stopped; start QA only
+ssh automat 'docker start projectionist-qa'
+cd /Volumes/appdata/projectionist-qa-scripts/pentest
+./run.sh    # loads ../.env.qa; refuses :8788 and automat.vip
+```
+
+In-process lab checklists remain in git: `python3 scripts/security/pentest/run-checklist.py`. The live kit expands handshake / honeypot / invite / IDOR / WAN-header coverage; reports go to `qa-runs/YYYY-MM-DD-maintainer-pentest/` (no passwords, cookies redacted).
+
 ---
 
 ## Watch identity attribution (Plex owner local account)
@@ -121,5 +150,6 @@ Or wait for the next container start / history ingest after upgrading to **1.32.
 - `.cursor/rules/e2e-port-8788.mdc` — mocked e2e uses **8799**, not tunnel/prod 8788
 - `.cursor/rules/interactive-ui-qa.mdc` + skill — authored QA on `:8790`
 - `.cursor/rules/release.mdc` · [RELEASE.md](../RELEASE.md) — version bump, Hub publish, QA teardown
+- Maintainer pentest kit (host-local): `/Volumes/appdata/projectionist-qa-scripts/pentest/` — QA `:8790` only
 - [DOCKER.md](../DOCKER.md) · [wiki/Unraid.md](../wiki/Unraid.md) — generic Unraid install / Force Update
 - [AGENTS.md](../../AGENTS.md) — Cursor Cloud / agent quickstart (links here)

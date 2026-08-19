@@ -57,6 +57,13 @@ class SchemaMigrationsMixin:
             label=label,
         )
 
+    def try_run_write(self, operation: Callable[[], T], *, label: str = "write") -> bool:
+        """Like ``run_write`` but drop the job when the serializer queue is full."""
+        return self._write_serializer.try_run(
+            lambda: run_with_db_lock_retry(operation, label=label),
+            label=label,
+        )
+
     def write_queue_stats(self) -> dict:
         """Queue depth and wait-time samples for the write serializer."""
         return self._write_serializer.stats()
@@ -2056,4 +2063,35 @@ class SchemaMigrationsMixin:
 
         self.run_write(_managed, label="ensure_bootstrap_owner")
         self._bootstrap_owner_ready = True
+
+    def _migrate_drop_guest_role(self, conn: sqlite3.Connection) -> None:
+        """Map legacy role=guest to member (youth flag unchanged)."""
+        user_cols = self._table_columns(conn, "users")
+        if "role" in user_cols:
+            conn.execute("UPDATE users SET role = 'member' WHERE role = 'guest'")
+        invite_cols = self._table_columns(conn, "invites")
+        if "role" in invite_cols:
+            conn.execute("UPDATE invites SET role = 'member' WHERE role = 'guest'")
+
+    def _migrate_session_revocation(self, conn: sqlite3.Connection) -> None:
+        """Session epoch + jti denylist so logout / password rotate invalidate cookies."""
+        user_cols = self._table_columns(conn, "users")
+        if "session_epoch" not in user_cols:
+            conn.execute(
+                "ALTER TABLE users ADD COLUMN session_epoch INTEGER NOT NULL DEFAULT 0"
+            )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_revocations (
+                jti_hash TEXT PRIMARY KEY,
+                expires_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_session_revocations_expires
+            ON session_revocations(expires_at)
+            """
+        )
 
