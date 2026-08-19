@@ -99,6 +99,16 @@ class YearRollup:
     first_completion_at_ms: Optional[int]
     last_completion_at_ms: Optional[int]
     has_enough_data: bool
+    unique_movies: int = 0
+    unique_shows: int = 0
+    catalog_minutes: int = 0
+    catalog_minutes_coverage: int = 0
+    movie_genre_counts: Dict[str, int] = field(default_factory=dict)
+    tv_genre_counts: Dict[str, int] = field(default_factory=dict)
+    weekday_counts: Dict[int, int] = field(default_factory=dict)
+    director_counts: Dict[str, int] = field(default_factory=dict)
+    actor_counts: Dict[str, int] = field(default_factory=dict)
+    movie_decade_counts: Dict[int, int] = field(default_factory=dict)
 
     def as_dict(self) -> Dict[str, Any]:
         def _title(t: TitleRollup) -> Dict[str, Any]:
@@ -133,4 +143,14 @@ class YearRollup:
             "first_completion_at_ms": self.first_completion_at_ms,
             "last_completion_at_ms": self.last_completion_at_ms,
             "has_enough_data": self.has_enough_data,
+            "unique_movies": int(self.unique_movies),
+            "unique_shows": int(self.unique_shows),
+            "catalog_minutes": int(self.catalog_minutes),
+            "catalog_minutes_coverage": int(self.catalog_minutes_coverage),
+            "movie_genre_counts": dict(self.movie_genre_counts),
+            "tv_genre_counts": dict(self.tv_genre_counts),
+            "weekday_counts": {str(k): v for k, v in self.weekday_counts.items()},
+            "director_counts": dict(self.director_counts),
+            "actor_counts": dict(self.actor_counts),
+            "movie_decade_counts": {str(k): v for k, v in self.movie_decade_counts.items()},
         }

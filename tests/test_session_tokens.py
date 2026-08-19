@@ -52,6 +52,8 @@ class TokenCreationTests(SessionTokenTestCase):
         self.assertEqual(payload["uid"], "alice")
         self.assertIn("exp", payload)
         self.assertGreater(payload["exp"], time.time())
+        self.assertTrue(payload.get("jti"))
+        self.assertEqual(payload.get("sv"), 0)
 
     def test_custom_ttl_sets_correct_expiry(self) -> None:
         """The expiry is approximately now + ttl_seconds."""

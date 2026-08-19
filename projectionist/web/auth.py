@@ -16,6 +16,7 @@ import hashlib
 import hmac as _hmac
 import logging
 import os
+import re
 import secrets
 import threading
 import time
@@ -42,29 +43,40 @@ from projectionist.web.session_tokens import (
     DEFAULT_TTL_SECONDS,
     SESSION_COOKIE_NAME,
     create_session_token,
-    parse_session_token,
+    hash_session_jti,
+    parse_session_claims,
 )
 
-_API_AUTH_ALLOWLIST_EXACT = frozenset(
+# Exhaustive unauthenticated handshake (ACTIVE_MODE). No /api/auth/ prefix.
+# Keep docs/SECURITY.md, tests/test_api_authz.py, and the pentest allowlist in lockstep.
+PUBLIC_HANDSHAKE_EXACT = frozenset(
     {
-        "/api/health",
-        "/api/features",
-        "/api/access-requests",
-        "/api/guest/tour",
-        "/api/invites/validate",
-        "/api/invites/redeem/local",
+        ("GET", "/api/health"),
+        ("GET", "/api/features"),
+        ("POST", "/api/access-requests"),
+        ("GET", "/api/invites/validate"),
+        ("POST", "/api/invites/redeem/local"),
+        ("POST", "/api/auth/local/login"),
+        ("POST", "/api/auth/plex/pin"),
+        ("POST", "/api/auth/plex"),
+        ("POST", "/api/auth/logout"),
+        ("GET", "/api/auth/oidc/authorize"),
+        ("GET", "/api/auth/oidc/callback"),
     }
 )
-_API_AUTH_ALLOWLIST_PREFIXES = ("/api/auth/", "/api/webhooks/", "/mcp")
+PLEX_PIN_POLL_PATH = re.compile(r"^/api/auth/plex/pin/\d+$")
 PLEX_PIN_NONCE_COOKIE = "plex_pin_nonce"
 PLEX_PIN_NONCE_TTL_SECONDS = 1800
+JOIN_LINK_DETAIL = (
+    "An invite is required to join this household. Ask the household admin for a join link."
+)
 
 _pin_bindings_lock = threading.Lock()
 _pin_bindings: Dict[str, Dict[str, Any]] = {}
 
 logger = logging.getLogger(__name__)
 
-UserRole = Literal["owner", "member", "guest"]
+UserRole = Literal["owner", "member"]
 
 
 def _data_dir() -> Path:
@@ -119,7 +131,7 @@ class CurrentUser:
         }
 
 
-_ROLE_RANK = {"guest": 0, "member": 1, "owner": 2}
+_ROLE_RANK = {"member": 1, "owner": 2}
 
 
 def row_to_current_user(row) -> CurrentUser:
@@ -313,18 +325,23 @@ def seed_env_owner(db: Database) -> Optional[str]:
 
 
 def _cookie_should_be_secure(request: Optional[Request]) -> bool:
-    if request is None:
-        return False
-    forwarded = (request.headers.get("x-forwarded-proto") or "").split(",")[0].strip().lower()
-    return forwarded == "https"
+    from projectionist.web.ingress import request_is_trusted_https
+
+    return request_is_trusted_https(request)
 
 
 def set_session_cookie(
     response: Response,
     user_id: str,
     request: Optional[Request] = None,
+    db: Optional[Database] = None,
 ) -> None:
-    token = create_session_token(user_id)
+    session_epoch = 0
+    if db is not None:
+        row = db.get_user(user_id)
+        if row is not None:
+            session_epoch = _session_epoch_from_row(row)
+    token = create_session_token(user_id, session_epoch=session_epoch)
     response.set_cookie(
         key=SESSION_COOKIE_NAME,
         value=token,
@@ -344,12 +361,24 @@ def clear_session_cookie(response: Response, request: Optional[Request] = None) 
     )
 
 
-def is_public_api_path(path: str) -> bool:
-    """Paths that stay reachable without a session when multi-user is enabled."""
+def is_public_handshake(method: str, path: str) -> bool:
+    """Explicit method+path pairs reachable without a session (ACTIVE_MODE)."""
     cleaned = (path or "").split("?", 1)[0]
-    if cleaned in _API_AUTH_ALLOWLIST_EXACT:
+    key = (str(method or "GET").upper(), cleaned)
+    if key in PUBLIC_HANDSHAKE_EXACT:
         return True
-    return any(cleaned.startswith(prefix) for prefix in _API_AUTH_ALLOWLIST_PREFIXES)
+    if key[0] == "GET" and PLEX_PIN_POLL_PATH.match(cleaned):
+        return True
+    if cleaned.startswith("/api/webhooks/"):
+        return True
+    if cleaned.startswith("/mcp"):
+        return True
+    return False
+
+
+def is_public_api_path(path: str, method: str = "GET") -> bool:
+    """Back-compat wrapper; prefer ``is_public_handshake(method, path)``."""
+    return is_public_handshake(method, path)
 
 
 def _user_is_disabled(row) -> bool:
@@ -359,37 +388,88 @@ def _user_is_disabled(row) -> bool:
     return bool(int(row["disabled"]))
 
 
+def _session_epoch_from_row(row: Any) -> int:
+    try:
+        keys = set(row.keys()) if hasattr(row, "keys") else set()
+        if "session_epoch" in keys and row["session_epoch"] is not None:
+            return int(row["session_epoch"])
+    except (TypeError, ValueError):
+        return 0
+    return 0
+
+
 def _user_from_session(request: Request, db: Database) -> Optional[CurrentUser]:
     token = request.cookies.get(SESSION_COOKIE_NAME)
     if not token:
         return None
-    user_id = parse_session_token(token)
-    if not user_id:
+    claims = parse_session_claims(token)
+    if not claims:
         return None
+    user_id = str(claims["uid"])
     row = db.get_user(user_id)
     if row is None:
         return None
     if _user_is_disabled(row):
         return None
+    if int(claims.get("sv") or 0) != _session_epoch_from_row(row):
+        return None
+    jti = str(claims.get("jti") or "")
+    if jti and db.is_session_jti_revoked(hash_session_jti(jti)):
+        return None
     return row_to_current_user(row)
 
 
 async def multi_user_api_auth_middleware(request: Request, call_next):
-    """Require a valid session for /api/* when multi-user auth is enabled."""
+    """Household perimeter: SETUP_MODE lock, WAN interlock, then session gate."""
     path = request.url.path
+    method = request.method
     if path.startswith("/mcp"):
         return await call_next(request)
-    if not path.startswith("/api/") or is_public_api_path(path):
+
+    from projectionist.web.ingress import WAN_INTERLOCK_DETAIL, wan_interlock_blocks
+    from projectionist.web.jobs import get_job_manager
+    from projectionist.web.setup_mode import (
+        is_setup_mode,
+        is_setup_public_path,
+        setup_endpoint_locked,
+    )
+
+    try:
+        db = get_job_manager().db
+    except Exception:
+        return await call_next(request)
+
+    if is_setup_mode(db):
+        if not path.startswith("/api/"):
+            return await call_next(request)
+        if is_setup_public_path(method, path):
+            return await call_next(request)
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+
+    if setup_endpoint_locked(path):
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+
+    if path == "/api/guest/tour":
+        return JSONResponse({"detail": "Not found"}, status_code=404)
+
+    if not path.startswith("/api/"):
         return await call_next(request)
 
     settings = _settings()
     if not settings.features.multi_user_enabled:
+        if wan_interlock_blocks(request, multi_user_enabled=False):
+            if path in {"/api/health", "/api/features"}:
+                return await call_next(request)
+            return JSONResponse({"detail": WAN_INTERLOCK_DETAIL}, status_code=403)
         return await call_next(request)
 
-    from projectionist.web.jobs import get_job_manager
+    if is_public_handshake(method, path):
+        return await call_next(request)
 
-    user = _user_from_session(request, get_job_manager().db)
+    user = _user_from_session(request, db)
     if user is None:
+        if method == "POST" and path == "/api/auth/local/register":
+            return JSONResponse({"detail": JOIN_LINK_DETAIL}, status_code=403)
         return JSONResponse({"detail": "Authentication required"}, status_code=401)
     return await call_next(request)
 
@@ -568,7 +648,11 @@ def start_plex_pin_login(
 
 
 def poll_plex_pin_login(pin_id: int, request: Request, db: Database) -> Optional[CurrentUser]:
-    """Poll plex.tv PIN once. Returns CurrentUser when authorized, else None."""
+    """Poll plex.tv PIN once. Returns CurrentUser when authorized, else None.
+
+    Login/join only. Does not bind Plex onto an existing local-password user —
+    that is ``link_plex_identity``.
+    """
     enforce_rate_limit(request, bucket="auth_plex_pin_poll", limit=60, window_seconds=60)
     _ensure_plex_login_enabled()
     invite_token = _require_pin_nonce(pin_id, request, consume=False)
@@ -583,6 +667,93 @@ def poll_plex_pin_login(pin_id: int, request: Request, db: Database) -> Optional
         return None
     invite_token = _require_pin_nonce(pin_id, request, consume=True)
     return authenticate_plex_user(str(auth_token), db, invite_token=invite_token)
+
+
+def peek_plex_pin_authorized(pin_id: int, request: Request) -> bool:
+    """True when plex.tv has authorized this PIN. Never binds identity."""
+    enforce_rate_limit(request, bucket="auth_plex_pin_status", limit=60, window_seconds=60)
+    _ensure_plex_login_enabled()
+    _require_pin_nonce(pin_id, request, consume=False)
+    client_id = get_or_create_client_id(_data_dir())
+    try:
+        pin = fetch_plex_pin(int(pin_id), client_id)
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Could not check Plex login: {error}") from error
+    return bool(pin.get("authToken") or pin.get("auth_token"))
+
+
+def link_plex_identity(
+    *,
+    pin_id: int,
+    password: str,
+    request: Request,
+    db: Database,
+    user: CurrentUser,
+) -> CurrentUser:
+    """Bind Plex onto an authenticated local-password user in one transaction."""
+    enforce_rate_limit(request, bucket="auth_plex_link", limit=10, window_seconds=60)
+    _ensure_plex_login_enabled()
+    if user.plex_user_id:
+        raise HTTPException(status_code=400, detail="This account is already linked to Plex")
+    row = db.get_user(user.id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    stored_hash = row["password_hash"] if "password_hash" in row.keys() else None
+    if not stored_hash:
+        raise HTTPException(
+            status_code=400,
+            detail="Link Plex is only available for local-password accounts",
+        )
+    if not _verify_password(password, str(stored_hash)):
+        raise HTTPException(status_code=401, detail="Invalid password")
+
+    _require_pin_nonce(pin_id, request, consume=False)
+    client_id = get_or_create_client_id(_data_dir())
+    try:
+        pin = fetch_plex_pin(int(pin_id), client_id)
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=f"Could not check Plex login: {error}") from error
+    auth_token = pin.get("authToken") or pin.get("auth_token")
+    if not auth_token:
+        raise HTTPException(status_code=409, detail="Plex PIN is not authorized yet")
+    _require_pin_nonce(pin_id, request, consume=True)
+
+    try:
+        profile = fetch_plex_account(str(auth_token))
+    except Exception as error:  # noqa: BLE001
+        raise HTTPException(status_code=401, detail="Invalid Plex token") from error
+    plex_user_id, _display_name, email, avatar_url = _plex_profile_fields(profile)
+
+    try:
+        updated = db.bind_plex_user_id(
+            user.id,
+            plex_user_id=plex_user_id,
+            email=email,
+            avatar_url=avatar_url,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+    try:
+        from projectionist.watchlist.crypto import encrypt_plex_token
+        from projectionist.watchlist.plex_sync import maybe_pull_on_login
+
+        db.set_user_plex_token_enc(str(updated["id"]), encrypt_plex_token(str(auth_token)))
+        maybe_pull_on_login(db, _settings(), user_id=str(updated["id"]))
+    except Exception:
+        logger.debug("Could not persist/sync Plex watchlist token after link", exc_info=True)
+    try:
+        from projectionist.watch_tracker.identity import sync_plex_watch_identities
+
+        settings = _settings()
+        sync_plex_watch_identities(
+            db,
+            plex_url=settings.plex_url,
+            plex_token=settings.plex_token,
+        )
+    except Exception:
+        logger.debug("Could not repair watch identities after Plex link", exc_info=True)
+    return row_to_current_user_from_dict(updated)
 
 
 def _has_real_owner(db: Database) -> bool:
@@ -641,7 +812,10 @@ def authenticate_plex_user(
                     settings, db, raw_token=invite_token, method="plex"
                 )
             except ValueError as error:
-                raise HTTPException(status_code=403, detail=str(error)) from error
+                detail = str(error) or JOIN_LINK_DETAIL
+                if "invite" in detail.lower() or not invite_token:
+                    detail = JOIN_LINK_DETAIL
+                raise HTTPException(status_code=403, detail=detail) from error
 
             if invite_for_new is not None:
                 role = str(invite_for_new["role"])
@@ -779,6 +953,11 @@ def _hash_password(password: str, salt: Optional[bytes] = None) -> str:
     return f"{salt.hex()}${derived.hex()}"
 
 
+# Precomputed at import so unknown-user logins pay exactly one PBKDF2 (same as a
+# known username with a bad password). Never used as a real credential.
+_DUMMY_PASSWORD_HASH = _hash_password("!", salt=b"\x00" * _PASSWORD_SALT_BYTES)
+
+
 def _verify_password(password: str, stored_hash: str) -> bool:
     """Constant-time verification of a password against a stored hash."""
     if "$" not in stored_hash:
@@ -824,12 +1003,9 @@ def register_local_user(
 ) -> CurrentUser:
     """Create a local-password account.
 
-    Rules:
-      - While ownership is unclaimed (no real owner yet) anyone may register a
-        bootstrap account with no session. Whether it becomes ``owner`` follows
-        the owner-existence gate (legacy first-user-is-owner, unless an owner
-        has already been seeded — e.g. via ``PROJECTIONIST_OWNER_PASSWORD``).
-      - Once a real owner exists, only that owner can create further accounts.
+    Anonymous self-serve registration is closed. The owner account is created
+    by the setup wizard (or ``PROJECTIONIST_OWNER_PASSWORD``). Further members
+    join via invite. An authenticated owner may still mint a local account.
     """
     _ensure_local_login_enabled()
 
@@ -839,15 +1015,17 @@ def register_local_user(
     if len(password) < 8:
         raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
+    if requesting_user is None or requesting_user.role != "owner":
+        raise HTTPException(
+            status_code=403,
+            detail="Local registration is disabled. Ask the household admin for a join link.",
+        )
+
     existing = db.get_user_by_display_name(username)
     if existing is not None:
         raise HTTPException(status_code=409, detail="Username already taken")
 
-    if has_real_owner(db):
-        if requesting_user is None or requesting_user.role != "owner":
-            raise HTTPException(status_code=403, detail="Only the owner can create local accounts")
-
-    role = resolve_new_user_role(db)
+    role = "member"
     user_id = f"local-{secrets.token_hex(12)}"
     password_hash = _hash_password(password)
 
@@ -872,14 +1050,21 @@ def authenticate_local_user(
     _ensure_local_login_enabled()
 
     row = db.get_user_by_display_name(username.strip())
-    if row is None:
+    stored_hash = ""
+    if row is not None:
+        raw = row["password_hash"] if "password_hash" in row.keys() else None
+        stored_hash = str(raw or "")
+    dummy_or_missing = (
+        row is None
+        or _user_is_disabled(row)
+        or not stored_hash
+        or "$" not in stored_hash
+    )
+    if dummy_or_missing:
+        _verify_password(password, _DUMMY_PASSWORD_HASH)
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
-    if _user_is_disabled(row):
-        raise HTTPException(status_code=403, detail="This account has been disabled")
-
-    stored_hash = row["password_hash"]
-    if not stored_hash or not _verify_password(password, str(stored_hash)):
+    if not _verify_password(password, stored_hash):
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     return row_to_current_user(row)

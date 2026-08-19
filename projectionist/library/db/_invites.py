@@ -8,10 +8,16 @@ import time
 import uuid
 from typing import Any, Dict, List, Optional
 
+from ._shared import begin_immediate
+
 
 INVITE_STATUSES = frozenset({"pending", "redeemed", "revoked"})
-INVITE_ROLES = frozenset({"member", "guest"})
+INVITE_ROLES = frozenset({"member"})
 INVITE_METHODS = frozenset({"plex", "oidc", "local"})
+
+
+class InviteConflict(ValueError):
+    """Invite already used, or a concurrent redeem lost the write lock."""
 
 
 class InvitesMixin:
@@ -32,7 +38,7 @@ class InvitesMixin:
     ) -> Dict[str, Any]:
         cleaned_role = str(role or "member").strip().lower()
         if cleaned_role not in INVITE_ROLES:
-            raise ValueError("role must be member or guest")
+            raise ValueError("role must be member")
         methods = _normalize_methods(allowed_methods)
         email_clean = str(email or "").strip() or None
         plex_clean = str(expected_plex_user_id or "").strip() or None
@@ -166,6 +172,164 @@ class InvitesMixin:
         if str(row["status"]) != "redeemed":
             raise ValueError("Invite could not be redeemed")
         return self._row_to_invite(row)
+
+    def create_local_user_and_redeem_invite(
+        self,
+        *,
+        invite_id: str,
+        user_id: str,
+        display_name: str,
+        password_hash: str,
+        role: str,
+        email: Optional[str] = None,
+        is_youth: bool = False,
+    ) -> Dict[str, Any]:
+        """Insert a local user and burn the invite in one SQLite transaction."""
+        now = time.time()
+        try:
+            with self.connect() as conn:
+                begin_immediate(conn)
+                conn.execute(
+                    """
+                    INSERT INTO users (
+                        id, display_name, email, role, password_hash, auth_method,
+                        created_at, last_login_at, is_youth
+                    ) VALUES (?, ?, ?, ?, ?, 'local', ?, ?, ?)
+                    """,
+                    (
+                        user_id,
+                        display_name,
+                        email,
+                        role,
+                        password_hash,
+                        now,
+                        now,
+                        1 if is_youth else 0,
+                    ),
+                )
+                cursor = conn.execute(
+                    """
+                    UPDATE invites
+                    SET status = 'redeemed', redeemed_at = ?, redeemed_user_id = ?
+                    WHERE id = ? AND status = 'pending' AND expires_at >= ?
+                    """,
+                    (now, user_id, invite_id, now),
+                )
+                if int(cursor.rowcount or 0) != 1:
+                    raise InviteConflict("Invite has already been used")
+                user_row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+                invite_row = conn.execute("SELECT * FROM invites WHERE id = ?", (invite_id,)).fetchone()
+        except sqlite3.OperationalError as error:
+            if "locked" in str(error).lower() or "busy" in str(error).lower():
+                raise InviteConflict("Invite has already been used") from error
+            raise
+        assert user_row is not None and invite_row is not None
+        return {"user": self._row_to_user(user_row), "invite": self._row_to_invite(invite_row)}
+
+    def upsert_identity_and_redeem_invite(
+        self,
+        *,
+        invite_id: str,
+        method: str,
+        user_id: str,
+        display_name: str,
+        email: Optional[str],
+        role: str,
+        plex_user_id: Optional[str] = None,
+        oidc_sub: Optional[str] = None,
+        avatar_url: Optional[str] = None,
+        seerr_user_id: Optional[int] = None,
+        seerr_permissions: Optional[int] = None,
+        is_youth: bool = False,
+    ) -> Dict[str, Any]:
+        """Insert/upsert Plex or OIDC user and burn the invite in one transaction."""
+        now = time.time()
+        try:
+            with self.connect() as conn:
+                begin_immediate(conn)
+                if plex_user_id:
+                    conn.execute(
+                        """
+                        INSERT INTO users (
+                            id, display_name, email, role, plex_user_id, avatar_url,
+                            seerr_user_id, seerr_permissions, created_at, last_login_at,
+                            is_youth
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(plex_user_id) DO UPDATE SET
+                            display_name = excluded.display_name,
+                            email = excluded.email,
+                            avatar_url = excluded.avatar_url,
+                            seerr_user_id = COALESCE(excluded.seerr_user_id, users.seerr_user_id),
+                            seerr_permissions = COALESCE(excluded.seerr_permissions, users.seerr_permissions),
+                            last_login_at = excluded.last_login_at
+                        """,
+                        (
+                            user_id,
+                            display_name,
+                            email,
+                            role,
+                            plex_user_id,
+                            avatar_url,
+                            seerr_user_id,
+                            seerr_permissions,
+                            now,
+                            now,
+                            1 if is_youth else 0,
+                        ),
+                    )
+                    bound = conn.execute(
+                        "SELECT * FROM users WHERE plex_user_id = ?",
+                        (plex_user_id,),
+                    ).fetchone()
+                elif oidc_sub:
+                    oidc_user_id = f"oidc-{oidc_sub}"
+                    conn.execute(
+                        """
+                        INSERT INTO users (
+                            id, display_name, email, role, oidc_sub, auth_method,
+                            created_at, last_login_at, is_youth
+                        ) VALUES (?, ?, ?, ?, ?, 'oidc', ?, ?, ?)
+                        ON CONFLICT(oidc_sub) DO UPDATE SET
+                            display_name = excluded.display_name,
+                            email = excluded.email,
+                            last_login_at = excluded.last_login_at
+                        """,
+                        (
+                            oidc_user_id,
+                            display_name,
+                            email,
+                            role,
+                            oidc_sub,
+                            now,
+                            now,
+                            1 if is_youth else 0,
+                        ),
+                    )
+                    bound = conn.execute(
+                        "SELECT * FROM users WHERE oidc_sub = ?",
+                        (oidc_sub,),
+                    ).fetchone()
+                else:
+                    raise ValueError("Plex or OIDC identity is required")
+                assert bound is not None
+                redeemed_id = str(bound["id"])
+                cursor = conn.execute(
+                    """
+                    UPDATE invites
+                    SET status = 'redeemed', redeemed_at = ?, redeemed_user_id = ?
+                    WHERE id = ? AND status = 'pending' AND expires_at >= ?
+                    """,
+                    (now, redeemed_id, invite_id, now),
+                )
+                if int(cursor.rowcount or 0) != 1:
+                    raise InviteConflict("Invite has already been used")
+                invite_row = conn.execute("SELECT * FROM invites WHERE id = ?", (invite_id,)).fetchone()
+        except sqlite3.OperationalError as error:
+            if "locked" in str(error).lower() or "busy" in str(error).lower():
+                raise InviteConflict("Invite has already been used") from error
+            raise
+        assert invite_row is not None
+        return {"user": self._row_to_user(bound), "invite": self._row_to_invite(invite_row)}
 
     def has_denied_identity(
         self,

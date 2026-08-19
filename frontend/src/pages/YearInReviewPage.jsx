@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { getAuthMe, getYearInReview } from "../api/client";
+import YearInReviewRecap from "../components/YearInReviewRecap";
 import { useAuthGate } from "../components/UserMenu";
 import {
   chapterDurationMs,
   nextChapterIndex,
   prevChapterIndex,
+  recapIsReady,
   shareCardText,
   shouldAutoAdvance,
 } from "../lib/yearInReview.js";
@@ -34,6 +36,7 @@ export default function YearInReviewPage() {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [shareNote, setShareNote] = useState(null);
+  const [view, setView] = useState("reel");
   const cardRef = useRef(null);
   const prefersReducedMotion = usePrefersReducedMotion();
 
@@ -70,6 +73,7 @@ export default function YearInReviewPage() {
         setReel(payload?.reel || null);
         setStatus(payload?.status || null);
         setIndex(0);
+        setView("reel");
         setError(null);
       })
       .catch((err) => {
@@ -83,30 +87,40 @@ export default function YearInReviewPage() {
 
   const chapters = Array.isArray(reel?.chapters) ? reel.chapters : [];
   const chapter = chapters[index] || null;
+  const showRecap = recapIsReady(reel) && view === "recap";
 
   useEffect(() => {
-    if (!chapter || !shouldAutoAdvance({ paused, prefersReducedMotion })) return undefined;
+    if (showRecap || !chapter || !shouldAutoAdvance({ paused, prefersReducedMotion })) {
+      return undefined;
+    }
     const ms = chapterDurationMs(chapters, index);
     const timer = window.setTimeout(() => {
+      if (index >= chapters.length - 1 && recapIsReady(reel)) {
+        setView("recap");
+        return;
+      }
       setIndex((current) => nextChapterIndex(current, chapters.length));
     }, ms);
     return () => window.clearTimeout(timer);
-  }, [chapter, chapters, index, paused, prefersReducedMotion]);
+  }, [chapter, chapters, index, paused, prefersReducedMotion, reel, showRecap]);
 
-  const handleShare = useCallback(async () => {
-    if (!chapter?.shareable) return;
-    const text = shareCardText(chapter, year);
+  const copyText = useCallback(async (text) => {
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(text);
-        setShareNote("Copied this beat to the clipboard.");
+        setShareNote("Copied to the clipboard.");
       } else {
         setShareNote(text);
       }
     } catch {
       setShareNote("Couldn’t copy — try selecting the text.");
     }
-  }, [chapter, year]);
+  }, []);
+
+  const handleShare = useCallback(async () => {
+    if (!chapter?.shareable) return;
+    await copyText(shareCardText(chapter, year));
+  }, [chapter, copyText, year]);
 
   if (!authReady) {
     return (
@@ -128,7 +142,7 @@ export default function YearInReviewPage() {
     );
   }
 
-  if (!reel || !chapter) {
+  if (!reel || (!chapter && !showRecap)) {
     return (
       <main className="yir-page">
         <div className="yir-empty">
@@ -144,71 +158,116 @@ export default function YearInReviewPage() {
   }
 
   return (
-    <main className={`yir-page ${prefersReducedMotion ? "yir-reduced" : ""}`} data-testid="yir-page">
+    <main
+      className={`yir-page ${prefersReducedMotion ? "yir-reduced" : ""} ${showRecap ? "yir-page--recap" : ""}`}
+      data-testid="yir-page"
+    >
       <header className="yir-chrome">
         <Link to="/chat" className="yir-back">
           ← Chat
         </Link>
         <p className="yir-brand">Projectionist · {year}</p>
-        <button type="button" className="yir-pause" onClick={() => setPaused((p) => !p)}>
-          {paused ? "Play" : "Pause"}
-        </button>
+        {showRecap ? (
+          <span />
+        ) : (
+          <button type="button" className="yir-pause" onClick={() => setPaused((p) => !p)}>
+            {paused ? "Play" : "Pause"}
+          </button>
+        )}
       </header>
 
       <section className="yir-stage" aria-live="polite">
-        <article className="yir-card" ref={cardRef} data-kind={chapter.kind} key={chapter.id || index}>
-          <p className="yir-kicker">{status === "tease" ? "Early peek" : "Year in Review"}</p>
-          <h1 className="yir-title">{chapter.title}</h1>
-          <p className="yir-body">{chapter.body}</p>
-          {chapter.stat_lines?.length > 0 && (
-            <ul className="yir-stats">
-              {chapter.stat_lines.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          )}
-          {chapter.posters?.length > 0 && (
-            <div className="yir-posters" aria-hidden="true">
-              {chapter.posters.slice(0, 4).map((poster) => (
-                <div key={`${poster.title}-${poster.poster_url || ""}`} className="yir-poster">
-                  {poster.poster_url ? <img src={poster.poster_url} alt="" /> : <span>{poster.title}</span>}
-                </div>
-              ))}
-            </div>
-          )}
-        </article>
+        {showRecap ? (
+          <YearInReviewRecap
+            recap={reel.recap}
+            year={year}
+            onBackToReel={() => {
+              setView("reel");
+              setIndex(Math.max(0, chapters.length - 1));
+              setPaused(true);
+            }}
+            onCopy={copyText}
+            shareNote={shareNote}
+          />
+        ) : (
+          <article className="yir-card" ref={cardRef} data-kind={chapter.kind} key={chapter.id || index}>
+            <p className="yir-kicker">{status === "tease" ? "Early peek" : "Year in Review"}</p>
+            {chapter.hero ? (
+              <p className="yir-hero">
+                <span className="yir-hero-value">{chapter.hero.value}</span>
+                <span className="yir-hero-label">{chapter.hero.label}</span>
+              </p>
+            ) : null}
+            <h1 className="yir-title">{chapter.title}</h1>
+            <p className="yir-body">{chapter.body}</p>
+            {chapter.stat_lines?.length > 0 && (
+              <ul className="yir-stats">
+                {chapter.stat_lines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            )}
+            {chapter.posters?.length > 0 && (
+              <div className="yir-posters" aria-hidden="true">
+                {chapter.posters.slice(0, 4).map((poster) => (
+                  <div key={`${poster.title}-${poster.poster_url || ""}`} className="yir-poster">
+                    {poster.poster_url ? <img src={poster.poster_url} alt="" /> : <span>{poster.title}</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </article>
+        )}
       </section>
 
-      <nav className="yir-controls" aria-label="Reel controls">
-        <button
-          type="button"
-          onClick={() => setIndex((i) => prevChapterIndex(i, chapters.length))}
-          disabled={index <= 0}
-        >
-          Back
-        </button>
-        <div className="yir-dots" role="tablist" aria-label="Chapters">
-          {chapters.map((ch, i) => (
-            <button
-              key={ch.id || i}
-              type="button"
-              className={`yir-dot ${i === index ? "is-active" : ""}`}
-              aria-label={`Chapter ${i + 1}`}
-              aria-current={i === index ? "true" : undefined}
-              onClick={() => setIndex(i)}
-            />
-          ))}
-        </div>
-        <button
-          type="button"
-          onClick={() => setIndex((i) => nextChapterIndex(i, chapters.length))}
-          disabled={index >= chapters.length - 1}
-        >
-          Next
-        </button>
-      </nav>
+      {!showRecap ? (
+        <nav className="yir-controls" aria-label="Reel controls">
+          <button
+            type="button"
+            onClick={() => setIndex((i) => prevChapterIndex(i, chapters.length))}
+            disabled={index <= 0}
+          >
+            Back
+          </button>
+          <div className="yir-dots" role="tablist" aria-label="Chapters">
+            {chapters.map((ch, i) => (
+              <button
+                key={ch.id || i}
+                type="button"
+                className={`yir-dot ${i === index ? "is-active" : ""}`}
+                aria-label={`Chapter ${i + 1}`}
+                aria-current={i === index ? "true" : undefined}
+                onClick={() => setIndex(i)}
+              />
+            ))}
+            {recapIsReady(reel) ? (
+              <button
+                type="button"
+                className="yir-dot"
+                aria-label="Recap"
+                data-testid="yir-recap-dot"
+                onClick={() => setView("recap")}
+              />
+            ) : null}
+          </div>
+          <button
+            type="button"
+            data-testid="yir-next"
+            onClick={() => {
+              if (index >= chapters.length - 1 && recapIsReady(reel)) {
+                setView("recap");
+                return;
+              }
+              setIndex((i) => nextChapterIndex(i, chapters.length));
+            }}
+            disabled={index >= chapters.length - 1 && !recapIsReady(reel)}
+          >
+            {index >= chapters.length - 1 && recapIsReady(reel) ? "Recap" : "Next"}
+          </button>
+        </nav>
+      ) : null}
 
-      {chapter.shareable && (
+      {!showRecap && chapter.shareable && (
         <div className="yir-share">
           <button type="button" onClick={handleShare}>
             Copy this beat
@@ -217,7 +276,9 @@ export default function YearInReviewPage() {
         </div>
       )}
 
-      {reel.honesty?.footnote && <p className="yir-footnote muted">{reel.honesty.footnote}</p>}
+      {!showRecap && reel.honesty?.footnote && (
+        <p className="yir-footnote muted">{reel.honesty.footnote}</p>
+      )}
     </main>
   );
 }

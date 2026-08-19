@@ -163,6 +163,26 @@ class ClosedLoopIngestionTests(unittest.TestCase):
         self.assertEqual(staged[0]["status"], "pending")
         self.assertAlmostEqual(float(staged[0]["confidence_score"]), 0.85)
 
+    def test_closed_loop_unique_keys_are_capped(self) -> None:
+        from projectionist.library.db import _telemetry as telemetry_mod
+
+        original = telemetry_mod.TELEMETRY_EVENTS_MAX_ROWS
+        telemetry_mod.TELEMETRY_EVENTS_MAX_ROWS = 5
+        try:
+            for i in range(12):
+                upsert_closed_loop_event_sync(
+                    self.db,
+                    event_type="unmapped_token",
+                    priority_tier="P3",
+                    entity_type="facet",
+                    entity_key=f"cap-{i}",
+                )
+            rows = self.db.list_closed_loop_events(entity_type="facet")
+            capped = [row for row in rows if str(row["entity_key"]).startswith("cap-")]
+            self.assertLessEqual(len(capped), 5)
+        finally:
+            telemetry_mod.TELEMETRY_EVENTS_MAX_ROWS = original
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -20,7 +20,7 @@ import asyncio
 from typing import Any, Dict, List, Literal, Mapping, Optional
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
@@ -67,7 +67,7 @@ from projectionist.connectors.radarr import RadarrClient
 from projectionist.connectors.seerr import SeerrClient
 from projectionist.connectors.sonarr import SonarrClient
 from projectionist.connectors.tmdb import TMDBClient
-from projectionist.library.db import DEFAULT_LENS_ID
+from projectionist.library.db import DEFAULT_LENS_ID, InviteConflict
 from projectionist.library.external_search import (
     ERROR_NOT_CONFIGURED,
     external_tmdb_search,
@@ -183,7 +183,9 @@ from projectionist.web.auth import (
     clear_session_cookie,
     get_current_user_dep,
     handle_oidc_callback,
+    link_plex_identity,
     multi_user_api_auth_middleware,
+    peek_plex_pin_authorized,
     poll_plex_pin_login,
     register_local_user,
     require_role,
@@ -198,7 +200,12 @@ from projectionist.live_channels.stream_warm import get_stream_warm_scheduler
 from projectionist.web.jobs import get_job_manager, get_sync_scheduler
 from projectionist.scheduler import IdleScheduler
 from projectionist.scheduler.tasks import register_all as register_scheduler_tasks
-from projectionist.web.session_tokens import ensure_session_secret, has_usable_session_secret
+from projectionist.web.session_tokens import (
+    DEFAULT_TTL_SECONDS,
+    SESSION_COOKIE_NAME,
+    ensure_session_secret,
+    has_usable_session_secret,
+)
 from projectionist.web.library_privacy import (
     normalize_saved_library_content,
     sanitize_library_payload,
@@ -325,6 +332,13 @@ async def lifespan(_app: FastAPI):
             seed_env_owner(manager.db)
     except Exception:  # noqa: BLE001
         logger.exception("Startup: owner seeding failed (continuing)")
+
+    try:
+        from projectionist.web.setup_mode import resolve_setup_state
+
+        resolve_setup_state(manager.db)
+    except Exception:  # noqa: BLE001
+        logger.exception("Startup: setup-state migrate failed (continuing)")
 
     def _warm_library_facets() -> None:
         try:
@@ -485,9 +499,20 @@ async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
     for header, value in _SECURITY_HEADERS.items():
         response.headers.setdefault(header, value)
+    from projectionist.web.ingress import request_is_trusted_https
+
+    if request_is_trusted_https(request):
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
     return response
 
 
+from projectionist.mcp.http import install_mcp_parent_auth
+from projectionist.web.public_body_limit import PublicBodyLimitMiddleware
+
+install_mcp_parent_auth(app)
 try:
     from projectionist.mcp.http import mount_mcp_http
     from projectionist.mcp.server import mcp as _mcp_server
@@ -496,6 +521,7 @@ try:
 except Exception:  # noqa: BLE001
     # Optional [mcp] extra may be absent in slim installs.
     pass
+app.add_middleware(PublicBodyLimitMiddleware)
 
 
 def _row_to_lens(row: Any) -> Lens:
@@ -569,6 +595,9 @@ class FeatureFlagsPayload(BaseModel):
     ephemeral_collection_gc_dry_run: bool = False
     agent_may_mutate_personal_data: bool = False
     live_channels_enabled: bool = False
+    household_profile: str = "private"
+    trust_proxy_headers: bool = False
+    access_requests_enabled: bool = True
 
 
 class AuthSettingsPayload(BaseModel):
@@ -599,7 +628,7 @@ class PlexLoginPayload(BaseModel):
 
 
 class InviteCreatePayload(BaseModel):
-    role: str = Field(default="member")
+    role: str = Field(default="member", pattern="^member$")
     is_youth: bool = False
     allowed_methods: Optional[List[str]] = None
     email: Optional[str] = Field(default=None, max_length=320)
@@ -615,14 +644,14 @@ class InviteRedeemLocalPayload(BaseModel):
 
 
 class AccessRequestApprovePayload(BaseModel):
-    role: str = Field(default="member")
+    role: str = Field(default="member", pattern="^member$")
     is_youth: bool = False
     allowed_methods: Optional[List[str]] = None
     expires_in_seconds: Optional[int] = Field(default=None, ge=3600, le=30 * 24 * 3600)
 
 
 class UserUpdatePayload(BaseModel):
-    role: Optional[str] = Field(default=None, pattern="^(owner|member|guest)$")
+    role: Optional[str] = Field(default=None, pattern="^(owner|member)$")
     disabled: Optional[bool] = None
     is_youth: Optional[bool] = None
 
@@ -1105,15 +1134,17 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
     if user is None:
         user = bootstrap_owner(_db())
     request_path = "seerr" if uses_seerr_request_path(settings, role=user.role) else "arr"
-    from projectionist.config_store import resolve_guest_tour_enabled
+    from projectionist.config_store import household_profile_name
     from projectionist.notifications.service import notification_channel_offerings
+    from projectionist.web.setup_mode import resolve_setup_state
 
+    setup_state = resolve_setup_state(_db())
+    profile = household_profile_name(settings)
     payload: Dict[str, Any] = {
         "features": {
             "multi_user_enabled": settings.features.multi_user_enabled,
             "seerr_enabled": settings.features.seerr_enabled,
             "plex_collections_enabled": settings.features.plex_collections_enabled,
-            "guest_tour_enabled": resolve_guest_tour_enabled(settings),
             "invite_only": bool(getattr(settings.features, "invite_only", True)),
             "open_auto_provision": bool(
                 getattr(settings.features, "open_auto_provision", False)
@@ -1126,7 +1157,16 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
                 getattr(settings.features, "live_channels_enabled", False)
                 and str(getattr(settings.tunarr, "url", "") or "").strip()
             ),
+            "household_profile": profile,
+            "access_requests_enabled": bool(
+                getattr(settings.features, "access_requests_enabled", True)
+            ),
+            "trust_proxy_headers": bool(
+                getattr(settings.features, "trust_proxy_headers", False)
+            ),
         },
+        "setup_state": setup_state,
+        "household_domain": str(getattr(settings, "household_domain", "") or ""),
         "auth": {
             "mode": settings.auth.mode,
             "plex_login_enabled": settings.auth.plex_login_enabled,
@@ -1207,7 +1247,9 @@ def _serve_index() -> HTMLResponse:
 @app.get("/search", response_class=HTMLResponse)
 @app.get("/inbox", response_class=HTMLResponse)
 @app.get("/my-journey", response_class=HTMLResponse)
-@app.get("/tour", response_class=HTMLResponse)
+@app.get("/setup", response_class=HTMLResponse)
+@app.get("/join", response_class=HTMLResponse)
+@app.get("/login", response_class=HTMLResponse)
 def index() -> HTMLResponse:
     return _serve_index()
 
@@ -1260,6 +1302,13 @@ def tag_page(tag_name: str) -> HTMLResponse:
 @app.get("/login", response_class=HTMLResponse)
 def login_page() -> HTMLResponse:
     return _serve_index()
+
+
+@app.get("/tour")
+@app.get("/tour/")
+def tour_page() -> RedirectResponse:
+    """Guest tour is retired — cold hits must land on login, not JSON 404."""
+    return RedirectResponse(url="/login", status_code=302)
 
 
 @app.get("/privacy", response_class=HTMLResponse)
@@ -1588,14 +1637,55 @@ def auth_plex_pin_start(
 
 
 @app.get("/api/auth/plex/pin/{pin_id}")
-def auth_plex_pin_poll(pin_id: int, request: Request, response: Response) -> Dict[str, Any]:
-    """Poll Plex PIN. When authorized, upsert user and set session cookie."""
+def auth_plex_pin_poll(
+    pin_id: int,
+    request: Request,
+    response: Response,
+    peek: bool = Query(False, description="Link Plex: status only, no session bind."),
+) -> Dict[str, Any]:
+    """Poll Plex PIN. Login/join complete the household session when claimed.
+
+    Pass ``peek=1`` for Link Plex: plex.tv status only — no cookie, no user bind.
+    An existing household session is not enough to force peek-only.
+    """
+    if peek:
+        authorized = peek_plex_pin_authorized(pin_id, request)
+        return {
+            "authenticated": authorized,
+            "pending": not authorized,
+            "authorized": authorized,
+            "bound": False,
+        }
     user = poll_plex_pin_login(pin_id, request, _db())
     if user is None:
         return {"authenticated": False, "pending": True}
     clear_pin_nonce_cookie(response, request)
-    set_session_cookie(response, user.id, request)
+    set_session_cookie(response, user.id, request, db=_db())
     return {"user": user.to_dict(), "authenticated": True, "pending": False}
+
+
+class PlexLinkPayload(BaseModel):
+    pin_id: int
+    password: str = Field(min_length=1, max_length=256)
+
+
+@app.post("/api/auth/plex/link")
+def auth_plex_link(
+    payload: PlexLinkPayload,
+    request: Request,
+    response: Response,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Bind Plex to the current local-password user. Password + PIN in one request."""
+    linked = link_plex_identity(
+        pin_id=payload.pin_id,
+        password=payload.password,
+        request=request,
+        db=_db(),
+        user=user,
+    )
+    clear_pin_nonce_cookie(response, request)
+    return {"user": linked.to_dict(), "authenticated": True, "linked": True}
 
 
 @app.post("/api/auth/plex")
@@ -1607,7 +1697,7 @@ def auth_plex(payload: PlexLoginPayload, request: Request, response: Response) -
         _db(),
         invite_token=payload.invite_token,
     )
-    set_session_cookie(response, user.id, request)
+    set_session_cookie(response, user.id, request, db=_db())
     return {"user": user.to_dict(), "authenticated": True}
 
 
@@ -1617,22 +1707,22 @@ def auth_local_register(
     request: Request,
     response: Response,
 ) -> Dict[str, Any]:
-    """Create a local-password account.  Owner-only unless bootstrapping."""
+    """Owner-authenticated local account create. Anonymous always 403."""
     enforce_rate_limit(request, bucket="auth_local_register", limit=5, window_seconds=60)
     db = _db()
-    from projectionist.web.auth import has_real_owner
-
-    requesting_user = None
-    if has_real_owner(db):
-        requesting_user = get_current_user_dep(request)
-
+    if not _settings().features.multi_user_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail="Local registration is disabled. Ask the household admin for a join link.",
+        )
+    requesting_user = get_current_user_dep(request)
     user = register_local_user(
         username=payload.username,
         password=payload.password,
         db=db,
         requesting_user=requesting_user,
     )
-    set_session_cookie(response, user.id, request)
+    set_session_cookie(response, user.id, request, db=_db())
     return {"user": user.to_dict(), "authenticated": True}
 
 
@@ -1649,7 +1739,7 @@ def auth_local_login(
         db=_db(),
         request=request,
     )
-    set_session_cookie(response, user.id, request)
+    set_session_cookie(response, user.id, request, db=_db())
     return {"user": user.to_dict(), "authenticated": True}
 
 
@@ -1671,12 +1761,23 @@ def auth_oidc_callback(
 ) -> Dict[str, Any]:
     """Handle OIDC provider callback — exchange code, create/find user, set session."""
     user = handle_oidc_callback(code=code, state=state, db=_db(), request=request)
-    set_session_cookie(response, user.id, request)
+    set_session_cookie(response, user.id, request, db=_db())
     return {"user": user.to_dict(), "authenticated": True}
 
 
 @app.post("/api/auth/logout")
 def auth_logout(request: Request, response: Response) -> Dict[str, bool]:
+    token = request.cookies.get(SESSION_COOKIE_NAME)
+    if token:
+        from projectionist.web.session_tokens import hash_session_jti, parse_session_claims
+
+        claims = parse_session_claims(token)
+        jti = str(claims.get("jti") or "") if claims else ""
+        if jti:
+            _db().revoke_session_jti(
+                hash_session_jti(jti),
+                expires_at=float(claims.get("exp") or (time.time() + DEFAULT_TTL_SECONDS)),
+            )
     clear_session_cookie(response, request)
     return {"logged_out": True}
 
@@ -1685,6 +1786,7 @@ class AccessRequestCreatePayload(BaseModel):
     display_name: str = Field(min_length=2, max_length=120)
     email: Optional[str] = Field(default=None, max_length=320)
     message: Optional[str] = Field(default=None, max_length=2000)
+    organization_url: Optional[str] = Field(default=None, max_length=2000)
 
 
 @app.post("/api/access-requests")
@@ -1692,8 +1794,23 @@ def create_access_request_endpoint(
     payload: AccessRequestCreatePayload,
     request: Request,
 ) -> Dict[str, Any]:
-    """Public: guest asks the owner for household membership (CuratorX-owned queue)."""
-    enforce_rate_limit(request, bucket="access_request", limit=5, window_seconds=3600)
+    """Public: ask the owner for household membership (queue only)."""
+    settings = _settings()
+    if not bool(getattr(settings.features, "access_requests_enabled", True)):
+        raise HTTPException(status_code=404, detail="Not found")
+    enforce_rate_limit(request, bucket="access_request", limit=3, window_seconds=3600)
+    honeypot = str(payload.organization_url or "").strip()
+    if honeypot:
+        from projectionist.web.ingress import log_honeypot_ping
+
+        log_honeypot_ping(request, honeypot="organization_url")
+        return {
+            "request": {
+                "id": uuid.uuid4().hex,
+                "status": "pending",
+                "created_at": time.time(),
+            }
+        }
     from projectionist.access_requests import notify_owners_of_access_request
 
     try:
@@ -1744,9 +1861,17 @@ def redeem_invite_local_endpoint(
             username=payload.username,
             password=payload.password,
         )
+    except InviteConflict as error:
+        raise HTTPException(
+            status_code=409,
+            detail=str(error) or "Invite has already been used",
+        ) from error
     except ValueError as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
-    set_session_cookie(response, str(result["user"]["id"]), request)
+        detail = str(error)
+        if "already been used" in detail.lower():
+            raise HTTPException(status_code=409, detail=detail) from error
+        raise HTTPException(status_code=400, detail=detail) from error
+    set_session_cookie(response, str(result["user"]["id"]), request, db=_db())
     return {"authenticated": True, **result}
 
 
@@ -1994,6 +2119,55 @@ def sync_user_seerr(
 @app.get("/api/setup/status")
 def setup_status() -> Dict[str, Any]:
     return build_setup_status(_settings(), _db())
+
+
+class SetupCommitPayload(BaseModel):
+    profile: str = Field(min_length=3, max_length=16)
+    username: str = Field(min_length=2, max_length=80)
+    password: str = Field(min_length=8, max_length=256)
+    household_domain: str = ""
+    trust_proxy: bool = False
+    allow_access_requests: Optional[bool] = None
+    invite_only: Optional[bool] = None
+
+
+@app.get("/api/setup/handshake")
+def setup_handshake_get(request: Request) -> Dict[str, Any]:
+    from projectionist.web.setup_mode import handshake_payload
+
+    return handshake_payload(request, _db(), persist=True)
+
+
+@app.post("/api/setup/handshake")
+def setup_handshake_post(request: Request) -> Dict[str, Any]:
+    from projectionist.web.setup_mode import handshake_payload
+
+    return handshake_payload(request, _db(), persist=True)
+
+
+@app.post("/api/setup/commit")
+def setup_commit_endpoint(
+    payload: SetupCommitPayload,
+    request: Request,
+    response: Response,
+) -> Dict[str, Any]:
+    from projectionist.web.setup_mode import commit_setup
+
+    result = commit_setup(
+        request,
+        _db(),
+        _settings(),
+        DATA_DIR,
+        profile=payload.profile,
+        username=payload.username,
+        password=payload.password,
+        household_domain=payload.household_domain,
+        trust_proxy=payload.trust_proxy,
+        allow_access_requests=payload.allow_access_requests,
+        invite_only=payload.invite_only,
+    )
+    set_session_cookie(response, str(result["user"]["id"]), request, db=_db())
+    return result
 
 
 @app.get("/api/setup/wizard")
@@ -2337,12 +2511,14 @@ def active_derived_context() -> Dict[str, Any]:
 
 
 @app.get("/api/jobs")
-def list_jobs() -> List[Dict[str, Any]]:
+def list_jobs(user=Depends(require_role("owner"))) -> List[Dict[str, Any]]:
+    del user
     return [job.to_dict() for job in get_job_manager().list_jobs()]
 
 
 @app.get("/api/jobs/{job_id}")
-def get_job(job_id: str) -> Dict[str, Any]:
+def get_job(job_id: str, user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
     job = get_job_manager().get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -2571,14 +2747,10 @@ def set_library_item_watched_endpoint(
 ) -> Dict[str, Any]:
     """Mark an in-library title watched/unwatched locally and on Plex when configured.
 
-    Guests are blocked when multi-user is enabled. Plex uses the caller's
-    Sign-in-with-Plex token when present; otherwise the server ``plex_token``
-    (admin/account watched state — household-wide).
+    Plex uses the caller's Sign-in-with-Plex token when present; otherwise the
+    server ``plex_token`` (admin/account watched state — household-wide).
     """
     settings = _settings()
-    if settings.features.multi_user_enabled and user.role == "guest":
-        raise HTTPException(status_code=403, detail="Guests cannot change watched state")
-
     db = _db()
     try:
         item = set_library_item_watched(
@@ -2627,11 +2799,6 @@ def library_item_subtitles_download_endpoint(
             detail="Asking Plex for subtitles requires confirm=true",
         )
     settings = _settings()
-    if settings.features.multi_user_enabled and user.role == "guest":
-        raise HTTPException(
-            status_code=403,
-            detail="Guests can’t ask Plex to download subtitles",
-        )
     from projectionist.library.subtitles import download_preferred_subtitles
 
     prefer_sdh = bool(getattr(user, "is_youth", False))
@@ -5756,8 +5923,6 @@ def admin_repair_watch_identities(user=Depends(require_role("owner"))) -> Dict[s
 @app.get("/api/year-in-review/{year}")
 def get_year_in_review(year: int, user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     """Return the signed-in member's Year in Review reel for a calendar year."""
-    if str(getattr(user, "role", "") or "") == "guest":
-        raise HTTPException(status_code=403, detail="Guests do not have Year in Review")
     if year < 2000 or year > 2100:
         raise HTTPException(status_code=400, detail="Invalid year")
     from projectionist.year_in_review.snapshot import get_snapshot
@@ -6258,67 +6423,7 @@ def list_published_collections(
 
 @app.get("/api/guest/tour")
 def guest_tour() -> Dict[str, Any]:
-    """What's great here — published collections for the public guest tour."""
-    from projectionist.config_store import resolve_guest_tour_enabled
-
-    settings = _settings()
-    if not resolve_guest_tour_enabled(settings):
-        raise HTTPException(status_code=404, detail="Guest tour is not enabled")
-    items = _db().list_published_lists()
-    live_teaser: Dict[str, Any] = {
-        "enabled": False,
-        "ready": False,
-        "channels": [],
-        "cta": "request_access",
-        "message": "",
-    }
-    if bool(getattr(settings.features, "live_channels_enabled", False)):
-        try:
-            from projectionist.live_channels.guide import build_on_now_snapshot
-
-            snap = build_on_now_snapshot(settings)
-            teaser_channels = []
-            for channel in (snap.get("channels") or [])[:4]:
-                if not isinstance(channel, dict):
-                    continue
-                now = channel.get("now") if isinstance(channel.get("now"), dict) else {}
-                title = str(now.get("title") or "").strip()
-                if not title:
-                    continue
-                teaser_channels.append(
-                    {
-                        "name": str(channel.get("name") or "Station"),
-                        "number": channel.get("number"),
-                        "now_title": title,
-                    }
-                )
-            live_teaser = {
-                "enabled": True,
-                "ready": bool(snap.get("ready")) and bool(teaser_channels),
-                "channels": teaser_channels,
-                "cta": "request_access",
-                "message": (
-                    "What’s great tonight on the household Live stations — "
-                    "ask your host for access to watch."
-                    if teaser_channels
-                    else "Live Channels is on — ask your host for access to tune in."
-                ),
-            }
-        except Exception:  # noqa: BLE001
-            live_teaser = {
-                "enabled": True,
-                "ready": False,
-                "channels": [],
-                "cta": "request_access",
-                "message": "Live Channels may be on — ask your host for access.",
-            }
-    return {
-        "title": "What's great here",
-        "lede": "A short tour of collections your host published for visitors.",
-        "items": items,
-        "count": len(items),
-        "live_teaser": live_teaser,
-    }
+    raise HTTPException(status_code=404, detail="Not found")
 
 
 @app.get("/api/collections/{list_id}", response_model=CuratedList)

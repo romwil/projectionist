@@ -91,7 +91,7 @@ test.describe("Admin maintenance dashboard", () => {
     await page.goto("/admin/sync");
     await expect(page.getByTestId("library-sync-card")).toBeVisible();
     await expect(page.getByTestId("library-sync-button")).toBeVisible();
-    await expect(page.getByTestId("library-sync-card")).toContainText("Library sync");
+    await expect(page.getByTestId("library-sync-card")).toContainText("Sync library");
     await expect(page.locator("body")).not.toContainText("(Phase 8)");
   });
 });

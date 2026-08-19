@@ -245,7 +245,11 @@ class PlexWebhookApiTests(unittest.TestCase):
         importlib.reload(app_mod)
         client = TestClient(app_mod.app)
         response = client.post("/api/webhooks/plex", json=_movie_stop_payload())
-        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.status_code, 401)
+        body = str(response.json().get("detail") or "")
+        self.assertNotIn("PROJECTIONIST_", body)
+        self.assertNotIn("CURATORX_", body)
+        self.assertNotIn("webhook_secret", body.lower())
 
     def test_webhook_rejects_missing_secret_when_configured(self) -> None:
         save_settings(

@@ -1203,7 +1203,8 @@ def warm_channel_stream(
     channel every few minutes keeps six ffmpeg pipelines hot (2000%+ CPU) and
     SIGKILLs mid-watch sessions when they contend for resources.
     """
-    from urllib.request import Request, urlopen
+    from projectionist.circuit_breaker import CircuitOpenError, is_host_circuit_open
+    from projectionist.connectors.http import request_bytes
 
     cid = str(channel_id or "").strip()
     if not cid:
@@ -1221,14 +1222,16 @@ def warm_channel_stream(
         poll_count += 1
         for url in (media_url, master_url):
             try:
-                request = Request(url, method="GET")
-                with urlopen(request, timeout=8) as response:
-                    body = response.read(8192).decode("utf-8", "replace")
+                body = request_bytes(url, timeout=8, max_bytes=8192).decode("utf-8", "replace")
                 if "#EXTINF" in body:
                     playlist_ready = True
                     break
                 if body.strip():
                     last_error = "playlist returned without segments yet"
+            except CircuitOpenError as error:
+                last_error = str(error)[:160]
+                hard_fail = True
+                break
             except Exception as error:  # noqa: BLE001
                 last_error = str(error)[:160]
                 # Connection refused / DNS / invalid URL — do not burn the full timeout.
@@ -1243,8 +1246,9 @@ def warm_channel_stream(
                         "unreachable",
                         "invalid url",
                         "unknown url type",
+                        "circuit open",
                     )
-                ):
+                ) or is_host_circuit_open(url):
                     hard_fail = True
                     break
         if playlist_ready or hard_fail:
@@ -1255,13 +1259,13 @@ def warm_channel_stream(
     ts_error = ""
     if pull_ts:
         try:
-            request = Request(ts_url, method="GET")
-            with urlopen(
-                request, timeout=max(10, int(timeout or _WARM_DEFAULT_TIMEOUT_S))
-            ) as response:
-                ts_bytes = len(
-                    response.read(max(int(min_ts_bytes or 0), _WARM_MIN_TS_BYTES))
+            ts_bytes = len(
+                request_bytes(
+                    ts_url,
+                    timeout=max(10, int(timeout or _WARM_DEFAULT_TIMEOUT_S)),
+                    max_bytes=max(int(min_ts_bytes or 0), _WARM_MIN_TS_BYTES),
                 )
+            )
         except Exception as error:  # noqa: BLE001
             ts_error = str(error)[:200]
 

@@ -56,6 +56,48 @@ export function yirPath(year) {
 }
 
 /**
+ * Recap share text — the screenshot-in-words beat.
+ * @param {object|null|undefined} recap
+ * @param {number} year
+ */
+export function recapShareText(recap, year) {
+  if (!recap || typeof recap !== "object") return `Projectionist · ${year}`;
+  const lines = [`Projectionist · ${year}`];
+  if (recap.headline) lines.push(String(recap.headline));
+  const hero = Array.isArray(recap.hero) ? recap.hero : [];
+  for (const item of hero) {
+    const value = String(item?.value || "").trim();
+    const label = String(item?.label || "").trim();
+    if (value && label) lines.push(`${value} ${label}`);
+  }
+  if (recap.movie_genre?.name) {
+    lines.push(`Movies: ${recap.movie_genre.name}`);
+  }
+  if (recap.tv_genre?.name) {
+    lines.push(`TV: ${recap.tv_genre.name}`);
+  }
+  return lines.filter(Boolean).join("\n");
+}
+
+/**
+ * Whether the linger recap sheet should render (ready reels only).
+ */
+export function recapIsReady(reel) {
+  return Boolean(reel?.recap) && String(reel?.status || "") === "ready";
+}
+
+/**
+ * Month bars for the recap chart. Values 0–1 relative to the peak month.
+ * @param {Record<string, number>|null|undefined} monthlyCounts
+ */
+export function monthBarPercents(monthlyCounts) {
+  const counts = monthlyCounts && typeof monthlyCounts === "object" ? monthlyCounts : {};
+  const values = Array.from({ length: 12 }, (_, i) => Number(counts[String(i + 1)] || counts[i + 1] || 0));
+  const peak = Math.max(0, ...values);
+  return values.map((n) => (peak > 0 ? n / peak : 0));
+}
+
+/**
  * Durable reel path from an admin generate response — only when the snapshot is viewable.
  * Prefer API `path`; never invent a link for empty / not-ready status.
  * @param {{ path?: string|null, year?: number, status?: string, delivered?: number }|null|undefined} result

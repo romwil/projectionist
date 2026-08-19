@@ -96,7 +96,12 @@ class YearInReviewTests(unittest.TestCase):
         self.assertGreaterEqual(len(chapters), 3)
         kinds = {c["kind"] for c in chapters}
         self.assertIn("overture", kinds)
-        self.assertIn("honesty", kinds)
+        self.assertIn("volume", kinds)
+        self.assertNotIn("honesty", kinds)
+        recap = snap["reel"]["recap"]
+        self.assertIsNotNone(recap)
+        self.assertTrue(recap["hero"])
+        self.assertIn("honesty_footnote", recap)
         # No social signals → no ratings/shares/live chapters required
         self.assertNotIn("ratings", kinds)
 
@@ -436,7 +441,7 @@ class YearInReviewChapterPolishTests(unittest.TestCase):
 
         chapter = build_top_movies(rollup, {})
         assert chapter is not None
-        self.assertEqual(chapter["title"], "Movies you finished")
+        self.assertEqual(chapter["title"], "The movies")
         self.assertNotIn("revisited", chapter["body"].lower())
         self.assertNotIn("stuck", chapter["body"].lower())
 

@@ -7,8 +7,8 @@ describe("resolveMemberShell", () => {
     assert.equal(resolveMemberShell({ role: "guest", isYouth: true, multiUserEnabled: false }), "default");
   });
 
-  it("picks guest shell for guest role", () => {
-    assert.equal(resolveMemberShell({ role: "guest", multiUserEnabled: true }), "guest");
+  it("maps a legacy guest role onto the default member shell", () => {
+    assert.equal(resolveMemberShell({ role: "guest", multiUserEnabled: true }), "default");
   });
 
   it("picks youth shell for youth members", () => {
@@ -21,25 +21,11 @@ describe("resolveMemberShell", () => {
 });
 
 describe("guestDeepLinkBlocked", () => {
-  it("blocks guests once auth is ready in multi-user mode", () => {
+  it("never blocks — guests were migrated to members", () => {
     assert.equal(
       guestDeepLinkBlocked({ role: "guest", multiUserEnabled: true, authReady: true }),
-      true,
-    );
-  });
-
-  it("does not block while auth is settling or multi-user is off", () => {
-    assert.equal(
-      guestDeepLinkBlocked({ role: "guest", multiUserEnabled: true, authReady: false }),
       false,
     );
-    assert.equal(
-      guestDeepLinkBlocked({ role: "guest", multiUserEnabled: false, authReady: true }),
-      false,
-    );
-  });
-
-  it("never blocks members or owners", () => {
     assert.equal(
       guestDeepLinkBlocked({ role: "member", multiUserEnabled: true, authReady: true }),
       false,
@@ -52,9 +38,9 @@ describe("guestDeepLinkBlocked", () => {
 });
 
 describe("shellRootClass", () => {
-  it("adds youth and guest modifiers", () => {
+  it("adds youth modifiers and ignores legacy guest", () => {
     assert.match(shellRootClass("youth"), /app-root--youth/);
-    assert.match(shellRootClass("guest"), /guest-shell/);
+    assert.equal(shellRootClass("guest"), "app-root");
     assert.equal(shellRootClass("default"), "app-root");
   });
 });

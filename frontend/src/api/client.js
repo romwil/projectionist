@@ -84,6 +84,25 @@ export async function getFeatures() {
   return api("/features");
 }
 
+export async function getSetupHandshake() {
+  return api("/setup/handshake");
+}
+
+export async function commitSetup(payload) {
+  return api("/setup/commit", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function testPlex(settings = {}) {
+  return testService("plex", settings);
+}
+
+export async function testTmdb(settings = {}) {
+  return testService("tmdb", settings);
+}
+
 export async function getPlexMachineId() {
   const payload = await api("/plex/machine-id");
   return String(payload?.machine_id || "").trim();
@@ -239,8 +258,16 @@ export async function startPlexPinLogin({ inviteToken } = {}) {
   return api(`/auth/plex/pin${search.toString() ? `?${search}` : ""}`, { method: "POST" });
 }
 
-export async function pollPlexPinLogin(pinId) {
-  return api(`/auth/plex/pin/${encodeURIComponent(pinId)}`);
+export async function pollPlexPinLogin(pinId, { peek } = {}) {
+  const search = peek ? "?peek=1" : "";
+  return api(`/auth/plex/pin/${encodeURIComponent(pinId)}${search}`);
+}
+
+export async function linkPlexAccount({ pinId, password }) {
+  return api("/auth/plex/link", {
+    method: "POST",
+    body: JSON.stringify({ pin_id: pinId, password }),
+  });
 }
 
 export async function loginWithPlex(authToken, { inviteToken } = {}) {
@@ -595,11 +622,6 @@ export async function listPublishedCollections() {
 
 export async function getPublishedCollection(listId) {
   return api(`/collections/${encodeURIComponent(listId)}`);
-}
-
-/** Guest tour — what's great here over published collections. */
-export async function getGuestTour() {
-  return api("/guest/tour");
 }
 
 export async function createAccessRequest(payload) {

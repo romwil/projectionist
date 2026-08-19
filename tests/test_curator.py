@@ -263,8 +263,8 @@ class CuratorAgentToolLoopTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(seen_tools[1])
             self.assertIn("could not find confident matches", text_blocks[0]["content"].lower())
 
-    async def test_empty_gaps_auto_fallback_strips_tools_on_stop_retrying(self) -> None:
-        """Empty themed gaps auto-run fallback inside the tool; stop_retrying wraps up."""
+    async def test_empty_gaps_strips_tools_on_stop_retrying(self) -> None:
+        """Empty themed gaps fail closed with stop_retrying so the wrap-up turn has no tools."""
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             settings = Settings(
@@ -325,8 +325,8 @@ class CuratorAgentToolLoopTests(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(len(seen_tools), 2)
             self.assertIsNotNone(seen_tools[0])
-            self.assertIsNone(seen_tools[1])  # stop_retrying wrap-up after auto-fallback
-            self.assertGreaterEqual(mock_tmdb.discover_tv.call_count, 2)
+            self.assertIsNone(seen_tools[1])  # stop_retrying wrap-up after honest empty
+            self.assertGreaterEqual(mock_tmdb.discover_tv.call_count, 1)
             self.assertIn("nothing confident matched", text_blocks[0]["content"].lower())
 
 

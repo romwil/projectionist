@@ -118,6 +118,8 @@ class AdminLogsApiTests(unittest.TestCase):
         os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-admin-logs-session-secret-value"
+        os.environ["PROJECTIONIST_ALLOW_OPEN_JOIN"] = "1"
+        os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
         clear_rate_limits()
         import projectionist.web.jobs as jobs
@@ -148,6 +150,8 @@ class AdminLogsApiTests(unittest.TestCase):
             "LLM_PROVIDER",
             "CURATORX_SESSION_SECRET",
             "DATA_DIR",
+            "PROJECTIONIST_ALLOW_OPEN_JOIN",
+            "PROJECTIONIST_SETUP_STATE",
         ):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
@@ -197,7 +201,7 @@ class AdminLogsApiTests(unittest.TestCase):
         resp = self.client.get("/api/admin/logs")
         self.assertEqual(resp.status_code, 403)
 
-    def test_guest_cannot_read_logs(self) -> None:
+    def test_guest_role_cannot_be_assigned(self) -> None:
         self._enable_multi_user()
         self._login_as(1, "Owner")
         self.client.post("/api/auth/logout")
@@ -206,7 +210,7 @@ class AdminLogsApiTests(unittest.TestCase):
         self.client.post("/api/auth/logout")
         self._login_as(1, "Owner")
         patch_resp = self.client.patch(f"/api/users/{user_id}", json={"role": "guest"})
-        self.assertEqual(patch_resp.status_code, 200, patch_resp.text)
+        self.assertIn(patch_resp.status_code, (400, 422))
         self.client.post("/api/auth/logout")
         self._login_as(9, "GuestCandidate")
         denied = self.client.get("/api/admin/logs")

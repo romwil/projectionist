@@ -91,7 +91,6 @@ export default function AppShell({
   const showTopbarTitles = variant === "topbar" && showTitles !== false && title != null;
   let shellEyebrow = eyebrow;
   if (!shellEyebrow && shell === "youth" && !isPublicChrome) shellEyebrow = "Youth mode";
-  if (!shellEyebrow && shell === "guest" && !isPublicChrome) shellEyebrow = "Guest tour";
 
   const usePrimaryToolbar = variant === "topbar" && !isPublicChrome;
   const useLeafHeader = !usePrimaryToolbar && !isPublicChrome;
@@ -114,7 +113,7 @@ export default function AppShell({
             inboxUnreadCount={inboxUnreadCount}
             uiTheme={uiTheme}
             onThemeChange={setUiTheme}
-            className={isYouth ? "youth-shell-topbar" : role === "guest" ? "guest-shell-topbar" : ""}
+            className={isYouth ? "youth-shell-topbar" : ""}
           />
           {title != null || actions != null ? (
             <div className="app-shell-page-bar" data-testid="app-shell-page-bar">

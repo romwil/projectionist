@@ -510,7 +510,6 @@ def discover_missing_titles(
             "keywords_unresolved": payload.get("keywords_unresolved") or [],
             "companies_resolved": payload.get("companies_resolved") or [],
             "companies_unresolved": payload.get("companies_unresolved") or [],
-            "suggested_fallback": payload.get("suggested_fallback"),
             "note": payload.get("note"),
         }
     )

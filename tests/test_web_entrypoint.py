@@ -6,7 +6,10 @@ import unittest
 from unittest.mock import patch
 
 from projectionist.web.__main__ import (
+    UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE,
+    UVICORN_TIMEOUT_KEEP_ALIVE,
     bind_exposed_without_auth,
+    main,
     resolve_host,
     warn_if_exposed_without_auth,
 )
@@ -76,6 +79,20 @@ class WarnEmissionTests(unittest.TestCase):
             with patch("projectionist.web.__main__.logger") as mock_logger:
                 warn_if_exposed_without_auth("0.0.0.0", 8788)
                 mock_logger.warning.assert_not_called()
+
+
+class UvicornTimeoutTests(unittest.TestCase):
+    def test_main_sets_keep_alive_and_incomplete_event_limits(self) -> None:
+        with patch("uvicorn.run") as run:
+            main()
+        kwargs = run.call_args.kwargs
+        self.assertEqual(kwargs["timeout_keep_alive"], UVICORN_TIMEOUT_KEEP_ALIVE)
+        self.assertEqual(
+            kwargs["h11_max_incomplete_event_size"],
+            UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE,
+        )
+        self.assertEqual(UVICORN_TIMEOUT_KEEP_ALIVE, 5)
+        self.assertEqual(UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE, 16 * 1024)
 
 
 if __name__ == "__main__":

@@ -92,6 +92,8 @@ class NotificationPlatformTests(unittest.TestCase):
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-notif-session-secret-value"
+        os.environ["PROJECTIONIST_ALLOW_OPEN_JOIN"] = "1"
+        os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
@@ -115,6 +117,8 @@ class NotificationPlatformTests(unittest.TestCase):
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
         os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_ALLOW_OPEN_JOIN", None)
+        os.environ.pop("PROJECTIONIST_SETUP_STATE", None)
         self._tmpdir.cleanup()
 
     def _enable_multi_user(self) -> None:

@@ -28,20 +28,9 @@ export const YOUTH_NAV_ITEMS = [
   { id: "watchlist", kind: "watchlist", label: "My list", testId: "app-nav-watchlist" },
 ];
 
-export const GUEST_NAV_ITEMS = [
-  { id: "tour", to: ROUTES.tour, label: "What's great", testId: "app-nav-tour" },
-  { id: "collections", to: "/collections", label: "Collections", testId: "app-nav-collections" },
-];
-
 /** Secondary ("More") destinations for the current role. */
 function secondaryNavItems({ isYouth, role }) {
-  if (String(role || "").toLowerCase() === "guest") {
-    return [
-      ...GUEST_NAV_ITEMS,
-      { id: "help", to: ROUTES.help, label: "Help", testId: "app-nav-help" },
-      { id: "about", to: ROUTES.about, label: "About", testId: "app-nav-about" },
-    ];
-  }
+  void role;
   if (isYouth) {
     return [
       ...YOUTH_NAV_ITEMS,

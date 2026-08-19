@@ -26,22 +26,19 @@ export function requestPathFromFeatures(features) {
 export function normalizeUserRole(role, { multiUserEnabled = true } = {}) {
   if (!multiUserEnabled) return "owner";
   const value = String(role || "").trim().toLowerCase();
-  if (value === "owner" || value === "member" || value === "guest") return value;
+  if (value === "owner") return "owner";
+  if (value === "member" || value === "guest") return "member";
   return "owner";
 }
 
-/** Guests match agent tool denial — no *arr / Seerr / collection writes. */
+/** Guests no longer exist; leftover guest ids map to member via normalizeUserRole. */
 export function canProposeMediaActions(role, options = {}) {
   return normalizeUserRole(role, options) !== "guest";
 }
 
-export function guestAddGuidance() {
-  return "Ask owner";
-}
-
 /**
  * Capability for Add / Request CTAs given role + requestPathFromFeatures.
- * Members on the Seerr path may request; guests get guided copy instead of dead buttons.
+ * Members on the Seerr path may request.
  */
 export function resolveAddCapability({
   role,
@@ -50,16 +47,6 @@ export function resolveAddCapability({
 } = {}) {
   const normalized = normalizeUserRole(role, { multiUserEnabled });
   const path = requestPath === "seerr" ? "seerr" : "arr";
-  if (normalized === "guest") {
-    return {
-      role: normalized,
-      requestPath: path,
-      canAdd: false,
-      canRequest: false,
-      showGuidedCopy: true,
-      guidedCopy: guestAddGuidance(),
-    };
-  }
   const useSeerr = path === "seerr";
   return {
     role: normalized,

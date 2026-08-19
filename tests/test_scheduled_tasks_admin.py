@@ -24,8 +24,13 @@ from projectionist.scheduler.run_outcome import (
     extract_outcome_detail,
     format_run_outcome_message,
 )
+from projectionist.web.auth import _hash_password
 from projectionist.web.rate_limit import clear_rate_limits
-from projectionist.web.session_tokens import SESSION_COOKIE_NAME, clear_session_secret_cache
+from projectionist.web.session_tokens import (
+    SESSION_COOKIE_NAME,
+    clear_session_secret_cache,
+    create_session_token,
+)
 
 
 async def _noop_task(
@@ -290,6 +295,7 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-scheduled-tasks-secret"
+        os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
         clear_rate_limits()
         import projectionist.web.jobs as jobs
@@ -317,6 +323,7 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
         os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_SETUP_STATE", None)
         self._tmpdir.cleanup()
 
     def _write_settings(self, *, multi_user: bool = False, local: bool = False) -> None:
@@ -375,23 +382,23 @@ class ScheduledTasksAdminApiTests(unittest.TestCase):
 
     def test_member_denied_when_multi_user_enabled(self) -> None:
         self._write_settings(multi_user=True, local=True)
-        owner = self.client.post(
-            "/api/auth/local/register",
-            json={"username": "owner1", "password": "password123"},
-        )
-        self.assertEqual(owner.status_code, 200, owner.text)
-        member = self.client.post(
-            "/api/auth/local/register",
-            json={"username": "member1", "password": "password123"},
-        )
-        self.assertEqual(member.status_code, 200, member.text)
-        self.assertEqual(member.json()["user"]["role"], "member")
+        import projectionist.web.jobs as jobs
 
-        # Fresh client with only the member session.
-        member_cookie = member.cookies.get(SESSION_COOKIE_NAME)
-        self.assertIsNotNone(member_cookie)
+        db = jobs.get_job_manager().db
+        db.create_local_user(
+            user_id="local-owner1",
+            display_name="owner1",
+            password_hash=_hash_password("password123"),
+            role="owner",
+        )
+        db.create_local_user(
+            user_id="local-member1",
+            display_name="member1",
+            password_hash=_hash_password("password123"),
+            role="member",
+        )
         bare = TestClient(self.app_mod.app)
-        bare.cookies.set(SESSION_COOKIE_NAME, member_cookie)
+        bare.cookies.set(SESSION_COOKIE_NAME, create_session_token("local-member1"))
         denied = bare.get("/api/admin/scheduled-tasks")
         self.assertEqual(denied.status_code, 403)
         denied_run = bare.post("/api/admin/scheduled-tasks/health_metrics/run")

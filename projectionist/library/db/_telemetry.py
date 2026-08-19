@@ -22,6 +22,10 @@ from ._shared import (
     run_with_db_lock_retry,
 )
 
+# Unique closed-loop keys are capped so hostile high-entropy tokens cannot grow
+# the SQLite file without bound. Oldest rows (by updated_at) are dropped first.
+TELEMETRY_EVENTS_MAX_ROWS = 10_000
+
 
 class TelemetryConfigMixin:
     def insert_telemetry_event(
@@ -119,8 +123,24 @@ class TelemetryConfigMixin:
                         payload_json,
                     ),
                 )
+                count_row = conn.execute(
+                    "SELECT COUNT(*) AS c FROM telemetry_events"
+                ).fetchone()
+                count = int(count_row["c"] if count_row else 0)
+                overflow = count - TELEMETRY_EVENTS_MAX_ROWS
+                if overflow > 0:
+                    conn.execute(
+                        """
+                        DELETE FROM telemetry_events WHERE rowid IN (
+                            SELECT rowid FROM telemetry_events
+                            ORDER BY updated_at ASC, rowid ASC
+                            LIMIT ?
+                        )
+                        """,
+                        (overflow,),
+                    )
 
-        self.run_write(_write, label="upsert_closed_loop_event")
+        self.try_run_write(_write, label="upsert_closed_loop_event")
 
     def list_closed_loop_events(
         self,

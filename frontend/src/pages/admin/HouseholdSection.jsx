@@ -61,36 +61,6 @@ export default function HouseholdSection({
               />
               <span>Require Plex sign-in for the app</span>
             </label>
-            <label className="config-toggle" data-testid="guest-tour-enabled-toggle">
-              <input
-                type="checkbox"
-                checked={Boolean(settings?.features?.guest_tour_enabled)}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  updateFeatureFlags({ guest_tour_enabled: enabled });
-                  persistSettings({
-                    features: { ...(settings.features || {}), guest_tour_enabled: enabled },
-                  })
-                    .then(() =>
-                      setActionFeedback(
-                        "guest-tour",
-                        "success",
-                        enabled
-                          ? "Take a Tour is on — visitors see it on the login page."
-                          : "Take a Tour is off.",
-                      ),
-                    )
-                    .catch((error) => setActionFeedback("guest-tour", "error", error.message));
-                }}
-              />
-              <span>Enable public Take a Tour (/tour)</span>
-            </label>
-            <details className="config-advanced-details" data-testid="guest-tour-advanced">
-              <summary>Advanced</summary>
-              <p className="wizard-note">
-                Host env <code>CURATORX_GUEST_TOUR_ENABLED</code> overrides this toggle when set.
-              </p>
-            </details>
             {settings?.features?.multi_user_enabled ? (
               <>
                 <label className="config-toggle" data-testid="agent-may-mutate-personal-data-toggle">
@@ -213,8 +183,8 @@ export default function HouseholdSection({
                     <span>Allow Sign in with Plex (PIN)</span>
                   </label>
                   <p className="wizard-note field-help">
-                    Primary path is the PIN / link button on the login page. Token paste there is an advanced
-                    fallback only — do not look for a token on plex.tv account settings.
+                    Household members sign in with Plex on the login page. New people join with an invite
+                    link from Admin → Access.
                   </p>
                 </div>
                 {featureFlags?.user?.role === "owner" || !featureFlags?.features?.multi_user_enabled ? (
@@ -265,7 +235,6 @@ export default function HouseholdSection({
                                     >
                                       <option value="owner">Owner</option>
                                       <option value="member">Member</option>
-                                      <option value="guest">Guest</option>
                                     </select>
                                   </td>
                                   <td>

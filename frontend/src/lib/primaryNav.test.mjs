@@ -84,12 +84,11 @@ describe("primaryNav", () => {
     assert.equal(items.some((i) => i.id === "my-journey"), true);
   });
 
-  it("guest sees only Search, Chat, Explore", () => {
-    assert.deepEqual(primaryNavVisibleIds({ role: "guest" }), [
-      "search",
-      "chat",
-      "explore",
-    ]);
+  it("legacy guest role sees the same peers as a member", () => {
+    assert.deepEqual(
+      primaryNavVisibleIds({ role: "guest" }),
+      primaryNavVisibleIds({ role: "member" }),
+    );
   });
 
   it("shapes the same peers for the drawer with app-nav test ids", () => {

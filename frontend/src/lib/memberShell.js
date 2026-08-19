@@ -4,16 +4,14 @@
  * @returns {'youth' | 'guest' | 'default'}
  */
 export function resolveMemberShell({ role = "owner", isYouth = false, multiUserEnabled = false } = {}) {
+  void role;
   if (!multiUserEnabled) return "default";
-  const normalized = String(role || "owner").toLowerCase();
-  if (normalized === "guest") return "guest";
   if (isYouth) return "youth";
   return "default";
 }
 
 /**
- * True when a signed-in guest must not reach member-only surfaces
- * (My Journey, Inbox) via deep links.
+ * Legacy guests are members. Deep-link blocking for a third role is gone.
  *
  * @param {{ role?: string, multiUserEnabled?: boolean, authReady?: boolean }} opts
  */
@@ -22,8 +20,10 @@ export function guestDeepLinkBlocked({
   multiUserEnabled = false,
   authReady = true,
 } = {}) {
-  if (!authReady || !multiUserEnabled) return false;
-  return String(role || "").toLowerCase() === "guest";
+  void role;
+  void multiUserEnabled;
+  void authReady;
+  return false;
 }
 
 /**
@@ -33,6 +33,5 @@ export function guestDeepLinkBlocked({
  */
 export function shellRootClass(shell, base = "app-root") {
   if (shell === "youth") return `${base} app-root--youth youth-shell`;
-  if (shell === "guest") return `${base} app-root--guest guest-shell`;
   return base;
 }

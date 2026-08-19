@@ -11,6 +11,7 @@ from projectionist.library.db import Database
 from projectionist.watch_tracker.rollups import build_year_rollup
 from projectionist.year_in_review import REEL_SCHEMA_VERSION
 from projectionist.year_in_review.chapters import assemble_chapters
+from projectionist.year_in_review.recap import build_recap
 from projectionist.year_in_review.signals import collect_social_signals
 
 logger = logging.getLogger(__name__)
@@ -159,6 +160,7 @@ def build_reel_for_user(
             ),
         },
         "rollup": rollup.as_dict(),
+        "recap": build_recap(rollup, ctx) if status == "ready" else None,
         "chapters": chapters,
         "path": f"/year-in-review/{int(year)}",
     }

@@ -274,12 +274,6 @@ TOOL_DEFINITIONS: List[Mapping[str, Any]] = [
                             "year_from/year_to also apply on this path."
                         ),
                     },
-                    "is_fallback_attempt": {
-                        "type": "boolean",
-                        "description": (
-                            "Set true only when retrying with suggested_fallback from a prior empty result"
-                        ),
-                    },
                 },
                 "required": ["media_type"],
             },

@@ -489,7 +489,14 @@ class FeatureFlags:
     # When multi-user is on, new Plex/OIDC identities require a valid invite by default.
     invite_only: bool = True
     # Opt-in LAN-open behavior: auto-provision new sign-ins as members (pre-1.26).
+    # Ignored on Public Household. Requires PROJECTIONIST_ALLOW_OPEN_JOIN=1.
     open_auto_provision: bool = False
+    # Ingress profile chosen at setup: "private" (LAN) or "public" (custom domain / tunnel).
+    household_profile: str = "private"
+    # Wizard / settings equivalent of PROJECTIONIST_TRUST_PROXY_HEADERS.
+    trust_proxy_headers: bool = False
+    # Public access-request queue (novice toggle).
+    access_requests_enabled: bool = True
     # Idle prune of agent / movie-night Plex collections tagged ephemeral.
     ephemeral_collection_gc_enabled: bool = True
     # When true, collection_gc only logs what it would delete.
@@ -693,6 +700,8 @@ class Settings:
     llm_embedding_base_url: str = ""
     onboarding_complete: bool = False
     setup_wizard_pending: bool = False
+    # Public household domain for invite URLs and cookie/HSTS guidance.
+    household_domain: str = ""
     library_sync_interval_hours: int = 24
     # Preferred local hour (0–23) for daily sync; None = interval-only scheduling.
     library_sync_hour: Optional[int] = None
@@ -1025,26 +1034,34 @@ def _env_bool(name: str) -> bool | None:
 
 
 def resolve_guest_tour_enabled(settings: Settings | None = None) -> bool:
-    """Guest tour flag — PROJECTIONIST_GUEST_TOUR_ENABLED wins when set."""
-    env_value = _env_bool("PROJECTIONIST_GUEST_TOUR_ENABLED")
-    if env_value is not None:
-        return env_value
+    """Guest tour is removed. Always False (env kept only so old .env files boot)."""
+    del settings
+    return False
+
+
+def household_profile_name(settings: Settings | None = None) -> str:
     flags = getattr(settings, "features", None) if settings is not None else None
-    return bool(getattr(flags, "guest_tour_enabled", False))
+    raw = str(getattr(flags, "household_profile", "private") or "private").strip().lower()
+    return "public" if raw == "public" else "private"
 
 
 def invite_required_for_new_users(settings: Settings | None = None) -> bool:
     """True when new Plex/OIDC identities must redeem a valid invite.
 
-    Defaults to invite-only whenever multi-user is on. Owners opt into today's
-    LAN-open auto-provision with ``features.open_auto_provision``, or by turning
-    ``features.invite_only`` off.
+    Public Household always requires an invite. Private Household may open join
+    only with ``PROJECTIONIST_ALLOW_OPEN_JOIN=1`` plus ``open_auto_provision``
+    (or ``invite_only`` off).
     """
     flags = getattr(settings, "features", None) if settings is not None else None
     if flags is None:
         return False
     if not bool(getattr(flags, "multi_user_enabled", False)):
         return False
-    if bool(getattr(flags, "open_auto_provision", False)):
+    if household_profile_name(settings) == "public":
+        return True
+    allow_open = _env_bool("PROJECTIONIST_ALLOW_OPEN_JOIN")
+    if allow_open and bool(getattr(flags, "open_auto_provision", False)):
         return False
+    if bool(getattr(flags, "open_auto_provision", False)) and not allow_open:
+        return bool(getattr(flags, "invite_only", True))
     return bool(getattr(flags, "invite_only", True))

@@ -121,14 +121,31 @@ def _secret() -> bytes:
     return resolve_session_secret().encode("utf-8")
 
 
-def create_session_token(user_id: str, *, ttl_seconds: int = DEFAULT_TTL_SECONDS) -> str:
-    payload = {"uid": user_id, "exp": time.time() + ttl_seconds}
+def create_session_token(
+    user_id: str,
+    *,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+    session_epoch: int = 0,
+    jti: Optional[str] = None,
+) -> str:
+    payload = {
+        "uid": user_id,
+        "exp": time.time() + ttl_seconds,
+        "jti": jti or secrets.token_urlsafe(16),
+        "sv": int(session_epoch),
+    }
     body = base64.urlsafe_b64encode(json.dumps(payload, separators=(",", ":")).encode()).decode()
     sig = hmac.new(_secret(), body.encode("utf-8"), hashlib.sha256).hexdigest()
     return f"{body}.{sig}"
 
 
-def parse_session_token(token: str) -> Optional[str]:
+def hash_session_jti(jti: str) -> str:
+    """SHA-256 hex of a session jti for the revocation table (never store raw jti)."""
+    return hashlib.sha256(str(jti).encode("utf-8")).hexdigest()
+
+
+def parse_session_claims(token: str) -> Optional[dict]:
+    """Return ``{uid, jti, sv, exp}`` when HMAC and expiry are valid."""
     if not token or "." not in token:
         return None
     body, sig = token.rsplit(".", 1)
@@ -143,4 +160,21 @@ def parse_session_token(token: str) -> Optional[str]:
     exp = payload.get("exp")
     if not user_id or not isinstance(exp, (int, float)) or float(exp) < time.time():
         return None
-    return str(user_id)
+    jti = payload.get("jti")
+    try:
+        session_epoch = int(payload.get("sv") or 0)
+    except (TypeError, ValueError):
+        session_epoch = 0
+    return {
+        "uid": str(user_id),
+        "jti": str(jti) if jti else "",
+        "sv": session_epoch,
+        "exp": float(exp),
+    }
+
+
+def parse_session_token(token: str) -> Optional[str]:
+    claims = parse_session_claims(token)
+    if not claims:
+        return None
+    return str(claims["uid"])

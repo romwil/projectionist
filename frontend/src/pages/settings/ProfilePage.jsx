@@ -1,6 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { getAuthMe, getFeatures, logout, patchAuthMe, uploadAuthAvatar } from "../../api/client";
+import {
+  getAuthMe,
+  getFeatures,
+  linkPlexAccount,
+  logout,
+  patchAuthMe,
+  pollPlexPinLogin,
+  startPlexPinLogin,
+  uploadAuthAvatar,
+} from "../../api/client";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
 import UserAvatar from "../../components/UserAvatar";
@@ -35,6 +44,13 @@ export default function ProfilePage() {
   const [avatarBust, setAvatarBust] = useState("");
   const [requestPath, setRequestPath] = useState("direct");
   const [seerrLinked, setSeerrLinked] = useState(false);
+  const [linkBusy, setLinkBusy] = useState(false);
+  const [linkWaiting, setLinkWaiting] = useState(false);
+  const [linkAuthorized, setLinkAuthorized] = useState(false);
+  const [linkPinId, setLinkPinId] = useState(null);
+  const [linkAuthUrl, setLinkAuthUrl] = useState("");
+  const [linkPassword, setLinkPassword] = useState("");
+  const linkPollRef = useRef(null);
   const avatarInputRef = useRef(null);
 
   useEffect(() => {
@@ -58,6 +74,87 @@ export default function ProfilePage() {
       })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    return () => {
+      if (linkPollRef.current) clearTimeout(linkPollRef.current);
+    };
+  }, []);
+
+  function stopLinkWait() {
+    if (linkPollRef.current) {
+      clearTimeout(linkPollRef.current);
+      linkPollRef.current = null;
+    }
+    setLinkWaiting(false);
+    setLinkBusy(false);
+  }
+
+  function scheduleLinkPoll(pinId, deadline) {
+    linkPollRef.current = setTimeout(async () => {
+      try {
+        if (Date.now() >= deadline) {
+          stopLinkWait();
+          setStatus({ type: "error", message: "Plex sign-in timed out. Try again." });
+          return;
+        }
+        const result = await pollPlexPinLogin(pinId, { peek: true });
+        if (result?.authorized) {
+          setLinkAuthorized(true);
+          setLinkWaiting(false);
+          setLinkBusy(false);
+          return;
+        }
+        scheduleLinkPoll(pinId, deadline);
+      } catch (error) {
+        stopLinkWait();
+        setStatus({ type: "error", message: error.message || "Could not check Plex." });
+      }
+    }, 1000);
+  }
+
+  async function handleStartLinkPlex() {
+    setLinkBusy(true);
+    setStatus(null);
+    setLinkAuthorized(false);
+    setLinkPassword("");
+    try {
+      const pin = await startPlexPinLogin();
+      setLinkPinId(pin.id);
+      setLinkAuthUrl(pin.auth_url || "");
+      setLinkWaiting(true);
+      if (pin.auth_url) {
+        window.open(pin.auth_url, "projectionist-plex-link", "width=600,height=700");
+      }
+      scheduleLinkPoll(pin.id, Date.now() + 15 * 60 * 1000);
+    } catch (error) {
+      setLinkBusy(false);
+      setStatus({ type: "error", message: error.message || "Could not start Plex linking." });
+    }
+  }
+
+  async function handleConfirmLinkPlex(event) {
+    event.preventDefault();
+    if (!linkPinId || !linkPassword) {
+      setStatus({ type: "error", message: "Enter your password to finish linking Plex." });
+      return;
+    }
+    setLinkBusy(true);
+    setStatus(null);
+    try {
+      const result = await linkPlexAccount({ pinId: linkPinId, password: linkPassword });
+      setUser(result.user);
+      setLinkAuthorized(false);
+      setLinkPinId(null);
+      setLinkAuthUrl("");
+      setLinkPassword("");
+      setStatus({ type: "success", message: "Plex is linked. Watch history can now map to this account." });
+    } catch (error) {
+      setStatus({ type: "error", message: error.message || "Could not link Plex." });
+    } finally {
+      setLinkBusy(false);
+    }
+  }
 
   async function handleSave(event) {
     event.preventDefault();
@@ -265,6 +362,65 @@ export default function ProfilePage() {
           ) : null}
         </p>
       </SettingsPanel>
+
+      {!user.plex_user_id ? (
+        <SettingsPanel
+          title="Link Plex"
+          lead="Link Plex to count watches from the server. Confirm with your household password in the same step — the PIN poll never binds on its own."
+          testId="settings-link-plex"
+        >
+          {!linkWaiting && !linkAuthorized ? (
+            <button
+              type="button"
+              className="primary"
+              data-testid="link-plex-start"
+              disabled={linkBusy}
+              onClick={handleStartLinkPlex}
+            >
+              {linkBusy ? "Starting…" : "Link Plex"}
+            </button>
+          ) : null}
+          {linkWaiting ? (
+            <p className="status status-secondary" data-testid="link-plex-waiting">
+              Finish signing in with Plex
+              {linkAuthUrl ? (
+                <>
+                  {" "}
+                  <a href={linkAuthUrl} target="_blank" rel="noreferrer">
+                    Open Plex
+                  </a>
+                </>
+              ) : null}
+              . This page waits until Plex authorizes — it does not attach yet.
+              <button type="button" className="ghost" onClick={stopLinkWait}>
+                Cancel
+              </button>
+            </p>
+          ) : null}
+          {linkAuthorized ? (
+            <form onSubmit={handleConfirmLinkPlex} data-testid="link-plex-confirm">
+              <label>
+                <span>Confirm with your password</span>
+                <input
+                  type="password"
+                  data-testid="link-plex-password"
+                  value={linkPassword}
+                  onChange={(event) => setLinkPassword(event.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+              </label>
+              <button type="submit" className="primary" data-testid="link-plex-submit" disabled={linkBusy || !linkPassword}>
+                {linkBusy ? "Linking…" : "Confirm and link Plex"}
+              </button>
+            </form>
+          ) : null}
+        </SettingsPanel>
+      ) : (
+        <SettingsPanel title="Plex" testId="settings-plex-linked">
+          <p className="status status-secondary">Plex account linked. Watch history maps to this household member.</p>
+        </SettingsPanel>
+      )}
 
       <div className="settings-actions">
         <button type="button" className="ghost" data-testid="settings-sign-out" onClick={handleSignOut}>

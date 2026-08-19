@@ -7,6 +7,21 @@ import sqlite3
 import time
 from typing import Callable, Optional, TypeVar
 
+def begin_immediate(conn: sqlite3.Connection) -> None:
+    """Take a RESERVED lock before the first write (invite dual-write, etc.).
+
+    Python sqlite3 defaults to DEFERRED BEGIN, which lets two connections both
+    read ``pending`` before either upgrades — then ``database is locked``.
+    """
+    try:
+        if conn.in_transaction:
+            conn.commit()
+    except sqlite3.Error:
+        pass
+    conn.isolation_level = None
+    conn.execute("BEGIN IMMEDIATE")
+
+
 def _optional_int_col(row: sqlite3.Row, keys: set, name: str) -> Optional[int]:
     """Read an optional integer column that may be missing on older schemas."""
     if name in keys and row[name] is not None:

@@ -186,16 +186,20 @@ def probe_tunarr_http_ready(base_url: str, *, timeout: float = 4.0) -> bool:
     if not url:
         return False
     try:
+        from projectionist.circuit_breaker import bypass_host_circuits
         from projectionist.connectors.tunarr import TunarrClient
 
-        client = TunarrClient(url, timeout=timeout)
-        client.version()
-        return True
+        with bypass_host_circuits():
+            client = TunarrClient(url, timeout=timeout)
+            client.version()
+            return True
     except Exception:  # noqa: BLE001
         try:
+            from projectionist.circuit_breaker import bypass_host_circuits
             from projectionist.connectors.tunarr import TunarrClient
 
-            TunarrClient(url, timeout=timeout).health()
+            with bypass_host_circuits():
+                TunarrClient(url, timeout=timeout).health()
             return True
         except Exception:  # noqa: BLE001
             return False

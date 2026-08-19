@@ -93,6 +93,10 @@ export function useAuthGate({ redirect = true } = {}) {
         const features = await getFeatures();
         enabled = Boolean(features?.features?.multi_user_enabled);
         if (cancelled) return;
+        if (features?.setup_state === "setup") {
+          navigate("/setup", { replace: true });
+          return;
+        }
         setMultiUserEnabled(enabled);
         setLiveChannelsReady(Boolean(features?.features?.live_channels_ready));
         if (!enabled) {
@@ -121,7 +125,7 @@ export function useAuthGate({ redirect = true } = {}) {
             return;
           }
           setIsOwner(false);
-          setRole("guest");
+          setRole("");
           setIsYouth(false);
           setAuthenticated(false);
           setAuthReady(true);
@@ -132,8 +136,9 @@ export function useAuthGate({ redirect = true } = {}) {
           if (me.user.ui_font_size) applyUiFontSize(me.user.ui_font_size);
           if (me.user.ui_theme) applyUiTheme(me.user.ui_theme);
         }
-        const nextRole = String(me.user?.role || "guest").toLowerCase();
-        setRole(nextRole === "owner" || nextRole === "member" || nextRole === "guest" ? nextRole : "guest");
+        const rawRole = String(me.user?.role || "member").toLowerCase();
+        const nextRole = rawRole === "owner" ? "owner" : "member";
+        setRole(nextRole);
         setIsOwner(nextRole === "owner");
         setIsYouth(Boolean(me.user?.is_youth));
         setAuthenticated(true);
@@ -147,7 +152,7 @@ export function useAuthGate({ redirect = true } = {}) {
             return;
           }
           setIsOwner(false);
-          setRole("guest");
+          setRole("");
           setIsYouth(false);
           setAuthenticated(false);
           setAuthReady(true);

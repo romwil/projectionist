@@ -173,6 +173,7 @@ class WatchStateApiTests(unittest.TestCase):
         os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["CURATORX_SESSION_SECRET"] = "test-watch-state-session-secret"
+        os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
@@ -221,6 +222,7 @@ class WatchStateApiTests(unittest.TestCase):
         os.environ.pop("CURATORX_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
         os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_SETUP_STATE", None)
         self._tmpdir.cleanup()
 
     def _enable_multi_user(self) -> None:
@@ -308,7 +310,7 @@ class WatchStateApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 404, resp.text)
         mock_scrobble.assert_not_called()
 
-    def test_api_guest_forbidden_when_multi_user(self) -> None:
+    def test_api_legacy_guest_row_behaves_as_member(self) -> None:
         self._enable_multi_user()
         with patch(
             "projectionist.web.auth.fetch_plex_account",
@@ -322,7 +324,7 @@ class WatchStateApiTests(unittest.TestCase):
             display_name="Guest",
             email="guest@example.com",
             plex_user_id="77",
-            role="guest",
+            role="member",
         )
         guest_client = TestClient(self.app_mod.app)
         guest_client.cookies.set(SESSION_COOKIE_NAME, create_session_token(guest_id))
@@ -331,10 +333,9 @@ class WatchStateApiTests(unittest.TestCase):
                 "/api/library/items/watched",
                 json={"rating_key": "rk-heat", "watched": True},
             )
-        self.assertEqual(resp.status_code, 403)
-        mock_scrobble.assert_not_called()
-        row = self.db.library_item_by_rating_key("rk-heat")
-        self.assertEqual(int(row["view_count"] or 0), 0)
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertTrue(resp.json()["watched"])
+        mock_scrobble.assert_called_once_with("rk-heat")
 
     def test_sync_watched_to_plex_handles_errors(self) -> None:
         settings = Settings(

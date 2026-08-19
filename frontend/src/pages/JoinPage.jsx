@@ -3,13 +3,13 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   formatApiError,
   getFeatures,
-  loginWithPlex,
   pollPlexPinLogin,
   redeemInviteLocal,
   startOidcLogin,
   startPlexPinLogin,
   validateInvite,
 } from "../api/client";
+import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
 import { resolveAuthMethods } from "../lib/loginScreen";
 
@@ -34,6 +34,7 @@ export default function JoinPage() {
   const [authUrl, setAuthUrl] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showLocal, setShowLocal] = useState(false);
 
   const reloadInvite = useCallback(() => {
     if (!token) {
@@ -89,7 +90,7 @@ export default function JoinPage() {
           return;
         }
         const result = await pollPlexPinLogin(pinId);
-        if (result?.authenticated) {
+        if (result?.authenticated && result?.user) {
           stopPinWait();
           navigate("/chat", { replace: true });
           return;
@@ -110,7 +111,7 @@ export default function JoinPage() {
       setWaitingForPlex(true);
       setAuthUrl(pin?.auth_url || "");
       if (pin?.auth_url) {
-        window.open(pin.auth_url, "curatorx-plex-join", "noopener,noreferrer");
+        window.open(pin.auth_url, "projectionist-plex-join", "noopener,noreferrer");
       }
       schedulePinPoll(pin.id, Date.now() + PIN_TIMEOUT_MS);
     } catch (err) {
@@ -153,69 +154,68 @@ export default function JoinPage() {
     }
   }
 
-  async function handleTokenFallback(event) {
-    event.preventDefault();
-    const authToken = new FormData(event.target).get("auth_token");
-    setBusy(true);
-    setError("");
-    try {
-      await loginWithPlex(String(authToken || ""), { inviteToken: token });
-      navigate("/chat", { replace: true });
-    } catch (err) {
-      setError(formatApiError(err) || "Could not finish joining.");
-      setBusy(false);
-    }
-  }
-
   return (
-    <div className="login-page" data-testid="join-page">
-      <div className="login-card">
-        <p className="eyebrow">Household invite</p>
-        <h1>Join Projectionist</h1>
-        {loading ? <p className="status status-secondary">Checking invite…</p> : null}
-        {error ? <InlineAlert type="error" message={error} testId="join-error" /> : null}
-        {!loading && invite ? (
-          <>
-            <p className="login-help" data-testid="join-invite-summary">
-              You&apos;re joining as a <strong>{invite.role}</strong>
-              {invite.is_youth ? " (Youth mode)" : ""}. This link works once.
+    <GlassDoor
+      testId="join-page"
+      eyebrow="You’re invited"
+      title="Join this household"
+      lede={
+        loading
+          ? "Checking invite…"
+          : invite
+            ? "Sign in with Plex to join. Username and password is a fallback on the same link."
+            : "This invite is not available."
+      }
+      footer={
+        <p className="login-help">
+          Already a member? <Link to="/login">Sign in</Link>
+        </p>
+      }
+    >
+      {error ? <InlineAlert type="error" message={error} testId="join-error" /> : null}
+      {!loading && invite ? (
+        <>
+          <p className="login-help" data-testid="join-invite-summary">
+            You&apos;re joining as a household member
+            {invite.is_youth ? " (Youth mode)" : ""}. This link works once.
+          </p>
+          {waitingForPlex ? (
+            <p className="status status-secondary" data-testid="join-plex-waiting">
+              Waiting for Plex…
+              {authUrl ? (
+                <>
+                  {" "}
+                  <a href={authUrl} target="_blank" rel="noreferrer">
+                    Open Plex again
+                  </a>
+                </>
+              ) : null}
             </p>
-            {waitingForPlex ? (
-              <p className="status status-secondary" data-testid="join-plex-waiting">
-                Waiting for Plex…
-                {authUrl ? (
-                  <>
-                    {" "}
-                    <a href={authUrl} target="_blank" rel="noreferrer">
-                      Open Plex again
-                    </a>
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-            {plexEnabled ? (
-              <button
-                type="button"
-                className="login-primary"
-                data-testid="join-plex"
-                disabled={busy || waitingForPlex}
-                onClick={handlePlex}
-              >
-                Sign in with Plex
-              </button>
-            ) : null}
-            {oidcEnabled ? (
-              <button
-                type="button"
-                className="login-secondary"
-                data-testid="join-oidc"
-                disabled={busy || waitingForPlex}
-                onClick={handleOidc}
-              >
-                Continue with SSO
-              </button>
-            ) : null}
-            {localEnabled ? (
+          ) : null}
+          {plexEnabled ? (
+            <button
+              type="button"
+              className="login-primary"
+              data-testid="join-plex"
+              disabled={busy || waitingForPlex}
+              onClick={handlePlex}
+            >
+              Sign in with Plex
+            </button>
+          ) : null}
+          {oidcEnabled ? (
+            <button
+              type="button"
+              className="login-secondary"
+              data-testid="join-oidc"
+              disabled={busy || waitingForPlex}
+              onClick={handleOidc}
+            >
+              Continue with SSO
+            </button>
+          ) : null}
+          {localEnabled ? (
+            showLocal ? (
               <form className="login-form" onSubmit={handleLocal} data-testid="join-local-form">
                 <label className="login-field">
                   <span>Choose a username</span>
@@ -249,24 +249,20 @@ export default function JoinPage() {
                   {busy ? "Joining…" : "Create account & join"}
                 </button>
               </form>
-            ) : null}
-            {plexEnabled ? (
-              <details className="login-advanced">
-                <summary>Advanced: Plex token</summary>
-                <form onSubmit={handleTokenFallback}>
-                  <input name="auth_token" data-testid="join-plex-token" placeholder="Plex auth token" />
-                  <button type="submit" className="ghost" disabled={busy}>
-                    Join with token
-                  </button>
-                </form>
-              </details>
-            ) : null}
-          </>
-        ) : null}
-        <p className="login-help">
-          Already a member? <Link to="/login">Sign in</Link>
-        </p>
-      </div>
-    </div>
+            ) : (
+              <button
+                type="button"
+                className="login-secondary"
+                data-testid="join-local-toggle"
+                disabled={busy || waitingForPlex}
+                onClick={() => setShowLocal(true)}
+              >
+                Use a username and password instead
+              </button>
+            )
+          ) : null}
+        </>
+      ) : null}
+    </GlassDoor>
   );
 }

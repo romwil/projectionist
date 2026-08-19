@@ -91,6 +91,35 @@ class WriteSerializer:
             raise job.error[0]
         return job.result[0]  # type: ignore[return-value]
 
+    def try_run(self, fn: Callable[[], T], *, label: str = "write") -> bool:
+        """Enqueue ``fn`` without blocking; return False if the queue is full."""
+        if self.in_writer_thread():
+            fn()
+            return True
+
+        with self._close_lock:
+            if self._closed:
+                logger.warning("Write serializer shut down; dropping label=%s", label)
+                return False
+
+        job = _WriteJob(
+            fn=fn,
+            label=label or "write",
+            enqueued_at=time.monotonic(),
+            event=threading.Event(),
+            result=[],
+            error=[],
+        )
+        try:
+            self._queue.put(job, block=False)
+        except queue.Full:
+            logger.warning("SQLite write serializer full; dropping label=%s", label)
+            return False
+        job.event.wait()
+        if job.error:
+            raise job.error[0]
+        return True
+
     def stats(self) -> dict:
         with self._stats_lock:
             return {

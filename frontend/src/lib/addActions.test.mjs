@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   collectAddableFromMessage,
   groupAddableItems,
-  guestAddGuidance,
   lastAssistantHasTitleCards,
   normalizePendingTokens,
   normalizeUserRole,
@@ -170,18 +169,18 @@ test("collectAddableFromMessage ignores empty placeholder cards", () => {
   assert.equal(sonarr[0].title, "Ready");
 });
 
-test("normalizeUserRole treats single-user as owner", () => {
+test("normalizeUserRole treats single-user as owner and maps guest to member", () => {
   assert.equal(normalizeUserRole("guest", { multiUserEnabled: false }), "owner");
   assert.equal(normalizeUserRole("member"), "member");
-  assert.equal(normalizeUserRole("guest"), "guest");
+  assert.equal(normalizeUserRole("guest"), "member");
 });
 
-test("resolveAddCapability hides guest adds and keeps member Seerr requests", () => {
+test("resolveAddCapability maps legacy guest to member capability", () => {
   const guest = resolveAddCapability({ role: "guest", requestPath: "seerr" });
+  assert.equal(guest.role, "member");
   assert.equal(guest.canAdd, false);
-  assert.equal(guest.canRequest, false);
-  assert.equal(guest.showGuidedCopy, true);
-  assert.equal(guest.guidedCopy, guestAddGuidance());
+  assert.equal(guest.canRequest, true);
+  assert.equal(guest.showGuidedCopy, false);
 
   const memberSeerr = resolveAddCapability({ role: "member", requestPath: "seerr" });
   assert.equal(memberSeerr.canAdd, false);
@@ -193,16 +192,14 @@ test("resolveAddCapability hides guest adds and keeps member Seerr requests", ()
   assert.equal(ownerArr.canRequest, false);
 });
 
-test("groupAddableItems returns empty groups for guests", () => {
+test("groupAddableItems treats legacy guest as member", () => {
   const items = [
     { title: "Dune", media_type: "movie", tmdb_id: 1 },
     { title: "Severance", media_type: "show", tvdb_id: 2, tmdb_id: 3 },
   ];
-  assert.deepEqual(groupAddableItems(items, { requestPath: "arr", role: "guest" }), {
-    radarr: [],
-    sonarr: [],
-    seerr: [],
-  });
+  const guest = groupAddableItems(items, { requestPath: "arr", role: "guest" });
+  const memberArr = groupAddableItems(items, { requestPath: "arr", role: "member" });
+  assert.deepEqual(guest, memberArr);
   const member = groupAddableItems(items, { requestPath: "seerr", role: "member" });
   assert.equal(member.seerr.length, 2);
   assert.equal(member.radarr.length, 0);

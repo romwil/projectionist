@@ -48,6 +48,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
+from projectionist.circuit_breaker import (
+    DEFAULT_QUARANTINE_COOLDOWN_SECONDS,
+    QUARANTINE_THRESHOLD,
+    QuarantineInfo,
+)
 from projectionist.config_store import Settings, load_merged_settings
 from projectionist.library.db import Database
 from projectionist.scheduler.autotune import (
@@ -73,8 +78,6 @@ DEFAULT_IDLE_THRESHOLD_MINUTES = 15
 SCHEDULER_POLL_SECONDS = 30
 SCHEDULER_INITIAL_DELAY_SECONDS = 60
 DEFAULT_TASK_TIMEOUT_SECONDS = 300  # 5 minutes
-QUARANTINE_THRESHOLD = 3
-DEFAULT_QUARANTINE_COOLDOWN_SECONDS = 3600  # 1 hour
 
 
 @dataclass
@@ -98,6 +101,9 @@ class TaskDefinition:
     progress_scope: Optional[str] = None
 
 
+# QuarantineInfo lives in projectionist.circuit_breaker (shared with connector HTTP).
+
+
 @dataclass
 class TaskState:
     """Runtime state of a registered task, persisted in SQLite."""
@@ -111,53 +117,6 @@ class TaskState:
     last_outcome_reason: Optional[str] = None
     last_run_summary: Optional[Dict[str, Any]] = None
     items_per_cycle: Optional[int] = None
-
-
-@dataclass
-class QuarantineInfo:
-    """In-memory quarantine state for a task that has failed repeatedly."""
-
-    consecutive_failures: int = 0
-    last_error: str = ""
-    quarantined_at: Optional[float] = None
-    cooldown_seconds: int = DEFAULT_QUARANTINE_COOLDOWN_SECONDS
-
-    @property
-    def is_quarantined(self) -> bool:
-        if self.quarantined_at is None:
-            return False
-        elapsed = time.time() - self.quarantined_at
-        if elapsed >= self.cooldown_seconds:
-            self.release()
-            return False
-        return True
-
-    @property
-    def remaining_seconds(self) -> Optional[float]:
-        if self.quarantined_at is None:
-            return None
-        remaining = self.cooldown_seconds - (time.time() - self.quarantined_at)
-        return max(0.0, remaining)
-
-    def record_failure(self, error: str) -> bool:
-        """Record a failure. Returns True if the task is now quarantined."""
-        self.consecutive_failures += 1
-        self.last_error = error
-        if self.consecutive_failures >= QUARANTINE_THRESHOLD and self.quarantined_at is None:
-            self.quarantined_at = time.time()
-            return True
-        return False
-
-    def record_success(self) -> None:
-        self.consecutive_failures = 0
-        self.last_error = ""
-        self.quarantined_at = None
-
-    def release(self) -> None:
-        """Manually clear quarantine (admin reset or cooldown expiry)."""
-        self.consecutive_failures = 0
-        self.last_error = ""
-        self.quarantined_at = None
 
 
 class _HeartbeatHandle:

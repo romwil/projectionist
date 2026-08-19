@@ -194,6 +194,167 @@
   gap: var(--space-4);
 }
 
+.yir-hero {
+  margin: 0 0 var(--space-5);
+}
+
+.yir-hero-value {
+  display: block;
+  font-family: var(--font-display);
+  font-size: clamp(2.5rem, 8vw, 4.5rem);
+  line-height: 1;
+  color: var(--accent);
+}
+
+.yir-hero-label {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: var(--text-xs);
+}
+
+.yir-page--recap .yir-stage {
+  align-items: flex-start;
+}
+
+.yir-recap {
+  width: 100%;
+  padding: var(--space-6) 0 var(--space-8);
+}
+
+.yir-hero-grid {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-6);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.yir-hero-cell {
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+}
+
+.yir-crowns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+
+.yir-crown-name {
+  font-family: var(--font-display);
+  font-size: clamp(1.5rem, 4vw, 2.25rem);
+  margin: 0 0 var(--space-2);
+}
+
+.yir-crown-count {
+  margin: 0;
+  color: var(--muted);
+}
+
+.yir-recap-block {
+  margin-bottom: var(--space-6);
+}
+
+.yir-recap-block h2 {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  margin: 0 0 var(--space-3);
+}
+
+.yir-recap-titles {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.yir-recap-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.yir-month-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 4px;
+  height: 96px;
+  margin: 0 0 var(--space-6);
+}
+
+.yir-month-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.yir-month-bar {
+  width: 100%;
+  max-width: 18px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.85;
+}
+
+.yir-extras {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 var(--space-5);
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.yir-extras strong {
+  display: block;
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.yir-recap-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.yir-recap-actions button {
+  font-family: var(--font-body);
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.75rem;
+  cursor: pointer;
+}
+
+.yir-recap-actions .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--workspace-base);
+}
+
+@media (max-width: 640px) {
+  .yir-crowns,
+  .yir-hero-grid,
+  .yir-extras {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .yir-card {
     animation: none;
