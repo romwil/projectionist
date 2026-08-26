@@ -654,6 +654,26 @@ class YouthSettings:
     max_content_rating: str = "PG-13"
 
 
+@dataclass
+class TheaterSettings:
+    """Lobby theater kiosk (open LAN display on a dedicated port)."""
+
+    enabled: bool = False
+    # landscape | portrait
+    orientation: str = "landscape"
+    # everyone | household
+    audience: str = "everyone"
+    # empty | now_available
+    idle_mode: str = "empty"
+    # rotator | panelled
+    multi_mode: str = "rotator"
+    # dynamic | static
+    header_mode: str = "dynamic"
+    static_label: str = ""
+    # Idle carousel interval (seconds).
+    rotate_seconds: int = 12
+
+
 NESTED_SETTINGS_TYPES.update(
     {
         "features": FeatureFlags,
@@ -663,6 +683,7 @@ NESTED_SETTINGS_TYPES.update(
         "mail": MailSettings,
         "apprise": AppriseSettings,
         "youth": YouthSettings,
+        "theater": TheaterSettings,
     }
 )
 
@@ -732,6 +753,7 @@ class Settings:
     mail: MailSettings = field(default_factory=MailSettings)
     apprise: AppriseSettings = field(default_factory=AppriseSettings)
     youth: YouthSettings = field(default_factory=YouthSettings)
+    theater: TheaterSettings = field(default_factory=TheaterSettings)
 
     def apply_to_environ(self) -> None:
         for env_name, field_name in ENV_TO_FIELD.items():

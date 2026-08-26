@@ -12,6 +12,7 @@ Jump to: [LAN hosts](#lan-hosts-source-of-truth) · [Rollout](#rollout--appdata)
 |------|----------|---------|
 | **Production** | `http://10.10.1.202:8788` | Version, `/api/health`, admin UI, “is prod on X.Y.Z?” |
 | **QA sidecar** | `http://10.10.1.202:8790` | Interactive UI QA, multi-role smoke, WIP image checks |
+| **QA lobby theater** | `http://10.10.1.202:8792` | Open LAN lightbox for the QA sidecar (maps container `8791`) |
 | **Public hostname** | `https://projectionist.automat.vip` | Member-facing access only — **not** version or admin truth |
 
 ### Why the public URL is not truth

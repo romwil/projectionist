@@ -8,9 +8,12 @@ services:
       - .env
     ports:
       - "${HOST_PORT:-8788}:8788"
+      # Lobby theater (LAN only — do not publish via public reverse proxy)
+      - "${THEATER_HOST_PORT:-8791}:8791"
     environment:
       DATA_DIR: /config
       PORT: "8788"
+      PROJECTIONIST_THEATER_PORT: "8791"
       TZ: ${TZ:-UTC}
       PLEX_URL: ${PLEX_URL:-}
       PLEX_TOKEN: ${PLEX_TOKEN:-}
