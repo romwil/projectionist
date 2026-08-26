@@ -8,7 +8,7 @@ Each ID:
 | Field | Meaning |
 |-------|---------|
 | **roles** | Who must run this ID (`member`, `owner`, `youth`, `guest`, `guest-tour`, or `*`) |
-| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `shell`, `login`, `tour`, `invite`, `access-request`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`) |
+| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `shell`, `login`, `tour`, `invite`, `access-request`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`, `lobby`, `theater`) |
 | **source** | Primary frontend file(s) |
 | **steps** | Required interactions (page-load alone ≠ pass) |
 | **pass** | Observable pass criteria |
@@ -354,6 +354,46 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **source:** `frontend/src/components/admin/YearInReviewAdminPanel.jsx`, `frontend/src/pages/InboxPage.jsx`, `projectionist/year_in_review/delivery.py`
 - **steps:** On `/admin/newsletters`, leave `newsletters-yir-notify-toggle` on. Click `newsletters-yir-self-generate` and **confirm** the dialog. Wait for `newsletters-yir-status`. If status is success with `newsletters-yir-link`, follow the link (or open Inbox). If status reports not enough finishes / empty, record N/A for reel open but still open `/inbox` and note whether a YIR card appeared.
 - **pass:** Generate completes without crash. On ready: status success, optional reel link only when ready, and Inbox shows a durable Year in Review item (or reel opens at `/year-in-review/{year}`). Empty-year is PASS with honest empty copy (not a silent failure). Canceling the confirm dialog without generating is not this ID — re-run with confirm.
+
+### `admin.lobby-nav`
+
+- **roles:** `owner`
+- **tags:** `admin`, `lobby`, `theater`, `nav`
+- **source:** `frontend/src/lib/adminNav.js`, `frontend/src/pages/LobbyDisplayPage.jsx`, `frontend/src/main.jsx`
+- **steps:** Sign in as owner. Open Admin rail Household group. Click **Lobby** (`app-nav-admin-lobby` / `/admin/lobby`). Confirm page `data-testid="lobby-display-page"` and panel `lobby-theater-panel`.
+- **pass:** Lobby admin page loads for owner. Member navigating to `/admin/lobby` redirects away (covered by `nav.admin-redirect` when rechecked).
+
+### `admin.lobby-settings-save`
+
+- **roles:** `owner`
+- **tags:** `admin`, `lobby`, `theater`, `settings`
+- **source:** `frontend/src/pages/LobbyDisplayPage.jsx`, `projectionist/config_store.py`
+- **steps:** On `/admin/lobby`, confirm controls: `lobby-enabled-toggle`, `lobby-orientation`, `lobby-audience`, `lobby-idle-mode`, `lobby-multi-mode`, `lobby-header-mode`, `lobby-rotate-seconds`. Toggle idle mode between empty and now_available (or confirm current values). Click `lobby-save`. Wait for success alert.
+- **pass:** Save succeeds without wiping other settings. Reload `/admin/lobby` and confirm persisted values. Do not leave theater disabled if the campaign needs the kiosk IDs next — restore `enabled` on before leaving.
+
+### `theater.kiosk-shell`
+
+- **roles:** `*` (unauthenticated LAN; use theater host port, not main QA `:8790`/`:8793`)
+- **tags:** `lobby`, `theater`
+- **source:** `projectionist/theater/static/index.html`, `projectionist/theater/static/theater.css`, `projectionist/theater/app.py`
+- **steps:** Open the QA theater base URL (e.g. `http://10.10.1.202:8792/` when main QA is remapped off `:8790`). Confirm pure black stage, lightbox bezel, header plate, and **no** title/viewer metadata text on the board. If theater is disabled, confirm the quiet disabled note instead.
+- **pass:** Kiosk shell renders (enabled: board or empty well; disabled: `disabled-note`). Zero descriptive metadata text on the poster board. Screenshot required.
+
+### `theater.sse-hydrate`
+
+- **roles:** `*` (unauthenticated; theater port)
+- **tags:** `lobby`, `theater`
+- **source:** `projectionist/theater/hub.py`, `projectionist/theater/static/theater.js`
+- **steps:** With theater enabled, open the kiosk URL. In DevTools Network (or CDP), confirm an `EventSource` / `text/event-stream` to `/api/theater/events`. Confirm a `hydrate` event arrives (or board leaves the disabled note). Confirm **no** client polling loop to a now-playing REST endpoint.
+- **pass:** SSE connects; hydrate (or live push) drives UI. No `GET /api/theater/now-playing` poll. Screenshot or network evidence required.
+
+### `theater.not-on-main-app`
+
+- **roles:** `*` (main QA app port)
+- **tags:** `lobby`, `theater`, `gating`
+- **source:** `projectionist/web/app.py`, `projectionist/web/auth.py`
+- **steps:** Against the **main** QA URL (not theater port), request `GET /api/theater/events` and `GET /api/theater/poster?rk=1`.
+- **pass:** Both return **404** (or non-event-stream failure) — theater routes must not exist on the main app / PUBLIC_HANDSHAKE surface.
 
 ### `settings.notifications-yir-opt-in`
 
