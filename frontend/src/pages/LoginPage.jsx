@@ -5,13 +5,14 @@ import {
   getFeatures,
   createAccessRequest,
   loginWithLocal,
+  loginWithPlex,
   pollPlexPinLogin,
   startOidcLogin,
   startPlexPinLogin,
 } from "../api/client";
 import GlassDoor from "../components/GlassDoor";
 import InlineAlert from "../components/InlineAlert";
-import { loginLede, resolveAuthMethods } from "../lib/loginScreen";
+import { loginLede, plexAdvancedCopy, resolveAuthMethods } from "../lib/loginScreen";
 
 const PIN_POLL_MS = 1000;
 const PIN_TIMEOUT_MS = 15 * 60 * 1000;
@@ -19,6 +20,8 @@ const PIN_TIMEOUT_MS = 15 * 60 * 1000;
 export default function LoginPage() {
   const navigate = useNavigate();
   const [features, setFeatures] = useState(null);
+  const [authToken, setAuthToken] = useState("");
+  const [showTokenInput, setShowTokenInput] = useState(false);
   const [loading, setLoading] = useState(false);
   const [waitingForPlex, setWaitingForPlex] = useState(false);
   const [authUrl, setAuthUrl] = useState("");
@@ -106,6 +109,7 @@ export default function LoginPage() {
   async function handlePlexSignIn() {
     setLoading(true);
     setError("");
+    setShowTokenInput(false);
     try {
       const pin = await startPlexPinLogin();
       setAuthUrl(pin.auth_url || "");
@@ -120,6 +124,27 @@ export default function LoginPage() {
       setWaitingForPlex(false);
       setLoading(false);
       setError(formatApiError(signInError));
+    }
+  }
+
+  async function handleTokenSignIn(event) {
+    event.preventDefault();
+    const advanced = plexAdvancedCopy({ open: true });
+    const token = authToken.trim();
+    if (!token) {
+      setError(advanced.emptyError);
+      return;
+    }
+    stopPinWait();
+    setLoading(true);
+    setError("");
+    try {
+      await loginWithPlex(token);
+      navigate("/chat", { replace: true });
+    } catch (signInError) {
+      setError(formatApiError(signInError));
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -168,6 +193,7 @@ export default function LoginPage() {
   const accessRequestsOn = features?.features?.access_requests_enabled !== false;
   const lede = featuresLoading ? "Loading sign-in options…" : loginLede(methods);
   const householdName = features?.household_domain || "Projectionist";
+  const advanced = plexAdvancedCopy({ open: showTokenInput });
 
   const methodDivider = (
     <div className="login-divider" role="separator">
@@ -234,6 +260,44 @@ export default function LoginPage() {
               </button>
             </div>
           )}
+          {!waitingForPlex ? (
+            <div className="login-advanced" data-testid="plex-advanced">
+              <button
+                type="button"
+                className="login-advanced-toggle"
+                data-testid="show-token-login"
+                aria-expanded={showTokenInput}
+                onClick={() => setShowTokenInput((open) => !open)}
+              >
+                {advanced.toggleLabel}
+              </button>
+              {showTokenInput ? (
+                <form className="login-form" onSubmit={handleTokenSignIn}>
+                  <label className="login-field">
+                    <span>{advanced.tokenLabel}</span>
+                    <input
+                      type="password"
+                      data-testid="plex-token-input"
+                      value={authToken}
+                      onChange={(event) => setAuthToken(event.target.value)}
+                      placeholder={advanced.tokenPlaceholder}
+                      autoComplete="off"
+                      disabled={loading}
+                    />
+                  </label>
+                  <p className="login-help">{advanced.tokenHelp}</p>
+                  <button
+                    type="submit"
+                    className="login-secondary"
+                    data-testid="submit-plex-login"
+                    disabled={loading}
+                  >
+                    {loading ? "Signing in…" : advanced.submitLabel}
+                  </button>
+                </form>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       ) : null}
 

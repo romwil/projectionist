@@ -1,7 +1,8 @@
-"""Uvicorn entry point."""
+"""Uvicorn entry point — main app + lobby theater on a second port."""
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 import os
@@ -30,6 +31,16 @@ def resolve_host() -> str:
 
     host = (os.environ.get("HOST") or branded_env("HOST") or "").strip()
     return host or "0.0.0.0"
+
+
+def resolve_theater_port() -> int:
+    from projectionist.theater import DEFAULT_THEATER_PORT
+
+    raw = (os.environ.get("PROJECTIONIST_THEATER_PORT") or "").strip()
+    try:
+        return int(raw) if raw else DEFAULT_THEATER_PORT
+    except ValueError:
+        return DEFAULT_THEATER_PORT
 
 
 def _is_loopback_host(host: str) -> bool:
@@ -82,6 +93,66 @@ def warn_if_exposed_without_auth(host: str, port: int) -> None:
         )
 
 
+def _uvicorn_config(app: str, *, host: str, port: int, log_level: str):
+    import uvicorn
+
+    return uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        reload=False,
+        log_level=log_level,
+        timeout_keep_alive=UVICORN_TIMEOUT_KEEP_ALIVE,
+        h11_max_incomplete_event_size=UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE,
+    )
+
+
+async def _serve_dual(*, host: str, main_port: int, theater_port: int, log_level: str) -> None:
+    import uvicorn
+
+    from projectionist.theater.app import create_theater_app
+    from projectionist.web.jobs import get_job_manager
+
+    # Ensure job manager / DB exist before theater binds (shared DATA_DIR).
+    data_dir = Path(os.environ.get("DATA_DIR", "/config"))
+    manager = get_job_manager()
+
+    def settings_factory():
+        from projectionist.config_store import load_merged_settings
+
+        return load_merged_settings(data_dir)
+
+    theater_app = create_theater_app(
+        data_dir=data_dir,
+        db_factory=lambda: manager.db,
+        settings_factory=settings_factory,
+    )
+
+    main_config = _uvicorn_config(
+        "projectionist.web.app:app",
+        host=host,
+        port=main_port,
+        log_level=log_level,
+    )
+    theater_config = uvicorn.Config(
+        theater_app,
+        host=host,
+        port=theater_port,
+        reload=False,
+        log_level=log_level,
+        timeout_keep_alive=UVICORN_TIMEOUT_KEEP_ALIVE,
+        h11_max_incomplete_event_size=UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE,
+    )
+    main_server = uvicorn.Server(main_config)
+    theater_server = uvicorn.Server(theater_config)
+    logger.info(
+        "Lobby theater listening on %s:%s (LAN-only gate; never publish via public proxy)",
+        host,
+        theater_port,
+    )
+    await asyncio.gather(main_server.serve(), theater_server.serve())
+
+
 def main() -> None:
     import uvicorn
 
@@ -95,16 +166,47 @@ def main() -> None:
     level = configure_logging()
     host = resolve_host()
     port = int(os.environ.get("PORT", "8788"))
+    theater_port = resolve_theater_port()
+    log_level = logging.getLevelName(level).lower()
     warn_if_exposed_without_auth(host, port)
-    uvicorn.run(
-        "projectionist.web.app:app",
-        host=host,
-        port=port,
-        reload=False,
-        log_level=logging.getLevelName(level).lower(),
-        timeout_keep_alive=UVICORN_TIMEOUT_KEEP_ALIVE,
-        h11_max_incomplete_event_size=UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE,
-    )
+
+    # Dual servers share one process. Tests that patch uvicorn.run still work
+    # when PROJECTIONIST_THEATER_DISABLE=1 (single-port fallback).
+    if (os.environ.get("PROJECTIONIST_THEATER_DISABLE") or "").strip() in {
+        "1",
+        "true",
+        "TRUE",
+        "yes",
+        "YES",
+    }:
+        uvicorn.run(
+            "projectionist.web.app:app",
+            host=host,
+            port=port,
+            reload=False,
+            log_level=log_level,
+            timeout_keep_alive=UVICORN_TIMEOUT_KEEP_ALIVE,
+            h11_max_incomplete_event_size=UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE,
+        )
+        return
+
+    try:
+        asyncio.run(
+            _serve_dual(
+                host=host,
+                main_port=port,
+                theater_port=theater_port,
+                log_level=log_level,
+            )
+        )
+    except OSError as exc:
+        logger.error(
+            "Failed to bind dual servers (main=%s theater=%s): %s",
+            port,
+            theater_port,
+            exc,
+        )
+        raise
 
 
 if __name__ == "__main__":

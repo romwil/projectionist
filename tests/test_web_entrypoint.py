@@ -83,8 +83,9 @@ class WarnEmissionTests(unittest.TestCase):
 
 class UvicornTimeoutTests(unittest.TestCase):
     def test_main_sets_keep_alive_and_incomplete_event_limits(self) -> None:
-        with patch("uvicorn.run") as run:
-            main()
+        with patch.dict("os.environ", {"PROJECTIONIST_THEATER_DISABLE": "1"}, clear=False):
+            with patch("uvicorn.run") as run:
+                main()
         kwargs = run.call_args.kwargs
         self.assertEqual(kwargs["timeout_keep_alive"], UVICORN_TIMEOUT_KEEP_ALIVE)
         self.assertEqual(
@@ -93,6 +94,13 @@ class UvicornTimeoutTests(unittest.TestCase):
         )
         self.assertEqual(UVICORN_TIMEOUT_KEEP_ALIVE, 5)
         self.assertEqual(UVICORN_H11_MAX_INCOMPLETE_EVENT_SIZE, 16 * 1024)
+
+    def test_resolve_theater_port_default(self) -> None:
+        from projectionist.web.__main__ import resolve_theater_port
+
+        with patch.dict("os.environ", {}, clear=False) as env:
+            env.pop("PROJECTIONIST_THEATER_PORT", None)
+            self.assertEqual(resolve_theater_port(), 8791)
 
 
 if __name__ == "__main__":

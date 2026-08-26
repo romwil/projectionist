@@ -814,6 +814,17 @@ class YouthSettingsPayload(BaseModel):
     max_content_rating: str = "PG-13"
 
 
+class TheaterSettingsPayload(BaseModel):
+    enabled: bool = False
+    orientation: str = "landscape"
+    audience: str = "everyone"
+    idle_mode: str = "empty"
+    multi_mode: str = "rotator"
+    header_mode: str = "dynamic"
+    static_label: str = ""
+    rotate_seconds: int = Field(default=12, ge=8, le=60)
+
+
 class SettingsPayload(BaseModel):
     plex_url: str = ""
     plex_token: str = ""
@@ -861,6 +872,7 @@ class SettingsPayload(BaseModel):
     mail: MailSettingsPayload = Field(default_factory=MailSettingsPayload)
     apprise: AppriseSettingsPayload = Field(default_factory=AppriseSettingsPayload)
     youth: YouthSettingsPayload = Field(default_factory=YouthSettingsPayload)
+    theater: TheaterSettingsPayload = Field(default_factory=TheaterSettingsPayload)
 
 
 class McpKeyWhichPayload(BaseModel):
@@ -1059,6 +1071,21 @@ def _mask_settings(settings: Settings) -> Dict[str, Any]:
     apprise_payload["configured"] = apprise_install_configured(settings)
     apprise_payload["package_available"] = apprise_available()
     payload["apprise"] = apprise_payload
+    from projectionist.theater.normalize import normalize_theater_settings, theater_host_port_hint
+
+    theater = normalize_theater_settings(getattr(settings, "theater", None))
+    theater_payload = {
+        "enabled": bool(theater.enabled),
+        "orientation": theater.orientation,
+        "audience": theater.audience,
+        "idle_mode": theater.idle_mode,
+        "multi_mode": theater.multi_mode,
+        "header_mode": theater.header_mode,
+        "static_label": theater.static_label,
+        "rotate_seconds": theater.rotate_seconds,
+        "host_port": theater_host_port_hint(),
+    }
+    payload["theater"] = theater_payload
     return payload
 
 
@@ -2225,6 +2252,20 @@ def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) 
     before = Settings.load(settings_path)
     existing = _settings()
     merged = merge_secret_fields(payload.model_dump(), existing)
+    from projectionist.theater.normalize import normalize_theater_settings
+
+    if isinstance(merged.get("theater"), dict):
+        theater_norm = normalize_theater_settings(merged["theater"])
+        merged["theater"] = {
+            "enabled": theater_norm.enabled,
+            "orientation": theater_norm.orientation,
+            "audience": theater_norm.audience,
+            "idle_mode": theater_norm.idle_mode,
+            "multi_mode": theater_norm.multi_mode,
+            "header_mode": theater_norm.header_mode,
+            "static_label": theater_norm.static_label,
+            "rotate_seconds": theater_norm.rotate_seconds,
+        }
     settings = _normalize_mcp_image_sizes(
         normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
     )
@@ -2245,6 +2286,14 @@ def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) 
     invalidate_certifications_on_settings_change(_db(), before, settings, payload.model_dump())
     save_settings(DATA_DIR, settings)
     sync_settings_to_db(_db(), settings)
+    try:
+        from projectionist.theater.hub import get_theater_hub
+
+        get_theater_hub().notify_settings_changed()
+    except RuntimeError:
+        pass
+    except Exception:  # noqa: BLE001
+        logger.debug("theater settings notify skipped", exc_info=True)
     # Disable→re-enable should re-nudge; clear once-ever dedupe when Live turns off.
     before_live = bool(getattr(before.features, "live_channels_enabled", False))
     after_live = bool(getattr(settings.features, "live_channels_enabled", False))
