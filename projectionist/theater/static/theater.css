@@ -5,8 +5,9 @@
   --plate: #121212;
   --plate-lit: #e8e4dc;
   --rim: rgba(255, 255, 255, 0.08);
-  --progress: #cfc8b8;
-  --progress-track: rgba(255, 255, 255, 0.12);
+  /* Defaults assume dark poster art; per-unit vars override from luminance sample. */
+  --theater-progress-fill: #cfc8b8;
+  --theater-progress-track: rgba(255, 255, 255, 0.18);
 }
 
 * {
@@ -132,14 +133,15 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
+  /* 4px reads from wall/TV distance; still a lightbox edge, not a scrubber */
   height: 4px;
-  background: var(--progress-track);
+  background: var(--theater-progress-track);
 }
 
 .progress-fill {
   height: 100%;
   width: 0%;
-  background: var(--progress);
+  background: var(--theater-progress-fill);
   transform-origin: left center;
 }
 
