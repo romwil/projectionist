@@ -69,6 +69,10 @@ body {
   height: 100%;
 }
 
+.unit[hidden] {
+  display: none !important;
+}
+
 .bezel {
   background: linear-gradient(160deg, #111 0%, var(--bezel) 45%, #050505 100%);
   border: 1px solid var(--bezel-edge);
