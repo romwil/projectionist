@@ -22,10 +22,13 @@ services:
     # Most settings already persist in ./config/settings.json.
     ports:
       - "${HOST_PORT:-8788}:8788"
+      # Lobby theater lightbox — LAN only; never forward through a public VIP/proxy.
+      - "${THEATER_HOST_PORT:-8791}:8791"
     environment:
       PROJECTIONIST_HOST_DATA_DIR: ${PROJECTIONIST_HOST_DATA_DIR:-${PWD}/config}
       DATA_DIR: /config
       PORT: "8788"
+      PROJECTIONIST_THEATER_PORT: "8791"
       TZ: ${TZ:-UTC}
       PLEX_URL: ${PLEX_URL:-}
       PLEX_TOKEN: ${PLEX_TOKEN:-}

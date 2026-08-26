@@ -41,6 +41,7 @@ fi
 
 IMAGE_TAG="${1:-${IMAGE_TAG:-latest}}"
 HOST_PORT="${HOST_PORT:-8788}"
+THEATER_HOST_PORT="${THEATER_HOST_PORT:-8791}"
 # New installs / recreate prefer container name projectionist. Override if your
 # Dockerman container is still named curatorx: CONTAINER_NAME=curatorx ./rollout.sh
 CONTAINER_NAME="${CONTAINER_NAME:-projectionist}"
@@ -123,10 +124,12 @@ run_plain_docker() {
     --name "$CONTAINER_NAME"
     --restart unless-stopped
     -p "${HOST_PORT}:8788"
+    -p "${THEATER_HOST_PORT}:8791"
     -v "${CONFIG_DIR}:/config"
     --add-host=host.docker.internal:host-gateway
     -e DATA_DIR=/config
     -e PORT=8788
+    -e PROJECTIONIST_THEATER_PORT=8791
     -e "PROJECTIONIST_HOST_DATA_DIR=${CONFIG_DIR}"
   )
   if [[ -n "$DOCKER_SOCK" ]]; then
@@ -247,6 +250,7 @@ log "=== Projectionist rollout ==="
 log "Dir:   $SCRIPT_DIR"
 log "Image: $IMAGE"
 log "Port:  ${HOST_PORT} → 8788"
+log "Theater port: ${THEATER_HOST_PORT} → 8791 (LAN only)"
 if [[ -n "$DOCKER_SOCK" ]]; then
   log "Docker socket: ${DOCKER_SOCK} → /var/run/docker.sock"
 fi

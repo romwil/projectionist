@@ -1,0 +1,19 @@
+"""Lobby theater — open LAN now-playing lightbox on a dedicated port."""
+
+from __future__ import annotations
+
+DEFAULT_THEATER_PORT = 8791
+POSTER_CACHE_CONTROL = "public, max-age=86400"
+SSE_PING_SECONDS = 15
+WATCHER_POLL_SECONDS = 7
+AVAILABLE_REFRESH_SECONDS = 180
+CLIENT_SILENCE_RECONNECT_MS = 45_000
+
+__all__ = [
+    "DEFAULT_THEATER_PORT",
+    "POSTER_CACHE_CONTROL",
+    "SSE_PING_SECONDS",
+    "WATCHER_POLL_SECONDS",
+    "AVAILABLE_REFRESH_SECONDS",
+    "CLIENT_SILENCE_RECONNECT_MS",
+]

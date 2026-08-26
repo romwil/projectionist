@@ -61,8 +61,9 @@ RUN addgroup --system --gid 1000 projectionist \
 
 ENV DATA_DIR=/config
 ENV PORT=8788
+ENV PROJECTIONIST_THEATER_PORT=8791
 
-EXPOSE 8788
+EXPOSE 8788 8791
 
 VOLUME ["/config"]
 
