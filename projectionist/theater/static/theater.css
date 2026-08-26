@@ -1,0 +1,146 @@
+:root {
+  --field: #000000;
+  --bezel: #0a0a0a;
+  --bezel-edge: #1a1a1a;
+  --plate: #121212;
+  --plate-lit: #e8e4dc;
+  --rim: rgba(255, 255, 255, 0.08);
+  --progress: #cfc8b8;
+  --progress-track: rgba(255, 255, 255, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  background: var(--field);
+  color: var(--plate-lit);
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
+  overflow: hidden;
+}
+
+.stage {
+  width: 100vw;
+  height: 100vh;
+  display: grid;
+  place-items: center;
+  background: var(--field);
+  padding: clamp(1rem, 4vw, 3rem);
+}
+
+.disabled-note {
+  max-width: 28rem;
+  text-align: center;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.85rem;
+  opacity: 0.55;
+}
+
+.empty-well {
+  width: min(42vw, 420px);
+  aspect-ratio: 2 / 3;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: radial-gradient(ellipse at center, #090909 0%, #000 70%);
+}
+
+.board {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1rem, 3vw, 2.5rem);
+  width: 100%;
+  height: 100%;
+}
+
+.board.panelled {
+  flex-wrap: nowrap;
+}
+
+.lightbox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.bezel {
+  background: linear-gradient(160deg, #111 0%, var(--bezel) 45%, #050505 100%);
+  border: 1px solid var(--bezel-edge);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.02),
+    0 24px 60px rgba(0, 0, 0, 0.85);
+  padding: clamp(0.55rem, 1.2vw, 0.9rem);
+  width: min(42vw, 460px);
+}
+
+.orientation-portrait .bezel {
+  width: min(72vw, 520px);
+}
+
+.panelled .bezel {
+  width: min(22vw, 280px);
+}
+
+.header-plate {
+  background: var(--plate);
+  color: var(--plate-lit);
+  text-align: center;
+  padding: 0.55rem 0.75rem;
+  margin-bottom: 0.55rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  font-size: clamp(0.65rem, 1.1vw, 0.85rem);
+  font-weight: 600;
+  box-shadow: inset 0 0 18px rgba(255, 248, 230, 0.08);
+}
+
+.art-well {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  background: #000;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--rim);
+}
+
+.poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.9s ease;
+  pointer-events: none;
+}
+
+.poster.visible {
+  opacity: 1;
+}
+
+.progress-track {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  background: var(--progress-track);
+}
+
+.progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--progress);
+  transform-origin: left center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poster {
+    transition: none;
+  }
+}

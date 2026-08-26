@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex" />
+    <title>Lobby Theater</title>
+    <link rel="stylesheet" href="/theater.css" />
+  </head>
+  <body>
+    <main id="stage" class="stage orientation-landscape" data-mode="empty" aria-live="polite">
+      <p id="disabled-note" class="disabled-note" hidden>Lobby display is off. Enable it under Admin → Lobby.</p>
+      <div id="board" class="board" hidden>
+        <!-- Fixed DOM pools — never create/destroy img nodes per transition. -->
+        <section class="lightbox unit" data-unit="0">
+          <div class="bezel">
+            <header class="header-plate"><span class="header-text">NOW PLAYING</span></header>
+            <div class="art-well">
+              <img class="poster slot-a" alt="" decoding="async" />
+              <img class="poster slot-b" alt="" decoding="async" />
+              <div class="progress-track" hidden>
+                <div class="progress-fill"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="lightbox unit" data-unit="1" hidden>
+          <div class="bezel">
+            <header class="header-plate"><span class="header-text">NOW PLAYING</span></header>
+            <div class="art-well">
+              <img class="poster slot-a" alt="" decoding="async" />
+              <img class="poster slot-b" alt="" decoding="async" />
+              <div class="progress-track" hidden>
+                <div class="progress-fill"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="lightbox unit" data-unit="2" hidden>
+          <div class="bezel">
+            <header class="header-plate"><span class="header-text">NOW PLAYING</span></header>
+            <div class="art-well">
+              <img class="poster slot-a" alt="" decoding="async" />
+              <img class="poster slot-b" alt="" decoding="async" />
+              <div class="progress-track" hidden>
+                <div class="progress-fill"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <section class="lightbox unit" data-unit="3" hidden>
+          <div class="bezel">
+            <header class="header-plate"><span class="header-text">NOW PLAYING</span></header>
+            <div class="art-well">
+              <img class="poster slot-a" alt="" decoding="async" />
+              <img class="poster slot-b" alt="" decoding="async" />
+              <div class="progress-track" hidden>
+                <div class="progress-fill"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div id="empty-well" class="empty-well" aria-hidden="true"></div>
+    </main>
+    <script src="/theater.js" defer></script>
+  </body>
+</html>

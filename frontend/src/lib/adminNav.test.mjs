@@ -35,7 +35,9 @@ describe("adminNav", () => {
     assert.equal(adminNavLinks().find((item) => item.id === "usage")?.to, "/admin/usage");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.label, "Holidays");
     assert.equal(adminNavLinks().find((item) => item.id === "holidays")?.to, "/admin/holidays");
-    assert.equal(adminNavLinks().length, 19);
+    assert.equal(adminNavLinks().find((item) => item.id === "lobby")?.label, "Lobby");
+    assert.equal(adminNavLinks().find((item) => item.id === "lobby")?.to, "/admin/lobby");
+    assert.equal(adminNavLinks().length, 20);
   });
 
   it("groups the dense rail with Home / Household / Ops headings", () => {
@@ -49,7 +51,7 @@ describe("adminNav", () => {
     );
     assert.equal(
       groups.reduce((sum, group) => sum + group.links.length, 0),
-      19,
+      20,
     );
     assert.deepEqual(
       groups[0].links.map((item) => item.id),
