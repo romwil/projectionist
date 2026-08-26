@@ -51,6 +51,83 @@
     fill.style.width = `${Math.max(0, Math.min(1, Number(ratio) || 0)) * 100}%`;
   }
 
+  /** Mid-contrast default when canvas sample fails (tainted / empty). */
+  const PROGRESS_FALLBACK = {
+    fill: "#cfc8b8",
+    track: "rgba(255, 255, 255, 0.18)",
+  };
+  const PROGRESS_ON_DARK = {
+    fill: "#e8e4dc",
+    track: "rgba(255, 255, 255, 0.22)",
+  };
+  const PROGRESS_ON_LIGHT = {
+    fill: "#1a1a1a",
+    track: "rgba(0, 0, 0, 0.28)",
+  };
+
+  function applyProgressContrast(unitEl, colors) {
+    unitEl.style.setProperty("--theater-progress-fill", colors.fill);
+    unitEl.style.setProperty("--theater-progress-track", colors.track);
+  }
+
+  /**
+   * Sample the lower ~8% of the visible poster and pick a bar that contrasts
+   * with average luminance (light art → dark bar, dark art → light bar).
+   */
+  function syncProgressContrast(unitEl, img) {
+    if (!unitEl || !img || !img.naturalWidth || !img.naturalHeight) {
+      if (unitEl) applyProgressContrast(unitEl, PROGRESS_FALLBACK);
+      return;
+    }
+    try {
+      const srcW = img.naturalWidth;
+      const srcH = img.naturalHeight;
+      const bandFrac = 0.08;
+      const bandH = Math.max(1, Math.floor(srcH * bandFrac));
+      const sampleW = Math.min(64, srcW);
+      const canvas = document.createElement("canvas");
+      canvas.width = sampleW;
+      canvas.height = Math.min(16, bandH);
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) {
+        applyProgressContrast(unitEl, PROGRESS_FALLBACK);
+        return;
+      }
+      ctx.drawImage(
+        img,
+        0,
+        srcH - bandH,
+        srcW,
+        bandH,
+        0,
+        0,
+        canvas.width,
+        canvas.height,
+      );
+      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let sum = 0;
+      let count = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        const a = data[i + 3];
+        if (a < 16) continue;
+        // Rec. 709 relative luminance
+        sum += (0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255;
+        count += 1;
+      }
+      if (!count) {
+        applyProgressContrast(unitEl, PROGRESS_FALLBACK);
+        return;
+      }
+      const luminance = sum / count;
+      applyProgressContrast(
+        unitEl,
+        luminance >= 0.52 ? PROGRESS_ON_LIGHT : PROGRESS_ON_DARK,
+      );
+    } catch (_) {
+      applyProgressContrast(unitEl, PROGRESS_FALLBACK);
+    }
+  }
+
   function showPoster(unitEl, url) {
     if (!url) return;
     const a = unitEl.querySelector(".slot-a");
@@ -58,11 +135,15 @@
     if (!a || !b) return;
     const active = a.classList.contains("visible") ? a : b.classList.contains("visible") ? b : null;
     const next = active === a ? b : a;
-    if (active && active.getAttribute("src") === url) return;
+    if (active && active.getAttribute("src") === url) {
+      if (active.complete) syncProgressContrast(unitEl, active);
+      return;
+    }
 
     const reveal = () => {
       next.classList.add("visible");
       if (active) active.classList.remove("visible");
+      syncProgressContrast(unitEl, next);
     };
 
     if (next.getAttribute("src") === url && next.complete) {
@@ -75,7 +156,9 @@
     };
     next.addEventListener("load", onLoad);
     next.src = url;
-    if (reducedMotion()) {
+    // Prefer waiting for decode so contrast sample sees real pixels; CSS
+    // already disables the opacity transition when reduced-motion is set.
+    if (next.complete) {
       next.removeEventListener("load", onLoad);
       reveal();
     }
