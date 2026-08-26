@@ -25,10 +25,6 @@
   /** @type {Array<object>} */
   let liveSessions = [];
 
-  function reducedMotion() {
-    return window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  }
-
   function markByte() {
     lastByteAt = Date.now();
   }
