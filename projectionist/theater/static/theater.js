@@ -81,10 +81,42 @@
     if (text) text.textContent = label || "";
   }
 
+  function setStatusCaption(unitEl, label, visible) {
+    const caption = unitEl.querySelector(".status-caption");
+    const text = unitEl.querySelector(".status-caption-text");
+    if (!caption || !text) return;
+    if (!visible || !label) {
+      caption.hidden = true;
+      caption.setAttribute("aria-hidden", "true");
+      text.textContent = "";
+      return;
+    }
+    caption.hidden = false;
+    caption.setAttribute("aria-hidden", "false");
+    text.textContent = label;
+  }
+
+  function applyUnitLabels(unitEl, snapshot) {
+    setHeader(unitEl, snapshot.header_label || "");
+    const showCaption =
+      headerMode === "static" &&
+      Boolean(snapshot.status_label) &&
+      (currentMode === "now_playing" || currentMode === "now_available");
+    setStatusCaption(unitEl, snapshot.status_label, showCaption);
+  }
+
+  function clearUnitLabels() {
+    units.forEach((unit) => {
+      setStatusCaption(unit, "", false);
+    });
+  }
+
   function setProgress(unitEl, ratio, visible) {
     const track = unitEl.querySelector(".progress-track");
     const fill = unitEl.querySelector(".progress-fill");
+    const artWell = unitEl.querySelector(".art-well");
     if (!track || !fill) return;
+    if (artWell) artWell.classList.toggle("has-progress", Boolean(visible));
     if (!visible) {
       track.hidden = true;
       fill.style.transform = "scaleX(0)";
@@ -244,6 +276,7 @@
     board.hidden = true;
     emptyWell.hidden = false;
     currentMode = "empty";
+    clearUnitLabels();
   }
 
   function showBoard() {
@@ -257,13 +290,14 @@
     });
   }
 
-  function startRotator(label) {
+  function startRotator(snapshot) {
     clearTimers();
     showBoard();
     board.classList.toggle("panelled", false);
     visibleUnits(1);
     const unit = units[0];
-    setHeader(unit, label);
+    currentMode = "now_available";
+    applyUnitLabels(unit, snapshot);
     setProgress(unit, 0, false);
     if (!deck.length) {
       showEmpty();
@@ -276,7 +310,6 @@
       deckIndex = nextLiveDeckIndex(deckIndex + 1);
       showPoster(unit, deck[deckIndex].poster_url);
     }, Math.max(8, rotateSeconds) * 1000);
-    currentMode = "now_available";
   }
 
   function tickProgress() {
@@ -304,18 +337,18 @@
       baseProgress: Number(s.progress) || 0,
       baseAt: Date.now(),
     }));
-    const label = snapshot.header_label || "NOW PLAYING";
     const panelled = multiMode === "panelled" && liveSessions.length > 1;
     board.classList.toggle("panelled", panelled);
     if (!liveSessions.length) {
       showEmpty();
       return;
     }
+    currentMode = "now_playing";
     if (panelled) {
       visibleUnits(liveSessions.length);
       liveSessions.forEach((session, index) => {
         const unit = units[index];
-        setHeader(unit, label);
+        applyUnitLabels(unit, snapshot);
         showPoster(unit, session.poster_url);
         setProgress(unit, session.progress, true);
       });
@@ -324,7 +357,7 @@
       let idx = 0;
       const paint = () => {
         const session = liveSessions[idx % liveSessions.length];
-        setHeader(units[0], label);
+        applyUnitLabels(units[0], snapshot);
         showPoster(units[0], session.poster_url);
         setProgress(units[0], session.progress, true);
       };
@@ -337,7 +370,6 @@
       }
     }
     progressTimer = setInterval(tickProgress, 1000);
-    currentMode = "now_playing";
   }
 
   function applySnapshot(snapshot) {
@@ -386,10 +418,10 @@
       }
       // Keep cycling the local deck; only restart rotator if we left idle.
       if (currentMode === "now_available" && rotateTimer) {
-        setHeader(units[0], snapshot.header_label || "NOW AVAILABLE");
+        applyUnitLabels(units[0], snapshot);
         return;
       }
-      startRotator(snapshot.header_label || "NOW AVAILABLE");
+      startRotator(snapshot);
       return;
     }
     showEmpty();
@@ -468,6 +500,10 @@
           if (headerMode === "dynamic" && snapshot.header_label) {
             units.forEach((unit) => {
               if (!unit.hidden) setHeader(unit, snapshot.header_label);
+            });
+          } else if (headerMode === "static" && snapshot.status_label) {
+            units.forEach((unit) => {
+              if (!unit.hidden) setStatusCaption(unit, snapshot.status_label, true);
             });
           }
         } else {

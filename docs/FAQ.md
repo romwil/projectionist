@@ -8,6 +8,10 @@ A chat-first + Explore curator for self-hosted **Plex** libraries — and a real
 
 **Try it in one line** once you're set up: ask *"What should we watch tonight, under two hours, that I haven't seen?"* — you get a shortlist from *your* shelves, each with a reason. See [MCP.md](MCP.md).
 
+## What is Lobby Theater?
+
+An optional **LAN-only** full-screen lightbox for a TV or kiosk in your lobby — separate from the main app port. When something is playing on Plex, the board shows **now playing** with progress; when idle, it rotates posters from your library. Owners enable it under **Admin → Lobby** and open the dedicated theater port (default **8791**). Idle carousels can pick a feed with `?feed=recently_added`, `recently_released`, or `trending` (aliases: `recently-added`, `recent-releases`, `popular`). Keep the port on your private LAN only — do not publish it through a public reverse proxy. See [SECURITY.md](SECURITY.md) and [HELP.md](HELP.md#lobby-theater-owners).
+
 ## Which Docker image should I use?
 
 | Tag | When |

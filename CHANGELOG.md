@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.33.3] — 2026-08-27
+
+Static lobby headers keep your venue name on the plate while NOW PLAYING and idle feed labels move to a caption on the poster footer. Docs refresh Lobby Theater offering copy and kiosk guidance.
+
+### Highlights
+- **Your name stays up top.** Static header mode keeps your custom label on the marquee; status moves to the poster footer.
+- **Feed labels where you can read them.** RECENTLY ADDED, RECENTLY RELEASED, TRENDING, and NOW PLAYING show under the art when the header is static.
+- **Clearer lobby setup copy.** README, FAQ, HELP, and admin Lobby Display text explain feeds and static vs dynamic headers.
+
+### Added
+- Theater snapshot `status_label` and `resolve_status_label()` for poster footer captions when `header_mode` is static.
+- Poster footer UI in theater static assets (caption above progress bar when playing).
+
+### Changed
+- Lobby Display admin labels describe dynamic header vs static label + footer captions.
+- User-facing docs refreshed for Lobby Theater feeds and kiosk URLs (from prior doc pass on this branch).
+
+### Verification
+- Backend: 1,984 passed, 6 skipped, 34 subtests passed; 76.22% coverage (74% required).
+- Frontend unit: 681 passed, 0 failed; ESLint 0 errors (134 warnings pre-existing); production Vite build passed.
+- Theater suite: 29 passed (static header status labels, snapshot `status_label`, resolve_status_label).
+
 ## [1.33.2] — 2026-08-27
 
 Lobby theater idle boards can pick a movie feed from the URL — recently added, recently released, or trending — so kiosks can show different poster carousels without extra config.
@@ -22,7 +44,7 @@ Lobby theater idle boards can pick a movie feed from the URL — recently added,
 ### Verification
 - Backend: 1,978 passed, 6 skipped, 34 subtests passed; 76.02% coverage (74% required).
 - Frontend: ESLint 0 errors (134 warnings pre-existing); production Vite build passed.
-- Theater suite: 23 passed (feed param, per-feed hub, trending deck).
+- Theater suite: 27 passed (feed param, per-feed hub, trending deck, single Plex poll per tick, header labels).
 
 ## [1.33.1] — 2026-08-27
 

@@ -38,6 +38,7 @@ from projectionist.theater.snapshot import (
     build_board_snapshot,
     filter_sessions,
     resolve_header_label,
+    resolve_status_label,
 )
 from projectionist.web.rate_limit import clear_rate_limits
 
@@ -184,6 +185,47 @@ class SnapshotTests(unittest.TestCase):
             resolve_header_label(theater, watching=False, feed="trending"),
             "MY LOBBY",
         )
+        self.assertEqual(
+            resolve_status_label(watching=False, feed="trending"),
+            "TRENDING",
+        )
+
+    def test_snapshot_static_header_with_status_label(self) -> None:
+        settings = Settings(
+            theater=TheaterSettings(
+                enabled=True,
+                idle_mode="now_available",
+                header_mode="static",
+                static_label="AUTOMAT",
+            ),
+        )
+        snap = build_board_snapshot(
+            self.db,
+            settings,
+            sessions=[],
+            fetch_sessions=False,
+            feed="recently_released",
+        )
+        self.assertEqual(snap["header_label"], "AUTOMAT")
+        self.assertEqual(snap["status_label"], "RECENTLY RELEASED")
+
+    def test_snapshot_status_label_now_playing(self) -> None:
+        settings = Settings(
+            theater=TheaterSettings(
+                enabled=True,
+                header_mode="static",
+                static_label="AUTOMAT",
+            ),
+        )
+        snap = build_board_snapshot(
+            self.db,
+            settings,
+            sessions=[_session()],
+            fetch_sessions=False,
+            feed="trending",
+        )
+        self.assertEqual(snap["header_label"], "AUTOMAT")
+        self.assertEqual(snap["status_label"], "NOW PLAYING")
 
     def test_snapshot_header_label_follows_feed(self) -> None:
         settings = Settings(
@@ -202,6 +244,7 @@ class SnapshotTests(unittest.TestCase):
                 feed=feed,
             )
             self.assertEqual(snap["header_label"], expected, msg=feed)
+            self.assertEqual(snap["status_label"], expected, msg=feed)
 
     def test_idle_now_available_deck(self) -> None:
         settings = Settings(

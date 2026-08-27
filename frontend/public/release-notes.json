@@ -1,6 +1,40 @@
 {
-  "generated_at": "2026-08-27T04:14:46Z",
+  "generated_at": "2026-08-27T05:10:34Z",
   "releases": [
+    {
+      "version": "1.33.3",
+      "date": "2026-08-27",
+      "summary": "Static lobby headers keep your venue name on the plate while NOW PLAYING and idle feed labels move to a caption on the poster footer. Docs refresh Lobby Theater offering copy and kiosk guidance.",
+      "highlights": [
+        "**Your name stays up top.** Static header mode keeps your custom label on the marquee; status moves to the poster footer.",
+        "**Feed labels where you can read them.** RECENTLY ADDED, RECENTLY RELEASED, TRENDING, and NOW PLAYING show under the art when the header is static.",
+        "**Clearer lobby setup copy.** README, FAQ, HELP, and admin Lobby Display text explain feeds and static vs dynamic headers."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Theater snapshot `status_label` and `resolve_status_label()` for poster footer captions when `header_mode` is static.",
+            "Poster footer UI in theater static assets (caption above progress bar when playing)."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Lobby Display admin labels describe dynamic header vs static label + footer captions.",
+            "User-facing docs refreshed for Lobby Theater feeds and kiosk URLs (from prior doc pass on this branch)."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend: 1,984 passed, 6 skipped, 34 subtests passed; 76.22% coverage (74% required).",
+            "Frontend unit: 681 passed, 0 failed; ESLint 0 errors (134 warnings pre-existing); production Vite build passed.",
+            "Theater suite: 29 passed (static header status labels, snapshot `status_label`, resolve_status_label)."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.33.2",
       "date": "2026-08-27",
@@ -21,7 +55,8 @@
         {
           "title": "Changed",
           "bullets": [
-            "Idle `now_available` deck sources library feeds instead of hard-coded recently-added only."
+            "Idle `now_available` deck sources library feeds instead of hard-coded recently-added only.",
+            "Lobby theater header reflects the active idle feed (`RECENTLY ADDED`, `RECENTLY RELEASED`, `TRENDING`) instead of generic `NOW AVAILABLE`."
           ]
         },
         {
@@ -29,7 +64,7 @@
           "bullets": [
             "Backend: 1,978 passed, 6 skipped, 34 subtests passed; 76.02% coverage (74% required).",
             "Frontend: ESLint 0 errors (134 warnings pre-existing); production Vite build passed.",
-            "Theater suite: 23 passed (feed param, per-feed hub, trending deck)."
+            "Theater suite: 27 passed (feed param, per-feed hub, trending deck, single Plex poll per tick, header labels)."
           ]
         }
       ]
