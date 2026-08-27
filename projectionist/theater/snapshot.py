@@ -178,13 +178,20 @@ def build_board_snapshot(
     theater = normalize_theater_settings(getattr(settings, "theater", None))
     active: List[PlexActiveSession] = list(sessions or [])
     if fetch_sessions and sessions is None and theater.enabled:
-        if settings.plex_url and settings.plex_token:
-            try:
-                client = PlexClient(settings.plex_url, settings.plex_token, timeout=10)
-                active = client.active_sessions()
-            except Exception:  # noqa: BLE001
-                logger.debug("theater active_sessions failed", exc_info=True)
+        plex_url = str(settings.plex_url or "").strip()
+        if plex_url and settings.plex_token:
+            from projectionist.circuit_breaker import is_host_circuit_open
+
+            if is_host_circuit_open(plex_url):
+                logger.debug("theater active_sessions skipped: plex circuit open")
                 active = []
+            else:
+                try:
+                    client = PlexClient(settings.plex_url, settings.plex_token, timeout=10)
+                    active = client.active_sessions()
+                except Exception:  # noqa: BLE001
+                    logger.debug("theater active_sessions failed", exc_info=True)
+                    active = []
 
     household_keys: Optional[Set[str]] = None
     if theater.audience == "household":
