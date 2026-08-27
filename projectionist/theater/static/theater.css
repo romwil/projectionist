@@ -140,6 +140,34 @@ body {
   background: var(--theater-progress-track);
   /* Avoid paint thrash from JS width writes — compositor-friendly bar. */
   contain: layout paint;
+  z-index: 3;
+}
+
+.status-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0.45rem 0.5rem 0.5rem;
+  text-align: center;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  font-size: clamp(0.55rem, 0.95vw, 0.72rem);
+  font-weight: 600;
+  color: var(--plate-lit);
+  background: linear-gradient(
+    to top,
+    rgba(0, 0, 0, 0.78) 0%,
+    rgba(0, 0, 0, 0.42) 65%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 2;
+}
+
+.art-well.has-progress .status-caption {
+  bottom: 4px;
+  padding-bottom: 0.35rem;
 }
 
 .progress-fill {

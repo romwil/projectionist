@@ -682,7 +682,7 @@ Generate/rotate both in **Admin → Advanced** (or set the env vars); the keys m
 | Recently released | `/?feed=recently_released` |
 | Trending / popular | `/?feed=trending` or `/?feed=popular` |
 
-When `header_mode` is **dynamic**, idle boards show **RECENTLY ADDED**, **RECENTLY RELEASED**, or **TRENDING**; **now playing** always shows **NOW PLAYING**. Static header mode uses your custom label instead.
+When `header_mode` is **dynamic**, idle boards show **RECENTLY ADDED**, **RECENTLY RELEASED**, or **TRENDING**; **now playing** always shows **NOW PLAYING**. With **static** header mode, the top plate shows your custom label (e.g. venue name) and the active feed or **NOW PLAYING** appears as a caption at the bottom of the poster, above the progress bar when something is playing.
 
 **Security:** Theater routes are unauthenticated but **LAN-gated** (RFC1918 / loopback / Docker bridge). Never expose `:8791` on a public VIP or through Cloudflare/NPM. See [SECURITY.md](SECURITY.md).
 
