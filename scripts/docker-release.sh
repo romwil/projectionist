@@ -76,6 +76,10 @@ echo "Build identity: version=${VERSION} created=${BUILD_DATE} revision=${VCS_RE
 echo "Flags: --provenance=false --sbom=false (Unraid-compatible Docker v2 manifests)"
 echo "Compat dual-tag after push: ${COMPAT_IMAGE}:{${VERSION},${ALSO_LINE},latest}"
 
+# buildx is always BuildKit; export for any nested classic docker and document intent.
+# Cache mounts in the Dockerfile need BuildKit (npm/pip --mount=type=cache).
+export DOCKER_BUILDKIT=1
+
 docker buildx build \
   --platform "${PLATFORMS}" \
   --provenance=false \

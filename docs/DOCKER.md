@@ -18,6 +18,34 @@ __pycache__/
 
 After a local package rename, also purge the venv editable install before trusting imports — see [TESTING.md](TESTING.md#after-renaming-the-python-package-curatorx--projectionist).
 
+### Build caching (Dockerfile / BuildKit)
+
+The image is **multi-stage**: Node builds the Vite SPA, then a slim Python runtime copies `frontend/dist` and installs `.[web,mcp]`.
+
+Caching that matters:
+
+| Layer / mount | What stays warm | What busts it |
+|---|---|---|
+| Frontend `npm ci` | `frontend/package-lock.json` unchanged | Lockfile / package.json change |
+| BuildKit npm cache (`/root/.npm`) | Download cache across builds | Rare; cleared with builder prune |
+| Python deps (`pip install` on stub package) | `pyproject.toml` (+ README/LICENSE) unchanged | Dependency / metadata change |
+| BuildKit pip cache (`/root/.cache/pip`) | Wheel cache across builds | Rare; cleared with builder prune |
+| App source / SPA rebuild | — | Any `projectionist/` or frontend source edit |
+| Identity (`ARG`/`LABEL`/`/app/.build-info`) | Declared **after** apt/pip so version bumps do not reinstall deps | Every release (intentional) |
+
+**BuildKit is required** for `--mount=type=cache`. Docker 23+ and `docker buildx` enable it by default. On older engines:
+
+```bash
+export DOCKER_BUILDKIT=1
+docker build -t projectionist:local .
+```
+
+`scripts/docker-release.sh` exports `DOCKER_BUILDKIT=1` and always uses `buildx` (Hub multi-arch). **Automat `unraid-rollout.sh` only pulls Hub images** — it does not build, so no BuildKit flag is needed on the Unraid host for production rollout.
+
+Maintainer QA Path A (local `docker build` of a WIP tag on Automat) should use BuildKit the same way (`DOCKER_BUILDKIT=1` or buildx) so npm/pip cache mounts apply. Path B/C that only recreate from Hub tags are unchanged.
+
+CI (`docker-smoke`) uses Buildx + GitHub Actions cache (`cache-from`/`cache-to: type=gha`) so PR image smokes reuse layers across runs.
+
 ---
 
 ## Mac (Homebrew)
