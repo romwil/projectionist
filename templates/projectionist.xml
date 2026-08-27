@@ -1,5 +1,5 @@
 <?xml version="1.0"?>
-<!-- Unraid Community Applications template — Projectionist 1.33.2 -->
+<!-- Unraid Community Applications template — Projectionist 1.33.3 -->
 <Container version="2">
   <Name>projectionist</Name>
   <Repository>romwil/projectionist:latest</Repository>
@@ -21,6 +21,9 @@
   <CPUset/>
   <Requires>Plex Media Server on your LAN. Optional: Radarr, Sonarr, Tautulli, Fanart.tv, and an LLM API key or Ollama on the Unraid host.</Requires>
   <Changes>
+### 1.33.3
+Static lobby header: feed/status captions on poster footer; Lobby Theater docs refresh.
+
 ### 1.33.2
 Lobby theater fail-safe watcher + poster cache (stampede hardening).
 
@@ -542,7 +545,7 @@ Year in Review beats get honest: multi-day rewatches only, Plex stars when we ca
 - MCP design philosophy documentation
 
 ### 1.3.0 — Initial CA template
-- Image line: `romwil/projectionist:1.33` (pin `:1.33.2` if you need an exact build)
+- Image line: `romwil/projectionist:1.33` (pin `:1.33.3` if you need an exact build)
 - Config volume `/config` for settings.json + SQLite
 - Dual MCP keys: privacy (`PROJECTIONIST_MCP_API_KEY`) and full (`PROJECTIONIST_MCP_FULL_API_KEY`); or generate in Admin → Advanced
 - Optional seed envs for Plex / *arr / TMDB / LLM; session + webhook secrets for multi-user and Plex webhooks
@@ -551,7 +554,7 @@ Year in Review beats get honest: multi-day rewatches only, Plex stars when we ca
 Projectionist is cinema intelligence for your personal archive — chat with a companion that knows your Plex library. Connect Plex, Radarr, Sonarr, TMDB, and your preferred LLM provider (cloud API or Ollama).
 
 **Updating (important)**
-- Repository default: `romwil/projectionist:latest` (pin `:1.33` / `:1.33.2` if preferred). During the compatibility window the same digests are also published as `romwil/curatorx:*`.
+- Repository default: `romwil/projectionist:latest` (pin `:1.33` / `:1.33.3` if preferred). During the compatibility window the same digests are also published as `romwil/curatorx:*`.
 - If **Force Update** reports **TOTAL DATA PULLED: 0 B** and the app stays on an old version, Docker kept a stale local tag. SSH: `docker pull romwil/projectionist:latest` then Force Update / Apply, or `cd /mnt/user/appdata/projectionist && ./rollout.sh latest`. Do not wipe `/config`.
 - Full notes: https://github.com/romwil/projectionist/blob/main/docs/wiki/Unraid.md
 
