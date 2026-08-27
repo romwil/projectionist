@@ -15,10 +15,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
 
       - name: Install Python package
         run: pip install ".[web,dev,mcp]"
@@ -26,7 +32,7 @@ jobs:
       - name: Install and build frontend
         run: |
           cd frontend
-          npm install
+          npm ci
           npm run build
 
       - name: Frontend unit tests
@@ -34,7 +40,7 @@ jobs:
 
       - name: Install Playwright
         run: |
-          npm install
+          npm ci
           npx playwright install --with-deps chromium
 
       - name: Run tests with coverage
@@ -57,14 +63,20 @@ jobs:
           fi
           test -f frontend/public/release-notes.json
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Build image
-        run: |
-          docker build \
-            -t projectionist:ci-smoke \
-            --build-arg PROJECTIONIST_VERSION=ci-smoke \
-            --build-arg BUILD_DATE="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            --build-arg VCS_REF="${GITHUB_SHA}" \
-            .
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: projectionist:ci-smoke
+          build-args: |
+            PROJECTIONIST_VERSION=ci-smoke
+            BUILD_DATE=${{ github.event.head_commit.timestamp || 'unknown' }}
+            VCS_REF=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Run container and smoke /api/health
         run: |
