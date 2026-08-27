@@ -16,7 +16,7 @@ from projectionist.config_store import Settings, load_merged_settings
 from projectionist.library.db import Database
 from projectionist.theater import POSTER_CACHE_CONTROL, POSTER_RATE_LIMIT_PER_MINUTE
 from projectionist.theater.hub import TheaterHub, get_theater_hub, init_theater_hub
-from projectionist.theater.normalize import normalize_theater_settings, theater_host_port_hint
+from projectionist.theater.normalize import normalize_theater_feed, normalize_theater_settings, theater_host_port_hint
 from projectionist.theater.poster import fetch_poster_bytes, poster_response
 from projectionist.theater.poster_cache import get_poster_cache
 from projectionist.web.ingress import (
@@ -128,8 +128,12 @@ def create_theater_app(
         }
 
     @app.get("/api/theater/events")
-    async def theater_events(request: Request) -> StreamingResponse:
+    async def theater_events(
+        request: Request,
+        feed: Optional[str] = Query(None),
+    ) -> StreamingResponse:
         del request
+        idle_feed = normalize_theater_feed(feed)
         settings = _settings()
         theater = normalize_theater_settings(getattr(settings, "theater", None))
         if not theater.enabled:
@@ -149,6 +153,7 @@ def create_theater_app(
                         "multi_mode": theater.multi_mode,
                         "idle_mode": theater.idle_mode,
                         "rotate_seconds": theater.rotate_seconds,
+                        "feed": idle_feed,
                     },
                     separators=(",", ":"),
                 )
@@ -171,7 +176,7 @@ def create_theater_app(
             )
 
         return StreamingResponse(
-            theater_hub.subscribe(),
+            theater_hub.subscribe(feed=idle_feed),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",
