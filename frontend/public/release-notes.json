@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-27T03:24:59Z",
+  "generated_at": "2026-08-27T03:28:39Z",
   "releases": [
     {
       "version": "1.33.1",
@@ -35,8 +35,10 @@
         {
           "title": "Verification",
           "bullets": [
-            "Focused: `tests/test_theater.py` (adaptive poll, circuit skip, poster cache/ETag/rate-limit/health).",
-            "Full suite recorded at ship (pytest cov ≥74%, frontend unit/lint/build)."
+            "Backend: 1,974 passed, 6 skipped, 34 subtests passed; 76.04% coverage (74% required).",
+            "Frontend unit: 681 passed, 0 failed.",
+            "ESLint: 0 errors (134 warnings pre-existing); production Vite build passed.",
+            "Focused: `tests/test_theater.py` (adaptive poll, circuit skip, poster cache/ETag/rate-limit/health)."
           ]
         }
       ]

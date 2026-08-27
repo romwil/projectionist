@@ -24,8 +24,10 @@ Lobby theater stops stampeding Plex when kiosks fan in: adaptive watcher cadence
 - Multi-kiosk poster fan-in no longer stampedes PMS for the same rating keys.
 
 ### Verification
+- Backend: 1,974 passed, 6 skipped, 34 subtests passed; 76.04% coverage (74% required).
+- Frontend unit: 681 passed, 0 failed.
+- ESLint: 0 errors (134 warnings pre-existing); production Vite build passed.
 - Focused: `tests/test_theater.py` (adaptive poll, circuit skip, poster cache/ETag/rate-limit/health).
-- Full suite recorded at ship (pytest cov ≥74%, frontend unit/lint/build).
 
 ## [1.33.0] — 2026-08-19
 
