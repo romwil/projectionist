@@ -333,7 +333,6 @@ class TheaterHub:
             )
             return
 
-        settings_changed = False  # handled once per tick below
         mode = str(snapshot.get("mode") or "")
         sig = session_signature(snapshot.get("sessions") or [])
         last_mode = self._last_mode_by_feed.get(idle_feed, "")
