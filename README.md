@@ -59,6 +59,7 @@ Teaching principles: **sync vs idle trickle**, **materialize similarity**, **hon
 
 - **Chat + Explore** — cinema workspace with Lights Up / Lights Down themes; `/explore` browse hub; title detail with trailer, Watch on Plex, and **More Like This** neighbors
 - **Live Channels** — library-aware stations via Tunarr; household **On now** + gasp `/live` (Guide / Watch / pop-out); **Plex Live TV** remains first-class dual-watch (Admin → Live Channels)
+- **Lobby Theater** — open-LAN kiosk lightbox on a dedicated port (`8791` by default): live **now playing** from Plex sessions, idle poster carousel from your library; pick the idle feed with `?feed=recently_added`, `recently_released`, or `trending` (aliases: `recently-added`, `recent-releases`, `popular`); adaptive Plex polling + shared poster cache for Pi-class wall hardware (Admin → Lobby)
 - **Library-grounded curator** — RAG + facet query over structured credits/motifs and layered plot text; explainable “why this?”; agent tools for similar titles, relations, and people
 - **Confirm before you grab** — Radarr / Sonarr (and optional Seerr) writes need an explicit confirm in chat or the status dock
 - **Ratings, watchlists & household recommends** — 1–5★ reviews (optional Plex sync), Plex Discover watchlist pull, peer recommendations inbox
