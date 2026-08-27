@@ -453,6 +453,44 @@ class PosterCacheTests(unittest.TestCase):
         self.assertEqual(hit.body, poster.body)
         self.assertEqual(hit.content_type, "image/jpeg")
 
+    def test_single_flight_leader_cancel_terminates_waiters(self) -> None:
+        """Leader CancelledError must complete the shared Future (no waiter hang)."""
+        cache = TheaterPosterCache(self.data_dir)
+
+        async def scenario() -> None:
+            started = asyncio.Event()
+
+            async def slow_factory() -> str:
+                started.set()
+                await asyncio.sleep(3600)
+                return "never"
+
+            def waiter_must_not_lead() -> str:
+                raise AssertionError("waiter must join inflight, not become leader")
+
+            leader = asyncio.create_task(cache.single_flight("rk-cancel", slow_factory))
+            await started.wait()
+            waiter = asyncio.create_task(
+                cache.single_flight("rk-cancel", waiter_must_not_lead)
+            )
+            # Let the waiter attach to the shared Future.
+            await asyncio.sleep(0)
+
+            leader.cancel()
+            with self.assertRaises(asyncio.CancelledError):
+                await leader
+
+            # Pre-fix hang: shield(wait) never completed after leader cancel.
+            with self.assertRaises(asyncio.CancelledError):
+                await asyncio.wait_for(waiter, timeout=1.0)
+
+            # Inflight cleared — a fresh flight can succeed.
+            result = await cache.single_flight("rk-cancel", lambda: "retried")
+            self.assertEqual(result, "retried")
+            self.assertEqual(len(cache._inflight), 0)
+
+        asyncio.run(scenario())
+
 
 class TheaterRoutesAbsentFromMainApp(unittest.TestCase):
     def test_main_app_has_no_theater_events_route(self) -> None:
