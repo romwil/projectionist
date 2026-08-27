@@ -1,6 +1,12 @@
 (() => {
   "use strict";
 
+  /**
+   * Lobby theater kiosk client — assume resource-starved Chromium on aging silicon.
+   * Rules: static DOM img pool only, opacity/transform compositing, local idle deck
+   * keeps cycling through SSE hiccups (no error screens, no Image() churn).
+   */
+
   const SILENCE_MS = 45000;
   const MAX_PANELS = 4;
 
@@ -24,9 +30,47 @@
   let currentMode = "empty";
   /** @type {Array<object>} */
   let liveSessions = [];
+  /** URLs that failed to load this session; cleared when deck drops them. */
+  const deadPosters = new Set();
+  /** Cached contrast choice per poster URL — avoid re-sampling on Pi-class CPUs. */
+  const contrastByUrl = new Map();
+  /** Single reused canvas for luminance samples (never allocate per reveal). */
+  const sampleCanvas = document.createElement("canvas");
+  const sampleCtx = sampleCanvas.getContext("2d", { willReadFrequently: true });
 
   function markByte() {
     lastByteAt = Date.now();
+  }
+
+  function pruneDeadPosters(activeUrls) {
+    const keep = new Set(
+      (activeUrls || []).filter((u) => typeof u === "string" && u),
+    );
+    for (const url of Array.from(deadPosters)) {
+      if (!keep.has(url)) deadPosters.delete(url);
+    }
+    for (const url of Array.from(contrastByUrl.keys())) {
+      if (!keep.has(url)) contrastByUrl.delete(url);
+    }
+  }
+
+  function markPosterDead(url) {
+    if (url) deadPosters.add(url);
+  }
+
+  function isPosterDead(url) {
+    return Boolean(url) && deadPosters.has(url);
+  }
+
+  function nextLiveDeckIndex(fromIndex) {
+    if (!deck.length) return 0;
+    let idx = fromIndex % deck.length;
+    for (let i = 0; i < deck.length; i += 1) {
+      const url = deck[idx] && deck[idx].poster_url;
+      if (url && !isPosterDead(url)) return idx;
+      idx = (idx + 1) % deck.length;
+    }
+    return fromIndex % deck.length;
   }
 
   function setHeader(unitEl, label) {
@@ -40,11 +84,12 @@
     if (!track || !fill) return;
     if (!visible) {
       track.hidden = true;
-      fill.style.width = "0%";
+      fill.style.transform = "scaleX(0)";
       return;
     }
     track.hidden = false;
-    fill.style.width = `${Math.max(0, Math.min(1, Number(ratio) || 0)) * 100}%`;
+    const clamped = Math.max(0, Math.min(1, Number(ratio) || 0));
+    fill.style.transform = `scaleX(${clamped})`;
   }
 
   /** Mid-contrast default when canvas sample fails (tainted / empty). */
@@ -69,10 +114,20 @@
   /**
    * Sample the lower ~8% of the visible poster and pick a bar that contrasts
    * with average luminance (light art → dark bar, dark art → light bar).
+   * Reuses one canvas; caches result per URL.
    */
   function syncProgressContrast(unitEl, img) {
     if (!unitEl || !img || !img.naturalWidth || !img.naturalHeight) {
       if (unitEl) applyProgressContrast(unitEl, PROGRESS_FALLBACK);
+      return;
+    }
+    const srcUrl = img.getAttribute("src") || "";
+    if (srcUrl && contrastByUrl.has(srcUrl)) {
+      applyProgressContrast(unitEl, contrastByUrl.get(srcUrl));
+      return;
+    }
+    if (!sampleCtx) {
+      applyProgressContrast(unitEl, PROGRESS_FALLBACK);
       return;
     }
     try {
@@ -81,15 +136,9 @@
       const bandFrac = 0.08;
       const bandH = Math.max(1, Math.floor(srcH * bandFrac));
       const sampleW = Math.min(64, srcW);
-      const canvas = document.createElement("canvas");
-      canvas.width = sampleW;
-      canvas.height = Math.min(16, bandH);
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) {
-        applyProgressContrast(unitEl, PROGRESS_FALLBACK);
-        return;
-      }
-      ctx.drawImage(
+      sampleCanvas.width = sampleW;
+      sampleCanvas.height = Math.min(16, bandH);
+      sampleCtx.drawImage(
         img,
         0,
         srcH - bandH,
@@ -97,10 +146,15 @@
         bandH,
         0,
         0,
-        canvas.width,
-        canvas.height,
+        sampleCanvas.width,
+        sampleCanvas.height,
       );
-      const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const { data } = sampleCtx.getImageData(
+        0,
+        0,
+        sampleCanvas.width,
+        sampleCanvas.height,
+      );
       let sum = 0;
       let count = 0;
       for (let i = 0; i < data.length; i += 4) {
@@ -115,17 +169,16 @@
         return;
       }
       const luminance = sum / count;
-      applyProgressContrast(
-        unitEl,
-        luminance >= 0.52 ? PROGRESS_ON_LIGHT : PROGRESS_ON_DARK,
-      );
+      const colors = luminance >= 0.52 ? PROGRESS_ON_LIGHT : PROGRESS_ON_DARK;
+      if (srcUrl) contrastByUrl.set(srcUrl, colors);
+      applyProgressContrast(unitEl, colors);
     } catch (_) {
       applyProgressContrast(unitEl, PROGRESS_FALLBACK);
     }
   }
 
   function showPoster(unitEl, url) {
-    if (!url) return;
+    if (!url || isPosterDead(url)) return;
     const a = unitEl.querySelector(".slot-a");
     const b = unitEl.querySelector(".slot-b");
     if (!a || !b) return;
@@ -148,15 +201,27 @@
     }
     const onLoad = () => {
       next.removeEventListener("load", onLoad);
+      next.removeEventListener("error", onError);
       reveal();
     };
+    const onError = () => {
+      next.removeEventListener("load", onLoad);
+      next.removeEventListener("error", onError);
+      markPosterDead(url);
+    };
     next.addEventListener("load", onLoad);
+    next.addEventListener("error", onError);
     next.src = url;
     // Prefer waiting for decode so contrast sample sees real pixels; CSS
     // already disables the opacity transition when reduced-motion is set.
     if (next.complete) {
       next.removeEventListener("load", onLoad);
-      reveal();
+      next.removeEventListener("error", onError);
+      if (next.naturalWidth > 0) {
+        reveal();
+      } else {
+        markPosterDead(url);
+      }
     }
   }
 
@@ -201,11 +266,11 @@
       showEmpty();
       return;
     }
-    deckIndex = deckIndex % deck.length;
+    deckIndex = nextLiveDeckIndex(deckIndex);
     showPoster(unit, deck[deckIndex].poster_url);
     rotateTimer = setInterval(() => {
       if (!deck.length) return;
-      deckIndex = (deckIndex + 1) % deck.length;
+      deckIndex = nextLiveDeckIndex(deckIndex + 1);
       showPoster(unit, deck[deckIndex].poster_url);
     }, Math.max(8, rotateSeconds) * 1000);
     currentMode = "now_available";
@@ -293,11 +358,25 @@
       deck = snapshot.available.filter((item) => item && item.poster_url);
     }
 
+    const activeUrls = [];
+    (snapshot.sessions || []).forEach((s) => {
+      if (s && s.poster_url) activeUrls.push(s.poster_url);
+    });
+    deck.forEach((item) => {
+      if (item && item.poster_url) activeUrls.push(item.poster_url);
+    });
+    pruneDeadPosters(activeUrls);
+
     if (snapshot.mode === "now_playing" || snapshot.watching) {
       showNowPlaying(snapshot);
       return;
     }
     if (snapshot.mode === "now_available") {
+      // Keep cycling the local deck; only restart rotator if we left idle.
+      if (currentMode === "now_available" && rotateTimer) {
+        setHeader(units[0], snapshot.header_label || "NOW AVAILABLE");
+        return;
+      }
       startRotator(snapshot.header_label || "NOW AVAILABLE");
       return;
     }
@@ -313,6 +392,8 @@
       }
       source = null;
     }
+    // Do not clearTimers / wipe the board — local idle deck keeps running
+    // while SSE reconnects through a hiccup.
     source = new EventSource("/api/theater/events");
     markByte();
 
@@ -353,6 +434,7 @@
         /* ignore */
       }
     });
+    // Quiet reconnect — never paint an error surface on scrap kiosks.
     source.onerror = markByte;
   }
 
