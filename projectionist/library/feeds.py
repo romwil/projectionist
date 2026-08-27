@@ -736,6 +736,58 @@ def feed_revisit_these(
     }
 
 
+def feed_trending(
+    db: Database,
+    *,
+    limit: int = DEFAULT_FEED_LIMIT,
+    offset: int = 0,
+    media_type: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Popular owned titles by TMDB ``vote_average`` (movies by default)."""
+    capped = _cap_limit(limit, max_limit=MAX_PAGE_LIMIT)
+    off = _cap_offset(offset)
+    media_filter = _normalize_media_type(media_type) or "movie"
+    where_parts = ["vote_average IS NOT NULL", "vote_average > 0"]
+    params: List[Any] = []
+    if media_filter:
+        where_parts.append("media_type = ?")
+        params.append(media_filter)
+    where_sql = " AND ".join(where_parts)
+    with db.connect() as conn:
+        count_row = conn.execute(
+            f"SELECT COUNT(*) AS cnt FROM library_items WHERE {where_sql}",
+            tuple(params),
+        ).fetchone()
+        total = int(count_row["cnt"] or 0)
+        rows = conn.execute(
+            f"""
+            SELECT *
+            FROM library_items
+            WHERE {where_sql}
+            ORDER BY vote_average DESC, title ASC
+            LIMIT ? OFFSET ?
+            """,
+            tuple(params) + (capped, off),
+        ).fetchall()
+    items = [_feed_item(row) for row in rows]
+    note = None
+    if not items:
+        note = (
+            "No rated titles in the library yet — run library sync or metadata "
+            "enrichment for vote_average."
+        )
+    return {
+        "feed": "trending",
+        "items": items,
+        "total": total,
+        "offset": off,
+        "limit": capped,
+        "has_more": off + len(items) < total,
+        "media_type": media_filter,
+        "note": note,
+    }
+
+
 def feed_recent_releases(
     db: Database,
     *,

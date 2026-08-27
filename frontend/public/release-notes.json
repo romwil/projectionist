@@ -1,6 +1,38 @@
 {
-  "generated_at": "2026-08-27T03:28:39Z",
+  "generated_at": "2026-08-27T04:08:08Z",
   "releases": [
+    {
+      "version": "1.33.2",
+      "date": "2026-08-27",
+      "summary": "Lobby theater idle boards can pick a movie feed from the URL — recently added, recently released, or trending — so kiosks can show different poster carousels without extra config.",
+      "highlights": [
+        "**Pick your lobby carousel.** Add `?feed=` to the theater URL to rotate recently added, recently released, or popular movies when nothing is playing.",
+        "**Same quiet Plex behavior.** Feed choice only changes the idle deck; now-playing still comes from live sessions with the same backoff and poster cache."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Theater `?feed=` query param (aliases: `recently-added`, `recent-releases`, `popular`) on the lobby URL and `/api/theater/events`.",
+            "`feed_trending` library helper — owned movies ranked by TMDB `vote_average`.",
+            "Per-feed watcher snapshots so multiple kiosks with different feeds do not clobber each other."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "Idle `now_available` deck sources library feeds instead of hard-coded recently-added only."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend theater suite: 23 passed; full pytest pending pre-ship gate.",
+            "Frontend build/lint pending pre-ship gate."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.33.1",
       "date": "2026-08-27",
@@ -29,6 +61,7 @@
         {
           "title": "Fixed",
           "bullets": [
+            "Empty `available` snapshots clear the local kiosk deck and stop stale `now_available` rotation.",
             "Multi-kiosk poster fan-in no longer stampedes PMS for the same rating keys."
           ]
         },

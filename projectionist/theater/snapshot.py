@@ -9,8 +9,12 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
 from projectionist.config_store import Settings, TheaterSettings
 from projectionist.connectors.plex import PlexActiveSession, PlexClient
 from projectionist.library.db import Database
-from projectionist.library.feeds import feed_recently_added
-from projectionist.theater.normalize import normalize_theater_settings
+from projectionist.library.feeds import (
+    feed_recent_releases,
+    feed_recently_added,
+    feed_trending,
+)
+from projectionist.theater.normalize import normalize_theater_feed, normalize_theater_settings
 
 logger = logging.getLogger(__name__)
 
@@ -117,14 +121,28 @@ def resolve_header_label(theater: TheaterSettings, *, watching: bool) -> str:
     return "NOW PLAYING" if watching else "NOW AVAILABLE"
 
 
-def build_available_deck(db: Database, *, limit: int = 16) -> List[Dict[str, str]]:
+def _idle_feed_payload(db: Database, *, feed: str, limit: int) -> Dict[str, Any]:
+    mode = normalize_theater_feed(feed)
+    if mode == "recently_released":
+        return feed_recent_releases(db, limit=limit, days=365, media_type="movie")
+    if mode == "trending":
+        return feed_trending(db, limit=limit, media_type="movie")
+    return feed_recently_added(db, limit=limit, days=365, media_type="movie")
+
+
+def build_available_deck(
+    db: Database,
+    *,
+    limit: int = 16,
+    feed: str = "recently_added",
+) -> List[Dict[str, str]]:
     try:
-        feed = feed_recently_added(db, limit=limit, days=365, media_type="movie")
+        payload = _idle_feed_payload(db, feed=feed, limit=limit)
     except Exception:  # noqa: BLE001
-        logger.debug("theater recently-added deck failed", exc_info=True)
+        logger.debug("theater idle deck failed feed=%s", feed, exc_info=True)
         return []
     deck: List[Dict[str, str]] = []
-    for item in feed.get("items") or []:
+    for item in payload.get("items") or []:
         rating_key = str(item.get("rating_key") or "").strip()
         poster = str(item.get("poster_url") or "").strip()
         if not rating_key or not poster:
@@ -174,7 +192,9 @@ def build_board_snapshot(
     *,
     sessions: Optional[Sequence[PlexActiveSession]] = None,
     fetch_sessions: bool = True,
+    feed: str = "recently_added",
 ) -> Dict[str, Any]:
+    idle_feed = normalize_theater_feed(feed)
     theater = normalize_theater_settings(getattr(settings, "theater", None))
     active: List[PlexActiveSession] = list(sessions or [])
     if fetch_sessions and sessions is None and theater.enabled:
@@ -209,7 +229,7 @@ def build_board_snapshot(
         available: List[Dict[str, str]] = []
     elif theater.idle_mode == "now_available":
         mode = "now_available"
-        available = build_available_deck(db, limit=16)
+        available = build_available_deck(db, limit=16, feed=idle_feed)
     else:
         mode = "empty"
         available = []
@@ -223,6 +243,7 @@ def build_board_snapshot(
         "multi_mode": theater.multi_mode,
         "idle_mode": theater.idle_mode,
         "rotate_seconds": theater.rotate_seconds,
+        "feed": idle_feed,
         "mode": mode,
         "watching": watching,
         "sessions": board_sessions,
