@@ -1,6 +1,6 @@
 # Help
 
-Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Live**, **Inbox**, **My Journey**, **Related titles**, and — for owners — idle curation and Live Channels craft.
+Projectionist is a private cinema companion for the library you already own. It talks to *your* Plex catalog — not a Netflix top-10 — so every recommendation, comparison, and "what should we watch?" is grounded in titles you actually have. This page is the in-app guide for **Chat**, **Search**, **Explore**, **Live**, **Inbox**, **My Journey**, **Related titles**, and — for owners — idle curation, **Lobby Theater**, and Live Channels craft.
 
 New here? Start with **[Chat](/chat)** and just ask for something in plain language. The top bar keeps Search, Chat, Explore, Live (when stations are on the air), Inbox, My Journey, and Settings as peer destinations (owners also see Admin). Prefer names to icons? The hamburger menu lists those same destinations by label under **Navigate**, then **More** for Related titles, Tags, Watchlist, Library, Help, Privacy, and About — so nothing is reachable from only one of the two. Everything below shows you the shortest path to a result, then explains how it works so you can trust it.
 
@@ -667,6 +667,28 @@ Projectionist can expose your **indexed library** to external tools over MCP, ga
 | Full / in-stack MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` | Deeper internal fields + confirm-gated *arr propose tools for trusted LAN automation |
 
 Generate/rotate both in **Admin → Advanced** (or set the env vars); the keys must differ. Privacy mode never exposes `X-Plex-Token` media URLs, `rating_key`, or secrets. Details and the exposure model: [MCP.md](MCP.md) and [Privacy](/privacy).
+
+## Lobby Theater (owners)
+
+**Lobby Theater** is a second HTTP listener for wall-mounted kiosks — not part of the main SPA on `:8788`. It shows live Plex **now playing** when sessions exist; otherwise an idle **now available** poster carousel sourced from your indexed library.
+
+**Enable and tune (Admin → Lobby):** orientation, audience filter, idle mode (`empty` vs `now_available`), multi-poster layout, header mode (dynamic feed labels vs static text), and rotate interval. Save persists to `settings.json`; the theater watcher picks up changes on the next tick.
+
+**Open the kiosk:** `http://<host>:8791/` (default theater port — map it LAN-only in Docker/Unraid). Add a feed for the idle deck:
+
+| Feed | URL example |
+|------|-------------|
+| Recently added (default) | `/?feed=recently_added` or `/` |
+| Recently released | `/?feed=recently_released` |
+| Trending / popular | `/?feed=trending` or `/?feed=popular` |
+
+When `header_mode` is **dynamic**, idle boards show **RECENTLY ADDED**, **RECENTLY RELEASED**, or **TRENDING**; **now playing** always shows **NOW PLAYING**. With **static** header mode, the top plate shows your custom label (e.g. venue name) and the active feed or **NOW PLAYING** appears as a caption at the bottom of the poster, above the progress bar when something is playing.
+
+**Security:** Theater routes are unauthenticated but **LAN-gated** (RFC1918 / loopback / Docker bridge). Never expose `:8791` on a public VIP or through Cloudflare/NPM. See [SECURITY.md](SECURITY.md).
+
+**Ops notes:** Multiple kiosks with different `?feed=` values share one Plex poll per watcher tick; poster responses use ETag/304 and a shared cache under `{DATA_DIR}/theater-poster-cache`. Maintainer rollout: [docs/ops/AUTOMAT.md](ops/AUTOMAT.md).
+
+---
 
 ## Live Channels (owners)
 

@@ -2,7 +2,7 @@
 
 **Cinema intelligence for your personal archive.**
 
-Projectionist is an open-source, self-hosted cinema intelligence engine and agentic companion for personal media libraries — local-first, zero-telemetry, with vector mapping, multi-signal taste modeling, MCP access, and hardened multi-tenant roles (Owner / Member / Youth / Guest). It indexes what you own, talks with a BYO LLM, and only writes to Radarr/Sonarr/Seerr after you confirm.
+Projectionist is an open-source, self-hosted cinema intelligence engine and agentic companion for personal media libraries — local-first, zero-telemetry, with vector mapping, multi-signal taste modeling, MCP access, and hardened multi-tenant roles (Owner / Member / Youth / Guest). It indexes what you own, talks with a BYO LLM, only writes to Radarr/Sonarr/Seerr after you confirm, and can drive **Lobby Theater** wall kiosks (now playing + library-fed idle carousels) alongside **Live Channels** and the main cinema workspace.
 
 ## Why Projectionist?
 

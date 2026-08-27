@@ -136,6 +136,18 @@ def resolve_header_label(
     return _IDLE_FEED_HEADER_LABELS.get(mode, "NOW AVAILABLE")
 
 
+def resolve_status_label(
+    *,
+    watching: bool,
+    feed: str = "recently_added",
+) -> str:
+    """Feed/mode caption for the poster footer — always dynamic, even when header is static."""
+    if watching:
+        return "NOW PLAYING"
+    mode = normalize_theater_feed(feed)
+    return _IDLE_FEED_HEADER_LABELS.get(mode, "NOW AVAILABLE")
+
+
 def _idle_feed_payload(db: Database, *, feed: str, limit: int) -> Dict[str, Any]:
     mode = normalize_theater_feed(feed)
     if mode == "recently_released":
@@ -250,10 +262,14 @@ def build_board_snapshot(
         available = []
 
     header_label = resolve_header_label(theater, watching=watching, feed=idle_feed)
+    status_label = ""
+    if mode in {"now_playing", "now_available"}:
+        status_label = resolve_status_label(watching=watching, feed=idle_feed)
     return {
         "enabled": bool(theater.enabled),
         "header_mode": theater.header_mode,
         "header_label": header_label,
+        "status_label": status_label,
         "orientation": theater.orientation,
         "multi_mode": theater.multi_mode,
         "idle_mode": theater.idle_mode,

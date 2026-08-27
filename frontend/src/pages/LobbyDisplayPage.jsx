@@ -154,8 +154,8 @@ export default function LobbyDisplayPage() {
               onChange={(e) => patch({ header_mode: e.target.value })}
               data-testid="lobby-header-mode"
             >
-              <option value="dynamic">Dynamic (NOW PLAYING / NOW AVAILABLE)</option>
-              <option value="static">Static label</option>
+              <option value="dynamic">Dynamic (NOW PLAYING / feed labels on header)</option>
+              <option value="static">Static label (feed labels on poster footer)</option>
             </select>
           </label>
 
