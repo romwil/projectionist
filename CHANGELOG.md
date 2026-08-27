@@ -21,6 +21,7 @@ Lobby theater stops stampeding Plex when kiosks fan in: adaptive watcher cadence
 - Circuit-open path skips Plex session fetches and reuses the last snapshot when possible.
 
 ### Fixed
+- Empty `available` snapshots clear the local kiosk deck and stop stale `now_available` rotation.
 - Multi-kiosk poster fan-in no longer stampedes PMS for the same rating keys.
 
 ### Verification
