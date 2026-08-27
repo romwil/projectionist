@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# PULL-ONLY from Docker Hub. Does not build images.
+# Not a substitute for docker-release.sh. CA/Unraid proof = pull a Hub tag (docs/RELEASE.md).
+# Do not use a host-built image as release proof.
 # Projectionist Unraid rollout: pull + recreate via plain Docker CLI
 # (stock Unraid has neither Compose v2 nor docker-compose).
 # Prefer `docker compose` / `docker-compose` when available; otherwise

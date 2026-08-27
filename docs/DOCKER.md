@@ -157,8 +157,8 @@ cd /mnt/user/appdata/projectionist
 # ./unraid-force-pull.sh latest
 ```
 
-Maintainer Automat LAN hosts, version-truth rules, and QA teardown:
-[ops/AUTOMAT.md](ops/AUTOMAT.md).
+Maintainer Automat LAN hosts, version-truth rules, Hub-first QA (Path B pull vs Path A host build), and QA teardown:
+[ops/AUTOMAT.md](ops/AUTOMAT.md). `rollout.sh` is **pull-only** — never treat a host `docker build` as Unraid CA proof.
 
 `rollout.sh` uses plain Docker CLI on Unraid (Compose is usually absent). If `docker compose` / `docker-compose` is available it prefers that instead. Same-named containers are stop/rm only — `./config` is never wiped. Optional seed env: copy `.env.example` → `.env` (secrets usually already live in `config/`).
 
@@ -223,7 +223,7 @@ If Unraid, Caddy, Nginx Proxy Manager, Cloudflare, or another reverse proxy repl
 
 ## Publishing multi-arch images (maintainers)
 
-Full ship checklist (version parity, tests, CHANGELOG, GitHub release, then images): **[RELEASE.md](RELEASE.md)**.
+Full ship checklist (**Hub-first**: publish `romwil/projectionist:X.Y.Z`, then PR/tag, then CA proof via Hub pull — not a host `docker build` / Path A): **[RELEASE.md](RELEASE.md)**. GitHub merge alone is not a release.
 
 Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use the release script:
 
