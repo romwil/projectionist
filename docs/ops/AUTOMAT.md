@@ -57,6 +57,47 @@ Automat members reach the household at `https://projectionist.automat.vip`. That
 | macOS mount (common) | `/Volumes/appdata/projectionist` |
 | Canonical script in git | `scripts/unraid-rollout.sh` → sync to appdata as `rollout.sh` |
 
+### Canonical prod appdata tree (user install — not a git clone)
+
+Production appdata is a **rollout kit + live `/config` bind mount**, not a copy of this repository. Agents must **not** `git clone` into `/mnt/user/appdata/projectionist` (or the macOS SMB mirror).
+
+```
+/mnt/user/appdata/projectionist/
+├── config/                  # DATA_DIR — SQLite, settings.json, theater cache, Tunarr, logs (KEEP; never wipe for rollout)
+│   ├── projectionist.db
+│   ├── settings.json
+│   ├── jobs_state.json
+│   ├── theater-poster-cache/
+│   ├── tunarr/
+│   └── …
+├── rollout.sh               # from scripts/unraid-rollout.sh (pull-only Hub tag + recreate)
+├── unraid-force-pull.sh     # from scripts/unraid-force-pull.sh (image refresh before Dockerman Force Update)
+├── docker-compose.yml       # from docker-compose.unraid.yml (optional; plain docker also works on stock Unraid)
+├── .env                     # optional host overrides (Plex/TMDB/LLM keys, TZ, MOUNT_DOCKER_SOCK) — not in git
+└── .env.example             # from scripts/unraid.env.example (placeholders only)
+```
+
+**Do not place in prod appdata:** `.git/`, `frontend/`, `tests/`, `.venv`, CI caches, or any full source tree. Development belongs in a normal git checkout (e.g. maintainer laptop), not on Unraid appdata.
+
+**Sync kit from repo after script changes** (does not restart prod):
+
+```bash
+cp scripts/unraid-rollout.sh /mnt/user/appdata/projectionist/rollout.sh
+cp docker-compose.unraid.yml /mnt/user/appdata/projectionist/docker-compose.yml
+cp scripts/unraid.env.example /mnt/user/appdata/projectionist/.env.example
+cp scripts/unraid-force-pull.sh /mnt/user/appdata/projectionist/unraid-force-pull.sh
+```
+
+Legacy installs that never migrated may still use `/mnt/user/appdata/curatorx/` with the same layout (`config/` + rollout kit).
+
+### Related maintainer paths (not prod appdata)
+
+| Host path | Role | Git clone? |
+|-----------|------|------------|
+| `/mnt/user/appdata/projectionist-qa` | QA sidecar **DATA_DIR** only (`settings.json`, `projectionist.db`, …) | No — config volume |
+| `/mnt/user/appdata/projectionist-qa-scripts` | QA compose template, `.env.qa`, `seed-qa-roles.sh`, `pentest/`, `qa-runs/` | No — host-local kit (see `qa-runs/QA-LIFECYCLE.md`) |
+| `/mnt/user/appdata/projectionist-qa-build/` | Optional **Path A** rsync target (`src/`, `src-lobby/`, `src-theater/`) for host `docker build` on Automat | Source trees only — **not** CA/release proof; prefer Hub pull (Path B) |
+
 `rollout.sh` is **pull-only** from Docker Hub (`romwil/projectionist:X.Y.Z`). It does **not** build from a git tree. Prod promote is step 4 of the Hub-first ship path in [RELEASE.md](../RELEASE.md) — only after Hub publish + CA proof pull.
 
 ```bash
