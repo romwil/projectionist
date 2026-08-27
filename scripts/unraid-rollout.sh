@@ -9,7 +9,8 @@
 # Does NOT wipe ./config (settings.json, SQLite, secrets).
 #
 # Canonical copy lives in the repo as scripts/unraid-rollout.sh — keep the
-# host copy in sync after upgrades:
+# host copy in sync after upgrades. Host appdata is rollout kit + ./config only
+# (see docs/ops/AUTOMAT.md — do not git clone the full repo into appdata):
 #   cp scripts/unraid-rollout.sh /mnt/user/appdata/projectionist/rollout.sh
 #   cp docker-compose.unraid.yml /mnt/user/appdata/projectionist/docker-compose.yml
 #   cp scripts/unraid.env.example /mnt/user/appdata/projectionist/.env.example

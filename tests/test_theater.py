@@ -26,7 +26,7 @@ from projectionist.theater import (
 )
 from projectionist.theater.app import create_theater_app, theater_peer_allowed
 from projectionist.theater.hub import TheaterHub, reset_theater_hub_for_tests
-from projectionist.theater.normalize import normalize_theater_settings
+from projectionist.theater.normalize import normalize_theater_feed, normalize_theater_settings
 from projectionist.theater.poster import fetch_poster_bytes
 from projectionist.theater.poster_cache import (
     TheaterPosterCache,
@@ -34,6 +34,7 @@ from projectionist.theater.poster_cache import (
     reset_poster_caches_for_tests,
 )
 from projectionist.theater.snapshot import (
+    build_available_deck,
     build_board_snapshot,
     filter_sessions,
     resolve_header_label,
@@ -83,6 +84,13 @@ class NormalizeTheaterTests(unittest.TestCase):
         self.assertEqual(len(theater.static_label), 24)
         self.assertEqual(theater.rotate_seconds, 8)
 
+    def test_normalize_feed_aliases(self) -> None:
+        self.assertEqual(normalize_theater_feed(None), "recently_added")
+        self.assertEqual(normalize_theater_feed("recently-added"), "recently_added")
+        self.assertEqual(normalize_theater_feed("recent-releases"), "recently_released")
+        self.assertEqual(normalize_theater_feed("popular"), "trending")
+        self.assertEqual(normalize_theater_feed("nope"), "recently_added")
+
 
 class SnapshotTests(unittest.TestCase):
     def setUp(self) -> None:
@@ -97,6 +105,20 @@ class SnapshotTests(unittest.TestCase):
                 "year": 2020,
                 "poster_url": "https://image.tmdb.org/t/p/w500/example.jpg",
                 "added_at": int(time.time()) - 3600,
+                "vote_average": 8.2,
+                "release_date": "2026-01-15",
+            }
+        )
+        self.db.upsert_library_item(
+            {
+                "rating_key": "101",
+                "media_type": "movie",
+                "title": "Older Hit",
+                "year": 2019,
+                "poster_url": "https://image.tmdb.org/t/p/w500/older.jpg",
+                "added_at": int(time.time()) - 86400 * 400,
+                "vote_average": 9.1,
+                "release_date": "2019-06-01",
             }
         )
 
@@ -128,7 +150,58 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(len(snap["sessions"]), 1)
         self.assertNotIn("title", snap["sessions"][0])
         self.assertIn("/api/theater/poster?rk=", snap["sessions"][0]["poster_url"])
-        self.assertEqual(resolve_header_label(settings.theater, watching=True), "NOW PLAYING")
+        self.assertEqual(
+            resolve_header_label(settings.theater, watching=True, feed="recently_added"),
+            "NOW PLAYING",
+        )
+
+    def test_resolve_header_label_per_feed(self) -> None:
+        theater = TheaterSettings(
+            enabled=True,
+            idle_mode="now_available",
+            header_mode="dynamic",
+        )
+        self.assertEqual(
+            resolve_header_label(theater, watching=False, feed="recently_added"),
+            "RECENTLY ADDED",
+        )
+        self.assertEqual(
+            resolve_header_label(theater, watching=False, feed="recently_released"),
+            "RECENTLY RELEASED",
+        )
+        self.assertEqual(
+            resolve_header_label(theater, watching=False, feed="trending"),
+            "TRENDING",
+        )
+
+    def test_static_header_respects_override_when_idle(self) -> None:
+        theater = TheaterSettings(
+            enabled=True,
+            header_mode="static",
+            static_label="MY LOBBY",
+        )
+        self.assertEqual(
+            resolve_header_label(theater, watching=False, feed="trending"),
+            "MY LOBBY",
+        )
+
+    def test_snapshot_header_label_follows_feed(self) -> None:
+        settings = Settings(
+            theater=TheaterSettings(enabled=True, idle_mode="now_available"),
+        )
+        for feed, expected in (
+            ("recently_added", "RECENTLY ADDED"),
+            ("recently_released", "RECENTLY RELEASED"),
+            ("trending", "TRENDING"),
+        ):
+            snap = build_board_snapshot(
+                self.db,
+                settings,
+                sessions=[],
+                fetch_sessions=False,
+                feed=feed,
+            )
+            self.assertEqual(snap["header_label"], expected, msg=feed)
 
     def test_idle_now_available_deck(self) -> None:
         settings = Settings(
@@ -142,6 +215,24 @@ class SnapshotTests(unittest.TestCase):
         )
         self.assertEqual(snap["mode"], "now_available")
         self.assertGreaterEqual(len(snap["available"]), 1)
+
+    def test_idle_deck_honors_feed_param(self) -> None:
+        added = build_available_deck(self.db, limit=8, feed="recently_added")
+        released = build_available_deck(self.db, limit=8, feed="recently_released")
+        trending = build_available_deck(self.db, limit=8, feed="trending")
+        self.assertEqual({row["id"] for row in added}, {"100"})
+        self.assertEqual({row["id"] for row in released}, {"100"})
+        self.assertEqual(trending[0]["id"], "101")
+        self.assertGreaterEqual(len(trending), 2)
+        snap = build_board_snapshot(
+            self.db,
+            Settings(theater=TheaterSettings(enabled=True, idle_mode="now_available")),
+            sessions=[],
+            fetch_sessions=False,
+            feed="trending",
+        )
+        self.assertEqual(snap["feed"], "trending")
+        self.assertEqual(snap["available"][0]["id"], "101")
 
     def test_circuit_open_skips_plex_client(self) -> None:
         reset_host_circuits()
@@ -210,7 +301,7 @@ class TheaterAppTests(unittest.TestCase):
         hub: TheaterHub = self.app.state.theater_hub
 
         async def first_event() -> str:
-            agen = hub.subscribe()
+            agen = hub.subscribe(feed="trending")
             try:
                 return await asyncio.wait_for(agen.__anext__(), timeout=2.0)
             finally:
@@ -218,10 +309,24 @@ class TheaterAppTests(unittest.TestCase):
 
         chunk = asyncio.run(first_event())
         self.assertIn("event: hydrate", chunk)
-        self.assertIn('"mode"', chunk)
+        self.assertIn('"feed":"trending"', chunk.replace(" ", ""))
 
         routes = {getattr(route, "path", "") for route in self.app.routes}
         self.assertIn("/api/theater/events", routes)
+
+    def test_events_endpoint_accepts_feed_query(self) -> None:
+        hub: TheaterHub = self.app.state.theater_hub
+
+        async def first_event(feed: str) -> str:
+            agen = hub.subscribe(feed=feed)
+            try:
+                return await asyncio.wait_for(agen.__anext__(), timeout=2.0)
+            finally:
+                await agen.aclose()
+
+        chunk = asyncio.run(first_event("recent-releases"))
+        self.assertIn("event: hydrate", chunk)
+        self.assertIn('"feed":"recently_released"', chunk.replace(" ", ""))
 
     def test_wan_reject(self) -> None:
         request = MagicMock()
@@ -297,27 +402,56 @@ class TheaterAppTests(unittest.TestCase):
         host_circuits.record_failure(self.settings.plex_url, "timeout")
         before = hub.plex_call_count
         with patch.object(TheaterHub, "subscriber_count", property(lambda self: 1)):
-            with patch(
-                "projectionist.theater.hub.build_board_snapshot",
-                return_value={
-                    "enabled": True,
-                    "mode": "empty",
-                    "watching": False,
-                    "sessions": [],
-                    "available": [],
-                    "header_label": "NOW PLAYING",
-                    "header_mode": "dynamic",
-                    "orientation": "landscape",
-                    "multi_mode": "rotator",
-                    "idle_mode": "empty",
-                    "rotate_seconds": 12,
-                },
-            ) as snap:
-                hub._tick()
+            with patch.object(
+                TheaterHub,
+                "_active_feeds",
+                return_value={"recently_added"},
+            ):
+                with patch(
+                    "projectionist.theater.hub.build_board_snapshot",
+                    return_value={
+                        "enabled": True,
+                        "mode": "empty",
+                        "watching": False,
+                        "sessions": [],
+                        "available": [],
+                        "header_label": "NOW PLAYING",
+                        "header_mode": "dynamic",
+                        "orientation": "landscape",
+                        "multi_mode": "rotator",
+                        "idle_mode": "empty",
+                        "rotate_seconds": 12,
+                        "feed": "recently_added",
+                    },
+                ) as snap:
+                    hub._tick()
         # Circuit open path must not count a Plex poll.
         self.assertEqual(hub.plex_call_count, before)
         snap.assert_called()
         self.assertTrue(hub.degraded)
+
+    def test_multiple_feeds_single_plex_call_per_tick(self) -> None:
+        self.settings = Settings(
+            plex_url="http://plex.local:32400",
+            plex_token="token",
+            theater=TheaterSettings(enabled=True, idle_mode="now_available"),
+        )
+        hub: TheaterHub = self.app.state.theater_hub
+        hub.settings_factory = lambda: self.settings
+        before = hub.plex_call_count
+        with patch.object(TheaterHub, "subscriber_count", property(lambda self: 2)):
+            with patch.object(
+                TheaterHub,
+                "_active_feeds",
+                return_value={"recently_added", "trending"},
+            ):
+                with patch(
+                    "projectionist.connectors.plex.PlexClient.active_sessions",
+                    return_value=[],
+                ) as active_sessions:
+                    hub._tick()
+        self.assertEqual(hub.plex_call_count, before + 1)
+        active_sessions.assert_called_once()
 
     def test_poster_rate_limit(self) -> None:
         fake_body = b"\xff\xd8\xfffakejpeg"

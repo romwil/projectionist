@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+## [1.33.2] — 2026-08-27
+
+Lobby theater idle boards can pick a movie feed from the URL — recently added, recently released, or trending — so kiosks can show different poster carousels without extra config.
+
+### Highlights
+- **Pick your lobby carousel.** Add `?feed=` to the theater URL to rotate recently added, recently released, or popular movies when nothing is playing.
+- **Same quiet Plex behavior.** Feed choice only changes the idle deck; now-playing still comes from live sessions with the same backoff and poster cache.
+
+### Added
+- Theater `?feed=` query param (aliases: `recently-added`, `recent-releases`, `popular`) on the lobby URL and `/api/theater/events`.
+- `feed_trending` library helper — owned movies ranked by TMDB `vote_average`.
+- Per-feed watcher snapshots so multiple kiosks with different feeds do not clobber each other.
+
+### Changed
+- Idle `now_available` deck sources library feeds instead of hard-coded recently-added only.
+- Lobby theater header reflects the active idle feed (`RECENTLY ADDED`, `RECENTLY RELEASED`, `TRENDING`) instead of generic `NOW AVAILABLE`.
+
+### Verification
+- Backend: 1,978 passed, 6 skipped, 34 subtests passed; 76.02% coverage (74% required).
+- Frontend: ESLint 0 errors (134 warnings pre-existing); production Vite build passed.
+- Theater suite: 23 passed (feed param, per-feed hub, trending deck).
+
 ## [1.33.1] — 2026-08-27
 
 Lobby theater stops stampeding Plex when kiosks fan in: adaptive watcher cadence, circuit-open degradation, and a shared poster cache with ETag/304 and rate limits.
