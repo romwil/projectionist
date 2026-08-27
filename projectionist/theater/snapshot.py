@@ -114,11 +114,26 @@ def filter_sessions(
     return kept
 
 
-def resolve_header_label(theater: TheaterSettings, *, watching: bool) -> str:
+_IDLE_FEED_HEADER_LABELS = {
+    "recently_added": "RECENTLY ADDED",
+    "recently_released": "RECENTLY RELEASED",
+    "trending": "TRENDING",
+}
+
+
+def resolve_header_label(
+    theater: TheaterSettings,
+    *,
+    watching: bool,
+    feed: str = "recently_added",
+) -> str:
     if theater.header_mode == "static":
         label = str(theater.static_label or "").strip()
         return label or "NOW PLAYING"
-    return "NOW PLAYING" if watching else "NOW AVAILABLE"
+    if watching:
+        return "NOW PLAYING"
+    mode = normalize_theater_feed(feed)
+    return _IDLE_FEED_HEADER_LABELS.get(mode, "NOW AVAILABLE")
 
 
 def _idle_feed_payload(db: Database, *, feed: str, limit: int) -> Dict[str, Any]:
@@ -234,7 +249,7 @@ def build_board_snapshot(
         mode = "empty"
         available = []
 
-    header_label = resolve_header_label(theater, watching=watching)
+    header_label = resolve_header_label(theater, watching=watching, feed=idle_feed)
     return {
         "enabled": bool(theater.enabled),
         "header_mode": theater.header_mode,
