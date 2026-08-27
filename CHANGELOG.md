@@ -17,6 +17,7 @@ Lobby theater idle boards can pick a movie feed from the URL — recently added,
 
 ### Changed
 - Idle `now_available` deck sources library feeds instead of hard-coded recently-added only.
+- Lobby theater header reflects the active idle feed (`RECENTLY ADDED`, `RECENTLY RELEASED`, `TRENDING`) instead of generic `NOW AVAILABLE`.
 
 ### Verification
 - Backend: 1,978 passed, 6 skipped, 34 subtests passed; 76.02% coverage (74% required).

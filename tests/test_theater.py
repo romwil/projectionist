@@ -150,7 +150,58 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(len(snap["sessions"]), 1)
         self.assertNotIn("title", snap["sessions"][0])
         self.assertIn("/api/theater/poster?rk=", snap["sessions"][0]["poster_url"])
-        self.assertEqual(resolve_header_label(settings.theater, watching=True), "NOW PLAYING")
+        self.assertEqual(
+            resolve_header_label(settings.theater, watching=True, feed="recently_added"),
+            "NOW PLAYING",
+        )
+
+    def test_resolve_header_label_per_feed(self) -> None:
+        theater = TheaterSettings(
+            enabled=True,
+            idle_mode="now_available",
+            header_mode="dynamic",
+        )
+        self.assertEqual(
+            resolve_header_label(theater, watching=False, feed="recently_added"),
+            "RECENTLY ADDED",
+        )
+        self.assertEqual(
+            resolve_header_label(theater, watching=False, feed="recently_released"),
+            "RECENTLY RELEASED",
+        )
+        self.assertEqual(
+            resolve_header_label(theater, watching=False, feed="trending"),
+            "TRENDING",
+        )
+
+    def test_static_header_respects_override_when_idle(self) -> None:
+        theater = TheaterSettings(
+            enabled=True,
+            header_mode="static",
+            static_label="MY LOBBY",
+        )
+        self.assertEqual(
+            resolve_header_label(theater, watching=False, feed="trending"),
+            "MY LOBBY",
+        )
+
+    def test_snapshot_header_label_follows_feed(self) -> None:
+        settings = Settings(
+            theater=TheaterSettings(enabled=True, idle_mode="now_available"),
+        )
+        for feed, expected in (
+            ("recently_added", "RECENTLY ADDED"),
+            ("recently_released", "RECENTLY RELEASED"),
+            ("trending", "TRENDING"),
+        ):
+            snap = build_board_snapshot(
+                self.db,
+                settings,
+                sessions=[],
+                fetch_sessions=False,
+                feed=feed,
+            )
+            self.assertEqual(snap["header_label"], expected, msg=feed)
 
     def test_idle_now_available_deck(self) -> None:
         settings = Settings(
