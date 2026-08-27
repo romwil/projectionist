@@ -430,6 +430,29 @@ class TheaterAppTests(unittest.TestCase):
         snap.assert_called()
         self.assertTrue(hub.degraded)
 
+    def test_multiple_feeds_single_plex_call_per_tick(self) -> None:
+        self.settings = Settings(
+            plex_url="http://plex.local:32400",
+            plex_token="token",
+            theater=TheaterSettings(enabled=True, idle_mode="now_available"),
+        )
+        hub: TheaterHub = self.app.state.theater_hub
+        hub.settings_factory = lambda: self.settings
+        before = hub.plex_call_count
+        with patch.object(TheaterHub, "subscriber_count", property(lambda self: 2)):
+            with patch.object(
+                TheaterHub,
+                "_active_feeds",
+                return_value={"recently_added", "trending"},
+            ):
+                with patch(
+                    "projectionist.connectors.plex.PlexClient.active_sessions",
+                    return_value=[],
+                ) as active_sessions:
+                    hub._tick()
+        self.assertEqual(hub.plex_call_count, before + 1)
+        active_sessions.assert_called_once()
+
     def test_poster_rate_limit(self) -> None:
         fake_body = b"\xff\xd8\xfffakejpeg"
         with patch(
