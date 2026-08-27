@@ -8,17 +8,62 @@ Step-by-step maintainer / agent guide for shipping a Projectionist version. Foll
 
 ---
 
+## Canonical ship path (Hub-first)
+
+A version is **not released** until Docker Hub has `romwil/projectionist:X.Y.Z` (plus the script’s line / `latest` tags). GitHub merge alone, a local Unraid `docker build`, or a host-built QA sidecar is **not** a release.
+
+| Step | What | Gate |
+|------|------|------|
+| **0. Prepare** | Semver bump + CHANGELOG + tests on a **PR branch** (branch protection → no direct push to `main`) | CI green; versions lockstep |
+| **1. Hub** | `./scripts/docker-release.sh X.Y.Z` → `romwil/projectionist:{X.Y.Z,X.Y,latest}` (+ curatorx dual-tag) | `docker buildx imagetools inspect romwil/projectionist:X.Y.Z` succeeds |
+| **2. GitHub** | Merge PR → `main`, annotated tag `vX.Y.Z`, `gh release create` | Tag + release match Hub version |
+| **3. CA proof** | On Automat (or equivalent), **pull** that Hub tag onto QA / a disposable container — same path Unraid CA will use | Running image digest matches Hub; **not** a Path A host `docker build` |
+| **4. Prod** | `cd …/appdata/projectionist && ./rollout.sh X.Y.Z` (pull-only) | `/api/health` + `/app/.build-info` show `X.Y.Z` |
+
+Order notes:
+
+- Prepare (version files + CHANGELOG) **before** Hub publish — `docker-release.sh` embeds `PROJECTIONIST_VERSION` and requires the CHANGELOG heading for `X.Y.Z`.
+- Hub may be published from the release PR branch **before** merge when the tree is release-ready; do not merge and claim “shipped” if Hub still lacks `:X.Y.Z`.
+- Skip step 4 until the user asks to promote Automat prod. Never stop prod while iterating on QA.
+
+### Anti-patterns (do not do)
+
+| Anti-pattern | Why it fails |
+|--------------|--------------|
+| Merge / tag on GitHub and call it released **without** Hub `:X.Y.Z` | Unraid CA installs from Hub; GitHub alone does not ship the image |
+| Version bump in tree **without** `./scripts/docker-release.sh X.Y.Z` | Numbering drifts from what CA / `rollout.sh` can pull |
+| Claim “`X.Y.Z` is out” when `romwil/projectionist:X.Y.Z` is missing on Hub | False release; members and Automat cannot pull it |
+| Test a **host-built** QA image (Path A: `docker build` on Automat from a git tree) as proof of the **Unraid CA** path | CA pulls Hub tags; Path A never exercises that path |
+| Treat `docker compose up --build` / local laptop image as CA / Unraid proof | Same gap — not multi-arch Hub manifests |
+| Push straight to `main` / skip the PR | Violates branch protection; bypasses review + CI |
+| Promote Automat prod from a local build or untagged WIP | Prod must pull a published Hub tag via `rollout.sh` |
+| Reuse an old version number for a new Hub push | Breaks digest expectations; always bump semver for a new ship |
+
+### Semver rules
+
+| Change | Bump | Example |
+|--------|------|---------|
+| Bugfix / hotfix (single-flight cancel, typo, crash) | **patch** | `1.33.1` → `1.33.2` |
+| New feature / user-visible capability | **minor** | `1.33.2` → `1.34.0` |
+| Intentional breaking change | **major** | only when deliberately breaking |
+
+- Always bump for a new Hub publish — never republish new bits under an already-shipped `X.Y.Z`.
+- Keep GitHub tag `vX.Y.Z`, CHANGELOG heading, lockstep files, and Hub tags on the **same** number.
+
+
+---
+
 ## Authority & coordination
 
 - **Commit / push / tag / `gh release` / Docker Hub push** only when the user explicitly asks to ship a release (or clearly asks to commit/push those steps). Otherwise prepare files and stop.
 - Do **not** bump versions or cut a release while another agent is mid-feature on the same branch unless the user coordinates it.
-- Prefer `main` (or the branch the user names). Expect a clean enough tree that release-only files are intentional; do not discard unrelated in-progress work.
+- **Require** a **PR into `main`** (branch protection). Do **not** push directly to `main`; never bypass protection — use a PR even for hotfixes. Expect a clean enough tree that release-only files are intentional; do not discard unrelated in-progress work.
 
 ---
 
 ## Preflight
 
-1. Confirm the intended semver `X.Y.Z` (patch for fixes, minor for features, major only when intentionally breaking).
+1. Confirm the intended semver `X.Y.Z` (see [Semver rules](#semver-rules) above).
 2. Confirm no conflicting in-flight version bump on the branch (`git status`, recent `CHANGELOG.md` / `_version.py`).
 3. Ensure Docker buildx + Hub login are available before the image step (`docker buildx version`, `docker info`). On Mac without Desktop, Colima must be running ([DOCKER.md](DOCKER.md)).
 
@@ -71,7 +116,7 @@ Run these before tagging when the ship matches the trigger. Lab / QA only — ne
 | Trigger | Recommended gate | Command / action |
 |---------|------------------|------------------|
 | Security-touching (authz, MCP, prompt fencing, sessions, webhooks, headers, packaging) | Pentest harness green | `python3 scripts/security/pentest/run-checklist.py` (disposable lab; see [security/pentests/README.md](security/pentests/README.md)) |
-| Chrome / gating / role-shell ships | Interactive UI QA **delta** on `:8790` | `.cursor/skills/interactive-ui-qa` — open bugs + tagged IDs; never `:8788` |
+| Chrome / gating / role-shell ships | Interactive UI QA **delta** on `:8790` (Hub-pulled tag / Path B for release candidates) | `.cursor/skills/interactive-ui-qa` — open bugs + tagged IDs; never `:8788` |
 | Major chrome / periodic audit | Absolute baseline refresh | Same skill, mode `full` → host `qa-runs/ABSOLUTE_BASELINE.md` |
 
 Layer map: [Feature testing environment blueprint](superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md).
@@ -114,12 +159,31 @@ Writes `frontend/public/release-notes.json`. The Docker release script runs this
 
 ---
 
-## Commit / tag / push
+## Multi-arch Docker Hub
 
-Only when the user asked to ship:
+Canonical image: **`romwil/projectionist`**. Compat dual-tag (same digests): **`romwil/curatorx`**. Platforms: `linux/amd64,linux/arm64`.
+
+```bash
+./scripts/docker-release.sh X.Y.Z
+# optional:
+# ./scripts/docker-release.sh X.Y.Z --also-line X.Y   # default already derives X.Y
+# ./scripts/docker-release.sh X.Y.Z --date-tag        # also :latest-YYYYMMDD
+```
+
+Tags pushed on `romwil/projectionist`: `:X.Y.Z`, `:X.Y`, `:latest` (and `:latest-YYYYMMDD` with `--date-tag`). The script then retags identical manifests to `romwil/curatorx:*` for the compatibility window.
+
+The script sets `--provenance=false --sbom=false` so Unraid Dockerman sees Docker v2 **manifest lists** (not OCI attestation indexes). It prints Hub digests — paste into notes or keep for Unraid verify.
+
+Full Unraid / Force Update caveats: [DOCKER.md](DOCKER.md).
+
+---
+
+## Commit / PR / tag / GitHub release
+
+Only when the user asked to ship. Hub `:X.Y.Z` should already exist (or land in the same ship session) before calling the version released.
 
 1. Stage release files + code for this version (do not mix unrelated WIP).
-2. Commit message style (recent practice):
+2. Commit on the **release PR branch** (message style below), push the branch, and open/update a **PR into `main`**.
 
    ```text
    vX.Y.Z: <short Highlights-style title>
@@ -127,11 +191,14 @@ Only when the user asked to ship:
 
    Body: 1–3 sentences of why / user impact.
 
-3. Create an annotated tag matching the version:
+   Do **not** push directly to `main`. Never bypass branch protection — use a PR even for hotfixes.
+
+3. **After the PR is merged into `main`**, create an annotated tag on the merged tip (not before merge; not as a substitute for the PR):
 
    ```bash
+   git checkout main
+   git pull origin main
    git tag -a "vX.Y.Z" -m "vX.Y.Z"
-   git push origin HEAD
    git push origin "vX.Y.Z"
    ```
 
@@ -153,24 +220,28 @@ Recent example: [v1.19.4](https://github.com/romwil/projectionist/releases/tag/v
 
 ---
 
-## Multi-arch Docker Hub
+## CA path proof (pull Hub — not Path A)
 
-Canonical image: **`romwil/projectionist`**. Compat dual-tag (same digests): **`romwil/curatorx`**. Platforms: `linux/amd64,linux/arm64`.
+Unraid Community Applications installs by **pulling** `romwil/projectionist:…` from Docker Hub. Before promoting Automat prod, prove that path:
 
 ```bash
-./scripts/docker-release.sh X.Y.Z
-# optional:
-# ./scripts/docker-release.sh X.Y.Z --also-line X.Y   # default already derives X.Y
-# ./scripts/docker-release.sh X.Y.Z --date-tag        # also :latest-YYYYMMDD
+# Hub tag exists
+docker buildx imagetools inspect romwil/projectionist:X.Y.Z | head -30
+
+# On Automat — pull onto QA sidecar (preferred) or a disposable container.
+# Exact recreate commands: host QA-LIFECYCLE / QA-REDEPLOY (Path B = Hub tag).
+# Example shape (adjust per host runbook):
+ssh automat 'docker pull romwil/projectionist:X.Y.Z'
+# Then recreate projectionist-qa from that tag (Path B) — NOT docker build from a git tree (Path A).
 ```
 
-Tags pushed on `romwil/projectionist`: `:X.Y.Z`, `:X.Y`, `:latest` (and `:latest-YYYYMMDD` with `--date-tag`). The script then retags identical manifests to `romwil/curatorx:*` for the compatibility window.
+| Path | Meaning | Valid as CA / release proof? |
+|------|---------|------------------------------|
+| **B — Hub pull** | `docker pull romwil/projectionist:X.Y.Z` then run | **Yes** — matches Unraid CA |
+| **A — host build** | `docker build` on Automat from a checkout | **No** for release/CA proof (WIP / debug only) |
+| **C — restart** | Restart existing container | **No** — no new bits |
 
-The script sets `--provenance=false --sbom=false` so Unraid Dockerman sees Docker v2 **manifest lists** (not OCI attestation indexes). It prints Hub digests — paste into notes or keep for Unraid verify.
-
-Full Unraid / Force Update caveats: [DOCKER.md](DOCKER.md).
-
----
+Interactive UI QA may still use `:8790`, but for a release candidate the sidecar image must be the **Hub tag** (Path B). Document Path A only as secondary WIP iteration — never as “CA tested.”
 
 ## Spin down maintainer QA (after Hub publish)
 
@@ -221,22 +292,29 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 | ESLint errors | New violations | Fix to **0 errors** (warnings may remain) |
 | buildx / push fails on Mac | No runtime / not logged in | Start Colima or Desktop; `docker login` |
 | Agent cut a release unprompted | Violated commit policy | Stop; only ship when user asks |
+| “Released” but CA / Automat cannot pull `:X.Y.Z` | Hub publish skipped or failed | Run `./scripts/docker-release.sh X.Y.Z`; do not claim release until Hub inspect works |
+| QA “passed” but prod Hub pull differs | QA ran Path A host-built image | Recreate QA from Hub tag (Path B); re-run smoke / UI QA |
+| Direct push to `main` | Skipped PR / branch protection | Open a PR; do not force-push `main` |
 
 ---
 
 ## Agent checklist (copy)
 
-- [ ] User explicitly asked to release / commit+push this ship
-- [ ] No conflicting WIP version bump
-- [ ] Versions aligned (`_version.py`, root + frontend `package.json` + lockfiles, `pyproject.toml`, both Unraid XMLs identical, README badge)
-- [ ] Tests: pytest (≥74% cov, same floor in CI), `npm run test:unit`, `npm run lint` (0 errors), `npm run build`
-- [ ] `CHANGELOG.md`: `## [X.Y.Z]`, Highlights + technical + Verification
-- [ ] Docs updated if user-facing
-- [ ] *(Recommended)* Security-touching ship: pentest harness green (`python3 scripts/security/pentest/run-checklist.py`)
-- [ ] *(Recommended)* Chrome / gating ship: Interactive UI QA delta on `:8790` (never `:8788`)
-- [ ] `./scripts/generate-release-notes.sh --require-version X.Y.Z`
-- [ ] Commit `vX.Y.Z: …`, tag `vX.Y.Z`, push commit + tag
-- [ ] `gh release create` with Highlights
-- [ ] `./scripts/docker-release.sh X.Y.Z`
-- [ ] Post-release Hub / `gh` / optional Unraid verify
-- [ ] Spin down `projectionist-qa` (`:8790`) unless a QA/test campaign is still running — never touch prod `projectionist` / `:8788` (host runbook: `projectionist-qa-scripts/qa-runs/QA-LIFECYCLE.md`)
+```text
+□ User explicitly asked to release / commit+push this ship
+□ Semver chosen (patch hotfix → e.g. 1.33.1 → 1.33.2; minor for features)
+□ No conflicting WIP version bump; PR into main (no direct main push)
+□ Versions aligned (_version.py, root + frontend package.json + lockfiles, pyproject.toml, both Unraid XMLs identical, README badge)
+□ Tests: pytest (≥74% cov), npm run test:unit, npm run lint (0 errors), npm run build
+□ CHANGELOG: release heading for X.Y.Z, Highlights + technical + Verification
+□ Docs updated if user-facing
+□ (Recommended) Security-touching: pentest harness green
+□ (Recommended) Chrome/gating: Interactive UI QA on :8790 against Hub-pulled tag (Path B), never :8788
+□ ./scripts/generate-release-notes.sh --require-version X.Y.Z
+□ 1. ./scripts/docker-release.sh X.Y.Z  → Hub has romwil/projectionist:X.Y.Z
+□ 2. Merge PR → main (never direct-push/bypass); then tag vX.Y.Z on merged main; gh release create with Highlights
+□ 3. CA proof: pull Hub tag (Path B) — NOT host docker build (Path A)
+□ 4. Prod only if asked: ./rollout.sh X.Y.Z (pull-only)
+□ Spin down projectionist-qa (:8790) unless QA campaign still running — never touch prod :8788
+□ Do NOT claim “X.Y.Z released” if Hub lacks :X.Y.Z
+```

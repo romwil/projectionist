@@ -11,7 +11,7 @@ Jump to: [LAN hosts](#lan-hosts-source-of-truth) · [Rollout](#rollout--appdata)
 | Role | Base URL | Use for |
 |------|----------|---------|
 | **Production** | `http://10.10.1.202:8788` | Version, `/api/health`, admin UI, “is prod on X.Y.Z?” |
-| **QA sidecar** | `http://10.10.1.202:8790` | Interactive UI QA, multi-role smoke, WIP image checks |
+| **QA sidecar** | `http://10.10.1.202:8790` | Interactive UI QA, multi-role smoke; prefer **Hub-pulled** tag (Path B) for release/CA proof |
 | **QA lobby theater** | `http://10.10.1.202:8792` | Open LAN lightbox for the QA sidecar (maps container `8791`) |
 | **Public hostname** | `https://projectionist.automat.vip` | Member-facing access only — **not** version or admin truth |
 
@@ -57,17 +57,26 @@ Automat members reach the household at `https://projectionist.automat.vip`. That
 | macOS mount (common) | `/Volumes/appdata/projectionist` |
 | Canonical script in git | `scripts/unraid-rollout.sh` → sync to appdata as `rollout.sh` |
 
+`rollout.sh` is **pull-only** from Docker Hub (`romwil/projectionist:X.Y.Z`). It does **not** build from a git tree. Prod promote is step 4 of the Hub-first ship path in [RELEASE.md](../RELEASE.md) — only after Hub publish + CA proof pull.
+
 ```bash
 # On Unraid (SSH) — preferred one-shot pull + recreate; /config is never wiped
-cd /mnt/user/appdata/projectionist && ./rollout.sh 1.32.2
+cd /mnt/user/appdata/projectionist && ./rollout.sh 1.33.1
 
 # From a machine with the appdata share mounted:
-cd /Volumes/appdata/projectionist && ./rollout.sh 1.32.2
+cd /Volumes/appdata/projectionist && ./rollout.sh 1.33.1
 ```
 
 Keep the kit synced with the repo (`rollout.sh`, optional `unraid-force-pull.sh`, compose/env examples). Generic Force Update / 0 B pull pathology: [DOCKER.md](../DOCKER.md#unraid-force-update-pulls-0-b--stays-on-an-old-version).
 
 No tokens, Apprise URLs, or other secrets belong in this runbook — they live in `config/settings.json` on the host.
+
+### Anti-patterns on Automat
+
+- **Do not** `docker build` on Automat and treat that image as Unraid CA / release proof (Path A). CA installs pull Hub tags.
+- **Do not** promote prod from a host-built or untagged WIP image — only `./rollout.sh X.Y.Z` after Hub has `:X.Y.Z`.
+- **Do not** claim prod is on `X.Y.Z` from the public hostname; use LAN `:8788` (table above).
+
 
 ---
 
@@ -107,9 +116,24 @@ Member-facing copy and owner API examples: in-app `/help` and [HELP.md](../HELP.
 
 ## QA / release lifecycle
 
-1. Ship process: [RELEASE.md](../RELEASE.md) and `.cursor/rules/release.mdc`.
-2. After a successful Docker Hub publish, **spin down** maintainer QA (`projectionist-qa` on `:8790`) unless an active QA/test campaign is in progress.
-3. **Never** stop production `projectionist` / port **`:8788`**.
+Canonical ship order (full detail: [RELEASE.md](../RELEASE.md)):
+
+1. **Hub** — `./scripts/docker-release.sh X.Y.Z` so `romwil/projectionist:X.Y.Z` exists.
+2. **GitHub** — PR → `main` (branch protection — never bypass; use a PR even for hotfixes), then annotated tag + `gh release` **after merge** matching that version.
+3. **CA proof** — pull Hub tag onto QA / disposable container (**Path B**). This is the Unraid CA install path.
+4. **Prod** — only when asked: `./rollout.sh X.Y.Z` (pull-only). Never stop prod while iterating on QA.
+
+After a successful Docker Hub publish, **spin down** maintainer QA (`projectionist-qa` on `:8790`) unless an active QA/test campaign is in progress. **Never** stop production `projectionist` / port **`:8788`**.
+
+### QA image paths (host `QA-REDEPLOY.md`)
+
+| Path | What | Use for release / CA proof? |
+|------|------|------------------------------|
+| **B — Hub pull** | `docker pull romwil/projectionist:X.Y.Z` then recreate `projectionist-qa` | **Yes** — required for release-candidate UI QA |
+| **A — host build** | `docker build` from a git tree on Automat | **No** — WIP / debug only; not Unraid CA |
+| **C — restart** | Restart existing container | **No** — no new image |
+
+Agents must not write “CA / Unraid path verified” after a Path A recreate. Prefer Path B whenever the goal is “what members get from Community Applications.”
 
 Maintainer QA scripts and dated run artifacts live on the host under `/Volumes/appdata/projectionist-qa-scripts/` (not in this git tree). Lifecycle notes there: `qa-runs/QA-LIFECYCLE.md` when present.
 

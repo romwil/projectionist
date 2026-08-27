@@ -14,6 +14,11 @@ GitHub release, or pushing Docker images, **read and follow**
 
 - **Commit / push / tag / `gh release` / Docker Hub push only when the user explicitly asks**
   to ship (or clearly asks for those steps). Otherwise prepare files and stop.
+- **Do not** skip the PR into `main` (branch protection). Never push directly to `main` and
+  never bypass protection — use a PR even for hotfixes. Tag `vX.Y.Z` **only after** the
+  release PR is merged into `main` (see [docs/RELEASE.md](../../docs/RELEASE.md)).
+- **Hub-first:** a version is not released until `romwil/projectionist:X.Y.Z` exists on Docker
+  Hub (`./scripts/docker-release.sh X.Y.Z`). GitHub merge alone is not a ship.
 - **Do not** bump versions or cut a release while unrelated WIP (another agent’s feature)
   is mid-edit on the same files unless the user coordinates it.
 - Keep versions in lockstep (enforced by `tests/test_version.py` except the README badge):
