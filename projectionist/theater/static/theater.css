@@ -113,6 +113,7 @@ body {
   box-shadow: inset 0 0 0 1px var(--rim);
 }
 
+/* Opacity crossfade only — never animate layout properties on scrap silicon. */
 .poster {
   position: absolute;
   inset: 0;
@@ -122,6 +123,7 @@ body {
   opacity: 0;
   transition: opacity 0.9s ease;
   pointer-events: none;
+  will-change: opacity;
 }
 
 .poster.visible {
@@ -136,17 +138,28 @@ body {
   /* 4px reads from wall/TV distance; still a lightbox edge, not a scrubber */
   height: 4px;
   background: var(--theater-progress-track);
+  /* Avoid paint thrash from JS width writes — compositor-friendly bar. */
+  contain: layout paint;
 }
 
 .progress-fill {
   height: 100%;
-  width: 0%;
+  width: 100%;
   background: var(--theater-progress-fill);
+  transform: scaleX(0);
   transform-origin: left center;
+  transition: transform 1s linear;
+  will-change: transform;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .poster {
     transition: none;
+    will-change: auto;
+  }
+
+  .progress-fill {
+    transition: none;
+    will-change: auto;
   }
 }

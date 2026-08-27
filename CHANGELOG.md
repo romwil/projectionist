@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.33.1] — 2026-08-27
+
+Lobby theater stops stampeding Plex when kiosks fan in: adaptive watcher cadence, circuit-open degradation, and a shared poster cache with ETag/304 and rate limits.
+
+### Highlights
+- **Quieter lobby boards.** The wall display backs off when nothing is playing, and cools further if Plex is already under pressure.
+- **Posters that stick.** Repeat poster loads hit a local cache instead of hammering Plex on every kiosk refresh.
+- **Safer when Plex blips.** An open host circuit keeps the last good board (or an idle library board) instead of thrashing sessions.
+
+### Added
+- `projectionist/theater/poster_cache.py` — process + `DATA_DIR` disk cache, negative TTL, single-flight coalesce, background prefetch of visible rating keys.
+- Theater `/api/health` fields: `watcher_interval_s`, `watcher_degraded`, `poster_cache_hits` / `_misses` / `_negative_hits`.
+- Poster `ETag` / `If-None-Match` → **304**, `Cache-Control`, and per-minute poster rate limit.
+
+### Changed
+- Adaptive watcher poll: active ~12s, idle ~45s, degraded ~60s (or circuit backoff floor).
+- Circuit-open path skips Plex session fetches and reuses the last snapshot when possible.
+
+### Fixed
+- Empty `available` snapshots clear the local kiosk deck and stop stale `now_available` rotation.
+- Multi-kiosk poster fan-in no longer stampedes PMS for the same rating keys.
+
+### Verification
+- Backend: 1,974 passed, 6 skipped, 34 subtests passed; 76.04% coverage (74% required).
+- Frontend unit: 681 passed, 0 failed.
+- ESLint: 0 errors (134 warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_theater.py` (adaptive poll, circuit skip, poster cache/ETag/rate-limit/health).
+
 ## [1.33.0] — 2026-08-19
 
 The public face of a household is a glass door: sign in, request access, or redeem an invite. The guest tour is gone, jobs stay owner-only, and the login/webhook/MCP edges fail closed without leaking config.

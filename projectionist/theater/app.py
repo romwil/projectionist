@@ -14,9 +14,11 @@ from starlette.responses import Response
 
 from projectionist.config_store import Settings, load_merged_settings
 from projectionist.library.db import Database
+from projectionist.theater import POSTER_CACHE_CONTROL, POSTER_RATE_LIMIT_PER_MINUTE
 from projectionist.theater.hub import TheaterHub, get_theater_hub, init_theater_hub
 from projectionist.theater.normalize import normalize_theater_settings, theater_host_port_hint
 from projectionist.theater.poster import fetch_poster_bytes, poster_response
+from projectionist.theater.poster_cache import get_poster_cache
 from projectionist.web.ingress import (
     direct_peer,
     is_docker_nat_peer,
@@ -24,6 +26,7 @@ from projectionist.web.ingress import (
     parse_ip,
     peer_class_name,
 )
+from projectionist.web.rate_limit import enforce_rate_limit
 
 logger = logging.getLogger(__name__)
 
@@ -110,12 +113,18 @@ def create_theater_app(
     def theater_health() -> dict:
         settings = _settings()
         theater = normalize_theater_settings(getattr(settings, "theater", None))
+        cache = get_poster_cache(resolved_data_dir)
         return {
             "status": "ok",
             "service": "theater",
             "enabled": bool(theater.enabled),
             "subscribers": theater_hub.subscriber_count,
             "port_hint": theater_host_port_hint(),
+            "watcher_interval_s": theater_hub.next_poll_seconds,
+            "watcher_degraded": theater_hub.degraded,
+            "poster_cache_hits": cache.hits,
+            "poster_cache_misses": cache.misses,
+            "poster_cache_negative_hits": cache.negative_hits,
         }
 
     @app.get("/api/theater/events")
@@ -173,10 +182,32 @@ def create_theater_app(
 
     @app.get("/api/theater/poster")
     async def theater_poster(
+        request: Request,
         rk: str = Query(..., min_length=1, max_length=64),
     ) -> Response:
-        body, content_type = await fetch_poster_bytes(_db(), _settings(), rating_key=rk)
-        return poster_response(body, content_type)
+        enforce_rate_limit(
+            request,
+            bucket="theater_poster",
+            limit=POSTER_RATE_LIMIT_PER_MINUTE,
+            window_seconds=60.0,
+        )
+        body, content_type, etag = await fetch_poster_bytes(
+            _db(),
+            _settings(),
+            rating_key=rk,
+            data_dir=resolved_data_dir,
+        )
+        if_none_match = (request.headers.get("if-none-match") or "").strip()
+        if etag and if_none_match and if_none_match == etag:
+            return Response(
+                status_code=304,
+                headers={
+                    "Cache-Control": POSTER_CACHE_CONTROL,
+                    "ETag": etag,
+                    "X-Content-Type-Options": "nosniff",
+                },
+            )
+        return poster_response(body, content_type, etag=etag)
 
     @app.get("/", response_class=HTMLResponse)
     def theater_index() -> HTMLResponse:

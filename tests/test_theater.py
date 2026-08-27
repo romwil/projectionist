@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import tempfile
 import time
@@ -9,20 +10,35 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
+from projectionist.circuit_breaker import host_circuits, reset_host_circuits
 from projectionist.config_store import Settings, TheaterSettings
 from projectionist.connectors.plex import PlexActiveSession
 from projectionist.library.db import Database
-from projectionist.theater import POSTER_CACHE_CONTROL
+from projectionist.theater import (
+    POSTER_CACHE_CONTROL,
+    POSTER_RATE_LIMIT_PER_MINUTE,
+    WATCHER_POLL_ACTIVE_SECONDS,
+    WATCHER_POLL_DEGRADED_SECONDS,
+    WATCHER_POLL_IDLE_SECONDS,
+)
 from projectionist.theater.app import create_theater_app, theater_peer_allowed
 from projectionist.theater.hub import TheaterHub, reset_theater_hub_for_tests
 from projectionist.theater.normalize import normalize_theater_settings
+from projectionist.theater.poster import fetch_poster_bytes
+from projectionist.theater.poster_cache import (
+    TheaterPosterCache,
+    get_poster_cache,
+    reset_poster_caches_for_tests,
+)
 from projectionist.theater.snapshot import (
     build_board_snapshot,
     filter_sessions,
     resolve_header_label,
 )
+from projectionist.web.rate_limit import clear_rate_limits
 
 
 def _session(
@@ -127,10 +143,29 @@ class SnapshotTests(unittest.TestCase):
         self.assertEqual(snap["mode"], "now_available")
         self.assertGreaterEqual(len(snap["available"]), 1)
 
+    def test_circuit_open_skips_plex_client(self) -> None:
+        reset_host_circuits()
+        settings = Settings(
+            plex_url="http://plex.local:32400",
+            plex_token="token",
+            theater=TheaterSettings(enabled=True, idle_mode="empty"),
+        )
+        host_circuits.record_failure(settings.plex_url, "timeout")
+        host_circuits.record_failure(settings.plex_url, "timeout")
+        host_circuits.record_failure(settings.plex_url, "timeout")
+        with patch("projectionist.theater.snapshot.PlexClient") as plex_cls:
+            snap = build_board_snapshot(self.db, settings, fetch_sessions=True)
+        plex_cls.assert_not_called()
+        self.assertEqual(snap["mode"], "empty")
+        reset_host_circuits()
+
 
 class TheaterAppTests(unittest.TestCase):
     def setUp(self) -> None:
         reset_theater_hub_for_tests()
+        reset_poster_caches_for_tests()
+        clear_rate_limits()
+        reset_host_circuits()
         self._tmpdir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self._tmpdir.name)
         self.db = Database(self.data_dir / "projectionist.db")
@@ -166,11 +201,12 @@ class TheaterAppTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         reset_theater_hub_for_tests()
+        reset_poster_caches_for_tests()
+        clear_rate_limits()
+        reset_host_circuits()
         self._tmpdir.cleanup()
 
     def test_sse_hydrate_on_connect(self) -> None:
-        import asyncio
-
         hub: TheaterHub = self.app.state.theater_hub
 
         async def first_event() -> str:
@@ -184,8 +220,6 @@ class TheaterAppTests(unittest.TestCase):
         self.assertIn("event: hydrate", chunk)
         self.assertIn('"mode"', chunk)
 
-        # Route exists and is event-stream (don't hold the streaming body open).
-        # TestClient.stream can hang on infinite generators; probe headers via hub above.
         routes = {getattr(route, "path", "") for route in self.app.routes}
         self.assertIn("/api/theater/events", routes)
 
@@ -206,16 +240,28 @@ class TheaterAppTests(unittest.TestCase):
         fake_body = b"\xff\xd8\xfffakejpeg"
         with patch(
             "projectionist.theater.app.fetch_poster_bytes",
-            return_value=(fake_body, "image/jpeg"),
+            return_value=(fake_body, "image/jpeg", '"abc"'),
         ):
             response = self.client.get("/api/theater/poster?rk=100")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers.get("cache-control"), POSTER_CACHE_CONTROL)
+        self.assertEqual(response.headers.get("etag"), '"abc"')
+
+    def test_poster_etag_304(self) -> None:
+        fake_body = b"\xff\xd8\xfffakejpeg"
+        with patch(
+            "projectionist.theater.app.fetch_poster_bytes",
+            return_value=(fake_body, "image/jpeg", '"abc"'),
+        ):
+            response = self.client.get(
+                "/api/theater/poster?rk=100",
+                headers={"If-None-Match": '"abc"'},
+            )
+        self.assertEqual(response.status_code, 304)
 
     def test_zero_subscribers_no_plex_stampede(self) -> None:
         hub: TheaterHub = self.app.state.theater_hub
         before = hub.plex_call_count
-        # Force a watcher tick with zero subscribers.
         hub._tick()
         self.assertEqual(hub.plex_call_count, before)
 
@@ -224,10 +270,188 @@ class TheaterAppTests(unittest.TestCase):
         hub: TheaterHub = self.app.state.theater_hub
         hub.settings_factory = lambda: self.settings
         before = hub.plex_call_count
-        # Even with a fake subscriber count, disabled path must not poll Plex.
         with patch.object(TheaterHub, "subscriber_count", property(lambda self: 1)):
             hub._tick()
         self.assertEqual(hub.plex_call_count, before)
+
+    def test_adaptive_poll_idle_slower_than_active(self) -> None:
+        hub: TheaterHub = self.app.state.theater_hub
+        idle = hub.poll_interval_for_mode("now_available", degraded=False)
+        active = hub.poll_interval_for_mode("now_playing", degraded=False)
+        degraded = hub.poll_interval_for_mode("now_playing", degraded=True)
+        self.assertEqual(idle, float(WATCHER_POLL_IDLE_SECONDS))
+        self.assertEqual(active, float(WATCHER_POLL_ACTIVE_SECONDS))
+        self.assertGreaterEqual(degraded, float(WATCHER_POLL_DEGRADED_SECONDS))
+        self.assertGreater(idle, active)
+
+    def test_circuit_open_watcher_skips_plex_increment(self) -> None:
+        self.settings = Settings(
+            plex_url="http://plex.local:32400",
+            plex_token="token",
+            theater=TheaterSettings(enabled=True, idle_mode="empty"),
+        )
+        hub: TheaterHub = self.app.state.theater_hub
+        hub.settings_factory = lambda: self.settings
+        host_circuits.record_failure(self.settings.plex_url, "timeout")
+        host_circuits.record_failure(self.settings.plex_url, "timeout")
+        host_circuits.record_failure(self.settings.plex_url, "timeout")
+        before = hub.plex_call_count
+        with patch.object(TheaterHub, "subscriber_count", property(lambda self: 1)):
+            with patch(
+                "projectionist.theater.hub.build_board_snapshot",
+                return_value={
+                    "enabled": True,
+                    "mode": "empty",
+                    "watching": False,
+                    "sessions": [],
+                    "available": [],
+                    "header_label": "NOW PLAYING",
+                    "header_mode": "dynamic",
+                    "orientation": "landscape",
+                    "multi_mode": "rotator",
+                    "idle_mode": "empty",
+                    "rotate_seconds": 12,
+                },
+            ) as snap:
+                hub._tick()
+        # Circuit open path must not count a Plex poll.
+        self.assertEqual(hub.plex_call_count, before)
+        snap.assert_called()
+        self.assertTrue(hub.degraded)
+
+    def test_poster_rate_limit(self) -> None:
+        fake_body = b"\xff\xd8\xfffakejpeg"
+        with patch(
+            "projectionist.theater.app.fetch_poster_bytes",
+            return_value=(fake_body, "image/jpeg", '"abc"'),
+        ):
+            last = None
+            for _ in range(POSTER_RATE_LIMIT_PER_MINUTE + 5):
+                last = self.client.get("/api/theater/poster?rk=100")
+                if last.status_code == 429:
+                    break
+        self.assertIsNotNone(last)
+        self.assertEqual(last.status_code, 429)
+
+    def test_health_exposes_watcher_and_cache(self) -> None:
+        response = self.client.get("/api/health")
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertIn("watcher_interval_s", body)
+        self.assertIn("poster_cache_hits", body)
+
+
+class PosterCacheTests(unittest.TestCase):
+    def setUp(self) -> None:
+        reset_poster_caches_for_tests()
+        self._tmpdir = tempfile.TemporaryDirectory()
+        self.data_dir = Path(self._tmpdir.name)
+        self.db = Database(self.data_dir / "projectionist.db")
+        self.db.upsert_library_item(
+            {
+                "rating_key": "100",
+                "media_type": "movie",
+                "title": "Example",
+                "year": 2020,
+                "poster_url": "https://image.tmdb.org/t/p/w500/example.jpg",
+            }
+        )
+        self.settings = Settings(theater=TheaterSettings(enabled=True))
+
+    def tearDown(self) -> None:
+        reset_poster_caches_for_tests()
+        self._tmpdir.cleanup()
+
+    def test_negative_cache_skips_second_upstream(self) -> None:
+        calls = {"n": 0}
+
+        async def boom(*_a, **_k):
+            calls["n"] += 1
+            raise HTTPException(status_code=404, detail="Poster not found")
+
+        with patch("projectionist.theater.poster._upstream_fetch", side_effect=boom):
+            with self.assertRaises(HTTPException):
+                asyncio.run(
+                    fetch_poster_bytes(
+                        self.db,
+                        self.settings,
+                        rating_key="100",
+                        data_dir=self.data_dir,
+                    )
+                )
+            with self.assertRaises(HTTPException):
+                asyncio.run(
+                    fetch_poster_bytes(
+                        self.db,
+                        self.settings,
+                        rating_key="100",
+                        data_dir=self.data_dir,
+                    )
+                )
+        self.assertEqual(calls["n"], 1)
+        cache = get_poster_cache(self.data_dir)
+        self.assertGreaterEqual(cache.negative_hits, 1)
+
+    def test_positive_cache_and_single_flight(self) -> None:
+        calls = {"n": 0}
+        body = b"\xff\xd8\xffcached"
+
+        async def once(*_a, **_k):
+            calls["n"] += 1
+            await asyncio.sleep(0.05)
+            return body, "image/jpeg", "https://image.tmdb.org/t/p/w500/example.jpg"
+
+        async def dual() -> None:
+            with patch("projectionist.theater.poster._upstream_fetch", side_effect=once):
+                a, b = await asyncio.gather(
+                    fetch_poster_bytes(
+                        self.db,
+                        self.settings,
+                        rating_key="100",
+                        data_dir=self.data_dir,
+                    ),
+                    fetch_poster_bytes(
+                        self.db,
+                        self.settings,
+                        rating_key="100",
+                        data_dir=self.data_dir,
+                    ),
+                )
+            self.assertEqual(a[0], body)
+            self.assertEqual(b[0], body)
+
+        asyncio.run(dual())
+        self.assertEqual(calls["n"], 1)
+
+        # Third call is a pure memory/disk hit — no upstream.
+        with patch(
+            "projectionist.theater.poster._upstream_fetch",
+            side_effect=AssertionError("should not fetch"),
+        ):
+            cached = asyncio.run(
+                fetch_poster_bytes(
+                    self.db,
+                    self.settings,
+                    rating_key="100",
+                    data_dir=self.data_dir,
+                )
+            )
+        self.assertEqual(cached[0], body)
+
+    def test_disk_hit_across_cache_instances(self) -> None:
+        cache_a = TheaterPosterCache(self.data_dir)
+        poster = cache_a.put(
+            "100",
+            b"\xff\xd8\xffdisk",
+            "image/jpeg",
+            source="https://image.tmdb.org/t/p/w500/example.jpg",
+        )
+        cache_b = TheaterPosterCache(self.data_dir)
+        hit = cache_b.get("100")
+        self.assertIsNotNone(hit)
+        assert hit is not None
+        self.assertEqual(hit.body, poster.body)
+        self.assertEqual(hit.content_type, "image/jpeg")
 
 
 class TheaterRoutesAbsentFromMainApp(unittest.TestCase):
