@@ -13,12 +13,12 @@ Authoritative hosts for the Automat Unraid deployment. Full human runbook:
 | Role | URL | Notes |
 |------|-----|--------|
 | **Prod** | `http://10.10.1.202:8788` | Authoritative for version, health, and admin UI checks |
-| **QA sidecar** | `http://10.10.1.202:8790` | Maintainer QA only |
+| **QA sidecar** | `http://10.10.1.202:8790` | Maintainer QA; release/CA proof = Hub pull (Path B), not host build |
 | **Not truth** | `https://projectionist.automat.vip` (or ad-hoc SSH tunnels) | CDN/proxy lag; agents wrongly read stale versions here |
 
 - Local `localhost:8788` is often an **SSH tunnel to prod** — not local dev; never use for e2e (see [e2e-port-8788.mdc](e2e-port-8788.mdc)).
 - Appdata / rollout kit: `/mnt/user/appdata/projectionist` (Unraid); often mounted as `/Volumes/appdata/projectionist`.
-- Rollout: `cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z` — keep `rollout.sh` synced from `scripts/unraid-rollout.sh`.
+- Rollout: `cd /mnt/user/appdata/projectionist && ./rollout.sh X.Y.Z` (Hub **pull-only** — not a host build) — keep `rollout.sh` synced from `scripts/unraid-rollout.sh`.
 
 ## UI verification
 
@@ -32,4 +32,4 @@ Weekly newsletter + Year in Review admin: **Admin → Ops → Newsletters** (`/a
 
 ## Release lifecycle
 
-Follow [release.mdc](release.mdc) / [docs/RELEASE.md](../../docs/RELEASE.md). After Hub publish, spin down QA `:8790` unless a campaign is active. **Never** stop prod `projectionist` / `:8788`.
+Follow [release.mdc](release.mdc) / [docs/RELEASE.md](../../docs/RELEASE.md) (**Hub-first**). CA proof = pull Hub tag onto QA (Path B), not Path A host `docker build`. After Hub publish, spin down QA `:8790` unless a campaign is active. **Never** stop prod `projectionist` / `:8788`.

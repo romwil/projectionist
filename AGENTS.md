@@ -43,6 +43,11 @@ own port, which proxies `/api` to `:8788`).
 If you add suites that hit rate-limited auth routes heavily, clear the limiter between tests the
 same way — otherwise later cases can see 429 and missing `user` keys.
 
+### Shipping releases (Hub-first)
+A GitHub merge, local Unraid `docker build`, or host-built QA image is **not** a release.
+Canonical path: **Hub publish** (`./scripts/docker-release.sh X.Y.Z`) → **PR merge + tag** → **CA proof via Hub pull (Path B)** → **prod `rollout.sh` (pull-only)** when asked.
+Details: [docs/RELEASE.md](docs/RELEASE.md). Rule: `.cursor/rules/release.mdc`.
+
 ### Automat maintainer LAN (version / health / UI truth)
 When checking the live Automat Unraid stack, use LAN hosts — **not** the public hostname:
 
