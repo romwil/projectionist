@@ -287,9 +287,12 @@ class TheaterPosterCache:
     async def single_flight(self, rating_key: str, factory: Callable[[], Any]) -> Any:
         """Coalesce concurrent fetches for the same rating key.
 
-        Waiters always observe a terminal future (result or exception). The
-        inflight slot is cleared in ``finally`` so a failed flight never
-        leaves subsequent callers blocked on a dead Future.
+        Waiters always observe a terminal future (result or exception),
+        including when the leader is cancelled: ``CancelledError`` inherits
+        from ``BaseException`` (not ``Exception``), so the shared Future must
+        still be completed before the leader re-raises. The inflight slot is
+        cleared in ``finally`` so a failed flight never leaves subsequent
+        callers blocked on a dead Future — waiters can retry a new flight.
         """
         key = str(rating_key or "").strip()
         async with self._inflight_lock:
@@ -314,11 +317,16 @@ class TheaterPosterCache:
                 if fut is not None and not fut.done():
                     fut.set_result(result)
             return result
-        except Exception as exc:  # noqa: BLE001
+        except BaseException as exc:
+            # Must cover CancelledError (BaseException in 3.9+) so waiters
+            # holding asyncio.shield(wait) never hang on an incomplete Future.
             async with self._inflight_lock:
                 fut = self._inflight.get(key)
                 if fut is not None and not fut.done():
-                    fut.set_exception(exc)
+                    if isinstance(exc, asyncio.CancelledError):
+                        fut.set_exception(asyncio.CancelledError())
+                    else:
+                        fut.set_exception(exc)
             raise
         finally:
             async with self._inflight_lock:
