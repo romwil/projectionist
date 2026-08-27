@@ -354,7 +354,9 @@
     stage.classList.toggle("orientation-landscape", snapshot.orientation !== "portrait");
     stage.dataset.mode = snapshot.mode || "empty";
 
-    if (Array.isArray(snapshot.available) && snapshot.available.length) {
+    // Always honor an available array (including empty) so an empty
+    // snapshot clears a stale local deck instead of keeping rotation alive.
+    if (Array.isArray(snapshot.available)) {
       deck = snapshot.available.filter((item) => item && item.poster_url);
     }
 
@@ -372,6 +374,10 @@
       return;
     }
     if (snapshot.mode === "now_available") {
+      if (!deck.length) {
+        showEmpty();
+        return;
+      }
       // Keep cycling the local deck; only restart rotator if we left idle.
       if (currentMode === "now_available" && rotateTimer) {
         setHeader(units[0], snapshot.header_label || "NOW AVAILABLE");
