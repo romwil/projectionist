@@ -24,7 +24,7 @@ from projectionist.theater import (
     WATCHER_POLL_DEGRADED_SECONDS,
     WATCHER_POLL_IDLE_SECONDS,
 )
-from projectionist.theater.normalize import normalize_theater_settings
+from projectionist.theater.normalize import normalize_theater_feed, normalize_theater_settings
 from projectionist.theater.snapshot import build_board_snapshot, session_signature
 
 logger = logging.getLogger(__name__)
@@ -34,9 +34,18 @@ logger = logging.getLogger(__name__)
 class _Subscriber:
     queue: asyncio.Queue
     loop: asyncio.AbstractEventLoop
+    feed: str = "recently_added"
 
     def __hash__(self) -> int:
         return id(self)
+
+
+@dataclass(frozen=True)
+class _PlexSessions:
+    """Shared Plex poll result for one watcher tick (all feeds reuse sessions)."""
+
+    sessions: List[Any]
+    circuit_skipped: bool = False
 
 
 @dataclass
@@ -55,6 +64,10 @@ class TheaterHub:
     _last_settings_sig: str = ""
     _last_available_at: float = 0.0
     _last_snapshot: Optional[Dict[str, Any]] = None
+    _last_snapshots_by_feed: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    _last_available_at_by_feed: Dict[str, float] = field(default_factory=dict)
+    _last_mode_by_feed: Dict[str, str] = field(default_factory=dict)
+    _last_signature_by_feed: Dict[str, str] = field(default_factory=dict)
     _plex_calls: int = 0
     _started: bool = False
     _degraded: bool = False
@@ -108,11 +121,23 @@ class TheaterHub:
     def notify_settings_changed(self) -> None:
         """Force hydrate on next watcher tick (or immediately if subscribers)."""
         self._last_settings_sig = ""
-        snapshot = self._safe_snapshot(fetch_sessions=self.subscriber_count > 0)
-        if snapshot is not None:
-            self._broadcast("hydrate", snapshot)
-            self._remember(snapshot)
-            self._maybe_prefetch(snapshot)
+        feeds = self._active_feeds() or {"recently_added"}
+        plex_sessions: Optional[_PlexSessions] = None
+        if self.subscriber_count > 0:
+            plex_sessions = self._fetch_plex_sessions_for_tick(self.settings())
+        for idle_feed in feeds:
+            if plex_sessions is not None:
+                snapshot = self._safe_snapshot(
+                    fetch_sessions=False,
+                    feed=idle_feed,
+                    plex_sessions=plex_sessions,
+                )
+            else:
+                snapshot = self._safe_snapshot(fetch_sessions=False, feed=idle_feed)
+            if snapshot is not None:
+                self._broadcast("hydrate", snapshot, feed=idle_feed)
+                self._remember(snapshot)
+                self._maybe_prefetch(snapshot)
 
     def poll_interval_for_mode(self, mode: str, *, degraded: bool = False) -> float:
         """Expose adaptive cadence for tests and /api/health."""
@@ -150,7 +175,77 @@ class TheaterHub:
         plex_url = str(settings.plex_url or "").strip()
         return bool(plex_url and is_host_circuit_open(plex_url))
 
-    def _safe_snapshot(self, *, fetch_sessions: bool) -> Optional[Dict[str, Any]]:
+    def _active_feeds(self) -> Set[str]:
+        with self._lock:
+            if not self._subscribers:
+                return set()
+            return {normalize_theater_feed(sub.feed) for sub in self._subscribers}
+
+    def _fetch_plex_sessions_for_tick(self, settings: Settings) -> _PlexSessions:
+        """One Plex poll per watcher tick; all feeds reuse the result."""
+        if self._plex_circuit_open(settings):
+            self._degraded = True
+            return _PlexSessions(sessions=[], circuit_skipped=True)
+
+        theater = normalize_theater_settings(getattr(settings, "theater", None))
+        plex_url = str(settings.plex_url or "").strip()
+        if not theater.enabled or not plex_url or not settings.plex_token:
+            self._degraded = False
+            return _PlexSessions(sessions=[], circuit_skipped=False)
+
+        self._plex_calls += 1
+        active: List[Any] = []
+        try:
+            from projectionist.connectors.plex import PlexClient
+
+            client = PlexClient(settings.plex_url, settings.plex_token, timeout=10)
+            active = list(client.active_sessions())
+        except Exception:  # noqa: BLE001
+            logger.debug("theater active_sessions failed", exc_info=True)
+            active = []
+
+        if self._plex_circuit_open(settings):
+            self._degraded = True
+        else:
+            self._degraded = False
+        return _PlexSessions(sessions=active, circuit_skipped=False)
+
+    def _snapshot_from_plex_sessions(
+        self,
+        settings: Settings,
+        *,
+        idle_feed: str,
+        plex_sessions: _PlexSessions,
+    ) -> Dict[str, Any]:
+        cached = self._last_snapshots_by_feed.get(idle_feed)
+        if plex_sessions.circuit_skipped:
+            if cached is not None:
+                return dict(cached)
+            if self._last_snapshot is not None:
+                return dict(self._last_snapshot)
+            return build_board_snapshot(
+                self.db_factory(),
+                settings,
+                sessions=[],
+                fetch_sessions=False,
+                feed=idle_feed,
+            )
+        return build_board_snapshot(
+            self.db_factory(),
+            settings,
+            sessions=plex_sessions.sessions,
+            fetch_sessions=False,
+            feed=idle_feed,
+        )
+
+    def _safe_snapshot(
+        self,
+        *,
+        fetch_sessions: bool,
+        feed: str = "recently_added",
+        plex_sessions: Optional[_PlexSessions] = None,
+    ) -> Optional[Dict[str, Any]]:
+        idle_feed = normalize_theater_feed(feed)
         try:
             settings = self.settings()
             theater = normalize_theater_settings(getattr(settings, "theater", None))
@@ -164,14 +259,23 @@ class TheaterHub:
                     "multi_mode": theater.multi_mode,
                     "idle_mode": theater.idle_mode,
                     "rotate_seconds": theater.rotate_seconds,
+                    "feed": idle_feed,
                     "mode": "empty",
                     "watching": False,
                     "sessions": [],
                     "available": [],
                 }
 
+            if plex_sessions is not None:
+                return self._snapshot_from_plex_sessions(
+                    settings, idle_feed=idle_feed, plex_sessions=plex_sessions
+                )
+
+            cached = self._last_snapshots_by_feed.get(idle_feed)
             if fetch_sessions and self._plex_circuit_open(settings):
                 self._degraded = True
+                if cached is not None:
+                    return dict(cached)
                 if self._last_snapshot is not None:
                     return dict(self._last_snapshot)
                 # Idle board from library only — no Plex sessions call.
@@ -180,6 +284,7 @@ class TheaterHub:
                     settings,
                     sessions=[],
                     fetch_sessions=False,
+                    feed=idle_feed,
                 )
 
             if fetch_sessions:
@@ -188,6 +293,7 @@ class TheaterHub:
                 self.db_factory(),
                 settings,
                 fetch_sessions=fetch_sessions,
+                feed=idle_feed,
             )
             # build_board_snapshot swallows Plex errors into empty sessions;
             # treat circuit-open after the attempt as degraded for backoff.
@@ -197,18 +303,29 @@ class TheaterHub:
                 self._degraded = False
             return snapshot
         except Exception:  # noqa: BLE001
-            logger.exception("theater snapshot failed")
+            logger.exception("theater snapshot failed feed=%s", idle_feed)
             self._degraded = True
+            cached = self._last_snapshots_by_feed.get(idle_feed)
+            if cached is not None:
+                return dict(cached)
             if self._last_snapshot is not None:
                 return dict(self._last_snapshot)
             return None
 
     def _remember(self, snapshot: Dict[str, Any]) -> None:
-        self._last_mode = str(snapshot.get("mode") or "")
-        self._last_signature = session_signature(snapshot.get("sessions") or [])
+        feed = normalize_theater_feed(str(snapshot.get("feed") or "recently_added"))
+        mode = str(snapshot.get("mode") or "")
+        sig = session_signature(snapshot.get("sessions") or [])
+        self._last_mode = mode
+        self._last_signature = sig
         self._last_snapshot = dict(snapshot)
-        if snapshot.get("mode") == "now_available":
-            self._last_available_at = time.monotonic()
+        self._last_snapshots_by_feed[feed] = dict(snapshot)
+        self._last_mode_by_feed[feed] = mode
+        self._last_signature_by_feed[feed] = sig
+        if mode == "now_available":
+            now = time.monotonic()
+            self._last_available_at = now
+            self._last_available_at_by_feed[feed] = now
         self._next_poll_seconds = self.poll_interval_for_mode(
             self._last_mode, degraded=self._degraded
         )
@@ -249,12 +366,21 @@ class TheaterHub:
         except Exception:  # noqa: BLE001
             logger.debug("theater poster prefetch schedule failed", exc_info=True)
 
-    def _broadcast(self, event: str, data: Dict[str, Any]) -> None:
+    def _broadcast(
+        self,
+        event: str,
+        data: Dict[str, Any],
+        *,
+        feed: Optional[str] = None,
+    ) -> None:
         payload = json.dumps(data, separators=(",", ":"))
+        target_feed = normalize_theater_feed(feed) if feed else None
         dead: List[_Subscriber] = []
         with self._lock:
             subscribers = list(self._subscribers)
         for sub in subscribers:
+            if target_feed is not None and normalize_theater_feed(sub.feed) != target_feed:
+                continue
             try:
                 asyncio.run_coroutine_threadsafe(
                     sub.queue.put((event, payload)),
@@ -275,6 +401,56 @@ class TheaterHub:
                 logger.exception("theater watcher tick failed")
                 self._degraded = True
                 self._next_poll_seconds = float(WATCHER_POLL_DEGRADED_SECONDS)
+
+    def _tick_feed(self, idle_feed: str, *, plex_sessions: _PlexSessions) -> None:
+        need_available_refresh = (
+            self._last_mode_by_feed.get(idle_feed) == "now_available"
+            and (time.monotonic() - self._last_available_at_by_feed.get(idle_feed, 0.0))
+            >= AVAILABLE_REFRESH_SECONDS
+        )
+        snapshot = self._safe_snapshot(
+            fetch_sessions=False,
+            feed=idle_feed,
+            plex_sessions=plex_sessions,
+        )
+        if snapshot is None:
+            self._next_poll_seconds = self.poll_interval_for_mode(
+                self._last_mode_by_feed.get(idle_feed) or "empty", degraded=True
+            )
+            return
+
+        mode = str(snapshot.get("mode") or "")
+        sig = session_signature(snapshot.get("sessions") or [])
+        last_mode = self._last_mode_by_feed.get(idle_feed, "")
+        last_sig = self._last_signature_by_feed.get(idle_feed, "")
+
+        if need_available_refresh:
+            self._broadcast("hydrate", snapshot, feed=idle_feed)
+            self._remember(snapshot)
+            self._maybe_prefetch(snapshot)
+            return
+
+        if mode != last_mode:
+            if mode == "now_playing":
+                self._broadcast("now_playing", snapshot, feed=idle_feed)
+            else:
+                self._broadcast("idle", snapshot, feed=idle_feed)
+            self._remember(snapshot)
+            self._maybe_prefetch(snapshot)
+            return
+
+        if mode == "now_playing" and sig != last_sig:
+            prev_ids = {p.split(":")[0] for p in last_sig.split("|") if p}
+            next_ids = {p.split(":")[0] for p in sig.split("|") if p}
+            if prev_ids != next_ids:
+                self._broadcast("now_playing", snapshot, feed=idle_feed)
+                self._maybe_prefetch(snapshot)
+            else:
+                self._broadcast("progress", snapshot, feed=idle_feed)
+            self._remember(snapshot)
+            return
+
+        self._remember(snapshot)
 
     def _tick(self) -> None:
         settings = self.settings()
@@ -298,57 +474,34 @@ class TheaterHub:
             self._next_poll_seconds = float(WATCHER_POLL_IDLE_SECONDS)
             return
 
-        need_available_refresh = (
-            self._last_mode == "now_available"
-            and (time.monotonic() - self._last_available_at) >= AVAILABLE_REFRESH_SECONDS
-        )
-        snapshot = self._safe_snapshot(fetch_sessions=True)
-        if snapshot is None:
-            self._next_poll_seconds = self.poll_interval_for_mode(
-                self._last_mode or "empty", degraded=True
-            )
+        active_feeds = self._active_feeds()
+        plex_sessions = self._fetch_plex_sessions_for_tick(settings)
+        if settings_changed:
+            for idle_feed in active_feeds:
+                snapshot = self._safe_snapshot(
+                    fetch_sessions=False,
+                    feed=idle_feed,
+                    plex_sessions=plex_sessions,
+                )
+                if snapshot is not None:
+                    self._broadcast("hydrate", snapshot, feed=idle_feed)
+                    self._remember(snapshot)
+                    self._maybe_prefetch(snapshot)
             return
 
-        if settings_changed or need_available_refresh:
-            self._broadcast("hydrate", snapshot)
-            self._remember(snapshot)
-            self._maybe_prefetch(snapshot)
-            return
+        for idle_feed in active_feeds:
+            self._tick_feed(idle_feed, plex_sessions=plex_sessions)
 
-        mode = str(snapshot.get("mode") or "")
-        sig = session_signature(snapshot.get("sessions") or [])
-        if mode != self._last_mode:
-            if mode == "now_playing":
-                self._broadcast("now_playing", snapshot)
-            else:
-                self._broadcast("idle", snapshot)
-            self._remember(snapshot)
-            self._maybe_prefetch(snapshot)
-            return
-
-        if mode == "now_playing" and sig != self._last_signature:
-            # Session set / pause / seek change — push progress correction.
-            prev_ids = {p.split(":")[0] for p in self._last_signature.split("|") if p}
-            next_ids = {p.split(":")[0] for p in sig.split("|") if p}
-            if prev_ids != next_ids:
-                self._broadcast("now_playing", snapshot)
-                self._maybe_prefetch(snapshot)
-            else:
-                self._broadcast("progress", snapshot)
-            self._remember(snapshot)
-            return
-
-        self._remember(snapshot)
-
-    async def subscribe(self) -> AsyncIterator[str]:
+    async def subscribe(self, *, feed: str = "recently_added") -> AsyncIterator[str]:
+        idle_feed = normalize_theater_feed(feed)
         loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue(maxsize=32)
-        sub = _Subscriber(queue=queue, loop=loop)
+        sub = _Subscriber(queue=queue, loop=loop, feed=idle_feed)
         with self._lock:
             self._subscribers.add(sub)
 
         try:
-            snapshot = self._safe_snapshot(fetch_sessions=True)
+            snapshot = self._safe_snapshot(fetch_sessions=True, feed=idle_feed)
             if snapshot is None:
                 snapshot = {
                     "enabled": False,
@@ -362,6 +515,7 @@ class TheaterHub:
                     "multi_mode": "rotator",
                     "idle_mode": "empty",
                     "rotate_seconds": 12,
+                    "feed": idle_feed,
                 }
             yield _sse_event("hydrate", snapshot)
             self._remember(snapshot)

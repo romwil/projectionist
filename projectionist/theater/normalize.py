@@ -11,6 +11,25 @@ _AUDIENCES = frozenset({"everyone", "household"})
 _IDLE_MODES = frozenset({"empty", "now_available"})
 _MULTI_MODES = frozenset({"rotator", "panelled"})
 _HEADER_MODES = frozenset({"dynamic", "static"})
+_FEED_MODES = frozenset({"recently_added", "recently_released", "trending"})
+_FEED_ALIASES = {
+    "recently-added": "recently_added",
+    "recentlyadded": "recently_added",
+    "recent-releases": "recently_released",
+    "recent_releases": "recently_released",
+    "recently-released": "recently_released",
+    "recentlyreleased": "recently_released",
+    "popular": "trending",
+}
+
+
+def normalize_theater_feed(raw: str | None) -> str:
+    """Lobby idle deck source — ``?feed=`` on the theater URL / SSE endpoint."""
+    token = str(raw or "").strip().lower().replace("-", "_")
+    token = _FEED_ALIASES.get(token, token)
+    if token in _FEED_MODES:
+        return token
+    return "recently_added"
 
 
 def normalize_theater_settings(raw: TheaterSettings | Mapping[str, Any] | None) -> TheaterSettings:

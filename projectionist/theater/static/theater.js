@@ -30,6 +30,9 @@
   let currentMode = "empty";
   /** @type {Array<object>} */
   let liveSessions = [];
+  /** @type {string} */
+  let idleFeed = "recently_added";
+
   /** URLs that failed to load this session; cleared when deck drops them. */
   const deadPosters = new Set();
   /** Cached contrast choice per poster URL — avoid re-sampling on Pi-class CPUs. */
@@ -359,6 +362,9 @@
     if (Array.isArray(snapshot.available)) {
       deck = snapshot.available.filter((item) => item && item.poster_url);
     }
+    if (snapshot.feed && snapshot.feed !== idleFeed) {
+      idleFeed = String(snapshot.feed);
+    }
 
     const activeUrls = [];
     (snapshot.sessions || []).forEach((s) => {
@@ -389,6 +395,37 @@
     showEmpty();
   }
 
+  function readFeedParam() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const raw = params.get("feed");
+      if (!raw) return "recently_added";
+      const token = String(raw).trim().toLowerCase().replace(/-/g, "_");
+      if (token === "recently_added" || token === "recentlyadded") {
+        return "recently_added";
+      }
+      if (
+        token === "recently_released" ||
+        token === "recent_releases" ||
+        token === "recentlyreleased"
+      ) {
+        return "recently_released";
+      }
+      if (token === "trending" || token === "popular") {
+        return "trending";
+      }
+      return "recently_added";
+    } catch (_) {
+      return "recently_added";
+    }
+  }
+
+  function eventsUrl() {
+    const base = "/api/theater/events";
+    if (!idleFeed || idleFeed === "recently_added") return base;
+    return `${base}?feed=${encodeURIComponent(idleFeed)}`;
+  }
+
   function connect() {
     if (source) {
       try {
@@ -400,7 +437,7 @@
     }
     // Do not clearTimers / wipe the board — local idle deck keeps running
     // while SSE reconnects through a hiccup.
-    source = new EventSource("/api/theater/events");
+    source = new EventSource(eventsUrl());
     markByte();
 
     const onPayload = (event) => {
@@ -453,6 +490,7 @@
     }, 5000);
   }
 
+  idleFeed = readFeedParam();
   connect();
   startWatchdog();
 })();
