@@ -22,7 +22,7 @@ Lobby theater idle boards can pick a movie feed from the URL — recently added,
 ### Verification
 - Backend: 1,978 passed, 6 skipped, 34 subtests passed; 76.02% coverage (74% required).
 - Frontend: ESLint 0 errors (134 warnings pre-existing); production Vite build passed.
-- Theater suite: 23 passed (feed param, per-feed hub, trending deck).
+- Theater suite: 27 passed (feed param, per-feed hub, trending deck, single Plex poll per tick, header labels).
 
 ## [1.33.1] — 2026-08-27
 

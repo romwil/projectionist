@@ -6,7 +6,7 @@ In-repo documentation for operators deploying Projectionist on Docker or Unraid.
 
 An **agentic curator** for self-hosted Plex — chat, Explore browse, and a **privacy-first MCP interface** over local structured + unstructured data. Projectionist indexes your library into SQLite (credits, dates, facets, layered plot text, materialized neighbors/relations) and exposes surgical tool calls to a BYO LLM. Your Plex token, watch history, and collection details never leave your hardware.
 
-Features: library-grounded recommendations, Explore feeds, title detail with neighbors, confirm-gated Radarr/Sonarr adds, ratings and watchlists, Lights Up/Down themes, owner dashboard, optional household auth (Plex PIN, local password, OIDC), dual-key MCP transport, and a single `/config` Docker volume. See [MCP.md](../MCP.md) and [ARCHITECTURE.md](../ARCHITECTURE.md).
+Features: library-grounded recommendations, Explore feeds, title detail with neighbors, confirm-gated Radarr/Sonarr adds, ratings and watchlists, **Lobby Theater** LAN kiosks (now playing + `?feed=` idle carousels on a dedicated port), **Live Channels** via Tunarr, Lights Up/Down themes, owner dashboard, optional household auth (Plex PIN, local password, OIDC), dual-key MCP transport, and a single `/config` Docker volume. See [MCP.md](../MCP.md) and [ARCHITECTURE.md](../ARCHITECTURE.md).
 
 ## Pages
 
