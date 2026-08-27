@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Hub-first release: this push IS the release artifact.
+# A version is not released until romwil/projectionist:X.Y.Z exists on Hub.
+# GitHub merge / local Unraid docker build are NOT substitutes. See docs/RELEASE.md.
 # Multi-arch Docker Hub release for Projectionist.
 #
 # Canonical image: romwil/projectionist

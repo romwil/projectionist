@@ -1,5 +1,5 @@
 ---
-description: Follow docs/RELEASE.md for version bumps, CHANGELOG releases, GitHub releases, and Docker image publishes
+description: Follow docs/RELEASE.md for Hub-first ships, version bumps, CHANGELOG, GitHub releases, and Docker image publishes
 globs: CHANGELOG.md,projectionist/_version.py,package.json,frontend/package.json,frontend/public/release-notes.json,scripts/docker-release.sh,scripts/generate-release-notes.sh,docs/RELEASE.md,pyproject.toml,templates/projectionist.xml,unraid/projectionist.xml,README.md,tests/test_version.py,.github/workflows/ci.yml
 alwaysApply: false
 ---
@@ -10,6 +10,17 @@ When shipping a version, bumping versions, writing a release CHANGELOG entry, cu
 GitHub release, or pushing Docker images, **read and follow**
 [docs/RELEASE.md](../../docs/RELEASE.md). Do not rediscover the process.
 
+## Canonical ship path (Hub-first)
+
+A version is **not released** until Hub has `romwil/projectionist:X.Y.Z`. Order:
+
+1. **Prepare** on a PR branch (semver + CHANGELOG + tests; no direct `main` push)
+2. **Hub** — `./scripts/docker-release.sh X.Y.Z`
+3. **GitHub** — merge PR → `main`, then tag `vX.Y.Z`, `gh release create`
+4. **CA proof** — pull Hub tag (Path B); **not** Path A host `docker build` on Automat
+5. **Prod** — only when asked: `rollout.sh X.Y.Z` (pull-only)
+
+
 ## Hard rules
 
 - **Commit / push / tag / `gh release` / Docker Hub push only when the user explicitly asks**
@@ -19,6 +30,10 @@ GitHub release, or pushing Docker images, **read and follow**
   release PR is merged into `main` (see [docs/RELEASE.md](../../docs/RELEASE.md)).
 - **Hub-first:** a version is not released until `romwil/projectionist:X.Y.Z` exists on Docker
   Hub (`./scripts/docker-release.sh X.Y.Z`). GitHub merge alone is not a ship.
+- **CA proof ≠ Path A:** do not treat a host-built QA image or local `docker build` as Unraid CA / release proof. Pull the Hub tag (Path B).
+- **Do not** claim version `X.Y.Z` is released if Hub lacks `romwil/projectionist:X.Y.Z`.
+- **Do not** bump version in-tree without a matching Hub publish in the same ship.
+- **Semver:** patch for hotfixes (e.g. single-flight cancel → `1.33.1` → `1.33.2`); minor for features; never reuse a shipped `X.Y.Z` for new bits.
 - **Do not** bump versions or cut a release while unrelated WIP (another agent’s feature)
   is mid-edit on the same files unless the user coordinates it.
 - Keep versions in lockstep (enforced by `tests/test_version.py` except the README badge):
@@ -40,5 +55,5 @@ GitHub release, or pushing Docker images, **read and follow**
   unless an active QA/test campaign is in progress. Never stop prod `projectionist` / `:8788`.
   Runbook: `/Volumes/appdata/projectionist-qa-scripts/qa-runs/QA-LIFECYCLE.md`.
 
-Checklist, exact test commands (pytest cov ≥74, frontend unit/lint/build), `gh release`
-notes shape, and failure modes: **docs/RELEASE.md**.
+Checklist, anti-patterns, exact test commands, `gh release` notes shape, and failure
+modes: **docs/RELEASE.md**.
