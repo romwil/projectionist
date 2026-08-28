@@ -9,6 +9,7 @@ import {
   expandRailItem,
   stashRailSeed,
 } from "./railChatSeed.js";
+import { libraryHubPath } from "./libraryTabs.js";
 
 export const ROUTES = {
   chat: "/chat",
@@ -69,9 +70,9 @@ export const RECOMMEND_LIKE_PARAM = "recommend_like";
 const RECOMMEND_LIKE_YEAR_PARAM = "year";
 const RECOMMEND_LIKE_TYPE_PARAM = "type";
 
-/** Deep-link to the watchlist browse page. */
+/** Deep-link to the watchlist tab in the Library hub. */
 export function watchlistBrowseHref() {
-  return ROUTES.watchlist;
+  return libraryHubPath("watchlist");
 }
 
 /** Deep-link to chat that triggers the rate / review batch flow. */
@@ -310,8 +311,12 @@ export function backLabelForPath(path, { defaultLabel = "Back" } = {}) {
     return "Back to tag search";
   }
   if (normalized === ROUTES.plotLab) return "Back to Plot Lab";
-  if (normalized === ROUTES.libraryBrowse) return "Back to Explore";
-  if (normalized === ROUTES.watchlist) return "Back to chat";
+  if (normalized === ROUTES.libraryBrowse) return "Back to Library";
+  if (normalized === ROUTES.watchlist) return "Back to Library";
+  if (normalized === ROUTES.library) return "Back to chat";
+  if (normalized.startsWith("/library/saved")) return "Back to Library";
+  if (normalized.startsWith("/library/shelves")) return "Back to Library";
+  if (normalized.startsWith("/library/collections")) return "Back to Library";
   if (normalized.startsWith("/explore/section/")) return "Back to Explore";
   if (normalized.startsWith("/tag/")) return "Back to tag";
   if (normalized.startsWith("/person/")) return "Back to person";

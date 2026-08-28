@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ROUTES } from "./backNav.js";
+import { libraryHubPath } from "./libraryTabs.js";
 import {
   APP_NAV_CORE_ITEMS,
   YOUTH_NAV_ITEMS,
@@ -41,7 +42,6 @@ describe("buildAppNavItems", () => {
     assert.deepEqual(moreBlock(items), [
       "related-titles",
       "tags",
-      "watchlist",
       "library",
       "help",
       "privacy",
@@ -144,7 +144,6 @@ describe("buildAppNavItems", () => {
     assert.deepEqual(moreBlock(items), [
       "related-titles",
       "tags",
-      "watchlist",
       "library",
       "help",
       "privacy",
@@ -171,7 +170,7 @@ describe("buildAppNavItems", () => {
       APP_NAV_CORE_ITEMS.find((item) => item.id === "related-titles")?.to,
       ROUTES.relatedTitles,
     );
-    assert.equal(APP_NAV_CORE_ITEMS.find((item) => item.id === "watchlist")?.kind, "watchlist");
+    assert.equal(APP_NAV_CORE_ITEMS.find((item) => item.id === "watchlist"), undefined);
     assert.equal(APP_NAV_CORE_ITEMS.find((item) => item.id === "library")?.to, ROUTES.library);
   });
 
@@ -179,6 +178,7 @@ describe("buildAppNavItems", () => {
     const items = buildAppNavItems({ isYouth: true, role: "member" });
     assert.deepEqual(moreBlock(items), ["watchlist", "help"]);
     assert.equal(items.find((item) => item.id === "watchlist")?.label, "My list");
+    assert.equal(items.find((item) => item.id === "watchlist")?.to, libraryHubPath("watchlist"));
     assert.equal(navigateBlock(items).includes("admin"), false);
     assert.equal(navigateBlock(items).includes("my-journey"), true);
   });
