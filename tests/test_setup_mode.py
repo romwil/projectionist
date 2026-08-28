@@ -29,7 +29,6 @@ class SetupModeApiTests(unittest.TestCase):
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
-        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-setup-mode-session-secret-xx"
         os.environ["HOST"] = "0.0.0.0"
@@ -53,7 +52,6 @@ class SetupModeApiTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         for key in (
-            "PROJECTIONIST_SKIP_DOTENV",
             "PROJECTIONIST_SKIP_DOTENV",
             "LLM_PROVIDER",
             "PROJECTIONIST_SESSION_SECRET",

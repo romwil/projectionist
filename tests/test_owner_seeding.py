@@ -222,7 +222,6 @@ class OwnerSeedingIntegrationTests(unittest.TestCase):
             {
                 "DATA_DIR": self._tmp.name,
                 "PROJECTIONIST_SKIP_DOTENV": "1",
-                "PROJECTIONIST_SKIP_DOTENV": "1",
                 "LLM_PROVIDER": "ollama",
                 "PROJECTIONIST_SESSION_SECRET": "integration-owner-seed-secret-value",
                 "PROJECTIONIST_OWNER_USERNAME": "boss",
