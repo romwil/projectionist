@@ -180,9 +180,9 @@ class TelemetryAdminAPITests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-telemetry-secret"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-telemetry-secret"
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
@@ -201,9 +201,9 @@ class TelemetryAdminAPITests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
-        os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_SESSION_SECRET", None)
         self._tmpdir.cleanup()
 
     def test_summary_endpoint(self) -> None:

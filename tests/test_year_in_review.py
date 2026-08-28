@@ -185,10 +185,9 @@ class YearInReviewAdminApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-yir-secret"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-yir-secret"
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
@@ -209,10 +208,9 @@ class YearInReviewAdminApiTests(unittest.TestCase):
         clear_rate_limits()
         clear_pin_bindings()
         for key in (
-            "CURATORX_SKIP_DOTENV",
             "PROJECTIONIST_SKIP_DOTENV",
             "LLM_PROVIDER",
-            "CURATORX_SESSION_SECRET",
+            "PROJECTIONIST_SESSION_SECRET",
             "DATA_DIR",
         ):
             os.environ.pop(key, None)

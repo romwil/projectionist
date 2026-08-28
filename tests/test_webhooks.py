@@ -185,7 +185,7 @@ class PlexWebhookApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         self._secret = "test-webhook-secret"
         save_settings(Path(self._tmpdir.name), Settings(webhook_secret=self._secret))
@@ -196,7 +196,7 @@ class PlexWebhookApiTests(unittest.TestCase):
 
         importlib.reload(app_mod)
         self.client = TestClient(app_mod.app)
-        self._headers = {"X-CuratorX-Webhook-Secret": self._secret}
+        self._headers = {"X-Projectionist-Webhook-Secret": self._secret}
         self.db = jobs.get_job_manager().db
         self.db.upsert_plex_user(
             user_id="plex-4242",
@@ -210,7 +210,7 @@ class PlexWebhookApiTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
         self._tmpdir.cleanup()
 
@@ -248,7 +248,7 @@ class PlexWebhookApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         body = str(response.json().get("detail") or "")
         self.assertNotIn("PROJECTIONIST_", body)
-        self.assertNotIn("CURATORX_", body)
+        self.assertNotIn("PROJECTIONIST_", body)
         self.assertNotIn("webhook_secret", body.lower())
 
     def test_webhook_rejects_missing_secret_when_configured(self) -> None:
@@ -288,7 +288,7 @@ class PlexWebhookApiTests(unittest.TestCase):
         response = client.post(
             "/api/webhooks/plex",
             json=_movie_stop_payload(),
-            headers={"X-CuratorX-Webhook-Secret": "super-secret"},
+            headers={"X-Projectionist-Webhook-Secret": "super-secret"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.json()["queued"])

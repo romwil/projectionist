@@ -18,6 +18,7 @@ import { useTitleDetailOverlay } from "../components/TitleDetailOverlayProvider.
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES } from "../lib/backNav.js";
+import { libraryHubPath } from "../lib/libraryTabs.js";
 import {
   BULK_DELETE_EMPTY_SELECTION_MESSAGE,
   formatBulkLibraryDeleteResultMessage,
@@ -45,7 +46,7 @@ function pinToCardItem(pin) {
   };
 }
 
-export default function WatchlistPage() {
+export default function WatchlistPage({ embedded = false }) {
   const { isOwner, multiUserEnabled } = useAuthGate();
   const { start, update, finish } = useBulkActionProgress();
   const { openTitleDetail } = useTitleDetailOverlay();
@@ -260,18 +261,9 @@ export default function WatchlistPage() {
     });
   }
 
-  return (
-    <AppShell
-      className="app-root watchlist-page"
-      testId="watchlist-page"
-      variant="browse"
-      leading={<BackLink fallbackTo={ROUTES.chat} testId="watchlist-back" />}
-      actions={
-        <Link to={ROUTES.watchlistSettings} className="app-topbar-link" data-testid="watchlist-sync-settings">
-          Sync settings
-        </Link>
-      }
-    >
+  const pageBody = (
+    <>
+      {!embedded ? (
       <section className="explore-section-hero watchlist-hero" data-testid="watchlist-hero">
         <p className="person-eyebrow">Watchlist</p>
         <h1 data-testid="watchlist-title">Your watchlist</h1>
@@ -282,6 +274,7 @@ export default function WatchlistPage() {
           </Link>
         </p>
       </section>
+      ) : null}
 
       <div className="explore-section-toolbar watchlist-toolbar" data-testid="watchlist-toolbar">
         <MediaBrowseControls
@@ -429,6 +422,24 @@ export default function WatchlistPage() {
         open={Boolean(recommendItem)}
         onClose={() => setRecommendItem(null)}
       />
+    </>
+  );
+
+  if (embedded) return pageBody;
+
+  return (
+    <AppShell
+      className="app-root watchlist-page"
+      testId="watchlist-page"
+      variant="browse"
+      leading={<BackLink fallbackTo={libraryHubPath("watchlist")} testId="watchlist-back" />}
+      actions={
+        <Link to={ROUTES.watchlistSettings} className="app-topbar-link" data-testid="watchlist-sync-settings">
+          Sync settings
+        </Link>
+      }
+    >
+      {pageBody}
     </AppShell>
   );
 }

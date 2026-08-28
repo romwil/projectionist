@@ -388,29 +388,6 @@ def sample_owned_library(
     )
 
 
-@mcp.tool(name="find_collection_gaps")
-def find_collection_gaps(
-    media_type: Optional[str] = "movie",
-    year_from: Optional[int] = None,
-    year_to: Optional[int] = None,
-    genres: Optional[str] = None,
-    limit: int = 12,
-) -> str:
-    """Deprecated alias of sample_owned_library (owned inventory only).
-
-    Prefer sample_owned_library for owned slices, or discover_missing_titles for
-    real TMDB titles missing from the library. Kept for one release for clients
-    still calling find_collection_gaps.
-    """
-    return _sample_owned_library_payload(
-        media_type=media_type,
-        year_from=year_from,
-        year_to=year_to,
-        genres=genres,
-        limit=limit,
-    )
-
-
 @mcp.tool()
 def discover_missing_titles(
     media_type: str = "movie",

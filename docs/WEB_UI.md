@@ -67,10 +67,10 @@ With `features.multi_user_enabled` left at `false` (the default), Projectionist 
 | `/title/{movie\|show}/{id}` | Title detail — backdrop hero, Plot knowledge panel, trailer modal, Watch on Plex, purge notes |
 | `/privacy` | Privacy disclosure (no login) |
 | `/about` | About / version |
-| `/help` | Help guide — Chat, Explore, Plot Lab, owner idle curation (no login; role-aware sections) |
+| `/help` | Help guide — Chat, Explore, Related titles, owner idle curation (no login; role-aware sections) |
 | `/explore` | Explore hub — hero library search, Browse Movies/TV entry cards, feed rails, Library Pulse + knowledge strip footer |
 | `/explore/browse` | Unified library browse — server-paginated title list (Movies / TV shows / `q` search) reusing the standard sort/filter/columns/export/bulk stack and the 48/100/500/All page-size selector |
-| `/explore/plot-lab` | Plot Lab — multi-signal / motifs-only walls, theme chips when present, Why? layers, surprising neighbors |
+| `/explore/plot-lab` | Related titles — multi-signal / motifs-only walls, theme chips when present, Why? layers, surprising neighbors |
 | `/lists` and `/lists/{id}` | Local curated lists and playlists; a list is a reusable shelf, while a playlist signals a planned viewing sequence |
 | `/admin/issues` | Owner-only media-issue queue with review status and logged supported repairs |
 | `/admin/tasks` | Owner Scheduled Tasks (coverage strip, cadence, batch, measured rate, run history, ETA) |
@@ -115,7 +115,7 @@ On `/config` load, the UI fetches certification status and sequentially tests an
 - **Card hover backdrop** — Hover a title card to see a blurred backdrop image when art is available.
 - **Cinema mode** — In the results overlay, toggle **Cinema mode** to enlarge cards and dim surrounding chrome.
 - **TV progress rings** — Show cards display a small ring for watched vs total episodes when that data is available.
-- **Watch overlays** — Every poster (Explore rails, Plot Lab, Watchlist, Person, section pages, chat TitleCard, QuickPick, title-detail related rails) shows a Plex-like upper-right checkmark when fully watched, or a distinct in-progress badge for movie playhead progress / partially watched shows.
+- **Watch overlays** — Every poster (Explore rails, Related titles, Watchlist, Person, section pages, chat TitleCard, QuickPick, title-detail related rails) shows a Plex-like upper-right checkmark when fully watched, or a distinct in-progress badge for movie playhead progress / partially watched shows.
 - **Revisit These** — Explore hub rail of up to 20 partially watched shows idle for 60+ days (random sample; honest empty when none qualify).
 - **Explore discovery rotation** — The hub rotates one director filmography (minimum three owned titles) and one genre (minimum four) per day using a deterministic date seed, so a reload does not shuffle the shelves. A third rail uses the small, editable server calendar for holidays and observances (including movable Arbor Day); within seven days it matches title, genre, keyword, and plot text to that occasion. Otherwise it uses a restrained season-of-the-year match. Rails hide when their metadata has no useful matches; director and genre headings deep-link to their existing Explore facet walls.
 - **Library Pulse placement** — Library Pulse is deliberately after the discovery rails. It preserves the same health and collection stats, while letting title-led browsing set the first impression of Explore.
@@ -308,15 +308,15 @@ Anyone may send a typed **Report issue** from the grip. Reports go to `/api/medi
 
 | Surface | Audience | Content |
 |---------|----------|---------|
-| `/help` ([HELP.md](HELP.md)) | Everyone; owner sections when `isOwner` | Chat, Explore, Plot Lab, Plot knowledge, sparse-wall explanation; owners get scheduler / coverage / LLM-vs-free guidance |
-| [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) | Operators + curious users | Full why/what/how of knowledge dimensions, idle trickle, product surfaces for coverage / Plot Lab / title detail |
+| `/help` ([HELP.md](HELP.md)) | Everyone; owner sections when `isOwner` | Chat, Explore, Related titles, Plot knowledge, sparse-wall explanation; owners get scheduler / coverage / LLM-vs-free guidance |
+| [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) | Operators + curious users | Full why/what/how of knowledge dimensions, idle trickle, product surfaces for coverage / Related titles / title detail |
 | Admin → Dashboard | Owners | Knowledge coverage panel (% overview / motifs / keywords / neighbors / loglines) |
 | Admin → Scheduled Tasks | Owners | Coverage strip + cadence, measured rate, ETA; deep-linked from Help and cold Explore empty states |
 | Explore hub | Everyone | Compact knowledge-coverage honesty strip |
 
 Jump links on Help highlight **Owners**, Coverage, Dashboard, and Scheduled Tasks for owners; members see browse/chat guidance and are pointed at the server owner for sync.
 
-**Deep-linkable Help.** Every Help heading (h2/h3/h4) is auto-assigned a stable GitHub-style anchor id from its text — no hand-maintained lookup — so any section is addressable as `/help#section-slug`. `HelpPage` scrolls to `location.hash` after the markdown paints (with a `scroll-margin-top` so the sticky header clears). Wire contextual "learn more" links with the shared `helpAnchor(slug)` builder (`src/lib/backNav.js`) or the unobtrusive `HelpHint` component (`src/components/HelpHint.jsx`), which renders a subtle "?" icon or a small text link that jumps straight to the right section. Current contextual entry points: the knowledge-coverage strip/panel, Explore's **Library Pulse**, title-detail **Plot knowledge**, and Plot Lab's sparse-wall note. Slugs are unit-tested in `src/lib/helpAnchors.test.mjs`.
+**Deep-linkable Help.** Every Help heading (h2/h3/h4) is auto-assigned a stable GitHub-style anchor id from its text — no hand-maintained lookup — so any section is addressable as `/help#section-slug`. `HelpPage` scrolls to `location.hash` after the markdown paints (with a `scroll-margin-top` so the sticky header clears). Wire contextual "learn more" links with the shared `helpAnchor(slug)` builder (`src/lib/backNav.js`) or the unobtrusive `HelpHint` component (`src/components/HelpHint.jsx`), which renders a subtle "?" icon or a small text link that jumps straight to the right section. Current contextual entry points: the knowledge-coverage strip/panel, Explore's **Library Pulse**, title-detail **Plot knowledge**, and Related titles's sparse-wall note. Slugs are unit-tested in `src/lib/helpAnchors.test.mjs`.
 
 ---
 

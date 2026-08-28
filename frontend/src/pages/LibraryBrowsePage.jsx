@@ -82,7 +82,7 @@ function browseSubtitle(mediaType, q) {
   return "Every title in your library";
 }
 
-export default function LibraryBrowsePage() {
+export default function LibraryBrowsePage({ embedded = false }) {
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isOwner, multiUserEnabled } = useAuthGate();
@@ -466,28 +466,9 @@ export default function LibraryBrowsePage() {
     ? { showRecommend: true, onRecommend: setRecommendItem }
     : { showRecommend: false };
 
-  return (
-    <AppShell
-      className={`app-root explore-section-page library-browse-page${isSearchRoute ? " search-page" : ""}`}
-      testId={isSearchRoute ? "search-page" : "library-browse-page"}
-      variant={isSearchRoute ? "topbar" : "browse"}
-      title={isSearchRoute ? "Search" : undefined}
-      eyebrow={isSearchRoute ? "Your collection and beyond" : undefined}
-      leading={
-        isSearchRoute ? null : <BackLink fallbackTo={ROUTES.explore} testId="library-browse-back" />
-      }
-      actions={
-        isSearchRoute ? null : (
-          <Link
-            to={ROUTES.explore}
-            className="app-topbar-link"
-            data-testid="library-browse-hub-link"
-          >
-            Explore hub
-          </Link>
-        )
-      }
-    >
+  const pageBody = (
+    <>
+      {!embedded ? (
       <section className="explore-section-hero" data-testid="library-browse-hero">
         <p className="person-eyebrow">{isSearchRoute ? "Search" : "Explore"}</p>
         <h1 data-testid="library-browse-title">{browseHeading(browse.media_type, q)}</h1>
@@ -500,6 +481,7 @@ export default function LibraryBrowsePage() {
           onSubmit={handleSearchSubmit}
         />
       </section>
+      ) : null}
 
       <div className="explore-section-toolbar" data-testid="library-browse-toolbar">
         <MediaBrowseControls
@@ -742,6 +724,34 @@ export default function LibraryBrowsePage() {
           multiUserEnabled={access.multiUserEnabled}
         />
       ) : null}
+    </>
+  );
+
+  if (embedded) return pageBody;
+
+  return (
+    <AppShell
+      className={`app-root explore-section-page library-browse-page${isSearchRoute ? " search-page" : ""}`}
+      testId={isSearchRoute ? "search-page" : "library-browse-page"}
+      variant={isSearchRoute ? "topbar" : "browse"}
+      title={isSearchRoute ? "Search" : undefined}
+      eyebrow={isSearchRoute ? "Your collection and beyond" : undefined}
+      leading={
+        isSearchRoute ? null : <BackLink fallbackTo={ROUTES.explore} testId="library-browse-back" />
+      }
+      actions={
+        isSearchRoute ? null : (
+          <Link
+            to={ROUTES.explore}
+            className="app-topbar-link"
+            data-testid="library-browse-hub-link"
+          >
+            Explore hub
+          </Link>
+        )
+      }
+    >
+      {pageBody}
     </AppShell>
   );
 }

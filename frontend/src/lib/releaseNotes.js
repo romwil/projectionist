@@ -1,6 +1,6 @@
 /** Release notes helpers — What’s New gate + About panel. */
 
-export const LAST_SEEN_VERSION_KEY = "curatorx.last_seen_version";
+export const LAST_SEEN_VERSION_KEY = "projectionist.last_seen_version";
 export const RELEASE_NOTES_URL = "/release-notes.json";
 
 /**

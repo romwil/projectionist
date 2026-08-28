@@ -11,7 +11,7 @@ const KONAMI_SEQUENCE = [
   "a",
 ];
 
-const EASTER_EGG_STORAGE_KEY = "curatorx.easter-egg-fired";
+const EASTER_EGG_STORAGE_KEY = "projectionist.easter-egg-fired";
 
 export function easterEggAlreadyFired() {
   try {

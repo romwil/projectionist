@@ -35,13 +35,13 @@ describe("normalizeWeeklyDigest", () => {
     assert.equal(stats.new.value, "4");
     assert.equal(stats.new.to, "/explore/section/recently-added");
     assert.equal(stats["open-issues"].value, "2");
-    assert.equal(stats["open-issues"].to, "/admin/issues");
+    assert.equal(stats["open-issues"].to, "/admin/health?tab=issues");
     assert.equal(stats.unwatched.value, "62%");
     assert.match(stats.unwatched.to, /watch_state=unwatched/);
     assert.equal(stats.coverage.value, "89%");
     assert.equal(stats.coverage.to, "/admin/taxonomy");
     assert.equal(stats.purge.value, "6");
-    assert.equal(stats.purge.to, "/admin/dashboard#storage-intelligence");
+    assert.equal(stats.purge.to, "/admin/health?tab=sync#storage-intelligence");
   });
 
   it("dedupes new-addition chips by tmdb or title+year", () => {

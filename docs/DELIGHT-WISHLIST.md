@@ -1,6 +1,6 @@
 # Delight wishlist
 
-Living backlog for experiences that make CuratorX feel more generous. Tags are target persona and priority; promotion into a delivery plan remains an owner decision.
+Living backlog for experiences that make Projectionist feel more generous. Tags are target persona and priority; promotion into a delivery plan remains an owner decision.
 
 The backlog is delivered in **phases**, each one a self-contained milestone that ships and releases on its own. Phases 1 and 2 are done; Phases 3–5 below reflect a **full persona re-survey** (human + AI archetypes) and the locked planning decisions that close the former open questions. A contributor can pick up any remaining phase and plan it without re-deriving the groundwork.
 
@@ -22,7 +22,7 @@ The delight work is sequenced by *who* it serves, easiest-to-reach substrate fir
 | **1** | Curator memory foundation — cited knowledge, follow-ups, fail-closed per-user memory                                          | The AI curators (Scholar, Concierge, Companion) | ✅ Shipped **1.10.0** |
 | **2** | Owner delight tools — health hero, safe grooming undo, collections/courses, Youth review, weekly digest                       | Owner / Curator                                 | ✅ Shipped **1.16.0** |
 | **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | ✅ P3a **1.20.0**; P3b **1.21.0**; P3c **1.22.0** |
-| **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, CuratorX request-access    | Youth members, guests                           | ✅ Shipped **1.23.0** |
+| **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, Projectionist request-access    | Youth members, guests                           | ✅ Shipped **1.23.0** |
 | **5** | Curator depth — Enthusiast nudge (no live now-watching), Scholar syllabus, Concierge acquire path, Companion mood + callbacks | The four curator archetypes                     | ✅ Shipped **1.24.0** |
 | **Next** | Post–Phase-5 program (gaps/MCP, Live residuals, Admin rail, LLM ops, delight A–E) | Household + curators | → Cursor unified plan `unified_gaps_and_delight_b1cef49d` |
 
@@ -40,7 +40,7 @@ flowchart LR
 
 **How to read the phases below.** Each one calls out what it can **build on** (shipped substrate) versus what is **greenfield** (no code exists yet), so nobody plans a milestone assuming a transport or connector that isn't there. Capabilities keep the doc's **Must / Love / Like** priority framing. Planning unknowns that once lived as "open questions" are recorded under [Locked decisions](#locked-decisions).
 
-**Out of scope for Phases 3–5 (explicit):** external streaming "on Netflix/Max" connectors; live Plex session / now-watching polling; replacing Seerr for post-member *media* acquisition (CuratorX owns *account* access requests only).
+**Out of scope for Phases 3–5 (explicit):** external streaming "on Netflix/Max" connectors; live Plex session / now-watching polling; replacing Seerr for post-member *media* acquisition (Projectionist owns *account* access requests only).
 
 ---
 
@@ -60,7 +60,7 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 | **Youth / guest UI**                        | **Distinct layouts** (not just role-conditioned chrome on the adult shell).                                                                                                                                                                                                                                                                               |
 | **Engagement (badges / streaks / courses)** | Substrate in **Phase 3**; youth-safe presets in **Phase 4**.                                                                                                                                                                                                                                                                                              |
 | **Now-watching / Plex sessions**            | **Out of this program.** Enthusiast re-ranked: nudge is Must; react to *recently* watched / continue-watching context is Love.                                                                                                                                                                                                                            |
-| **Guest request-access**                    | CuratorX-owned invite/request queue → owner inbox (+ email). Not Seerr-as-first-entry. Seerr remains for *media* requests after membership.                                                                                                                                                                                                               |
+| **Guest request-access**                    | Projectionist-owned invite/request queue → owner inbox (+ email). Not Seerr-as-first-entry. Seerr remains for *media* requests after membership.                                                                                                                                                                                                               |
 
 
 ---
@@ -73,7 +73,7 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 
 ### Phase 3 — Adult everyday + notifications + engagement
 
-**Why this matters / who it delights.** The adult household member is the person who opens CuratorX most nights. Phase 1 gave the curator a memory; Phase 2 gave the owner control. Phase 3 turns both into everyday wins the member actually feels — and builds the shared notification + engagement substrate Phase 4 and Phase 5 will reuse. Ship as sequenced sub-releases (P3a → P3b → P3c) if needed; treat as one phase programmatically.
+**Why this matters / who it delights.** The adult household member is the person who opens Projectionist most nights. Phase 1 gave the curator a memory; Phase 2 gave the owner control. Phase 3 turns both into everyday wins the member actually feels — and builds the shared notification + engagement substrate Phase 4 and Phase 5 will reuse. Ship as sequenced sub-releases (P3a → P3b → P3c) if needed; treat as one phase programmatically.
 
 #### P3a — Availability, lists, continue-watching ✅ Shipped **1.20.0**
 
@@ -118,7 +118,7 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 
 ### Phase 4 — Distinct youth + guest doors ✅ Shipped **1.23.0**
 
-**Why this matters / who it delights.** Two audiences share a theme: people who need a *gentler, narrower* CuratorX. Younger household members need age-appropriate results and a friendly voice; guests need to look around safely before they join. Owners already got the Youth **moderation** side in 1.16.0 (the Youth review dashboard and fail-closed youth memory); Phase 4 builds the **member-facing** youth experience and a welcoming guest tour — as **distinct shells**, not a thinner adult chrome.
+**Why this matters / who it delights.** Two audiences share a theme: people who need a *gentler, narrower* Projectionist. Younger household members need age-appropriate results and a friendly voice; guests need to look around safely before they join. Owners already got the Youth **moderation** side in 1.16.0 (the Youth review dashboard and fail-closed youth memory); Phase 4 builds the **member-facing** youth experience and a welcoming guest tour — as **distinct shells**, not a thinner adult chrome.
 
 **Youth member**
 
@@ -130,7 +130,7 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 
 - **Must (substrate ✅):** browse without owner-only data; an obvious sign-in route; no destructive actions.
 - **Must (new UX):** ✅ distinct guest layout / tour shell.
-- **Love:** ✅ a public-friendly "what's great here" tour over published collections; **CuratorX-owned request-access** queue → owner inbox (+ email if configured); approve → invite/member. Do not require prior Seerr login. Seerr remains for *media* requests after membership.
+- **Love:** ✅ a public-friendly "what's great here" tour over published collections; **Projectionist-owned request-access** queue → owner inbox (+ email if configured); approve → invite/member. Do not require prior Seerr login. Seerr remains for *media* requests after membership.
 - **Like:** ✅ a taste quiz that can seed a Phase 3 profile after joining.
 
 ---
@@ -207,7 +207,7 @@ The phases above are drawn from this backlog. It stays as the living, persona-or
 
 - **Must (✅ substrate):** browse sanitized; sign-in route; no destructive actions.
 - **Must (new UX):** distinct guest layout / tour shell.
-- **Love:** "what's great here" guided tour; **CuratorX-owned request-access** queue → owner inbox (+ email); not Seerr-as-first-entry.
+- **Love:** "what's great here" guided tour; **Projectionist-owned request-access** queue → owner inbox (+ email); not Seerr-as-first-entry.
 - **Like:** taste quiz seeding Phase 3 profile after join.
 
 

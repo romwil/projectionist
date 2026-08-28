@@ -76,6 +76,15 @@ import {
 } from "./lib/personaConsultPolling.js";
 import { executeSlashCommand, parseSlashCommand } from "./lib/slashCommands.js";
 import {
+  CHAT_LAUNCHER_CHIPS,
+  resolveChatLauncherChipAction,
+} from "./lib/chatLauncherChips.js";
+import {
+  filterSlashCommandPalette,
+  formatSlashCommandInsert,
+  shouldShowSlashCommandPalette,
+} from "./lib/slashCommandPalette.js";
+import {
   normalizeQuickPickError,
   normalizeQuickPickResult,
   quickPickMoodQuery,
@@ -130,6 +139,7 @@ import TypingIndicator from "./components/TypingIndicator";
 import UndoToast from "./components/UndoToast";
 import WatchlistPanel from "./components/WatchlistPanel";
 import WelcomePanel from "./components/WelcomePanel";
+import SlashCommandPalette from "./components/SlashCommandPalette";
 import OnThisDayCard from "./components/OnThisDayCard";
 import LibraryGlanceCard from "./components/LibraryGlanceCard";
 import { useAuthGate } from "./components/UserMenu";
@@ -138,7 +148,7 @@ import useChatScroll from "./hooks/useChatScroll";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import useVoiceMode from "./hooks/useVoiceMode.js";
 
-const SIDEBAR_RAIL_KEY = "curatorx.sidebar.rail";
+const SIDEBAR_RAIL_KEY = "projectionist.sidebar.rail";
 const ADD_FEEDBACK_DISMISS_MS = 5000;
 const THREAD_DELETE_UNDO_MS = 6000;
 const PERFECT_PICK_ACK =
@@ -167,6 +177,7 @@ export default function App() {
     role: userRole,
     isYouth,
     liveChannelsReady,
+    seerrEnabled,
   } = useAuthGate();
   const { start: startBulkProgress, update: updateBulkProgress, finish: finishBulkProgress } = useBulkActionProgress();
   const navigate = useNavigate();
@@ -237,6 +248,7 @@ export default function App() {
     }
   });
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [slashPaletteIndex, setSlashPaletteIndex] = useState(0);
 
   useEffect(() => {
     if (!isWatchlistPanelRequest(searchParams)) return;
@@ -245,6 +257,18 @@ export default function App() {
   }, [searchParams, setSearchParams, navigate]);
 
   inputRef.current = input;
+
+  useEffect(() => {
+    setSlashPaletteIndex(0);
+  }, [input]);
+
+  const plexCollectionsEnabled = Boolean(features?.features?.plex_collections_enabled);
+  const slashPaletteItems = useMemo(
+    () => filterSlashCommandPalette(input, { plexCollectionsEnabled }),
+    [input, plexCollectionsEnabled],
+  );
+  const showSlashPalette =
+    shouldShowSlashCommandPalette(input) && slashPaletteItems.length > 0 && !loading && threadsReady;
 
   const {
     listening: voiceListening,
@@ -896,6 +920,25 @@ export default function App() {
     return result;
   }
 
+  function handleContextChip(chip) {
+    const action = resolveChatLauncherChipAction(chip);
+    if (!action) return;
+    if (action.type === "send") {
+      sendMessage(action.prompt);
+      return;
+    }
+    if (action.type === "prefill") {
+      setInput(action.text);
+      composerRef.current?.focus();
+    }
+  }
+
+  function handleSlashPaletteSelect(entry) {
+    setInput(formatSlashCommandInsert(entry.command));
+    setSlashPaletteIndex(0);
+    composerRef.current?.focus();
+  }
+
   async function sendMessage(text) {
     if (!text.trim() || loading) return;
     stopVoiceListening();
@@ -1510,6 +1553,7 @@ export default function App() {
         isYouth={isYouth}
         role={userRole}
         multiUserEnabled={multiUserEnabled}
+        seerrEnabled={seerrEnabled}
         authReady={authReady}
         liveChannelsReady={liveChannelsReady}
         navOpen={appNavOpen}
@@ -1654,6 +1698,8 @@ export default function App() {
                   greeting={personaUi?.welcome_greeting}
                   starters={personaUi?.welcome_starters}
                   onStarterSelect={sendMessage}
+                  contextChips={CHAT_LAUNCHER_CHIPS}
+                  onContextChip={handleContextChip}
                 />
               </>
             ) : null}
@@ -1718,6 +1764,14 @@ export default function App() {
               </span>
               <InlineAlert type="error" message={chatError} />
               <div className="composer-chrome" data-testid="composer-chrome">
+                {showSlashPalette ? (
+                  <SlashCommandPalette
+                    items={slashPaletteItems}
+                    activeIndex={slashPaletteIndex}
+                    onSelect={handleSlashPaletteSelect}
+                    onHover={setSlashPaletteIndex}
+                  />
+                ) : null}
                 <textarea
                   ref={composerRef}
                   data-testid="composer-input"
@@ -1737,6 +1791,34 @@ export default function App() {
                       });
                     }
                     konamiTrackerRef.current(event);
+
+                    if (showSlashPalette) {
+                      if (event.key === "ArrowDown") {
+                        event.preventDefault();
+                        setSlashPaletteIndex((index) =>
+                          Math.min(index + 1, slashPaletteItems.length - 1),
+                        );
+                        return;
+                      }
+                      if (event.key === "ArrowUp") {
+                        event.preventDefault();
+                        setSlashPaletteIndex((index) => Math.max(index - 1, 0));
+                        return;
+                      }
+                      if (event.key === "Tab" || event.key === "Enter") {
+                        const entry = slashPaletteItems[slashPaletteIndex];
+                        if (entry) {
+                          event.preventDefault();
+                          handleSlashPaletteSelect(entry);
+                          return;
+                        }
+                      }
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        setSlashPaletteIndex(0);
+                        return;
+                      }
+                    }
 
                     const canSubmit = Boolean(input.trim()) && !loading && threadsReady;
                     if (shouldSubmitComposerOnEnter(event, { canSubmit })) {

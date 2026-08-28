@@ -78,9 +78,9 @@ class FeatureFlagAndTunarrSettingsTests(unittest.TestCase):
             "PROJECTIONIST_TUNARR_URL",
             "PROJECTIONIST_TUNARR_IMAGE",
             "PROJECTIONIST_DOCKER_ORCHESTRATION",
-            "CURATORX_TUNARR_URL",
-            "CURATORX_TUNARR_IMAGE",
-            "CURATORX_DOCKER_ORCHESTRATION",
+            "PROJECTIONIST_TUNARR_URL",
+            "PROJECTIONIST_TUNARR_IMAGE",
+            "PROJECTIONIST_DOCKER_ORCHESTRATION",
         )
         saved = {k: os.environ.pop(k, None) for k in keys}
         try:
@@ -333,7 +333,7 @@ class DockerLifecycleTests(unittest.TestCase):
         settings = Settings(tunarr=TunarrSettings(docker_orchestration=True))
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("PROJECTIONIST_DOCKER_ORCHESTRATION", None)
-            os.environ.pop("CURATORX_DOCKER_ORCHESTRATION", None)
+            os.environ.pop("PROJECTIONIST_DOCKER_ORCHESTRATION", None)
             self.assertTrue(orchestration_enabled(settings))
 
     def test_socket_without_orchestration_skips_engine(self) -> None:
@@ -601,7 +601,7 @@ class DockerLifecycleTests(unittest.TestCase):
         )
         with patch.dict(os.environ, {}, clear=False):
             os.environ.pop("PROJECTIONIST_TUNARR_MEDIA_BINDS", None)
-            os.environ.pop("CURATORX_TUNARR_MEDIA_BINDS", None)
+            os.environ.pop("PROJECTIONIST_TUNARR_MEDIA_BINDS", None)
             self.assertEqual(
                 resolve_media_binds(settings),
                 ["/host/media:/data/media:ro"],
@@ -2069,9 +2069,9 @@ class PreflightAndPublishTests(unittest.TestCase):
                 "HOST_IP",
                 "PROJECTIONIST_TUNARR_PUBLIC_URL",
                 "PROJECTIONIST_PUBLIC_URL",
-                "CURATORX_HOST_IP",
-                "CURATORX_TUNARR_PUBLIC_URL",
-                "CURATORX_PUBLIC_URL",
+                "PROJECTIONIST_HOST_IP",
+                "PROJECTIONIST_TUNARR_PUBLIC_URL",
+                "PROJECTIONIST_PUBLIC_URL",
             ):
                 os.environ.pop(key, None)
             attach = build_plex_attach(

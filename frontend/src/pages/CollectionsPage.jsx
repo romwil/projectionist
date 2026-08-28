@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { getPublishedCollection, listPublishedCollections } from "../api/client";
 import BackLink from "../components/BackLink";
 import AppShell from "../layouts/AppShell";
-import { ROUTES } from "../lib/browseLinks.js";
+import { libraryCollectionsDetailPath, libraryHubPath } from "../lib/libraryTabs.js";
 import { formatCollectionStepTitle, orderCollectionSteps } from "../lib/collections.js";
 
 /**
@@ -11,7 +11,7 @@ import { formatCollectionStepTitle, orderCollectionSteps } from "../lib/collecti
  * collection the owner has published; only the owner publishes (authoring lives
  * on the Lists page). Courses render as an ordered, note-annotated sequence.
  */
-export default function CollectionsPage() {
+export default function CollectionsPage({ embedded = false }) {
   const { listId } = useParams();
   const [state, setState] = useState({ loading: true, items: [], detail: null, error: "" });
 
@@ -47,13 +47,9 @@ export default function CollectionsPage() {
   const isCourse = detail?.list_kind === "course";
   const steps = orderCollectionSteps(detail?.items || []);
 
-  return (
-    <AppShell
-      className="app-root collections-page"
-      testId="collections-page"
-      variant="browse"
-      leading={<BackLink fallbackTo={listId ? "/collections" : ROUTES.explore} />}
-    >
+  const pageBody = (
+    <>
+      {!embedded ? (
       <section className="explore-section-hero">
         <p className="person-eyebrow">{listId ? detail?.list_kind || "Collection" : "Collections"}</p>
         <h1>{listId ? detail?.name || "Collection" : "Published collections & courses"}</h1>
@@ -66,6 +62,7 @@ export default function CollectionsPage() {
             : "Collections and courses your curator has published for the household."}
         </p>
       </section>
+      ) : null}
 
       {state.loading ? <p className="status status-secondary">Loading…</p> : null}
       {state.error ? <p className="error">{state.error}</p> : null}
@@ -74,7 +71,7 @@ export default function CollectionsPage() {
         state.items.length ? (
           <div className="curated-list-grid" data-testid="collections-grid">
             {state.items.map((list) => (
-              <Link key={list.id} to={`/collections/${list.id}`} className="review-prompt-card">
+              <Link key={list.id} to={libraryCollectionsDetailPath(list.id)} className="review-prompt-card">
                 <strong>{list.name}</strong>
                 <span>
                   {list.list_kind === "course" ? "Course" : "Collection"} · {list.item_count} title
@@ -113,6 +110,19 @@ export default function CollectionsPage() {
           )}
         </section>
       ) : null}
+    </>
+  );
+
+  if (embedded) return pageBody;
+
+  return (
+    <AppShell
+      className="app-root collections-page"
+      testId="collections-page"
+      variant="browse"
+      leading={<BackLink fallbackTo={libraryHubPath("collections")} />}
+    >
+      {pageBody}
     </AppShell>
   );
 }

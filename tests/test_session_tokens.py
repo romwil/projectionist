@@ -25,7 +25,7 @@ class SessionTokenTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_SESSION_SECRET", None)
         clear_session_secret_cache()
 
     def tearDown(self) -> None:
@@ -101,7 +101,7 @@ class TokenVerificationTests(SessionTokenTestCase):
         """A token signed with one secret cannot be verified with another."""
         token = create_session_token("user-4")
         clear_session_secret_cache()
-        os.environ["CURATORX_SESSION_SECRET"] = "completely-different-secret-value"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "completely-different-secret-value"
         self.assertIsNone(parse_session_token(token))
 
     def test_empty_token_is_rejected(self) -> None:

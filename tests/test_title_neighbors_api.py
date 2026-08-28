@@ -17,7 +17,7 @@ class TitleNeighborsApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         import projectionist.web.jobs as jobs
 
@@ -33,7 +33,7 @@ class TitleNeighborsApiTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
         self._tmpdir.cleanup()
 

@@ -74,7 +74,7 @@ function cardLead(rec, recommendation, picks) {
     const mediaTitle = recommendationMediaTitle(rec) || rec.title || "this title";
     return (
       <>
-        <strong>You have to see this</strong> —{" "}
+        <strong>Worth a look</strong> —{" "}
         <TitleDigInEm item={recommendation}>
           {mediaTitle}
           {yearBit}

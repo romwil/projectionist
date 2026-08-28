@@ -1,4 +1,4 @@
-export const VOICE_PREFS_KEY = "curatorx.voicePrefs";
+export const VOICE_PREFS_KEY = "projectionist.voicePrefs";
 export const VOICE_PREFS_EVENT = "curatorx:voicePrefs";
 
 export const DEFAULT_VOICE_PREFS = Object.freeze({

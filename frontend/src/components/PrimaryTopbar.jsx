@@ -26,6 +26,7 @@ export default function PrimaryTopbar({
   isYouth = false,
   role = "owner",
   multiUserEnabled = false,
+  seerrEnabled = false,
   authReady = true,
   liveChannelsReady = false,
   navOpen = false,
@@ -73,6 +74,7 @@ export default function PrimaryTopbar({
           isYouth={isYouth}
           role={role}
           multiUserEnabled={multiUserEnabled}
+          seerrEnabled={seerrEnabled}
           authReady={authReady}
           liveChannelsReady={liveChannelsReady}
           adminBadges={adminBadges}

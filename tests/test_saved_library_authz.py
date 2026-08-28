@@ -26,9 +26,9 @@ class SavedLibraryAuthzTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-saved-library-authz-secret-value"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-saved-library-authz-secret-value"
         os.environ["PROJECTIONIST_ALLOW_OPEN_JOIN"] = "1"
         os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
@@ -49,9 +49,9 @@ class SavedLibraryAuthzTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         for key in (
-            "CURATORX_SKIP_DOTENV",
+            "PROJECTIONIST_SKIP_DOTENV",
             "LLM_PROVIDER",
-            "CURATORX_SESSION_SECRET",
+            "PROJECTIONIST_SESSION_SECRET",
             "DATA_DIR",
             "PROJECTIONIST_ALLOW_OPEN_JOIN",
             "PROJECTIONIST_SETUP_STATE",

@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fprojectionist-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/projectionist)
-[![Version](https://img.shields.io/badge/version-1.33.4-green.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.34.0-green.svg)](CHANGELOG.md)
 
 **Cinema intelligence for your personal archive.**
 
@@ -33,7 +33,8 @@ Ordinary recommenders blend everything you’ve ever watched into one noisy prof
               ▼                 ▼                 ▼
         ┌──────────┐     ┌────────────┐    ┌────────────┐
         │  Chat /  │     │  Explore / │    │ Dual-key   │
-        │  Agent   │     │  Plot Lab  │    │ MCP tools  │
+        │  Agent   │     │  Related   │    │ MCP tools  │
+        │          │     │  titles    │    │            │
         └────┬─────┘     └─────┬──────┘    └─────┬──────┘
              │                 │                 │
              └─────────────────┼─────────────────┘
@@ -87,8 +88,6 @@ docker run -d --name projectionist \
 ```
 
 Open **http://localhost:8788** and complete the setup wizard (Name → Connections → Libraries).
-
-During the compatibility window, the same image digests are also published as `romwil/curatorx:*`.
 
 ### Docker Compose
 
@@ -184,7 +183,7 @@ Settings live in `{DATA_DIR}/settings.json` (Docker: `/config/settings.json`). E
 
 ### Environment variables (branded prefix)
 
-Prefer `PROJECTIONIST_*`. During the compatibility window (~2 releases), matching `CURATORX_*` values are still read when the new key is absent.
+Prefer `PROJECTIONIST_*` only. Legacy `CURATORX_*` env names are no longer read as of **1.34.0** — rename keys before upgrading.
 
 | Variable | Purpose |
 |----------|---------|
