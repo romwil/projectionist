@@ -16,6 +16,8 @@ from typing import (
     List,
     Mapping,
     Optional,
+    Sequence,
+    Tuple,
 )
 
 from ._shared import (
@@ -25,6 +27,22 @@ from ._shared import (
 # Unique closed-loop keys are capped so hostile high-entropy tokens cannot grow
 # the SQLite file without bound. Oldest rows (by updated_at) are dropped first.
 TELEMETRY_EVENTS_MAX_ROWS = 10_000
+# Rows upserted between overflow checks inside a single batch. The COUNT(*) that
+# drives pruning is the expensive part, so large batches amortize it instead of
+# paying it per row.
+TELEMETRY_EVENTS_PRUNE_EVERY = 64
+
+_CLOSED_LOOP_UPSERT_SQL = """
+INSERT INTO telemetry_events (
+    event_type, priority_tier, entity_type, entity_key,
+    payload_json, hit_count, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT(event_type, entity_type, entity_key) DO UPDATE SET
+    hit_count = hit_count + 1,
+    updated_at = CURRENT_TIMESTAMP,
+    payload_json = excluded.payload_json,
+    priority_tier = excluded.priority_tier
+"""
 
 
 class TelemetryConfigMixin:
@@ -90,6 +108,67 @@ class TelemetryConfigMixin:
 
     # --- Closed-loop augmentation (table: telemetry_events / staged_augmentations) ---
 
+    def _prune_telemetry_events_overflow(self, conn: sqlite3.Connection) -> int:
+        """Drop the oldest ``telemetry_events`` rows above the cap. Returns rows deleted."""
+        count_row = conn.execute("SELECT COUNT(*) AS c FROM telemetry_events").fetchone()
+        count = int(count_row["c"] if count_row else 0)
+        overflow = count - TELEMETRY_EVENTS_MAX_ROWS
+        if overflow <= 0:
+            return 0
+        conn.execute(
+            """
+            DELETE FROM telemetry_events WHERE rowid IN (
+                SELECT rowid FROM telemetry_events
+                ORDER BY updated_at ASC, rowid ASC
+                LIMIT ?
+            )
+            """,
+            (overflow,),
+        )
+        return overflow
+
+    def upsert_closed_loop_events(self, events: Sequence[Mapping[str, Any]]) -> int:
+        """Upsert many ``telemetry_events`` rows in one write job / one transaction.
+
+        Each mapping supplies ``event_type``, ``priority_tier``, ``entity_type``,
+        ``entity_key`` and an optional ``payload_json``. Rows without an entity key
+        are skipped. Returns the number of rows handed to the writer, or 0 when the
+        job was dropped because the write serializer queue was full.
+        """
+        rows: List[Tuple[Any, ...]] = []
+        for event in events or ():
+            if not event:
+                continue
+            entity_key = str(event.get("entity_key") or "").strip()
+            if not entity_key:
+                continue
+            rows.append(
+                (
+                    str(event.get("event_type") or "").strip() or "unknown",
+                    str(event.get("priority_tier") or "").strip() or "P3",
+                    str(event.get("entity_type") or "").strip() or "unknown",
+                    entity_key,
+                    event.get("payload_json"),
+                )
+            )
+        if not rows:
+            return 0
+
+        def _write() -> None:
+            with self.connect() as conn:
+                since_prune = 0
+                for params in rows:
+                    conn.execute(_CLOSED_LOOP_UPSERT_SQL, params)
+                    since_prune += 1
+                    if since_prune >= TELEMETRY_EVENTS_PRUNE_EVERY:
+                        self._prune_telemetry_events_overflow(conn)
+                        since_prune = 0
+                if since_prune:
+                    self._prune_telemetry_events_overflow(conn)
+
+        accepted = self.try_run_write(_write, label="upsert_closed_loop_events")
+        return len(rows) if accepted else 0
+
     def upsert_closed_loop_event(
         self,
         *,
@@ -100,47 +179,17 @@ class TelemetryConfigMixin:
         payload_json: Optional[str] = None,
     ) -> None:
         """Upsert one row into ``telemetry_events``, incrementing ``hit_count`` on conflict."""
-
-        def _write() -> None:
-            with self.connect() as conn:
-                conn.execute(
-                    """
-                    INSERT INTO telemetry_events (
-                        event_type, priority_tier, entity_type, entity_key,
-                        payload_json, hit_count, created_at, updated_at
-                    ) VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-                    ON CONFLICT(event_type, entity_type, entity_key) DO UPDATE SET
-                        hit_count = hit_count + 1,
-                        updated_at = CURRENT_TIMESTAMP,
-                        payload_json = excluded.payload_json,
-                        priority_tier = excluded.priority_tier
-                    """,
-                    (
-                        event_type,
-                        priority_tier,
-                        entity_type,
-                        entity_key,
-                        payload_json,
-                    ),
-                )
-                count_row = conn.execute(
-                    "SELECT COUNT(*) AS c FROM telemetry_events"
-                ).fetchone()
-                count = int(count_row["c"] if count_row else 0)
-                overflow = count - TELEMETRY_EVENTS_MAX_ROWS
-                if overflow > 0:
-                    conn.execute(
-                        """
-                        DELETE FROM telemetry_events WHERE rowid IN (
-                            SELECT rowid FROM telemetry_events
-                            ORDER BY updated_at ASC, rowid ASC
-                            LIMIT ?
-                        )
-                        """,
-                        (overflow,),
-                    )
-
-        self.try_run_write(_write, label="upsert_closed_loop_event")
+        self.upsert_closed_loop_events(
+            [
+                {
+                    "event_type": event_type,
+                    "priority_tier": priority_tier,
+                    "entity_type": entity_type,
+                    "entity_key": entity_key,
+                    "payload_json": payload_json,
+                }
+            ]
+        )
 
     def list_closed_loop_events(
         self,

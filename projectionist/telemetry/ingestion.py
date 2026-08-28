@@ -22,7 +22,7 @@ import json
 import logging
 import threading
 import uuid
-from typing import Any, Dict, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 
 from projectionist.library.db import Database
 
@@ -345,11 +345,53 @@ def scrub_closed_loop_payload(payload: Optional[Mapping[str, Any]]) -> Dict[str,
     return cleaned
 
 
-def _normalize_entity_key(entity_key: str) -> str:
+def _normalize_entity_key(entity_key: Any) -> str:
     key = str(entity_key or "").strip()
     if len(key) > _MAX_ENTITY_KEY_LEN:
         key = key[:_MAX_ENTITY_KEY_LEN]
     return key
+
+
+def _encode_payload(payload: Optional[Mapping[str, Any]]) -> str:
+    scrubbed = scrub_closed_loop_payload(payload)
+    payload_json = json.dumps(scrubbed, default=str, separators=(",", ":"))
+    if len(payload_json) > _MAX_PAYLOAD_CHARS:
+        payload_json = json.dumps(
+            {"_truncated": True, "keys": sorted(scrubbed.keys())[:40]},
+            separators=(",", ":"),
+        )
+    return payload_json
+
+
+def upsert_closed_loop_events_sync(
+    db: Database,
+    events: Sequence[Mapping[str, Any]],
+) -> int:
+    """Normalize, scrub, and upsert a batch into ``telemetry_events``.
+
+    One database write job for the whole list. Events with a blank ``entity_key``
+    are dropped. Returns the number of rows handed to the writer.
+    """
+    prepared: List[Dict[str, Any]] = []
+    for event in events or ():
+        if not event:
+            continue
+        key = _normalize_entity_key(event.get("entity_key"))
+        if not key:
+            continue
+        prepared.append(
+            {
+                "event_type": str(event.get("event_type") or "").strip() or "unknown",
+                "priority_tier": str(event.get("priority_tier") or "P3").strip().upper()
+                or "P3",
+                "entity_type": str(event.get("entity_type") or "").strip() or "unknown",
+                "entity_key": key,
+                "payload_json": _encode_payload(event.get("payload")),
+            }
+        )
+    if not prepared:
+        return 0
+    return int(db.upsert_closed_loop_events(prepared) or 0)
 
 
 def upsert_closed_loop_event_sync(
@@ -362,22 +404,17 @@ def upsert_closed_loop_event_sync(
     payload: Optional[Mapping[str, Any]] = None,
 ) -> None:
     """Synchronous upsert into ``telemetry_events`` (safe for ``asyncio.to_thread``)."""
-    key = _normalize_entity_key(entity_key)
-    if not key:
-        return
-    scrubbed = scrub_closed_loop_payload(payload)
-    payload_json = json.dumps(scrubbed, default=str, separators=(",", ":"))
-    if len(payload_json) > _MAX_PAYLOAD_CHARS:
-        payload_json = json.dumps(
-            {"_truncated": True, "keys": sorted(scrubbed.keys())[:40]},
-            separators=(",", ":"),
-        )
-    db.upsert_closed_loop_event(
-        event_type=str(event_type or "").strip() or "unknown",
-        priority_tier=str(priority_tier or "P3").strip().upper() or "P3",
-        entity_type=str(entity_type or "").strip() or "unknown",
-        entity_key=key,
-        payload_json=payload_json,
+    upsert_closed_loop_events_sync(
+        db,
+        [
+            {
+                "event_type": event_type,
+                "priority_tier": priority_tier,
+                "entity_type": entity_type,
+                "entity_key": entity_key,
+                "payload": payload,
+            }
+        ],
     )
 
 
@@ -402,37 +439,33 @@ async def upsert_closed_loop_event(
     )
 
 
-def schedule_closed_loop_event(
+def schedule_closed_loop_events(
     db: Database,
-    *,
-    event_type: str,
-    priority_tier: str,
-    entity_type: str,
-    entity_key: str,
-    payload: Optional[Mapping[str, Any]] = None,
+    events: Sequence[Mapping[str, Any]],
 ) -> None:
-    """Fire-and-forget closed-loop upsert; returns immediately.
+    """Fire-and-forget batch upsert; returns immediately.
 
-    Prefer ``asyncio.to_thread`` when a running loop exists; fall back to a
-    daemon thread so sync call sites (and tests without a loop) stay non-blocking.
-    Write failures are logged without payload contents and never raised.
+    The whole list travels as a *single* inflight job (and a single database
+    write transaction), so emitting N deficits costs one scheduling slot rather
+    than N. Prefer ``asyncio.to_thread`` when a running loop exists; fall back to
+    a daemon thread so sync call sites (and tests without a loop) stay
+    non-blocking. Write failures are logged without payload contents and never
+    raised.
     """
+    batch: List[Dict[str, Any]] = [dict(event) for event in (events or ()) if event]
+    if not batch:
+        return
+    label = str(batch[0].get("event_type") or "batch").strip() or "batch"
+    count = len(batch)
 
     def _safe_write() -> None:
         try:
-            upsert_closed_loop_event_sync(
-                db,
-                event_type=event_type,
-                priority_tier=priority_tier,
-                entity_type=entity_type,
-                entity_key=entity_key,
-                payload=payload,
-            )
+            upsert_closed_loop_events_sync(db, batch)
         except Exception:
             logger.debug(
-                "Closed-loop telemetry write failed for type=%s entity=%s",
-                event_type,
-                entity_type,
+                "Closed-loop telemetry write failed for type=%s count=%s",
+                label,
+                count,
                 exc_info=True,
             )
 
@@ -441,9 +474,9 @@ def schedule_closed_loop_event(
     except RuntimeError:
         if not _closed_loop_thread_slots.acquire(blocking=False):
             logger.warning(
-                "Closed-loop telemetry dropped (thread ceiling) type=%s entity=%s",
-                event_type,
-                entity_type,
+                "Closed-loop telemetry dropped (thread ceiling) type=%s count=%s",
+                label,
+                count,
             )
             return
 
@@ -456,7 +489,7 @@ def schedule_closed_loop_event(
         thread = threading.Thread(
             target=_thread_write,
             daemon=True,
-            name=f"closed-loop-{event_type}",
+            name=f"closed-loop-{label}",
         )
         thread.start()
         return
@@ -466,9 +499,9 @@ def schedule_closed_loop_event(
     _closed_loop_inflight.update(live)
     if len(_closed_loop_inflight) >= _CLOSED_LOOP_MAX_INFLIGHT:
         logger.warning(
-            "Closed-loop telemetry dropped (inflight ceiling) type=%s entity=%s",
-            event_type,
-            entity_type,
+            "Closed-loop telemetry dropped (inflight ceiling) type=%s count=%s",
+            label,
+            count,
         )
         return
 
@@ -477,16 +510,40 @@ def schedule_closed_loop_event(
             await asyncio.to_thread(_safe_write)
         except Exception:
             logger.debug(
-                "Closed-loop telemetry schedule failed for type=%s entity=%s",
-                event_type,
-                entity_type,
+                "Closed-loop telemetry schedule failed for type=%s count=%s",
+                label,
+                count,
                 exc_info=True,
             )
 
     try:
-        task = loop.create_task(_runner(), name=f"closed-loop-{event_type}")
+        task = loop.create_task(_runner(), name=f"closed-loop-{label}")
     except TypeError:
         # Python <3.11: create_task has no name=
         task = loop.create_task(_runner())
     _closed_loop_inflight.add(task)
     task.add_done_callback(_closed_loop_inflight.discard)
+
+
+def schedule_closed_loop_event(
+    db: Database,
+    *,
+    event_type: str,
+    priority_tier: str,
+    entity_type: str,
+    entity_key: str,
+    payload: Optional[Mapping[str, Any]] = None,
+) -> None:
+    """Fire-and-forget upsert of a single closed-loop event."""
+    schedule_closed_loop_events(
+        db,
+        [
+            {
+                "event_type": event_type,
+                "priority_tier": priority_tier,
+                "entity_type": entity_type,
+                "entity_key": entity_key,
+                "payload": payload,
+            }
+        ],
+    )

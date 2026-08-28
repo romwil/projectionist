@@ -12,6 +12,7 @@ used by ``BaseAugmentationTask`` — separate from the interaction stream.
 from projectionist.telemetry.coverage import (
     EVENT_COVERAGE_DEFICIT,
     schedule_coverage_deficit,
+    schedule_coverage_deficits,
 )
 from projectionist.telemetry.demand import (
     EVENT_METADATA_DEMAND,
@@ -26,9 +27,11 @@ from projectionist.telemetry.explore import (
 from projectionist.telemetry.ingestion import (
     TelemetryIngester,
     schedule_closed_loop_event,
+    schedule_closed_loop_events,
     scrub_closed_loop_payload,
     upsert_closed_loop_event,
     upsert_closed_loop_event_sync,
+    upsert_closed_loop_events_sync,
 )
 from projectionist.telemetry.llm_usage import (
     PURPOSE_CHAT,
@@ -47,13 +50,16 @@ __all__ = [
     "EVENT_EXPLORE_MISS",
     "EVENT_BAD_NEIGHBOR",
     "schedule_closed_loop_event",
+    "schedule_closed_loop_events",
     "schedule_coverage_deficit",
+    "schedule_coverage_deficits",
     "schedule_metadata_demand",
     "schedule_explore_miss",
     "schedule_bad_neighbor_match",
     "scrub_closed_loop_payload",
     "upsert_closed_loop_event",
     "upsert_closed_loop_event_sync",
+    "upsert_closed_loop_events_sync",
     "PURPOSE_CHAT",
     "PURPOSE_CHAT_TOOL",
     "PURPOSE_WRAP_UP",
