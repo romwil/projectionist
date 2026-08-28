@@ -50,6 +50,45 @@ Order notes:
 - Always bump for a new Hub publish — never republish new bits under an already-shipped `X.Y.Z`.
 - Keep GitHub tag `vX.Y.Z`, CHANGELOG heading, lockstep files, and Hub tags on the **same** number.
 
+### Dot (patch) release — quick path
+
+**Dot release** = bump **Z** only (`1.33.3` → `1.33.4`). Use for bugfixes, hotfixes, and small UX fixes on the current minor line. Use a **minor** bump (`1.33.x` → `1.34.0`) when shipping a new user-visible capability.
+
+Historical note: git has **no record of a deleted patch-release script** — only `scripts/seed-qa-roles.sh` was removed briefly (`6b64e20`). Dot ships were always manual: feature commits bundled code + bump (e.g. `db18a1e` `v1.33.2`), or a separate `chore(release): X.Y.Z` commit (`4fba871` `1.33.3`). `scripts/patch-release.sh` codifies that prep for agents and maintainers.
+
+| Kind | Example commit message | Version bump |
+|------|------------------------|--------------|
+| Patch / dot | `v1.33.4: …` or `chore(release): 1.33.4` | Z +1, same X.Y |
+| Minor feature | `v1.34.0: …` | Y +1, Z → 0 |
+
+**Prep (PR branch, before Hub):**
+
+1. Finish fixes on a **PR branch** (never direct `main`).
+2. Write `## [X.Y.Z] — YYYY-MM-DD` in `CHANGELOG.md` (Highlights + technical + Verification).
+3. Run the patch prep helper (bumps lockstep files + Unraid XML + `release-notes.json`):
+
+   ```bash
+   ./scripts/patch-release.sh --dry-run                    # preview next patch (needs CHANGELOG heading)
+   ./scripts/patch-release.sh 1.33.4 \
+     --xml-summary "One-line Unraid <Changes> blurb" \
+     --run-tests                                           # optional full gates
+   ```
+
+   Omit `1.33.4` to auto-bump patch on `projectionist.__version__`. `--check` validates CHANGELOG + lockstep without writing files.
+
+4. Review diff; commit `vX.Y.Z: <Highlights-style title>` (or `chore(release): X.Y.Z` when version-only).
+
+**Ship (when user asks)** — same Hub-first path as any release:
+
+```bash
+./scripts/docker-release.sh X.Y.Z
+# PR merge → tag vX.Y.Z on main → gh release create
+# CA proof: pull Hub tag (Path B) — not Automat host build
+# Prod if asked: cd …/appdata/projectionist && ./rollout.sh X.Y.Z
+```
+
+Recent dot line on `1.33.x`: `1.33.1` (fail-safe watcher), `1.33.2` (feed param), `1.33.3` (static header captions) — each with full CHANGELOG Highlights, not version-only tag churn.
+
 
 ---
 
@@ -302,9 +341,9 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 
 ```text
 □ User explicitly asked to release / commit+push this ship
-□ Semver chosen (patch hotfix → e.g. 1.33.1 → 1.33.2; minor for features)
+□ Semver chosen (patch hotfix → e.g. 1.33.3 → 1.33.4 via ./scripts/patch-release.sh; minor for features)
 □ No conflicting WIP version bump; PR into main (no direct main push)
-□ Versions aligned (_version.py, root + frontend package.json + lockfiles, pyproject.toml, both Unraid XMLs identical, README badge)
+□ Versions aligned (_version.py, root + frontend package.json + lockfiles, pyproject.toml, both Unraid XMLs identical, README badge) — or run ./scripts/patch-release.sh after CHANGELOG
 □ Tests: pytest (≥74% cov), npm run test:unit, npm run lint (0 errors), npm run build
 □ CHANGELOG: release heading for X.Y.Z, Highlights + technical + Verification
 □ Docs updated if user-facing
