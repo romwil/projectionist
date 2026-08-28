@@ -1,6 +1,39 @@
 {
-  "generated_at": "2026-08-27T05:10:34Z",
+  "generated_at": "2026-08-28T02:20:59Z",
   "releases": [
+    {
+      "version": "1.33.4",
+      "date": "2026-08-27",
+      "summary": "Lobby Display stays enabled after restarts and partial settings saves. Dot-release prep gets a restored maintainer helper and runbook updates for Hub-first ships.",
+      "highlights": [
+        "**Lobby stays on.** Turning on Lobby Display in Admin persists across restarts — partial settings saves no longer flip theater back off.",
+        "**Faster dot releases.** `patch-release.sh` bumps lockstep version files, Unraid XML, and release notes in one step for patch ships."
+      ],
+      "sections": [
+        {
+          "title": "Fixed",
+          "bullets": [
+            "Partial `PUT /api/settings` no longer clobbers `theater.enabled` when the client omits nested theater fields — `merge_theater_settings_payload()` preserves existing lobby flags.",
+            "Unraid CA template pin regex in `patch-release.sh` handles compound `` `:X.Y` / `:X.Y.Z` `` examples (tested in `test_unraid_pin_compound_regex`)."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "`scripts/patch-release.sh` — dot-release helper with `--dry-run`, `--check`, `--run-tests`, and `--xml-summary`.",
+            "Release runbooks: `docs/RELEASE.md`, `docs/ops/AUTOMAT.md`, `.cursor/rules/release.mdc`, `AGENTS.md`."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend: pytest full suite (≥74% cov), `tests/test_setup.py`, `tests/test_theater.py`, `tests/test_version.py`.",
+            "Frontend: ESLint 0 errors, production build, unit tests.",
+            "`./scripts/patch-release.sh --check` lockstep parity."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.33.3",
       "date": "2026-08-27",
