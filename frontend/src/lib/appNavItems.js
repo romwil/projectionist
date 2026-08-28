@@ -61,6 +61,7 @@ export function buildAppNavItems({
   role = "owner",
   pathname = "",
   multiUserEnabled = true,
+  seerrEnabled = false,
   authReady = true,
   liveChannelsReady = false,
 } = {}) {
@@ -82,7 +83,7 @@ export function buildAppNavItems({
   }
   if (isOwner && authReady && isAdminPath(pathname)) {
     items.push({ kind: "heading", id: "heading-admin", label: "Admin" });
-    items.push(...buildAdminDrawerItems());
+    items.push(...buildAdminDrawerItems({ multiUserEnabled, seerrEnabled }));
   }
   if (secondary.length > 0) {
     items.push({ kind: "heading", id: "heading-more", label: "More" });
