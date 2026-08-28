@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [1.34.1] — 2026-08-28
+
+Live Channels can turn one TV show into a nonstop station, and idle enrichment no longer stalls the app with SQLite write storms.
+
+### Highlights
+- **Show → Live channel.** Create a shuffle or sequential marathon from a single TV series in Admin → Live Channels.
+- **Snappier while enriching.** Coverage telemetry batches into one SQLite write instead of flooding the writer during idle synopsis work.
+
+### Added
+- **From TV show.** `POST /api/admin/live-channels/channels/from-show` and Admin “From TV show” panel — pick a library show (or paste a Plex ratingKey), choose shuffle or sequential, publish a full-run Tunarr station. Show rating keys persist in `station_meta` so Refill keeps the same series.
+
+### Fixed
+- Closed-loop `coverage_deficit` emits batch into a single write-serializer job (one transaction, one prune) instead of N jobs that queued waits up to ~13s on Automat.
+- Synopsis backlog signals run after enrichment with a cap of 5, so they no longer contend with `set_long_synopsis` in the same tick.
+
+### Verification
+- Backend focused: live channels + closed-loop telemetry green; full suite pass expected at release gates.
+- Frontend unit + lint + build at ship.
+
 ## [1.34.0] — 2026-08-28
 
 UX wave — CuratorX ripout, cinema map, admin health hub, unified Library, chat launcher, solo admin IA, and clearer settings labels.

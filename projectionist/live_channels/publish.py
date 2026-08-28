@@ -60,7 +60,7 @@ def craft_fill_mode(*, collection_id: str = "", source: str = "") -> str:
     src = str(source or "").strip().lower()
     if src == "chaos":
         return "soft"
-    if src == "collection" or str(collection_id or "").strip():
+    if src in {"collection", "show"} or str(collection_id or "").strip():
         return "full_run"
     return "soft"
 
@@ -548,11 +548,14 @@ def set_station_meta(
     cluster_tag: Optional[str] = None,
     subtitles_enabled: Optional[bool] = None,
     youth_safe: Optional[bool] = None,
+    item_rating_keys: Optional[Sequence[str]] = None,
+    item_hints: Optional[Sequence[str]] = None,
 ) -> None:
     """Persist station recipe fields on ``settings.tunarr.station_meta`` (in-memory).
 
-    ``motif`` / ``cluster_tag`` / ``craft_filters``: ``None`` leaves the stored
-    value unchanged; a provided value (including empty) replaces it.
+    ``motif`` / ``cluster_tag`` / ``craft_filters`` / ``item_rating_keys`` /
+    ``item_hints``: ``None`` leaves the stored value unchanged; a provided value
+    (including empty) replaces it.
     """
     cid = str(channel_id or "").strip()
     if not cid or settings is None:
@@ -588,6 +591,12 @@ def set_station_meta(
         row["subtitles_enabled"] = bool(subtitles_enabled)
     if youth_safe is not None:
         row["youth_safe"] = bool(youth_safe)
+    if item_rating_keys is not None:
+        row["item_rating_keys"] = [
+            str(k).strip() for k in item_rating_keys if str(k).strip()
+        ]
+    if item_hints is not None:
+        row["item_hints"] = [str(h).strip() for h in item_hints if str(h).strip()]
     if craft_filters is not None:
         from projectionist.live_channels.filters import normalize_craft_filters
 
@@ -610,6 +619,12 @@ def station_craft_snapshot(settings: Any, channel_id: str) -> Dict[str, Any]:
         "programming_mode": str(row.get("programming_mode") or "").strip(),
         "media_scope": normalize_media_scope(row.get("media_scope")),
         "craft_filters": craft,
+        "item_rating_keys": [
+            str(k).strip() for k in (row.get("item_rating_keys") or []) if str(k).strip()
+        ],
+        "item_hints": [
+            str(h).strip() for h in (row.get("item_hints") or []) if str(h).strip()
+        ],
         "youth_safe": bool(row.get("youth_safe")),
         "subtitles_enabled": (
             bool(row["subtitles_enabled"]) if "subtitles_enabled" in row else None
@@ -684,16 +699,30 @@ def recipe_from_station_meta(
     source = str(row.get("source") or "").strip()
     if collection_id:
         source = source or "collection"
+    rating_keys = tuple(
+        str(k).strip() for k in (row.get("item_rating_keys") or []) if str(k).strip()
+    )
+    item_hints = tuple(
+        str(h).strip() for h in (row.get("item_hints") or []) if str(h).strip()
+    )
+    if rating_keys and not source:
+        source = "show"
     from projectionist.live_channels.filters import normalize_craft_filters
 
     craft_filters = normalize_craft_filters(row.get("craft_filters")).to_dict()
     has_filters = not normalize_craft_filters(craft_filters).is_empty()
     # Decade/genre stations may only have craft_filters + media_scope persisted.
-    if not source and not mode_raw and not collection_id and not has_filters:
+    if (
+        not source
+        and not mode_raw
+        and not collection_id
+        and not has_filters
+        and not rating_keys
+    ):
         return None
     default_mode = (
         ProgrammingMode.SEQUENTIAL
-        if source == "collection"
+        if source in {"collection", "show"}
         else ProgrammingMode.SHUFFLE
     )
     mode = (
@@ -716,6 +745,8 @@ def recipe_from_station_meta(
         summary=f"Refill from stored recipe ({mode.value})",
         craft_filters=craft_filters,
         youth_safe=bool(row.get("youth_safe")),
+        item_rating_keys=rating_keys,
+        item_hints=item_hints,
     )
 
 
@@ -2826,6 +2857,8 @@ def publish_recipes(
             cluster_tag=str(recipe.cluster_tag or ""),
             subtitles_enabled=resolve_subtitles_enabled(settings, default=False),
             youth_safe=bool(getattr(recipe, "youth_safe", False)),
+            item_rating_keys=list(getattr(recipe, "item_rating_keys", ()) or ()),
+            item_hints=list(getattr(recipe, "item_hints", ()) or ()),
         )
 
     def _apply_programming(channel_id: str, recipe: ChannelRecipe) -> Dict[str, Any]:
@@ -3171,6 +3204,31 @@ def publish_recipes(
     }
 
 
+def _next_free_channel_number(client: TunarrClient, settings: Any = None) -> int:
+    """First free station number (Tunarr lineup ∪ Plex-occupied) from the base."""
+    from projectionist.live_channels.craft import next_channel_number
+
+    existing = client.list_channels()
+    numbers = [int(ch.get("number") or 0) for ch in existing if ch.get("number") is not None]
+    occupied: List[int] = []
+    base = 100
+    if settings is not None:
+        try:
+            from projectionist.live_channels.plex_attach import (
+                collect_plex_occupied_channel_numbers,
+            )
+
+            occupied = collect_plex_occupied_channel_numbers(settings)
+        except Exception:  # noqa: BLE001
+            occupied = []
+        tunarr = getattr(settings, "tunarr", None)
+        try:
+            base = int(getattr(tunarr, "channel_number_base", 100) or 100)
+        except (TypeError, ValueError):
+            base = 100
+    return next_channel_number(numbers, base=base, occupied=occupied)
+
+
 def publish_collection_channel(
     client: TunarrClient,
     *,
@@ -3189,28 +3247,7 @@ def publish_collection_channel(
     title = str(collection_title or name or "Collection").strip() or "Collection"
     number = int(channel_number or 0)
     if number <= 0:
-        from projectionist.live_channels.craft import next_channel_number
-
-        existing = client.list_channels()
-        numbers = [int(ch.get("number") or 0) for ch in existing if ch.get("number") is not None]
-        occupied: List[int] = []
-        if settings is not None:
-            try:
-                from projectionist.live_channels.plex_attach import (
-                    collect_plex_occupied_channel_numbers,
-                )
-
-                occupied = collect_plex_occupied_channel_numbers(settings)
-            except Exception:  # noqa: BLE001
-                occupied = []
-        base = 100
-        if settings is not None:
-            tunarr = getattr(settings, "tunarr", None)
-            try:
-                base = int(getattr(tunarr, "channel_number_base", 100) or 100)
-            except (TypeError, ValueError):
-                base = 100
-        number = next_channel_number(numbers, base=base, occupied=occupied)
+        number = _next_free_channel_number(client, settings)
     mode = normalize_programming_mode(
         programming_mode or ProgrammingMode.SEQUENTIAL.value,
         default=ProgrammingMode.SEQUENTIAL,
@@ -3251,6 +3288,104 @@ def publish_collection_channel(
     result["recipe"] = recipe.to_dict()
     result["item_hint_count"] = len(hints)
     result["item_rating_key_count"] = len(rating_keys)
+    return result
+
+
+def resolve_show_for_channel(
+    *,
+    show_rating_key: str = "",
+    show_title: str = "",
+    show_item_id: int = 0,
+    settings: Any = None,
+) -> Tuple[str, str]:
+    """Resolve a TV show to ``(rating_key, title)`` for a single-show station.
+
+    A library ``show_item_id`` wins when it resolves; otherwise the caller's
+    explicit Plex ``ratingKey`` is used. Raises ``ValueError`` when neither
+    yields a key, or when the library row is not a TV show.
+    """
+    del settings  # library rows come from the job-manager DB, not settings
+    rating_key = str(show_rating_key or "").strip()
+    title = str(show_title or "").strip()
+    item_id = int(show_item_id or 0)
+    if item_id > 0:
+        db = None
+        try:
+            from projectionist.web.jobs import get_job_manager
+
+            db = get_job_manager().db
+        except Exception:  # noqa: BLE001
+            db = None
+        row = db.library_item_by_id(item_id) if db is not None else None
+        if row is None:
+            raise ValueError(f"Library item {item_id} was not found")
+        media_type = str(row["media_type"] or "").strip().lower()
+        if media_type not in {"show", "shows", "tv"}:
+            raise ValueError(
+                f"Library item {item_id} is a {media_type or 'unknown'}, not a TV show"
+            )
+        rating_key = str(row["rating_key"] or "").strip() or rating_key
+        title = title or str(row["title"] or "").strip()
+    if not rating_key:
+        raise ValueError("A show ratingKey or library item id is required")
+    return rating_key, title or "Show"
+
+
+def publish_show_channel(
+    client: TunarrClient,
+    *,
+    show_rating_key: str = "",
+    show_title: str = "",
+    show_item_id: int = 0,
+    channel_number: int = 0,
+    name: str = "",
+    programming_mode: str = "",
+    settings: Any = None,
+) -> Dict[str, Any]:
+    """Create a nonstop station from one TV show (seq run / shuffle).
+
+    The show ``ratingKey`` rides ``item_rating_keys``; fill expands it to every
+    episode via Tunarr descendants, so the station is a full-run marathon.
+    """
+    rating_key, title = resolve_show_for_channel(
+        show_rating_key=show_rating_key,
+        show_title=show_title,
+        show_item_id=show_item_id,
+        settings=settings,
+    )
+    number = int(channel_number or 0)
+    if number <= 0:
+        number = _next_free_channel_number(client, settings)
+    mode = normalize_programming_mode(
+        programming_mode or ProgrammingMode.SEQUENTIAL.value,
+        default=ProgrammingMode.SEQUENTIAL,
+    )
+    mode_label = {
+        ProgrammingMode.SEQUENTIAL: "Sequential",
+        ProgrammingMode.SHUFFLE: "Shuffle",
+    }.get(mode, mode.value)
+    station_name = str(name or "").strip() or f"{title} Channel"
+    recipe = ChannelRecipe(
+        name=station_name[:48],
+        number=number,
+        source="show",
+        programming_mode=mode,
+        media_scope=MediaScope.TV.value,
+        summary=f"{mode_label} channel from the show “{title}”",
+        item_hints=(title,),
+        item_rating_keys=(rating_key,),
+    )
+    result = publish_recipes(
+        client,
+        [recipe],
+        skip_existing_numbers=True,
+        settings=settings,
+    )
+    result["recipe"] = recipe.to_dict()
+    result["show_rating_key"] = rating_key
+    result["show_title"] = title
+    result["item_hint_count"] = 1
+    result["item_rating_key_count"] = 1
     return result
 
 
@@ -3420,6 +3555,8 @@ def refill_channel_lineup(
             motif=str(recipe.motif or ""),
             cluster_tag=str(recipe.cluster_tag or ""),
             youth_safe=bool(getattr(recipe, "youth_safe", False)),
+            item_rating_keys=list(getattr(recipe, "item_rating_keys", ()) or ()),
+            item_hints=list(getattr(recipe, "item_hints", ()) or ()),
         )
 
     media_types = (

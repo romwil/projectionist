@@ -102,6 +102,21 @@ class LiveChannelsFromCollectionPayload(BaseModel):
     sync: bool = False
 
 
+class LiveChannelsFromShowPayload(BaseModel):
+    """Create one nonstop station from a single TV show."""
+
+    show_rating_key: str = ""
+    show_title: str = ""
+    # Projectionist library item id — resolves rating_key + title server-side.
+    show_item_id: int = 0
+    channel_number: int = 0
+    name: str = ""
+    programming_mode: str = "sequential"
+    confirm: bool = False
+    # sync=true only for tests / diagnostics (default = background job).
+    sync: bool = False
+
+
 class LiveChannelsPublishChannelPayload(BaseModel):
     """Craft-form publish: one ChannelRecipe-shaped body."""
 
@@ -608,6 +623,103 @@ def live_channels_from_collection_endpoint(
         "message": accepted.get("message")
         or "Publish started — progress updates below.",
         "mode": "collection",
+    }
+
+
+@router.post("/api/admin/live-channels/channels/from-show")
+def live_channels_from_show_endpoint(
+    payload: LiveChannelsFromShowPayload,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Publish one TV show as a nonstop Tunarr channel (async by default)."""
+    del user
+    if not payload.confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Creating a channel from a show requires confirm=true",
+        )
+    if not str(payload.show_rating_key or "").strip() and int(payload.show_item_id or 0) <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="A show ratingKey or library item id is required",
+        )
+    settings = _settings()
+    if not settings.features.live_channels_enabled:
+        raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.publish import (
+        publish_show_channel,
+        tunarr_client_from_settings,
+    )
+    from projectionist.live_channels.publish_progress import (
+        make_phase_callback,
+        progress_store,
+        start_publish_job,
+    )
+
+    def _run(settings_obj: Settings, on_phase: Any) -> Dict[str, Any]:
+        on_phase("matching", "Resolving show episodes…")
+        client = tunarr_client_from_settings(settings_obj)
+        on_phase("publishing", "Publishing show station…")
+        result = publish_show_channel(
+            client,
+            show_rating_key=payload.show_rating_key,
+            show_title=payload.show_title,
+            show_item_id=payload.show_item_id,
+            channel_number=payload.channel_number,
+            name=payload.name,
+            programming_mode=payload.programming_mode,
+            settings=settings_obj,
+        )
+        on_phase("warming", "Preparing streams…")
+        return _finalize_live_channels_publish(settings_obj, result, on_phase=on_phase)
+
+    if payload.sync:
+        store = progress_store()
+        if not store.begin(mode="show"):
+            raise HTTPException(status_code=409, detail="Publish already running.")
+        on_phase = make_phase_callback(store)
+        try:
+            result = _run(settings, on_phase)
+        except ValueError as error:
+            store.set_error(str(error))
+            raise HTTPException(status_code=400, detail=str(error)) from error
+        except Exception as error:  # noqa: BLE001
+            store.set_error(str(error)[:400])
+            raise HTTPException(
+                status_code=502,
+                detail=_safe_error_detail(error, "Could not create channel from show"),
+            ) from error
+        store.set_done(str(result.get("note") or "Publish finished."), result=result)
+        return {**result, "accepted": True, "async": False}
+
+    settings_snapshot = Settings.from_mapping(asdict(settings))
+
+    def _runner() -> None:
+        store = progress_store()
+        on_phase = make_phase_callback(store)
+        try:
+            result = _run(settings_snapshot, on_phase)
+        except Exception as error:  # noqa: BLE001
+            store.set_error(str(error)[:400] or "Publish failed.")
+            return
+        store.set_done(str(result.get("note") or "Publish finished."), result=result)
+
+    accepted = start_publish_job(_runner, mode="show")
+    if not accepted.get("accepted"):
+        raise HTTPException(
+            status_code=409,
+            detail=str(accepted.get("message") or "Publish already running."),
+        )
+    return {
+        "ok": True,
+        "accepted": True,
+        "async": True,
+        "busy": True,
+        "phase": accepted.get("phase"),
+        "percent": accepted.get("percent"),
+        "message": accepted.get("message")
+        or "Publish started — progress updates below.",
+        "mode": "show",
     }
 
 

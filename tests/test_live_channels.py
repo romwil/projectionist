@@ -4124,6 +4124,173 @@ class CollectionIdMatchTests(unittest.TestCase):
         client.list_program_descendants.assert_called_with("show-uuid-full")
 
 
+class ShowChannelPublishTests(unittest.TestCase):
+    """Single-show stations: source=show, TV scope, full-run episode pool."""
+
+    def _client(self) -> MagicMock:
+        client = MagicMock()
+        client.list_channels.return_value = []
+        return client
+
+    def test_builds_show_recipe_and_publishes(self) -> None:
+        from projectionist.live_channels.publish import publish_show_channel
+        from projectionist.live_channels.recipes import ProgrammingMode
+
+        client = self._client()
+        with patch(
+            "projectionist.live_channels.publish.publish_recipes",
+            return_value={"ok": True, "count_published": 1},
+        ) as publish_recipes:
+            result = publish_show_channel(
+                client,
+                show_rating_key="4242",
+                show_title="Deep Space Nine",
+            )
+
+        recipes = publish_recipes.call_args.args[1]
+        self.assertEqual(len(recipes), 1)
+        recipe = recipes[0]
+        self.assertEqual(recipe.source, "show")
+        self.assertEqual(recipe.media_scope, "tv")
+        self.assertEqual(recipe.item_rating_keys, ("4242",))
+        self.assertEqual(recipe.item_hints, ("Deep Space Nine",))
+        self.assertEqual(recipe.programming_mode, ProgrammingMode.SEQUENTIAL)
+        self.assertEqual(recipe.name, "Deep Space Nine Channel")
+        self.assertEqual(recipe.number, 100)
+        self.assertTrue(publish_recipes.call_args.kwargs["skip_existing_numbers"])
+        self.assertEqual(result["recipe"]["source"], "show")
+        self.assertEqual(result["show_rating_key"], "4242")
+        self.assertEqual(result["item_rating_key_count"], 1)
+
+    def test_shuffle_mode_and_explicit_name_and_number(self) -> None:
+        from projectionist.live_channels.publish import publish_show_channel
+        from projectionist.live_channels.recipes import ProgrammingMode
+
+        client = self._client()
+        with patch(
+            "projectionist.live_channels.publish.publish_recipes",
+            return_value={"ok": True},
+        ) as publish_recipes:
+            publish_show_channel(
+                client,
+                show_rating_key="77",
+                show_title="Columbo",
+                name="All Columbo",
+                channel_number=142,
+                programming_mode="shuffle",
+            )
+
+        recipe = publish_recipes.call_args.args[1][0]
+        self.assertEqual(recipe.programming_mode, ProgrammingMode.SHUFFLE)
+        self.assertEqual(recipe.name, "All Columbo")
+        self.assertEqual(recipe.number, 142)
+        # Explicit number must not trigger a lineup probe.
+        client.list_channels.assert_not_called()
+
+    def test_resolves_library_item_id_to_rating_key(self) -> None:
+        from projectionist.live_channels.publish import publish_show_channel
+
+        client = self._client()
+        db = MagicMock()
+        db.library_item_by_id.return_value = {
+            "rating_key": "9001",
+            "title": "The Wire",
+            "media_type": "show",
+        }
+        manager = MagicMock()
+        manager.db = db
+        with patch("projectionist.web.jobs.get_job_manager", return_value=manager), patch(
+            "projectionist.live_channels.publish.publish_recipes",
+            return_value={"ok": True},
+        ) as publish_recipes:
+            result = publish_show_channel(client, show_item_id=17)
+
+        db.library_item_by_id.assert_called_once_with(17)
+        recipe = publish_recipes.call_args.args[1][0]
+        self.assertEqual(recipe.item_rating_keys, ("9001",))
+        self.assertEqual(recipe.item_hints, ("The Wire",))
+        self.assertEqual(result["show_title"], "The Wire")
+
+    def test_rejects_movie_library_item(self) -> None:
+        from projectionist.live_channels.publish import publish_show_channel
+
+        db = MagicMock()
+        db.library_item_by_id.return_value = {
+            "rating_key": "5",
+            "title": "Heat",
+            "media_type": "movie",
+        }
+        manager = MagicMock()
+        manager.db = db
+        with patch("projectionist.web.jobs.get_job_manager", return_value=manager):
+            with self.assertRaises(ValueError) as ctx:
+                publish_show_channel(self._client(), show_item_id=5)
+        self.assertIn("not a TV show", str(ctx.exception))
+
+    def test_requires_a_show_key(self) -> None:
+        from projectionist.live_channels.publish import publish_show_channel
+
+        with self.assertRaises(ValueError):
+            publish_show_channel(self._client(), show_title="Nameless")
+
+    def test_show_source_fills_full_run(self) -> None:
+        from projectionist.live_channels.publish import craft_fill_mode
+
+        self.assertEqual(craft_fill_mode(source="show"), "full_run")
+
+    def test_show_recipe_expands_episodes_full_run(self) -> None:
+        """A source=show recipe carries only the show key — expand past the soft cap."""
+        from projectionist.live_channels.publish import collect_programs_for_recipe
+        from projectionist.live_channels.recipes import ChannelRecipe, ProgrammingMode
+
+        client = MagicMock()
+        client.list_library_programs.return_value = []
+        client.search_programs.return_value = {
+            "results": [
+                {
+                    "type": "show",
+                    "title": "Deep Space Nine",
+                    "uuid": "show-uuid-dsn",
+                    "externalKey": "4242",
+                    "identifiers": [{"type": "plex", "id": "4242", "sourceId": "src"}],
+                }
+            ]
+        }
+        client.list_program_descendants.return_value = [
+            {
+                "type": "content",
+                "id": f"ep-{i}",
+                "duration": 2_700_000,
+                "program": {
+                    "uuid": f"ep-{i}",
+                    "type": "episode",
+                    "title": f"Episode {i}",
+                    "identifiers": [
+                        {"type": "plex", "id": str(430000 + i), "sourceId": "src"}
+                    ],
+                },
+            }
+            for i in range(1, 45)
+        ]
+        recipe = ChannelRecipe(
+            name="Deep Space Nine Channel",
+            number=100,
+            source="show",
+            programming_mode=ProgrammingMode.SEQUENTIAL,
+            media_scope="tv",
+            item_hints=("Deep Space Nine",),
+            item_rating_keys=("4242",),
+        )
+        stats: dict = {}
+        picked = collect_programs_for_recipe(
+            client, recipe, catalog=[], media_scope="tv", match_stats=stats
+        )
+        self.assertEqual(len(picked), 44)
+        self.assertGreater(len(picked), 30)
+        self.assertTrue(stats.get("full_run"))
+        client.list_program_descendants.assert_called_with("show-uuid-dsn")
+
+
 class CraftFiltersTests(unittest.TestCase):
     def test_normalize_decade_and_and_stack(self) -> None:
         from projectionist.live_channels.filters import (
