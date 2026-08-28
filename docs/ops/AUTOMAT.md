@@ -159,6 +159,7 @@ Member-facing copy and owner API examples: in-app `/help` and [HELP.md](../HELP.
 
 Canonical ship order (full detail: [RELEASE.md](../RELEASE.md)):
 
+0. **Prepare (dot/patch)** — on a PR branch: CHANGELOG `## [X.Y.Z]`, then `./scripts/patch-release.sh [--run-tests]` (lockstep bump + release-notes). Minor features: bump Y manually or extend the script.
 1. **Hub** — `./scripts/docker-release.sh X.Y.Z` so `romwil/projectionist:X.Y.Z` exists.
 2. **GitHub** — PR → `main` (branch protection — never bypass; use a PR even for hotfixes), then annotated tag + `gh release` **after merge** matching that version.
 3. **CA proof** — pull Hub tag onto QA / disposable container (**Path B**). This is the Unraid CA install path.

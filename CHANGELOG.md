@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.33.4] — 2026-08-27
+
+Lobby Display stays enabled after restarts and partial settings saves. Dot-release prep gets a restored maintainer helper and runbook updates for Hub-first ships.
+
+### Highlights
+- **Lobby stays on.** Turning on Lobby Display in Admin persists across restarts — partial settings saves no longer flip theater back off.
+- **Faster dot releases.** `patch-release.sh` bumps lockstep version files, Unraid XML, and release notes in one step for patch ships.
+
+### Fixed
+- Partial `PUT /api/settings` no longer clobbers `theater.enabled` when the client omits nested theater fields — `merge_theater_settings_payload()` preserves existing lobby flags.
+- Unraid CA template pin regex in `patch-release.sh` handles compound `` `:X.Y` / `:X.Y.Z` `` examples (tested in `test_unraid_pin_compound_regex`).
+
+### Changed
+- `scripts/patch-release.sh` — dot-release helper with `--dry-run`, `--check`, `--run-tests`, and `--xml-summary`.
+- Release runbooks: `docs/RELEASE.md`, `docs/ops/AUTOMAT.md`, `.cursor/rules/release.mdc`, `AGENTS.md`.
+
+### Verification
+- Backend: 1,989 passed, 6 skipped, 34 subtests passed; 76.22% coverage (74% required).
+- Frontend unit: 681 passed, 0 failed; ESLint 0 errors (134 warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_setup.py` (theater merge), `tests/test_theater.py`, `tests/test_version.py` (lockstep + Unraid pin regex); `./scripts/patch-release.sh --check`.
+
 ## [1.33.3] — 2026-08-27
 
 Static lobby headers keep your venue name on the plate while NOW PLAYING and idle feed labels move to a caption on the poster footer. Docs refresh Lobby Theater offering copy and kiosk guidance.

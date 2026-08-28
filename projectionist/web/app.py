@@ -223,6 +223,7 @@ from projectionist.web.setup import (
     build_wizard_status,
     invalidate_certifications_on_settings_change,
     merge_secret_fields,
+    merge_theater_settings_payload,
     record_service_integration,
     resolve_test_payload,
     sync_settings_to_db,
@@ -2252,20 +2253,7 @@ def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) 
     before = Settings.load(settings_path)
     existing = _settings()
     merged = merge_secret_fields(payload.model_dump(), existing)
-    from projectionist.theater.normalize import normalize_theater_settings
-
-    if isinstance(merged.get("theater"), dict):
-        theater_norm = normalize_theater_settings(merged["theater"])
-        merged["theater"] = {
-            "enabled": theater_norm.enabled,
-            "orientation": theater_norm.orientation,
-            "audience": theater_norm.audience,
-            "idle_mode": theater_norm.idle_mode,
-            "multi_mode": theater_norm.multi_mode,
-            "header_mode": theater_norm.header_mode,
-            "static_label": theater_norm.static_label,
-            "rotate_seconds": theater_norm.rotate_seconds,
-        }
+    merge_theater_settings_payload(payload, existing, merged)
     settings = _normalize_mcp_image_sizes(
         normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
     )
