@@ -138,7 +138,7 @@ import useChatScroll from "./hooks/useChatScroll";
 import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts";
 import useVoiceMode from "./hooks/useVoiceMode.js";
 
-const SIDEBAR_RAIL_KEY = "curatorx.sidebar.rail";
+const SIDEBAR_RAIL_KEY = "projectionist.sidebar.rail";
 const ADD_FEEDBACK_DISMISS_MS = 5000;
 const THREAD_DELETE_UNDO_MS = 6000;
 const PERFECT_PICK_ACK =

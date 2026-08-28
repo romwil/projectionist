@@ -38,8 +38,6 @@ class ConstantTimeKeyCompareTests(unittest.TestCase):
             },
             clear=False,
         ) as env:
-            env.pop("CURATORX_MCP_API_KEY", None)
-            env.pop("CURATORX_MCP_FULL_API_KEY", None)
             self.assertEqual(resolve_http_mcp_auth("full-key")[0], "full")
             self.assertEqual(resolve_http_mcp_auth("priv-key")[0], "privacy")
             self.assertIsNone(resolve_http_mcp_auth("wrong")[0])
@@ -62,8 +60,8 @@ class FullModeAuthTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "CURATORX_MCP_API_KEY": "priv-key",
-                "CURATORX_MCP_FULL_API_KEY": "full-key",
+                "PROJECTIONIST_MCP_API_KEY": "priv-key",
+                "PROJECTIONIST_MCP_FULL_API_KEY": "full-key",
             },
             clear=False,
         ):
@@ -84,7 +82,7 @@ class FullModeAuthTests(unittest.TestCase):
             self.assertEqual(status, 401)
             self.assertEqual(detail, "Unauthorized")
             self.assertNotIn("PROJECTIONIST_", detail or "")
-            self.assertNotIn("CURATORX_", detail or "")
+            self.assertNotIn("PROJECTIONIST_", detail or "")
 
 
 class FullSchemaTests(unittest.TestCase):
@@ -126,11 +124,11 @@ class McpFullModeToolTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         set_mcp_mode("full")
 
     def tearDown(self) -> None:
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         self._tmpdir.cleanup()
         set_mcp_mode("privacy")
 
@@ -202,7 +200,7 @@ class McpFullModeToolTests(unittest.TestCase):
         )
         with patch.dict(os.environ, {}, clear=False) as env:
             env.pop("PROJECTIONIST_MCP_FULL_CONFIRM", None)
-            env.pop("CURATORX_MCP_FULL_CONFIRM", None)
+            env.pop("PROJECTIONIST_MCP_FULL_CONFIRM", None)
             with patch.object(mcp_server, "_database", return_value=db):
                 payload = json.loads(mcp_server.confirm_pending_action(token, confirmed=True))
 

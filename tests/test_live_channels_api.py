@@ -17,7 +17,7 @@ class LiveChannelsApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         import projectionist.web.jobs as jobs
@@ -54,7 +54,7 @@ class LiveChannelsApiTests(unittest.TestCase):
         reset_progress_for_tests()
         reset_continuity_progress()
         reset_publish_progress()
-        for key in ("CURATORX_SKIP_DOTENV", "PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER"):
+        for key in ("PROJECTIONIST_SKIP_DOTENV", "PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER"):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
 

@@ -84,6 +84,10 @@ const SECTION_TITLES = {
   advanced: "Advanced",
 };
 
+const SECTION_LEADS = {
+  advanced: "Integrations & keys",
+};
+
 const SECRET_FIELDS = [
   "plex_token",
   "radarr_api_key",
@@ -3376,6 +3380,9 @@ export default function ConfigPage() {
         <div>
           {showWizard ? <p className="eyebrow">Configuration</p> : null}
           <h1>{showWizard ? "First-run setup" : SECTION_TITLES[section] || "Admin"}</h1>
+          {!showWizard && SECTION_LEADS[section] ? (
+            <p className="muted admin-section-lead">{SECTION_LEADS[section]}</p>
+          ) : null}
         </div>
         {showWizard ? (
           <Link to="/" className="btn-link">

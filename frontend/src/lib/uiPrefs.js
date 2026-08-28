@@ -5,8 +5,6 @@ const FONT_SIZES = {
 };
 
 export const UI_THEME_STORAGE_KEY = "projectionist.ui_theme";
-/** Legacy theme key — read once and migrate into UI_THEME_STORAGE_KEY. */
-export const UI_THEME_STORAGE_KEY_LEGACY = "curatorx.ui_theme";
 
 const THEME_PREFS = new Set(["lights_up", "lights_down", "system"]);
 
@@ -65,16 +63,6 @@ export function loadStoredUiTheme(storage = globalThis.localStorage) {
     const current = storage?.getItem?.(UI_THEME_STORAGE_KEY);
     if (current != null && String(current).trim() !== "") {
       return normalizeUiTheme(current);
-    }
-    const legacy = storage?.getItem?.(UI_THEME_STORAGE_KEY_LEGACY);
-    if (legacy != null && String(legacy).trim() !== "") {
-      const migrated = normalizeUiTheme(legacy);
-      try {
-        storage?.setItem?.(UI_THEME_STORAGE_KEY, migrated);
-      } catch {
-        // localStorage unavailable for write-through migrate
-      }
-      return migrated;
     }
     return "system";
   } catch {

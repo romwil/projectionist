@@ -331,6 +331,113 @@
   background: var(--accent-soft);
 }
 
+.admin-rail-link-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-rail-link-subtitle {
+  font-size: var(--text-xs);
+  font-weight: 400;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.health-page-header {
+  margin-bottom: var(--space-4);
+}
+
+.health-tabs {
+  margin-bottom: var(--space-5);
+}
+
+.health-tab-panel .dash-page,
+.health-tab-panel .llm-usage-page,
+.health-tab-panel .media-issues-panel {
+  padding-top: 0;
+}
+
+.dash-header-embedded,
+.admin-page-header-embedded {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-4);
+}
+
+.lobby-setup-guide {
+  margin-bottom: var(--space-6);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.lobby-setup-guide h2 {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+}
+
+.lobby-setup-guide h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-md);
+}
+
+.lobby-setup-block {
+  margin-top: var(--space-5);
+}
+
+.lobby-setup-block p {
+  margin: 0 0 var(--space-2);
+}
+
+.lobby-setup-url-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  margin-top: var(--space-3);
+}
+
+.lobby-setup-url {
+  flex: 1 1 16rem;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: var(--text-sm);
+  word-break: break-all;
+}
+
+.lobby-setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.lobby-setup-guide .editorial-links li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.lobby-feed-copy {
+  flex-shrink: 0;
+}
+
+.lobby-setup-preview {
+  width: 100%;
+  max-width: 640px;
+  height: 360px;
+  margin-top: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #000;
+}
+
 .admin-rail-footer,
 .settings-rail-footer {
   display: flex;

@@ -27,7 +27,6 @@ export const PRIMARY_NAV_ITEMS = [
     to: ROUTES.chat,
     label: "Chat",
     youthLabel: "Ask",
-    guestLabel: "Ask",
     icon: "chat",
     testId: "topbar-chat-link",
   },
@@ -36,7 +35,6 @@ export const PRIMARY_NAV_ITEMS = [
     to: ROUTES.explore,
     label: "Explore",
     youthLabel: "Browse",
-    guestLabel: "Browse",
     icon: "explore",
     testId: "topbar-explore-link",
   },
@@ -82,7 +80,6 @@ export const PRIMARY_NAV_ITEMS = [
 
 /**
  * Which primary toolbar peers a role may see.
- * Guest: Search, Chat, Explore only.
  * Youth / member: no Admin.
  * Owner: full set.
  *
@@ -141,7 +138,6 @@ export function buildPrimaryNavItems({
   return PRIMARY_NAV_ITEMS.filter((item) => visible.has(item.id)).map((item) => {
     let label = item.label;
     if (isYouth && item.youthLabel) label = item.youthLabel;
-    if (String(role).toLowerCase() === "guest" && item.guestLabel) label = item.guestLabel;
     return { ...item, label };
   });
 }

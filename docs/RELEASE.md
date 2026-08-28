@@ -15,7 +15,7 @@ A version is **not released** until Docker Hub has `romwil/projectionist:X.Y.Z` 
 | Step | What | Gate |
 |------|------|------|
 | **0. Prepare** | Semver bump + CHANGELOG + tests on a **PR branch** (branch protection → no direct push to `main`) | CI green; versions lockstep |
-| **1. Hub** | `./scripts/docker-release.sh X.Y.Z` → `romwil/projectionist:{X.Y.Z,X.Y,latest}` (+ curatorx dual-tag) | `docker buildx imagetools inspect romwil/projectionist:X.Y.Z` succeeds |
+| **1. Hub** | `./scripts/docker-release.sh X.Y.Z` → `romwil/projectionist:{X.Y.Z,X.Y,latest}` | `docker buildx imagetools inspect romwil/projectionist:X.Y.Z` succeeds |
 | **2. GitHub** | Merge PR → `main`, annotated tag `vX.Y.Z`, `gh release create` | Tag + release match Hub version |
 | **3. CA proof** | On Automat (or equivalent), **pull** that Hub tag onto QA / a disposable container — same path Unraid CA will use | Running image digest matches Hub; **not** a Path A host `docker build` |
 | **4. Prod** | `cd …/appdata/projectionist && ./rollout.sh X.Y.Z` (pull-only) | `/api/health` + `/app/.build-info` show `X.Y.Z` |
@@ -122,9 +122,9 @@ Bump **all** of these to the same `X.Y.Z` (`tests/test_version.py` enforces ever
 | `unraid/projectionist.xml` | **Identical** to `templates/projectionist.xml` (CA still uses both paths) |
 | `README.md` | Version badge (`badge/version-X.Y.Z-…`) — keep in lockstep; not asserted by `test_version` |
 
-Canonical Unraid Repository tag: `romwil/projectionist:latest`. During the compatibility window, `scripts/docker-release.sh` also dual-tags identical digests to `romwil/curatorx:*`. Legacy `templates/curatorx.xml` / `unraid/curatorx.xml` stay as thin CA pointers (not version-lockstep).
+Canonical Unraid Repository tag: `romwil/projectionist:latest`. Legacy `templates/curatorx.xml` / `unraid/curatorx.xml` stay as thin CA pointers (not version-lockstep).
 
-Docker image identity does **not** come from those files at build time — `scripts/docker-release.sh` passes `PROJECTIONIST_VERSION` (and `CURATORX_VERSION` alias) into OCI labels and `/app/.build-info`.
+Docker image identity does **not** come from those files at build time — `scripts/docker-release.sh` passes `PROJECTIONIST_VERSION` into OCI labels and `/app/.build-info`.
 
 ---
 
@@ -200,7 +200,7 @@ Writes `frontend/public/release-notes.json`. The Docker release script runs this
 
 ## Multi-arch Docker Hub
 
-Canonical image: **`romwil/projectionist`**. Compat dual-tag (same digests): **`romwil/curatorx`**. Platforms: `linux/amd64,linux/arm64`.
+Canonical image: **`romwil/projectionist`**. Platforms: `linux/amd64,linux/arm64`.
 
 ```bash
 ./scripts/docker-release.sh X.Y.Z
@@ -209,7 +209,7 @@ Canonical image: **`romwil/projectionist`**. Compat dual-tag (same digests): **`
 # ./scripts/docker-release.sh X.Y.Z --date-tag        # also :latest-YYYYMMDD
 ```
 
-Tags pushed on `romwil/projectionist`: `:X.Y.Z`, `:X.Y`, `:latest` (and `:latest-YYYYMMDD` with `--date-tag`). The script then retags identical manifests to `romwil/curatorx:*` for the compatibility window.
+Tags pushed on `romwil/projectionist`: `:X.Y.Z`, `:X.Y`, `:latest` (and `:latest-YYYYMMDD` with `--date-tag`).
 
 The script sets `--provenance=false --sbom=false` so Unraid Dockerman sees Docker v2 **manifest lists** (not OCI attestation indexes). It prints Hub digests — paste into notes or keep for Unraid verify.
 
@@ -298,12 +298,9 @@ After a successful Docker Hub publish (`scripts/docker-release.sh`), **spin down
 # Hub manifest list (expect docker.distribution.manifest.list.v2+json)
 docker buildx imagetools inspect romwil/projectionist:X.Y.Z | head -30
 
-# Digests for :X.Y.Z and :latest should match this ship (and match dual-tagged curatorx)
+# Digests for :X.Y.Z and :latest should match this ship
 docker buildx imagetools inspect romwil/projectionist:X.Y.Z --format '{{.Manifest.Digest}}'
 docker buildx imagetools inspect romwil/projectionist:latest --format '{{.Manifest.Digest}}'
-docker buildx imagetools inspect romwil/curatorx:X.Y.Z --format '{{.Manifest.Digest}}'
-docker buildx imagetools inspect romwil/curatorx:latest --format '{{.Manifest.Digest}}'
-
 # GitHub
 gh release view "vX.Y.Z"
 

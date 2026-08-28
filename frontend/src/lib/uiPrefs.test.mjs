@@ -82,12 +82,11 @@ test("applyUiTheme persists preference without document", () => {
   assert.equal(store.get("projectionist.ui_theme"), "lights_up");
 });
 
-test("loadStoredUiTheme migrates legacy curatorx.ui_theme once", () => {
-  const store = new Map([["curatorx.ui_theme", "lights_down"]]);
+test("loadStoredUiTheme defaults to system when unset", () => {
+  const store = new Map();
   const storage = {
     getItem: (k) => (store.has(k) ? store.get(k) : null),
     setItem: (k, v) => store.set(k, v),
   };
-  assert.equal(loadStoredUiTheme(storage), "lights_down");
-  assert.equal(store.get("projectionist.ui_theme"), "lights_down");
+  assert.equal(loadStoredUiTheme(storage), "system");
 });

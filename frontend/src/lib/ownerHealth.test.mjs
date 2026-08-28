@@ -32,7 +32,7 @@ describe("buildHealthHeroTiles", () => {
     assert.match(byId.rating.to, /watch_state=watched/);
     assert.equal(byId.issues.value, "3");
     assert.equal(byId.issues.tone, "warn");
-    assert.equal(byId.issues.to, "/admin/issues");
+    assert.equal(byId.issues.to, "/admin/health?tab=issues");
     assert.equal(byId.streak, undefined);
   });
 

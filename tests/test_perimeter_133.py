@@ -14,8 +14,8 @@ class McpHttpPerimeterTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-mcp-perimeter-session-secret"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-mcp-perimeter-session-secret"
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
@@ -28,8 +28,8 @@ class McpHttpPerimeterTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
-        os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SESSION_SECRET", None)
         os.environ.pop("DATA_DIR", None)
         self._tmpdir.cleanup()
 
@@ -40,7 +40,7 @@ class McpHttpPerimeterTests(unittest.TestCase):
             self.assertNotIn("location", {key.lower() for key in response.headers})
             body = response.text
             self.assertNotIn("PROJECTIONIST_", body)
-            self.assertNotIn("CURATORX_", body)
+            self.assertNotIn("PROJECTIONIST_", body)
             self.assertIn("Unauthorized", body)
 
     def test_oversized_access_request_is_413(self) -> None:

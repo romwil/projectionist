@@ -85,7 +85,7 @@ export function normalizeWeeklyDigest(latest) {
         id: "open-issues",
         label: "Open issues",
         value: String(num(issues.open)),
-        to: "/admin/issues",
+        to: "/admin/health?tab=issues",
       },
       {
         id: "unwatched",
@@ -103,7 +103,7 @@ export function normalizeWeeklyDigest(latest) {
         id: "purge",
         label: "Purge candidates",
         value: String(num(purge.candidates)),
-        to: "/admin/dashboard#storage-intelligence",
+        to: "/admin/health?tab=sync#storage-intelligence",
       },
     ],
   };

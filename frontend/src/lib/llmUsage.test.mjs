@@ -8,10 +8,10 @@ import { adminNavLinks } from "./adminNav.js";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe("llm usage UI smoke", () => {
-  it("exposes Usage under Ops admin nav", () => {
-    const usage = adminNavLinks().find((item) => item.id === "usage");
-    assert.equal(usage?.label, "Usage");
-    assert.equal(usage?.to, "/admin/usage");
+  it("exposes LLM usage under Health admin nav", () => {
+    const health = adminNavLinks().find((item) => item.id === "health");
+    assert.equal(health?.label, "Health");
+    assert.equal(health?.to, "/admin/health");
   });
 
   it("ships LlmUsagePage with filters and chart panels", () => {
@@ -30,9 +30,11 @@ describe("llm usage UI smoke", () => {
     assert.match(src, /renderModelPicker/);
   });
 
-  it("registers /admin/usage route", () => {
+  it("registers Health page with usage tab redirect", () => {
     const src = readFileSync(join(__dirname, "../main.jsx"), "utf8");
-    assert.match(src, /LlmUsagePage/);
+    assert.match(src, /HealthPage/);
+    assert.match(src, /path="health"/);
     assert.match(src, /path="usage"/);
+    assert.match(src, /tab=usage/);
   });
 });

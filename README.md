@@ -33,7 +33,8 @@ Ordinary recommenders blend everything you’ve ever watched into one noisy prof
               ▼                 ▼                 ▼
         ┌──────────┐     ┌────────────┐    ┌────────────┐
         │  Chat /  │     │  Explore / │    │ Dual-key   │
-        │  Agent   │     │  Plot Lab  │    │ MCP tools  │
+        │  Agent   │     │  Related   │    │ MCP tools  │
+        │          │     │  titles    │    │            │
         └────┬─────┘     └─────┬──────┘    └─────┬──────┘
              │                 │                 │
              └─────────────────┼─────────────────┘
@@ -87,8 +88,6 @@ docker run -d --name projectionist \
 ```
 
 Open **http://localhost:8788** and complete the setup wizard (Name → Connections → Libraries).
-
-During the compatibility window, the same image digests are also published as `romwil/curatorx:*`.
 
 ### Docker Compose
 
@@ -184,7 +183,7 @@ Settings live in `{DATA_DIR}/settings.json` (Docker: `/config/settings.json`). E
 
 ### Environment variables (branded prefix)
 
-Prefer `PROJECTIONIST_*`. During the compatibility window (~2 releases), matching `CURATORX_*` values are still read when the new key is absent.
+Prefer `PROJECTIONIST_*` only. Legacy `CURATORX_*` env names are no longer read as of the next release — rename keys before upgrading.
 
 | Variable | Purpose |
 |----------|---------|

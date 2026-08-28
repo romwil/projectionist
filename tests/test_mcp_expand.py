@@ -22,10 +22,10 @@ class McpExpandTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
 
     def tearDown(self) -> None:
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         self._tmpdir.cleanup()
 
     def test_what_to_watch_and_purge_tools(self) -> None:

@@ -1,4 +1,4 @@
-"""Smoke tests for CuratorX MCP library tools."""
+"""Smoke tests for Projectionist MCP library tools."""
 
 from __future__ import annotations
 
@@ -62,7 +62,7 @@ class McpLibraryTests(unittest.TestCase):
             self.assertEqual(payload["group_by"], "decade")
             self.assertEqual(payload["buckets"][0]["count"], 1)
 
-    def test_sample_owned_library_and_find_collection_gaps_alias(self) -> None:
+    def test_sample_owned_library(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
             db.upsert_library_item(
@@ -77,10 +77,8 @@ class McpLibraryTests(unittest.TestCase):
             with patch.dict("os.environ", {"DATA_DIR": tmp}):
                 with patch.object(mcp_server, "_database", return_value=db):
                     sample = json.loads(mcp_server.sample_owned_library(genres="Horror", limit=5))
-                    alias = json.loads(mcp_server.find_collection_gaps(genres="Horror", limit=5))
             self.assertIn("sample_owned", sample)
             self.assertEqual(sample["sample_owned"]["total_matched"], 1)
-            self.assertEqual(alias["sample_owned"]["total_matched"], 1)
 
     def test_discover_missing_titles_privacy_safe_gaps(self) -> None:
         from projectionist.config_store import Settings

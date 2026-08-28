@@ -18,9 +18,9 @@ class McpAdminSettingsTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
-        os.environ.pop("CURATORX_MCP_API_KEY", None)
-        os.environ.pop("CURATORX_MCP_FULL_API_KEY", None)
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
+        os.environ.pop("PROJECTIONIST_MCP_API_KEY", None)
+        os.environ.pop("PROJECTIONIST_MCP_FULL_API_KEY", None)
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
@@ -34,9 +34,9 @@ class McpAdminSettingsTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
-        os.environ.pop("CURATORX_MCP_API_KEY", None)
-        os.environ.pop("CURATORX_MCP_FULL_API_KEY", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_MCP_API_KEY", None)
+        os.environ.pop("PROJECTIONIST_MCP_FULL_API_KEY", None)
         self._tmpdir.cleanup()
 
     def test_get_settings_masks_mcp_keys_with_hint(self) -> None:
@@ -121,7 +121,7 @@ class McpAdminSettingsTests(unittest.TestCase):
         self.assertFalse(resp.json()["settings"]["mcp_api_key_set"])
 
     def test_clear_env_key_rejected(self) -> None:
-        os.environ["CURATORX_MCP_API_KEY"] = "from-env-xxxx"
+        os.environ["PROJECTIONIST_MCP_API_KEY"] = "from-env-xxxx"
         import projectionist.web.jobs as jobs
 
         jobs._manager = None

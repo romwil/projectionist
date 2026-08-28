@@ -734,7 +734,7 @@ class Settings:
     # Explicit allowlist: empty keeps all reported repairs owner-approved.
     auto_repair_issue_codes: list[str] = field(default_factory=list)
     webhook_secret: str = ""
-    # Dual-mode MCP HTTP keys (also PROJECTIONIST_MCP_* / CURATORX_MCP_* env).
+    # Dual-mode MCP HTTP keys (PROJECTIONIST_MCP_* env).
     mcp_api_key: str = ""
     mcp_full_api_key: str = ""
     # Active-curation scope for the full key: when true, the full MCP key may
@@ -1048,7 +1048,7 @@ def save_settings(data_dir: Path, settings: Settings) -> Path:
 def _env_bool(name: str) -> bool | None:
     """Return True/False when env is set, else None (unset).
 
-    Branded ``PROJECTIONIST_*`` / ``CURATORX_*`` names dual-read via envcompat.
+    Branded ``PROJECTIONIST_*`` names via envcompat.
     """
     from projectionist.envcompat import env_bool
 
