@@ -117,6 +117,46 @@ class VersionTests(unittest.TestCase):
             self.assertIn("renamed to Projectionist", legacy_texts[0])
             self.assertIn("templates/projectionist.xml", legacy_texts[0])
 
+    def test_unraid_pin_compound_regex(self) -> None:
+        """patch-release.sh compound pin example must match and substitute."""
+        # Keep in sync with set_unraid_xml() in scripts/patch-release.sh
+        pattern = r"(pin `:)[0-9]+\.[0-9]+` / `:[0-9]+\.[0-9]+\.[0-9]+"
+        sample = "pin `:1.33` / `:1.33.3`"
+        self.assertRegex(sample, pattern)
+        updated = re.sub(pattern, r"\g<1>1.34` / `:1.34.0", sample)
+        self.assertEqual(updated, "pin `:1.34` / `:1.34.0`")
+
+    def test_unraid_changes_insert_regex(self) -> None:
+        """patch-release.sh <Changes> insert must add ### X.Y.Z when tag is well-formed."""
+        # Keep in sync with set_unraid_xml() in scripts/patch-release.sh
+        target = "1.33.4"
+        insert_pattern = r"(<Changes>\s*\n)"
+        sample = "<Changes>\n### 1.33.3\nPrior release\n"
+        insert = f"### {target}\nOne-line summary\n\n"
+        updated = re.sub(insert_pattern, rf"\1{insert}", sample, count=1)
+        self.assertIsNotNone(
+            re.search(rf"^### {re.escape(target)}\s*$", updated, flags=re.MULTILINE),
+        )
+        self.assertIn("One-line summary", updated)
+
+    def test_unraid_changes_insert_missing_tag(self) -> None:
+        """Missing/malformed <Changes> must not silently skip ### X.Y.Z insertion."""
+        target = "1.33.4"
+        target_heading = rf"^### {re.escape(target)}\s*$"
+        insert_pattern = r"(<Changes>\s*\n)"
+        insert = f"### {target}\nsummary\n\n"
+
+        for sample in (
+            "<!-- Projectionist 1.33.3 -->\n<Other>\n",
+            "<Changes>### 1.33.3</Changes>\n",  # no newline after opening tag
+        ):
+            with self.subTest(sample=sample[:40]):
+                updated = re.sub(insert_pattern, rf"\1{insert}", sample, count=1)
+                self.assertIsNone(
+                    re.search(target_heading, updated, flags=re.MULTILINE),
+                    "insert regex no-opped; patch-release.sh must abort before write",
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

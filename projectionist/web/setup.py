@@ -529,6 +529,51 @@ def build_setup_status(settings: Settings, db: Database | None = None) -> Dict[s
     }
 
 
+def merge_theater_settings_payload(
+    payload: Any,
+    existing: Settings,
+    merged: Dict[str, Any],
+) -> None:
+    """Apply theater block for PUT /api/settings without clobbering on partial payloads.
+
+    SettingsPayload fills omitted top-level keys with dataclass defaults. A partial
+    PUT (e.g. only ``features``) would otherwise reset ``theater.enabled`` to false.
+    """
+    from dataclasses import asdict
+
+    from projectionist.theater.normalize import normalize_theater_settings
+
+    fields_set = getattr(payload, "model_fields_set", set())
+    if "theater" not in fields_set:
+        merged["theater"] = asdict(existing.theater)
+        return
+
+    incoming = merged.get("theater")
+    if not isinstance(incoming, Mapping):
+        merged["theater"] = asdict(existing.theater)
+        return
+
+    base = asdict(existing.theater)
+    nested = getattr(payload, "theater", None)
+    nested_set = getattr(nested, "model_fields_set", set()) if nested is not None else set()
+    theater_in = dict(incoming)
+    for key, value in base.items():
+        if key not in nested_set:
+            theater_in[key] = value
+
+    theater_norm = normalize_theater_settings(theater_in)
+    merged["theater"] = {
+        "enabled": theater_norm.enabled,
+        "orientation": theater_norm.orientation,
+        "audience": theater_norm.audience,
+        "idle_mode": theater_norm.idle_mode,
+        "multi_mode": theater_norm.multi_mode,
+        "header_mode": theater_norm.header_mode,
+        "static_label": theater_norm.static_label,
+        "rotate_seconds": theater_norm.rotate_seconds,
+    }
+
+
 def merge_secret_fields(incoming: Mapping[str, Any], existing: Settings) -> Dict[str, Any]:
     merged = dict(incoming)
     defaults = Settings()

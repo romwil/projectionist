@@ -1,6 +1,6 @@
 ---
 description: Follow docs/RELEASE.md for Hub-first ships, version bumps, CHANGELOG, GitHub releases, and Docker image publishes
-globs: CHANGELOG.md,projectionist/_version.py,package.json,frontend/package.json,frontend/public/release-notes.json,scripts/docker-release.sh,scripts/generate-release-notes.sh,docs/RELEASE.md,pyproject.toml,templates/projectionist.xml,unraid/projectionist.xml,README.md,tests/test_version.py,.github/workflows/ci.yml
+globs: CHANGELOG.md,projectionist/_version.py,package.json,frontend/package.json,frontend/public/release-notes.json,scripts/docker-release.sh,scripts/generate-release-notes.sh,scripts/patch-release.sh,docs/RELEASE.md,pyproject.toml,templates/projectionist.xml,unraid/projectionist.xml,README.md,tests/test_version.py,.github/workflows/ci.yml
 alwaysApply: false
 ---
 
@@ -14,7 +14,7 @@ GitHub release, or pushing Docker images, **read and follow**
 
 A version is **not released** until Hub has `romwil/projectionist:X.Y.Z`. Order:
 
-1. **Prepare** on a PR branch (semver + CHANGELOG + tests; no direct `main` push)
+1. **Prepare** on a PR branch (semver + CHANGELOG + tests; no direct `main` push). For dot/patch ships, run `./scripts/patch-release.sh` after the CHANGELOG section exists (see [docs/RELEASE.md](../../docs/RELEASE.md) § Dot release).
 2. **Hub** — `./scripts/docker-release.sh X.Y.Z`
 3. **GitHub** — merge PR → `main`, then tag `vX.Y.Z`, `gh release create`
 4. **CA proof** — pull Hub tag (Path B); **not** Path A host `docker build` on Automat
@@ -33,7 +33,7 @@ A version is **not released** until Hub has `romwil/projectionist:X.Y.Z`. Order:
 - **CA proof ≠ Path A:** do not treat a host-built QA image or local `docker build` as Unraid CA / release proof. Pull the Hub tag (Path B).
 - **Do not** claim version `X.Y.Z` is released if Hub lacks `romwil/projectionist:X.Y.Z`.
 - **Do not** bump version in-tree without a matching Hub publish in the same ship.
-- **Semver:** patch for hotfixes (e.g. single-flight cancel → `1.33.1` → `1.33.2`); minor for features; never reuse a shipped `X.Y.Z` for new bits.
+- **Semver:** patch for hotfixes (dot release: `./scripts/patch-release.sh` → e.g. `1.33.3` → `1.33.4`); minor for features; never reuse a shipped `X.Y.Z` for new bits.
 - **Do not** bump versions or cut a release while unrelated WIP (another agent’s feature)
   is mid-edit on the same files unless the user coordinates it.
 - Keep versions in lockstep (enforced by `tests/test_version.py` except the README badge):
