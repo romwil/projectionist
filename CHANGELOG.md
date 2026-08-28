@@ -9,9 +9,14 @@
 - **My Journey refocus.** Cinema exploration map — directors, cinematographers, composers, genre/era insight cards, and courses/explainers via `GET /api/journey/exploration` (no streaks, badges, or challenges).
 - **Admin Health hub.** Sync health, LLM spend, and media issues regrouped at `/admin/health?tab=` with legacy `/admin/dashboard`, `/admin/usage`, and `/admin/issues` redirects.
 - **Lobby setup wizard.** Admin → Lobby uses a step-by-step wizard with a focused shell that hides the dense ops rail until setup is done.
+- **Unified Library hub.** Shelves, watchlist, collections, and browse live under `/library` tabs; legacy `/lists`, `/collections`, and `/watchlist` routes redirect.
+- **Chat launcher.** Empty-state context chips and a slash-command autocomplete palette on the chat home screen.
 
 ### Changed
 - **Admin navigation regroup.** Admin rail reorganized into five scannable groups — Setup, Experience, Platform, Communications, and System — with headings only (no new routes).
+- **Solo-install admin IA.** When `multi_user_enabled` is false, the admin rail trims to ~9 essentials grouped as Setup / Experience / Platform, with an "On the wall" Experience subtitle for Lobby and Live Channels.
+- **Settings rail clarity.** Opaque settings labels renamed for quicker scanning (Profile, Voice, Taste, Notifications, Watchlist, Lists).
+- **Live theater typography.** Pop-out Live watch scales type on wide viewports for living-room readability.
 - **Hygiene cleanup.** Removed vestigial guest nav labels, orphan `PlotLabPage` / `EngagementPage` sources (redirects unchanged), and `guest_access_enabled` from the features API payload.
 - **Docs:** Product-facing "Plot Lab" strings → **Related titles** in README, WEB_UI, and CURATOR_KNOWLEDGE; configuration docs document `PROJECTIONIST_*` only.
 
