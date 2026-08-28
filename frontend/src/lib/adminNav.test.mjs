@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { ROUTES } from "./backNav.js";
 import {
   ADMIN_NAV,
+  SINGLE_USER_ADMIN_LINK_IDS,
   adminNavGroups,
   adminNavLinks,
   buildAdminDrawerItems,
@@ -113,5 +114,36 @@ describe("adminNav", () => {
       items.find((item) => item.id === "admin-advanced")?.subtitle,
       "Integrations & keys",
     );
+  });
+
+  it("filters single-user admin to nine essentials with Experience grouping", () => {
+    const links = adminNavLinks({ multiUserEnabled: false });
+    assert.equal(links.length, SINGLE_USER_ADMIN_LINK_IDS.length);
+    assert.deepEqual(
+      links.map((item) => item.id),
+      SINGLE_USER_ADMIN_LINK_IDS,
+    );
+    assert.equal(links.some((item) => item.id === "household"), false);
+    assert.equal(links.some((item) => item.id === "access"), false);
+    assert.equal(links.some((item) => item.id === "youth"), false);
+    assert.equal(links.some((item) => item.id === "mail"), false);
+    assert.equal(links.some((item) => item.id === "seerr"), false);
+
+    const groups = adminNavGroups({ multiUserEnabled: false });
+    assert.deepEqual(
+      groups.map((group) => group.label),
+      ["Setup", "Experience", "Platform"],
+    );
+    assert.match(String(groups[1].subtitle || ""), /On the wall/i);
+    assert.deepEqual(
+      groups[1].links.map((item) => item.id),
+      ["lobby", "live-channels"],
+    );
+  });
+
+  it("keeps Seerr in single-user nav when seerr_enabled", () => {
+    const links = adminNavLinks({ multiUserEnabled: false, seerrEnabled: true });
+    assert.equal(links.length, SINGLE_USER_ADMIN_LINK_IDS.length + 1);
+    assert.ok(links.some((item) => item.id === "seerr"));
   });
 });

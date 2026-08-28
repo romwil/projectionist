@@ -247,6 +247,30 @@
   background: color-mix(in srgb, var(--muted) 10%, transparent);
 }
 
+.admin-rail-group-setup .admin-rail-group-band,
+.admin-rail-group-experience .admin-rail-group-band,
+.admin-rail-group-platform .admin-rail-group-band,
+.admin-rail-group-communications .admin-rail-group-band,
+.admin-rail-group-system .admin-rail-group-band {
+  background: color-mix(in srgb, var(--text) 3.5%, transparent);
+}
+
+.admin-rail-group-setup .admin-rail-group-band {
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+}
+
+.admin-rail-group-experience .admin-rail-group-band {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+}
+
+.admin-rail-group-note {
+  margin: 0;
+  padding: 0 0.35rem 0.15rem;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: var(--muted);
+}
+
 .admin-rail-heading {
   margin: 0.15rem 0 0;
   padding: 0.15rem 0.1rem;
