@@ -96,7 +96,6 @@ class LogFileConfigTests(unittest.TestCase):
             env = {
                 "DATA_DIR": tmp,
                 "PROJECTIONIST_SKIP_DOTENV": "1",
-                "PROJECTIONIST_SKIP_DOTENV": "1",
                 "LOG_LEVEL": "INFO",
             }
             with patch.dict(os.environ, env, clear=False):
@@ -114,7 +113,6 @@ class AdminLogsApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-admin-logs-session-secret-value"
@@ -145,7 +143,6 @@ class AdminLogsApiTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         for key in (
-            "PROJECTIONIST_SKIP_DOTENV",
             "PROJECTIONIST_SKIP_DOTENV",
             "LLM_PROVIDER",
             "PROJECTIONIST_SESSION_SECRET",

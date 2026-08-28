@@ -157,7 +157,6 @@ class MarkBadMediaApiTests(unittest.TestCase):
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
-        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-bad-media-session"
         os.environ["RADARR_URL"] = "http://radarr"
