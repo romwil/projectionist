@@ -1621,6 +1621,16 @@ export async function publishLiveChannelsFromCollection(body = {}) {
   });
 }
 
+export async function publishLiveChannelsFromShow(body = {}) {
+  return api("/admin/live-channels/channels/from-show", {
+    method: "POST",
+    body: JSON.stringify({
+      confirm: true,
+      ...body,
+    }),
+  });
+}
+
 export async function getLiveChannelsPublishStatus() {
   return api("/admin/live-channels/publish/status");
 }

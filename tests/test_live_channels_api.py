@@ -669,6 +669,87 @@ class LiveChannelsApiTests(unittest.TestCase):
         # Job may already be done (fast mock) or still busy.
         self.assertIn(status.json().get("phase"), {"queued", "matching", "publishing", "plex_sync", "warming", "done", "error", "idle"})
 
+    def test_from_show_async_accepts_job(self) -> None:
+        self._enable()
+        with patch(
+            "projectionist.web.live_channels_routes._finalize_live_channels_publish",
+            return_value={"ok": True, "note": "done", "count_published": 1},
+        ), patch(
+            "projectionist.live_channels.publish.publish_show_channel",
+            return_value={"ok": True, "count_published": 1, "note": "matched"},
+        ), patch(
+            "projectionist.live_channels.publish.tunarr_client_from_settings",
+            return_value=MagicMock(),
+        ):
+            resp = self.client.post(
+                "/api/admin/live-channels/channels/from-show",
+                json={
+                    "confirm": True,
+                    "show_rating_key": "4242",
+                    "show_title": "Deep Space Nine",
+                    "programming_mode": "shuffle",
+                },
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body.get("accepted"))
+        self.assertTrue(body.get("async"))
+        self.assertEqual(body.get("mode"), "show")
+        status = self.client.get("/api/admin/live-channels/publish/status")
+        self.assertEqual(status.status_code, 200)
+        # Job may already be done (fast mock) or still busy.
+        self.assertIn(
+            status.json().get("phase"),
+            {"queued", "matching", "publishing", "plex_sync", "warming", "done", "error", "idle"},
+        )
+
+    def test_from_show_sync_passes_show_through(self) -> None:
+        """sync=true runs inline and forwards the resolved show + mode."""
+        self._enable()
+        with patch(
+            "projectionist.web.live_channels_routes._finalize_live_channels_publish",
+            side_effect=lambda _settings, result, **_kw: result,
+        ), patch(
+            "projectionist.live_channels.publish.publish_show_channel",
+            return_value={"ok": True, "count_published": 1, "note": "matched"},
+        ) as publish_show, patch(
+            "projectionist.live_channels.publish.tunarr_client_from_settings",
+            return_value=MagicMock(),
+        ):
+            resp = self.client.post(
+                "/api/admin/live-channels/channels/from-show",
+                json={
+                    "confirm": True,
+                    "sync": True,
+                    "show_rating_key": "4242",
+                    "show_title": "Deep Space Nine",
+                    "programming_mode": "sequential",
+                },
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        self.assertFalse(resp.json().get("async"))
+        kwargs = publish_show.call_args.kwargs
+        self.assertEqual(kwargs["show_rating_key"], "4242")
+        self.assertEqual(kwargs["show_title"], "Deep Space Nine")
+        self.assertEqual(kwargs["programming_mode"], "sequential")
+
+    def test_from_show_requires_confirm(self) -> None:
+        self._enable()
+        resp = self.client.post(
+            "/api/admin/live-channels/channels/from-show",
+            json={"show_rating_key": "4242", "confirm": False},
+        )
+        self.assertEqual(resp.status_code, 400)
+
+    def test_from_show_requires_a_show_key(self) -> None:
+        self._enable()
+        resp = self.client.post(
+            "/api/admin/live-channels/channels/from-show",
+            json={"confirm": True, "show_title": "Nameless"},
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("ratingKey", resp.json().get("detail", ""))
+
     def test_publish_custom_requires_confirm(self) -> None:
         self._enable()
         resp = self.client.post(

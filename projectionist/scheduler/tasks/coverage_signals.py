@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from collections import Counter
-from typing import Any, Iterable, Mapping
+from typing import Any, Dict, Iterable, List, Mapping
 
 from projectionist.library.db import Database
 from projectionist.library.theme_map import KEYWORD_TO_THEME, normalize_keyword, parse_keywords
-from projectionist.telemetry.coverage import schedule_coverage_deficit
+from projectionist.telemetry.coverage import schedule_coverage_deficits
 
 
 def _row_val(row: Any, key: str, default: Any = "") -> Any:
@@ -46,20 +46,22 @@ def emit_unmapped_keyword_signals(
                 continue
             counts[norm] += 1
 
-    emitted = 0
+    deficits: List[Dict[str, Any]] = []
     for keyword, count in counts.most_common(max_emit):
         if count < min_item_count:
             break
-        schedule_coverage_deficit(
-            deficit_kind="theme_keyword",
-            entity_type="keyword",
-            entity_key=keyword,
-            priority_tier="P1",
-            context_source="keyword_theme_tagging",
-            extra={"item_count": count, "keyword": keyword},
+        deficits.append(
+            {
+                "deficit_kind": "theme_keyword",
+                "entity_type": "keyword",
+                "entity_key": keyword,
+                "priority_tier": "P1",
+                "context_source": "keyword_theme_tagging",
+                "extra": {"item_count": count, "keyword": keyword},
+            }
         )
-        emitted += 1
-    return emitted
+    schedule_coverage_deficits(deficits)
+    return len(deficits)
 
 
 def emit_motif_deficit_signals(
@@ -76,9 +78,9 @@ def emit_motif_deficit_signals(
             ).fetchall()
         }
 
-    emitted = 0
+    deficits: List[Dict[str, Any]] = []
     for row in db.all_library_items():
-        if emitted >= max_emit:
+        if len(deficits) >= max_emit:
             break
         item_id = int(row["id"])
         if item_id in motif_titles:
@@ -90,19 +92,21 @@ def emit_motif_deficit_signals(
                 parts.append(str(row[col]))
         if not parts:
             continue
-        schedule_coverage_deficit(
-            deficit_kind="motif",
-            entity_type="library_item",
-            entity_key=str(item_id),
-            priority_tier="P1",
-            context_source="summary_motifs",
-            extra={
-                "item_id": item_id,
-                "title": str(_row_val(row, "title") or ""),
-            },
+        deficits.append(
+            {
+                "deficit_kind": "motif",
+                "entity_type": "library_item",
+                "entity_key": str(item_id),
+                "priority_tier": "P1",
+                "context_source": "summary_motifs",
+                "extra": {
+                    "item_id": item_id,
+                    "title": str(_row_val(row, "title") or ""),
+                },
+            }
         )
-        emitted += 1
-    return emitted
+    schedule_coverage_deficits(deficits)
+    return len(deficits)
 
 
 def emit_metadata_backlog_signals(
@@ -112,23 +116,25 @@ def emit_metadata_backlog_signals(
 ) -> int:
     """Emit P2 metadata deficit signals for titles needing TMDB enrichment."""
     backlog = db.items_needing_metadata_enrichment(limit=limit)
-    emitted = 0
+    deficits: List[Dict[str, Any]] = []
     for row in backlog:
         item_id = int(row["id"])
-        schedule_coverage_deficit(
-            deficit_kind="metadata",
-            entity_type="library_item",
-            entity_key=str(item_id),
-            priority_tier="P2",
-            context_source="metadata_enrichment",
-            extra={
-                "item_id": item_id,
-                "title": str(_row_val(row, "title") or ""),
-                "tmdb_id": _row_val(row, "tmdb_id"),
-            },
+        deficits.append(
+            {
+                "deficit_kind": "metadata",
+                "entity_type": "library_item",
+                "entity_key": str(item_id),
+                "priority_tier": "P2",
+                "context_source": "metadata_enrichment",
+                "extra": {
+                    "item_id": item_id,
+                    "title": str(_row_val(row, "title") or ""),
+                    "tmdb_id": _row_val(row, "tmdb_id"),
+                },
+            }
         )
-        emitted += 1
-    return emitted
+    schedule_coverage_deficits(deficits)
+    return len(deficits)
 
 
 def emit_synopsis_backlog_signals(
@@ -152,23 +158,25 @@ def emit_synopsis_backlog_signals(
             """,
             (max(1, min(int(limit), 50)),),
         ).fetchall()
-    emitted = 0
+    deficits: List[Dict[str, Any]] = []
     for row in rows:
         item_id = int(row["id"])
-        schedule_coverage_deficit(
-            deficit_kind="synopsis",
-            entity_type="library_item",
-            entity_key=str(item_id),
-            priority_tier="P2",
-            context_source="long_synopsis_enrichment",
-            extra={
-                "item_id": item_id,
-                "title": str(row["title"] or ""),
-                "tmdb_id": row["tmdb_id"],
-            },
+        deficits.append(
+            {
+                "deficit_kind": "synopsis",
+                "entity_type": "library_item",
+                "entity_key": str(item_id),
+                "priority_tier": "P2",
+                "context_source": "long_synopsis_enrichment",
+                "extra": {
+                    "item_id": item_id,
+                    "title": str(row["title"] or ""),
+                    "tmdb_id": row["tmdb_id"],
+                },
+            }
         )
-        emitted += 1
-    return emitted
+    schedule_coverage_deficits(deficits)
+    return len(deficits)
 
 
 def emit_embedding_backlog_signals(
@@ -178,9 +186,9 @@ def emit_embedding_backlog_signals(
 ) -> int:
     """Emit P2 embedding deficit signals for items with overview but no embedding."""
     existing = set(db.embedding_content_hashes().keys())
-    emitted = 0
+    deficits: List[Dict[str, Any]] = []
     for row in db.all_library_items():
-        if emitted >= limit:
+        if len(deficits) >= limit:
             break
         item_id = int(row["id"])
         if item_id in existing:
@@ -188,16 +196,18 @@ def emit_embedding_backlog_signals(
         overview = str(_row_val(row, "summary") or _row_val(row, "tmdb_overview") or "").strip()
         if not overview:
             continue
-        schedule_coverage_deficit(
-            deficit_kind="embedding",
-            entity_type="library_item",
-            entity_key=str(item_id),
-            priority_tier="P2",
-            context_source="semantic_embeddings",
-            extra={
-                "item_id": item_id,
-                "title": str(_row_val(row, "title") or ""),
-            },
+        deficits.append(
+            {
+                "deficit_kind": "embedding",
+                "entity_type": "library_item",
+                "entity_key": str(item_id),
+                "priority_tier": "P2",
+                "context_source": "semantic_embeddings",
+                "extra": {
+                    "item_id": item_id,
+                    "title": str(_row_val(row, "title") or ""),
+                },
+            }
         )
-        emitted += 1
-    return emitted
+    schedule_coverage_deficits(deficits)
+    return len(deficits)

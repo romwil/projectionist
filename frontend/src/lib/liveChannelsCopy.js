@@ -158,6 +158,7 @@ export function liveSetupStepNumbers({ dockerOrchestration = false } = {}) {
 export const CREATE_STATION_MODES = [
   { id: "custom", label: "Custom" },
   { id: "collection", label: "From collection" },
+  { id: "show", label: "From TV show" },
   { id: "starters", label: "Starter pack" },
 ];
 

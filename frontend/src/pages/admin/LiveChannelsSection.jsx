@@ -16,7 +16,9 @@ import {
   previewLiveChannelsCraft,
   publishLiveChannelsChannel,
   publishLiveChannelsFromCollection,
+  publishLiveChannelsFromShow,
   publishLiveChannelsStarters,
+  queryLibrary,
   refillLiveChannelsChannel,
 } from "../../api/client";
 import {
@@ -212,11 +214,37 @@ export default function LiveChannelsSection({
   const setupSteps = liveSetupStepNumbers({ dockerOrchestration });
   const [createStationMode, setCreateStationMode] = useState("custom");
   const [healthDetailsOpen, setHealthDetailsOpen] = useState(false);
+  const [showQuery, setShowQuery] = useState("");
+  const [showResults, setShowResults] = useState([]);
+  const [showSearchBusy, setShowSearchBusy] = useState(false);
+  const [showSearched, setShowSearched] = useState(false);
+  // Picked show (id + rating_key + title) or a manually typed ratingKey fallback.
+  const [showPick, setShowPick] = useState({ item_id: 0, rating_key: "", title: "" });
+  const [showMode, setShowMode] = useState("sequential");
+  const [showManual, setShowManual] = useState(false);
   const craftCollections = liveCraftOptions?.collections || [];
   const selectedCraftCollection = findLiveCollection(
     craftCollections,
     liveCraft.collection_id,
   );
+  const showReady = Boolean(showPick.item_id > 0 || showPick.rating_key.trim());
+
+  async function searchShows() {
+    const query = showQuery.trim();
+    if (!query) return;
+    setShowSearchBusy(true);
+    try {
+      const payload = await queryLibrary({ query, media_type: "show", limit: 25 });
+      setShowResults(payload?.items || []);
+      setShowSearched(true);
+    } catch (error) {
+      setShowResults([]);
+      setShowSearched(true);
+      setActionFeedback("live-channels", "error", error.message, { block: "show" });
+    } finally {
+      setShowSearchBusy(false);
+    }
+  }
 
   async function proposeStarterPack() {
     setLiveBusy("starters");
@@ -1666,6 +1694,169 @@ export default function LiveChannelsSection({
                       </div>
                       {renderPublishProgress("collection")}
                       {renderLiveBlockAlert("collection")}
+                    </div>
+                    ) : null}
+
+                    {createStationMode === "show" ? (
+                    <div
+                      className="live-channels-craft-block"
+                      data-testid="live-channels-from-show"
+                    >
+                      <p className="wizard-note">
+                        One show, nonstop. Search your TV library, pick a series, and
+                        Projectionist fills the station with every episode it can resolve —
+                        Sequential runs them in order, Shuffle randomizes the full run.
+                      </p>
+                      <div className="service-fields live-channels-craft-fields">
+                        <label>
+                          Find a show
+                          <input
+                            type="search"
+                            data-testid="live-channels-show-search"
+                            placeholder="Search your TV library…"
+                            value={showQuery}
+                            onChange={(event) => setShowQuery(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key !== "Enter") return;
+                              event.preventDefault();
+                              searchShows();
+                            }}
+                          />
+                        </label>
+                        <div className="wizard-actions">
+                          <button
+                            type="button"
+                            data-testid="live-channels-show-search-run"
+                            disabled={showSearchBusy || !showQuery.trim()}
+                            onClick={searchShows}
+                          >
+                            {showSearchBusy ? "Searching…" : "Search shows"}
+                          </button>
+                        </div>
+                        {showResults.length ? (
+                          <label>
+                            Show
+                            <select
+                              data-testid="live-channels-show-picker"
+                              value={showPick.item_id ? String(showPick.item_id) : ""}
+                              onChange={(event) => {
+                                const id = Number(event.target.value || 0);
+                                const match = showResults.find((row) => row.id === id);
+                                setShowPick({
+                                  item_id: id,
+                                  rating_key: match?.rating_key || "",
+                                  title: match?.title || "",
+                                });
+                              }}
+                            >
+                              <option value="">Select a show…</option>
+                              {showResults.map((row) => (
+                                <option key={row.id} value={String(row.id)}>
+                                  {row.title}
+                                  {row.year ? ` (${row.year})` : ""}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : showSearched && !showSearchBusy ? (
+                          <p className="wizard-note" data-testid="live-channels-show-empty">
+                            No TV shows matched “{showQuery.trim()}”. Sync your library, or
+                            enter the Plex ratingKey below.
+                          </p>
+                        ) : null}
+                        <label>
+                          Play order
+                          <select
+                            data-testid="live-channels-show-mode"
+                            value={showMode}
+                            onChange={(event) => setShowMode(event.target.value)}
+                          >
+                            <option value="sequential">Sequential — episode order</option>
+                            <option value="shuffle">Shuffle — full run, randomized</option>
+                          </select>
+                        </label>
+                      </div>
+                      <label className="config-toggle">
+                        <input
+                          type="checkbox"
+                          data-testid="live-channels-show-manual-toggle"
+                          checked={showManual}
+                          onChange={(event) => setShowManual(event.target.checked)}
+                        />
+                        <span>Enter a Plex ratingKey instead (advanced)</span>
+                      </label>
+                      {showManual ? (
+                        <div className="service-fields live-channels-craft-fields">
+                          <label>
+                            Show title
+                            <input
+                              type="text"
+                              data-testid="live-channels-show-title"
+                              value={showPick.title}
+                              onChange={(event) =>
+                                setShowPick((prev) => ({ ...prev, title: event.target.value }))
+                              }
+                            />
+                          </label>
+                          <label>
+                            Plex ratingKey
+                            <input
+                              type="text"
+                              data-testid="live-channels-show-rating-key"
+                              value={showPick.rating_key}
+                              onChange={(event) =>
+                                setShowPick((prev) => ({
+                                  ...prev,
+                                  item_id: 0,
+                                  rating_key: event.target.value,
+                                }))
+                              }
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+                      <div className="wizard-actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="live-channels-publish-show"
+                          disabled={liveBusy === "show" || !showReady}
+                          onClick={async () => {
+                            const title = showPick.title.trim() || "this show";
+                            const modeLabel =
+                              showMode === "shuffle" ? "Shuffle" : "Sequential";
+                            if (
+                              !window.confirm(
+                                `Publish “${title}” as a ${modeLabel} Live Channel station?`,
+                              )
+                            ) {
+                              return;
+                            }
+                            await runPublishJob(
+                              () =>
+                                publishLiveChannelsFromShow({
+                                  show_item_id: showPick.item_id || 0,
+                                  show_rating_key: showPick.rating_key.trim(),
+                                  show_title: showPick.title.trim(),
+                                  programming_mode: showMode,
+                                }),
+                              {
+                                busyKey: "show",
+                                block: "show",
+                                successFallback: `Published “${title}”.`,
+                              },
+                            );
+                          }}
+                        >
+                          {liveBusy === "show"
+                            ? "Publishing…"
+                            : showReady
+                              ? `Publish “${showPick.title.trim() || "show"}”`
+                              : "Pick a show to publish"}
+                        </button>
+                      </div>
+                      {renderPublishProgress("show")}
+                      {renderLiveBlockAlert("show")}
                     </div>
                     ) : null}
 

@@ -1655,17 +1655,20 @@ export default function ConfigPage() {
   }
 
   function renderPublishProgress(block) {
+    const publishBusy =
+      liveBusy === "collection" || liveBusy === "craft" || liveBusy === "show";
     const busyMatch =
       (block === "collection" && liveBusy === "collection") ||
       (block === "craft" && liveBusy === "craft") ||
-      (block === "publish" && (liveBusy === "collection" || liveBusy === "craft"));
+      (block === "show" && liveBusy === "show") ||
+      (block === "publish" && publishBusy);
     if (
       !(
         busyMatch ||
         (livePublishProgress &&
           livePublishProgress.phase &&
           livePublishProgress.phase !== "idle" &&
-          (liveBusy === "collection" || liveBusy === "craft" || livePublishProgress.mode === block))
+          (publishBusy || livePublishProgress.mode === block))
       )
     ) {
       return null;

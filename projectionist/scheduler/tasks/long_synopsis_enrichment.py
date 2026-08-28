@@ -129,7 +129,6 @@ async def run(
 
     batch_size = resolve_batch_size(db, TASK_NAME, DEFAULT_BATCH_SIZE)
     backlog = db.items_needing_long_synopsis(limit=batch_size)
-    coverage_signals = emit_synopsis_backlog_signals(db, limit=batch_size)
     if not backlog:
         return {"status": "completed", "enriched": 0, "remaining": 0}
 
@@ -183,6 +182,10 @@ async def run(
 
         if idx + 1 < len(backlog):
             await asyncio.sleep(REQUEST_PAUSE_SECONDS)
+
+    # Emitted after the writes so titles just enriched are no longer counted as
+    # deficits, and capped low so the signal never rivals the enrichment itself.
+    coverage_signals = emit_synopsis_backlog_signals(db, limit=min(batch_size, 5))
 
     remaining = db.count_items_needing_long_synopsis()
     logger.info(

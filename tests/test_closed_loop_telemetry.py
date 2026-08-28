@@ -14,9 +14,11 @@ from projectionist.library.db import Database
 from projectionist.library.db.migrations import CURRENT_SCHEMA_VERSION, MIGRATIONS
 from projectionist.telemetry.ingestion import (
     schedule_closed_loop_event,
+    schedule_closed_loop_events,
     scrub_closed_loop_payload,
     upsert_closed_loop_event,
     upsert_closed_loop_event_sync,
+    upsert_closed_loop_events_sync,
 )
 
 
@@ -162,6 +164,109 @@ class ClosedLoopIngestionTests(unittest.TestCase):
         self.assertEqual(len(staged), 1)
         self.assertEqual(staged[0]["status"], "pending")
         self.assertAlmostEqual(float(staged[0]["confidence_score"]), 0.85)
+
+    def test_batch_upsert_writes_every_event(self) -> None:
+        written = upsert_closed_loop_events_sync(
+            self.db,
+            [
+                {
+                    "event_type": "coverage_deficit",
+                    "priority_tier": "p2",
+                    "entity_type": "library_item",
+                    "entity_key": f"batch-{index}",
+                    "payload": {"item_id": index, "api_key": "leak"},
+                }
+                for index in range(6)
+            ],
+        )
+        self.assertEqual(written, 6)
+        rows = self.db.list_closed_loop_events(event_type="coverage_deficit")
+        keys = {str(row["entity_key"]) for row in rows}
+        self.assertEqual(keys, {f"batch-{index}" for index in range(6)})
+        self.assertTrue(all(str(row["priority_tier"]) == "P2" for row in rows))
+        payload = json.loads(rows[0]["payload_json"])
+        self.assertNotIn("api_key", payload)
+
+    def test_batch_upsert_skips_blank_keys_and_empty_lists(self) -> None:
+        self.assertEqual(upsert_closed_loop_events_sync(self.db, []), 0)
+        written = upsert_closed_loop_events_sync(
+            self.db,
+            [
+                {
+                    "event_type": "search_miss",
+                    "priority_tier": "P2",
+                    "entity_type": "title",
+                    "entity_key": "   ",
+                },
+                {
+                    "event_type": "search_miss",
+                    "priority_tier": "P2",
+                    "entity_type": "title",
+                    "entity_key": "tmdb:9",
+                },
+            ],
+        )
+        self.assertEqual(written, 1)
+        rows = self.db.list_closed_loop_events(event_type="search_miss")
+        self.assertEqual([str(row["entity_key"]) for row in rows], ["tmdb:9"])
+
+    def test_batch_upsert_increments_hit_count_across_calls(self) -> None:
+        events = [
+            {
+                "event_type": "unmapped_token",
+                "priority_tier": "P1",
+                "entity_type": "facet",
+                "entity_key": "neo noir",
+            }
+        ]
+        upsert_closed_loop_events_sync(self.db, events)
+        upsert_closed_loop_events_sync(self.db, events)
+        rows = self.db.list_closed_loop_events(event_type="unmapped_token")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(int(rows[0]["hit_count"]), 2)
+
+    def test_batch_schedule_uses_single_job(self) -> None:
+        schedule_closed_loop_events(
+            self.db,
+            [
+                {
+                    "event_type": "coverage_deficit",
+                    "priority_tier": "P2",
+                    "entity_type": "library_item",
+                    "entity_key": f"sched-{index}",
+                    "payload": {"item_id": index},
+                }
+                for index in range(4)
+            ],
+        )
+        self._wait_for_closed_loop_threads()
+        rows = self.db.list_closed_loop_events(event_type="coverage_deficit")
+        keys = {str(row["entity_key"]) for row in rows}
+        self.assertEqual(keys, {f"sched-{index}" for index in range(4)})
+
+    def test_batch_prune_enforces_cap(self) -> None:
+        from projectionist.library.db import _telemetry as telemetry_mod
+
+        original = telemetry_mod.TELEMETRY_EVENTS_MAX_ROWS
+        telemetry_mod.TELEMETRY_EVENTS_MAX_ROWS = 5
+        try:
+            written = upsert_closed_loop_events_sync(
+                self.db,
+                [
+                    {
+                        "event_type": "unmapped_token",
+                        "priority_tier": "P3",
+                        "entity_type": "facet",
+                        "entity_key": f"bulk-{index}",
+                    }
+                    for index in range(20)
+                ],
+            )
+            self.assertEqual(written, 20)
+            rows = self.db.list_closed_loop_events(entity_type="facet")
+            self.assertLessEqual(len(rows), 5)
+        finally:
+            telemetry_mod.TELEMETRY_EVENTS_MAX_ROWS = original
 
     def test_closed_loop_unique_keys_are_capped(self) -> None:
         from projectionist.library.db import _telemetry as telemetry_mod
