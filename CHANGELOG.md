@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [1.34.0] — 2026-08-28
+
+UX wave — CuratorX ripout, cinema map, admin health hub, unified Library, chat launcher, solo admin IA, and clearer settings labels.
+
+### Highlights
+- **Projectionist-only config.** Legacy CuratorX env vars, localStorage keys, Docker tags, and webhook headers are gone — one prefix, one image, one secret name.
+- **My Journey as cinema map.** Explore directors, cinematographers, composers, and genre/era cards instead of streaks and badges.
+- **Admin Health hub.** Sync, LLM spend, and media issues share `/admin/health` tabs; old dashboard/usage/issues URLs redirect.
+- **One Library home.** Shelves, watchlist, collections, and browse live under `/library`; chat gets context chips and slash-command autocomplete.
+- **Simpler solo admin.** Single-user installs see ~9 admin links grouped Setup / Experience / Platform, with living-room copy for Lobby and Live.
+- **Clearer settings & Live.** Settings rail labels spell out Voice, Taste, and Lists; pop-out Live type scales on wide screens.
+
 ### Breaking
 - **CuratorX compatibility removed.** Environment variables must use the `PROJECTIONIST_*` prefix only — legacy `CURATORX_*` names are no longer read. Browser localStorage keys use `projectionist.*` only (no `curatorx.*` migration). Docker Hub publishes `romwil/projectionist` only (no `romwil/curatorx` dual-tag). Plex webhooks must send `X-Projectionist-Webhook-Secret` (legacy `X-CuratorX-Webhook-Secret` rejected). MCP clients should call `discover_missing_titles` / `sample_owned_library` instead of the removed `find_collection_gaps` alias.
 
@@ -15,10 +27,17 @@
 ### Changed
 - **Admin navigation regroup.** Admin rail reorganized into five scannable groups — Setup, Experience, Platform, Communications, and System — with headings only (no new routes).
 - **Solo-install admin IA.** When `multi_user_enabled` is false, the admin rail trims to ~9 essentials grouped as Setup / Experience / Platform, with an "On the wall" Experience subtitle for Lobby and Live Channels.
-- **Settings rail clarity.** Opaque settings labels renamed for quicker scanning (Profile, Voice, Taste, Notifications, Watchlist, Lists).
+- **Settings rail clarity.** Opaque settings labels renamed for quicker scanning (Voice & persona, Taste preferences, and stable Profile / Notifications / Watchlist / Lists).
 - **Live theater typography.** Pop-out Live watch scales type on wide viewports for living-room readability.
 - **Hygiene cleanup.** Removed vestigial guest nav labels, orphan `PlotLabPage` / `EngagementPage` sources (redirects unchanged), and `guest_access_enabled` from the features API payload.
 - **Docs:** Product-facing "Plot Lab" strings → **Related titles** in README, WEB_UI, and CURATOR_KNOWLEDGE; configuration docs document `PROJECTIONIST_*` only.
+
+### Fixed
+- Settings, chat, and AppShell now pass `seerrEnabled` into the primary nav drawer so solo installs show Seerr when it is enabled (matches Admin).
+
+### Verification
+- Backend: 2,089 passed, 6 skipped, 36 subtests passed; 76.18% coverage (74% required).
+- Frontend unit: 700 passed, 0 failed; ESLint 0 errors (136 warnings pre-existing); production Vite build passed.
 
 ## [1.33.4] — 2026-08-27
 

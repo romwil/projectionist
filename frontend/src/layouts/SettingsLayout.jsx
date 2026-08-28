@@ -17,6 +17,7 @@ export default function SettingsLayout() {
   const [role, setRole] = useState("owner");
   const [isYouth, setIsYouth] = useState(false);
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
+  const [seerrEnabled, setSeerrEnabled] = useState(false);
   const [liveChannelsReady, setLiveChannelsReady] = useState(false);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
@@ -28,6 +29,7 @@ export default function SettingsLayout() {
       try {
         const features = await getFeatures();
         const multiUser = Boolean(features?.features?.multi_user_enabled);
+        const seerrReady = Boolean(features?.features?.seerr_enabled);
         const liveReady = Boolean(features?.features?.live_channels_ready);
         const me = await getAuthMe().catch(() => null);
         if (me?.user?.ui_font_size || me?.user?.ui_theme) {
@@ -40,6 +42,7 @@ export default function SettingsLayout() {
             setIsOwner(true);
             setRole("owner");
             setMultiUserEnabled(false);
+            setSeerrEnabled(seerrReady);
             setLiveChannelsReady(liveReady);
             setReady(true);
           }
@@ -54,6 +57,7 @@ export default function SettingsLayout() {
         setRole(String(me.user.role || "member"));
         setIsYouth(Boolean(me.user.is_youth));
         setMultiUserEnabled(true);
+        setSeerrEnabled(seerrReady);
         setLiveChannelsReady(liveReady);
         setReady(true);
       } catch {
@@ -107,6 +111,7 @@ export default function SettingsLayout() {
         isYouth={isYouth}
         role={role}
         multiUserEnabled={multiUserEnabled}
+        seerrEnabled={seerrEnabled}
         authReady
         liveChannelsReady={liveChannelsReady}
         navOpen={appNavOpen}
