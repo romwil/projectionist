@@ -177,6 +177,7 @@ export default function App() {
     role: userRole,
     isYouth,
     liveChannelsReady,
+    seerrEnabled,
   } = useAuthGate();
   const { start: startBulkProgress, update: updateBulkProgress, finish: finishBulkProgress } = useBulkActionProgress();
   const navigate = useNavigate();
@@ -1552,6 +1553,7 @@ export default function App() {
         isYouth={isYouth}
         role={userRole}
         multiUserEnabled={multiUserEnabled}
+        seerrEnabled={seerrEnabled}
         authReady={authReady}
         liveChannelsReady={liveChannelsReady}
         navOpen={appNavOpen}

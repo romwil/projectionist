@@ -48,8 +48,8 @@ A version is **not released** until Hub has `romwil/projectionist:X.Y.Z`. Order:
   `### Verification`. Voice: [docs/DOCS_STYLE.md](../../docs/DOCS_STYLE.md).
 - Regenerate notes with `./scripts/generate-release-notes.sh --require-version X.Y.Z`.
 - Publish images only via `./scripts/docker-release.sh X.Y.Z` → canonical
-  `romwil/projectionist` (`:X.Y.Z`, `:X.Y`, `:latest`) **and** dual-tag identical
-  digests to `romwil/curatorx:*` during the compatibility window. Never invent
+  `romwil/projectionist` (`:X.Y.Z`, `:X.Y`, `:latest`). As of 1.34.0 there is no
+  `romwil/curatorx` dual-tag. Never invent
   alternate registries or skip the script’s Unraid-compatible manifest flags.
 - After a successful Hub publish, **spin down maintainer QA** (`projectionist-qa` on `:8790`)
   unless an active QA/test campaign is in progress. Never stop prod `projectionist` / `:8788`.
