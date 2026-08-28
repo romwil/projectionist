@@ -83,7 +83,7 @@ export function buildHealthHeroTiles({ health, coverage, openIssues } = {}) {
       label: "Open issues",
       value: issues == null ? "—" : String(issues),
       detail: issues ? "Needs review" : "All clear",
-      to: "/admin/issues",
+      to: "/admin/health?tab=issues",
       tone: issues ? "warn" : "good",
     },
   ];

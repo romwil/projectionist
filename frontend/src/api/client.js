@@ -775,6 +775,10 @@ export async function getEngagementSummary() {
   return api("/engagement/summary");
 }
 
+export async function getJourneyExploration() {
+  return api("/journey/exploration");
+}
+
 export async function postCourseProgress(listId, { position = 0, completed = false } = {}) {
   return api(`/engagement/courses/${encodeURIComponent(listId)}/progress`, {
     method: "POST",

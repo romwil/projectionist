@@ -43,8 +43,8 @@ describe("backLabelForPath", () => {
     assert.equal(backLabelForPath("/explore/tags"), "Back to tag search");
     assert.equal(backLabelForPath("/explore/plot-lab"), "Back to Plot Lab");
     assert.equal(backLabelForPath("/explore/section/recently-added"), "Back to Explore");
-    assert.equal(backLabelForPath("/explore/browse"), "Back to Explore");
-    assert.equal(backLabelForPath("/explore/browse?media_type=movie"), "Back to Explore");
+    assert.equal(backLabelForPath("/explore/browse"), "Back to Library");
+    assert.equal(backLabelForPath("/explore/browse?media_type=movie"), "Back to Library");
     assert.equal(backLabelForPath("/explore"), "Back to Explore");
     assert.equal(backLabelForPath("/"), "Back to chat");
     assert.equal(backLabelForPath("/privacy"), "Back to Privacy");
@@ -132,11 +132,17 @@ describe("withReturnTo", () => {
 describe("watchlist browse route", () => {
   it("exposes a dedicated /watchlist route", () => {
     assert.equal(ROUTES.watchlist, "/watchlist");
-    assert.equal(watchlistBrowseHref(), "/watchlist");
+    assert.equal(watchlistBrowseHref(), "/library?tab=watchlist");
   });
 
   it("labels the watchlist page back link", () => {
-    assert.equal(backLabelForPath("/watchlist"), "Back to chat");
+    assert.equal(backLabelForPath("/watchlist"), "Back to Library");
+  });
+
+  it("labels library hub browse back link", () => {
+    assert.equal(backLabelForPath("/explore/browse"), "Back to Library");
+    assert.equal(backLabelForPath("/library"), "Back to chat");
+    assert.equal(backLabelForPath("/library/saved"), "Back to Library");
   });
 });
 

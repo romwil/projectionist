@@ -26,19 +26,19 @@ class LoggingConfigTests(unittest.TestCase):
         self.assertTrue(root.handlers)
         self.assertEqual(root.level, logging.INFO)
 
-    def test_resolve_log_level_prefers_curatorx_env(self) -> None:
-        with patch.dict(os.environ, {"CURATORX_LOG_LEVEL": "DEBUG", "LOG_LEVEL": "ERROR"}, clear=False):
+    def test_resolve_log_level_prefers_projectionist_env(self) -> None:
+        with patch.dict(os.environ, {"PROJECTIONIST_LOG_LEVEL": "DEBUG", "LOG_LEVEL": "ERROR"}, clear=False):
             self.assertEqual(resolve_log_level(), logging.DEBUG)
 
     def test_resolve_log_level_falls_back_to_log_level(self) -> None:
         env = os.environ.copy()
-        env.pop("CURATORX_LOG_LEVEL", None)
+        env.pop("PROJECTIONIST_LOG_LEVEL", None)
         with patch.dict(os.environ, {**env, "LOG_LEVEL": "WARNING"}, clear=True):
             self.assertEqual(resolve_log_level(), logging.WARNING)
 
     def test_resolve_log_level_defaults_to_info(self) -> None:
         env = os.environ.copy()
-        env.pop("CURATORX_LOG_LEVEL", None)
+        env.pop("PROJECTIONIST_LOG_LEVEL", None)
         env.pop("LOG_LEVEL", None)
         with patch.dict(os.environ, env, clear=True):
             self.assertEqual(resolve_log_level(), logging.INFO)

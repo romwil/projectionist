@@ -112,8 +112,8 @@ class McpHttpKeyModeTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "CURATORX_MCP_API_KEY": "priv-key",
-                "CURATORX_MCP_FULL_API_KEY": "full-key",
+                "PROJECTIONIST_MCP_API_KEY": "priv-key",
+                "PROJECTIONIST_MCP_FULL_API_KEY": "full-key",
             },
             clear=False,
         ):
@@ -126,8 +126,8 @@ class McpHttpKeyModeTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "CURATORX_MCP_API_KEY": "priv-key",
-                "CURATORX_MCP_FULL_API_KEY": "full-key",
+                "PROJECTIONIST_MCP_API_KEY": "priv-key",
+                "PROJECTIONIST_MCP_FULL_API_KEY": "full-key",
             },
             clear=False,
         ):
@@ -139,8 +139,8 @@ class McpHttpKeyModeTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "CURATORX_MCP_API_KEY": "same",
-                "CURATORX_MCP_FULL_API_KEY": "same",
+                "PROJECTIONIST_MCP_API_KEY": "same",
+                "PROJECTIONIST_MCP_FULL_API_KEY": "same",
             },
             clear=False,
         ):
@@ -154,9 +154,9 @@ class McpHttpKeyModeTests(unittest.TestCase):
         with patch.dict(
             os.environ,
             {
-                "CURATORX_MCP_MODE": "full",
-                "CURATORX_MCP_API_KEY": "priv",
-                "CURATORX_MCP_FULL_API_KEY": "",
+                "PROJECTIONIST_MCP_MODE": "full",
+                "PROJECTIONIST_MCP_API_KEY": "priv",
+                "PROJECTIONIST_MCP_FULL_API_KEY": "",
             },
             clear=False,
         ):
@@ -176,11 +176,11 @@ class McpPrivacyToolTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         set_mcp_mode("privacy")
 
     def tearDown(self) -> None:
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         self._tmpdir.cleanup()
         set_mcp_mode("privacy")
 

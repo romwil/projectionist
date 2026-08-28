@@ -401,9 +401,9 @@ class YouthChatHistoryReadTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-youth-history-session-secret"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-youth-history-session-secret"
         os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
         clear_rate_limits()
@@ -442,9 +442,9 @@ class YouthChatHistoryReadTests(unittest.TestCase):
         clear_rate_limits()
         clear_pin_bindings()
         for key in (
-            "CURATORX_SKIP_DOTENV",
+            "PROJECTIONIST_SKIP_DOTENV",
             "LLM_PROVIDER",
-            "CURATORX_SESSION_SECRET",
+            "PROJECTIONIST_SESSION_SECRET",
             "DATA_DIR",
             "PROJECTIONIST_SETUP_STATE",
         ):
@@ -542,9 +542,9 @@ class AccessRequestTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-access-session-secret-value"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-access-session-secret-value"
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
@@ -572,9 +572,9 @@ class AccessRequestTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
-        os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_SESSION_SECRET", None)
         self._tmpdir.cleanup()
 
     def test_create_access_request_public(self) -> None:

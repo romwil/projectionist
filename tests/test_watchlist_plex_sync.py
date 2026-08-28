@@ -20,7 +20,7 @@ from projectionist.watchlist.plex_sync import get_watchlist_sync_status, sync_wa
 class WatchlistCryptoTests(unittest.TestCase):
     def test_roundtrip(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.dict("os.environ", {"DATA_DIR": tmp, "CURATORX_SESSION_SECRET": "unit-test-secret"}):
+            with patch.dict("os.environ", {"DATA_DIR": tmp, "PROJECTIONIST_SESSION_SECRET": "unit-test-secret"}):
                 from projectionist.web.session_tokens import clear_session_secret_cache
 
                 clear_session_secret_cache()
@@ -152,7 +152,7 @@ class WatchlistSyncUnitTests(unittest.TestCase):
                 plex_user_id="1",
                 role="owner",
             )
-            with patch.dict("os.environ", {"DATA_DIR": tmp, "CURATORX_SESSION_SECRET": "unit-test-secret"}):
+            with patch.dict("os.environ", {"DATA_DIR": tmp, "PROJECTIONIST_SESSION_SECRET": "unit-test-secret"}):
                 from projectionist.web.session_tokens import clear_session_secret_cache
 
                 clear_session_secret_cache()
@@ -196,7 +196,7 @@ class WatchlistSyncUnitTests(unittest.TestCase):
                 plex_user_id="2",
                 role="owner",
             )
-            with patch.dict("os.environ", {"DATA_DIR": tmp, "CURATORX_SESSION_SECRET": "unit-test-secret"}):
+            with patch.dict("os.environ", {"DATA_DIR": tmp, "PROJECTIONIST_SESSION_SECRET": "unit-test-secret"}):
                 from projectionist.web.session_tokens import clear_session_secret_cache
 
                 clear_session_secret_cache()
@@ -260,8 +260,8 @@ class WatchlistApiTests(unittest.TestCase):
 
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
-        os.environ["CURATORX_SESSION_SECRET"] = "unit-test-secret"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "unit-test-secret"
         from projectionist.web.session_tokens import clear_session_secret_cache
         import projectionist.web.jobs as jobs
         import projectionist.web.app as app_mod
@@ -278,7 +278,7 @@ class WatchlistApiTests(unittest.TestCase):
 
         clear_session_secret_cache()
         jobs._manager = None
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         self._tmpdir.cleanup()
 
     def test_sync_status_endpoint(self) -> None:

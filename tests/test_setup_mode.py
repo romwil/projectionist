@@ -28,13 +28,12 @@ class SetupModeApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
         os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-setup-mode-session-secret-xx"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-setup-mode-session-secret-xx"
         os.environ["HOST"] = "0.0.0.0"
         os.environ.pop("PROJECTIONIST_SETUP_STATE", None)
-        os.environ.pop("CURATORX_SETUP_STATE", None)
+        os.environ.pop("PROJECTIONIST_SETUP_STATE", None)
         clear_session_secret_cache()
         clear_rate_limits()
         import projectionist.web.jobs as jobs
@@ -53,14 +52,13 @@ class SetupModeApiTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         for key in (
-            "CURATORX_SKIP_DOTENV",
             "PROJECTIONIST_SKIP_DOTENV",
             "LLM_PROVIDER",
-            "CURATORX_SESSION_SECRET",
+            "PROJECTIONIST_SESSION_SECRET",
             "DATA_DIR",
             "HOST",
             "PROJECTIONIST_SETUP_STATE",
-            "CURATORX_SETUP_STATE",
+            "PROJECTIONIST_SETUP_STATE",
         ):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()

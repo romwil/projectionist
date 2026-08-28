@@ -17,7 +17,6 @@ from projectionist.config_store import (
 
 class GuestTourFlagTests(unittest.TestCase):
     def tearDown(self) -> None:
-        os.environ.pop("CURATORX_GUEST_TOUR_ENABLED", None)
         os.environ.pop("PROJECTIONIST_GUEST_TOUR_ENABLED", None)
 
     def test_always_false(self) -> None:
@@ -25,7 +24,7 @@ class GuestTourFlagTests(unittest.TestCase):
         self.assertFalse(
             resolve_guest_tour_enabled(Settings(features=FeatureFlags(guest_tour_enabled=True)))
         )
-        os.environ["CURATORX_GUEST_TOUR_ENABLED"] = "1"
+        os.environ["PROJECTIONIST_GUEST_TOUR_ENABLED"] = "1"
         self.assertFalse(resolve_guest_tour_enabled(Settings()))
 
     def test_persists_legacy_key_but_does_not_enable(self) -> None:

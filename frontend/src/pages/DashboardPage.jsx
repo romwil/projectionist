@@ -557,7 +557,7 @@ const fetchGenreAgg = () => getLibraryAggregate("genre");
 const fetchCountryAgg = () => getLibraryAggregate("country");
 const fetchLanguageAgg = () => getLibraryAggregate("language");
 
-export default function DashboardPage() {
+export default function DashboardPage({ embedded = false }) {
   const overview = useDashData(fetchOverview);
   const health = useDashData(fetchHealth);
   const stats = useDashData(fetchStats);
@@ -625,15 +625,24 @@ export default function DashboardPage() {
     : reviews.data?.reviews ?? reviews.data?.items ?? [];
 
   return (
-    <div className="dash-page" data-testid="dashboard-page">
-      <header className="dash-header">
-        <div>
-          <h1 className="dash-title">Library intelligence</h1>
+    <div className={`dash-page${embedded ? " dash-page-embedded" : ""}`} data-testid="dashboard-page">
+      {embedded ? null : (
+        <header className="dash-header">
+          <div>
+            <h1 className="dash-title">Library intelligence</h1>
+          </div>
+          <button type="button" className="ghost" onClick={refreshAll}>
+            Refresh
+          </button>
+        </header>
+      )}
+      {embedded ? (
+        <div className="dash-header dash-header-embedded">
+          <button type="button" className="ghost" onClick={refreshAll}>
+            Refresh dashboard
+          </button>
         </div>
-        <button type="button" className="ghost" onClick={refreshAll}>
-          Refresh
-        </button>
-      </header>
+      ) : null}
 
       <OwnerHealthHero health={hlth} />
 

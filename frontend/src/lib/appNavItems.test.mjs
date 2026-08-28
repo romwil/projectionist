@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { ROUTES } from "./backNav.js";
+import { libraryHubPath } from "./libraryTabs.js";
 import {
   APP_NAV_CORE_ITEMS,
   YOUTH_NAV_ITEMS,
@@ -41,7 +42,6 @@ describe("buildAppNavItems", () => {
     assert.deepEqual(moreBlock(items), [
       "related-titles",
       "tags",
-      "watchlist",
       "library",
       "help",
       "privacy",
@@ -129,9 +129,9 @@ describe("buildAppNavItems", () => {
     ]);
     const adminIdx = ids.indexOf("heading-admin");
     assert.ok(adminIdx > 0);
-    assert.equal(ids[adminIdx + 1], "admin-heading-home");
+    assert.equal(ids[adminIdx + 1], "admin-heading-setup");
     assert.ok(ids.includes("admin-overview"));
-    assert.ok(ids.includes("admin-issues"));
+    assert.ok(ids.includes("admin-health"));
     assert.equal(
       items.filter((item) => item.kind === "admin").length,
       adminNavLinks().length,
@@ -144,12 +144,24 @@ describe("buildAppNavItems", () => {
     assert.deepEqual(moreBlock(items), [
       "related-titles",
       "tags",
-      "watchlist",
       "library",
       "help",
       "privacy",
       "about",
     ]);
+  });
+
+  it("filters Admin drawer links for single-user installs", () => {
+    const items = buildAppNavItems({
+      isOwner: true,
+      multiUserEnabled: false,
+      pathname: "/admin/overview",
+    });
+    const adminLinks = items.filter((item) => item.kind === "admin");
+    assert.equal(adminLinks.length, 9);
+    assert.equal(adminLinks.some((item) => item.id === "admin-household"), false);
+    assert.equal(adminLinks.some((item) => item.id === "admin-issues"), false);
+    assert.ok(items.some((item) => item.id === "admin-heading-experience"));
   });
 
   it("shows no peers while auth is unresolved, so Admin never flashes", () => {
@@ -171,7 +183,7 @@ describe("buildAppNavItems", () => {
       APP_NAV_CORE_ITEMS.find((item) => item.id === "related-titles")?.to,
       ROUTES.relatedTitles,
     );
-    assert.equal(APP_NAV_CORE_ITEMS.find((item) => item.id === "watchlist")?.kind, "watchlist");
+    assert.equal(APP_NAV_CORE_ITEMS.find((item) => item.id === "watchlist"), undefined);
     assert.equal(APP_NAV_CORE_ITEMS.find((item) => item.id === "library")?.to, ROUTES.library);
   });
 
@@ -179,6 +191,7 @@ describe("buildAppNavItems", () => {
     const items = buildAppNavItems({ isYouth: true, role: "member" });
     assert.deepEqual(moreBlock(items), ["watchlist", "help"]);
     assert.equal(items.find((item) => item.id === "watchlist")?.label, "My list");
+    assert.equal(items.find((item) => item.id === "watchlist")?.to, libraryHubPath("watchlist"));
     assert.equal(navigateBlock(items).includes("admin"), false);
     assert.equal(navigateBlock(items).includes("my-journey"), true);
   });

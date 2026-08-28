@@ -112,7 +112,7 @@ export function inboxHeadline(items = []) {
     if (kind === "arrival") return "Something new arrived";
     if (kind === "digest") return "You have a digest";
     if (kind === "access-request") return "Someone requested access";
-    if (kind === "nudge") return "A curator nudge for you";
+    if (kind === "nudge") return "A curator note for you";
     if (kind === "library-share") return "Someone shared a saved page";
     if (kind === "year-in-review") return "Your Year in Review is ready";
     if (kind === "recommendation" && isWatchPartyRecommendation(list[0])) {
@@ -280,7 +280,7 @@ export function inboxCardCopy(item) {
   }
   if (kind === "nudge") {
     return {
-      eyebrow: isLiveChannelsNudge(item) ? "Live Channels" : "Nudge",
+      eyebrow: isLiveChannelsNudge(item) ? "Live Channels" : "Curator note",
       lead: title,
       note: nudgeCardNote(item),
     };

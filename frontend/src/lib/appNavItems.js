@@ -9,6 +9,7 @@
 
 import { buildAdminDrawerItems, isAdminPath } from "./adminNav.js";
 import { ROUTES } from "./backNav.js";
+import { libraryHubPath } from "./libraryTabs.js";
 import { buildPrimaryDrawerItems } from "./primaryNav.js";
 
 /** Secondary destinations for adults — no toolbar icon of their own. */
@@ -20,12 +21,16 @@ export const APP_NAV_CORE_ITEMS = [
     testId: "app-nav-related-titles",
   },
   { id: "tags", to: ROUTES.tags, label: "Tags", testId: "app-nav-tags" },
-  { id: "watchlist", kind: "watchlist", label: "Watchlist", testId: "app-nav-watchlist" },
   { id: "library", to: ROUTES.library, label: "Library", testId: "app-nav-library" },
 ];
 
 export const YOUTH_NAV_ITEMS = [
-  { id: "watchlist", kind: "watchlist", label: "My list", testId: "app-nav-watchlist" },
+  {
+    id: "watchlist",
+    to: libraryHubPath("watchlist"),
+    label: "My list",
+    testId: "app-nav-watchlist",
+  },
 ];
 
 /** Secondary ("More") destinations for the current role. */
@@ -61,6 +66,7 @@ export function buildAppNavItems({
   role = "owner",
   pathname = "",
   multiUserEnabled = true,
+  seerrEnabled = false,
   authReady = true,
   liveChannelsReady = false,
 } = {}) {
@@ -82,7 +88,7 @@ export function buildAppNavItems({
   }
   if (isOwner && authReady && isAdminPath(pathname)) {
     items.push({ kind: "heading", id: "heading-admin", label: "Admin" });
-    items.push(...buildAdminDrawerItems());
+    items.push(...buildAdminDrawerItems({ multiUserEnabled, seerrEnabled }));
   }
   if (secondary.length > 0) {
     items.push({ kind: "heading", id: "heading-more", label: "More" });

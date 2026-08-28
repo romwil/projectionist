@@ -34,7 +34,6 @@ _SECRET_HEADER_NAMES = frozenset(
         "x-api-key",
         "x-mcp-key",
         "x-projectionist-webhook-secret",
-        "x-curatorx-webhook-secret",
         "cf-access-jwt-assertion",
         "cf-access-client-secret",
     }

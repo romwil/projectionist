@@ -34,13 +34,13 @@ class CryptoTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SESSION_SECRET"] = "test-crypto-secret-strong-enough"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-crypto-secret-strong-enough"
         clear_session_secret_cache()
 
     def tearDown(self) -> None:
         clear_session_secret_cache()
         os.environ.pop("DATA_DIR", None)
-        os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_SESSION_SECRET", None)
         self._tmpdir.cleanup()
 
 
@@ -81,7 +81,7 @@ class DecryptionFailureTests(CryptoTestCase):
         """A token encrypted with one key cannot be decrypted with another."""
         encrypted = encrypt_plex_token("my-secret-token")
         clear_session_secret_cache()
-        os.environ["CURATORX_SESSION_SECRET"] = "a-completely-different-secret-key"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "a-completely-different-secret-key"
         self.assertIsNone(decrypt_plex_token(encrypted))
 
     def test_tampered_ciphertext_is_rejected(self) -> None:

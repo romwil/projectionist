@@ -18,7 +18,7 @@ from projectionist.web.__main__ import (
 class ResolveHostTests(unittest.TestCase):
     def test_defaults_to_all_interfaces_for_docker(self) -> None:
         with patch.dict("os.environ", {}, clear=False) as env:
-            for key in ("HOST", "PROJECTIONIST_HOST", "CURATORX_HOST"):
+            for key in ("HOST", "PROJECTIONIST_HOST"):
                 env.pop(key, None)
             self.assertEqual(resolve_host(), "0.0.0.0")
 
@@ -27,18 +27,15 @@ class ResolveHostTests(unittest.TestCase):
             self.assertEqual(resolve_host(), "127.0.0.1")
 
     def test_projectionist_host_override(self) -> None:
-        env = {"PROJECTIONIST_HOST": "10.0.0.5"}
-        with patch.dict("os.environ", env, clear=False) as patched:
+        with patch.dict("os.environ", {"PROJECTIONIST_HOST": "10.0.0.5"}, clear=False) as patched:
             patched.pop("HOST", None)
-            patched.pop("CURATORX_HOST", None)
             self.assertEqual(resolve_host(), "10.0.0.5")
 
-    def test_curatorx_host_legacy_override(self) -> None:
-        env = {"CURATORX_HOST": "10.0.0.6"}
-        with patch.dict("os.environ", env, clear=False) as patched:
+    def test_ignores_legacy_curatorx_host(self) -> None:
+        with patch.dict("os.environ", {"CURATORX_HOST": "10.0.0.6"}, clear=False) as patched:
             patched.pop("HOST", None)
             patched.pop("PROJECTIONIST_HOST", None)
-            self.assertEqual(resolve_host(), "10.0.0.6")
+            self.assertEqual(resolve_host(), "0.0.0.0")
 
 
 class BindExposureTests(unittest.TestCase):

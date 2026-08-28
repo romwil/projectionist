@@ -39,7 +39,7 @@ export const MEDIA_BROWSE_PAGE_SIZES = [48, 100, 500, "all"];
  */
 export const MEDIA_BROWSE_ALL_CAP = 5000;
 
-const STORAGE_PREFIX = "curatorx.media-browse.columns.";
+const STORAGE_PREFIX = "projectionist.media-browse.columns.";
 
 /** True when a page-size value represents the capped "All" selection. */
 export function isAllPageSize(value) {

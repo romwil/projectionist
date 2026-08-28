@@ -7,14 +7,14 @@ To re-record from a live host (optional):
 
 .. code-block:: bash
 
-    CURATORX_CONTRACT_RECORD=1 \\
+    PROJECTIONIST_CONTRACT_RECORD=1 \\
       RADARR_URL=... RADARR_API_KEY=... \\
       SONARR_URL=... SONARR_API_KEY=... \\
       TMDB_API_KEY=... \\
       .venv/bin/python -m pytest tests/test_integration_contracts.py -k record -v
 
 Live ping coverage (including TMDB) stays in ``tests/test_live_integrations.py``
-behind ``CURATORX_LIVE_INTEGRATION=1``.
+behind ``PROJECTIONIST_LIVE_INTEGRATION=1``.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ from projectionist.connectors.sonarr import SonarrClient
 from projectionist.connectors.tmdb import TMDBClient
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "contracts"
-_RECORD = os.environ.get("CURATORX_CONTRACT_RECORD", "").strip().lower() in {
+_RECORD = os.environ.get("PROJECTIONIST_CONTRACT_RECORD", "").strip().lower() in {
     "1",
     "true",
     "yes",
@@ -162,7 +162,7 @@ class ContractFixtureHygieneTests(unittest.TestCase):
 
 @unittest.skipUnless(
     _RECORD,
-    "Set CURATORX_CONTRACT_RECORD=1 plus service credentials to re-record fixtures",
+    "Set PROJECTIONIST_CONTRACT_RECORD=1 plus service credentials to re-record fixtures",
 )
 class ContractRecordTests(unittest.TestCase):
     """Optional live re-record path — skipped in default CI."""

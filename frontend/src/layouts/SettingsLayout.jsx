@@ -3,17 +3,10 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { getAuthMe, getFeatures, listNotifications } from "../api/client";
 import PrimaryTopbar from "../components/PrimaryTopbar";
 import { ROUTES } from "../lib/backNav.js";
+import { SETTINGS_NAV } from "../lib/settingsNav.js";
 import { applyUiTheme, loadStoredUiTheme } from "../lib/uiPrefs.js";
 
-/** Rail labels use short verbs where the job is an action (Speak / Tune / Notify). */
-export const SETTINGS_NAV = [
-  { to: "/settings/profile", id: "profile", label: "Profile" },
-  { to: "/settings/voice", id: "voice", label: "Speak" },
-  { to: "/settings/taste", id: "taste", label: "Tune" },
-  { to: "/settings/notifications", id: "notifications", label: "Notify" },
-  { to: "/settings/watchlist", id: "watchlist", label: "Watchlist" },
-  { to: "/settings/lists", id: "lists", label: "Lists" },
-];
+export { SETTINGS_NAV };
 
 export default function SettingsLayout() {
   const navigate = useNavigate();
@@ -24,6 +17,7 @@ export default function SettingsLayout() {
   const [role, setRole] = useState("owner");
   const [isYouth, setIsYouth] = useState(false);
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
+  const [seerrEnabled, setSeerrEnabled] = useState(false);
   const [liveChannelsReady, setLiveChannelsReady] = useState(false);
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
@@ -35,6 +29,7 @@ export default function SettingsLayout() {
       try {
         const features = await getFeatures();
         const multiUser = Boolean(features?.features?.multi_user_enabled);
+        const seerrReady = Boolean(features?.features?.seerr_enabled);
         const liveReady = Boolean(features?.features?.live_channels_ready);
         const me = await getAuthMe().catch(() => null);
         if (me?.user?.ui_font_size || me?.user?.ui_theme) {
@@ -47,6 +42,7 @@ export default function SettingsLayout() {
             setIsOwner(true);
             setRole("owner");
             setMultiUserEnabled(false);
+            setSeerrEnabled(seerrReady);
             setLiveChannelsReady(liveReady);
             setReady(true);
           }
@@ -61,6 +57,7 @@ export default function SettingsLayout() {
         setRole(String(me.user.role || "member"));
         setIsYouth(Boolean(me.user.is_youth));
         setMultiUserEnabled(true);
+        setSeerrEnabled(seerrReady);
         setLiveChannelsReady(liveReady);
         setReady(true);
       } catch {
@@ -114,6 +111,7 @@ export default function SettingsLayout() {
         isYouth={isYouth}
         role={role}
         multiUserEnabled={multiUserEnabled}
+        seerrEnabled={seerrEnabled}
         authReady
         liveChannelsReady={liveChannelsReady}
         navOpen={appNavOpen}

@@ -22,17 +22,17 @@ from projectionist.library.vec_index import (
 class VecCapabilityTests(unittest.TestCase):
     def setUp(self) -> None:
         reset_vec_capability_cache()
-        self._prev = os.environ.get("CURATORX_SQLITE_VEC")
+        self._prev = os.environ.get("PROJECTIONIST_SQLITE_VEC")
 
     def tearDown(self) -> None:
         reset_vec_capability_cache()
         if self._prev is None:
-            os.environ.pop("CURATORX_SQLITE_VEC", None)
+            os.environ.pop("PROJECTIONIST_SQLITE_VEC", None)
         else:
-            os.environ["CURATORX_SQLITE_VEC"] = self._prev
+            os.environ["PROJECTIONIST_SQLITE_VEC"] = self._prev
 
     def test_env_disable_forces_unavailable(self) -> None:
-        os.environ["CURATORX_SQLITE_VEC"] = "0"
+        os.environ["PROJECTIONIST_SQLITE_VEC"] = "0"
         reset_vec_capability_cache()
         cap = vec_capability()
         self.assertFalse(cap["available"])
@@ -40,7 +40,7 @@ class VecCapabilityTests(unittest.TestCase):
         self.assertFalse(vec_available())
 
     def test_ann_returns_none_when_unavailable(self) -> None:
-        os.environ["CURATORX_SQLITE_VEC"] = "0"
+        os.environ["PROJECTIONIST_SQLITE_VEC"] = "0"
         reset_vec_capability_cache()
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "projectionist.db")

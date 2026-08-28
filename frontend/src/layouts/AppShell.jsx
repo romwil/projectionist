@@ -44,6 +44,7 @@ export default function AppShell({
     multiUserEnabled,
     authenticated,
     liveChannelsReady,
+    seerrEnabled,
   } = useAuthGate({
     redirect: requireAuth,
   });
@@ -106,6 +107,7 @@ export default function AppShell({
             isYouth={isYouth}
             role={role}
             multiUserEnabled={multiUserEnabled}
+            seerrEnabled={seerrEnabled}
             authReady={authReady}
             liveChannelsReady={liveChannelsReady}
             navOpen={navOpen}
@@ -141,6 +143,7 @@ export default function AppShell({
               isYouth={isYouth}
               role={role}
               multiUserEnabled={multiUserEnabled}
+              seerrEnabled={seerrEnabled}
               authReady={authReady}
             />
             <AppNavToggle open={navOpen} onClick={() => setNavOpen(true)} />

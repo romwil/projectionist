@@ -1,6 +1,6 @@
-# Curator knowledge — how CuratorX understands your library
+# Curator knowledge — how Projectionist understands your library
 
-CuratorX does not “remember” every plot the way a streaming catalog’s marketing copy implies. It builds **stacked knowledge dimensions** from free local/Plex/TMDB data first, then optional LLM layers, then presents that knowledge in Chat, Explore, and Plot Lab.
+Projectionist does not “remember” every plot the way a streaming catalog’s marketing copy implies. It builds **stacked knowledge dimensions** from free local/Plex/TMDB data first, then optional LLM layers, then presents that knowledge in Chat, Explore, and Related titles.
 
 This guide explains **why** motif walls can feel sparse, **what** each knowledge layer is, **how** idle tasks fill them, and **what** owners should expect over time.
 
@@ -8,19 +8,19 @@ In-app entry point: `/help` ([HELP.md](HELP.md)) · related: [ARCHITECTURE.md](A
 
 ---
 
-## Why short blurbs make Plot Lab walls sparse
+## Why short blurbs make Related titles walls sparse
 
 Most titles arrive with a **Plex summary** and, after enrichment, a **TMDB overview** — typically ~200–300 characters. That is enough for a poster card, and not enough for dense motif intersections.
 
 ### Case study: Kill Bill · bride ∩ coma
 
-*Kill Bill: Vol. 1* plot text literally mentions **the Bride** and a **coma**. Yet Plot Lab can still fail a `bride` + `coma` intersection. Current motif extraction:
+*Kill Bill: Vol. 1* plot text literally mentions **the Bride** and a **coma**. Yet Related titles can still fail a `bride` + `coma` intersection. Current motif extraction:
 
 1. Motifs are normalized **unigrams** and content-word **bigrams** from the layered summary, overview, tagline, long synopsis, and optional logline. Grammar fragments such as `and chloe` or `its power` are rejected, while useful compounds such as `wicked wonderland` remain.
 2. Document-frequency filtering keeps uncommon-but-shared terms (`df ≥ 2`, not ultra-common).
 3. Each title keeps at most **18** motifs (`MAX_MOTIFS_PER_ITEM`), preferring rarer candidates and contentful phrases — so “bride” can still lose the slot race to other rare words.
 4. Possessives are normalized (`bride's` → `bride`), so Vol. 2 can store the same token.
-5. Plot Lab’s motif wall is an **AND** over those facet rows. Missing one chip → empty wall, even when the library “knows” the film in free text or TMDB keywords (`revenge`, `martial arts`, …).
+5. Related titles’s motif wall is an **AND** over those facet rows. Missing one chip → empty wall, even when the library “knows” the film in free text or TMDB keywords (`revenge`, `martial arts`, …).
 
 **Takeaway:** Sparse walls are often a **representation / intersection** problem, not an empty library. Keywords and raw plot text are richer than the motif chip set today.
 
@@ -30,7 +30,7 @@ Phase work landing in parallel aims to unlock bride∩coma-style discovery **wit
 
 | Phase | Intent |
 |-------|--------|
-| **A** | Better motif extraction (normalize possessives, bigrams, retain keyword-aligned tokens) + Plot Lab multi-signal AND (motifs ∪ keywords ∪ live plot-text match) with Why? citing the matching layer |
+| **A** | Better motif extraction (normalize possessives, bigrams, retain keyword-aligned tokens) + Related titles multi-signal AND (motifs ∪ keywords ∪ live plot-text match) with Why? citing the matching layer |
 | **B** | Durable scheduler run history, measured throughput in Admin, auto-tune batch/interval from real runs, neighbor backlog catch-up |
 | **C** | Optional long synopsis sources + local keyword→theme mapping; LLM loglines/themes stay last-resort |
 | **D** | Coverage UI, title “Plot knowledge” panel, chat tools that prefer structured layers before semantic search |
@@ -47,14 +47,14 @@ Treat curator knowledge as a stack, not one chip wall:
 |---|-----------|------------|----------------|--------|
 | 1 | **Identity** | Title, year, media type, Plex/TMDB/IMDB ids | Plex sync | Done |
 | 2 | **Credits / place** | People, jobs, country, language | TMDB credits + sync | Done |
-| 3 | **Catalog tags** | Genres, TMDB keywords | Sync + `metadata_enrichment` | Mostly done; underused in Plot Lab today |
+| 3 | **Catalog tags** | Genres, TMDB keywords | Sync + `metadata_enrichment` | Mostly done; underused in Related titles today |
 | 4 | **Plot text layers** | summary → overview → tagline → optional long synopsis → rare LLM logline | Plex / TMDB / optional idle | Layered fields exist; long synopsis optional (Wikipedia/OMDb) |
-| 5 | **Lexical motifs** | Searchable plot tokens in `library_facets` (`facet_type='motif'`) | Idle `summary_motifs` | Improved (Phase A); hybrid Plot Lab AND mitigates sparsity |
+| 5 | **Lexical motifs** | Searchable plot tokens in `library_facets` (`facet_type='motif'`) | Idle `summary_motifs` | Improved (Phase A); hybrid Related titles AND mitigates sparsity |
 | 6 | **Tropes / themes** | Controlled vocab (`facet_type='theme'`) | Idle `keyword_theme_tagging` (local map) | Offline from keywords |
 | 7 | **Similarity graph** | Embeddings + `item_neighbors` + `title_relations` | Idle embed / neighbors / relations | Embeddings often full; neighbor edges can lag |
 | 8 | **Taste / ops** | Lenses, reviews, purge, watchlist, gaps | User + other idle tasks | Separate from plot depth |
 
-**Principle:** Prefer free/structured sources and local NLP before LLM. LLM stays a thin optional layer for hard gaps. Provenance rules stay sacred — CuratorX must not invent plot ([DATA_MODEL.md](DATA_MODEL.md#provenance-rules-dates--plot-text)).
+**Principle:** Prefer free/structured sources and local NLP before LLM. LLM stays a thin optional layer for hard gaps. Provenance rules stay sacred — Projectionist must not invent plot ([DATA_MODEL.md](DATA_MODEL.md#provenance-rules-dates--plot-text)).
 
 ```mermaid
 flowchart LR
@@ -71,7 +71,7 @@ flowchart LR
     Neigh[plot_neighbors]
   end
   subgraph present [Present]
-    PlotLab[Plot Lab]
+    PlotLab[Related titles]
     Explore[Explore rails]
     Chat[Chat tools]
   end
@@ -131,7 +131,7 @@ Agent tools and Explore feeds **read caches**; they do not recompute embeddings 
 |---------|----------------|
 | **Chat** | Tools over library, facets, neighbors, semantic search |
 | **Explore** | Feed rails (recently added, releases, On This Day), Pulse |
-| **Plot Lab** | Motif chip catalog + AND wall + Why? excerpts; surprising neighbors from seed title |
+| **Related titles** | Motif chip catalog + AND wall + Why? excerpts; surprising neighbors from seed title |
 | **Title detail** | Overview, “More Like This” from `item_neighbors` |
 | **Admin → Scheduled Tasks** | Owner cadence + batch, durable recent runs, measured items/hour when history exists, ETA (measured or theoretical) |
 
@@ -141,10 +141,10 @@ Agent tools and Explore feeds **read caches**; they do not recompute embeddings 
 
 ### First-start idle bootstrap
 
-Regular idle intervals (often 12–24h) are right for steady-state trickle, but a brand-new library would otherwise sit sparse for days. On IdleScheduler start, CuratorX checks whether foundational knowledge tasks have **never run**. If so, it runs a **one-shot sequenced bootstrap** (not a parallel stampede):
+Regular idle intervals (often 12–24h) are right for steady-state trickle, but a brand-new library would otherwise sit sparse for days. On IdleScheduler start, Projectionist checks whether foundational knowledge tasks have **never run**. If so, it runs a **one-shot sequenced bootstrap** (not a parallel stampede):
 
 1. `metadata_enrichment` — only when a TMDB metadata backlog exists  
-2. `summary_motifs` — full library motif pass (Plot Lab chips)  
+2. `summary_motifs` — full library motif pass (Related titles chips)  
 3. `keyword_theme_tagging` — free theme facets from keywords  
 4. `long_synopsis_enrichment` — when the synopsis source is enabled (Wikipedia by default)  
 5. `semantic_embeddings` — only when the embeddings table is empty and titles still need vectors  
@@ -162,7 +162,7 @@ Chat turns must stay snappy. Building motifs across thousands of titles, embeddi
 | `metadata_enrichment` | Fill missing TMDB overview/tagline/keywords/dates/credits | Fewer empty plot fields |
 | `semantic_embeddings` | Vectorize layered plot text | Row in `embeddings` per title |
 | `plot_neighbors` | Materialize top-K similar titles | Rows in `item_neighbors` |
-| `summary_motifs` | Lexical motif facets for Plot Lab | `library_facets` motif rows |
+| `summary_motifs` | Lexical motif facets for Related titles | `library_facets` motif rows |
 | `title_relations_refresh` | Collection / neighbor / crew graph | `title_relations` edges |
 | `llm_logline_enrichment` | Optional one-liner when free text is thin | Sparse `llm_logline` fills |
 | `long_synopsis_enrichment` | Longer plot from Wikipedia (default) or OMDb | `long_synopsis` + `synopsis_source` |
@@ -195,14 +195,14 @@ After a full library sync on a multi-thousand-title library:
 | Neighbor edges | Lag embeddings — each title needs a materialization pass | Can remain underbuilt for a long time if cadence is slow |
 | LLM loglines | Very sparse by design | Only trickle when provider configured |
 
-**Honest empty states** in Explore / Plot Lab / “More Like This” mean the cache is cold — not that similarity does not exist. Owners see a CTA to **Admin → Scheduled Tasks**; members see the note only.
+**Honest empty states** in Explore / Related titles / “More Like This” mean the cache is cold — not that similarity does not exist. Owners see a CTA to **Admin → Scheduled Tasks**; members see the note only.
 
 Practical owner habits:
 
 1. Finish sync, then leave the container idle overnight.
 2. In **Admin → Scheduled Tasks**, confirm knowledge tasks are enabled; tighten cadence for `metadata_enrichment`, `plot_neighbors`, and `summary_motifs` after large imports.
 3. Use **Warm Explore** (when offered) to fire the enrichment sequence without waiting for natural idle.
-4. Re-check Plot Lab motif catalog and a seed title’s neighbors after several cycles.
+4. Re-check Related titles motif catalog and a seed title’s neighbors after several cycles.
 
 When an upgrade changes motif extraction, run `summary_motifs` once from **Admin →
 Scheduled Tasks** (or wait for its next schedule). It replaces the existing `motif`
@@ -233,7 +233,7 @@ facets from current plot text; a full library reindex is unnecessary.
 
 - **Chat** — ask for plot-ish intersections (“revenge martial arts under 2 hours”); the agent uses tools over library + facets when available.
 - **Explore** — browse rails; a compact **Knowledge** strip shows coverage honesty (overview / motifs / keywords / neighbors %); empty rails usually mean cold caches.
-- **Plot Lab** (`/explore/plot-lab`) — tap motif chips (AND when multiple); optional theme chips when `facet_type='theme'` is populated; **Multi-signal** (default) matches each token via motif ∪ keyword ∪ plot text; **Motifs only** for pure facet walls; open **Why?** for which layer matched; seed a title for surprising neighbors.
+- **Related titles** (`/explore/plot-lab`) — tap motif chips (AND when multiple); optional theme chips when `facet_type='theme'` is populated; **Multi-signal** (default) matches each token via motif ∪ keyword ∪ plot text; **Motifs only** for pure facet walls; open **Why?** for which layer matched; seed a title for surprising neighbors.
 - **Title detail** — **Plot knowledge** panel lists which plot layers are present, motif/keyword/theme chips, and neighbor count; “More Like This” reads `item_neighbors`.
 - **Help** (`/help`, [HELP.md](HELP.md)) — role-aware guidance; links here for depth.
 
@@ -249,10 +249,10 @@ Everything above, plus:
 
 ## Browse, collection, and repair knowledge boundaries
 
-Library knowledge is valuable only when people can inspect and act on it without confusing a browse convenience for an administrative command. CuratorX therefore treats browsing, collecting, and repair as separate layers:
+Library knowledge is valuable only when people can inspect and act on it without confusing a browse convenience for an administrative command. Projectionist therefore treats browsing, collecting, and repair as separate layers:
 
 1. **Browse controls** shape a read query: sort direction, filters, poster/list presentation, visible columns, and privacy-safe CSV output. The server owns the query contract (`sort_dir`, a bounded result count, and an export allowlist) so a client cannot turn an export into raw paths, tokens, or private operational data.
-2. **Curated lists and playlists** preserve human intent. A list means a reusable shelf; a playlist means a viewing program. Both are local CuratorX collections, while the Plex Discover watchlist is a distinct “remember this” signal and may be synchronized separately.
+2. **Curated lists and playlists** preserve human intent. A list means a reusable shelf; a playlist means a viewing program. Both are local Projectionist collections, while the Plex Discover watchlist is a distinct “remember this” signal and may be synchronized separately.
 3. **Media issues** preserve operational evidence. A member’s issue report records a problem code, note, and media identity in a durable owner queue. It is not a remote-control route to Radarr, Sonarr, Plex, or the filesystem.
 
 This separation matters on a household server. A person reporting corrupted audio should be able to do that from the same poster grip used to pin or collect a title, but should not need credentials—or receive authority—to mark files bad and launch downloads. The owner has the broader context: storage policy, quality profiles, *arr connectivity, and whether the apparent issue is actually a metadata mismatch.
@@ -261,7 +261,7 @@ This separation matters on a household server. A person reporting corrupted audi
 
 For supported `wrong_language`, `bad_video`, and `bad_audio` reports, a repair playbook can look up an already-managed *arr record, use the connector's documented failed-file/search capability where it is safe, and append each decision and response to the issue log. It does not manufacture an identifier, delete an unknown library file, or treat a search as proof that a replacement exists. `wrong_title`, `mismatch`, `duplicate`, `missing_subs`, and free-form reports remain owner-review-first unless a future, explicit policy adds a safe action.
 
-Owner-configured auto-repair begins disabled and is limited to allowlisted codes. It is a convenience for known, repeatable conditions—not an escalation of member authority. A skipped repair is a successful safety outcome when CuratorX cannot establish a safe target.
+Owner-configured auto-repair begins disabled and is limited to allowlisted codes. It is a convenience for known, repeatable conditions—not an escalation of member authority. A skipped repair is a successful safety outcome when Projectionist cannot establish a safe target.
 
 ---
 
@@ -272,6 +272,6 @@ Owner-configured auto-repair begins disabled and is limited to allowlisted codes
 | [HELP.md](HELP.md) | In-app Help source (`/help`) |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Scheduler boundary, trickle, Explore APIs |
 | [DATA_MODEL.md](DATA_MODEL.md) | Tables and provenance |
-| [WEB_UI.md](WEB_UI.md) | Routes and Plot Lab UX |
+| [WEB_UI.md](WEB_UI.md) | Routes and Related titles UX |
 | [ONBOARDING.md](ONBOARDING.md) | First sync → idle warm-up |
-| [FAQ.md](FAQ.md) | Short answers (“Why is Plot Lab empty?”) |
+| [FAQ.md](FAQ.md) | Short answers (“Why is Related titles empty?”) |

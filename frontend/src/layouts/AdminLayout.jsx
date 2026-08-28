@@ -18,6 +18,7 @@ export default function AdminLayout() {
   const [inboxUnreadCount, setInboxUnreadCount] = useState(0);
   const [uiTheme, setUiTheme] = useState(() => loadStoredUiTheme());
   const [multiUserEnabled, setMultiUserEnabled] = useState(false);
+  const [seerrEnabled, setSeerrEnabled] = useState(false);
   const [liveChannelsReady, setLiveChannelsReady] = useState(false);
 
   useEffect(() => {
@@ -29,6 +30,7 @@ export default function AdminLayout() {
         const multiUser = Boolean(features?.features?.multi_user_enabled);
         if (!cancelled) {
           setMultiUserEnabled(multiUser);
+          setSeerrEnabled(Boolean(features?.features?.seerr_enabled));
           setLiveChannelsReady(Boolean(features?.features?.live_channels_ready));
         }
         if (!multiUser) {
@@ -119,6 +121,7 @@ export default function AdminLayout() {
             isOwner
             role="owner"
             multiUserEnabled={multiUserEnabled}
+            seerrEnabled={seerrEnabled}
             authReady
             liveChannelsReady={liveChannelsReady}
             navOpen={appNavOpen}
@@ -134,7 +137,7 @@ export default function AdminLayout() {
               <h1 className="admin-rail-title">Admin</h1>
             </div>
             <nav className="admin-rail-nav" aria-label="Admin sections">
-              {adminNavGroups().map((group, groupIndex) => (
+              {adminNavGroups({ multiUserEnabled, seerrEnabled }).map((group, groupIndex) => (
                 <section
                   key={group.id}
                   className={`admin-rail-group admin-rail-group-${group.id.replace(/^heading-/, "")}`}
@@ -165,7 +168,12 @@ export default function AdminLayout() {
                             }
                             data-testid={`admin-nav-${item.id}`}
                           >
-                            <span>{item.label}</span>
+                            <span className="admin-rail-link-text">
+                              <span>{item.label}</span>
+                              {item.subtitle ? (
+                                <span className="admin-rail-link-subtitle">{item.subtitle}</span>
+                              ) : null}
+                            </span>
                             {showBadge ? (
                               <span
                                 className="admin-rail-badge"
@@ -180,6 +188,11 @@ export default function AdminLayout() {
                       })}
                     </div>
                   </div>
+                  {group.subtitle ? (
+                    <p className="admin-rail-group-note" data-testid={`admin-nav-${group.id}-note`}>
+                      {group.subtitle}
+                    </p>
+                  ) : null}
                 </section>
               ))}
             </nav>

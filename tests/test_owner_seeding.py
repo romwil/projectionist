@@ -16,7 +16,7 @@ from projectionist.web import auth
 from projectionist.web.session_tokens import clear_session_secret_cache
 
 _OWNER_ENV_KEYS = ("PROJECTIONIST_OWNER_USERNAME", "PROJECTIONIST_OWNER_PASSWORD",
-                   "CURATORX_OWNER_USERNAME", "CURATORX_OWNER_PASSWORD")
+                   "PROJECTIONIST_OWNER_USERNAME", "PROJECTIONIST_OWNER_PASSWORD")
 
 
 class OwnerSeedingTests(unittest.TestCase):
@@ -61,7 +61,7 @@ class OwnerSeedingTests(unittest.TestCase):
     def test_seed_defaults_username_to_owner(self) -> None:
         with patch.dict(os.environ, {"PROJECTIONIST_OWNER_PASSWORD": "supersecretpw"}, clear=False) as env:
             env.pop("PROJECTIONIST_OWNER_USERNAME", None)
-            env.pop("CURATORX_OWNER_USERNAME", None)
+            env.pop("PROJECTIONIST_OWNER_USERNAME", None)
             auth.seed_env_owner(self.db)
         self.assertIsNotNone(self.db.get_user_by_display_name(auth.DEFAULT_OWNER_USERNAME))
 
@@ -222,7 +222,6 @@ class OwnerSeedingIntegrationTests(unittest.TestCase):
             {
                 "DATA_DIR": self._tmp.name,
                 "PROJECTIONIST_SKIP_DOTENV": "1",
-                "CURATORX_SKIP_DOTENV": "1",
                 "LLM_PROVIDER": "ollama",
                 "PROJECTIONIST_SESSION_SECRET": "integration-owner-seed-secret-value",
                 "PROJECTIONIST_OWNER_USERNAME": "boss",

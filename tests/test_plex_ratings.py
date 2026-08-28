@@ -315,7 +315,7 @@ class PlexReviewApiSyncTests(unittest.TestCase):
         self._tmpdir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self._tmpdir.name)
         os.environ["DATA_DIR"] = str(self.data_dir)
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         save_settings(
             self.data_dir,
@@ -337,7 +337,7 @@ class PlexReviewApiSyncTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
         self._tmpdir.cleanup()
 

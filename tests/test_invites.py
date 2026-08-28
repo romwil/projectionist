@@ -70,7 +70,7 @@ class InviteDbTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SESSION_SECRET"] = "test-invite-db-session-secret-xx"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-invite-db-session-secret-xx"
         clear_session_secret_cache()
         self.db = Database(Path(self._tmpdir.name) / "projectionist.db")
         self.db.create_local_user(
@@ -83,7 +83,7 @@ class InviteDbTests(unittest.TestCase):
     def tearDown(self) -> None:
         clear_session_secret_cache()
         os.environ.pop("DATA_DIR", None)
-        os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_SESSION_SECRET", None)
         self._tmpdir.cleanup()
 
     def test_create_lookup_redeem_replay(self) -> None:
@@ -203,9 +203,9 @@ class InviteDbTests(unittest.TestCase):
 class InviteApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SESSION_SECRET"] = "test-session-secret-invite-only-xx"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-session-secret-invite-only-xx"
         os.environ["LLM_PROVIDER"] = "ollama"
         clear_session_secret_cache()
         clear_rate_limits()
@@ -251,9 +251,9 @@ class InviteApiTests(unittest.TestCase):
         clear_pin_bindings()
         clear_oidc_states()
         for key in (
-            "CURATORX_SKIP_DOTENV",
+            "PROJECTIONIST_SKIP_DOTENV",
             "LLM_PROVIDER",
-            "CURATORX_SESSION_SECRET",
+            "PROJECTIONIST_SESSION_SECRET",
             "DATA_DIR",
         ):
             os.environ.pop(key, None)

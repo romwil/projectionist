@@ -1,12 +1,8 @@
-# CuratorX — Configuration
+# Projectionist — Configuration
 
 Settings persist to `{DATA_DIR}/settings.json` (default `/config/settings.json` in Docker, `./config` locally). Environment variables override file values when set.
 
-### Projectionist env prefix (compat window)
-
-Canonical branded variables use the `PROJECTIONIST_*` prefix. Matching `CURATORX_*` names are still read for ~2 releases when the new key is unset; the runtime logs a deprecation warning when a legacy key supplies the value. Prefer `PROJECTIONIST_*` on new installs and when you next edit Compose / Unraid templates.
-
----
+Canonical branded variables use the `PROJECTIONIST_*` prefix. 
 
 ## Required
 
@@ -39,7 +35,7 @@ Canonical branded variables use the `PROJECTIONIST_*` prefix. Matching `CURATORX
 |---------|---------|-------------|
 | Fanart.tv key | `FANART_API_KEY` | Rich poster/backdrop art |
 | TVDB key | `TVDB_API_KEY` | TV metadata parity (client present; sync wiring partial) |
-| Long synopsis source | `PROJECTIONIST_LONG_SYNOPSIS_SOURCE` (alias `CURATORX_LONG_SYNOPSIS_SOURCE`) | Idle long plots. Default **`wikipedia`** (free, no key, deeper plot without LLM). Prefer **`off`** to disable (also empty/`none`/`disabled`). Or `omdb` / `auto`. Never overwrites Plex/TMDB. |
+| Long synopsis source | `PROJECTIONIST_LONG_SYNOPSIS_SOURCE` | Idle long plots. Default **`wikipedia`** (free, no key, deeper plot without LLM). Prefer **`off`** to disable (also empty/`none`/`disabled`). Or `omdb` / `auto`. Never overwrites Plex/TMDB. |
 | OMDb API key | `OMDB_API_KEY` | Required only when synopsis source is `omdb` (or `auto` fallback). Free OMDb key. |
 
 | Tautulli URL / key | `TAUTULLI_URL`, `TAUTULLI_API_KEY` | Watch stats for purge scoring |
@@ -51,17 +47,17 @@ Canonical branded variables use the `PROJECTIONIST_*` prefix. Matching `CURATORX
 | TV page size | `tv_page_size` in settings | Plex TV fetch batch size (50–2000, default 500) |
 | Library enrich workers | `library_enrich_workers` in settings | Parallel workers for TMDB/Fanart enrichment **and** TV episode Plex fetches during library sync (1–16, default 6). SQLite upserts stay serial. |
 | Sync reviews to Plex | `sync_reviews_to_plex` in settings | When `true`, saving a 1–5 star review writes the matching Plex user rating (2/4/6/8/10) via `PUT /:/rate` |
-| Log level | `PROJECTIONIST_LOG_LEVEL` (alias `CURATORX_LOG_LEVEL`) or `LOG_LEVEL` | `ERROR`, `WARNING`, `INFO` (default), or `DEBUG` |
-| Log format | `LOG_FORMAT` or `PROJECTIONIST_LOG_FORMAT` (alias `CURATORX_LOG_FORMAT`) | `text` (default) or `json` |
-| App log file | `PROJECTIONIST_LOG_FILE` (alias `CURATORX_LOG_FILE`) or `LOG_FILE` | Durable rotating log for **Admin → Logs**. Default `{DATA_DIR}/logs/projectionist.log` (Docker/Unraid: `/config/logs/projectionist.log`). Stdout still receives the same stream. |
+| Log level | `PROJECTIONIST_LOG_LEVEL` or `LOG_LEVEL` | `ERROR`, `WARNING`, `INFO` (default), or `DEBUG` |
+| Log format | `LOG_FORMAT` or `PROJECTIONIST_LOG_FORMAT` | `text` (default) or `json` |
+| App log file | `PROJECTIONIST_LOG_FILE` or `LOG_FILE` | Durable rotating log for **Admin → Logs**. Default `{DATA_DIR}/logs/projectionist.log` (Docker/Unraid: `/config/logs/projectionist.log`). Stdout still receives the same stream. |
 | Log rotation | `PROJECTIONIST_LOG_MAX_BYTES` / `PROJECTIONIST_LOG_BACKUP_COUNT` | Max size per file (default 5 MiB) and rotated backups kept (default 3). |
-| Privacy MCP key | `PROJECTIONIST_MCP_API_KEY` (alias `CURATORX_MCP_API_KEY`) | Enables HTTP `/mcp` in **privacy** mode (public schema, read-only). Or generate in **Admin → Advanced**. |
-| Full MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` (alias `CURATORX_MCP_FULL_API_KEY`) | Enables `/mcp` in **full** mode (internal fields + confirm-gated *arr proposes). Must differ from the privacy key. |
-| MCP full confirm | `PROJECTIONIST_MCP_FULL_CONFIRM` (alias `CURATORX_MCP_FULL_CONFIRM`) | Active-curation scope: `1`/`true` lets the full MCP key confirm/execute its own *arr proposals. Off by default — a human confirms on the web plane. |
-| Session secret | `PROJECTIONIST_SESSION_SECRET` (alias `CURATORX_SESSION_SECRET`) | Multi-user session cookies (auto-generated under `DATA_DIR` if unset) |
-| Owner username | `PROJECTIONIST_OWNER_USERNAME` (alias `CURATORX_OWNER_USERNAME`) | Username for the env-seeded owner (default `owner`) |
-| Owner password | `PROJECTIONIST_OWNER_PASSWORD` (alias `CURATORX_OWNER_PASSWORD`) | Multi-user first-owner setup: seeds the owner account so the first login cannot be raced on a shared LAN. Sign in with local username + password (works even if local login is otherwise off). Rotating it and restarting resets the owner password (no lockout). Min 8 chars. |
-| Webhook secret | `PROJECTIONIST_WEBHOOK_SECRET` (alias `CURATORX_WEBHOOK_SECRET`) | Required for Plex webhook auth (`X-Projectionist-Webhook-Secret` or legacy `X-CuratorX-Webhook-Secret`) |
+| Privacy MCP key | `PROJECTIONIST_MCP_API_KEY` | Enables HTTP `/mcp` in **privacy** mode (public schema, read-only). Or generate in **Admin → Advanced**. |
+| Full MCP key | `PROJECTIONIST_MCP_FULL_API_KEY` | Enables `/mcp` in **full** mode (internal fields + confirm-gated *arr proposes). Must differ from the privacy key. |
+| MCP full confirm | `PROJECTIONIST_MCP_FULL_CONFIRM` | Active-curation scope: `1`/`true` lets the full MCP key confirm/execute its own *arr proposals. Off by default — a human confirms on the web plane. |
+| Session secret | `PROJECTIONIST_SESSION_SECRET` | Multi-user session cookies (auto-generated under `DATA_DIR` if unset) |
+| Owner username | `PROJECTIONIST_OWNER_USERNAME` | Username for the env-seeded owner (default `owner`) |
+| Owner password | `PROJECTIONIST_OWNER_PASSWORD` | Multi-user first-owner setup: seeds the owner account so the first login cannot be raced on a shared LAN. Sign in with local username + password (works even if local login is otherwise off). Rotating it and restarting resets the owner password (no lockout). Min 8 chars. |
+| Webhook secret | `PROJECTIONIST_WEBHOOK_SECRET` | Required for Plex webhook auth (`X-Projectionist-Webhook-Secret` or legacy `X-Projectionist-Webhook-Secret`) |
 
 MCP details: [MCP.md](MCP.md). Privacy disclosure: [PRIVACY.md](PRIVACY.md) and in-app `/privacy`.
 
@@ -78,7 +74,7 @@ remain masked and are never emitted to chat or MCP clients.
 
 ## Feature flags (optional, off by default)
 
-CuratorX ships as a **single-owner homelab app** with no login screen. Household multi-user auth and Seerr integration are **opt-in** and stay disabled until you turn them on in Configuration or `settings.json`.
+Projectionist ships as a **single-owner homelab app** with no login screen. Household multi-user auth and Seerr integration are **opt-in** and stay disabled until you turn them on in Configuration or `settings.json`.
 
 Default values (also in `config/settings.example.json`):
 
@@ -109,7 +105,7 @@ Default values (also in `config/settings.example.json`):
 | `features.invite_only` | `true` | When multi-user is on, new Plex/OIDC users must redeem a `/join` invite (existing users unchanged) |
 | `features.open_auto_provision` | `false` | Opt-in LAN-open: auto-provision new sign-ins as members (overrides invite-only) |
 | `features.plex_collections_enabled` | `false` | Let the curator propose Plex collection create/add (confirm-gated) |
-| `features.ephemeral_collection_gc_enabled` | `true` | Idle prune of expired `[CuratorX]` movie-night / agent collections |
+| `features.ephemeral_collection_gc_enabled` | `true` | Idle prune of expired `[Projectionist]` movie-night / agent collections |
 | `features.ephemeral_collection_gc_dry_run` | `false` | Log what `collection_gc` would delete without calling Plex DELETE |
 | `features.seerr_enabled` | `false` | Activates Seerr connector for household discovery and requests |
 | `features.live_channels_enabled` | `false` | Tunarr-backed Live Channels (additional Plex Live TV tuner alongside OTA); owner toggle in Admin → Live Channels |
@@ -146,20 +142,20 @@ Default values (also in `config/settings.example.json`):
 
 **Unraid CA:** enable the optional **Docker Socket** path (`/var/run/docker.sock` → `/var/run/docker.sock`) for managed Tunarr. Off by default (root-equivalent); leave blank and use a BYO `tunarr.url` otherwise. When the socket is mounted, also set **Host data dir (Tunarr)** / `PROJECTIONIST_HOST_DATA_DIR` to the same host path as Config (default `/mnt/user/appdata/projectionist/config`) so Tunarr binds under appdata instead of host `/config/tunarr`. Compose: commented sock volume + `PROJECTIONIST_HOST_DATA_DIR` in `docker-compose.unraid.yml`. Appdata `rollout.sh`: set `MOUNT_DOCKER_SOCK=1` (or `DOCKER_SOCK=/var/run/docker.sock`) in `.env`; rollout injects `PROJECTIONIST_HOST_DATA_DIR` from the config bind path. When the socket is mounted, the container also needs the docker sock group (Unraid: `--group-add 281` in ExtraParams / rollout auto-detects GID) because the entrypoint drops to uid 1000 — a mount alone is not enough for mode `660`.
 
-**For most installs:** leave everything at the defaults. CuratorX behaves exactly as before — one implicit owner, no login, no Seerr calls.
+**For most installs:** leave everything at the defaults. Projectionist behaves exactly as before — one implicit owner, no login, no Seerr calls.
 
 **To enable multi-user or Seerr later:** open **Admin → Multi-user auth** and **Admin → Seerr** (or edit `{DATA_DIR}/settings.json`), set `features.multi_user_enabled` to `true`, enable one or more of `auth.plex_login_enabled`, `auth.local_login_enabled`, and `auth.oidc_enabled` (set `auth.mode` to match your primary method), and save. For Seerr, set `features.seerr_enabled` to `true`, add your Seerr URL and API key, and test the connection. The frontend reads `GET /api/features` (`auth_methods`, flags) to show or hide login options, Seerr request buttons, and user-management UI.
 
 ### Multi-user login
 
-When `features.multi_user_enabled` is `true`, CuratorX requires sign-in for the chat UI and enforces session auth on `/api/*` (allowlisted health/features/auth/webhooks). See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).
+When `features.multi_user_enabled` is `true`, Projectionist requires sign-in for the chat UI and enforces session auth on `/api/*` (allowlisted health/features/auth/webhooks). See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).
 
 1. **Enable in Admin** — Turn on **Enable multi-user auth** and choose login methods (Plex, local password, OIDC).
-2. **Set a session secret (required for any real deploy)** — Export `CURATORX_SESSION_SECRET` to a long random string in your container or `.env`. Without it, CuratorX auto-generates one under `DATA_DIR` (or refuses the public dev default for multi-user).
-3. **Sign in** — Open CuratorX; you are redirected to `/login`. Use a configured method. For Plex, CuratorX opens the plex.tv link flow; after approval, CuratorX stores a signed session cookie. Token paste remains an advanced fallback only.
+2. **Set a session secret (required for any real deploy)** — Export `CURATORX_SESSION_SECRET` to a long random string in your container or `.env`. Without it, Projectionist auto-generates one under `DATA_DIR` (or refuses the public dev default for multi-user).
+3. **Sign in** — Open Projectionist; you are redirected to `/login`. Use a configured method. For Plex, Projectionist opens the plex.tv link flow; after approval, Projectionist stores a signed session cookie. Token paste remains an advanced fallback only.
 4. **Roles** — By default the first account to sign in becomes **owner** and later accounts start as **member**. On a shared LAN that first-login step can be raced, so for any deploy beyond a fully trusted network set `PROJECTIONIST_OWNER_PASSWORD` (and optionally `PROJECTIONIST_OWNER_USERNAME`, default `owner`) in your container/`.env`. Projectionist then seeds the owner account up front — sign in with that local username + password (works even if the local-login flag is off), and no other first login can claim owner. Rotating the password and restarting resets it (recovery path — no lockout). Owners can promote/demote, disable, or remove users under **Admin → Users**. Chat, pending actions, watchlist, recommendations, and reviews are partitioned by user.
-5. **Seerr bridge** — With Seerr enabled and **Link Plex users to Seerr on login** checked, CuratorX calls Seerr `POST /auth/plex` during Plex login and stores `seerr_user_id` + permissions on the user row.
-6. **OIDC** — Set `oidc_issuer_url`, `oidc_client_id`, `oidc_client_secret`, and `oidc_redirect_uri` (callback to your CuratorX URL). The authorize flow uses a CSRF `state` parameter.
+5. **Seerr bridge** — With Seerr enabled and **Link Plex users to Seerr on login** checked, Projectionist calls Seerr `POST /auth/plex` during Plex login and stores `seerr_user_id` + permissions on the user row.
+6. **OIDC** — Set `oidc_issuer_url`, `oidc_client_id`, `oidc_client_secret`, and `oidc_redirect_uri` (callback to your Projectionist URL). The authorize flow uses a CSRF `state` parameter.
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -177,9 +173,9 @@ When `features.multi_user_enabled` is `true`, CuratorX requires sign-in for the 
 
 **Proxy / Unraid notes**
 
-- **Plex PIN:** No OAuth callback URL is required. The browser opens plex.tv; CuratorX polls plex.tv from the server. Allow outbound HTTPS to `plex.tv` / `app.plex.tv`.
-- **OIDC:** Configure `oidc_redirect_uri` to your CuratorX callback URL (must be reachable by the IdP).
-- Serve CuratorX over HTTPS (or trusted LAN HTTP) as usual for the HttpOnly session cookie (`SameSite=Lax`).
+- **Plex PIN:** No OAuth callback URL is required. The browser opens plex.tv; Projectionist polls plex.tv from the server. Allow outbound HTTPS to `plex.tv` / `app.plex.tv`.
+- **OIDC:** Configure `oidc_redirect_uri` to your Projectionist callback URL (must be reachable by the IdP).
+- Serve Projectionist over HTTPS (or trusted LAN HTTP) as usual for the HttpOnly session cookie (`SameSite=Lax`).
 
 **Troubleshooting**
 
@@ -192,7 +188,7 @@ When `features.multi_user_enabled` is `true`, CuratorX requires sign-in for the 
 
 ## Library sync (Settings)
 
-After onboarding, open **Config** / **Settings**. The **Library sync** card lets you pull your Plex libraries into CuratorX on demand.
+After onboarding, open **Config** / **Settings**. The **Library sync** card lets you pull your Plex libraries into Projectionist on demand.
 
 | Control | What it does |
 |---------|----------------|
@@ -231,13 +227,13 @@ Use this for offline analysis, backup, or feeding external training pipelines. N
 
 ## Seerr (optional household requests)
 
-Seerr (Overseerr / Jellyseerr) lets household **members** request movies and shows without direct Radarr/Sonarr access. CuratorX remains the **owner's intelligence layer**; members see **Request in Seerr** on title cards when multi-user mode is enabled.
+Seerr (Overseerr / Jellyseerr) lets household **members** request movies and shows without direct Radarr/Sonarr access. Projectionist remains the **owner's intelligence layer**; members see **Request in Seerr** on title cards when multi-user mode is enabled.
 
 ### Setup steps (novice homelab)
 
 1. **Install Seerr** — Deploy [Seerr](https://github.com/seerr-team/seerr) on your LAN alongside Plex, Radarr, and Sonarr. Complete its setup wizard and link Plex + *arr inside Seerr.
 2. **Create an API key** — In Seerr: **Settings → General → API Key**. Copy the key.
-3. **Enable in CuratorX** — **Config → Seerr** → check **Enable Seerr integration**, enter URL (e.g. `http://10.0.0.10:5055`) and API key, click **Test connection**.
+3. **Enable in Projectionist** — **Config → Seerr** → check **Enable Seerr integration**, enter URL (e.g. `http://10.0.0.10:5055`) and API key, click **Test connection**.
 4. **Certify** — A successful test marks Seerr certified (same as Plex/Radarr). Save settings.
 5. **Roles** — Owners keep **Add to Radarr/Sonarr**. Members (when multi-user is on) get **Request in Seerr**. Check `GET /api/features` → `request_path` (`arr` or `seerr`).
 
@@ -254,7 +250,7 @@ Seerr (Overseerr / Jellyseerr) lets household **members** request movies and sho
 ### Troubleshooting
 
 - **401 on test** — Regenerate the Seerr API key and save again in Config.
-- **Connection refused** — Verify the URL from the CuratorX host/container (not just your desktop browser).
+- **Connection refused** — Verify the URL from the Projectionist host/container (not just your desktop browser).
 - **Members still see Radarr** — Requires `features.seerr_enabled` **and** `user.role` = `member` from `GET /api/features`.
 - **Request fails after confirm** — Ensure Radarr/Sonarr are configured in Seerr and the service API key has admin/request rights.
 
@@ -262,37 +258,37 @@ Seerr (Overseerr / Jellyseerr) lets household **members** request movies and sho
 
 ## Plex review sync
 
-CuratorX can mirror your **personal 1–5 star reviews** back to Plex so they appear as Plex user ratings on movies and shows you own.
+Projectionist can mirror your **personal 1–5 star reviews** back to Plex so they appear as Plex user ratings on movies and shows you own.
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
 | `sync_reviews_to_plex` | `true` | When enabled, every saved review with a Plex `rating_key` triggers `PUT /:/rate` |
 
-**Star mapping:** CuratorX uses 0.5–5 stars internally (half-star steps). Plex stores ratings on a 0–10 scale, so CuratorX maps `stars × 2` (e.g. `4.5→9`, `5→10`).
+**Star mapping:** Projectionist uses 0.5–5 stars internally (half-star steps). Plex stores ratings on a 0–10 scale, so Projectionist maps `stars × 2` (e.g. `4.5→9`, `5→10`).
 
 **Where to turn it on:** Configuration → **Plex library mapping** → check **Sync personal reviews to Plex star ratings**, then save (the toggle saves immediately).
 
 **Requirements:** Plex URL and token must be configured. The reviewed title needs a Plex `rating_key` (usually present after a library sync). If sync fails (Plex offline, missing key), the review is still saved locally; `plex_rating_synced` stays `false` until a later save succeeds.
 
-**Reading Plex ratings:** During library sync, CuratorX reads each title's Plex `userRating` (0–10 scale) and stores it as `plex_user_rating_stars` (1–5) on `library_items`. Episode-level Plex ratings are stored on `library_episodes.plex_user_rating_stars` during TV episode sync.
+**Reading Plex ratings:** During library sync, Projectionist reads each title's Plex `userRating` (0–10 scale) and stores it as `plex_user_rating_stars` (1–5) on `library_items`. Episode-level Plex ratings are stored on `library_episodes.plex_user_rating_stars` during TV episode sync.
 
-**Immediate cache update:** When a review syncs to Plex (including after you choose **Replace on Plex**), CuratorX updates the local `plex_user_rating_stars` cache immediately — you do not need to wait for the next library sync to see the new rating in chat or library queries.
+**Immediate cache update:** When a review syncs to Plex (including after you choose **Replace on Plex**), Projectionist updates the local `plex_user_rating_stars` cache immediately — you do not need to wait for the next library sync to see the new rating in chat or library queries.
 
 **Rating conflicts:** If Plex already has a different star rating when you save a review with sync enabled, the API returns **409** with `code: plex_rating_conflict` and the message `Plex has X★ — keep or replace?`. Your review is saved locally either way. Choose **Keep Plex rating** to leave Plex unchanged, or **Replace on Plex** (resubmit with `replace_plex_rating: true`) to overwrite Plex.
 
 **Collections (curator tools):** The agent can propose creating Plex collections or adding owned titles to an existing collection when `features.plex_collections_enabled` is `true`. These writes require the same confirmation tokens as Radarr/Sonarr adds — nothing is sent to Plex until you confirm (one-click Confirm in chat/status dock, or by saying yes so the agent calls `confirm_pending_action` with the pending token). Turn this on in Configuration → **Plex library mapping** → **Allow curator to manage Plex collections**.
 
-Agent / movie-night collections are tagged with a `[CuratorX]` title prefix and recorded with a TTL (`ephemeral_collection_ttl_hours`, default 168). Idle task `collection_gc` deletes only those tracked rows when expired — never owner-named evergreen collections without the marker. Owner toggles: `features.ephemeral_collection_gc_enabled` (default true) and `features.ephemeral_collection_gc_dry_run` (log-only).
+Agent / movie-night collections are tagged with a `[Projectionist]` title prefix and recorded with a TTL (`ephemeral_collection_ttl_hours`, default 168). Idle task `collection_gc` deletes only those tracked rows when expired — never owner-named evergreen collections without the marker. Owner toggles: `features.ephemeral_collection_gc_enabled` (default true) and `features.ephemeral_collection_gc_dry_run` (log-only).
 
 ---
 
 ## Plex webhooks (near-completion rating prompts)
 
-CuratorX can receive **Plex webhook** events so rating prompts appear soon after you finish a movie or episode — without waiting for the next library sync.
+Projectionist can receive **Plex webhook** events so rating prompts appear soon after you finish a movie or episode — without waiting for the next library sync.
 
 ### Webhook URL
 
-Point Plex at this endpoint (replace host/port with your CuratorX server):
+Point Plex at this endpoint (replace host/port with your Projectionist server):
 
 ```text
 http://YOUR_CURATORX_HOST:8765/api/webhooks/plex
@@ -300,35 +296,35 @@ http://YOUR_CURATORX_HOST:8765/api/webhooks/plex
 
 Examples:
 
-| How you run CuratorX | Typical URL |
+| How you run Projectionist | Typical URL |
 |----------------------|-------------|
 | Docker on Unraid (`8765:8765`) | `http://YOUR_UNRAID_IP:8765/api/webhooks/plex` |
 | Same machine as Plex | `http://127.0.0.1:8765/api/webhooks/plex` |
 | Reverse proxy | `https://curatorx.yourdomain.com/api/webhooks/plex` |
 
-Plex must be able to reach this URL from the Plex Media Server host (LAN IP is fine; `localhost` only works if Plex and CuratorX share the same container/network namespace).
+Plex must be able to reach this URL from the Plex Media Server host (LAN IP is fine; `localhost` only works if Plex and Projectionist share the same container/network namespace).
 
 ### Webhook authentication (optional)
 
-If your CuratorX instance is reachable from outside your trusted LAN, set a shared secret so random callers cannot queue rating prompts.
+If your Projectionist instance is reachable from outside your trusted LAN, set a shared secret so random callers cannot queue rating prompts.
 
 | Setting | Env var | Header |
 |---------|---------|--------|
-| `webhook_secret` | `PROJECTIONIST_WEBHOOK_SECRET` (alias `CURATORX_WEBHOOK_SECRET`) | `X-Projectionist-Webhook-Secret` (or legacy `X-CuratorX-Webhook-Secret`) |
+| `webhook_secret` | `PROJECTIONIST_WEBHOOK_SECRET` | `X-Projectionist-Webhook-Secret` (or legacy `X-Projectionist-Webhook-Secret`) |
 
 When `webhook_secret` is non-empty, every `POST /api/webhooks/plex` must include the header with the same value. Requests without a matching header receive **401 Unauthorized**. When the secret is empty (default), webhooks work as before with no header required.
 
-**Homelab tip:** Generate a long random string (e.g. `openssl rand -hex 32`), add it to `.env` as `CURATORX_WEBHOOK_SECRET=...`, restart CuratorX, then configure your reverse proxy or a small script to inject the header when forwarding Plex webhooks — Plex itself does not send custom headers, so the secret is most useful behind a proxy you control or on a LAN-only URL.
+**Homelab tip:** Generate a long random string (e.g. `openssl rand -hex 32`), add it to `.env` as `CURATORX_WEBHOOK_SECRET=...`, restart Projectionist, then configure your reverse proxy or a small script to inject the header when forwarding Plex webhooks — Plex itself does not send custom headers, so the secret is most useful behind a proxy you control or on a LAN-only URL.
 
 ### Setup steps (novice homelab / Unraid)
 
-1. **Confirm CuratorX is reachable** — Open the CuratorX UI in your browser. Note the host IP and port (default **8765** in `docker-compose.yml`).
+1. **Confirm Projectionist is reachable** — Open the Projectionist UI in your browser. Note the host IP and port (default **8765** in `docker-compose.yml`).
 2. **Open Plex webhook settings** — Plex Web App → your avatar → **Account Settings** → **Webhooks** (or Plex Media Server → **Settings** → **Webhooks**, depending on Plex version).
 3. **Add the URL** — Paste `http://YOUR_CURATORX_IP:8765/api/webhooks/plex` and save.
-4. **Test with a short watch** — Play a movie or episode past **85%**, then stop playback. Within a few seconds, open CuratorX chat; a persona-voiced rating card should appear at the bottom of the thread.
+4. **Test with a short watch** — Play a movie or episode past **85%**, then stop playback. Within a few seconds, open Projectionist chat; a persona-voiced rating card should appear at the bottom of the thread.
 5. **Optional: Tautulli** — If you use Tautulli, configure it under **Config → Tautulli**. Library sync will also use Tautulli `get_metadata` for completion % when Plex `viewOffset` is missing locally.
 
-### What CuratorX listens for
+### What Projectionist listens for
 
 | Plex event | Behavior |
 |------------|----------|
@@ -338,20 +334,20 @@ When `webhook_secret` is non-empty, every `POST /api/webhooks/plex` must include
 
 Prompts are skipped when you already saved a review, or if you dismissed the same title within the last 30 days.
 
-**Personal watch nudges need a mapped Plex identity.** CuratorX only queues “You’re X% through…” prompts when the webhook `Account.id` matches a CuratorX user with that Plex id linked (Admin → Access / household users). Unmapped or server-token watches are ignored on purpose so one person’s progress never becomes another account’s nudge.
+**Personal watch nudges need a mapped Plex identity.** Projectionist only queues “You’re X% through…” prompts when the webhook `Account.id` matches a Projectionist user with that Plex id linked (Admin → Access / household users). Unmapped or server-token watches are ignored on purpose so one person’s progress never becomes another account’s nudge.
 
 ### Troubleshooting
 
-- **No prompt after finishing** — Confirm the webhook URL is saved in Plex and CuratorX logs show `Plex webhook` entries. Try a full stop (not just back-button) past 85%. If logs show `unattributed_account`, link that Plex user under Admin → Access so personal nudges can bind.
-- **Connection refused** — Use the LAN IP CuratorX listens on, not `localhost`, unless Plex runs on the same host.
-- **Prompt only after sync** — Webhook not reaching CuratorX; fix URL/firewall. Sync-based detection still works via `viewOffset` during library sync.
+- **No prompt after finishing** — Confirm the webhook URL is saved in Plex and Projectionist logs show `Plex webhook` entries. Try a full stop (not just back-button) past 85%. If logs show `unattributed_account`, link that Plex user under Admin → Access so personal nudges can bind.
+- **Connection refused** — Use the LAN IP Projectionist listens on, not `localhost`, unless Plex runs on the same host.
+- **Prompt only after sync** — Webhook not reaching Projectionist; fix URL/firewall. Sync-based detection still works via `viewOffset` during library sync.
 - **Duplicate prompts** — One row per `(user_id, rating_key)` in `rating_prompt_queue`; re-watching updates completion but won't spam if you already reviewed.
 
 ---
 
 ## Logging
 
-CuratorX logs to **stdout/stderr** for Docker and systemd deployments. Set the level in `.env` or `docker-compose.yml`:
+Projectionist logs to **stdout/stderr** for Docker and systemd deployments. Set the level in `.env` or `docker-compose.yml`:
 
 | Level | What you see |
 |-------|----------------|
@@ -417,7 +413,7 @@ Or env: `CURATORX_LONG_SYNOPSIS_SOURCE=wikipedia` / `off` / `auto` / `omdb` and 
 
 ### First-start idle bootstrap
 
-On IdleScheduler start, if foundational knowledge tasks have **never run** (`last_run_at` null), CuratorX runs a one-shot sequenced bootstrap instead of waiting for multi-day intervals:
+On IdleScheduler start, if foundational knowledge tasks have **never run** (`last_run_at` null), Projectionist runs a one-shot sequenced bootstrap instead of waiting for multi-day intervals:
 
 1. `metadata_enrichment` (only if metadata backlog > 0)
 2. `summary_motifs`
