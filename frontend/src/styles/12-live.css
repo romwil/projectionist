@@ -732,6 +732,38 @@
   font-size: 1rem;
 }
 
+@media (min-width: 1280px) {
+  [data-theater-mode="true"] .live-page--popout {
+    --live-theater-scale: 1.22;
+  }
+
+  [data-theater-mode="true"] .live-page--popout .live-chrome-title {
+    font-size: calc(1rem * var(--live-theater-scale));
+  }
+
+  [data-theater-mode="true"] .live-page--popout .live-chrome-home {
+    font-size: calc(1.15rem * var(--live-theater-scale));
+  }
+
+  [data-theater-mode="true"] .live-page--popout .live-chrome-link,
+  [data-theater-mode="true"] .live-page--popout .live-chrome-btn {
+    font-size: calc(0.95rem * var(--live-theater-scale));
+  }
+
+  [data-theater-mode="true"] .live-page--popout .live-osd-title {
+    font-size: calc(1.35rem * var(--live-theater-scale));
+  }
+
+  [data-theater-mode="true"] .live-page--popout .live-osd-meta,
+  [data-theater-mode="true"] .live-page--popout .live-osd-channel {
+    font-size: calc(0.95rem * var(--live-theater-scale));
+  }
+
+  [data-theater-mode="true"] .live-page--popout .live-eyebrow {
+    font-size: calc(var(--text-xs) * var(--live-theater-scale));
+  }
+}
+
 @media (max-width: 720px) {
   .live-guide-scroll {
     grid-template-columns: minmax(6.5rem, 8.5rem) 1fr;

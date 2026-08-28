@@ -151,6 +151,19 @@ describe("buildAppNavItems", () => {
     ]);
   });
 
+  it("filters Admin drawer links for single-user installs", () => {
+    const items = buildAppNavItems({
+      isOwner: true,
+      multiUserEnabled: false,
+      pathname: "/admin/overview",
+    });
+    const adminLinks = items.filter((item) => item.kind === "admin");
+    assert.equal(adminLinks.length, 9);
+    assert.equal(adminLinks.some((item) => item.id === "admin-household"), false);
+    assert.equal(adminLinks.some((item) => item.id === "admin-issues"), false);
+    assert.ok(items.some((item) => item.id === "admin-heading-experience"));
+  });
+
   it("shows no peers while auth is unresolved, so Admin never flashes", () => {
     const items = buildAppNavItems({
       isOwner: true,

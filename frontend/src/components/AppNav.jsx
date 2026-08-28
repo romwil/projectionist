@@ -11,9 +11,11 @@ function isAdminGroupHeading(item) {
 
 function adminGroupClass(item) {
   const id = String(item?.id || "");
-  if (id.endsWith("-home")) return "app-nav-admin-group-home";
-  if (id.endsWith("-household")) return "app-nav-admin-group-household";
-  if (id.endsWith("-ops")) return "app-nav-admin-group-ops";
+  if (id.endsWith("-setup") || id.endsWith("-home")) return "app-nav-admin-group-home";
+  if (id.endsWith("-experience") || id.endsWith("-household")) return "app-nav-admin-group-household";
+  if (id.endsWith("-platform") || id.endsWith("-ops")) return "app-nav-admin-group-ops";
+  if (id.endsWith("-communications")) return "app-nav-admin-group-comms";
+  if (id.endsWith("-system")) return "app-nav-admin-group-system";
   return "";
 }
 
@@ -25,6 +27,7 @@ export default function AppNav({
   isYouth = false,
   role = "owner",
   multiUserEnabled = true,
+  seerrEnabled = false,
   authReady = true,
   liveChannelsReady = false,
   adminBadges = null,
@@ -47,6 +50,7 @@ export default function AppNav({
     role,
     pathname: location.pathname,
     multiUserEnabled,
+    seerrEnabled,
     authReady,
     liveChannelsReady,
   });
@@ -123,12 +127,17 @@ export default function AppNav({
           data-testid={`app-nav-group-${item.id}`}
         >
           <div className="app-nav-admin-group-band">
-            <p
-              className="app-nav-heading app-nav-heading-side"
-              data-testid={item.testId || `app-nav-${item.id}`}
-            >
-              {item.label}
-            </p>
+            <div className="app-nav-admin-group-heading">
+              <p
+                className="app-nav-heading app-nav-heading-side"
+                data-testid={item.testId || `app-nav-${item.id}`}
+              >
+                {item.label}
+              </p>
+              {item.subtitle ? (
+                <p className="app-nav-admin-group-note">{item.subtitle}</p>
+              ) : null}
+            </div>
             <ul className="app-nav-admin-group-links">{links.map((link) => renderLinkItem(link))}</ul>
           </div>
         </li>,
