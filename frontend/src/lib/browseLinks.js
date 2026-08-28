@@ -1,6 +1,7 @@
 /** Path helpers for person and tag browse pages. */
 
 import { ROUTES, withReturnTo } from "./backNav.js";
+import { libraryHubPath } from "./libraryTabs.js";
 
 export { ROUTES, withReturnTo };
 
@@ -83,7 +84,7 @@ export function libraryBrowsePath({ mediaType, q } = {}) {
   const query = String(q || "").trim();
   if (query) params.set("q", query);
   const search = params.toString();
-  const base = ROUTES.search || ROUTES.libraryBrowse;
+  const base = ROUTES.search || libraryHubPath("browse");
   return search ? `${base}?${search}` : base;
 }
 
