@@ -9,7 +9,7 @@ import MediaBrowseResults from "../components/MediaBrowseResults";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
-import { ROUTES } from "../lib/browseLinks.js";
+import { libraryHubPath, libraryShelvesDetailPath } from "../lib/libraryTabs.js";
 import { pageAgentListItems } from "../lib/agentResultLists.js";
 import {
   MEDIA_BROWSE_PAGE_SIZES,
@@ -20,7 +20,7 @@ import {
   parseMediaBrowse,
 } from "../lib/mediaBrowse.js";
 
-export default function ListsPage() {
+export default function ListsPage({ embedded = false }) {
   const { listId } = useParams();
   const { multiUserEnabled, isOwner } = useAuthGate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -103,64 +103,100 @@ export default function ListsPage() {
     }));
   }
 
-  return <AppShell className="app-root lists-page" testId="lists-page" variant="browse" leading={<BackLink fallbackTo={ROUTES.explore} />}>
-    <section className="explore-section-hero"><p className="person-eyebrow">{listId ? state.list?.list_kind || "List" : "Collections"}</p><h1>{listId ? state.list?.name || "List" : "Lists & playlists"}</h1><p className="explore-section-subtitle">Lists are intentional Projectionist shelves. Watchlist pins answer “keep this in mind”; playlists answer “play these together.”</p></section>
-    {state.loading ? <p className="status status-secondary">Loading…</p> : null}
-    {state.error ? <p className="error">{state.error}</p> : null}
-    {!listId && !state.loading ? <div className="curated-list-grid">{state.lists.map((list) => <Link key={list.id} to={`/lists/${list.id}`} className="review-prompt-card"><strong>{list.name}</strong><span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span></Link>)}</div> : null}
-    {listId && !state.loading && isOwner ? (
-      <CourseAuthoringPanel list={state.list} onRefresh={reload} />
-    ) : null}
-    {listId && !state.loading ? (
-      <section className="tag-results">
-        <MediaBrowseControls
-          state={browse}
-          onChange={handleBrowseChange}
-          columns={columns}
-          onColumnsChange={setColumns}
-          columnScope={`list-${listId}`}
-          filterOptions={filterOptions}
-          pageSizes={MEDIA_BROWSE_PAGE_SIZES}
-          exportItems
-          onExport={exportCurrentPage}
-        />
-        <p className="explore-section-pagination-summary" data-testid="list-browse-summary">
-          {paginationSummary}
-        </p>
-        {page.items.length ? (
-          <MediaBrowseResults
+  const pageBody = (
+    <>
+      {!embedded ? (
+        <section className="explore-section-hero">
+          <p className="person-eyebrow">{listId ? state.list?.list_kind || "List" : "Collections"}</p>
+          <h1>{listId ? state.list?.name || "List" : "Lists & playlists"}</h1>
+          <p className="explore-section-subtitle">
+            Lists are intentional Projectionist shelves. Watchlist pins answer “keep this in mind”; playlists answer “play these together.”
+          </p>
+        </section>
+      ) : null}
+      {state.loading ? <p className="status status-secondary">Loading…</p> : null}
+      {state.error ? <p className="error">{state.error}</p> : null}
+      {!listId && !state.loading ? (
+        <div className="curated-list-grid">
+          {state.lists.map((list) => (
+            <Link key={list.id} to={libraryShelvesDetailPath(list.id)} className="review-prompt-card">
+              <strong>{list.name}</strong>
+              <span>{list.list_kind === "playlist" ? "Playlist" : "List"}</span>
+            </Link>
+          ))}
+        </div>
+      ) : null}
+      {listId && !state.loading && isOwner ? (
+        <CourseAuthoringPanel list={state.list} onRefresh={reload} />
+      ) : null}
+      {listId && !state.loading ? (
+        <section className="tag-results">
+          <MediaBrowseControls
             state={browse}
-            items={page.items}
-            columns={columns || undefined}
-            cardProps={(item) => ({
-              testId: "list-title-card",
-              showRecommend: multiUserEnabled,
-              onRecommend: multiUserEnabled ? setRecommendItem : undefined,
-              listId,
-              listItemId: item._listItemId,
-              onRemoveFromList: removeFromCollection,
-            })}
-          />
-        ) : <p className="explore-empty status status-secondary">{page.total ? "No titles on this page." : `This ${state.list?.list_kind === "playlist" ? "playlist" : "list"} has no titles yet.`}</p>}
-        {page.total ? (
-          <MediaBrowsePagination
-            summary={paginationSummary}
-            pageSize={allPages ? "all" : pageSize}
+            onChange={handleBrowseChange}
+            columns={columns}
+            onColumnsChange={setColumns}
+            columnScope={`list-${listId}`}
+            filterOptions={filterOptions}
             pageSizes={MEDIA_BROWSE_PAGE_SIZES}
-            onPageSizeChange={(limit) => handleBrowseChange({ limit, offset: 0 })}
-            hasPrevious={page.hasPrevious}
-            hasNext={page.hasNext}
-            onPrevious={() => handleBrowseChange({ offset: Math.max(0, browse.offset - pageSize) })}
-            onNext={() => handleBrowseChange({ offset: browse.offset + pageSize })}
-            testIdPrefix="list-browse"
+            exportItems
+            onExport={exportCurrentPage}
           />
-        ) : null}
-      </section>
-    ) : null}
-    <RecommendModal
-      item={recommendItem}
-      open={Boolean(recommendItem)}
-      onClose={() => setRecommendItem(null)}
-    />
-  </AppShell>;
+          <p className="explore-section-pagination-summary" data-testid="list-browse-summary">
+            {paginationSummary}
+          </p>
+          {page.items.length ? (
+            <MediaBrowseResults
+              state={browse}
+              items={page.items}
+              columns={columns || undefined}
+              cardProps={(item) => ({
+                testId: "list-title-card",
+                showRecommend: multiUserEnabled,
+                onRecommend: multiUserEnabled ? setRecommendItem : undefined,
+                listId,
+                listItemId: item._listItemId,
+                onRemoveFromList: removeFromCollection,
+              })}
+            />
+          ) : (
+            <p className="explore-empty status status-secondary">
+              {page.total ? "No titles on this page." : `This ${state.list?.list_kind === "playlist" ? "playlist" : "list"} has no titles yet.`}
+            </p>
+          )}
+          {page.total ? (
+            <MediaBrowsePagination
+              summary={paginationSummary}
+              pageSize={allPages ? "all" : pageSize}
+              pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+              onPageSizeChange={(limit) => handleBrowseChange({ limit, offset: 0 })}
+              hasPrevious={page.hasPrevious}
+              hasNext={page.hasNext}
+              onPrevious={() => handleBrowseChange({ offset: Math.max(0, browse.offset - pageSize) })}
+              onNext={() => handleBrowseChange({ offset: browse.offset + pageSize })}
+              testIdPrefix="list-browse"
+            />
+          ) : null}
+        </section>
+      ) : null}
+      <RecommendModal
+        item={recommendItem}
+        open={Boolean(recommendItem)}
+        onClose={() => setRecommendItem(null)}
+      />
+    </>
+  );
+
+  if (embedded) return pageBody;
+
+  return (
+    <AppShell
+      className="app-root lists-page"
+      testId="lists-page"
+      variant="browse"
+      leading={<BackLink fallbackTo={libraryHubPath("shelves")} />}
+    >
+      {pageBody}
+    </AppShell>
+  );
 }

@@ -7,7 +7,7 @@ import MessageText from "../components/MessageText";
 import TitleCard from "../components/TitleCard";
 import AgentAvatar from "../components/AgentAvatar";
 import ShareActionMenu from "../components/ShareActionMenu";
-import { ROUTES } from "../lib/backNav";
+import { libraryHubPath, librarySavedPath } from "../lib/libraryTabs.js";
 import { librarySharePrivacyNote } from "../lib/householdSocial.js";
 import { savedLibraryBlocks } from "../lib/savedLibraryBlocks";
 
@@ -43,7 +43,7 @@ export default function LibraryPage() {
   if (pageId) {
     const blocks = page?.content?.blocks || [];
     return (
-      <AppShell className="app-root explore-page" title={page?.name || "Saved response"} actions={<BackLink fallbackTo={ROUTES.library} />}>
+      <AppShell className="app-root explore-page" title={page?.name || "Saved response"} actions={<BackLink fallbackTo={librarySavedPath()} />}>
         <main className="explore-main">
           <section className="explore-section library-detail-section" data-testid="library-detail-page">
             <div className="section-heading library-detail-heading">
@@ -119,7 +119,7 @@ export default function LibraryPage() {
     );
   }
   return (
-    <AppShell className="app-root explore-page" title="Library" actions={<BackLink fallbackTo={ROUTES.chat} />}>
+    <AppShell className="app-root explore-page" title="Library" actions={<BackLink fallbackTo={libraryHubPath()} />}>
       <main className="explore-main"><section className="explore-section">
         <div className="section-heading"><p className="eyebrow">Your saved curator responses</p><h1>Library</h1></div>
         <label className="library-search">
@@ -128,7 +128,7 @@ export default function LibraryPage() {
         </label>
         {Object.entries(groupedByDate(pages)).map(([date, entries]) => <div key={date}><h2>{date}</h2>{entries.map((entry) => (
           <article className="thread-row library-row" key={entry.id}>
-            <button type="button" className="library-row-main" onClick={() => navigate(`/library/${entry.id}`)}>
+            <button type="button" className="library-row-main" onClick={() => navigate(`${librarySavedPath()}/${encodeURIComponent(entry.id)}`)}>
               <span className="library-row-title"><strong>{entry.name}</strong>{entry.persona?.name ? <span className="message-agent-meta library-persona-badge"><AgentAvatar name={entry.persona.name} /><span>{entry.persona.name}</span></span> : null}</span>
               <em>{entry.summary || entry.searchable_text.slice(0, 160)}</em>
             </button>
@@ -139,7 +139,7 @@ export default function LibraryPage() {
               sourceSessionId={entry.source_session_id}
               sourceMessageId={entry.source_message_id}
               extraActions={[
-                { label: "Open", icon: "open_in_new", onClick: () => navigate(`/library/${entry.id}`) },
+                { label: "Open", icon: "open_in_new", onClick: () => navigate(`${librarySavedPath()}/${encodeURIComponent(entry.id)}`) },
                 { label: "Chat from here", icon: "forum", onClick: () => navigate(`/?saved_library=${encodeURIComponent(entry.id)}`) },
                 { label: "Archive", icon: "archive", onClick: () => archive(entry) },
               ]}
