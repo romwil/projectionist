@@ -6,7 +6,7 @@ Enable for a hoster or CI with secrets:
 
 .. code-block:: bash
 
-    CURATORX_LIVE_INTEGRATION=1 \\
+    PROJECTIONIST_LIVE_INTEGRATION=1 \\
       PLEX_URL=... PLEX_TOKEN=... \\
       RADARR_URL=... RADARR_API_KEY=... \\
       SONARR_URL=... SONARR_API_KEY=... \\
@@ -15,7 +15,7 @@ Enable for a hoster or CI with secrets:
       .venv/bin/python -m unittest tests.test_live_integrations -v
 
 Credentials are read from the environment (and ``.env`` unless
-``CURATORX_SKIP_DOTENV=1``). When a field is empty, values from
+``PROJECTIONIST_SKIP_DOTENV=1``). When a field is empty, values from
 ``$DATA_DIR/settings.json`` (default ``./config``) fill the gap.
 
 Each service test skips individually when that service is not configured.
@@ -37,7 +37,7 @@ from projectionist.web.setup import (
     test_tmdb as check_tmdb,
 )
 
-_LIVE_FLAG = os.environ.get("CURATORX_LIVE_INTEGRATION", "").strip().lower()
+_LIVE_FLAG = os.environ.get("PROJECTIONIST_LIVE_INTEGRATION", "").strip().lower()
 _LIVE_ENABLED = _LIVE_FLAG in {"1", "true", "yes"}
 
 
@@ -51,14 +51,14 @@ def _env_or(*candidates: str) -> str:
 
 @unittest.skipUnless(
     _LIVE_ENABLED,
-    "Set CURATORX_LIVE_INTEGRATION=1 (plus service URL/API keys) to run live integrations",
+    "Set PROJECTIONIST_LIVE_INTEGRATION=1 (plus service URL/API keys) to run live integrations",
 )
 class LiveIntegrationTests(unittest.TestCase):
     """Ping each configured *arr / Plex / Seerr instance when credentials exist."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        if os.environ.get("CURATORX_SKIP_DOTENV", "").strip() != "1":
+        if os.environ.get("PROJECTIONIST_SKIP_DOTENV", "").strip() != "1":
             load_dotenv_file()
         data_dir = Path(os.environ.get("DATA_DIR", "config"))
         settings = load_merged_settings(data_dir)
@@ -121,10 +121,10 @@ class LiveIntegrationGateTests(unittest.TestCase):
 
     def test_live_class_is_skipped_when_flag_off(self) -> None:
         if _LIVE_ENABLED:
-            self.skipTest("CURATORX_LIVE_INTEGRATION is enabled in this environment")
+            self.skipTest("PROJECTIONIST_LIVE_INTEGRATION is enabled in this environment")
         self.assertTrue(
             getattr(LiveIntegrationTests, "__unittest_skip__", False),
-            "LiveIntegrationTests must be skipped unless CURATORX_LIVE_INTEGRATION=1",
+            "LiveIntegrationTests must be skipped unless PROJECTIONIST_LIVE_INTEGRATION=1",
         )
 
 

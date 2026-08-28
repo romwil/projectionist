@@ -589,7 +589,6 @@ class FeatureFlagsPayload(BaseModel):
     multi_user_enabled: bool = False
     seerr_enabled: bool = False
     plex_collections_enabled: bool = False
-    guest_access_enabled: bool = False
     invite_only: bool = True
     open_auto_provision: bool = False
     ephemeral_collection_gc_enabled: bool = True
@@ -1021,7 +1020,7 @@ def _validate_distinct_mcp_keys(settings: Settings) -> None:
             detail=(
                 "Privacy and full MCP keys must differ. "
                 "Use separate secrets for PROJECTIONIST_MCP_API_KEY and "
-                "PROJECTIONIST_MCP_FULL_API_KEY (CURATORX_* aliases still work)."
+                "PROJECTIONIST_MCP_FULL_API_KEY."
             ),
         )
 
@@ -2263,7 +2262,7 @@ def put_settings(payload: SettingsPayload, user=Depends(require_role("owner"))) 
             status_code=400,
             detail=(
                 "Cannot enable multi-user auth without a strong session secret. "
-                "Set PROJECTIONIST_SESSION_SECRET (or legacy CURATORX_SESSION_SECRET) "
+                "Set PROJECTIONIST_SESSION_SECRET "
                 "to a long random value (not the development default), or remove that "
                 "env var so Projectionist can generate one under DATA_DIR."
             ),
@@ -5662,6 +5661,14 @@ def get_engagement_summary(user=Depends(get_current_user_dep)) -> Dict[str, Any]
 
     youth = bool(getattr(user, "is_youth", False))
     return engagement_summary(_db(), user_id=str(user.id), youth_safe_only=youth)
+
+
+@app.get("/api/journey/exploration")
+def get_journey_exploration(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
+    from projectionist.journey.exploration import journey_exploration
+
+    youth = bool(getattr(user, "is_youth", False))
+    return journey_exploration(_db(), user_id=str(user.id), youth_safe_only=youth)
 
 
 @app.post("/api/engagement/courses/{list_id}/progress")

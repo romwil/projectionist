@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Breaking
+- **CuratorX compatibility removed.** Environment variables must use the `PROJECTIONIST_*` prefix only — legacy `CURATORX_*` names are no longer read. Browser localStorage keys use `projectionist.*` only (no `curatorx.*` migration). Docker Hub publishes `romwil/projectionist` only (no `romwil/curatorx` dual-tag). Plex webhooks must send `X-Projectionist-Webhook-Secret` (legacy `X-CuratorX-Webhook-Secret` rejected). MCP clients should call `discover_missing_titles` / `sample_owned_library` instead of the removed `find_collection_gaps` alias.
+
+### Added
+- **My Journey refocus.** Cinema exploration map — directors, cinematographers, composers, genre/era insight cards, and courses/explainers via `GET /api/journey/exploration` (no streaks, badges, or challenges).
+- **Admin Health hub.** Sync health, LLM spend, and media issues regrouped at `/admin/health?tab=` with legacy `/admin/dashboard`, `/admin/usage`, and `/admin/issues` redirects.
+- **Lobby setup wizard.** Admin → Lobby uses a step-by-step wizard with a focused shell that hides the dense ops rail until setup is done.
+
+### Changed
+- **Admin navigation regroup.** Admin rail reorganized into five scannable groups — Setup, Experience, Platform, Communications, and System — with headings only (no new routes).
+- **Hygiene cleanup.** Removed vestigial guest nav labels, orphan `PlotLabPage` / `EngagementPage` sources (redirects unchanged), and `guest_access_enabled` from the features API payload.
+- **Docs:** Product-facing "Plot Lab" strings → **Related titles** in README, WEB_UI, and CURATOR_KNOWLEDGE; configuration docs document `PROJECTIONIST_*` only.
+
 ## [1.33.4] — 2026-08-27
 
 Lobby Display stays enabled after restarts and partial settings saves. Dot-release prep gets a restored maintainer helper and runbook updates for Hub-first ships.

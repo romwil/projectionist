@@ -165,7 +165,12 @@ export default function AdminLayout() {
                             }
                             data-testid={`admin-nav-${item.id}`}
                           >
-                            <span>{item.label}</span>
+                            <span className="admin-rail-link-text">
+                              <span>{item.label}</span>
+                              {item.subtitle ? (
+                                <span className="admin-rail-link-subtitle">{item.subtitle}</span>
+                              ) : null}
+                            </span>
                             {showBadge ? (
                               <span
                                 className="admin-rail-badge"

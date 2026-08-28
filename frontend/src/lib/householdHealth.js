@@ -105,7 +105,7 @@ export function buildHouseholdHealthChips({
       label: "Unwatched",
       value: unwatched == null ? "—" : `${unwatched}%`,
       detail: `${num(h.stale_adds).toLocaleString()} never played`,
-      to: "/admin/dashboard",
+      to: "/admin/health?tab=sync",
       tone: unwatched != null && unwatched >= 70 ? "warn" : "neutral",
     },
     {
@@ -113,7 +113,7 @@ export function buildHouseholdHealthChips({
       label: "Rated",
       value: rating == null ? "—" : `${rating}%`,
       detail: "Of watched titles",
-      to: "/admin/dashboard",
+      to: "/admin/health?tab=sync",
       tone: "neutral",
     },
     liveReadinessChip({ liveEnabled, liveReady, stationCount }),

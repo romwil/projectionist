@@ -16,7 +16,7 @@ class ErrorSanitizationTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         import projectionist.web.jobs as jobs
 
@@ -31,7 +31,7 @@ class ErrorSanitizationTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
-        for key in ("CURATORX_SKIP_DOTENV", "LLM_PROVIDER", "DATA_DIR"):
+        for key in ("PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER", "DATA_DIR"):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
 

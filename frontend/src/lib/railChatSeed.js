@@ -3,7 +3,7 @@
  * and merging curated library cards into the assistant turn.
  */
 
-export const RAIL_SEED_STORAGE_KEY = "curatorx:chat_rail_seed";
+export const RAIL_SEED_STORAGE_KEY = "projectionist:chat_rail_seed";
 export const CHAT_FROM_RAIL_PACK_PARAM = "rail_pack";
 export const CHAT_FROM_RAIL_ID_PARAM = "rail_id";
 

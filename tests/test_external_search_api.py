@@ -43,8 +43,8 @@ class ExternalSearchApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-external-search-session-secret"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-external-search-session-secret"
         os.environ["LLM_PROVIDER"] = "ollama"
         # Keep TMDB config driven purely by settings.json so the not-configured
         # case is deterministic even if another test leaked TMDB_API_KEY.
@@ -100,7 +100,7 @@ class ExternalSearchApiTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        for key in ("CURATORX_SKIP_DOTENV", "LLM_PROVIDER", "CURATORX_SESSION_SECRET", "DATA_DIR"):
+        for key in ("PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER", "PROJECTIONIST_SESSION_SECRET", "DATA_DIR"):
             os.environ.pop(key, None)
         if self._prev_tmdb_env is not None:
             os.environ["TMDB_API_KEY"] = self._prev_tmdb_env

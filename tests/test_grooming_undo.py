@@ -97,9 +97,9 @@ class GroomingUndoApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-grooming-secret"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-grooming-secret"
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
@@ -119,7 +119,7 @@ class GroomingUndoApiTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        for key in ("CURATORX_SKIP_DOTENV", "LLM_PROVIDER", "CURATORX_SESSION_SECRET"):
+        for key in ("PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER", "PROJECTIONIST_SESSION_SECRET"):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
 

@@ -170,9 +170,9 @@ class WatchStateApiTests(unittest.TestCase):
         self._tmpdir = tempfile.TemporaryDirectory()
         self.data_dir = Path(self._tmpdir.name)
         os.environ["DATA_DIR"] = str(self.data_dir)
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-watch-state-session-secret"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-watch-state-session-secret"
         os.environ["PROJECTIONIST_SETUP_STATE"] = "active"
         clear_session_secret_cache()
         clear_rate_limits()
@@ -219,9 +219,9 @@ class WatchStateApiTests(unittest.TestCase):
         clear_session_secret_cache()
         clear_rate_limits()
         clear_pin_bindings()
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
+        os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
         os.environ.pop("LLM_PROVIDER", None)
-        os.environ.pop("CURATORX_SESSION_SECRET", None)
+        os.environ.pop("PROJECTIONIST_SESSION_SECRET", None)
         os.environ.pop("PROJECTIONIST_SETUP_STATE", None)
         self._tmpdir.cleanup()
 

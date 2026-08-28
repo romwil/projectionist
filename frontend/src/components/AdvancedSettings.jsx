@@ -50,7 +50,7 @@ function McpKeyRow({
   onCopy,
 }) {
   const field = which === "privacy" ? "mcp_api_key" : "mcp_full_api_key";
-  const envName = which === "privacy" ? "CURATORX_MCP_API_KEY" : "CURATORX_MCP_FULL_API_KEY";
+  const envName = which === "privacy" ? "PROJECTIONIST_MCP_API_KEY" : "PROJECTIONIST_MCP_FULL_API_KEY";
   const title = which === "privacy" ? "Privacy MCP key" : "Full MCP key";
   const description =
     which === "privacy"

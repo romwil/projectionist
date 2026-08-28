@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import {
   confirmAction,
-  getEngagementSummary,
-  postCourseProgress,
+  getJourneyExploration,
   startCourseSyllabus,
   syllabusPublishHandoff,
 } from "../api/client";
@@ -12,85 +11,110 @@ import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES, chatFromRailHref } from "../lib/backNav.js";
 import {
-  buildJourneyNodes,
-  buildJourneyTree,
-  filterJourneyNodes,
-  journeyProgressSummary,
-  memberFacingCopyOk,
-  personaPathways,
-} from "../lib/journeyAchievements.js";
+  JOURNEY_EYEBROW,
+  JOURNEY_HERO_LEDE,
+  YOUTH_JOURNEY_EYEBROW,
+  YOUTH_JOURNEY_HERO_LEDE,
+  hasExplorationContent,
+  insightBrowseHref,
+  insightChatHref,
+  personChatHref,
+  personExploreHref,
+  personShelfLabel,
+} from "../lib/journeyExploration.js";
 import { guestDeepLinkBlocked } from "../lib/memberShell.js";
 
-function JourneyCallout({ node, x, y, onClose }) {
-  if (!node) return null;
+const PEOPLE_RAILS = [
+  { id: "directors", title: "Directors in your shelf", subtitle: "Voices behind the films you keep returning to." },
+  {
+    id: "cinematographers",
+    title: "Cinematographers",
+    subtitle: "Light, lens, and frame — craft across your collection.",
+  },
+  {
+    id: "composers",
+    title: "Composers",
+    subtitle: "Scores and soundtracks woven through your library.",
+  },
+];
+
+function JourneyPersonCard({ person }) {
+  const exploreHref = personExploreHref(person);
+  const chatHref = personChatHref(person);
+  const shelf = personShelfLabel(person);
+  const initial = String(person?.name || "?").slice(0, 1);
+
   return (
-    <div
-      className="journey-callout"
-      data-testid="journey-callout"
-      style={{ left: x, top: y }}
-      role="dialog"
-      aria-label={node.displayName}
-    >
-      <header className="journey-callout-header">
-        <strong>{node.displayName}</strong>
-        <button type="button" className="ghost" aria-label="Close" onClick={onClose}>
-          ✕
-        </button>
-      </header>
-      <p>{node.displayDescription}</p>
-      {node.personaId ? (
-        <p className="journey-callout-meta">Persona pathway · {node.personaId}</p>
+    <li className="journey-person-card" data-testid={`journey-person-${person.role}-${person.name}`}>
+      <div className="journey-person-card-main">
+        {person.profile_url ? (
+          <img src={person.profile_url} alt="" className="journey-person-avatar" loading="lazy" />
+        ) : (
+          <span className="journey-person-avatar journey-person-avatar--fallback" aria-hidden="true">
+            {initial}
+          </span>
+        )}
+        <div>
+          {exploreHref ? (
+            <Link to={exploreHref} className="journey-person-name">
+              {person.name}
+            </Link>
+          ) : (
+            <strong className="journey-person-name">{person.name}</strong>
+          )}
+          {shelf ? <p className="journey-person-meta">{shelf}</p> : null}
+        </div>
+      </div>
+      {chatHref ? (
+        <Link to={chatHref} className="text-button journey-person-chat" data-testid={`journey-person-chat-${person.name}`}>
+          Explore in Chat
+        </Link>
       ) : null}
-      <p className="journey-callout-meta">
-        {node.earned ? "Earned" : node.ready ? "Ready to pursue" : "Locked"}
-        {node.tier ? ` · ${node.tier}` : ""}
-      </p>
-    </div>
+    </li>
   );
 }
 
-function JourneyDetailDrawer({ node, onClose, onChat }) {
-  if (!node) return null;
+function JourneyPeopleRail({ railId, title, subtitle, people = [] }) {
+  if (!people.length) return null;
   return (
-    <aside className="journey-drawer" data-testid="journey-drawer" aria-label="Achievement detail">
-      <header className="journey-drawer-header">
+    <section className="explore-section" data-testid={`journey-people-${railId}`}>
+      <header className="explore-section-header">
         <div>
-          <p className="eyebrow">{node.ultimate ? "Ultimate badge" : "Achievement"}</p>
-          <h2>{node.displayName}</h2>
+          <h2>{title}</h2>
+          <p className="explore-section-subtitle">{subtitle}</p>
         </div>
-        <button type="button" className="ghost" data-testid="journey-drawer-close" onClick={onClose}>
-          Close
-        </button>
       </header>
-      <p className="journey-drawer-body">{node.displayDescription}</p>
-      <dl className="journey-drawer-meta">
-        <div>
-          <dt>Pathway</dt>
-          <dd>{node.category}</dd>
-        </div>
-        <div>
-          <dt>Tier</dt>
-          <dd>{node.tier}</dd>
-        </div>
-        <div>
-          <dt>Status</dt>
-          <dd>{node.earned ? "Earned" : node.locked ? "Locked" : "In progress"}</dd>
-        </div>
-      </dl>
-      {node.personaId ? (
-        <p>
-          <button type="button" className="primary" onClick={() => onChat?.(node)}>
-            Chat about this pathway
-          </button>
-        </p>
-      ) : (
-        <p>
-          <Link to={ROUTES.chat} className="primary">
-            Continue in Chat
+      <ul className="journey-person-list">
+        {people.map((person) => (
+          <JourneyPersonCard key={`${person.role}-${person.name}`} person={person} />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function JourneyInsightCard({ insight }) {
+  const browseHref = insightBrowseHref(insight);
+  const chatHref = insightChatHref(insight);
+
+  return (
+    <li className="journey-insight-card" data-testid={`journey-insight-${insight.id}`}>
+      <p className="journey-insight-kind">{insight.kind === "era" ? "Era" : "Genre"}</p>
+      <strong>{insight.label}</strong>
+      <p className="journey-insight-note">{insight.note}</p>
+      <div className="journey-insight-actions">
+        {browseHref ? (
+          <Link to={browseHref} className="text-button">
+            Browse shelf
           </Link>
-        </p>
-      )}
-    </aside>
+        ) : null}
+        {chatHref ? (
+          <Link to={chatHref} className="text-button" data-testid={`journey-insight-chat-${insight.id}`}>
+            Explore in Chat
+          </Link>
+        ) : null}
+      </div>
+    </li>
   );
 }
 
@@ -98,17 +122,12 @@ export default function MyJourneyPage() {
   const { authReady, isYouth, role, multiUserEnabled, isOwner } = useAuthGate();
   const [publishBusy, setPublishBusy] = useState("");
   const [state, setState] = useState({ loading: true, data: null, error: "" });
-  const [view, setView] = useState("list");
-  const [filter, setFilter] = useState("all");
-  const [callout, setCallout] = useState(null);
-  const [selected, setSelected] = useState(null);
-  const [busyCourse, setBusyCourse] = useState("");
   const [syllabusBusy, setSyllabusBusy] = useState("");
   const [syllabusNote, setSyllabusNote] = useState("");
 
   function reload() {
     setState((prev) => ({ ...prev, loading: true }));
-    getEngagementSummary()
+    getJourneyExploration()
       .then((data) => setState({ loading: false, data, error: "" }))
       .catch((err) =>
         setState({
@@ -124,24 +143,6 @@ export default function MyJourneyPage() {
     reload();
   }, [authReady, role, multiUserEnabled]);
 
-  const nodes = useMemo(
-    () => buildJourneyNodes(state.data, { isYouth }),
-    [state.data, isYouth],
-  );
-
-  useEffect(() => {
-    try {
-      memberFacingCopyOk(nodes);
-    } catch (err) {
-      console.error(err);
-    }
-  }, [nodes]);
-
-  const progress = useMemo(() => journeyProgressSummary(nodes), [nodes]);
-  const filtered = useMemo(() => filterJourneyNodes(nodes, filter), [nodes, filter]);
-  const tree = useMemo(() => buildJourneyTree(nodes), [nodes]);
-  const pathways = useMemo(() => personaPathways(nodes), [nodes]);
-
   if (!authReady) {
     return (
       <div className="app-root app-loading" data-testid="my-journey-auth-loading">
@@ -152,20 +153,6 @@ export default function MyJourneyPage() {
 
   if (guestDeepLinkBlocked({ role, multiUserEnabled, authReady: true })) {
     return <Navigate to={ROUTES.explore} replace />;
-  }
-
-  async function advanceCourse(course) {
-    setBusyCourse(course.id);
-    try {
-      const nextPos = Math.min((course.position || 0) + 1, course.item_count || 0);
-      const completed = nextPos >= (course.item_count || 0) && (course.item_count || 0) > 0;
-      await postCourseProgress(course.id, { position: nextPos, completed });
-      reload();
-    } catch {
-      /* keep prior state */
-    } finally {
-      setBusyCourse("");
-    }
   }
 
   async function openSyllabus(course) {
@@ -217,218 +204,65 @@ export default function MyJourneyPage() {
     }
   }
 
-  function handleChatPathway(node) {
-    const href = chatFromRailHref(
-      { railTitle: `My Journey · ${node.displayName}` },
-      { title: node.displayName, why: node.displayDescription },
-    );
-    window.location.assign(href);
-  }
-
   const data = state.data;
+  const eyebrow = isYouth ? YOUTH_JOURNEY_EYEBROW : JOURNEY_EYEBROW;
+  const heroLede = isYouth ? YOUTH_JOURNEY_HERO_LEDE : JOURNEY_HERO_LEDE;
+  const showPeopleRails = !isYouth;
+  const showInsights = !isYouth;
 
   return (
     <AppShell
       className="app-root my-journey-page"
       testId="my-journey-page"
       title="My Journey"
-      eyebrow="Cinema discovery, learning, and achievements"
+      eyebrow={eyebrow}
     >
       <main className="explore-main journey-main">
         <section className="journey-hero" data-testid="journey-hero">
-          <p className="journey-hero-lede">
-            Your path into cinema and media — unlock achievements, follow persona pathways, and
-            discover a few secret awards along the way.
-          </p>
-          <ul className="journey-progress-stats" data-testid="journey-progress-stats">
-            <li>
-              <strong>{progress.earned}</strong>
-              <span>earned</span>
-            </li>
-            <li>
-              <strong>{progress.inProgress}</strong>
-              <span>in progress</span>
-            </li>
-            <li>
-              <strong>
-                {progress.secretsFound}/{progress.secretsTotal}
-              </strong>
-              <span>secrets found</span>
-            </li>
-          </ul>
+          <p className="journey-hero-lede">{heroLede}</p>
         </section>
 
-        <div className="journey-toolbar" data-testid="journey-toolbar">
-          <div className="journey-view-toggle" role="tablist" aria-label="Journey view">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === "list"}
-              className={view === "list" ? "is-active" : ""}
-              data-testid="journey-view-list"
-              onClick={() => setView("list")}
-            >
-              List
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={view === "tree"}
-              className={view === "tree" ? "is-active" : ""}
-              data-testid="journey-view-tree"
-              onClick={() => setView("tree")}
-            >
-              Achievements Tree
-            </button>
-          </div>
-          {view === "list" ? (
-            <div className="journey-filters" role="group" aria-label="Filter achievements">
-              {[
-                ["all", "All"],
-                ["in-progress", "In progress"],
-                ["earned", "Earned"],
-                ["hidden", "Hidden revealed"],
-              ].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={filter === id ? "is-active" : ""}
-                  data-testid={`journey-filter-${id}`}
-                  onClick={() => setFilter(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
-
-        {state.loading ? <p className="status status-secondary">Loading your journey…</p> : null}
+        {state.loading ? <p className="status status-secondary">Loading your cinema map…</p> : null}
         {state.error ? <p className="status status-error">{state.error}</p> : null}
 
         {!state.loading && data ? (
           <>
-            {view === "list" ? (
-              <section className="journey-list" data-testid="journey-list">
-                <ul className="journey-card-list">
-                  {filtered.map((node) => (
-                    <li
-                      key={node.id}
-                      className={`journey-card${node.earned ? " is-earned" : ""}${node.hidden ? " is-hidden" : ""}`}
-                      data-testid={`journey-node-${node.id}`}
-                    >
-                      <button
-                        type="button"
-                        className="journey-card-button"
-                        onClick={() => setSelected(node)}
-                      >
-                        <div className="journey-card-top">
-                          <strong>{node.displayName}</strong>
-                          <span className="journey-tier">{node.tier}</span>
-                        </div>
-                        <p>{node.displayDescription}</p>
-                        <div className="journey-progress-bar" aria-hidden="true">
-                          <span style={{ width: `${Math.round((node.progress || 0) * 100)}%` }} />
-                        </div>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                {!filtered.length ? (
-                  <p className="status status-secondary">No achievements match this filter yet.</p>
-                ) : null}
-              </section>
-            ) : (
-              <section className="journey-tree" data-testid="journey-tree">
-                <div className="journey-tree-grid">
-                  {tree.map((column) => (
-                    <div key={column.id} className="journey-tree-column" data-testid={`journey-tree-${column.id}`}>
-                      <header>
-                        <h2>{column.label}</h2>
-                        <p className="explore-section-subtitle">Pathway toward the ultimate badge</p>
-                      </header>
-                      <ol className="journey-tree-nodes">
-                        {column.nodes.map((node, index) => (
-                          <li key={node.id}>
-                            {index > 0 ? <span className="journey-tree-edge" aria-hidden="true" /> : null}
-                            <button
-                              type="button"
-                              className={`journey-tree-node${node.earned ? " is-earned" : ""}${node.locked ? " is-locked" : ""}${node.ultimate ? " is-ultimate" : ""}`}
-                              data-testid={`journey-tree-node-${node.id}`}
-                              onMouseEnter={(event) => {
-                                const rect = event.currentTarget.getBoundingClientRect();
-                                // Viewport coords — callout is position:fixed (not relative to .journey-main).
-                                setCallout({
-                                  node,
-                                  x: rect.right + 8,
-                                  y: rect.top,
-                                });
-                              }}
-                              onMouseLeave={() => setCallout(null)}
-                              onFocus={(event) => {
-                                const rect = event.currentTarget.getBoundingClientRect();
-                                setCallout({
-                                  node,
-                                  x: rect.right + 8,
-                                  y: rect.top,
-                                });
-                              }}
-                              onBlur={() => setCallout(null)}
-                              onClick={() => setSelected(node)}
-                            >
-                              <span className="journey-tree-node-name">{node.displayName}</span>
-                              <span className="journey-tree-node-tier">{node.tier}</span>
-                            </button>
-                          </li>
-                        ))}
-                      </ol>
-                    </div>
-                  ))}
-                </div>
-                {pathways.length ? (
-                  <section className="journey-persona-paths" data-testid="journey-persona-paths">
-                    <h2>Persona pathways</h2>
-                    <p className="explore-section-subtitle">
-                      Follow a curator voice through its branch of the tree.
-                    </p>
-                    <ul>
-                      {pathways.map((path) => (
-                        <li key={path.personaId}>
-                          <strong>{path.personaId}</strong>
-                          {" — "}
-                          {path.nodes.filter((n) => n.earned).length}/{path.nodes.length}
-                          {path.completed ? " · complete" : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  </section>
-                ) : null}
-              </section>
-            )}
+            {showPeopleRails
+              ? PEOPLE_RAILS.map((rail) => (
+                  <JourneyPeopleRail
+                    key={rail.id}
+                    railId={rail.id}
+                    title={rail.title}
+                    subtitle={rail.subtitle}
+                    people={data.people?.[rail.id] || []}
+                  />
+                ))
+              : null}
 
-            {data.streak ? (
-              <section className="explore-section" data-testid="journey-streak">
+            {showInsights && (data.insights || []).length ? (
+              <section className="explore-section" data-testid="journey-insights">
                 <header className="explore-section-header">
                   <div>
-                    <h2>Chat streak</h2>
+                    <h2>Threads in your collection</h2>
                     <p className="explore-section-subtitle">
-                      Chat days in a row: {data.streak?.current_count || 0}
-                      {data.streak?.best_count ? ` · best ${data.streak.best_count}` : ""}
-                      {data.session_count_30d != null
-                        ? ` · ${data.session_count_30d} conversations in 30 days`
-                        : ""}
+                      Genres and eras that show up often — editorial notes, not scores.
                     </p>
                   </div>
                 </header>
+                <ul className="journey-insight-list">
+                  {(data.insights || []).map((insight) => (
+                    <JourneyInsightCard key={insight.id} insight={insight} />
+                  ))}
+                </ul>
               </section>
             ) : null}
 
             <section className="explore-section" data-testid="journey-courses">
               <header className="explore-section-header">
                 <div>
-                  <h2>Cinema courses</h2>
+                  <h2>Curated viewing paths</h2>
                   <p className="explore-section-subtitle">
-                    Ordered collections your curator published.{" "}
+                    Ordered collections from your curator.{" "}
                     <Link to="/collections">Browse collections</Link>
                   </p>
                 </div>
@@ -440,22 +274,14 @@ export default function MyJourneyPage() {
                       <strong>
                         <Link to={`/collections/${course.id}`}>{course.name}</Link>
                       </strong>
-                      <p>
-                        Step {course.position || 0} of {course.item_count || 0}
-                        {course.completed_at ? " · completed" : ""}
+                      {course.description ? <p>{course.description}</p> : null}
+                      <p className="journey-course-meta">
+                        {course.item_count || 0} title{(course.item_count || 0) === 1 ? "" : "s"}
                       </p>
                       <div className="journey-course-actions">
-                        {!course.completed_at && (course.item_count || 0) > 0 ? (
-                          <button
-                            type="button"
-                            className="text-button"
-                            disabled={busyCourse === course.id}
-                            onClick={() => advanceCourse(course)}
-                            data-testid={`journey-course-advance-${course.id}`}
-                          >
-                            Mark next step
-                          </button>
-                        ) : null}
+                        <Link to={`/collections/${course.id}`} className="text-button">
+                          Open collection
+                        </Link>
                         <button
                           type="button"
                           className="text-button"
@@ -473,9 +299,7 @@ export default function MyJourneyPage() {
                             onClick={() => publishSyllabusToPlex(course)}
                             data-testid={`journey-syllabus-publish-${course.id}`}
                           >
-                            {publishBusy === course.id
-                              ? "Publishing…"
-                              : "Publish syllabus to Plex"}
+                            {publishBusy === course.id ? "Publishing…" : "Publish syllabus to Plex"}
                           </button>
                         ) : null}
                       </div>
@@ -484,8 +308,8 @@ export default function MyJourneyPage() {
                 </ul>
               ) : (
                 <ChamberEmpty
-                  title="No courses yet"
-                  body="When your curator publishes a cinema course, it shows up here."
+                  title="No curated paths yet"
+                  body="When your curator publishes a cinema course, it shows up here as a viewing path."
                   ctaLabel="Browse collections"
                   ctaTo="/collections"
                   testId="journey-courses-empty"
@@ -505,32 +329,30 @@ export default function MyJourneyPage() {
                   <p className="explore-section-subtitle">Short notes on how Projectionist habits work.</p>
                 </div>
               </header>
-              <ul className="journey-card-list">
-                {(data.explainers || []).map((explainer) => (
-                  <li key={explainer.id} className="journey-card">
-                    <strong>{explainer.title}</strong>
-                    <p>{explainer.body_md}</p>
-                  </li>
-                ))}
-              </ul>
+              {(data.explainers || []).length ? (
+                <ul className="journey-card-list">
+                  {(data.explainers || []).map((explainer) => (
+                    <li key={explainer.id} className="journey-card">
+                      <strong>{explainer.title}</strong>
+                      <p>{explainer.body_md}</p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="status status-secondary">No explainers yet.</p>
+              )}
             </section>
-          </>
-        ) : null}
 
-        {callout ? (
-          <JourneyCallout
-            node={callout.node}
-            x={callout.x}
-            y={callout.y}
-            onClose={() => setCallout(null)}
-          />
-        ) : null}
-        {selected ? (
-          <JourneyDetailDrawer
-            node={selected}
-            onClose={() => setSelected(null)}
-            onChat={handleChatPathway}
-          />
+            {!hasExplorationContent(data) ? (
+              <ChamberEmpty
+                title="Your map is still filling in"
+                body="Watch, rate, and chat about titles — directors and craft threads appear as your library grows."
+                ctaLabel="Explore your shelf"
+                ctaTo={ROUTES.explore}
+                testId="journey-exploration-empty"
+              />
+            ) : null}
+          </>
         ) : null}
       </main>
     </AppShell>

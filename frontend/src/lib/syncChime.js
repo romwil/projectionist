@@ -1,4 +1,4 @@
-const MUTE_KEY = "curatorx.sync_chime_muted";
+const MUTE_KEY = "projectionist.sync_chime_muted";
 
 export function isSyncChimeMuted() {
   try {

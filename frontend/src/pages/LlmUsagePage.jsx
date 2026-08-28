@@ -34,7 +34,7 @@ function StatCard({ value, label, detail }) {
   );
 }
 
-export default function LlmUsagePage() {
+export default function LlmUsagePage({ embedded = false }) {
   const [days, setDays] = useState(7);
   const [model, setModel] = useState("");
   const [purpose, setPurpose] = useState("");
@@ -88,19 +88,34 @@ export default function LlmUsagePage() {
   );
 
   return (
-    <div className="admin-page llm-usage-page" data-testid="llm-usage-page">
-      <header className="admin-page-header">
-        <div>
-          <h1>Usage</h1>
+    <div
+      className={`admin-page llm-usage-page${embedded ? " llm-usage-page-embedded" : ""}`}
+      data-testid="llm-usage-page"
+    >
+      {embedded ? (
+        <div className="admin-page-header admin-page-header-embedded">
           <p className="muted">
             Token spend across chat, wrap-up, library saves, loglines, and embeddings. Estimated USD
             uses a small built-in price table — unknown models show tokens only.
           </p>
+          <button type="button" className="ghost" onClick={load} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
         </div>
-        <button type="button" className="ghost" onClick={load} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
-      </header>
+      ) : (
+        <header className="admin-page-header">
+          <div>
+            <h1>Usage</h1>
+            <p className="muted">
+              Token spend across chat, wrap-up, library saves, loglines, and embeddings. Estimated USD
+              uses a small built-in price table — unknown models show tokens only.
+            </p>
+          </div>
+          <button type="button" className="ghost" onClick={load} disabled={loading}>
+            {loading ? "Refreshing…" : "Refresh"}
+          </button>
+        </header>
+      )}
 
       <div className="llm-usage-filters" data-testid="llm-usage-filters">
         <label>

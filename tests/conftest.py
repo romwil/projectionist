@@ -207,7 +207,7 @@ def _default_setup_active(monkeypatch):
     """Existing tests assume ACTIVE_MODE. SETUP_MODE cases set the env themselves."""
     import os
 
-    if os.environ.get("PROJECTIONIST_SETUP_STATE") or os.environ.get("CURATORX_SETUP_STATE"):
+    if os.environ.get("PROJECTIONIST_SETUP_STATE") or os.environ.get("PROJECTIONIST_SETUP_STATE"):
         return
     monkeypatch.setenv("PROJECTIONIST_SETUP_STATE", "active")
 

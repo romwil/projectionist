@@ -25,8 +25,8 @@ class WatchTrackerApiTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmp.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
-        os.environ["CURATORX_SESSION_SECRET"] = "watch-tracker-test-secret"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "watch-tracker-test-secret"
         clear_session_secret_cache()
         clear_rate_limits()
         import projectionist.web.jobs as jobs
@@ -46,8 +46,8 @@ class WatchTrackerApiTests(unittest.TestCase):
         clear_rate_limits()
         for key in (
             "DATA_DIR",
-            "CURATORX_SKIP_DOTENV",
-            "CURATORX_SESSION_SECRET",
+            "PROJECTIONIST_SKIP_DOTENV",
+            "PROJECTIONIST_SESSION_SECRET",
         ):
             os.environ.pop(key, None)
         self._tmp.cleanup()

@@ -9,7 +9,6 @@ import PrivacyPage from "./pages/PrivacyPage";
 import AboutPage from "./pages/AboutPage";
 import HelpPage from "./pages/HelpPage";
 import NotFoundPage from "./pages/NotFoundPage";
-import DashboardPage from "./pages/DashboardPage";
 import ScheduledTasksPage from "./pages/ScheduledTasksPage";
 import AdminLayout from "./layouts/AdminLayout";
 import SettingsLayout from "./layouts/SettingsLayout";
@@ -35,7 +34,7 @@ import RelatedTitlesPage from "./pages/RelatedTitlesPage";
 import ListsPage from "./pages/ListsPage";
 import CollectionsPage from "./pages/CollectionsPage";
 import LibraryPage from "./pages/LibraryPage";
-import MediaIssuesPage from "./pages/MediaIssuesPage";
+import HealthPage from "./pages/HealthPage";
 import YouthReviewPage from "./pages/YouthReviewPage";
 import MailSettingsPage from "./pages/MailSettingsPage";
 import LobbyDisplayPage from "./pages/LobbyDisplayPage";
@@ -44,7 +43,6 @@ import AccessRequestsPage from "./pages/AccessRequestsPage";
 import LogsPage from "./pages/LogsPage";
 import HolidaysPage from "./pages/HolidaysPage";
 import StagedAugmentationsPage from "./pages/StagedAugmentationsPage";
-import LlmUsagePage from "./pages/LlmUsagePage";
 import JoinPage from "./pages/JoinPage";
 import SetupWizardPage from "./pages/SetupWizardPage";
 import YearInReviewPage from "./pages/YearInReviewPage";
@@ -95,10 +93,11 @@ createRoot(document.getElementById("root")).render(
           <Route path="/config" element={<Navigate to="/admin" replace />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<Navigate to="overview" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="usage" element={<LlmUsagePage />} />
+            <Route path="health" element={<HealthPage />} />
+            <Route path="dashboard" element={<Navigate to="/admin/health?tab=sync" replace />} />
+            <Route path="usage" element={<Navigate to="/admin/health?tab=usage" replace />} />
+            <Route path="issues" element={<Navigate to="/admin/health?tab=issues" replace />} />
             <Route path="tasks" element={<ScheduledTasksPage />} />
-            <Route path="issues" element={<MediaIssuesPage />} />
             <Route path="youth" element={<YouthReviewPage />} />
             <Route path="holidays" element={<HolidaysPage />} />
             <Route path="taxonomy" element={<StagedAugmentationsPage />} />

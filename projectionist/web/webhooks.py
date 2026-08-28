@@ -174,11 +174,7 @@ def register_webhook_routes(
     async def plex_webhook(request: Request) -> Dict[str, Any]:
         settings = settings_factory()
         secret = str(settings.webhook_secret or "").strip()
-        provided = str(
-            request.headers.get("X-Projectionist-Webhook-Secret")
-            or request.headers.get("X-CuratorX-Webhook-Secret")
-            or ""
-        ).strip()
+        provided = str(request.headers.get("X-Projectionist-Webhook-Secret") or "").strip()
         # Unconfigured and invalid both fail closed as generic 401 — no env names.
         if not secret or not provided or not secrets.compare_digest(provided, secret):
             raise HTTPException(status_code=401, detail="Unauthorized")

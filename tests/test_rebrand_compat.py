@@ -1,4 +1,4 @@
-"""Track 1 rebrand compat: env dual-read, DB path fallback, webhook headers."""
+"""Track 1 rebrand compat: PROJECTIONIST env, DB path fallback."""
 
 from __future__ import annotations
 
@@ -12,13 +12,12 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from projectionist.config_store import Settings, load_merged_settings, resolve_guest_tour_enabled, save_settings
-from projectionist.envcompat import branded_env, reset_deprecation_warnings, resolve_env
+from projectionist.envcompat import branded_env, resolve_env
 from projectionist.web.jobs import _resolve_db_path
 
 
 class EnvCompatTests(unittest.TestCase):
     def setUp(self) -> None:
-        reset_deprecation_warnings()
         self._keys = (
             "PROJECTIONIST_WEBHOOK_SECRET",
             "CURATORX_WEBHOOK_SECRET",
@@ -37,29 +36,28 @@ class EnvCompatTests(unittest.TestCase):
                 os.environ.pop(key, None)
             else:
                 os.environ[key] = value
-        reset_deprecation_warnings()
 
-    def test_prefers_projectionist_prefix(self) -> None:
+    def test_reads_projectionist_prefix(self) -> None:
         os.environ["PROJECTIONIST_WEBHOOK_SECRET"] = "new-secret"
-        os.environ["CURATORX_WEBHOOK_SECRET"] = "old-secret"
         self.assertEqual(resolve_env("PROJECTIONIST_WEBHOOK_SECRET"), "new-secret")
         self.assertEqual(branded_env("WEBHOOK_SECRET"), "new-secret")
 
-    def test_falls_back_to_curatorx_prefix(self) -> None:
+    def test_ignores_legacy_curatorx_prefix(self) -> None:
         os.environ["CURATORX_WEBHOOK_SECRET"] = "legacy-secret"
-        self.assertEqual(resolve_env("PROJECTIONIST_WEBHOOK_SECRET"), "legacy-secret")
+        self.assertIsNone(resolve_env("PROJECTIONIST_WEBHOOK_SECRET"))
+        self.assertIsNone(branded_env("WEBHOOK_SECRET"))
 
-    def test_guest_tour_legacy_env(self) -> None:
+    def test_guest_tour_env_does_not_enable(self) -> None:
+        os.environ["PROJECTIONIST_GUEST_TOUR_ENABLED"] = "1"
+        self.assertFalse(resolve_guest_tour_enabled(Settings()))
         os.environ["CURATORX_GUEST_TOUR_ENABLED"] = "1"
         self.assertFalse(resolve_guest_tour_enabled(Settings()))
-        os.environ["CURATORX_GUEST_TOUR_ENABLED"] = "0"
-        self.assertFalse(resolve_guest_tour_enabled(Settings()))
 
-    def test_load_merged_settings_reads_legacy_webhook(self) -> None:
+    def test_load_merged_settings_uses_projectionist_webhook(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            os.environ["CURATORX_WEBHOOK_SECRET"] = "from-legacy"
+            os.environ["PROJECTIONIST_WEBHOOK_SECRET"] = "from-projectionist"
             settings = load_merged_settings(Path(tmp))
-            self.assertEqual(settings.webhook_secret, "from-legacy")
+            self.assertEqual(settings.webhook_secret, "from-projectionist")
 
 
 class DbPathCompatTests(unittest.TestCase):
@@ -101,7 +99,6 @@ class WebhookHeaderCompatTests(unittest.TestCase):
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
         os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
         self._secret = "compat-webhook-secret"
         save_settings(Path(self._tmpdir.name), Settings(webhook_secret=self._secret))
         import projectionist.web.app as app_mod
@@ -116,7 +113,6 @@ class WebhookHeaderCompatTests(unittest.TestCase):
         self._tmpdir.cleanup()
         os.environ.pop("DATA_DIR", None)
         os.environ.pop("PROJECTIONIST_SKIP_DOTENV", None)
-        os.environ.pop("CURATORX_SKIP_DOTENV", None)
 
     def test_accepts_projectionist_header(self) -> None:
         response = self._client.post(
@@ -126,13 +122,13 @@ class WebhookHeaderCompatTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
 
-    def test_accepts_legacy_curatorx_header(self) -> None:
+    def test_rejects_legacy_curatorx_header(self) -> None:
         response = self._client.post(
             "/api/webhooks/plex",
             json={"event": "media.play", "Metadata": {"type": "movie", "ratingKey": "1"}},
             headers={"X-CuratorX-Webhook-Secret": self._secret},
         )
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 401)
 
 
 if __name__ == "__main__":

@@ -24,8 +24,7 @@ def resolve_host() -> str:
     Defaults to ``0.0.0.0`` so the container port mapping works out of the box
     on Docker / Unraid (the app must listen on all interfaces *inside* the
     container). Operators running bare-metal can restrict exposure by setting
-    ``HOST`` (uvicorn convention) or ``PROJECTIONIST_HOST`` /
-    ``CURATORX_HOST`` to e.g. ``127.0.0.1``.
+    ``HOST`` (uvicorn convention) or ``PROJECTIONIST_HOST`` to e.g. ``127.0.0.1``.
     """
     from projectionist.envcompat import branded_env
 

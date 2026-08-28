@@ -40,7 +40,7 @@ Resize from a larger master if needed: `sips -z 256 256 source.png --out unraid/
 
 4. Apply / Start, then open the WebUI link.
 
-Optional advanced env (or generate in **Admin → Advanced**): `PROJECTIONIST_MCP_API_KEY` (privacy) and `PROJECTIONIST_MCP_FULL_API_KEY` (full; must differ). Legacy `CURATORX_MCP_*` names still work during the compatibility window. Privacy notes: in-app `/privacy` or [PRIVACY.md](../PRIVACY.md).
+Optional advanced env (or generate in **Admin → Advanced**): `PROJECTIONIST_MCP_API_KEY` (privacy) and `PROJECTIONIST_MCP_FULL_API_KEY` (full; must differ). Use `PROJECTIONIST_MCP_*` only. Privacy notes: in-app `/privacy` or [PRIVACY.md](../PRIVACY.md).
 
 ## First run on Unraid
 

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-28T02:20:59Z",
+  "generated_at": "2026-08-28T02:24:59Z",
   "releases": [
     {
       "version": "1.33.4",
@@ -27,9 +27,9 @@
         {
           "title": "Verification",
           "bullets": [
-            "Backend: pytest full suite (≥74% cov), `tests/test_setup.py`, `tests/test_theater.py`, `tests/test_version.py`.",
-            "Frontend: ESLint 0 errors, production build, unit tests.",
-            "`./scripts/patch-release.sh --check` lockstep parity."
+            "Backend: 1,989 passed, 6 skipped, 34 subtests passed; 76.22% coverage (74% required).",
+            "Frontend unit: 681 passed, 0 failed; ESLint 0 errors (134 warnings pre-existing); production Vite build passed.",
+            "Focused: `tests/test_setup.py` (theater merge), `tests/test_theater.py`, `tests/test_version.py` (lockstep + Unraid pin regex); `./scripts/patch-release.sh --check`."
           ]
         }
       ]

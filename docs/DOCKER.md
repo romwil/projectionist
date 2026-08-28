@@ -1,6 +1,6 @@
 # Projectionist — Docker / Unraid
 
-Deploy Projectionist as a single container with a persistent `/config` volume for `settings.json` and `projectionist.db` (or legacy `curatorx.db`). Everyday tag: **`romwil/projectionist:latest`**. During the compatibility window the same digests are also published as **`romwil/curatorx:*`**. Pin a minor line (e.g. **`:1.11`**) or an exact build (**`:X.Y.Z`**, see [CHANGELOG.md](../CHANGELOG.md)) when you need a fixed target.
+Deploy Projectionist as a single container with a persistent `/config` volume for `settings.json` and `projectionist.db` (or legacy `curatorx.db`). Everyday tag: **`romwil/projectionist:latest`**. During the compatibility window the same digests are also published as **`**. Pin a minor line (e.g. **`:1.11`**) or an exact build (**`:X.Y.Z`**, see [CHANGELOG.md](../CHANGELOG.md)) when you need a fixed target.
 
 ### Python build-context hygiene
 
@@ -100,10 +100,10 @@ docker compose version
 docker info | head -5
 ```
 
-Then run CuratorX:
+Then run Projectionist:
 
 ```bash
-cd /path/to/curatorx
+cd /path/to/projectionist
 cp .env.example .env
 docker compose up -d --build
 ```
@@ -132,10 +132,10 @@ Environment variables in `.env` seed first-run settings (Plex, *arr, TMDB, LLM).
 All application output goes to stdout/stderr. Tail logs with:
 
 ```bash
-docker compose logs -f curatorx
+docker compose logs -f projectionist
 ```
 
-Set `CURATORX_LOG_LEVEL=DEBUG` in `.env` for verbose sync and agent tool tracing. See [CONFIGURATION.md](CONFIGURATION.md#logging).
+Set `PROJECTIONIST_LOG_LEVEL=DEBUG` in `.env` for verbose sync and agent tool tracing. See [CONFIGURATION.md](CONFIGURATION.md#logging).
 
 ---
 
@@ -147,9 +147,9 @@ Install from the Community Applications template (`templates/projectionist.xml` 
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/projectionist/config` → `/config` (legacy …/curatorx/config OK if never migrated) |
-| **Image** | `romwil/projectionist:latest` (or a `:X.Y` line / `:X.Y.Z` pin) — multi-arch amd64+arm64; dual-tagged `romwil/curatorx:*` during compat |
+| **Image** | `romwil/projectionist:latest` (or a `:X.Y` line / `:X.Y.Z` pin) — multi-arch amd64+arm64 |
 
-Optional advanced env (or generate in **Admin → Advanced**): `PROJECTIONIST_MCP_API_KEY` (privacy) and `PROJECTIONIST_MCP_FULL_API_KEY` (full; must differ). `CURATORX_*` aliases still work during compat. See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
+Optional advanced env (or generate in **Admin → Advanced**): `PROJECTIONIST_MCP_API_KEY` (privacy) and `PROJECTIONIST_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).
 
 ### Ollama on the Unraid host
 
@@ -196,7 +196,7 @@ Maintainer Automat LAN hosts, version-truth rules, Hub-first QA (Path B pull vs 
 
 ### Unraid "Force Update" pulls 0 B / stays on an old version
 
-**Root cause (Dockerman on Unraid 7.x):** Force Update **does** call Docker Engine pull (`POST /images/create?fromImage=…`), then stop/rm/recreate. **TOTAL DATA PULLED: 0 B** means Engine reported the local tag as already current (or transferred no layer bytes), so Dockerman recreates from the existing local `romwil/projectionist:latest` (or dual-tagged `romwil/curatorx:latest`) → digest mapping. Hub can already point at a newer digest (confirmed with `docker buildx imagetools inspect` on another machine) while this host’s tag still maps to the previous content.
+**Root cause (Dockerman on Unraid 7.x):** Force Update **does** call Docker Engine pull (`POST /images/create?fromImage=…`), then stop/rm/recreate. **TOTAL DATA PULLED: 0 B** means Engine reported the local tag as already current (or transferred no layer bytes), so Dockerman recreates from the existing local `romwil/projectionist:latest` tag. Hub can already point at a newer digest (confirmed with `docker buildx imagetools inspect` on another machine) while this host’s tag still maps to the previous content.
 
 This is **not** fixed by OCI labels or `/app/.build-info` alone — those make each Hub release unique; they do not force Engine to re-resolve a floating tag. There is **no Community Applications XML attribute** that forces a stronger pull than Force Update already performs. Maintainers still publish with `--provenance=false --sbom=false` so Dockerman sees Docker v2 **manifest lists** (OCI attestation indexes historically showed as “not available”).
 
@@ -208,8 +208,7 @@ cd /mnt/user/appdata/projectionist && ./rollout.sh latest
 
 # Or image refresh only, then Docker UI → Force Update / Apply:
 docker pull romwil/projectionist:latest
-# dual-tag alias during compat: docker pull romwil/curatorx:latest
-# or: ./unraid-force-pull.sh latest
+# or: ./scripts/unraid-force-pull.sh latest
 ```
 
 **If pull reports up-to-date but Hub is newer**, delete the local tag and pull again (or use the helper):
@@ -263,7 +262,7 @@ Release images are multi-arch Docker Hub **manifest lists** (amd64 + arm64). Use
 
 **Release checklist (notes):** ensure `CHANGELOG.md` has a `## [X.Y.Z] — YYYY-MM-DD` heading for the release version. The release script runs `scripts/generate-release-notes.sh --require-version <semver>` **before** `docker buildx` and fails if that heading is missing. Output is `frontend/public/release-notes.json` (served as `/release-notes.json` for What’s New / About).
 
-The script builds with `--provenance=false --sbom=false`, passes `PROJECTIONIST_VERSION` (plus `CURATORX_VERSION` alias) / `BUILD_DATE` / `VCS_REF` into OCI labels + `/app/.build-info`, pushes `romwil/projectionist:{VERSION,X.Y,latest}`, dual-tags identical digests to `romwil/curatorx:*` during the compatibility window, then prints Hub digests for verification.
+The script builds with `--provenance=false --sbom=false`, passes `PROJECTIONIST_VERSION` / `BUILD_DATE` / `VCS_REF` into OCI labels + `/app/.build-info`, and pushes `romwil/projectionist:{VERSION,X.Y,latest}`.
 
 ---
 

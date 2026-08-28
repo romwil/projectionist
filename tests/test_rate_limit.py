@@ -91,12 +91,12 @@ class ClientIpExtractionTests(unittest.TestCase):
         return Request(scope)
 
     def test_prefers_x_forwarded_for(self) -> None:
-        os.environ["CURATORX_TRUST_PROXY_HEADERS"] = "1"
+        os.environ["PROJECTIONIST_TRUST_PROXY_HEADERS"] = "1"
         req = self._make_request(forwarded_for="203.0.113.50, 10.0.0.1")
         self.assertEqual(client_ip(req), "203.0.113.50")
 
     def test_ignores_x_forwarded_for_without_trust_flag(self) -> None:
-        os.environ.pop("CURATORX_TRUST_PROXY_HEADERS", None)
+        os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
         req = self._make_request(forwarded_for="203.0.113.50", client_host="127.0.0.1")
         self.assertEqual(client_ip(req), "127.0.0.1")
 
@@ -109,19 +109,19 @@ class ClientIpExtractionTests(unittest.TestCase):
         self.assertEqual(client_ip(req), "unknown")
 
     def test_single_forwarded_for_value(self) -> None:
-        os.environ["CURATORX_TRUST_PROXY_HEADERS"] = "1"
+        os.environ["PROJECTIONIST_TRUST_PROXY_HEADERS"] = "1"
         req = self._make_request(forwarded_for="198.51.100.5")
         self.assertEqual(client_ip(req), "198.51.100.5")
 
     def tearDown(self) -> None:
-        os.environ.pop("CURATORX_TRUST_PROXY_HEADERS", None)
+        os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
 
 
 class ChatRateLimitIntegrationTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
         import projectionist.web.jobs as jobs
 
@@ -137,7 +137,7 @@ class ChatRateLimitIntegrationTests(unittest.TestCase):
 
         jobs._manager = None
         clear_rate_limits()
-        for key in ("CURATORX_SKIP_DOTENV", "LLM_PROVIDER", "DATA_DIR"):
+        for key in ("PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER", "DATA_DIR"):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
 
@@ -201,10 +201,10 @@ class LocalAuthRateLimitXffTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmpdir = tempfile.TemporaryDirectory()
         os.environ["DATA_DIR"] = self._tmpdir.name
-        os.environ["CURATORX_SKIP_DOTENV"] = "1"
+        os.environ["PROJECTIONIST_SKIP_DOTENV"] = "1"
         os.environ["LLM_PROVIDER"] = "ollama"
-        os.environ["CURATORX_SESSION_SECRET"] = "test-xff-rate-limit-session-secret"
-        os.environ.pop("CURATORX_TRUST_PROXY_HEADERS", None)
+        os.environ["PROJECTIONIST_SESSION_SECRET"] = "test-xff-rate-limit-session-secret"
+        os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
         from projectionist.web.session_tokens import clear_session_secret_cache
 
         clear_session_secret_cache()
@@ -240,9 +240,9 @@ class LocalAuthRateLimitXffTests(unittest.TestCase):
         from projectionist.web.session_tokens import clear_session_secret_cache
 
         clear_session_secret_cache()
-        os.environ.pop("CURATORX_TRUST_PROXY_HEADERS", None)
-        os.environ.pop("CURATORX_SESSION_SECRET", None)
-        for key in ("CURATORX_SKIP_DOTENV", "LLM_PROVIDER", "DATA_DIR"):
+        os.environ.pop("PROJECTIONIST_TRUST_PROXY_HEADERS", None)
+        os.environ.pop("PROJECTIONIST_SESSION_SECRET", None)
+        for key in ("PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER", "DATA_DIR"):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
 

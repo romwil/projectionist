@@ -129,9 +129,9 @@ describe("buildAppNavItems", () => {
     ]);
     const adminIdx = ids.indexOf("heading-admin");
     assert.ok(adminIdx > 0);
-    assert.equal(ids[adminIdx + 1], "admin-heading-home");
+    assert.equal(ids[adminIdx + 1], "admin-heading-setup");
     assert.ok(ids.includes("admin-overview"));
-    assert.ok(ids.includes("admin-issues"));
+    assert.ok(ids.includes("admin-health"));
     assert.equal(
       items.filter((item) => item.kind === "admin").length,
       adminNavLinks().length,

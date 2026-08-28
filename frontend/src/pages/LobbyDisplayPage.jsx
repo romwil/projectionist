@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getSettings, saveSettings } from "../api/client";
 import InlineAlert from "../components/InlineAlert";
 import SettingsPageHeader from "../components/settings/SettingsPageHeader";
@@ -17,11 +17,31 @@ const EMPTY = {
   host_port: 8791,
 };
 
+const FEED_EXAMPLES = [
+  { id: "recently_added", label: "Recently added" },
+  { id: "recently_released", label: "Recently released" },
+  { id: "trending", label: "Trending" },
+];
+
+function lobbyKioskUrl(host, port, feed) {
+  const base = `http://${host}:${port}/`;
+  if (!feed || feed === "recently_added") return base;
+  return `${base}?feed=${encodeURIComponent(feed)}`;
+}
+
 export default function LobbyDisplayPage() {
   const [theater, setTheater] = useState(EMPTY);
   const [saveStatus, setSaveStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [ready, setReady] = useState(false);
+  const [copyStatus, setCopyStatus] = useState(null);
+  const [lanHost, setLanHost] = useState("<nas-ip>");
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hostname) {
+      setLanHost(window.location.hostname);
+    }
+  }, []);
 
   useEffect(() => {
     getSettings()
@@ -58,7 +78,6 @@ export default function LobbyDisplayPage() {
           rotate_seconds: Math.max(8, Math.min(60, Number(theater.rotate_seconds) || 12)),
         },
       };
-      // Drop masked secret placeholders / derived fields the API rejects or ignores.
       const saved = await saveSettings(payload);
       setTheater((prev) => ({ ...prev, ...(saved.theater || {}) }));
       setSaveStatus({ type: "success", message: "Lobby display settings saved." });
@@ -69,8 +88,21 @@ export default function LobbyDisplayPage() {
     }
   }
 
+  async function copyUrl(feed) {
+    const port = Number(theater.host_port) || 8791;
+    const url = lobbyKioskUrl(lanHost, port, feed);
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyStatus(`Copied ${feed ? `?feed=${feed}` : "kiosk URL"}`);
+      window.setTimeout(() => setCopyStatus(null), 2400);
+    } catch {
+      setCopyStatus("Could not copy — select the URL manually.");
+    }
+  }
+
   const port = Number(theater.host_port) || 8791;
-  const openUrl = `http://<nas-ip>:${port}/`;
+  const kioskUrl = useMemo(() => lobbyKioskUrl(lanHost, port), [lanHost, port]);
+  const previewUrl = theater.enabled ? kioskUrl : null;
 
   return (
     <div className="settings-page" data-testid="lobby-display-page">
@@ -85,6 +117,92 @@ export default function LobbyDisplayPage() {
         <InlineAlert type={saveStatus.type} message={saveStatus.message} onDismiss={() => setSaveStatus(null)} />
       ) : null}
 
+      <aside className="editorial-section lobby-setup-guide" data-testid="lobby-setup-guide">
+        <header className="editorial-header">
+          <p className="eyebrow">Setup guide</p>
+          <h2 className="editorial-lede">Point a wall browser at the theater port</h2>
+          <p className="editorial-meta">
+            The lobby runs as a separate LAN service on port{" "}
+            <code>{port}</code> (env <code>PROJECTIONIST_THEATER_PORT</code>, default 8791). It does not
+            share the main admin UI port.
+          </p>
+        </header>
+
+        <div className="lobby-setup-url-row">
+          <code className="lobby-setup-url" data-testid="lobby-kiosk-url">
+            {kioskUrl}
+          </code>
+          <div className="lobby-setup-actions">
+            <a
+              href={kioskUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ghost"
+              data-testid="lobby-open-kiosk"
+            >
+              Open kiosk
+            </a>
+            <button type="button" className="ghost" data-testid="lobby-copy-url" onClick={() => copyUrl()}>
+              Copy URL
+            </button>
+          </div>
+        </div>
+        {copyStatus ? <p className="wizard-note">{copyStatus}</p> : null}
+
+        <section className="lobby-setup-block">
+          <h3>Feed URL examples</h3>
+          <p>
+            Append <code>?feed=</code> to rotate a different idle deck when nothing is playing on Plex.
+          </p>
+          <ul className="editorial-links">
+            {FEED_EXAMPLES.map((feed) => {
+              const url = lobbyKioskUrl(lanHost, port, feed.id);
+              return (
+                <li key={feed.id}>
+                  <span>
+                    <strong>{feed.label}</strong> — <code>{url}</code>
+                  </span>
+                  <button
+                    type="button"
+                    className="ghost lobby-feed-copy"
+                    data-testid={`lobby-copy-feed-${feed.id}`}
+                    onClick={() => copyUrl(feed.id)}
+                  >
+                    Copy
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+
+        <section className="lobby-setup-block">
+          <h3>Header plate modes</h3>
+          <p>
+            <strong>Dynamic</strong> — NOW PLAYING and feed labels appear on the marquee header when idle.
+          </p>
+          <p>
+            <strong>Static</strong> — your fixed label stays on the header; feed titles move to the poster
+            footer caption instead.
+          </p>
+        </section>
+
+        {previewUrl ? (
+          <section className="lobby-setup-block">
+            <h3>Live preview</h3>
+            <p className="editorial-meta">Scaled iframe — same URL your wall screen will load.</p>
+            <iframe
+              title="Lobby kiosk preview"
+              className="lobby-setup-preview"
+              src={previewUrl}
+              data-testid="lobby-preview-iframe"
+            />
+          </section>
+        ) : (
+          <p className="wizard-note">Enable the lobby below to show a live preview iframe.</p>
+        )}
+      </aside>
+
       <form onSubmit={handleSave}>
         <SettingsPanel title="Lobby theater" testId="lobby-theater-panel">
           <SettingsToggle
@@ -94,8 +212,7 @@ export default function LobbyDisplayPage() {
             testId="lobby-enabled-toggle"
           />
           <p className="wizard-note">
-            When on, open <code>{openUrl}</code> from a LAN browser. Port comes from{" "}
-            <code>PROJECTIONIST_THEATER_PORT</code> (default {port}). Do not reverse-proxy this port to the
+            When on, open <code>{kioskUrl}</code> from a LAN browser. Do not reverse-proxy this port to the
             public internet.
           </p>
 

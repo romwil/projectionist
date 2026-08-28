@@ -32,8 +32,11 @@ export const ROUTES = {
   settings: "/settings",
   admin: "/admin",
   adminTasks: "/admin/tasks",
-  adminDashboard: "/admin/dashboard",
-  adminUsage: "/admin/usage",
+  adminHealth: "/admin/health",
+  /** @deprecated Prefer adminHealth with ?tab=sync */
+  adminDashboard: "/admin/health?tab=sync",
+  /** @deprecated Prefer adminHealth with ?tab=usage */
+  adminUsage: "/admin/health?tab=usage",
   adminLogs: "/admin/logs",
   about: "/about",
   help: "/help",
