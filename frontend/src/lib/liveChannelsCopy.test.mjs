@@ -71,7 +71,7 @@ describe("liveChannelsCopy", () => {
   it("exposes create-station modes and soft onboarding tip", () => {
     assert.deepEqual(
       CREATE_STATION_MODES.map((m) => m.id),
-      ["custom", "collection", "starters"],
+      ["custom", "collection", "show", "starters"],
     );
     assert.equal(liveOnboardingTip({ liveEnabled: true, syncHealthy: true }), null);
     const tip = liveOnboardingTip({ liveEnabled: false, syncHealthy: true });

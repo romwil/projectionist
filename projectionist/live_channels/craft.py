@@ -54,6 +54,11 @@ _SOURCES = (
         "description": "Play a Plex or published Projectionist collection in order.",
     },
     {
+        "id": "show",
+        "label": "TV show",
+        "description": "Play one show nonstop — every episode, in order or shuffled.",
+    },
+    {
         "id": "youth",
         "label": "Youth-safe",
         "description": "Shuffle at or below the household youth rating ceiling.",
