@@ -683,6 +683,39 @@ def apply_channel_subtitles_enabled(
     }
 
 
+def apply_channel_name(
+    client: TunarrClient,
+    channel_id: str,
+    *,
+    name: str,
+) -> Dict[str, Any]:
+    """Rename an existing Tunarr station (``PUT`` name + matching guide flex title)."""
+    cid = str(channel_id or "").strip()
+    new_name = str(name or "").strip()
+    if not cid:
+        raise ValueError("channel_id is required")
+    if not new_name:
+        raise ValueError("name is required")
+    channel = client.get_channel(cid)
+    old_name = str(channel.get("name") or "").strip()
+    body = _channel_put_body(channel, name=new_name)
+    flex = str(channel.get("guideFlexTitle") or "")
+    if old_name and flex.startswith(old_name):
+        body["guideFlexTitle"] = new_name + flex[len(old_name) :]
+    elif not flex:
+        body["guideFlexTitle"] = f"{new_name} · Up next"
+    updated = client.update_channel(cid, body)
+    resolved = str(
+        (updated or {}).get("name", new_name) if isinstance(updated, Mapping) else new_name
+    ).strip() or new_name
+    return {
+        "ok": True,
+        "channel_id": cid,
+        "name": resolved[:48],
+        "previous_name": old_name,
+    }
+
+
 def recipe_from_station_meta(
     settings: Any,
     channel_id: str,

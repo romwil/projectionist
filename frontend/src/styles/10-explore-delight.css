@@ -2326,6 +2326,12 @@ a.weekly-digest-stat:focus-visible {
 .owner-now-playing-health.health-airing {
   color: var(--accent, #6aa3ff);
 }
+.owner-now-playing-keepalive {
+  display: block;
+  margin-top: 0.15rem;
+  font-size: var(--text-xs);
+  color: var(--muted);
+}
 .owner-now-playing--compact {
   margin-top: 0.75rem;
 }

@@ -820,6 +820,49 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertEqual((meta.get("craft_filters") or {}).get("genres"), ["Horror"])
         self.assertEqual(meta.get("motif"), "creature feature")
 
+    def test_station_settings_rename_updates_tunarr_name(self) -> None:
+        """PATCH settings with name renames the Tunarr station immediately."""
+        self._enable()
+        client = MagicMock()
+        client.list_channels.return_value = [
+            {"id": "ch-101", "name": "Sci-Fi", "number": 101}
+        ]
+        client.get_channel.return_value = {
+            "id": "ch-101",
+            "name": "Sci-Fi",
+            "number": 101,
+            "guideFlexTitle": "Sci-Fi · Up next",
+            "subtitlesEnabled": False,
+        }
+        client.update_channel.return_value = {
+            "id": "ch-101",
+            "name": "Late Night Sci-Fi",
+            "number": 101,
+        }
+
+        with patch(
+            "projectionist.live_channels.publish.TunarrClient",
+            return_value=client,
+        ):
+            resp = self.client.patch(
+                "/api/admin/live-channels/channels/ch-101/settings",
+                json={
+                    "confirm": True,
+                    "media_scope": "both",
+                    "name": "Late Night Sci-Fi",
+                },
+            )
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["name"], "Late Night Sci-Fi")
+        self.assertIn("renamed", body["message"].lower())
+        client.update_channel.assert_called()
+        put_body = client.update_channel.call_args.args[1]
+        self.assertEqual(put_body["name"], "Late Night Sci-Fi")
+        self.assertEqual(put_body["guideFlexTitle"], "Late Night Sci-Fi · Up next")
+        client.set_channel_programming.assert_not_called()
+
     def test_refill_and_delete_channel(self) -> None:
         self._enable()
         client = MagicMock()

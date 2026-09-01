@@ -71,6 +71,7 @@ export function craftDraftFromStation(station = {}) {
   const filters = station?.craft_filters || {};
   const genres = Array.isArray(filters.genres) ? filters.genres.filter(Boolean) : [];
   return {
+    name: String(station?.name || "").trim(),
     media_scope: station?.media_scope || "both",
     subtitles_enabled: Boolean(station?.subtitles_enabled),
     source: station?.source || "",

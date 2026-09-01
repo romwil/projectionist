@@ -218,6 +218,7 @@ function getFocusableElements(root) {
                   detail={detail}
                   variant="compact"
                   fullPageHref={fullPageHref}
+                  onExpandFullPage={requestClose}
                   titleId={titleId}
                   multiUserEnabled={interactions.multiUserEnabled}
                   userRole={interactions.userRole}
