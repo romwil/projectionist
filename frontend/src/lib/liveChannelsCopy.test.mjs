@@ -7,6 +7,7 @@ import {
   liveAdminLabel,
   liveGuideEmptyCopy,
   liveHealthSentence,
+  liveInfrastructureFacts,
   liveOnboardingTip,
   liveSetupStepNumbers,
   liveStreamHealthCopy,
@@ -50,6 +51,37 @@ describe("liveChannelsCopy", () => {
     assert.match(sentence, /3 stations/);
     assert.match(sentence, /2 airing now/);
     assert.doesNotMatch(sentence, /XMLTV/);
+  });
+
+  it("surfaces infrastructure facts without a station catalog", () => {
+    const facts = liveInfrastructureFacts({
+      broadcast: { sidecar_up: true },
+      guide_index: {
+        plex_livetv: { guide_ok: true, tuner_alive: false, device_present: true, device_status: "dead" },
+        last_attach: { at: "2026-08-31T12:00:00Z", ok: true },
+        xmltv: { ok: false, error: "timeout" },
+      },
+      stream_warm: { kept_hot: 1 },
+    });
+    assert.equal(facts.engineLabel, "Tunarr up");
+    assert.equal(facts.tunerLabel, "Tuner dead");
+    assert.match(facts.guideLabel, /last ingest/);
+    assert.equal(facts.xmltvError, "timeout");
+    assert.equal(facts.streamWarmLabel, "1 channel kept hot");
+  });
+
+  it("labels zero or missing kept_hot as no channels kept hot", () => {
+    const zero = liveInfrastructureFacts({ stream_warm: { kept_hot: 0 } });
+    assert.equal(zero.streamWarmLabel, "No channels kept hot");
+
+    const missing = liveInfrastructureFacts({ stream_warm: {} });
+    assert.equal(missing.streamWarmLabel, "No channels kept hot");
+
+    const absent = liveInfrastructureFacts({});
+    assert.equal(absent.streamWarmLabel, "No channels kept hot");
+
+    const plural = liveInfrastructureFacts({ stream_warm: { kept_hot: 2 } });
+    assert.equal(plural.streamWarmLabel, "2 channels kept hot");
   });
 
   it("numbers Setup steps stably with and without Docker orch", () => {

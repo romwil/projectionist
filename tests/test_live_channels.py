@@ -826,6 +826,25 @@ class StatusBuilderTests(unittest.TestCase):
                     "now": None,
                     "next": {"title": "Later", "start": 400.0},
                 },
+                {
+                    "id": "ch-3",
+                    "name": "Mystery",
+                    "number": 102,
+                    "now": {
+                        "title": "Mystery · Up next",
+                        "percent": 12.0,
+                        "seconds_remaining": 20000,
+                        "is_paused": False,
+                    },
+                    "next": None,
+                },
+                {
+                    "id": "ch-4",
+                    "name": "Sci-Fi",
+                    "number": 103,
+                    "now": None,
+                    "next": None,
+                },
             ]
         }
         rows = owner_now_playing_rows(
@@ -833,26 +852,47 @@ class StatusBuilderTests(unittest.TestCase):
             channels=[
                 {"id": "ch-1", "name": "Chaos", "number": 100},
                 {"id": "ch-2", "name": "Quiet", "number": 101},
+                {"id": "ch-3", "name": "Mystery", "number": 102},
+                {"id": "ch-4", "name": "Sci-Fi", "number": 103},
             ],
             lineup_health={
                 "channels": [
                     {"id": "ch-1", "total_programs": 12},
                     {"id": "ch-2", "total_programs": 0},
+                    {"id": "ch-3", "total_programs": 0},
+                    {"id": "ch-4", "total_programs": 0},
                 ]
             },
             sessions={
-                "channels": [{"channel_id": "ch-1", "connections": 2}],
+                "channels": [
+                    {"channel_id": "ch-1", "connections": 2},
+                    {"channel_id": "ch-3", "connections": 1},
+                    {"channel_id": "ch-4", "connections": 1},
+                ],
             },
             engine_up=True,
         )
-        self.assertEqual(len(rows), 2)
+        self.assertEqual(len(rows), 4)
         self.assertEqual(rows[0]["now_title"], "Heat")
+        self.assertEqual(rows[0]["now_kind"], "program")
         self.assertEqual(rows[0]["next_title"], "Ronin")
-        self.assertEqual(rows[0]["health"], "streaming")
+        self.assertEqual(rows[0]["health"], "airing")
+        self.assertEqual(rows[0]["lineup_programs"], 12)
+        self.assertEqual(rows[0]["stream_connections"], 2)
         self.assertEqual(rows[0]["warning"], "padded_stop")
         self.assertEqual(rows[1]["now_title"], None)
+        self.assertEqual(rows[1]["now_kind"], None)
         self.assertEqual(rows[1]["next_title"], "Later")
         self.assertEqual(rows[1]["health"], "empty")
+        # Placeholder + keepalive session is empty, not streaming.
+        self.assertEqual(rows[2]["now_kind"], "placeholder")
+        self.assertEqual(rows[2]["health"], "empty")
+        self.assertEqual(rows[2]["stream_connections"], 1)
+        self.assertEqual(rows[2]["lineup_programs"], 0)
+        # Empty lineup + session is empty, not streaming.
+        self.assertEqual(rows[3]["health"], "empty")
+        self.assertEqual(rows[3]["now_kind"], None)
+        self.assertEqual(rows[3]["stream_connections"], 1)
 
     def test_status_includes_airing_and_sessions(self) -> None:
         settings = Settings(
@@ -868,6 +908,9 @@ class StatusBuilderTests(unittest.TestCase):
         ), patch(
             "projectionist.live_channels.status.TunarrClient.list_sessions",
             return_value={"ch-1": [{"type": "hls", "state": "started", "numConnections": 2}]},
+        ), patch(
+            "projectionist.live_channels.status.TunarrClient.get_channel_programming",
+            return_value={"totalPrograms": 8, "lineup": [1, 2, 3]},
         ), patch(
             "projectionist.live_channels.status.TunarrClient.get_guide_status",
             return_value={"channelIds": ["ch-1"]},
@@ -900,7 +943,12 @@ class StatusBuilderTests(unittest.TestCase):
         self.assertEqual(status["guide_status"]["channelIds"], ["ch-1"])
         self.assertEqual(len(status["now_playing"]), 1)
         self.assertEqual(status["now_playing"][0]["now_title"], "Heat")
-        self.assertEqual(status["now_playing"][0]["health"], "streaming")
+        self.assertEqual(status["now_playing"][0]["now_kind"], "program")
+        self.assertEqual(status["now_playing"][0]["health"], "airing")
+        self.assertEqual(status["now_playing"][0]["lineup_programs"], 8)
+        self.assertIn("guide_ok", status["guide_index"]["plex_livetv"])
+        self.assertIn("tuner_alive", status["guide_index"]["plex_livetv"])
+        self.assertIn("stream_warm", status)
 
 
 class RecipeDictTests(unittest.TestCase):

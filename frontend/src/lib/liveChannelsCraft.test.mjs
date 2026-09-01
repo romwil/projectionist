@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   collectionPublishButtonLabel,
+  craftDraftFromStation,
   filterLiveCollections,
   findLiveCollection,
 } from "./liveChannelsCraft.js";
@@ -54,5 +55,17 @@ describe("liveChannelsCraft", () => {
       collectionPublishButtonLabel({ selected: collections[0], busy: true }),
       "Publishing…",
     );
+  });
+
+  it("seeds station Settings draft with the Tunarr channel name", () => {
+    const draft = craftDraftFromStation({
+      name: "Mystery",
+      media_scope: "movies",
+      craft_filters: { genres: ["Thriller"], decade: 1970 },
+    });
+    assert.equal(draft.name, "Mystery");
+    assert.equal(draft.media_scope, "movies");
+    assert.deepEqual(draft.genres, ["Thriller"]);
+    assert.equal(draft.decade, "1970");
   });
 });

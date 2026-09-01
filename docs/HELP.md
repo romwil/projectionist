@@ -694,12 +694,16 @@ When `header_mode` is **dynamic**, idle boards show **RECENTLY ADDED**, **RECENT
 
 When Live Channels is on, Projectionist can publish library-aware stations through Tunarr into **Plex Live TV**. You never need Tunarr’s own admin UI. Household members watch in Projectionist **[Live](/live)** **and** Plex Live TV — both are first-class (see **Live** above for the member how-to).
 
-**What’s currently playing:** Admin **Overview** and **Live Channels → Stations** show an ops table for every station — channel # / name, now + progress, next + wall-clock start, health (airing / streaming / empty / unreachable), and dig-ins to Watch, Guide, or station settings. It refreshes while the page is open and is richer than the household **What’s on tonight** strip.
+**What’s currently playing:** Admin **Overview** and **Live Channels → Stations** show one honest board for every station — channel # / name, now + next, health (**Airing** / **Empty lineup** / **Idle** / **TV unreachable**), and dig-ins to Watch, Guide, or station settings. Empty lineups say **No lineup** (not Tunarr’s fake “Up next” placeholder) with a **Refill** button on the row. Placeholder slots show **Between programs**. Stream-warm **keepalive** is a separate chip — it does not make an empty station look like someone is watching. It refreshes while the page is open and is richer than the household **What’s on tonight** strip.
+
+**Infrastructure vs stations:** The **Infrastructure** strip above the board is engine / Plex guide / tuner / stream-warm health — not a second list of channels. After launch, **Add station** stays collapsed so craft does not duplicate the board.
+
+**Rename a station:** Open settings from the board, change the name, and save — it writes to Tunarr immediately. Craft, filters, and scope still need **Refill** to rebuild the lineup.
 
 **Craft and publish (Admin → Live Channels):**
 1. Turn Live Channels on, run preflight, and start the broadcast engine (when Docker management is available).
-2. Under **Create / publish channels**, either **Craft a custom station** (name, number, motif / taste cluster / Plex or published collection / youth-safe), publish a **collection**, or **Propose starters** and publish the pack. Stack **additive filters** (genre ∩ decade ∩ theme ∩ rating) on any recipe — use **Preview match count** before publish. The same filters can subfilter a collection. Filters persist on the station for Refill. Programming modes are **Sequential** (collection order) and **Shuffle** (full resolved pool).
-3. Check **Your stations** for lineup depth — use **Refill** if a station is empty after a library scan, or **Delete** to remove it from the tuner. Re-running **Propose starters** / publish is additive: existing channel numbers keep their stations.
+2. Under **Add station** (collapsed after launch), either **Craft a custom station** (name, number, motif / taste cluster / Plex or published collection / youth-safe), publish a **collection**, or **Propose starters** and publish the pack. Stack **additive filters** (genre ∩ decade ∩ theme ∩ rating) on any recipe — use **Preview match count** before publish. The same filters can subfilter a collection. Filters persist on the station for Refill. Programming modes are **Sequential** (collection order) and **Shuffle** (full resolved pool).
+3. Check the **Stations** board for lineup honesty — use **Refill** if a station is empty after a library scan, or **Delete** to remove it from the tuner. Re-running **Propose starters** / publish is additive: existing channel numbers keep their stations.
 4. Add Tunarr beside your other tuners in Plex (below), then **Attach Tunarr guide in Plex**.
 
 **Exclusion list:** Create a Plex collection named **NoLive** (or change the name under **Schedule pad & exclusion**). Titles in that collection are skipped when Projectionist fills recipes and starter packs.
