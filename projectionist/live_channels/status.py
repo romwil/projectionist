@@ -259,24 +259,43 @@ def airing_rows_from_snapshot(snapshot: Mapping[str, Any]) -> List[Dict[str, Any
     return rows
 
 
+_PLACEHOLDER_TITLES = frozenset({"flex", "filler", "continuity"})
+
+
+def now_kind_for_title(title: Optional[str]) -> str:
+    """Classify a now-title: program, Tunarr flex placeholder, or blank."""
+    text = str(title or "").strip()
+    if not text:
+        return ""
+    # Tunarr fills empty lineups with a 6-hour "{Station} · Up next" slot.
+    if "· Up next" in text or text.lower() in _PLACEHOLDER_TITLES:
+        return "placeholder"
+    return "program"
+
+
 def _station_health_chip(
     *,
     engine_up: bool,
     now: Optional[Mapping[str, Any]],
     lineup_programs: Optional[int],
-    stream_connections: int,
+    now_kind: str = "",
 ) -> str:
-    """Compact owner health token for the now-playing table."""
+    """Compact owner health token for the now-playing table.
+
+    Order: unreachable → paused → empty lineup → airing → idle.
+    Stream/HLS connection count is metadata, not a health override — stream-warm
+    keepalive must not make an empty station look like it is streaming.
+    """
     if not engine_up:
         return "unreachable"
     if now and bool(now.get("is_paused")):
         return "paused"
-    # Active streams beat an empty-lineup probe (probe can fail soft → 0).
-    if stream_connections > 0:
-        return "streaming"
     if lineup_programs is not None and int(lineup_programs) <= 0:
         return "empty"
-    if now and str(now.get("title") or "").strip():
+    kind = str(now_kind or "").strip() or now_kind_for_title(
+        str((now or {}).get("title") or "")
+    )
+    if kind == "program":
         return "airing"
     return "idle"
 
@@ -353,7 +372,9 @@ def owner_now_playing_rows(
         if number is None:
             number = snap.get("number")
         now_title = str((now or {}).get("title") or "").strip()
+        now_kind = now_kind_for_title(now_title)
         next_title = str((nxt or {}).get("title") or "").strip()
+        next_kind = now_kind_for_title(next_title)
         next_start = (nxt or {}).get("start") if nxt else None
         ends_at = (now or {}).get("ends_at") if now else None
         warning = ""
@@ -372,7 +393,7 @@ def owner_now_playing_rows(
             engine_up=engine_up,
             now=now,
             lineup_programs=lineup_total,
-            stream_connections=connections,
+            now_kind=now_kind,
         )
         why = station_airing_why(settings, cid) if settings is not None else ""
         rows.append(
@@ -381,6 +402,7 @@ def owner_now_playing_rows(
                 "name": name,
                 "number": number,
                 "now_title": now_title or None,
+                "now_kind": now_kind or None,
                 "title": now_title or None,  # alias for airing-row consumers
                 "percent": (now or {}).get("percent") if now else None,
                 "seconds_elapsed": (now or {}).get("seconds_elapsed") if now else None,
@@ -389,6 +411,7 @@ def owner_now_playing_rows(
                 "ends_at": ends_at,
                 "is_paused": bool((now or {}).get("is_paused")) if now else False,
                 "next_title": next_title or None,
+                "next_kind": next_kind or None,
                 "next_start": next_start,
                 "health": health,
                 "stream_connections": connections,
@@ -570,6 +593,25 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
     except Exception as error:  # noqa: BLE001
         plex_mapping["message"] = str(error)[:200]
 
+    device_status = str(plex_mapping.get("device_status") or "")
+    tuner_alive = bool(plex_mapping.get("device_present")) and device_status.lower() != "dead"
+    guide_ok = bool(last_guide_attach_ok and xmltv.get("ok"))
+
+    stream_warm: Dict[str, Any] = {"kept_hot": 0, "last_run_at": None, "ok": None, "message": ""}
+    try:
+        from projectionist.live_channels.stream_warm import get_stream_warm_scheduler
+
+        warm_status = get_stream_warm_scheduler().last_status()
+        last_warm = dict(warm_status.get("last_result") or {})
+        stream_warm = {
+            "kept_hot": int(last_warm.get("count_warmed_ok") or 0),
+            "last_run_at": warm_status.get("last_run_at"),
+            "ok": last_warm.get("ok"),
+            "message": str(last_warm.get("message") or ""),
+        }
+    except Exception:  # noqa: BLE001
+        pass
+
     guide_index = {
         "xmltv_url": guide_url,
         "xmltv": xmltv,
@@ -588,6 +630,8 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
             "device_title": plex_mapping.get("device_title"),
             "mapping_ok": plex_mapping.get("ok"),
             "mapping_message": plex_mapping.get("message") or "",
+            "guide_ok": guide_ok,
+            "tuner_alive": tuner_alive,
         },
         "last_attach": {
             "at": last_guide_attach_at or None,
@@ -671,6 +715,8 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
             "stream_connections": sessions.get("total_connections") or 0,
             "lineup_playable": bool(lineup_health.get("playable")),
             "xmltv_programme_count": int(xmltv.get("programme_count") or 0),
+            "guide_ok": guide_ok,
+            "tuner_alive": tuner_alive,
         },
         "channels": channels,
         "channel_count": channel_count,
@@ -709,4 +755,5 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         },
         "icon_probe": icon_probe,
         "plex_pass": plex_pass,
+        "stream_warm": stream_warm,
     }

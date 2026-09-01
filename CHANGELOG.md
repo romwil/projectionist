@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [1.34.2] — 2026-08-31
+
+Live Channels admin tells the truth about empty stations and engine health, and title overlays no longer hide the full page.
+
+### Highlights
+- **Honest Live stations.** Empty lineups say **No lineup** (with **Refill**), not a fake “Up next.” Keepalive no longer looks like someone is watching.
+- **One station list.** **Infrastructure** sits in its own strip; **Add station** stays collapsed so you don’t get a duplicate catalog.
+- **Open full page actually opens.** From a title overlay, the link closes the drawer so the full page isn’t stuck behind it.
+
+### Changed
+- Stations board maps empty / placeholder Tunarr slots to **No lineup** / **Between programs**, remaps `streaming` health to **Airing** or **Empty lineup**, and labels stream-warm as **keepalive** (not a viewer).
+- Infrastructure strip via `liveInfrastructureFacts` — zero or missing `kept_hot` is **No channels kept hot**, never “1 channel kept hot.”
+- After launch, **Add station** is collapsed; craft is not a second station catalog. Station settings can rename on Tunarr immediately (craft/scope still need Refill).
+- Owner Help documents the honest board, infrastructure strip, rename, and Refill CTA.
+
+### Fixed
+- TitleDetailDrawer **Open full page** same-tab click dismisses the overlay (modifier / new-tab clicks keep Inbox as-is).
+- Stream-warm keepalive no longer overrides an empty lineup as Streaming.
+
+### Verification
+- Backend: 2,106 passed, 6 skipped, 36 subtests passed; 76.25% coverage (74% required).
+- Frontend unit: 708 passed, 0 failed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.
+
 ## [1.34.1] — 2026-08-28
 
 Live Channels can turn one TV show into a nonstop station, and idle enrichment no longer stalls the app with SQLite write storms.

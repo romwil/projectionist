@@ -166,6 +166,8 @@ class LiveChannelsRefillChannelPayload(BaseModel):
 class LiveChannelsStationSettingsPayload(BaseModel):
     media_scope: str = "both"
     subtitles_enabled: Optional[bool] = None
+    # Display name on Tunarr / Plex Live TV (max 48). Omit to leave unchanged.
+    name: Optional[str] = None
     # Craft definition (optional). When present, replaces stored station_meta fields.
     # Empty craft_filters clears decade/genre/theme/rating. Refill applies the lineup.
     motif: Optional[str] = None
@@ -1021,10 +1023,11 @@ def live_channels_station_settings_endpoint(
     payload: LiveChannelsStationSettingsPayload,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Update Projectionist-side station settings (scope, captions, craft filters).
+    """Update station settings (name, scope, captions, craft filters).
 
-    Saves ``station_meta`` only — does **not** rewrite the Tunarr lineup. Owner
-    should Refill after changing decade/genre/theme/scope so the guide matches.
+    Name is written to Tunarr immediately. Craft/scope lands in ``station_meta``
+    only — owner should Refill after changing decade/genre/theme/scope so the
+    guide matches.
     """
     del user
     if not payload.confirm:
@@ -1037,6 +1040,7 @@ def live_channels_station_settings_endpoint(
         raise HTTPException(status_code=400, detail="Live Channels is not enabled")
     from projectionist.live_channels.filters import normalize_craft_filters
     from projectionist.live_channels.publish import (
+        apply_channel_name,
         apply_channel_subtitles_enabled,
         resolve_media_scope,
         resolve_subtitles_enabled,
@@ -1050,6 +1054,11 @@ def live_channels_station_settings_endpoint(
     cid = str(channel_id or "").strip()
     if not cid:
         raise HTTPException(status_code=400, detail="channel_id is required")
+    rename_to = (
+        str(payload.name).strip()[:48] if payload.name is not None else ""
+    )
+    if payload.name is not None and not rename_to:
+        raise HTTPException(status_code=400, detail="Station name cannot be empty")
     scope = normalize_media_scope(payload.media_scope)
     set_station_media_scope(settings, cid, scope)
     craft_touched = (
@@ -1079,7 +1088,8 @@ def live_channels_station_settings_endpoint(
     if payload.subtitles_enabled is not None:
         subtitles_enabled = bool(payload.subtitles_enabled)
         set_station_meta(settings, cid, subtitles_enabled=subtitles_enabled)
-    # Verify channel exists on Tunarr when reachable; push captions flag when set.
+    channel_name = ""
+    # Verify channel exists on Tunarr when reachable; push name / captions when set.
     try:
         client = tunarr_client_from_settings(settings)
         found = any(
@@ -1089,6 +1099,10 @@ def live_channels_station_settings_endpoint(
         )
         if not found:
             raise HTTPException(status_code=404, detail="Channel not found on Tunarr")
+        if rename_to:
+            renamed = apply_channel_name(client, cid, name=rename_to)
+            channel_name = str(renamed.get("name") or rename_to)
+            notes.insert(0, f"Station renamed to “{channel_name}”.")
         if subtitles_enabled is not None:
             apply_channel_subtitles_enabled(client, cid, enabled=subtitles_enabled)
             notes.append(
@@ -1096,8 +1110,17 @@ def live_channels_station_settings_endpoint(
                 if subtitles_enabled
                 else "Station captions off — Live encode won’t carry subtitle tracks."
             )
+        if not channel_name:
+            try:
+                channel_name = str(
+                    (client.get_channel(cid) or {}).get("name") or ""
+                ).strip()
+            except Exception:  # noqa: BLE001
+                channel_name = ""
     except HTTPException:
         raise
+    except ValueError as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:  # noqa: BLE001
         raise HTTPException(
             status_code=502,
@@ -1110,6 +1133,7 @@ def live_channels_station_settings_endpoint(
     return {
         "ok": True,
         "channel_id": cid,
+        "name": channel_name or rename_to,
         "media_scope": resolve_media_scope(settings, channel_id=cid),
         "subtitles_enabled": resolve_subtitles_enabled(settings, channel_id=cid),
         "motif": craft.get("motif") or "",
