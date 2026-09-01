@@ -22,7 +22,8 @@ Live Channels admin tells the truth about empty stations and engine health, and 
 - Stream-warm keepalive no longer overrides an empty lineup as Streaming.
 
 ### Verification
-- Full suite at release gates (pytest coverage floor 74%, frontend unit, lint 0 errors, SPA build).
+- Backend: 2,106 passed, 6 skipped, 36 subtests passed; 76.25% coverage (74% required).
+- Frontend unit: 708 passed, 0 failed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.
 
 ## [1.34.1] — 2026-08-28
 
