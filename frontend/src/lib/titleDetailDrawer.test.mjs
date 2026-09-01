@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   shouldOpenTitleOverlayClick,
@@ -7,6 +10,8 @@ import {
   titleDetailTargetFromItem,
   titleDetailTargetFromPurgeCandidate,
 } from "./titleDetailDrawer.js";
+
+const componentsDir = join(dirname(fileURLToPath(import.meta.url)), "..", "components");
 
 test("titleDetailTargetFromPurgeCandidate prefers tmdb id", () => {
   const candidate = {
@@ -65,4 +70,12 @@ test("shouldOpenTitleOverlayClick allows plain left clicks only", () => {
   assert.equal(shouldOpenTitleOverlayClick({ button: 0, ctrlKey: true }), false);
   assert.equal(shouldOpenTitleOverlayClick({ button: 0, shiftKey: true }), false);
   assert.equal(shouldOpenTitleOverlayClick({ button: 0, defaultPrevented: true }), false);
+});
+
+test("Open full page expands by closing the overlay on same-tab navigate", () => {
+  const content = readFileSync(join(componentsDir, "TitleDetailContent.jsx"), "utf8");
+  const drawer = readFileSync(join(componentsDir, "TitleDetailDrawer.jsx"), "utf8");
+  assert.match(content, /onExpandFullPage/);
+  assert.match(content, /title-detail-open-full/);
+  assert.match(drawer, /onExpandFullPage=\{requestClose\}/);
 });

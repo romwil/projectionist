@@ -133,6 +133,39 @@ export function liveHealthSentence(status) {
 }
 
 /**
+ * Structured facts for the Stations infrastructure strip (not a station catalog).
+ * @param {object|null|undefined} status
+ */
+export function liveInfrastructureFacts(status) {
+  const engineUp = Boolean(status?.broadcast?.sidecar_up);
+  const plex = status?.guide_index?.plex_livetv || {};
+  const xmltv = status?.guide_index?.xmltv || {};
+  const lastAttach = status?.guide_index?.last_attach || {};
+  const warm = status?.stream_warm || {};
+  const tunerAlive =
+    plex.tuner_alive
+    ?? (Boolean(plex.device_present) && String(plex.device_status || "").toLowerCase() !== "dead");
+  const guideOk = plex.guide_ok ?? Boolean(lastAttach.ok);
+  const xmltvError = xmltv.ok === false ? String(xmltv.error || "XMLTV error") : "";
+  const keptHot = Number(warm.kept_hot) || 0;
+  return {
+    engineUp,
+    engineLabel: engineUp ? "Tunarr up" : "Tunarr down",
+    guideOk: Boolean(guideOk),
+    guideLabel: lastAttach.at
+      ? `Plex guide ${guideOk ? "ok" : "failed"} · last ingest ${lastAttach.at}`
+      : "Plex guide not attached",
+    tunerAlive: Boolean(tunerAlive),
+    tunerLabel: tunerAlive ? "Tuner alive" : "Tuner dead",
+    xmltvError,
+    streamWarmLabel:
+      keptHot > 0
+        ? `${keptHot} channel${keptHot === 1 ? "" : "s"} kept hot`
+        : "No channels kept hot",
+  };
+}
+
+/**
  * Stable Setup step numbers for the pre-launch journey.
  * Connection is unlabeled as a numbered step in the plan (story order 1),
  * then Ready check → engine (if orch) → breaks → create → Plex.

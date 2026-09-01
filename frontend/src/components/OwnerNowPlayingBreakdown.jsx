@@ -9,16 +9,18 @@ import { normalizeOwnerNowPlaying } from "../lib/ownerNowPlaying.js";
 const POLL_MS = 20_000;
 
 /**
- * Owner ops-grade “What’s currently playing” — all stations, progress, next wall
- * time, health. Admin Overview + Live Channels → Stations.
+ * Owner ops-grade station board — all stations, honest now/next, health.
+ * Admin Overview + Live Channels → Stations.
  *
  * Dig in defaults to Watch only (dashboard). Pass digInExtras for Guide /
- * Stations / Settings on Live Channels admin.
+ * Settings on Live Channels admin. Pass onRefill for empty-lineup CTA.
  */
 export default function OwnerNowPlayingBreakdown({
   status: statusProp = null,
   onRefreshStatus = null,
   onOpenStationSettings = null,
+  onRefill = null,
+  refillBusyId = "",
   poll = true,
   compact = false,
   digInExtras = false,
@@ -85,11 +87,11 @@ export default function OwnerNowPlayingBreakdown({
       <div className="owner-now-playing-head">
         <div>
           <p className="eyebrow">Live Channels</p>
-          <h3 className="dash-panel-title">What’s currently playing</h3>
+          <h3 className="dash-panel-title">Stations</h3>
           <p className="owner-now-playing-meta">
             {digInExtras
-              ? "All stations — now, progress, next wall time, and health. Dig in to Watch, Guide, or station settings."
-              : "All stations — now, progress, next wall time, and health. Open Watch for any station."}
+              ? "One board for every station — now, next, and health. Watch stays on /live."
+              : "All stations — now, next, and health. Open Watch for any station."}
           </p>
         </div>
         <button
@@ -129,7 +131,12 @@ export default function OwnerNowPlayingBreakdown({
             </thead>
             <tbody>
               {model.rows.map((row) => (
-                <tr key={row.id} data-testid="owner-now-playing-row">
+                <tr
+                  key={row.id}
+                  data-testid="owner-now-playing-row"
+                  data-empty={row.isEmpty ? "true" : "false"}
+                  data-now-kind={row.nowKind || ""}
+                >
                   <td data-label="Station">
                     <span className="owner-now-playing-station">
                       {formatChannelLabel(row)}
@@ -144,12 +151,12 @@ export default function OwnerNowPlayingBreakdown({
                         {row.progressHint}
                       </span>
                     ) : null}
-                    {row.airingWhy ? (
+                    {!row.isEmpty && row.airingWhy ? (
                       <span className="owner-now-playing-why" data-testid="owner-now-playing-why">
                         {row.airingWhy}
                       </span>
                     ) : null}
-                    {row.percent != null ? (
+                    {row.showProgress && row.percent != null ? (
                       <div
                         className="on-now-progress-bar"
                         role="progressbar"
@@ -163,7 +170,7 @@ export default function OwnerNowPlayingBreakdown({
                         />
                       </div>
                     ) : null}
-                    {row.warning === "padded_stop" ? (
+                    {row.warning === "padded_stop" && !row.isEmpty ? (
                       <span className="owner-now-playing-warn" data-testid="owner-now-playing-warn">
                         Guide stop overruns next start
                       </span>
@@ -187,29 +194,53 @@ export default function OwnerNowPlayingBreakdown({
                       data-testid="owner-now-playing-health"
                     >
                       {row.healthLabel || "—"}
-                      {row.streamConnections > 0
-                        ? ` · ${row.streamConnections} stream${row.streamConnections === 1 ? "" : "s"}`
-                        : ""}
                     </span>
+                    {row.keepalive ? (
+                      <span className="owner-now-playing-keepalive" data-testid="owner-now-playing-keepalive">
+                        keepalive
+                      </span>
+                    ) : null}
                   </td>
                   <td data-label="Dig in">
                     <div className="owner-now-playing-actions">
-                      <Link
-                        className="ghost"
-                        to={liveWatchHref(row.id)}
-                        data-testid="owner-now-playing-watch"
-                      >
-                        Watch
-                      </Link>
+                      {row.isEmpty && typeof onRefill === "function" ? (
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="owner-now-playing-refill"
+                          disabled={refillBusyId === row.id}
+                          onClick={() => onRefill(row.id, row.name)}
+                        >
+                          {refillBusyId === row.id ? "Refilling…" : "Refill"}
+                        </button>
+                      ) : (
+                        <Link
+                          className="ghost"
+                          to={liveWatchHref(row.id)}
+                          data-testid="owner-now-playing-watch"
+                        >
+                          Watch
+                        </Link>
+                      )}
                       {digInExtras ? (
                         <>
-                          <Link
-                            className="ghost"
-                            to={ROUTES.live}
-                            data-testid="owner-now-playing-guide"
-                          >
-                            Guide
-                          </Link>
+                          {!row.isEmpty ? (
+                            <Link
+                              className="ghost"
+                              to={ROUTES.live}
+                              data-testid="owner-now-playing-guide"
+                            >
+                              Guide
+                            </Link>
+                          ) : (
+                            <Link
+                              className="ghost"
+                              to={liveWatchHref(row.id)}
+                              data-testid="owner-now-playing-watch"
+                            >
+                              Watch
+                            </Link>
+                          )}
                           {typeof onOpenStationSettings === "function" ? (
                             <button
                               type="button"
