@@ -1742,6 +1742,20 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(attach["coexistence"]["mode"], "additional_tuner")
         self.assertEqual(attach["existing_livetv"]["status"], "detected")
 
+    def test_xmltv_lineup_uri_writes_lan_guide_url(self) -> None:
+        from projectionist.live_channels.plex_attach import (
+            xmltv_lineup_uri,
+            xmltv_url,
+        )
+
+        guide = xmltv_url("http://10.10.1.202:18765")
+        self.assertEqual(guide, "http://10.10.1.202:18765/api/xmltv.xml")
+        self.assertEqual(
+            xmltv_lineup_uri(guide),
+            "lineup://tv.plex.providers.epg.xmltv/"
+            "http://10.10.1.202:18765/api/xmltv.xml#Projectionist",
+        )
+
     def test_prune_dead_grabber_devices_skips_ota_and_tunarr(self) -> None:
         import xml.etree.ElementTree as ET
 
@@ -1873,6 +1887,119 @@ class PreflightAndPublishTests(unittest.TestCase):
         self.assertEqual(result["mapped"], 2)
         self.assertEqual(result["expected"], 2)
         self.assertIn("reused_xmltv_dvr", result["steps"])
+
+    def test_attach_dead_tunarr_device_reregisters_without_deleting_dvr(self) -> None:
+        """Dead HDHR must be re-POSTed. Do not DELETE the XMLTV DVR (PMS hangs)."""
+        from unittest.mock import MagicMock, patch
+        import xml.etree.ElementTree as ET
+        from projectionist.live_channels.plex_attach import attach_tunarr_xmltv_to_plex
+
+        dead = ET.fromstring(
+            """
+            <MediaContainer>
+              <Device key="11" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr"
+                uri="http://10.10.1.202:18765" deviceId="Tunarr" title="Projectionist"
+                make="Tunarr - Silicondust" status="dead" state="enabled"/>
+            </MediaContainer>
+            """
+        )
+        alive = ET.fromstring(
+            """
+            <MediaContainer>
+              <Device key="13" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr"
+                uri="http://10.10.1.202:18765" deviceId="Tunarr" title="Projectionist"
+                make="Tunarr - Silicondust" status="alive" state="enabled"/>
+            </MediaContainer>
+            """
+        )
+        dvrs = ET.fromstring(
+            """
+            <MediaContainer>
+              <Dvr key="8" lineup="lineup://tv.plex.providers.epg.cloud/abc#Local"
+                epgIdentifier="tv.plex.providers.epg.cloud:8">
+                <Device key="1" uuid="device://tv.plex.grabbers.hdhomerun/OTA" deviceId="OTA"/>
+              </Dvr>
+              <Dvr key="12"
+                lineup="lineup://tv.plex.providers.epg.xmltv/http://10.10.1.202:18765/api/xmltv.xml#Projectionist"
+                epgIdentifier="tv.plex.providers.epg.xmltv:12">
+                <Device key="11" uuid="device://tv.plex.grabbers.hdhomerun/Tunarr" deviceId="Tunarr"/>
+              </Dvr>
+            </MediaContainer>
+            """
+        )
+        cmap = ET.fromstring(
+            """
+            <MediaContainer>
+              <ChannelMapping channelKey="C100.145.tunarr.com" deviceIdentifier="100" lineupIdentifier="100"/>
+              <ChannelMapping channelKey="C101.146.tunarr.com" deviceIdentifier="101" lineupIdentifier="101"/>
+            </MediaContainer>
+            """
+        )
+        put_ok = ET.fromstring('<MediaContainer size="0" status="0"/>')
+        state = {"phase": "dead"}
+        methods: list[str] = []
+
+        def fake_xml(client, path, *, method="GET", timeout=None):
+            del client, timeout
+            methods.append(f"{method} {path.split('?')[0]}")
+            if method == "DELETE":
+                raise AssertionError(f"must not delete DVR/device on attach: {path}")
+            if path.startswith("/media/grabbers/tv.plex.grabbers.hdhomerun/devices") and method == "POST":
+                state["phase"] = "alive"
+                return alive
+            if path.startswith("/media/grabbers/devices") and method == "GET" and "channelmap" not in path:
+                return dead if state["phase"] == "dead" else alive
+            if path.startswith("/livetv/dvrs") and method == "GET":
+                return dvrs
+            if path.startswith("/livetv/dvrs") and method == "POST":
+                raise AssertionError("must reuse existing XMLTV DVR, not create another")
+            if path.startswith("/livetv/epg/channelmap"):
+                return cmap
+            if "channelmap" in path and method == "PUT":
+                return put_ok
+            raise AssertionError(f"unexpected {method} {path}")
+
+        settings = Settings(
+            plex_url="http://plex.test:32400",
+            plex_token="token",
+            tunarr=TunarrSettings(
+                url="http://host.docker.internal:18765",
+                public_url="http://10.10.1.202:18765",
+            ),
+        )
+        mock_client = MagicMock()
+        mock_client.base_url = "http://plex.test:32400"
+        mock_client.token = "token"
+        mock_client.timeout = 10
+        with patch(
+            "projectionist.live_channels.plex_attach._plex_xml", side_effect=fake_xml
+        ), patch(
+            "projectionist.live_channels.plex_attach.count_tunarr_hdhr_channels",
+            return_value=2,
+        ), patch(
+            "projectionist.live_channels.plex_attach.scan_plex_device_channels",
+            return_value={"ok": True, "count": 2, "message": "ok"},
+        ), patch(
+            "projectionist.live_channels.plex_attach.prune_dead_grabber_devices",
+            return_value={"ok": True, "deleted": []},
+        ), patch(
+            "projectionist.connectors.http.request_empty"
+        ), patch("projectionist.connectors.plex.PlexClient", return_value=mock_client):
+            result = attach_tunarr_xmltv_to_plex(settings)
+        self.assertTrue(result["ok"], result)
+        self.assertEqual(result["xmltv_url"], "http://10.10.1.202:18765/api/xmltv.xml")
+        self.assertEqual(
+            result["lineup"],
+            "lineup://tv.plex.providers.epg.xmltv/"
+            "http://10.10.1.202:18765/api/xmltv.xml#Projectionist",
+        )
+        self.assertEqual(result["dvr_key"], "12")
+        self.assertIn("reregistered_device", result["steps"])
+        self.assertIn("reused_xmltv_dvr", result["steps"])
+        self.assertNotIn("force_recreate", result["steps"])
+        self.assertTrue(
+            any(m.startswith("POST /media/grabbers/tv.plex.grabbers.hdhomerun/devices") for m in methods)
+        )
 
     def test_refresh_surfaces_short_map_and_reattaches(self) -> None:
         """Post-publish refresh must not claim success when Plex still has a stale short map."""
