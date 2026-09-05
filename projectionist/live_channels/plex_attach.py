@@ -1192,9 +1192,33 @@ def attach_tunarr_xmltv_to_plex(
             "mapped": 0,
         }
 
-    # Enable device if Plex left it disabled/dead in Channel Sources.
+    # Dead HDHR: re-POST the tuner so Plex rediscovers Tunarr. Do not delete
+    # the XMLTV DVR here — PMS DELETE /livetv/dvrs/{key} hangs on Automat and
+    # 503s the guide. Repair (force_recreate) is the only delete path.
     status = str(device.attrib.get("status") or "").strip().lower()
     state = str(device.attrib.get("state") or "").strip().lower()
+    if status == "dead":
+        reg = _plex_xml(
+            client,
+            "/media/grabbers/tv.plex.grabbers.hdhomerun/devices?"
+            + urlencode({"uri": base}),
+            method="POST",
+            timeout=timeout,
+        )
+        found = _find_tunarr_device(reg, tunarr_base=base, manual_address=manual)
+        if found is None:
+            devices_root = _plex_xml(client, "/media/grabbers/devices", timeout=timeout)
+            found = _find_tunarr_device(
+                devices_root, tunarr_base=base, manual_address=manual
+            )
+        if found is not None:
+            device = found
+            device_uuid = str(device.attrib.get("uuid") or "").strip() or device_uuid
+            device_key = str(device.attrib.get("key") or "").strip() or device_key
+            steps_done.append("reregistered_device")
+        status = str(device.attrib.get("status") or "").strip().lower()
+        state = str(device.attrib.get("state") or "").strip().lower()
+
     if status == "dead" or state in {"disabled", "off"}:
         en = _plex_xml(
             client,
