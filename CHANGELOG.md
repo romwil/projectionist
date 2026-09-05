@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.34.3] — 2026-09-05
+
+Attach can wake a dead Tunarr tuner in Plex without tearing down the Live TV guide.
+
+### Highlights
+- **Safer Attach.** If Plex marks your Tunarr tuner dead, Attach wakes it back up instead of leaving Live TV stuck.
+- **The guide stays put.** Attach no longer deletes the XMLTV DVR — that hung Plex and blanked the guide.
+
+### Fixed
+- Attach re-POSTs a dead Tunarr HDHomeRun device so Plex rediscovers it (`reregistered_device`).
+- Attach does not DELETE `/livetv/dvrs/{key}` (PMS hang / 503). Repair (`force_recreate`) remains the only delete path.
+
+### Changed
+- Owner Help documents the dead-tuner re-register path and that Attach keeps the existing XMLTV DVR.
+
+### Verification
+- Backend: 2,108 passed, 6 skipped, 36 subtests passed; 76.27% coverage (74% required).
+- Frontend unit: 708 passed, 0 failed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_live_channels.py` (`test_xmltv_lineup_uri_writes_lan_guide_url`, `test_attach_dead_tunarr_device_reregisters_without_deleting_dvr`).
+
 ## [1.34.2] — 2026-08-31
 
 Live Channels admin tells the truth about empty stations and engine health, and title overlays no longer hide the full page.
