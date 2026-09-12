@@ -177,7 +177,14 @@ def start_publish_job(
 ) -> Dict[str, Any]:
     """Begin a background publish job. Returns an accepted/busy snapshot."""
     global _WORKER
+    from projectionist.live_channels.job import conflicting_live_job, live_job_busy_detail
+
     store = progress_store()
+    if conflicting_live_job():
+        snap = build_publish_job_status()
+        snap["accepted"] = False
+        snap["message"] = live_job_busy_detail()
+        return snap
     if not store.begin(mode=mode):
         snap = build_publish_job_status()
         snap["accepted"] = False

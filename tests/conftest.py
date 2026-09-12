@@ -10,6 +10,20 @@ from typing import Any, Dict, List, Mapping, Optional
 
 import pytest
 
+# CI (Linux GH runners) can fail unittest teardown with
+# `OSError: [Errno 39] Directory not empty` when SQLite/WAL or a leftover
+# writer still holds files. Ignore cleanup errors so the assertion result stands.
+_OrigTemporaryDirectory = tempfile.TemporaryDirectory
+
+
+class _QuietTemporaryDirectory(_OrigTemporaryDirectory):
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault("ignore_cleanup_errors", True)
+        super().__init__(*args, **kwargs)
+
+
+tempfile.TemporaryDirectory = _QuietTemporaryDirectory
+
 from projectionist.agent.tools import ToolRegistry
 from projectionist.config_store import Settings
 from projectionist.library.db import DEFAULT_LENS_ID, Database

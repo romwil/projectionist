@@ -21,6 +21,7 @@ export default function OwnerNowPlayingBreakdown({
   onOpenStationSettings = null,
   onRefill = null,
   refillBusyId = "",
+  actionsDisabled = false,
   poll = true,
   compact = false,
   digInExtras = false,
@@ -208,7 +209,7 @@ export default function OwnerNowPlayingBreakdown({
                           type="button"
                           className="primary"
                           data-testid="owner-now-playing-refill"
-                          disabled={refillBusyId === row.id}
+                          disabled={actionsDisabled || refillBusyId === row.id}
                           onClick={() => onRefill(row.id, row.name)}
                         >
                           {refillBusyId === row.id ? "Refilling…" : "Refill"}

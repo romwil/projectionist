@@ -44,14 +44,15 @@ import {
 } from "../api/client";
 import AdvancedSettings from "../components/AdvancedSettings";
 import PersonaSection from "../components/PersonaSection";
-import LiveChannelsSection, { isLiveChannelsLaunched } from "./admin/LiveChannelsSection";
+import LiveChannelsSection, { isLiveChannelsLaunched, LiveJobRail } from "./admin/LiveChannelsSection";
 import HouseholdSection from "./admin/HouseholdSection";
 import {
   formatLastSyncRelative,
   formatSyncJobDetails,
 } from "../lib/jobProgress.js";
 import { liveChannelsStartTimeoutAlertType } from "../lib/liveChannelsEngineFeedback.js";
-import { craftSoftCapHonestyNote, liveOnboardingTip } from "../lib/liveChannelsCopy.js";
+import { craftSoftCapHonestyNote, liveOnboardingTip, liveOverviewLine } from "../lib/liveChannelsCopy.js";
+import { isLiveJobBusy } from "../lib/liveChannelsJob.js";
 import { filterLiveCollections } from "../lib/liveChannelsCraft.js";
 import { buildHouseholdHealthChips } from "../lib/householdHealth.js";
 import {
@@ -657,7 +658,7 @@ export default function ConfigPage() {
   }, [settings?.features?.multi_user_enabled]);
 
   useEffect(() => {
-    if (showWizard || section !== "live-channels") return;
+    if (showWizard || (section !== "live-channels" && section !== "overview")) return;
     if (!settings?.features?.live_channels_enabled) {
       setLiveChannelsStatus(null);
       return;
@@ -688,6 +689,19 @@ export default function ConfigPage() {
         .catch(() => {});
     }
   }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url, settings?.tunarr?.docker_orchestration]);
+
+  useEffect(() => {
+    const jobBusy = isLiveJobBusy(liveChannelsStatus?.job);
+    const localBusy = Boolean(liveBusy) && liveBusy !== "status" && liveBusy !== "attach";
+    if ((!jobBusy && !localBusy) || showWizard) return undefined;
+    if (section !== "live-channels" && section !== "overview") return undefined;
+    const id = setInterval(() => {
+      getLiveChannelsStatus()
+        .then(setLiveChannelsStatus)
+        .catch(() => {});
+    }, 2000);
+    return () => clearInterval(id);
+  }, [liveChannelsStatus?.job, liveBusy, section, showWizard]);
 
   useEffect(() => {
     return () => {
@@ -2578,21 +2592,39 @@ export default function ConfigPage() {
 
         {showSection("overview")
           ? (() => {
+              const liveOn = Boolean(settings?.features?.live_channels_enabled);
               const tip = liveOnboardingTip({
-                liveEnabled: Boolean(settings?.features?.live_channels_enabled),
+                liveEnabled: liveOn,
                 libraryMapped: sections.length > 0,
                 syncHealthy: Boolean(libraryStats?.last_sync),
               });
-              if (!tip) return null;
+              if (!liveOn && !tip) return null;
               return (
-                <section className="config-section" data-testid={tip.testId}>
-                  <h2>{tip.title}</h2>
-                  <p>{tip.body}</p>
-                  <div className="config-actions">
-                    <Link to={tip.ctaTo} className="btn" data-testid="live-onboarding-cta">
-                      {tip.ctaLabel}
-                    </Link>
-                  </div>
+                <section className="config-section" data-testid="live-channels-overview-echo">
+                  {liveOn ? (
+                    <>
+                      <h2>Live Channels</h2>
+                      <p data-testid="live-channels-overview-health">
+                        {liveOverviewLine(liveChannelsStatus)}
+                      </p>
+                      <LiveJobRail job={liveChannelsStatus?.job} compact />
+                      <div className="config-actions">
+                        <Link to="/admin/live-channels" className="btn" data-testid="live-overview-open">
+                          Open Live Channels
+                        </Link>
+                      </div>
+                    </>
+                  ) : tip ? (
+                    <>
+                      <h2>{tip.title}</h2>
+                      <p>{tip.body}</p>
+                      <div className="config-actions">
+                        <Link to={tip.ctaTo} className="btn" data-testid="live-onboarding-cta">
+                          {tip.ctaLabel}
+                        </Link>
+                      </div>
+                    </>
+                  ) : null}
                 </section>
               );
             })()

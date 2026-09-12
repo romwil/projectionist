@@ -8,7 +8,7 @@ Each ID:
 | Field | Meaning |
 |-------|---------|
 | **roles** | Who must run this ID (`member`, `owner`, `youth`, `guest`, `guest-tour`, or `*`) |
-| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `shell`, `login`, `tour`, `invite`, `access-request`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`, `lobby`, `theater`) |
+| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `live`, `shell`, `login`, `tour`, `invite`, `access-request`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`, `lobby`, `theater`) |
 | **source** | Primary frontend file(s) |
 | **steps** | Required interactions (page-load alone ≠ pass) |
 | **pass** | Observable pass criteria |
@@ -370,6 +370,38 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **source:** `frontend/src/pages/LobbyDisplayPage.jsx`, `projectionist/config_store.py`
 - **steps:** On `/admin/lobby`, confirm controls: `lobby-enabled-toggle`, `lobby-orientation`, `lobby-audience`, `lobby-idle-mode`, `lobby-multi-mode`, `lobby-header-mode`, `lobby-rotate-seconds`. Toggle idle mode between empty and now_available (or confirm current values). Click `lobby-save`. Wait for success alert.
 - **pass:** Save succeeds without wiping other settings. Reload `/admin/lobby` and confirm persisted values. Do not leave theater disabled if the campaign needs the kiosk IDs next — restore `enabled` on before leaving.
+
+### `admin.live-channels-stations-infra`
+
+- **roles:** `owner`
+- **tags:** `admin`, `live`, `theme`
+- **source:** `frontend/src/pages/admin/LiveChannelsSection.jsx`, `frontend/src/lib/liveChannelsCopy.js`
+- **steps:** Sign in as owner. Open Admin → Live Channels (`/admin/live-channels`). On **Stations**, inspect `live-channels-health-strip` / `live-channels-infra-facts`. Confirm live `Plex map N/N` (or unknown) + tuner alive/dead — not a last-attach receipt as current map. Confirm **Refresh Plex map** (`live-channels-strip-refresh`) and **Rebuild tuner in Plex** (`live-channels-strip-rebuild`). Confirm no primary button labeled Repair. Do **not** click Rebuild on Automat Plex.
+- **pass:** Infrastructure strip visible. Refresh is the default Plex action. Rebuild is secondary with a strong confirm. Last attach is a subtitle (`live-channels-last-attach`) only. Screenshot required (Lights Up or Lights Down).
+
+### `admin.live-channels-job-rail`
+
+- **roles:** `owner`
+- **tags:** `admin`, `live`
+- **source:** `frontend/src/pages/admin/LiveChannelsSection.jsx`, `frontend/src/lib/liveChannelsJob.js`
+- **steps:** On Live Channels Stations, confirm mutating buttons (Refresh / Rebuild / Refill / Publish) exist. If a Live job is already in flight, confirm `live-channels-job-rail` (`aria-live`) and that those mutating buttons are disabled. If idle, optional: click **Refresh status** only (safe). Do **not** click Refresh Plex map or Rebuild against Automat Plex unless the campaign explicitly uses a simulated busy. To prove the rail without hitting Plex, a simulated busy (or leftover in-flight job) is enough.
+- **pass:** Rail copy matches “Working: … · Don’t start another Live job.” Dual-click of two mutating Live actions is not possible while busy. Refresh status remains enabled.
+
+### `admin.live-channels-setup-plex`
+
+- **roles:** `owner`
+- **tags:** `admin`, `live`
+- **source:** `frontend/src/pages/admin/LiveChannelsSection.jsx`
+- **steps:** Open Live Channels → **Setup**. Scroll to `live-channels-plex-attach`. Confirm happy-path copy that Projectionist writes the tuner/guide (`live-channels-plex-writes`). Confirm one Refresh / Rebuild pair (`live-channels-attach-guide`, `live-channels-plex-repair` labeled Rebuild). Expand **Plex didn’t see the tuner** (`live-channels-plex-fallback-summary`). Do **not** run Rebuild.
+- **pass:** 5-step owner wizard is collapsed, not the happy path. No primary Repair-as-delete. Attached badge (`live-channels-attach-ready`) follows live `mapping_ok`, not last-attach receipt.
+
+### `admin.live-channels-overview-echo`
+
+- **roles:** `owner`
+- **tags:** `admin`, `live`, `theme`
+- **source:** `frontend/src/pages/ConfigPage.jsx`, `frontend/src/lib/liveChannelsCopy.js`
+- **steps:** Open Admin → Overview (`/admin/overview`). If Live is enabled, confirm `live-channels-overview-echo` one-liner (`live-channels-overview-health`) with live map/tuner — not last-attach as current. If a job is in flight, confirm compact rail (`live-channels-job-rail-snippet`). Theme: run once Lights Up and once Lights Down.
+- **pass:** Health line present when Live is on. Job snippet only while busy. Screenshot each theme.
 
 ### `theater.kiosk-shell`
 
@@ -1112,7 +1144,8 @@ after direct URL navigation.
 | `notifications` | Settings → Notifications prefs; owner self-send; Admin → Mail |
 | `recommend` | Household Recommend modal open/send |
 | `settings` | Profile role line; notification prefs |
-| `admin` | Owner admin shell / Mail / Scheduled Tasks / Logs / Storage Intelligence / non-owner redirect |
+| `admin` | Owner admin shell / Mail / Scheduled Tasks / Logs / Storage Intelligence / Live Channels / non-owner redirect |
+| `live` | Admin Live Channels Stations / Setup / Overview echo / job rail |
 | `logs` | Admin → Logs filters, follow, refresh |
 | `purge` | Storage Intelligence candidates, grooming undo, removal summary |
 | `neighbors` | Surprising neighbors showcase on title / explore |
@@ -1174,6 +1207,10 @@ after direct URL navigation.
 | `recommend.send-to-peer` | member, owner |
 | `settings.notifications-prefs` | member, owner, youth |
 | `settings.notifications-owner-self-send` | owner |
+| `admin.live-channels-stations-infra` | owner |
+| `admin.live-channels-job-rail` | owner |
+| `admin.live-channels-setup-plex` | owner |
+| `admin.live-channels-overview-echo` | owner |
 | `admin.mail-notify-surface` | owner |
 | `admin.newsletters-surface` | owner |
 | `admin.newsletters-yir-generate-inbox` | owner |
