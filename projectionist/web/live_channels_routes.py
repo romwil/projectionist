@@ -35,6 +35,13 @@ def _settings() -> Settings:
     return _settings_factory()
 
 
+def _raise_if_live_job_busy() -> None:
+    from projectionist.live_channels.job import conflicting_live_job, live_job_busy_detail
+
+    if conflicting_live_job():
+        raise HTTPException(status_code=409, detail=live_job_busy_detail())
+
+
 def _db():
     if _db_factory is None:
         raise RuntimeError("live_channels routes not registered")
@@ -247,6 +254,10 @@ def live_channels_lifecycle_endpoint(
     action = str(payload.action or "ensure_running").strip().lower()
     on_phase = None
     if action in {"ensure_running", "start", "pull"}:
+        from projectionist.live_channels.job import conflicting_live_job, live_job_busy_detail
+
+        if conflicting_live_job():
+            raise HTTPException(status_code=409, detail=live_job_busy_detail())
         store = progress_store()
         store.begin(container_name=life.container_name)
         on_phase = make_phase_callback(store)
@@ -579,9 +590,14 @@ def live_channels_from_collection_endpoint(
         return _finalize_live_channels_publish(settings_obj, result, on_phase=on_phase)
 
     if payload.sync:
+        from projectionist.live_channels.job import conflicting_live_job, live_job_busy_detail
+
         store = progress_store()
-        if not store.begin(mode="collection"):
-            raise HTTPException(status_code=409, detail="Publish already running.")
+        if conflicting_live_job() or not store.begin(mode="collection"):
+            raise HTTPException(
+                status_code=409,
+                detail=live_job_busy_detail() if conflicting_live_job() else "Publish already running.",
+            )
         on_phase = make_phase_callback(store)
         try:
             result = _run(settings, on_phase)
@@ -676,6 +692,7 @@ def live_channels_from_show_endpoint(
         return _finalize_live_channels_publish(settings_obj, result, on_phase=on_phase)
 
     if payload.sync:
+        _raise_if_live_job_busy()
         store = progress_store()
         if not store.begin(mode="show"):
             raise HTTPException(status_code=409, detail="Publish already running.")
@@ -918,6 +935,7 @@ def live_channels_publish_channel_endpoint(
             tunarr_client_from_settings(settings)
         except ValueError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
+        _raise_if_live_job_busy()
         store = progress_store()
         if not store.begin(mode="craft"):
             raise HTTPException(status_code=409, detail="Publish already running.")
@@ -987,11 +1005,21 @@ def live_channels_refill_channel_endpoint(
     settings = _settings()
     if not settings.features.live_channels_enabled:
         raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    from projectionist.live_channels.job import (
+        KIND_REFILL,
+        begin_owned_job,
+        live_job_busy_detail,
+        owned_store,
+    )
     from projectionist.live_channels.publish import (
         refill_channel_lineup,
         tunarr_client_from_settings,
     )
 
+    if not begin_owned_job(KIND_REFILL):
+        raise HTTPException(status_code=409, detail=live_job_busy_detail())
+    store = owned_store()
+    store.set_phase("refilling", "Refilling station lineup…")
     try:
         client = tunarr_client_from_settings(settings)
         result = refill_channel_lineup(
@@ -1001,8 +1029,10 @@ def live_channels_refill_channel_endpoint(
             settings=settings,
         )
     except ValueError as error:
+        store.set_error(str(error))
         raise HTTPException(status_code=400, detail=str(error)) from error
     except Exception as error:  # noqa: BLE001
+        store.set_error(str(error)[:400])
         raise HTTPException(
             status_code=502,
             detail=_safe_error_detail(error, "Could not refill channel lineup"),
@@ -1012,6 +1042,9 @@ def live_channels_refill_channel_endpoint(
     if result.get("ok"):
         tunarr["last_publish_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         tunarr["last_error"] = ""
+        store.set_done(str(result.get("message") or "Station refilled."), result=result)
+    else:
+        store.set_error(str(result.get("message") or "Refill failed."))
     # Persist station_meta / continuity id mutations from refill.
     save_settings(DATA_DIR, Settings.from_mapping({**asdict(settings), "tunarr": tunarr}))
     return result
@@ -1196,6 +1229,7 @@ def live_channels_continuity_repair_endpoint(
     # Optional sync path for unit tests / curl diagnostics.
     sync = bool(getattr(body, "sync", False))
     if sync:
+        _raise_if_live_job_busy()
         store = progress_store()
         if not store.begin(mode=mode):
             raise HTTPException(
@@ -1353,8 +1387,14 @@ def live_channels_plex_attach_guide_endpoint(
     request: Request,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Attach Tunarr XMLTV to Plex via PMS API (separate DVR; OTA left alone)."""
+    """Refresh Plex map — Attach path, never DELETE the Tunarr XMLTV DVR."""
     del user
+    from projectionist.live_channels.job import (
+        KIND_PLEX_REFRESH,
+        begin_owned_job,
+        live_job_busy_detail,
+        owned_store,
+    )
     from projectionist.live_channels.plex_attach import attach_tunarr_xmltv_to_plex
     from projectionist.live_channels.publish import (
         prepare_channels_for_playback,
@@ -1365,10 +1405,14 @@ def live_channels_plex_attach_guide_endpoint(
     settings = _settings()
     if not settings.features.live_channels_enabled:
         raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    if not begin_owned_job(KIND_PLEX_REFRESH):
+        raise HTTPException(status_code=409, detail=live_job_busy_detail())
+    store = owned_store()
     forwarded = str(request.headers.get("x-forwarded-host") or "").strip()
     request_host = forwarded or str(request.headers.get("host") or "").strip()
     prepare: Dict[str, Any] = {"ok": False, "skipped": True}
     try:
+        store.set_phase("preparing", "Preparing stations…")
         prepare = prepare_channels_for_playback(
             tunarr_client_from_settings(settings),
             settings=settings,
@@ -1376,7 +1420,9 @@ def live_channels_plex_attach_guide_endpoint(
         )
     except Exception:  # noqa: BLE001 — attach can still proceed
         prepare = {"ok": False, "skipped": True}
-    result = attach_tunarr_xmltv_to_plex(settings, request_host=request_host)
+    result = attach_tunarr_xmltv_to_plex(
+        settings, request_host=request_host, on_phase=store.set_phase
+    )
     result["labels"] = prepare.get("labels") or {}
     result["prepare"] = prepare
     _persist_plex_guide_attach(settings, result)
@@ -1384,13 +1430,15 @@ def live_channels_plex_attach_guide_endpoint(
         detail = str(
             result.get("error")
             or result.get("message")
-            or "Could not attach Tunarr guide in Plex"
+            or "Could not refresh the Plex map"
         )
         mapped = result.get("mapped")
         expected = result.get("expected")
         if expected and mapped is not None:
             detail = f"{detail} (Mapped {mapped}/{expected})"
+        store.set_error(detail)
         raise HTTPException(status_code=400, detail=detail)
+    store.set_done(str(result.get("message") or "Plex map refreshed."), result=result)
     return result
 
 
@@ -1399,8 +1447,14 @@ def live_channels_plex_repair_endpoint(
     request: Request,
     user=Depends(require_role("owner")),
 ) -> Dict[str, Any]:
-    """Recreate Tunarr HDHR device + XMLTV DVR and force full channel remap."""
+    """Rebuild tuner in Plex — the only path that DELETEs the Tunarr XMLTV DVR."""
     del user
+    from projectionist.live_channels.job import (
+        KIND_PLEX_REBUILD,
+        begin_owned_job,
+        live_job_busy_detail,
+        owned_store,
+    )
     from projectionist.live_channels.plex_attach import repair_plex_tunarr_livetv
     from projectionist.live_channels.publish import (
         prepare_channels_for_playback,
@@ -1411,9 +1465,13 @@ def live_channels_plex_repair_endpoint(
     settings = _settings()
     if not settings.features.live_channels_enabled:
         raise HTTPException(status_code=400, detail="Live Channels is not enabled")
+    if not begin_owned_job(KIND_PLEX_REBUILD):
+        raise HTTPException(status_code=409, detail=live_job_busy_detail())
+    store = owned_store()
     forwarded = str(request.headers.get("x-forwarded-host") or "").strip()
     request_host = forwarded or str(request.headers.get("host") or "").strip()
     try:
+        store.set_phase("preparing", "Preparing stations…")
         prepare_channels_for_playback(
             tunarr_client_from_settings(settings),
             settings=settings,
@@ -1421,19 +1479,23 @@ def live_channels_plex_repair_endpoint(
         )
     except Exception:  # noqa: BLE001
         pass
-    result = repair_plex_tunarr_livetv(settings, request_host=request_host)
+    result = repair_plex_tunarr_livetv(
+        settings, request_host=request_host, on_phase=store.set_phase
+    )
     _persist_plex_guide_attach(settings, result)
     if not result.get("ok"):
         detail = str(
             result.get("error")
             or result.get("message")
-            or "Could not repair Tunarr in Plex"
+            or "Could not rebuild the Plex tuner"
         )
         mapped = result.get("mapped")
         expected = result.get("expected")
         if expected and mapped is not None:
             detail = f"{detail} (Mapped {mapped}/{expected})"
+        store.set_error(detail)
         raise HTTPException(status_code=400, detail=detail)
+    store.set_done(str(result.get("message") or "Plex tuner rebuilt."), result=result)
     return result
 
 
