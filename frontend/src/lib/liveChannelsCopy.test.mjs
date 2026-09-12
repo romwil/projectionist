@@ -9,6 +9,7 @@ import {
   liveHealthSentence,
   liveInfrastructureFacts,
   liveOnboardingTip,
+  liveOverviewLine,
   liveSetupStepNumbers,
   liveStreamHealthCopy,
   liveUserEmptyCopy,
@@ -65,9 +66,54 @@ describe("liveChannelsCopy", () => {
     });
     assert.equal(facts.engineLabel, "Tunarr up");
     assert.equal(facts.tunerLabel, "Tuner dead");
-    assert.match(facts.guideLabel, /last ingest/);
+    assert.equal(facts.guideOk, true);
+    assert.match(facts.guideLabel, /Plex map unknown|Plex guide/);
+    assert.match(facts.lastAttachLabel, /Last attach/);
     assert.equal(facts.xmltvError, "timeout");
     assert.equal(facts.streamWarmLabel, "1 channel kept hot");
+  });
+
+  it("uses live mapped/expected for guide, not last-attach receipt", () => {
+    const staleReceipt = liveInfrastructureFacts({
+      guide_index: {
+        plex_livetv: {
+          mapping_ok: false,
+          guide_ok: false,
+          mapped: 4,
+          expected: 6,
+          tuner_alive: true,
+          device_present: true,
+        },
+        last_attach: { at: "2026-09-01T00:00:00Z", ok: true },
+      },
+    });
+    assert.equal(staleReceipt.guideOk, false);
+    assert.equal(staleReceipt.guideLabel, "Plex map 4/6 · incomplete");
+    assert.match(staleReceipt.lastAttachLabel, /Last attach/);
+
+    const liveOk = liveInfrastructureFacts({
+      guide_index: {
+        plex_livetv: { mapping_ok: true, mapped: 6, expected: 6, tuner_alive: true },
+        last_attach: { at: "2026-08-01T00:00:00Z", ok: true },
+      },
+    });
+    assert.equal(liveOk.guideOk, true);
+    assert.equal(liveOk.guideLabel, "Plex map 6/6");
+  });
+
+  it("builds an Overview health line from live facts", () => {
+    const line = liveOverviewLine({
+      broadcast: { sidecar_up: true },
+      channel_count: 6,
+      guide_index: {
+        plex_livetv: { mapping_ok: true, mapped: 6, expected: 6, tuner_alive: true },
+      },
+    });
+    assert.match(line, /TV engine running/);
+    assert.match(line, /6 stations/);
+    assert.match(line, /Plex map 6\/6/);
+    assert.match(line, /Tuner alive/);
+    assert.doesNotMatch(line, /last ingest|Last attach/);
   });
 
   it("labels zero or missing kept_hot as no channels kept hot", () => {

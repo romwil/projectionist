@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import InlineAlert from "../../components/InlineAlert";
 import OwnerNowPlayingBreakdown from "../../components/OwnerNowPlayingBreakdown";
 import SectionHelp from "../../components/SectionHelp";
@@ -34,6 +34,11 @@ import {
   liveInfrastructureFacts,
   liveSetupStepNumbers,
 } from "../../lib/liveChannelsCopy.js";
+import {
+  isLiveMutatingDisabled,
+  liveJobRailCopy,
+  plexRebuildConfirmMessage,
+} from "../../lib/liveChannelsJob.js";
 
 export { buildCraftFiltersPayload, craftDraftFromStation };
 
@@ -66,6 +71,21 @@ export function LiveReadyBadge({ ready, label = "Ready", testId }) {
     <span className="certified-badge certified-badge-ok" data-testid={testId}>
       ✓ {label}
     </span>
+  );
+}
+
+export function LiveJobRail({ job, compact = false }) {
+  const copy = liveJobRailCopy(job);
+  if (!copy) return null;
+  return (
+    <div
+      className={`live-channels-job-rail${compact ? " is-compact" : ""}`}
+      role="status"
+      aria-live="polite"
+      data-testid={compact ? "live-channels-job-rail-snippet" : "live-channels-job-rail"}
+    >
+      {copy}
+    </div>
   );
 }
 
@@ -230,6 +250,20 @@ export default function LiveChannelsSection({
   );
   const showReady = Boolean(showPick.item_id > 0 || showPick.rating_key.trim());
 
+  useEffect(() => {
+    if (liveAttach) return undefined;
+    if (liveLaunched && effectiveLiveTab !== "setup") return undefined;
+    let cancelled = false;
+    getLiveChannelsPlexAttach()
+      .then((data) => {
+        if (!cancelled) setLiveAttach(data);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [liveAttach, liveLaunched, effectiveLiveTab, setLiveAttach]);
+
   async function searchShows() {
     const query = showQuery.trim();
     if (!query) return;
@@ -310,6 +344,9 @@ export default function LiveChannelsSection({
   }
 
   const infra = liveInfrastructureFacts(liveChannelsStatus);
+  const liveJob = liveChannelsStatus?.job;
+  const liveLocked = isLiveMutatingDisabled(liveJob, liveBusy);
+  const mappingOk = Boolean(liveChannelsStatus?.guide_index?.plex_livetv?.mapping_ok);
   const settingsStationId = stationSettingsOpen;
   const settingsStation =
     (liveChannelsStatus?.channels || []).find(
@@ -335,7 +372,7 @@ export default function LiveChannelsSection({
                   <button
                     type="button"
                     data-testid="live-channels-enable-cta"
-                    disabled={liveBusy === "enable" || liveBusy === "disable"}
+                    disabled={liveLocked || liveBusy === "enable" || liveBusy === "disable"}
                     aria-busy={liveBusy === "enable"}
                     onClick={() => handleLiveChannelsEnabled(true)}
                   >
@@ -365,7 +402,7 @@ export default function LiveChannelsSection({
                     type="button"
                     className="ghost"
                     data-testid="live-channels-disable-cta"
-                    disabled={liveBusy === "enable" || liveBusy === "disable"}
+                    disabled={liveLocked || liveBusy === "enable" || liveBusy === "disable"}
                     aria-busy={liveBusy === "disable"}
                     onClick={() => handleLiveChannelsEnabled(false)}
                   >
@@ -435,19 +472,44 @@ export default function LiveChannelsSection({
                       <div className="service-card-actions">
                         <button
                           type="button"
-                          className="ghost"
-                          data-testid="live-channels-strip-repair"
-                          disabled={
-                            liveBusy === "plex-repair"
-                            || liveBusy === "attach-guide"
-                            || Boolean(liveAttach?.needs_lan_url)
-                          }
+                          className="primary"
+                          data-testid="live-channels-strip-refresh"
+                          disabled={liveLocked || Boolean(liveAttach?.needs_lan_url)}
                           onClick={async () => {
-                            if (
-                              !window.confirm(
-                                "Repair Plex tuner/guide? This recreates the Tunarr device and XMLTV DVR in Plex (OTA stays), rescans all channels, and remaps the guide. Active Live TV sessions on Tunarr channels may drop briefly.",
-                              )
-                            ) {
+                            setLiveBusy("attach-guide");
+                            try {
+                              const result = await postLiveChannelsPlexAttachGuide();
+                              const mappedNote =
+                                result.expected != null
+                                  ? ` Mapped ${result.mapped ?? 0}/${result.expected}.`
+                                  : "";
+                              setActionFeedback(
+                                "live-channels",
+                                "success",
+                                `${result.message || "Plex map refreshed."}${mappedNote}`,
+                                { block: "health" },
+                              );
+                              try {
+                                setLiveChannelsStatus(await getLiveChannelsStatus());
+                              } catch {
+                                /* status refresh best-effort */
+                              }
+                            } catch (error) {
+                              setActionFeedback("live-channels", "error", error.message, { block: "health" });
+                            } finally {
+                              setLiveBusy(null);
+                            }
+                          }}
+                        >
+                          {liveBusy === "attach-guide" ? "Refreshing…" : "Refresh Plex map"}
+                        </button>
+                        <button
+                          type="button"
+                          className="ghost"
+                          data-testid="live-channels-strip-rebuild"
+                          disabled={liveLocked || Boolean(liveAttach?.needs_lan_url)}
+                          onClick={async () => {
+                            if (!window.confirm(plexRebuildConfirmMessage())) {
                               return;
                             }
                             setLiveBusy("plex-repair");
@@ -460,7 +522,7 @@ export default function LiveChannelsSection({
                               setActionFeedback(
                                 "live-channels",
                                 "success",
-                                `${result.message || "Plex Tunarr tuner/guide repaired."}${mappedNote}`,
+                                `${result.message || "Plex tuner rebuilt."}${mappedNote}`,
                                 { block: "health" },
                               );
                               try {
@@ -475,47 +537,7 @@ export default function LiveChannelsSection({
                             }
                           }}
                         >
-                          {liveBusy === "plex-repair" ? "Repairing…" : "Repair tuner/guide"}
-                        </button>
-                        <button
-                          type="button"
-                          className="ghost"
-                          data-testid="live-channels-strip-attach"
-                          disabled={
-                            liveBusy === "attach-guide"
-                            || liveBusy === "plex-repair"
-                            || Boolean(liveAttach?.needs_lan_url)
-                          }
-                          onClick={async () => {
-                            setLiveBusy("attach-guide");
-                            try {
-                              if (!liveAttach) {
-                                setLiveAttach(await getLiveChannelsPlexAttach());
-                              }
-                              const result = await postLiveChannelsPlexAttachGuide();
-                              const mappedNote =
-                                result.expected != null
-                                  ? ` Mapped ${result.mapped ?? 0}/${result.expected}.`
-                                  : "";
-                              setActionFeedback(
-                                "live-channels",
-                                "success",
-                                `${result.message || "Tunarr XMLTV guide attached in Plex (OTA left alone)."}${mappedNote}`,
-                                { block: "health" },
-                              );
-                              try {
-                                setLiveChannelsStatus(await getLiveChannelsStatus());
-                              } catch {
-                                /* status refresh best-effort */
-                              }
-                            } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message, { block: "health" });
-                            } finally {
-                              setLiveBusy(null);
-                            }
-                          }}
-                        >
-                          {liveBusy === "attach-guide" ? "Attaching…" : "Attach guide"}
+                          {liveBusy === "plex-repair" ? "Rebuilding…" : "Rebuild tuner in Plex"}
                         </button>
                         <button
                           type="button"
@@ -543,6 +565,12 @@ export default function LiveChannelsSection({
                       ) : null}
                       <li data-testid="live-channels-infra-warm">Stream-warm: {infra.streamWarmLabel}</li>
                     </ul>
+                    {infra.lastAttachLabel ? (
+                      <p className="wizard-note" data-testid="live-channels-last-attach">
+                        {infra.lastAttachLabel}
+                      </p>
+                    ) : null}
+                    <LiveJobRail job={liveJob} />
                     <p className="wizard-note" data-testid="live-channels-health-summary">
                       {liveHealthSentence(liveChannelsStatus)}
                     </p>
@@ -589,7 +617,7 @@ export default function LiveChannelsSection({
                                     ? ` · DVR ${liveChannelsStatus.guide_index.last_attach.dvr_key}`
                                     : ""
                                 }`
-                              : "not run yet — use Attach guide in Plex under Setup"}
+                              : "not run yet — use Refresh Plex map"}
                           </li>
                           <li data-testid="live-channels-plex-mapped">
                             Plex channel map:{" "}
@@ -632,6 +660,7 @@ export default function LiveChannelsSection({
                       status={liveChannelsStatus}
                       compact
                       digInExtras
+                      actionsDisabled={liveLocked}
                       refillBusyId={
                         String(liveBusy || "").startsWith("refill-")
                           ? String(liveBusy).slice("refill-".length)
@@ -806,7 +835,7 @@ export default function LiveChannelsSection({
                       <button
                         type="button"
                         data-testid="live-channels-run-preflight"
-                        disabled={liveBusy === "preflight"}
+                        disabled={liveLocked || liveBusy === "preflight"}
                         onClick={async () => {
                           setLiveBusy("preflight");
                           try {
@@ -885,7 +914,7 @@ export default function LiveChannelsSection({
                         <button
                           type="button"
                           data-testid="live-channels-ensure-running"
-                          disabled={liveBusy === "lifecycle"}
+                          disabled={liveLocked || liveBusy === "lifecycle"}
                           onClick={() => {
                             startBroadcastEngine().catch(() => {});
                           }}
@@ -1030,7 +1059,7 @@ export default function LiveChannelsSection({
                         type="button"
                         className="ghost"
                         data-testid="live-channels-rescan-filler"
-                        disabled={liveBusy === "continuity-repair"}
+                        disabled={liveLocked || liveBusy === "continuity-repair"}
                         onClick={async () => {
                           if (
                             !window.confirm(
@@ -1215,7 +1244,7 @@ export default function LiveChannelsSection({
                         type="button"
                         className="ghost"
                         data-testid="live-channels-save-schedule-settings"
-                        disabled={liveBusy === "engine-settings"}
+                        disabled={liveLocked || liveBusy === "engine-settings"}
                         onClick={async () => {
                           setLiveBusy("engine-settings");
                           try {
@@ -1672,7 +1701,7 @@ export default function LiveChannelsSection({
                           type="button"
                           className="primary"
                           data-testid="live-channels-craft-publish"
-                          disabled={liveBusy === "craft"}
+                          disabled={liveLocked || liveBusy === "craft"}
                           onClick={async () => {
                             if (
                               !window.confirm(
@@ -1802,6 +1831,7 @@ export default function LiveChannelsSection({
                           className="primary"
                           data-testid="live-channels-publish-collection"
                           disabled={
+                            liveLocked ||
                             liveBusy === "collection" ||
                             !selectedCraftCollection
                           }
@@ -1976,7 +2006,7 @@ export default function LiveChannelsSection({
                           type="button"
                           className="primary"
                           data-testid="live-channels-publish-show"
-                          disabled={liveBusy === "show" || !showReady}
+                          disabled={liveLocked || liveBusy === "show" || !showReady}
                           onClick={async () => {
                             const title = showPick.title.trim() || "this show";
                             const modeLabel =
@@ -2027,7 +2057,7 @@ export default function LiveChannelsSection({
                           type="button"
                           className="primary"
                           data-testid="live-channels-propose-starters"
-                          disabled={liveBusy === "starters"}
+                          disabled={liveLocked || liveBusy === "starters"}
                           onClick={proposeStarterPack}
                         >
                           {liveBusy === "starters" ? "Loading…" : "Propose starters"}
@@ -2065,7 +2095,7 @@ export default function LiveChannelsSection({
                             type="button"
                             className="primary"
                             data-testid="live-channels-publish-starters"
-                            disabled={liveBusy === "publish"}
+                            disabled={liveLocked || liveBusy === "publish"}
                             onClick={async () => {
                               if (
                                 !window.confirm(
@@ -2129,7 +2159,7 @@ export default function LiveChannelsSection({
                           type="button"
                           className="ghost"
                           data-testid={`live-channels-delete-${settingsStationId}`}
-                          disabled={!settingsStationId || liveBusy === `delete-${settingsStationId}`}
+                          disabled={liveLocked || !settingsStationId || liveBusy === `delete-${settingsStationId}`}
                           onClick={async () => {
                             if (!settingsStationId) return;
                             const label = `${settingsStation?.number != null ? `${settingsStation.number} · ` : ""}${settingsStation?.name || "station"}`;
@@ -2377,7 +2407,7 @@ export default function LiveChannelsSection({
                         <button
                           type="button"
                           data-testid={`live-channels-station-save-${settingsStationId}`}
-                          disabled={!settingsStationId || liveBusy === `settings-${settingsStationId}`}
+                          disabled={liveLocked || !settingsStationId || liveBusy === `settings-${settingsStationId}`}
                           onClick={async () => {
                             if (!settingsStationId || !stationCraftDraft) return;
                             setLiveBusy(`settings-${settingsStationId}`);
@@ -2422,7 +2452,7 @@ export default function LiveChannelsSection({
                           type="button"
                           className="ghost"
                           data-testid={`live-channels-station-refill-cta-${settingsStationId}`}
-                          disabled={!settingsStationId || liveBusy === `refill-${settingsStationId}`}
+                          disabled={liveLocked || !settingsStationId || liveBusy === `refill-${settingsStationId}`}
                           onClick={() => refillStation(settingsStationId, settingsStation?.name)}
                         >
                           {liveBusy === `refill-${settingsStationId}` ? "Refilling…" : "Refill"}
@@ -2445,10 +2475,7 @@ export default function LiveChannelsSection({
                   <>
                   <div
                     className={`service-card${
-                      liveAttach?.discovery?.ok ||
-                      liveChannelsStatus?.guide_index?.last_attach?.ok
-                        ? " service-ok"
-                        : ""
+                      mappingOk ? " service-ok" : ""
                     }`}
                     data-testid="live-channels-plex-attach"
                   >
@@ -2459,12 +2486,9 @@ export default function LiveChannelsSection({
                             Step {setupSteps.plex}
                           </p>
                         ) : null}
-                        <h3>Add to Plex</h3>
+                        <h3>Plex Live TV</h3>
                         <LiveReadyBadge
-                          ready={Boolean(
-                            liveAttach?.discovery?.ok ||
-                              liveChannelsStatus?.guide_index?.last_attach?.ok,
-                          )}
+                          ready={mappingOk}
                           label="Attached"
                           testId="live-channels-attach-ready"
                         />
@@ -2472,38 +2496,12 @@ export default function LiveChannelsSection({
                       <div className="service-card-actions">
                         <button
                           type="button"
-                          className="ghost"
-                          data-testid="live-channels-load-attach"
-                          disabled={liveBusy === "attach" || liveBusy === "attach-guide"}
-                          onClick={async () => {
-                            setLiveBusy("attach");
-                            try {
-                              setLiveAttach(await getLiveChannelsPlexAttach());
-                            } catch (error) {
-                              setActionFeedback("live-channels", "error", error.message, { block: "connection" });
-                            } finally {
-                              setLiveBusy(null);
-                            }
-                          }}
-                        >
-                          {liveBusy === "attach" ? "Loading…" : "Show Plex steps"}
-                        </button>
-                        <button
-                          type="button"
                           className="primary"
                           data-testid="live-channels-attach-guide"
-                          disabled={
-                            liveBusy === "attach" ||
-                            liveBusy === "attach-guide" ||
-                            liveBusy === "plex-repair" ||
-                            Boolean(liveAttach?.needs_lan_url)
-                          }
+                          disabled={liveLocked || Boolean(liveAttach?.needs_lan_url)}
                           onClick={async () => {
                             setLiveBusy("attach-guide");
                             try {
-                              if (!liveAttach) {
-                                setLiveAttach(await getLiveChannelsPlexAttach());
-                              }
                               const result = await postLiveChannelsPlexAttachGuide();
                               const mappedNote =
                                 result.expected != null
@@ -2512,7 +2510,7 @@ export default function LiveChannelsSection({
                               setActionFeedback(
                                 "live-channels",
                                 "success",
-                                `${result.message || "Tunarr XMLTV guide attached in Plex (OTA left alone)."}${mappedNote}`,
+                                `${result.message || "Plex map refreshed."}${mappedNote}`,
                                 { block: "attach" },
                               );
                               try {
@@ -2528,25 +2526,16 @@ export default function LiveChannelsSection({
                           }}
                         >
                           {liveBusy === "attach-guide"
-                            ? "Attaching guide…"
-                            : "Attach Tunarr guide in Plex"}
+                            ? "Refreshing…"
+                            : "Refresh Plex map"}
                         </button>
                         <button
                           type="button"
                           className="ghost"
                           data-testid="live-channels-plex-repair"
-                          disabled={
-                            liveBusy === "attach" ||
-                            liveBusy === "attach-guide" ||
-                            liveBusy === "plex-repair" ||
-                            Boolean(liveAttach?.needs_lan_url)
-                          }
+                          disabled={liveLocked || Boolean(liveAttach?.needs_lan_url)}
                           onClick={async () => {
-                            if (
-                              !window.confirm(
-                                "Repair Plex tuner/guide? This recreates the Tunarr device and XMLTV DVR in Plex (OTA stays), rescans all channels, and remaps the guide. Active Live TV sessions on Tunarr channels may drop briefly.",
-                              )
-                            ) {
+                            if (!window.confirm(plexRebuildConfirmMessage())) {
                               return;
                             }
                             setLiveBusy("plex-repair");
@@ -2559,7 +2548,7 @@ export default function LiveChannelsSection({
                               setActionFeedback(
                                 "live-channels",
                                 "success",
-                                `${result.message || "Plex Tunarr tuner/guide repaired."}${mappedNote}`,
+                                `${result.message || "Plex tuner rebuilt."}${mappedNote}`,
                                 { block: "attach" },
                               );
                               try {
@@ -2574,11 +2563,18 @@ export default function LiveChannelsSection({
                             }
                           }}
                         >
-                          {liveBusy === "plex-repair" ? "Repairing…" : "Repair Plex tuner/guide"}
+                          {liveBusy === "plex-repair" ? "Rebuilding…" : "Rebuild tuner in Plex"}
                         </button>
                       </div>
                     </div>
                     {renderLiveBlockAlert("attach")}
+                    <p className="wizard-note" data-testid="live-channels-plex-writes">
+                      Projectionist writes the Tunarr tuner and XMLTV guide in Plex.
+                      Refresh injects or remaps channels without deleting the DVR.
+                      Rebuild is advanced — it hangs Plex Media Server briefly and drops
+                      Tunarr Live TV; over-the-air stays.
+                    </p>
+                    <LiveJobRail job={liveJob} />
                     {liveAttach ? (
                       <>
                         <p
@@ -2597,13 +2593,21 @@ export default function LiveChannelsSection({
                             {liveAttach.coexistence.guide_warning}
                           </p>
                         ) : null}
-                        <ol className="wizard-note" data-testid="live-channels-attach-steps">
-                          {(liveAttach.steps || []).map((step) => (
-                            <li key={step.title}>
-                              <strong>{step.title}</strong> — {step.body}
-                            </li>
-                          ))}
-                        </ol>
+                        <details
+                          className="live-channels-advanced"
+                          data-testid="live-channels-plex-fallback"
+                        >
+                          <summary data-testid="live-channels-plex-fallback-summary">
+                            Plex didn’t see the tuner
+                          </summary>
+                          <ol className="wizard-note" data-testid="live-channels-attach-steps">
+                            {(liveAttach.steps || []).map((step) => (
+                              <li key={step.title}>
+                                <strong>{step.title}</strong> — {step.body}
+                              </li>
+                            ))}
+                          </ol>
+                        </details>
                         {liveAttach.needs_lan_url || !liveAttach.tuner_url ? (
                           <p className="wizard-note" data-testid="live-channels-attach-warning">
                             {liveAttach.warning ||
@@ -2635,8 +2639,7 @@ export default function LiveChannelsSection({
                             </label>
                             <label>
                               <span>
-                                Tunarr XMLTV URL (used by Attach Tunarr guide in Plex — not a
-                                Plex UI paste field)
+                                Tunarr XMLTV URL (Projectionist writes this — not a Plex UI paste field)
                               </span>
                               <input
                                 type="text"
@@ -2652,11 +2655,11 @@ export default function LiveChannelsSection({
                           <LiveStatusCheck ok={Boolean(liveAttach.discovery?.ok)} soft={!liveAttach.discovery?.ok}>
                             {liveAttach.discovery?.message || "Discovery not checked."}
                           </LiveStatusCheck>
-                          {liveChannelsStatus?.guide_index?.last_attach?.ok ? (
+                          {mappingOk ? (
                             <LiveStatusCheck ok>
-                              Guide attached
-                              {liveChannelsStatus.guide_index.last_attach.dvr_key
-                                ? ` · DVR ${liveChannelsStatus.guide_index.last_attach.dvr_key}`
+                              Live Plex map ok
+                              {liveChannelsStatus?.guide_index?.plex_livetv?.mapped != null
+                                ? ` · ${liveChannelsStatus.guide_index.plex_livetv.mapped}/${liveChannelsStatus.guide_index.plex_livetv.expected}`
                                 : ""}
                             </LiveStatusCheck>
                           ) : null}
@@ -2664,10 +2667,9 @@ export default function LiveChannelsSection({
                       </>
                     ) : (
                       <p className="wizard-note">
-                        On Tuner Setup, select discovered Tunarr and enter any ZIP so Next unlocks.
-                        EPG Location is commercial lineups only. Then click Attach Tunarr guide in
-                        Plex — Projectionist wires Tunarr XMLTV via the PMS API (OTA stays on its
-                        commercial guide). Leave any OTA device in place.
+                        Click Refresh Plex map — Projectionist writes the tuner and guide.
+                        Open <strong>Plex didn’t see the tuner</strong> only if Plex never
+                        discovered Tunarr. Leave any OTA device in place.
                       </p>
                     )}
                   </div>

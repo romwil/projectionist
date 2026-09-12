@@ -2,6 +2,34 @@
 
 ## [Unreleased]
 
+## [1.35.0] — 2026-09-12
+
+Live Channels serializes one job at a time, tells the truth about the Plex map, and keeps Refresh (never delete) as the default.
+
+### Highlights
+- **One job at a time.** A sticky rail shows what’s running — Refresh, Rebuild, engine, continuity, publish, or refill — and locks the other Live buttons so you can’t start a second job.
+- **Honest Plex health.** Stations and Overview show the live channel map and tuner, not last week’s attach receipt.
+- **Refresh, don’t delete.** **Refresh Plex map** injects or remaps without deleting the DVR. **Rebuild tuner in Plex** is the advanced delete path, behind a strong confirm.
+
+### Added
+- Shared Live job object `{ kind, phase, percent, message, startedAt }` on status; owned-job store plus 409 when another Live job is running.
+- Sticky job rail (`aria-live`) on Stations / Setup and a compact Overview snippet.
+- Overview Live health one-liner (`liveOverviewLine`) from live map + tuner.
+
+### Changed
+- Default Plex action is **Refresh Plex map** (Attach path). Advanced **Rebuild tuner in Plex** is today’s Repair (`force_recreate`). No primary Repair-as-delete button.
+- Attach / publish refresh never auto-DELETE on a short map or dead tuner; short HDHR cache returns `rebuild_needed` instead of recreating.
+- `guide_ok` / Attached follow live `mapping_ok`. Last attach is a subtitle only.
+- Setup happy path: Projectionist writes the tuner/guide. Five-step owner Plex wizard lives under **Plex didn’t see the tuner**.
+
+### Fixed
+- Short-map Attach no longer DELETE+recreate. Publish refresh does not `force_recreate` without Rebuild confirm.
+
+### Verification
+- Backend: 2,115 passed, 6 skipped; 76.30% coverage (74% required).
+- Frontend unit: 715 passed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.
+- Interactive UI QA delta on `:8790` (Path A visual campaign): Stations infra, job rail (simulated busy — no Automat Plex Refresh/Rebuild), Setup copy, Overview echo, Lights Up + Lights Down. Verdict PASS. Report: `qa-runs/2026-09-12-owner-live-channels-delta.md`.
+
 ## [1.34.3] — 2026-09-05
 
 Attach can wake a dead Tunarr tuner in Plex without tearing down the Live TV guide.

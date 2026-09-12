@@ -145,16 +145,26 @@ export function liveInfrastructureFacts(status) {
   const tunerAlive =
     plex.tuner_alive
     ?? (Boolean(plex.device_present) && String(plex.device_status || "").toLowerCase() !== "dead");
-  const guideOk = plex.guide_ok ?? Boolean(lastAttach.ok);
+  const mapped = Number(plex.mapped);
+  const expected = Number(plex.expected);
+  const hasMap = Number.isFinite(mapped) && Number.isFinite(expected) && expected > 0;
+  const mappingOk = plex.mapping_ok ?? plex.guide_ok ?? (hasMap && mapped >= expected && tunerAlive);
   const xmltvError = xmltv.ok === false ? String(xmltv.error || "XMLTV error") : "";
   const keptHot = Number(warm.kept_hot) || 0;
+  let guideLabel = "Plex guide not attached";
+  if (hasMap) {
+    guideLabel = `Plex map ${mapped}/${expected}${mappingOk ? "" : " · incomplete"}`;
+  } else if (plex.device_present) {
+    guideLabel = "Plex map unknown";
+  }
   return {
     engineUp,
     engineLabel: engineUp ? "Tunarr up" : "Tunarr down",
-    guideOk: Boolean(guideOk),
-    guideLabel: lastAttach.at
-      ? `Plex guide ${guideOk ? "ok" : "failed"} · last ingest ${lastAttach.at}`
-      : "Plex guide not attached",
+    guideOk: Boolean(mappingOk),
+    guideLabel,
+    lastAttachLabel: lastAttach.at
+      ? `Last attach ${lastAttach.at}${lastAttach.ok === false ? " · failed" : ""}`
+      : "",
     tunerAlive: Boolean(tunerAlive),
     tunerLabel: tunerAlive ? "Tuner alive" : "Tuner dead",
     xmltvError,
@@ -163,6 +173,19 @@ export function liveInfrastructureFacts(status) {
         ? `${keptHot} channel${keptHot === 1 ? "" : "s"} kept hot`
         : "No channels kept hot",
   };
+}
+
+/** Overview one-liner: live engine + map + tuner (not last-attach receipt). */
+export function liveOverviewLine(status) {
+  if (!status) return "Live Channels status not loaded.";
+  const facts = liveInfrastructureFacts(status);
+  const stations = Number(status.channel_count ?? 0);
+  return [
+    facts.engineUp ? "TV engine running" : "TV engine unreachable",
+    `${stations} station${stations === 1 ? "" : "s"}`,
+    facts.guideLabel,
+    facts.tunerLabel,
+  ].join(" · ");
 }
 
 /**
