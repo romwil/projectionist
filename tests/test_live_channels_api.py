@@ -25,6 +25,7 @@ class LiveChannelsApiTests(unittest.TestCase):
         from projectionist.live_channels.continuity_progress import (
             reset_progress_for_tests as reset_continuity_progress,
         )
+        from projectionist.live_channels.job import reset_live_job_for_tests
         from projectionist.live_channels.lifecycle_progress import reset_progress_for_tests
         from projectionist.live_channels.publish_progress import (
             reset_progress_for_tests as reset_publish_progress,
@@ -33,6 +34,7 @@ class LiveChannelsApiTests(unittest.TestCase):
         reset_progress_for_tests()
         reset_continuity_progress()
         reset_publish_progress()
+        reset_live_job_for_tests()
         import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
@@ -44,6 +46,7 @@ class LiveChannelsApiTests(unittest.TestCase):
         from projectionist.live_channels.continuity_progress import (
             reset_progress_for_tests as reset_continuity_progress,
         )
+        from projectionist.live_channels.job import reset_live_job_for_tests
         from projectionist.live_channels.lifecycle_progress import reset_progress_for_tests
         from projectionist.live_channels.publish_progress import (
             reset_progress_for_tests as reset_publish_progress,
@@ -53,6 +56,7 @@ class LiveChannelsApiTests(unittest.TestCase):
         reset_progress_for_tests()
         reset_continuity_progress()
         reset_publish_progress()
+        reset_live_job_for_tests()
         for key in ("PROJECTIONIST_SKIP_DOTENV", "PROJECTIONIST_SKIP_DOTENV", "LLM_PROVIDER"):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
@@ -530,6 +534,24 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertTrue(body["ok"])
         self.assertEqual(body["mapped"], 6)
         self.assertEqual(body["expected"], 6)
+
+    def test_plex_refresh_conflicts_when_job_busy(self) -> None:
+        from projectionist.live_channels.job import KIND_PLEX_REFRESH, owned_store
+
+        self._enable(public_url="http://10.10.1.202:18765")
+        store = owned_store()
+        self.assertTrue(store.begin(KIND_PLEX_REFRESH))
+        resp = self.client.post("/api/admin/live-channels/plex-attach-guide")
+        self.assertEqual(resp.status_code, 409, resp.text)
+        self.assertIn("Another Live job", resp.json()["detail"])
+
+    def test_status_includes_idle_job(self) -> None:
+        self._enable()
+        resp = self.client.get("/api/admin/live-channels/status")
+        self.assertEqual(resp.status_code, 200, resp.text)
+        job = resp.json().get("job") or {}
+        self.assertIn("phase", job)
+        self.assertFalse(job.get("busy"))
 
     def test_plex_attach_uses_public_url_not_docker_internal(self) -> None:
         self._enable(

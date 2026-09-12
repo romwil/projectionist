@@ -417,8 +417,8 @@ def build_plex_attach(
         "network tuner — leave any OTA / antenna DVR in place. The Plex UI has no "
         "XMLTV field in Tuner Setup, Device Settings, or DVR Settings once a "
         "commercial ZIP guide is on the server. After Tunarr is added as a tuner, "
-        "use Admin → Attach Tunarr guide in Plex (PMS API) to put Tunarr on its "
-        "own XMLTV DVR — OTA commercial guide stays untouched."
+        "use Admin → Refresh Plex map to let Projectionist write the tuner and "
+        "guide via the PMS API — OTA commercial guide stays untouched."
     )
 
     address_hint = manual_address or "host:port from the tuner URL below"
@@ -451,14 +451,13 @@ def build_plex_attach(
             ),
         },
         {
-            "title": "Attach Tunarr XMLTV via Projectionist (not Plex UI)",
+            "title": "If Plex didn’t see the tuner — add it once",
             "body": (
-                "Plex Device Settings and DVR Settings do not offer an XMLTV URL. "
-                "Back in Admin → Live Channels, click Attach Tunarr guide in Plex. "
-                "Projectionist calls the PMS API: moves Tunarr onto its own DVR with "
-                f"Tunarr XMLTV ({xmltv or 'the guide URL below'}) and maps channels. "
-                "Your OTA DVR and commercial guide stay untouched. Then refresh / watch "
-                "in Plex Live TV."
+                "Projectionist normally writes the tuner and guide for you (Refresh "
+                "Plex map). Only if Plex never discovered Tunarr: Settings → Live TV "
+                "& DVR → Add device, pick the Tunarr card, enter any ZIP so Next "
+                "unlocks, then return here and Refresh again. "
+                f"Guide URL Projectionist uses: {xmltv or 'the LAN XMLTV URL below'}."
             ),
         },
         {
@@ -522,10 +521,10 @@ def build_plex_attach(
             "existing_livetv": livetv,
             "guide_warning": (
                 "Plex UI has no XMLTV paste in Tuner Setup, Device Settings, or DVR "
-                "Settings when a commercial ZIP guide is already configured. After "
-                "the Tunarr tuner exists, use Admin → Attach Tunarr guide in Plex "
-                "(PMS API) — that creates a separate XMLTV DVR for Tunarr and leaves "
-                "OTA commercial guide alone."
+                "Settings when a commercial ZIP guide is already configured. "
+                "Projectionist writes the tuner and guide — use Admin → Refresh Plex "
+                "map. That creates a separate XMLTV DVR for Tunarr and leaves OTA "
+                "commercial guide alone."
             ),
             "api_attach": True,
         },
@@ -1082,6 +1081,7 @@ def attach_tunarr_xmltv_to_plex(
     timeout: int = 90,
     force_recreate: bool = False,
     _recreate_attempted: bool = False,
+    on_phase: Any = None,
 ) -> Dict[str, Any]:
     """Move Tunarr onto its own Plex DVR with Tunarr XMLTV via PMS API.
 
@@ -1093,7 +1093,8 @@ def attach_tunarr_xmltv_to_plex(
     are left alone.
 
     Success requires mapped count ≥ Tunarr HDHR lineup count (Mapped N/N).
-    Stale short maps trigger one automatic Tunarr-only recreate.
+    Never DELETEs the Tunarr XMLTV DVR unless ``force_recreate`` (Rebuild only).
+    Short maps stay honest — they do not auto-delete.
     """
     from urllib.parse import urlencode
 
@@ -1126,6 +1127,15 @@ def attach_tunarr_xmltv_to_plex(
     expected = count_tunarr_hdhr_channels(base, timeout=min(timeout, 10))
     client = PlexClient(plex_url, plex_token, timeout=timeout)
     steps_done: List[str] = []
+
+    def _phase(phase: str, message: str = "") -> None:
+        if callable(on_phase):
+            try:
+                on_phase(phase, message)
+            except Exception:  # noqa: BLE001
+                pass
+
+    _phase("injecting", "Finding or registering the Tunarr tuner…")
 
     pruned = prune_dead_grabber_devices(
         settings,
@@ -1327,6 +1337,7 @@ def attach_tunarr_xmltv_to_plex(
             "steps": steps_done,
         }
 
+    _phase("scanning", "Scanning Tunarr channels in Plex…")
     scan = scan_plex_device_channels(
         client,
         device_key,
@@ -1336,6 +1347,7 @@ def attach_tunarr_xmltv_to_plex(
     steps_done.append(f"scanned_device_{scan.get('count', 0)}")
     device_channel_count = int(scan.get("count") or 0)
 
+    _phase("mapping", "Mapping Tunarr channels…")
     mappings, map_err = _put_device_channelmap(
         client,
         device_key=device_key,
@@ -1359,35 +1371,12 @@ def attach_tunarr_xmltv_to_plex(
     else:
         steps_done.append("no_channel_mappings")
 
+    _phase("reloading", "Reloading the Plex guide…")
     _reload_dvr_guide(client, dvr_key, timeout=timeout)
     steps_done.append("reload_guide")
 
     mapped = len(mappings)
     complete = _mapping_complete(mapped, expected)
-
-    # Stale HDHR cache / orphan XMLTV DVR: recreate Tunarr stack once.
-    if not complete and not _recreate_attempted:
-        steps_done.extend(
-            _delete_tunarr_xmltv_stack(
-                client,
-                device_key=device_key,
-                device_uuid=device_uuid,
-                xmltv=xmltv,
-                timeout=timeout,
-            )
-        )
-        retry = attach_tunarr_xmltv_to_plex(
-            settings,
-            tunarr_url=tunarr_url,
-            request_host=request_host,
-            friendly_name=friendly_name,
-            timeout=timeout,
-            force_recreate=False,
-            _recreate_attempted=True,
-        )
-        retry_steps = list(retry.get("steps") or [])
-        retry["steps"] = steps_done + ["recreate_after_short_map"] + retry_steps
-        return retry
 
     message = (
         f"Mapped {mapped}/{expected or mapped} Tunarr channel(s) on Plex DVR {dvr_key}."
@@ -1398,8 +1387,9 @@ def attach_tunarr_xmltv_to_plex(
         message += " OTA commercial DVR left in place."
     else:
         message = (
-            f"Plex still maps only {mapped}/{expected} Tunarr channels after attach. "
-            "Open Admin → Repair Plex tuner/guide, or re-add the tuner in Plex Channel Sources."
+            f"Plex still maps only {mapped}/{expected} Tunarr channels after Refresh. "
+            "Use Rebuild tuner in Plex if you intentionally need a full recreate "
+            "(hangs PMS briefly; Tunarr Live TV drops; OTA stays)."
         )
 
     return {
@@ -1493,7 +1483,8 @@ def refresh_plex_live_tv_channels(
                 "xmltv_url": xmltv,
                 "message": (
                     f"Tunarr device missing from Plex Channel Sources "
-                    f"(Tunarr has {expected} channel(s)). Run Repair Plex tuner/guide."
+                    f"(Tunarr has {expected} channel(s)). Use Refresh Plex map, "
+                    "or Rebuild tuner in Plex if Refresh is not enough."
                 ),
             }
         attached = attach_tunarr_xmltv_to_plex(
@@ -1502,7 +1493,7 @@ def refresh_plex_live_tv_channels(
             request_host=request_host,
             friendly_name=friendly_name,
             timeout=timeout,
-            force_recreate=True,
+            force_recreate=False,
         )
         attached["attach_needed"] = not bool(attached.get("ok"))
         attached.setdefault("expected", expected)
@@ -1519,7 +1510,7 @@ def refresh_plex_live_tv_channels(
                 request_host=request_host,
                 friendly_name=friendly_name,
                 timeout=timeout,
-                force_recreate=True,
+                force_recreate=False,
             )
         return {
             "ok": False,
@@ -1527,7 +1518,10 @@ def refresh_plex_live_tv_channels(
             "mapped": 0,
             "expected": expected,
             "device_present": False,
-            "message": "Tunarr grabber is missing Plex keys — run Repair Plex tuner/guide.",
+            "message": (
+                "Tunarr grabber is missing Plex keys — use Refresh Plex map, "
+                "or Rebuild tuner in Plex if the device is corrupted."
+            ),
         }
 
     status = str(device.attrib.get("status") or "").strip().lower()
@@ -1539,7 +1533,7 @@ def refresh_plex_live_tv_channels(
                 request_host=request_host,
                 friendly_name=friendly_name,
                 timeout=timeout,
-                force_recreate=True,
+                force_recreate=False,
             )
             attached["attach_needed"] = not bool(attached.get("ok"))
             return attached
@@ -1553,7 +1547,8 @@ def refresh_plex_live_tv_channels(
             "xmltv_url": xmltv,
             "message": (
                 "Tunarr device is dead in Plex Channel Sources — "
-                "run Repair Plex tuner/guide."
+                "Refresh Plex map re-registers it without deleting the guide. "
+                "Use Rebuild tuner in Plex only if Refresh fails."
             ),
         }
 
@@ -1587,7 +1582,7 @@ def refresh_plex_live_tv_channels(
             "expected": expected,
             "device_present": True,
             "xmltv_url": xmltv,
-            "message": "No Tunarr XMLTV DVR found — run Attach / Repair Plex tuner/guide.",
+            "message": "No Tunarr XMLTV DVR found — use Refresh Plex map.",
         }
 
     scan = scan_plex_device_channels(
@@ -1599,22 +1594,29 @@ def refresh_plex_live_tv_channels(
     steps_done.append(f"scanned_device_{scan.get('count', 0)}")
     device_channel_count = int(scan.get("count") or 0)
 
-    # Plex still only sees the old 4 → recreate Tunarr stack.
-    if expected > 0 and device_channel_count < expected and allow_attach:
-        attached = attach_tunarr_xmltv_to_plex(
-            settings,
-            tunarr_url=tunarr_url,
-            request_host=request_host,
-            friendly_name=friendly_name,
-            timeout=timeout,
-            force_recreate=True,
+    # Short HDHR cache: tell the truth. Rebuild is the only delete path.
+    if expected > 0 and device_channel_count < expected:
+        message = (
+            f"Plex device still sees only {device_channel_count}/{expected} Tunarr "
+            "channels. Refresh will not delete the tuner — use Rebuild tuner in Plex "
+            "if you intentionally need a full recreate (hangs PMS briefly; OTA stays)."
         )
-        attached["attach_needed"] = not bool(attached.get("ok"))
-        attached.setdefault("steps", [])
-        attached["steps"] = steps_done + ["recreate_stale_device_channels"] + list(
-            attached.get("steps") or []
-        )
-        return attached
+        return {
+            "ok": False,
+            "attach_needed": False,
+            "rebuild_needed": True,
+            "mapped": device_channel_count,
+            "expected": expected,
+            "device_present": True,
+            "device_channels": device_channel_count,
+            "dvr_key": dvr_key,
+            "device_key": device_key,
+            "device_uuid": device_uuid,
+            "xmltv_url": xmltv,
+            "steps": steps_done + ["short_device_channels"],
+            "error": message,
+            "message": message,
+        }
 
     mappings, map_err = _put_device_channelmap(
         client,
@@ -1646,22 +1648,6 @@ def refresh_plex_live_tv_channels(
 
     mapped = len(mappings)
     complete = _mapping_complete(mapped, expected)
-    if not complete and allow_attach:
-        attached = attach_tunarr_xmltv_to_plex(
-            settings,
-            tunarr_url=tunarr_url,
-            request_host=request_host,
-            friendly_name=friendly_name,
-            timeout=timeout,
-            force_recreate=True,
-        )
-        attached["attach_needed"] = not bool(attached.get("ok"))
-        attached.setdefault("steps", [])
-        attached["steps"] = steps_done + ["recreate_short_channelmap"] + list(
-            attached.get("steps") or []
-        )
-        return attached
-
     if complete:
         message = (
             f"Mapped {mapped}/{expected} Tunarr channel(s) in Plex · guide reloading."
@@ -1671,7 +1657,7 @@ def refresh_plex_live_tv_channels(
     else:
         message = (
             f"Plex mapped only {mapped}/{expected} Tunarr channels — "
-            "run Repair Plex tuner/guide."
+            "use Rebuild tuner in Plex if you intentionally need a full recreate."
         )
 
     return {
@@ -1753,7 +1739,7 @@ def probe_plex_tunarr_mapping(
             "message": (
                 f"Tunarr HDHR {'up' if hdhr_ok else 'down'} with {expected} channel(s); "
                 "Plex Channel Sources has no Tunarr/Projectionist device — "
-                "run Repair Plex tuner/guide."
+                "use Refresh Plex map."
             ),
         }
 
@@ -1826,8 +1812,9 @@ def repair_plex_tunarr_livetv(
     request_host: Optional[str] = None,
     friendly_name: str = "Projectionist",
     timeout: int = 120,
+    on_phase: Any = None,
 ) -> Dict[str, Any]:
-    """One-click: recreate Tunarr device + XMLTV DVR + full channel map."""
+    """Rebuild: the only path that DELETEs the Tunarr XMLTV DVR + grabber."""
     return attach_tunarr_xmltv_to_plex(
         settings,
         tunarr_url=tunarr_url,
@@ -1835,6 +1822,7 @@ def repair_plex_tunarr_livetv(
         friendly_name=friendly_name,
         timeout=timeout,
         force_recreate=True,
+        on_phase=on_phase,
     )
 
 

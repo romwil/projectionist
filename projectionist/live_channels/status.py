@@ -22,6 +22,24 @@ from projectionist.live_channels.plex_attach import (
 from projectionist.live_channels.plex_pass import check_plex_pass
 
 
+def _live_job_snapshot() -> Dict[str, Any]:
+    try:
+        from projectionist.live_channels.job import build_live_job
+
+        return build_live_job()
+    except Exception:  # noqa: BLE001
+        return {
+            "kind": None,
+            "phase": "idle",
+            "percent": 0,
+            "message": "",
+            "started_at": None,
+            "startedAt": None,
+            "busy": False,
+            "label": "",
+        }
+
+
 def _xmltv_programme_stats(guide_url: str, *, timeout: int = 8) -> Dict[str, Any]:
     """Fetch Tunarr XMLTV and count channels / programmes (owner indexing pulse)."""
     url = str(guide_url or "").strip()
@@ -595,7 +613,8 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
 
     device_status = str(plex_mapping.get("device_status") or "")
     tuner_alive = bool(plex_mapping.get("device_present")) and device_status.lower() != "dead"
-    guide_ok = bool(last_guide_attach_ok and xmltv.get("ok"))
+    # Honest: live mapping, not last-attach receipt (a 6/6 receipt can be stale).
+    guide_ok = bool(plex_mapping.get("ok"))
 
     stream_warm: Dict[str, Any] = {"kept_hot": 0, "last_run_at": None, "ok": None, "message": ""}
     try:
@@ -647,8 +666,8 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
             and int(xmltv.get("content_programme_count") or 0) > 0
         ),
         "owner_hint": (
-            "Lineups have real titles — open Plex Live TV Guide, or click Attach Tunarr "
-            "guide in Plex again if the grid is still empty (reload can take a minute)."
+            "Lineups have real titles — open Plex Live TV Guide, or Refresh Plex map "
+            "if the grid is still empty (reload can take a minute)."
             if lineup_health.get("playable")
             and int(xmltv.get("content_programme_count") or 0) > 0
             else (
@@ -756,4 +775,5 @@ def build_live_channels_status(settings: Any) -> Dict[str, Any]:
         "icon_probe": icon_probe,
         "plex_pass": plex_pass,
         "stream_warm": stream_warm,
+        "job": _live_job_snapshot(),
     }
