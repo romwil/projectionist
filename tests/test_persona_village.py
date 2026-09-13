@@ -12,8 +12,10 @@ from unittest.mock import AsyncMock, patch
 from projectionist.agent.curator import _append_persona_consult_blocks, household_tool_summary
 from projectionist.agent.tools import TOOL_DEFINITIONS, ToolRegistry, build_system_prompt
 from projectionist.agent.village import (
+    CONSULT_MAX_ANSWER_CHARS,
     build_shared_consult_context,
     cancel_unpromised_persona_consults,
+    clip_consult_answer,
     quote_block_from_consult,
     resolve_village_sibling,
     run_persona_consult,
@@ -164,6 +166,44 @@ class TestConsultPersonaTool(unittest.IsolatedAsyncioTestCase):
                 callback["blocks"][1]["payload"]["consult_id"],
                 result["consult_id"],
             )
+
+    async def test_long_professor_answer_is_not_clipped_at_900(self) -> None:
+        lore = (
+            "The pylon/crystal mythology in Land of the Lost (1974-1977) is a "
+            "genuinely fascinating case of serialized world-building that deepened "
+            "considerably across its run. Season 1 established the core mechanics. "
+            "Season 2 is where the lore sharpens, owing substantially to David Gerrold. "
+        ) * 6
+        self.assertGreater(len(lore.strip()), 900)
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            settings = Settings()
+            settings.llm_api_key = "test-key"
+            registry = ToolRegistry(db, settings, DEFAULT_LENS_ID, session_id="thread-lore")
+            sibling = resolve_village_sibling("The Professor")
+            assert sibling is not None
+
+            async def long_chat(*args, **kwargs):
+                return {"choices": [{"message": {"content": lore}}]}
+
+            with (
+                patch("projectionist.agent.providers.get_chat_provider", return_value=object()),
+                patch("projectionist.telemetry.llm_track.tracked_chat", side_effect=long_chat),
+            ):
+                result = await run_persona_consult(
+                    registry,
+                    sibling,
+                    question="How did the pylon mythology evolve?",
+                    shared={"question": "How did the pylon mythology evolve?"},
+                    specialty={"specialty": "citations"},
+                    session_id="thread-lore",
+                )
+
+            self.assertTrue(result.get("quote_ok"))
+            answer = result.get("answer") or ""
+            self.assertGreater(len(answer), 900)
+            self.assertFalse(str(answer).endswith("…"))
+            self.assertIn("David Gerrold", answer)
 
     async def test_tool_definition_present(self) -> None:
         names = {tool["function"]["name"] for tool in TOOL_DEFINITIONS}
@@ -333,6 +373,37 @@ class TestConsultPersonaTool(unittest.IsolatedAsyncioTestCase):
             prompt = build_system_prompt(db, DEFAULT_LENS_ID, user_id="u1", user_role="member")
             self.assertIn("consult_persona", prompt)
             self.assertIn("I asked", prompt)
+
+
+class TestConsultAnswerClip(unittest.TestCase):
+    def test_floor_is_above_the_old_900_char_mid_sentence_cut(self) -> None:
+        self.assertGreaterEqual(CONSULT_MAX_ANSWER_CHARS, 4000)
+
+    def test_professor_lore_paragraph_is_not_ellipsis_clipped(self) -> None:
+        # Repro: Land of the Lost village quote ended mid-sentence with "…" at 900.
+        body = (
+            "The pylon/crystal mythology in Land of the Lost (1974-1977) is a "
+            "serialized world-building case that deepened across its run. "
+        )
+        lore = (body * 12).strip()
+        self.assertGreater(len(lore), 900)
+        self.assertLess(len(lore), CONSULT_MAX_ANSWER_CHARS)
+        kept = clip_consult_answer(lore)
+        self.assertEqual(kept, lore)
+        self.assertFalse(kept.endswith("…"))
+
+    def test_runaway_reply_clips_at_sentence_not_mid_word(self) -> None:
+        sentences = [
+            f"Sentence {i} finishes cleanly with a cited neighbor from the archive."
+            for i in range(140)
+        ]
+        runaway = " ".join(sentences)
+        self.assertGreater(len(runaway), CONSULT_MAX_ANSWER_CHARS)
+        clipped = clip_consult_answer(runaway)
+        self.assertLessEqual(len(clipped), CONSULT_MAX_ANSWER_CHARS)
+        self.assertTrue(clipped.endswith("."))
+        self.assertFalse(clipped.endswith("…"))
+        self.assertNotIn("neighb…", clipped)
 
 
 class TestConsultQuoteBlocks(unittest.TestCase):

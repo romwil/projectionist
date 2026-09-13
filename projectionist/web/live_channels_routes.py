@@ -1420,12 +1420,19 @@ def live_channels_plex_attach_guide_endpoint(
         )
     except Exception:  # noqa: BLE001 — attach can still proceed
         prepare = {"ok": False, "skipped": True}
-    result = attach_tunarr_xmltv_to_plex(
-        settings, request_host=request_host, on_phase=store.set_phase
-    )
-    result["labels"] = prepare.get("labels") or {}
-    result["prepare"] = prepare
-    _persist_plex_guide_attach(settings, result)
+    try:
+        result = attach_tunarr_xmltv_to_plex(
+            settings, request_host=request_host, on_phase=store.set_phase
+        )
+        result["labels"] = prepare.get("labels") or {}
+        result["prepare"] = prepare
+        _persist_plex_guide_attach(settings, result)
+    except Exception as error:  # noqa: BLE001 — must clear owned-job busy
+        store.set_error(str(error)[:400] or "Could not refresh the Plex map")
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not refresh the Plex map"),
+        ) from error
     if not result.get("ok"):
         detail = str(
             result.get("error")
@@ -1479,10 +1486,17 @@ def live_channels_plex_repair_endpoint(
         )
     except Exception:  # noqa: BLE001
         pass
-    result = repair_plex_tunarr_livetv(
-        settings, request_host=request_host, on_phase=store.set_phase
-    )
-    _persist_plex_guide_attach(settings, result)
+    try:
+        result = repair_plex_tunarr_livetv(
+            settings, request_host=request_host, on_phase=store.set_phase
+        )
+        _persist_plex_guide_attach(settings, result)
+    except Exception as error:  # noqa: BLE001 — must clear owned-job busy
+        store.set_error(str(error)[:400] or "Could not rebuild the Plex tuner")
+        raise HTTPException(
+            status_code=502,
+            detail=_safe_error_detail(error, "Could not rebuild the Plex tuner"),
+        ) from error
     if not result.get("ok"):
         detail = str(
             result.get("error")

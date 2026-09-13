@@ -25,7 +25,9 @@ CONSULT_TIMEOUT_S = 12.0
 CONSULT_HARD_TIMEOUT_S = 55.0
 CONSULT_PROMISE_WAIT_S = 60.0
 CONSULT_MAX_OUTSTANDING = 8
-CONSULT_MAX_ANSWER_CHARS = 900
+# Safety net only — 900 clipped The Professor mid-sentence (Land of the Lost lore).
+# Provider max_tokens is 4096; ~6k chars lets a specialist take finish without a novel.
+CONSULT_MAX_ANSWER_CHARS = 6000
 _OUTSTANDING_CONSULT_TASKS: Set[asyncio.Task[Any]] = set()
 _UNPROMISED_CONSULT_TASKS: Dict[
     str,
@@ -514,6 +516,33 @@ def _extract_answer_text(response: Mapping[str, Any]) -> str:
     return " ".join((_extract_text(response) or "").split()).strip()
 
 
+def clip_consult_answer(answer: str, *, limit: int = CONSULT_MAX_ANSWER_CHARS) -> str:
+    """Keep a complete consult quote; only clip runaway replies at a sentence end.
+
+    The old 900-char slice appended ``…`` mid-sentence, which made the primary
+    curator narrate "the response cut off there." Prefer a sentence boundary
+    so a specialist take can finish.
+    """
+    text = str(answer or "").strip()
+    if len(text) <= limit:
+        return text
+    window = text[:limit].rstrip()
+    if window.endswith((".", "!", "?")):
+        return window
+    cut = -1
+    for sep in (". ", "! ", "? "):
+        idx = window.rfind(sep)
+        if idx > cut:
+            cut = idx
+    min_keep = max(200, limit // 3)
+    if cut >= min_keep:
+        return window[: cut + 1].rstrip()
+    space = window.rfind(" ")
+    if space >= min_keep:
+        return window[:space].rstrip() + "…"
+    return window[: max(1, limit - 1)].rstrip() + "…"
+
+
 def _thread_has_consult_promise(db: Any, session_id: str, consult_id: str) -> bool:
     if not db.get_chat_thread(session_id):
         return False
@@ -564,7 +593,7 @@ async def _persist_delayed_consult(
         )
         return
 
-    answer = _extract_answer_text(response)
+    answer = clip_consult_answer(_extract_answer_text(response))
     if not answer:
         logger.info(
             "delayed persona consult returned no answer persona=%s session_id=%s",
@@ -572,8 +601,6 @@ async def _persist_delayed_consult(
             session_id,
         )
         return
-    if len(answer) > CONSULT_MAX_ANSWER_CHARS:
-        answer = answer[: CONSULT_MAX_ANSWER_CHARS - 1].rstrip() + "…"
 
     promise_deadline = time.monotonic() + CONSULT_PROMISE_WAIT_S
     while time.monotonic() < promise_deadline:
@@ -733,8 +760,10 @@ async def run_persona_consult(
     persona_block = _persona_prompt_block(registry.db, persona_id=sibling.template_id)
     specialty_instruction = SPECIALTY_INSTRUCTIONS.get(sibling.specialty, "")
     system = (
-        f"You are {sibling.display_name}, briefly consulting for a sibling curator. "
-        "Answer in 2–5 short sentences in your own voice. Do not call tools. "
+        f"You are {sibling.display_name}, consulting for a sibling curator. "
+        "Answer completely in your own voice — finish every sentence. "
+        "A tight paragraph or two is fine; go longer when cited depth needs it. "
+        "Do not trail off or end mid-thought. Do not call tools. "
         "Do not claim fleet writes completed. Do not invent private facts beyond the "
         "shared context. This is a quoted handoff — speak as yourself.\n"
         f"{specialty_instruction}\n"
@@ -836,12 +865,11 @@ async def run_persona_consult(
             code="consult_failed",
         )
 
-    answer = _extract_answer_text(response)
+    answer = clip_consult_answer(_extract_answer_text(response))
     if not answer:
-        fallback = _deterministic_specialty_answer(sibling, specialty, question)
-        answer = fallback
-    if len(answer) > CONSULT_MAX_ANSWER_CHARS:
-        answer = answer[: CONSULT_MAX_ANSWER_CHARS - 1].rstrip() + "…"
+        answer = clip_consult_answer(
+            _deterministic_specialty_answer(sibling, specialty, question)
+        )
 
     payload = _consult_payload(sibling, question, answer)
     payload["note"] = (

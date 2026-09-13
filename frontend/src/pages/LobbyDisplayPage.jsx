@@ -137,7 +137,7 @@ export default function LobbyDisplayPage() {
               href={kioskUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="ghost"
+              className="btn-link"
               data-testid="lobby-open-kiosk"
             >
               Open kiosk

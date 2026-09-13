@@ -870,7 +870,8 @@
 .scheduled-tasks-detail-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.4rem;
+  gap: 12px;
+  align-items: center;
   justify-content: flex-start;
 }
 
@@ -1235,12 +1236,18 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 .tag-and-bar,
 .tag-sort-control,
 .person-role-filters,
-.person-owned-pct,
-.scheduled-tasks-header-actions {
+.person-owned-pct {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.55rem;
+}
+
+.scheduled-tasks-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
 }
 
 .tag-and-bar {

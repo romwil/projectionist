@@ -599,7 +599,8 @@
 .user-management-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 12px;
+  align-items: center;
 }
 
 .user-management-actions .danger {
