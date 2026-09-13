@@ -2247,9 +2247,17 @@ export default function ConfigPage() {
                           serviceId="llm"
                         />
                       </div>
-                      <button type="button" data-testid="verify-llm" onClick={() => runTest("llm")} disabled={testing === "llm"}>
-                        {testing === "llm" ? "Verifying…" : "Verify"}
-                      </button>
+                      <div className="service-card-actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="verify-llm"
+                          onClick={() => runTest("llm")}
+                          disabled={testing === "llm"}
+                        >
+                          {testing === "llm" ? "Verifying…" : "Verify"}
+                        </button>
+                      </div>
                     </div>
                     <div className="wizard-fields">
                       <label>
@@ -2307,9 +2315,17 @@ export default function ConfigPage() {
                         serviceId={id}
                       />
                     </div>
-                    <button type="button" data-testid={`verify-${id}`} onClick={() => runTest(id)} disabled={testing === id}>
-                      {testing === id ? "Verifying…" : "Verify"}
-                    </button>
+                    <div className="service-card-actions">
+                      <button
+                        type="button"
+                        className="primary"
+                        data-testid={`verify-${id}`}
+                        onClick={() => runTest(id)}
+                        disabled={testing === id}
+                      >
+                        {testing === id ? "Verifying…" : "Verify"}
+                      </button>
+                    </div>
                   </div>
                   {id === "plex" && plexCollapsed ? (
                     <button type="button" className="ghost" onClick={() => setPlexCollapsed(false)}>
@@ -2609,7 +2625,7 @@ export default function ConfigPage() {
                       </p>
                       <LiveJobRail job={liveChannelsStatus?.job} compact />
                       <div className="config-actions">
-                        <Link to="/admin/live-channels" className="btn" data-testid="live-overview-open">
+                        <Link to="/admin/live-channels" className="btn-link" data-testid="live-overview-open">
                           Open Live Channels
                         </Link>
                       </div>
@@ -2619,7 +2635,7 @@ export default function ConfigPage() {
                       <h2>{tip.title}</h2>
                       <p>{tip.body}</p>
                       <div className="config-actions">
-                        <Link to={tip.ctaTo} className="btn" data-testid="live-onboarding-cta">
+                        <Link to={tip.ctaTo} className="btn-link" data-testid="live-onboarding-cta">
                           {tip.ctaLabel}
                         </Link>
                       </div>
@@ -2633,7 +2649,7 @@ export default function ConfigPage() {
         {showSection("overview") ? (
         <section className="config-section" data-testid="training-corpus-export">
           <h2>Export taste data</h2>
-          <p>
+          <p className="wizard-note">
             Download your chat reactions, saved preferences, and personal reviews as JSON — useful for
             backup or offline experiments.
           </p>
@@ -2641,6 +2657,7 @@ export default function ConfigPage() {
             <button
               type="button"
               data-testid="training-corpus-export-button"
+              className="primary"
               onClick={handleExportTrainingCorpus}
               disabled={exportingCorpus}
             >
@@ -2657,7 +2674,7 @@ export default function ConfigPage() {
         {showSection("overview") ? (
         <section className="config-section" data-testid="admin-backup-snapshot">
           <h2>Settings + database snapshot</h2>
-          <p>
+          <p className="wizard-note">
             Download a WAL-safe zip of <code>settings.json</code> and the library database for off-box
             backup. Keep your secrets key with the zip if fields are encrypted at rest.
           </p>
@@ -2780,7 +2797,7 @@ export default function ConfigPage() {
             );
           })()}
           <div className="connections-llm-actions">
-            <button type="button" onClick={() => runTest("llm")} disabled={testing === "llm"}>
+            <button type="button" className="primary" onClick={() => runTest("llm")} disabled={testing === "llm"}>
               Test connection
             </button>
             <CertifiedBadge certified={certifications.llm?.certified} testing={testing === "llm"} serviceId="llm" />
@@ -2819,9 +2836,11 @@ export default function ConfigPage() {
                         serviceId={id}
                       />
                     </div>
-                    <button type="button" onClick={() => runTest(id)} disabled={testing === id}>
-                      {testing === id ? "Testing…" : "Test"}
-                    </button>
+                    <div className="service-card-actions">
+                      <button type="button" className="primary" onClick={() => runTest(id)} disabled={testing === id}>
+                        {testing === id ? "Testing…" : "Test"}
+                      </button>
+                    </div>
                   </div>
                   <div className="service-fields">
                     {fields.map((field) => (
@@ -2883,9 +2902,11 @@ export default function ConfigPage() {
                         serviceId={id}
                       />
                     </div>
-                    <button type="button" onClick={() => runTest(id)} disabled={testing === id}>
-                      {testing === id ? "Testing…" : "Test"}
-                    </button>
+                    <div className="service-card-actions">
+                      <button type="button" className="primary" onClick={() => runTest(id)} disabled={testing === id}>
+                        {testing === id ? "Testing…" : "Test"}
+                      </button>
+                    </div>
                   </div>
                   <div className="service-fields">
                     {fields.map((field) => (
@@ -3007,9 +3028,17 @@ export default function ConfigPage() {
                       serviceId="seerr"
                     />
                   </div>
-                  <button type="button" data-testid="verify-seerr" onClick={() => runTest("seerr")} disabled={testing === "seerr"}>
-                    {testing === "seerr" ? "Testing…" : "Test connection"}
-                  </button>
+                  <div className="service-card-actions">
+                    <button
+                      type="button"
+                      className="primary"
+                      data-testid="verify-seerr"
+                      onClick={() => runTest("seerr")}
+                      disabled={testing === "seerr"}
+                    >
+                      {testing === "seerr" ? "Testing…" : "Test connection"}
+                    </button>
+                  </div>
                 </div>
                 <div className="service-fields">
                   <label>
@@ -3148,12 +3177,12 @@ export default function ConfigPage() {
         <>
         <section className="config-section" data-testid="library-sync-card" id="library-sync">
           <h2>Sync library</h2>
-          <p>
+          <p className="wizard-note">
             Refresh Projectionist from your Plex libraries. The first sync can take a few minutes while titles
             are indexed and enriched.
           </p>
           <div className="config-actions">
-            <button type="button" data-testid="library-sync-button" onClick={handleLibrarySync} disabled={syncingLibrary}>
+            <button type="button" className="primary" data-testid="library-sync-button" onClick={handleLibrarySync} disabled={syncingLibrary}>
               {syncingLibrary ? "Syncing…" : "Sync library"}
             </button>
           </div>
@@ -3229,7 +3258,7 @@ export default function ConfigPage() {
 
         <section className="config-section" data-testid="radarr-register-existing-card">
           <h2>Radarr — register on disk</h2>
-          <p>
+          <p className="wizard-note">
             Movies already in Plex but missing from Radarr can be registered without starting a
             download search. Titles without a TMDB id need a Plex rematch first.
           </p>
@@ -3245,6 +3274,7 @@ export default function ConfigPage() {
           <div className="config-actions">
             <button
               type="button"
+              className="primary"
               data-testid="radarr-register-existing-button"
               onClick={handleRegisterRadarrExisting}
               disabled={registeringRadarr || !radarrGapStats?.total}

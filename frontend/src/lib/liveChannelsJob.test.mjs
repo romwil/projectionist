@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import {
   idleLiveJob,
   isLiveJobBusy,
@@ -8,6 +11,13 @@ import {
   liveJobSnippet,
   plexRebuildConfirmMessage,
 } from "./liveChannelsJob.js";
+import { readAllStyles } from "./readStyles.mjs";
+
+const styles = readAllStyles();
+const liveSection = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../pages/admin/LiveChannelsSection.jsx"),
+  "utf8",
+);
 
 describe("liveChannelsJob", () => {
   it("treats idle / done / error as not busy", () => {
@@ -53,5 +63,36 @@ describe("liveChannelsJob", () => {
     assert.match(msg, /hang/i);
     assert.match(msg, /OTA/);
     assert.doesNotMatch(msg, /\bRepair\b/);
+  });
+});
+
+describe("live channels admin chrome", () => {
+  it("styles the job rail like service-card alerts, not a yellow slab", () => {
+    assert.match(styles, /\.live-channels-job-rail\s*\{[^}]*position:\s*sticky/s);
+    assert.match(styles, /\.live-channels-job-rail\s*\{[^}]*font-size:\s*14px/s);
+    assert.match(styles, /\.live-channels-job-rail\s*\{[^}]*background:\s*var\(--surface-2\)/s);
+    assert.match(styles, /\.service-card-actions\s*\{[^}]*display:\s*flex/s);
+    assert.match(styles, /\.live-channels-infra-facts\s*\{[^}]*font-size:\s*14px/s);
+    assert.match(styles, /\.live-channels-filler-add\s*\{/);
+    assert.match(styles, /\.live-channels-step-label\s*\{[^}]*letter-spacing:\s*0\.1em/s);
+  });
+
+  it("mounts one Live Channels job rail (Overview keeps the compact snippet)", () => {
+    const rails = liveSection.match(/<LiveJobRail\b/g) || [];
+    assert.equal(rails.length, 1);
+    assert.match(liveSection, /className="live-channels-filler-add"/);
+    assert.match(liveSection, /className="ghost"\s+data-testid="live-channels-filler-add"/);
+    assert.doesNotMatch(
+      liveSection,
+      /className="ghost"\s+data-testid="live-channels-rescan-filler"/,
+    );
+    assert.match(
+      liveSection,
+      /className="ghost"\s+data-testid=\{`live-channels-station-save-\$\{settingsStationId\}`\}/,
+    );
+    assert.match(
+      liveSection,
+      /className="primary"\s+data-testid=\{`live-channels-station-refill-cta-\$\{settingsStationId\}`\}/,
+    );
   });
 });

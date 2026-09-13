@@ -1,6 +1,39 @@
 {
-  "generated_at": "2026-09-12T03:36:37Z",
+  "generated_at": "2026-09-13T04:17:19Z",
   "releases": [
+    {
+      "version": "1.35.1",
+      "date": "2026-09-13",
+      "summary": "Live Channels chrome matches the rest of Admin, failed Plex jobs unlock, and village consults finish their sentences.",
+      "highlights": [
+        "**One job rail, one primary.** Live Channels shows the working rail with the tuner, one gold action per card, and **Add path** as a quiet control — not a gold slab.",
+        "**Admin that matches Settings.** Buttons, type, and spacing line up across Admin and member settings so notes stay readable at 14px.",
+        "**Refresh won’t stick.** If Plex map refresh or tuner rebuild fails, Live jobs unlock instead of staying busy forever.",
+        "**Specialists finish the thought.** Village consults can run a full take instead of cutting off mid-sentence."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "Live Channels: job rail sits with the tuner (Overview keeps the compact snippet); card actions wrap in `service-card-actions`; filler **Add path** is ghost; wizard notes / infra facts stay 14px.",
+            "Admin (Overview, Connections, Holidays, Tasks, Lobby) and matching member settings (Notifications send slots, field hints) share the same primary/ghost and type rhythm.",
+            "Persona consult cap `900` → `6000` characters with `clip_consult_answer` (sentence-end clip, not a mid-word ellipsis). Consult prompt asks specialists to finish every sentence."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`plex-attach-guide` and `plex-repair` wrap attach/repair in try/except and `store.set_error` so the owned-job store is not left busy after an uncaught Plex exception."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Gates pending (pytest ≥74%, frontend unit/lint/build); counts recorded after local run."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.35.0",
       "date": "2026-09-12",

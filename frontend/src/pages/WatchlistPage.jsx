@@ -180,11 +180,9 @@ export default function WatchlistPage({ embedded = false }) {
     if (failed) {
       setState((prev) => ({ ...prev, items: previousItems }));
     }
-    const summary = (
-      failed
-        ? `Removed ${ok}; ${failed} failed.`
-        : `Removed ${ok} title${ok === 1 ? "" : "s"} from your watchlist.`,
-    );
+    const summary = failed
+      ? `Removed ${ok}; ${failed} failed.`
+      : `Removed ${ok} title${ok === 1 ? "" : "s"} from your watchlist.`;
     setActionStatus(summary);
     finish(progressId, { label: summary, state: failed ? "error" : "success" });
     if (failed) await refresh();

@@ -336,7 +336,7 @@ export default function NotificationsSettingsPage() {
           </p>
           <button
             type="button"
-            className="ghost"
+            className="primary"
             onClick={handleSendSelf}
             disabled={sendingSelf}
             data-testid="notifications-newsletter-self-send"
@@ -364,7 +364,7 @@ export default function NotificationsSettingsPage() {
           </p>
           <button
             type="button"
-            className="ghost"
+            className="primary"
             onClick={handleGenerateYir}
             disabled={sendingYir}
             data-testid="notifications-yir-self-generate"

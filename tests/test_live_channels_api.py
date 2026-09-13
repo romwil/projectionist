@@ -545,6 +545,38 @@ class LiveChannelsApiTests(unittest.TestCase):
         self.assertEqual(resp.status_code, 409, resp.text)
         self.assertIn("Another Live job", resp.json()["detail"])
 
+    def test_plex_attach_guide_clears_busy_when_attach_raises(self) -> None:
+        from projectionist.live_channels.job import KIND_PLEX_REFRESH, begin_owned_job, owned_store
+
+        self._enable(public_url="http://10.10.1.202:18765")
+        with patch(
+            "projectionist.live_channels.plex_attach.attach_tunarr_xmltv_to_plex",
+            side_effect=RuntimeError("plex dvr exploded"),
+        ):
+            resp = self.client.post("/api/admin/live-channels/plex-attach-guide")
+        self.assertEqual(resp.status_code, 502, resp.text)
+        snap = owned_store().snapshot()
+        self.assertFalse(snap.get("busy"))
+        self.assertEqual(snap.get("phase"), "error")
+        self.assertIn("plex dvr exploded", str(snap.get("error") or snap.get("message") or ""))
+        self.assertTrue(begin_owned_job(KIND_PLEX_REFRESH))
+
+    def test_plex_repair_clears_busy_when_repair_raises(self) -> None:
+        from projectionist.live_channels.job import KIND_PLEX_REBUILD, begin_owned_job, owned_store
+
+        self._enable(public_url="http://10.10.1.202:18765")
+        with patch(
+            "projectionist.live_channels.plex_attach.repair_plex_tunarr_livetv",
+            side_effect=RuntimeError("tuner rebuild exploded"),
+        ):
+            resp = self.client.post("/api/admin/live-channels/plex-repair")
+        self.assertEqual(resp.status_code, 502, resp.text)
+        snap = owned_store().snapshot()
+        self.assertFalse(snap.get("busy"))
+        self.assertEqual(snap.get("phase"), "error")
+        self.assertIn("tuner rebuild exploded", str(snap.get("error") or snap.get("message") or ""))
+        self.assertTrue(begin_owned_job(KIND_PLEX_REBUILD))
+
     def test_status_includes_idle_job(self) -> None:
         self._enable()
         resp = self.client.get("/api/admin/live-channels/status")

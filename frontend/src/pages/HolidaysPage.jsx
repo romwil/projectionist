@@ -261,7 +261,7 @@ export default function HolidaysPage() {
           testId="holidays-list-panel"
           footer={
             <div className="settings-actions">
-              <button type="button" className="ghost" onClick={startCreate} data-testid="holidays-add">
+              <button type="button" className="primary" onClick={startCreate} data-testid="holidays-add">
                 Add holiday
               </button>
               <button
