@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-13T04:17:19Z",
+  "generated_at": "2026-09-13T04:22:20Z",
   "releases": [
     {
       "version": "1.35.1",
@@ -29,7 +29,9 @@
         {
           "title": "Verification",
           "bullets": [
-            "Gates pending (pytest ≥74%, frontend unit/lint/build); counts recorded after local run."
+            "Backend: 2,121 passed, 6 skipped, 36 subtests passed; 76.32% coverage (74% required).",
+            "Frontend unit: 721 passed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.",
+            "Focused: `tests/test_live_channels_api.py` (attach/repair busy-clear), `tests/test_persona_village.py` (consult clip), `frontend/src/lib/adminChrome.test.mjs` + live job-rail chrome."
           ]
         }
       ]
