@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [1.35.1] — 2026-09-13
+
+Live Channels chrome matches the rest of Admin, failed Plex jobs unlock, and village consults finish their sentences.
+
+### Highlights
+- **One job rail, one primary.** Live Channels shows the working rail with the tuner, one gold action per card, and **Add path** as a quiet control — not a gold slab.
+- **Admin that matches Settings.** Buttons, type, and spacing line up across Admin and member settings so notes stay readable at 14px.
+- **Refresh won’t stick.** If Plex map refresh or tuner rebuild fails, Live jobs unlock instead of staying busy forever.
+- **Specialists finish the thought.** Village consults can run a full take instead of cutting off mid-sentence.
+
+### Changed
+- Live Channels: job rail sits with the tuner (Overview keeps the compact snippet); card actions wrap in `service-card-actions`; filler **Add path** is ghost; wizard notes / infra facts stay 14px.
+- Admin (Overview, Connections, Holidays, Tasks, Lobby) and matching member settings (Notifications send slots, field hints) share the same primary/ghost and type rhythm.
+- Persona consult cap `900` → `6000` characters with `clip_consult_answer` (sentence-end clip, not a mid-word ellipsis). Consult prompt asks specialists to finish every sentence.
+
+### Fixed
+- `plex-attach-guide` and `plex-repair` wrap attach/repair in try/except and `store.set_error` so the owned-job store is not left busy after an uncaught Plex exception.
+
+### Verification
+- Backend: 2,121 passed, 6 skipped, 36 subtests passed; 76.32% coverage (74% required).
+- Frontend unit: 721 passed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_live_channels_api.py` (attach/repair busy-clear), `tests/test_persona_village.py` (consult clip), `frontend/src/lib/adminChrome.test.mjs` + live job-rail chrome.
+
 ## [1.35.0] — 2026-09-12
 
 Live Channels serializes one job at a time, tells the truth about the Plex map, and keeps Refresh (never delete) as the default.

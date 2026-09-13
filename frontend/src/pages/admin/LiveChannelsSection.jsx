@@ -410,6 +410,7 @@ export default function LiveChannelsSection({
                   </button>
                 </div>
                 {renderLiveBlockAlert("hero")}
+                <LiveJobRail job={liveJob} />
 
                 {liveLaunched ? (
                   <div
@@ -470,6 +471,8 @@ export default function LiveChannelsSection({
                         />
                       </div>
                       <div className="service-card-actions">
+                        {liveLaunched ? (
+                          <>
                         <button
                           type="button"
                           className="primary"
@@ -539,6 +542,8 @@ export default function LiveChannelsSection({
                         >
                           {liveBusy === "plex-repair" ? "Rebuilding…" : "Rebuild tuner in Plex"}
                         </button>
+                          </>
+                        ) : null}
                         <button
                           type="button"
                           className="ghost"
@@ -570,7 +575,6 @@ export default function LiveChannelsSection({
                         {infra.lastAttachLabel}
                       </p>
                     ) : null}
-                    <LiveJobRail job={liveJob} />
                     <p className="wizard-note" data-testid="live-channels-health-summary">
                       {liveHealthSentence(liveChannelsStatus)}
                     </p>
@@ -717,17 +721,20 @@ export default function LiveChannelsSection({
                           testId="live-channels-engine-ready-badge"
                         />
                       </div>
-                      <button
-                        type="button"
-                        data-testid="verify-tunarr"
-                        onClick={async () => {
-                          clearActionFeedback("live-channels");
-                          await runTest("tunarr");
-                        }}
-                        disabled={testing === "tunarr" || !settings?.tunarr?.url}
-                      >
-                        {testing === "tunarr" ? "Testing…" : "Test connection"}
-                      </button>
+                      <div className="service-card-actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="verify-tunarr"
+                          onClick={async () => {
+                            clearActionFeedback("live-channels");
+                            await runTest("tunarr");
+                          }}
+                          disabled={testing === "tunarr" || !settings?.tunarr?.url}
+                        >
+                          {testing === "tunarr" ? "Testing…" : "Test connection"}
+                        </button>
+                      </div>
                     </div>
                     <p className="wizard-note">
                       Point Projectionist at the TV engine (powered by Tunarr). Most owners leave the URL
@@ -832,11 +839,13 @@ export default function LiveChannelsSection({
                           testId="live-channels-preflight-ready"
                         />
                       </div>
-                      <button
-                        type="button"
-                        data-testid="live-channels-run-preflight"
-                        disabled={liveLocked || liveBusy === "preflight"}
-                        onClick={async () => {
+                      <div className="service-card-actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="live-channels-run-preflight"
+                          disabled={liveLocked || liveBusy === "preflight"}
+                          onClick={async () => {
                           setLiveBusy("preflight");
                           try {
                             const result = await postLiveChannelsPreflight({
@@ -859,6 +868,7 @@ export default function LiveChannelsSection({
                       >
                         {liveBusy === "preflight" ? "Checking…" : "Run ready check"}
                       </button>
+                      </div>
                     </div>
                     {renderLiveBlockAlert("preflight")}
                     <label className="config-toggle" data-testid="live-channels-plex-pass-confirm">
@@ -911,20 +921,23 @@ export default function LiveChannelsSection({
                             testId="live-channels-engine-ready"
                           />
                         </div>
-                        <button
-                          type="button"
-                          data-testid="live-channels-ensure-running"
-                          disabled={liveLocked || liveBusy === "lifecycle"}
-                          onClick={() => {
-                            startBroadcastEngine().catch(() => {});
-                          }}
-                        >
-                          {liveBusy === "lifecycle"
-                            ? "Starting…"
-                            : liveEngineProgress?.ready
-                              ? "Restart engine"
-                              : "Start engine"}
-                        </button>
+                        <div className="service-card-actions">
+                          <button
+                            type="button"
+                            className="primary"
+                            data-testid="live-channels-ensure-running"
+                            disabled={liveLocked || liveBusy === "lifecycle"}
+                            onClick={() => {
+                              startBroadcastEngine().catch(() => {});
+                            }}
+                          >
+                            {liveBusy === "lifecycle"
+                              ? "Starting…"
+                              : liveEngineProgress?.ready
+                                ? "Restart engine"
+                                : "Start engine"}
+                          </button>
+                        </div>
                       </div>
                       <p className="wizard-note">
                         Pulls the pinned Docker image and starts the TV engine with a config volume under your data
@@ -1055,12 +1068,13 @@ export default function LiveChannelsSection({
                           testId="live-channels-continuity-ready"
                         />
                       </div>
-                      <button
-                        type="button"
-                        className="ghost"
-                        data-testid="live-channels-rescan-filler"
-                        disabled={liveLocked || liveBusy === "continuity-repair"}
-                        onClick={async () => {
+                      <div className="service-card-actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          data-testid="live-channels-rescan-filler"
+                          disabled={liveLocked || liveBusy === "continuity-repair"}
+                          onClick={async () => {
                           if (
                             !window.confirm(
                               "Rescan filler and repair continuity? This remounts filler paths if needed, force-scans the local filler library, attaches the shared list, and warms streams. Active Live TV sessions may briefly drop while the TV engine restarts.",
@@ -1084,6 +1098,7 @@ export default function LiveChannelsSection({
                       >
                         {liveBusy === "continuity-repair" ? "Working…" : "Rescan filler"}
                       </button>
+                      </div>
                     </div>
                     <p className="wizard-note">
                       Commercial-cut shows often need a few minutes of bumpers between episodes.
@@ -1137,6 +1152,7 @@ export default function LiveChannelsSection({
                           </button>
                         </div>
                       ))}
+                      <div className="live-channels-filler-add">
                       <label>
                         Add host folder
                         <input
@@ -1149,6 +1165,7 @@ export default function LiveChannelsSection({
                       </label>
                       <button
                         type="button"
+                        className="ghost"
                         data-testid="live-channels-filler-add"
                         disabled={!fillerPathDraft.trim()}
                         onClick={() => {
@@ -1174,6 +1191,7 @@ export default function LiveChannelsSection({
                       >
                         Add path
                       </button>
+                      </div>
                     </div>
                     <div className="service-fields" data-testid="live-channels-schedule-settings">
                       <label>
@@ -1319,14 +1337,16 @@ export default function LiveChannelsSection({
                         <h3>{liveLaunched ? "Add station" : "Create a station"}</h3>
                       </div>
                       {liveLaunched ? (
-                        <button
-                          type="button"
-                          className={addStationOpen ? "ghost" : "primary"}
-                          data-testid="live-channels-add-station"
-                          onClick={() => setAddStationOpen((open) => !open)}
-                        >
-                          {addStationOpen ? "Close" : "Add station"}
-                        </button>
+                        <div className="service-card-actions">
+                          <button
+                            type="button"
+                            className={addStationOpen ? "ghost" : "primary"}
+                            data-testid="live-channels-add-station"
+                            onClick={() => setAddStationOpen((open) => !open)}
+                          >
+                            {addStationOpen ? "Close" : "Add station"}
+                          </button>
+                        </div>
                       ) : null}
                     </div>
                     {!liveLaunched || addStationOpen ? (
@@ -2406,6 +2426,7 @@ export default function LiveChannelsSection({
                       <div className="wizard-actions">
                         <button
                           type="button"
+                          className="ghost"
                           data-testid={`live-channels-station-save-${settingsStationId}`}
                           disabled={liveLocked || !settingsStationId || liveBusy === `settings-${settingsStationId}`}
                           onClick={async () => {
@@ -2450,7 +2471,7 @@ export default function LiveChannelsSection({
                         </button>
                         <button
                           type="button"
-                          className="ghost"
+                          className="primary"
                           data-testid={`live-channels-station-refill-cta-${settingsStationId}`}
                           disabled={liveLocked || !settingsStationId || liveBusy === `refill-${settingsStationId}`}
                           onClick={() => refillStation(settingsStationId, settingsStation?.name)}
@@ -2574,7 +2595,6 @@ export default function LiveChannelsSection({
                       Rebuild is advanced — it hangs Plex Media Server briefly and drops
                       Tunarr Live TV; over-the-air stays.
                     </p>
-                    <LiveJobRail job={liveJob} />
                     {liveAttach ? (
                       <>
                         <p

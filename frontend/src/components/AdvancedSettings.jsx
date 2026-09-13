@@ -222,7 +222,7 @@ export default function AdvancedSettings({
             </label>
           </div>
           <footer className="config-panel-footer">
-            <button type="button" data-testid="advanced-paths-sync-save" onClick={onSavePathsAndSync}>
+            <button type="button" className="primary" data-testid="advanced-paths-sync-save" onClick={onSavePathsAndSync}>
               Save paths &amp; sync
             </button>
             <InlineAlert type={saveAlert?.type} message={saveAlert?.message} />

@@ -68,11 +68,11 @@ export default function MediaIssuesPanel() {
             ) : null}
             {issue.status !== "resolved" ? (
               <div className="media-issue-actions">
+                <button type="button" className="primary" onClick={() => repair(issue)}>
+                  Run repair
+                </button>
                 <button className="ghost" type="button" onClick={() => resolve(issue)}>
                   Resolve
-                </button>
-                <button type="button" onClick={() => repair(issue)}>
-                  Run repair
                 </button>
               </div>
             ) : null}

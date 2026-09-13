@@ -373,8 +373,10 @@
 }
 .media-issue-actions {
   display: flex;
-  justify-content: end;
-  gap: 8px;
+  justify-content: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 @media (max-width: 900px) {
   .media-browse-controls {
