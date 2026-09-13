@@ -550,7 +550,7 @@ export default function ScheduledTasksPage() {
         <div className="scheduled-tasks-header-actions">
           <button
             type="button"
-            className="ghost"
+            className="primary"
             data-testid="warm-explore-preset"
             disabled={warming || !warmExploreNames.length || Boolean(running)}
             title={
@@ -821,7 +821,7 @@ export default function ScheduledTasksPage() {
                   <>
                     <button
                       type="button"
-                      className="ghost"
+                      className="primary"
                       disabled={
                         busyNames.has(selected.name) ||
                         isTaskRunning(selected) ||
