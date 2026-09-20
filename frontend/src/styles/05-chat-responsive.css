@@ -276,6 +276,8 @@
 
   .chat-scroll-region .inline-cards {
     grid-auto-columns: minmax(168px, 70vw);
+    padding-inline-end: var(--rail-peek);
+    scroll-padding-inline: var(--space-3);
   }
 
   .explore-page .explore-search {

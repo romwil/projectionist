@@ -1844,6 +1844,12 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   padding: 0 var(--space-4) var(--space-5);
 }
 
+.title-detail-drawer-body .title-neighbors,
+.title-detail-drawer-body .title-relations-entry {
+  width: 100%;
+  padding-inline: 0;
+}
+
 .title-detail-drawer-loading,
 .title-detail-drawer-error {
   padding: var(--space-4) 0;

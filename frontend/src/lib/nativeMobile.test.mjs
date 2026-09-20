@@ -72,6 +72,27 @@ describe("native mobile member contract (phone 768)", () => {
     );
   });
 
+  it("gives phone poster rails peek padding, snap, and 44px mid-rail grips", () => {
+    assert.match(styles, /--rail-card-width:\s*132px/);
+    assert.match(styles, /--rail-peek:\s*56px/);
+    assert.match(
+      styles,
+      /\.explore-card-rail\s*\{[^}]*overflow-y:\s*hidden/s,
+    );
+    assert.match(
+      styles,
+      /\.title-neighbors-track\s*\{[^}]*overflow-y:\s*hidden/s,
+    );
+    assert.match(
+      styles,
+      /@media \(max-width: 768px\)[\s\S]*?\.explore-card-rail[\s\S]*?padding-inline-end:\s*var\(--rail-peek\)/s,
+    );
+    assert.match(
+      styles,
+      /@media \(hover: none\), \(max-width: 768px\)[\s\S]*?\.poster-action-grip[\s\S]*?min-height:\s*var\(--tap-min\)/s,
+    );
+  });
+
   it("makes poster hover actions visible on touch and on phone widths", () => {
     assert.match(
       styles,

@@ -21,6 +21,9 @@
   /* Native-feeling phone chrome — 44px Apple HIG / 16px iOS zoom floor */
   --tap-min: 44px;
   --font-size-input: 16px;
+  /* Phone poster rails: two cards + a real peek, last card not flush. */
+  --rail-card-width: 132px;
+  --rail-peek: 56px;
   --leading-tight: 1.25;
   --leading-body: 1.55;
   --base-font-size: 15px;

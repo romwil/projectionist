@@ -53,6 +53,17 @@ describe("chatMediaStripClassName", () => {
 describe("completed chat media strip CSS (no nested vertical scroll)", () => {
   const styles = readAllStyles();
 
+  it("snaps completed inline-cards horizontally without nested vertical scroll", () => {
+    assert.match(
+      styles,
+      /\.chat-scroll-region\s+\.inline-cards\s*\{[^}]*overflow-y:\s*hidden/s,
+    );
+    assert.match(
+      styles,
+      /\.chat-scroll-region\s+\.inline-cards\s*\{[^}]*scroll-snap-type:\s*x\s+mandatory/s,
+    );
+  });
+
   it("keeps completed inline-cards on overflow-y hidden (not visible)", () => {
     assert.match(
       styles,
