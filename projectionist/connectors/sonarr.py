@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import urllib.parse
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, List, Mapping, Optional, Sequence
 
 from projectionist.config_store import pick_arr_root_folder, root_folder_paths_from_api
@@ -52,17 +53,20 @@ class SonarrClient:
             total_file_size=int(stats.get("sizeOnDisk") or 0),
         )
 
-    def series_list(self) -> List[SonarrSeries]:
+    def series_items(self) -> List[Mapping[str, Any]]:
+        """Raw series payloads, including seasons / monitored flags."""
         payload = request_json(
             f"{self.base_url}/api/v3/series",
             headers=self._headers(),
             timeout=self.timeout,
         )
+        return payload if isinstance(payload, list) else []
+
+    def series_list(self) -> List[SonarrSeries]:
         series_items: List[SonarrSeries] = []
-        if not isinstance(payload, list):
-            return series_items
-        for item in payload:
-            series_items.append(self._series_from_api(item))
+        for item in self.series_items():
+            if isinstance(item, Mapping):
+                series_items.append(self._series_from_api(item))
         return series_items
 
     def series_by_tvdb_id(self, tvdb_id: int) -> Optional[SonarrSeries]:
@@ -184,6 +188,50 @@ class SonarrClient:
             timeout=self.timeout,
         )
         return payload if isinstance(payload, list) else []
+
+    def list_aired_missing_episodes(
+        self,
+        series_id: int,
+        *,
+        include_specials: bool = False,
+        series: Optional[Mapping[str, Any]] = None,
+        now: Optional[datetime] = None,
+    ) -> List[Mapping[str, Any]]:
+        """Aired, monitored episodes with no file for one series (specials opt-in)."""
+        from projectionist.library.sonarr_missing import filter_aired_missing_episodes
+
+        payload = series if isinstance(series, Mapping) else self.series_by_id(series_id)
+        if not isinstance(payload, Mapping):
+            payload = {"id": int(series_id), "title": "", "monitored": True, "seasons": []}
+        seasons = payload.get("seasons") if isinstance(payload.get("seasons"), list) else None
+        return filter_aired_missing_episodes(
+            self.episodes(series_id),
+            series_id=int(series_id),
+            series_title=str(payload.get("title") or ""),
+            series_monitored=bool(payload.get("monitored")),
+            seasons=seasons,
+            include_specials=include_specials,
+            now=now,
+        )
+
+    def wanted_missing(self, page: int = 1, page_size: int = 100) -> Mapping[str, Any]:
+        """Page of Sonarr Wanted/missing (compare-only; not the search path)."""
+        params = urllib.parse.urlencode(
+            {
+                "page": max(1, int(page)),
+                "pageSize": max(1, min(int(page_size), 250)),
+                "sortKey": "airDateUtc",
+                "sortDirection": "descending",
+            }
+        )
+        payload = request_json(
+            f"{self.base_url}/api/v3/wanted/missing?{params}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        if isinstance(payload, dict):
+            return payload
+        return {"page": int(page), "pageSize": int(page_size), "totalRecords": 0, "records": []}
 
     def delete_episode_file(self, episode_file_id: int) -> None:
         """Delete one episode file from disk via Sonarr."""
