@@ -102,6 +102,45 @@ test.describe("Native mobile — member living-room", () => {
     await assertNoHorizontalPageOverflow(page);
   });
 
+  test("420×480 Simple Browser: composer input stays in the pane (not 100vh-clipped)", async ({ page }) => {
+    await page.setViewportSize({ width: 420, height: 480 });
+    await page.goto("/");
+    const composer = page.locator("form.composer");
+    const input = page.getByTestId("composer-input");
+    await expect(composer).toBeVisible();
+    await expect(input).toBeVisible();
+    await assertPinnedNearViewportBottom(composer, 480, 56);
+    const metrics = await page.evaluate(() => {
+      const root = document.querySelector(".app-root.workspace");
+      const form = document.querySelector("form.composer");
+      const field = document.querySelector("[data-testid='composer-input']");
+      const cs = root ? getComputedStyle(root) : null;
+      const formBox = form?.getBoundingClientRect();
+      const inputBox = field?.getBoundingClientRect();
+      return {
+        minHeight: cs?.minHeight,
+        height: cs?.height,
+        maxHeight: cs?.maxHeight,
+        innerHeight,
+        formTop: formBox?.top ?? -1,
+        formBottom: formBox?.bottom ?? -1,
+        inputTop: inputBox?.top ?? -1,
+        inputBottom: inputBox?.bottom ?? -1,
+        inputHeight: inputBox?.height ?? 0,
+      };
+    });
+    expect(parseFloat(metrics.minHeight || "0")).toBeLessThanOrEqual(metrics.innerHeight);
+    expect(parseFloat(metrics.height || "0")).toBeLessThanOrEqual(metrics.innerHeight + 1);
+    expect(metrics.formTop).toBeGreaterThanOrEqual(0);
+    expect(metrics.formBottom).toBeLessThanOrEqual(metrics.innerHeight + 4);
+    expect(metrics.inputTop).toBeGreaterThanOrEqual(0);
+    expect(metrics.inputBottom).toBeLessThanOrEqual(metrics.innerHeight + 4);
+    expect(metrics.inputHeight).toBeGreaterThan(20);
+    const threadBox = await page.getByTestId("chat-scroll-region").boundingBox();
+    expect(threadBox, "thread should keep a usable middle pane").not.toBeNull();
+    expect(threadBox!.height).toBeGreaterThan(80);
+  });
+
   test("user turn stays visible and New reply chip sits above the composer", async ({ page }) => {
     await page.goto("/");
     await page.getByTestId("composer-input").waitFor();

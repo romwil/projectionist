@@ -1479,10 +1479,11 @@ button.watchlist-chip {
   padding-left: max(var(--space-6), env(safe-area-inset-left));
   padding-right: max(var(--space-6), env(safe-area-inset-right));
   border-top: 1px solid var(--border-subtle);
-  flex-shrink: 0;
+  flex: 0 0 auto;
   max-width: none;
   width: 100%;
   margin: 0;
+  margin-top: auto;
   align-self: stretch;
   box-sizing: border-box;
   z-index: 5;
