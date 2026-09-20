@@ -19,8 +19,6 @@
 /* Stage C: phone/tablet — fullscreen chrome + threads drawer */
 @media (max-width: 768px) {
   .app-root.workspace {
-    height: 100dvh;
-    max-height: 100dvh;
     overflow: hidden;
   }
 
@@ -160,15 +158,32 @@
     position: sticky;
     bottom: 0;
     margin-top: auto;
-    padding: var(--space-3) var(--space-4);
-    padding-left: max(var(--space-4), env(safe-area-inset-left));
-    padding-right: max(var(--space-4), env(safe-area-inset-right));
-    padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
+    padding: 8px 12px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  /* Phone composer is input + send — not a second desktop toolbar. */
+  .ambient-context-tag {
+    display: none;
+  }
+
+  .composer-shell {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .composer-chrome {
+    padding: 4px 8px 6px;
+    gap: 4px;
   }
 
   .composer textarea {
     font-size: var(--font-size-input); /* avoid iOS focus zoom */
     min-height: var(--tap-min);
+    max-height: 96px;
+    padding: 10px 8px 0;
   }
 
   .composer-send,
@@ -181,7 +196,6 @@
     min-height: var(--tap-min);
   }
 
-  .composer-mood-chip,
   .persona-trigger,
   .welcome-starter-chip,
   .welcome-context-chip,
@@ -192,8 +206,143 @@
   }
 
   .composer-toolbar {
+    flex-wrap: nowrap;
+    row-gap: 0;
+  }
+
+  .explore-media-tab,
+  .app-nav-link {
+    min-height: var(--tap-min);
+  }
+
+  .search-page .app-shell-page-bar,
+  .explore-page .app-shell-page-bar,
+  .library-hub-page .app-shell-page-bar {
+    display: none;
+  }
+
+  .search-page-hero {
+    padding-bottom: var(--space-3);
+  }
+
+  /* Competing headers / desktop-only extras — keep useful controls. */
+  .app-shell-page-titles .app-topbar-eyebrow,
+  .app-topbar-eyebrow,
+  .library-hub-lede,
+  .explore-hub-card p,
+  .settings-rail-brand .eyebrow,
+  .settings-shell .app-footer,
+  .live-chrome-secondary [data-testid="live-popout"] {
+    display: none;
+  }
+
+  .welcome-panel {
+    padding-top: var(--space-4);
+    gap: var(--space-2);
+  }
+
+  .welcome-panel-greeting {
+    font-size: var(--text-xl);
+  }
+
+  .welcome-panel-starters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .welcome-starter-chip {
+    width: 100%;
+    text-align: left;
+    padding: 12px 14px;
+  }
+
+  .library-hub-hero {
+    padding-bottom: var(--space-2);
+  }
+
+  .library-hub-hero h1 {
+    margin: 0;
+    font-size: var(--text-xl);
+  }
+
+  .library-hub-saved-row {
+    margin: var(--space-2) 0 0;
+  }
+
+  .explore-poster-wall {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+
+  .chat-scroll-region .inline-cards {
+    grid-auto-columns: minmax(168px, 70vw);
+  }
+
+  .explore-page .explore-search {
+    flex-direction: row;
+    align-items: stretch;
+    margin: 0 0 var(--space-3);
+  }
+
+  .explore-page .explore-search .library-search--hero {
+    padding: 10px 12px;
+    font-size: var(--font-size-input);
+  }
+
+  .explore-page .explore-search .library-search--hero input,
+  .explore-page .explore-search-submit {
+    font-size: var(--font-size-input);
+  }
+
+  .explore-page .explore-search-submit {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    padding: 0 14px;
+    width: auto;
+    flex: 0 0 auto;
+    border-radius: var(--radius);
+  }
+
+  .explore-hub-links {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+
+  .explore-hub-card {
+    padding: 12px;
+  }
+
+  .explore-hub-card h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .library-hub-tabs {
+    margin-bottom: var(--space-3);
+  }
+
+  /* 09-title-detail-home sets .explore-section-bulk { display: flex } later
+     than the 03 hide — idle Select/Clear steal the fold. Show only after a pick. */
+  .explore-section-bulk {
+    display: none;
+  }
+
+  .explore-section-toolbar-row:has([data-testid="library-browse-selection-summary"]) .explore-section-bulk {
+    display: flex;
     flex-wrap: wrap;
-    row-gap: var(--space-2);
+    gap: var(--space-2);
+  }
+
+  /* Mood labels wrap into a wall and hide the thread. Surprise stays 44px.
+     Two-class selector beats later unscoped `.composer-mood-row { display: flex }`. */
+  .composer .composer-mood-row {
+    display: none;
+  }
+
+  /* Theme lives in Settings — don't compete with the wordmark. */
+  .primary-topbar .app-topbar-cluster > .app-topbar-icon {
+    display: none;
   }
 
   /* Member copy: 14px like Admin wizard-note — --text-sm reads cramped on a phone. */
@@ -318,29 +467,13 @@
   }
 }
 
-/* Smallest phones: an owner's peer cluster genuinely cannot fit. Scroll it
-   horizontally rather than clipping Settings and the user menu off-screen.
-   Tooltips are suppressed here — they would be cropped by the scroll box, and
-   `hover: none` already drops them on touch. */
+/* Compact chrome (≤900px) already hides peers. Keep the brand readable on
+   the smallest phones — never ellipsis-clip "Projectionist". */
 @media (max-width: 560px) {
   .primary-topbar .app-topbar-brand {
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-
-  .primary-topbar .app-topbar-actions {
-    flex: 1 1 auto;
-    justify-content: flex-end;
-    min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
-  }
-
-  .primary-topbar .app-topbar-actions::-webkit-scrollbar {
-    display: none;
+    flex: 0 0 auto;
+    min-width: max-content;
+    overflow: visible;
   }
 
   .primary-topbar .app-topbar-icon[data-tooltip]::after {

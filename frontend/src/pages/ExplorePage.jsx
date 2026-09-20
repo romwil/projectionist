@@ -372,8 +372,6 @@ export default function ExplorePage() {
     <AppShell
       className="app-root explore-page"
       testId="explore-page"
-      title="Explore"
-      eyebrow="Your cinema"
     >
       <main className="explore-main">
         <LibrarySearchBar

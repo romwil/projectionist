@@ -35,11 +35,53 @@ test.describe("Native mobile — member living-room", () => {
     await expect(composer).toBeVisible();
     await assertPinnedNearViewportBottom(composer, NATIVE_VIEWPORT.height);
 
+    const brand = page.getByTestId("projectionist-brand");
+    await expect(brand).toContainText("Projectionist");
+    const wordmark = await brand.evaluate((el) => {
+      const h1 = el.querySelector("h1");
+      return {
+        text: h1?.textContent?.replace(/\s+/g, " ").trim() || "",
+        scrollWidth: h1?.scrollWidth ?? 0,
+        clientWidth: h1?.clientWidth ?? 0,
+      };
+    });
+    expect(wordmark.text).toMatch(/Projectionist/);
+    expect(wordmark.scrollWidth).toBeLessThanOrEqual(wordmark.clientWidth + 1);
+
+    const thread = page.getByTestId("chat-scroll-region");
+    const threadBox = await thread.boundingBox();
+    expect(threadBox, "thread should occupy the middle pane").not.toBeNull();
+    expect(threadBox!.height).toBeGreaterThan(200);
+
+    await expect(page.getByTestId("app-topbar-peers")).toBeHidden();
+
     await input.fill("Find neo-noir films");
     await page.getByTestId("send-button").click();
     await expect(page.getByTestId("chat-message-user")).toContainText("Find neo-noir films");
     await expect(page.getByTestId("send-button")).toBeVisible();
     await assertPinnedNearViewportBottom(composer, NATIVE_VIEWPORT.height);
+  });
+
+  test("short Simple Browser pane still shows composer and full wordmark", async ({ page }) => {
+    await page.setViewportSize({ width: 560, height: 640 });
+    await page.goto("/");
+    const composer = page.locator("form.composer");
+    await expect(composer).toBeVisible();
+    await assertPinnedNearViewportBottom(composer, 640, 48);
+    const brand = page.getByTestId("projectionist-brand");
+    await expect(brand).toContainText("Projectionist");
+    const wordmark = await brand.evaluate((el) => {
+      const h1 = el.querySelector("h1");
+      return {
+        scrollWidth: h1?.scrollWidth ?? 0,
+        clientWidth: h1?.clientWidth ?? 0,
+      };
+    });
+    expect(wordmark.scrollWidth).toBeLessThanOrEqual(wordmark.clientWidth + 1);
+    const threadBox = await page.getByTestId("chat-scroll-region").boundingBox();
+    expect(threadBox!.height).toBeGreaterThan(160);
+    await expect(page.getByTestId("app-topbar-peers")).toBeHidden();
+    await assertNoHorizontalPageOverflow(page);
   });
 
   test("user turn stays visible and New reply chip sits above the composer", async ({ page }) => {
@@ -75,6 +117,13 @@ test.describe("Native mobile — member living-room", () => {
   test("library browse posters open a sheet overlay without overflowing", async ({ page }) => {
     await page.goto("/search");
     await expect(page.getByTestId("library-browse-results")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Browse library" })).toHaveCount(0);
+    await expect(page.getByText("Every title in your library")).toHaveCount(0);
+    await expect(page.getByTestId("library-browse-search-input")).toBeVisible();
+    await expect(page.getByTestId("app-shell-page-bar")).toHaveCount(0);
+    const filters = page.getByTestId("library-browse-filters");
+    await expect(filters).toBeVisible();
+    await expect(filters).not.toHaveAttribute("open");
     await assertNoHorizontalPageOverflow(page);
 
     const card = page.getByTestId("library-browse-card").first();
@@ -129,6 +178,11 @@ test.describe("Native mobile — admin pass", () => {
     await page.getByTestId("household-health-hero").waitFor();
     await assertNoHorizontalPageOverflow(page);
     await expect(page.getByTestId("household-health-hero")).toBeVisible();
+    await expect(page.getByTestId("projectionist-brand")).toContainText("Projectionist");
+
+    const grid = page.getByTestId("household-health-grid");
+    const cols = await grid.evaluate((el) => getComputedStyle(el).gridTemplateColumns);
+    expect(cols.split(" ").length, "narrow Overview tiles should be 2-col").toBeLessThanOrEqual(2);
 
     const gold = page.locator(".service-card-actions .primary, .service-card-actions button.primary");
     if (await gold.count()) {

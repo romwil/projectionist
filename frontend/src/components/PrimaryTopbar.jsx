@@ -19,6 +19,7 @@ import { patchAuthMe } from "../api/client";
 /**
  * Shared primary topbar: hamburger (optional) + brand + peer icons + theme + user.
  * Peer order: Search → Chat → Explore → Inbox → Admin → My Journey → Settings.
+ * At ≤900px, peers hide into the hamburger so the wordmark never clips.
  */
 export default function PrimaryTopbar({
   showNavToggle = true,
@@ -100,51 +101,55 @@ export default function PrimaryTopbar({
           />
         </div>
         <div className="app-topbar-actions">
-          {items.map((item) => {
-            const active = isPrimaryNavActive(item, location.pathname);
-            const classNames = `app-topbar-icon${active ? " is-active" : ""}`;
-            if (item.kind === "inbox") {
+          <div className="app-topbar-peers" data-testid="app-topbar-peers">
+            {items.map((item) => {
+              const active = isPrimaryNavActive(item, location.pathname);
+              const classNames = `app-topbar-icon${active ? " is-active" : ""}`;
+              if (item.kind === "inbox") {
+                return (
+                  <InboxBadgeButton
+                    key={item.id}
+                    unreadCount={inboxUnreadCount}
+                    to={item.to}
+                    className={classNames}
+                    active={active}
+                  />
+                );
+              }
               return (
-                <InboxBadgeButton
+                <Link
                   key={item.id}
-                  unreadCount={inboxUnreadCount}
                   to={item.to}
                   className={classNames}
-                  active={active}
-                />
+                  data-testid={item.testId}
+                  aria-label={item.label}
+                  aria-current={active ? "page" : undefined}
+                  data-tooltip={item.label}
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    {item.icon}
+                  </span>
+                </Link>
               );
-            }
-            return (
-              <Link
-                key={item.id}
-                to={item.to}
-                className={classNames}
-                data-testid={item.testId}
-                aria-label={item.label}
-                aria-current={active ? "page" : undefined}
-                data-tooltip={item.label}
+            })}
+          </div>
+          <div className="app-topbar-cluster" data-testid="app-topbar-cluster">
+            {showThemeToggle && uiTheme != null ? (
+              <button
+                type="button"
+                className="app-topbar-icon"
+                data-testid="topbar-theme-toggle"
+                aria-label={`Theme: ${themePreferenceLabel(uiTheme)}. Click to change.`}
+                data-tooltip={themePreferenceLabel(uiTheme)}
+                onClick={handleThemeClick}
               >
                 <span className="material-symbols-outlined" aria-hidden="true">
-                  {item.icon}
+                  {themeControlIcon(uiTheme)}
                 </span>
-              </Link>
-            );
-          })}
-          {showThemeToggle && uiTheme != null ? (
-            <button
-              type="button"
-              className="app-topbar-icon"
-              data-testid="topbar-theme-toggle"
-              aria-label={`Theme: ${themePreferenceLabel(uiTheme)}. Click to change.`}
-              data-tooltip={themePreferenceLabel(uiTheme)}
-              onClick={handleThemeClick}
-            >
-              <span className="material-symbols-outlined" aria-hidden="true">
-                {themeControlIcon(uiTheme)}
-              </span>
-            </button>
-          ) : null}
-          {showUserMenu && multiUserEnabled ? <UserMenu /> : null}
+              </button>
+            ) : null}
+            {showUserMenu && multiUserEnabled ? <UserMenu /> : null}
+          </div>
         </div>
       </header>
     </>

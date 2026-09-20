@@ -45,6 +45,9 @@ describe("progressiveBrowseSearch", () => {
     );
     assert.match(page, /LibrarySearchBar/);
     assert.match(page, /testId="library-browse-search"/);
+    assert.match(page, /isSearchRoute \? null/);
+    assert.match(page, /search-page-hero/);
+    assert.doesNotMatch(page, /isSearchRoute \? "Search" : "Explore"/);
     assert.match(page, /BROWSE_SEARCH_DEBOUNCE_MS/);
     assert.match(page, /nextBrowseSearchQuery/);
     assert.match(page, /setBrowseSearchQueryParam/);

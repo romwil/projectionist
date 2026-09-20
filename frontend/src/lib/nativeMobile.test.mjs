@@ -72,15 +72,41 @@ describe("native mobile member contract (phone 768)", () => {
     );
   });
 
-  it("makes poster hover actions visible on touch", () => {
-    assert.match(styles, /@media \(hover: none\)[\s\S]*?\.explore-card-hover-actions/s);
+  it("makes poster hover actions visible on touch and on phone widths", () => {
     assert.match(
       styles,
-      /@media \(hover: none\)[\s\S]*?\.explore-card-hover-actions\s*\{[^}]*pointer-events:\s*none/s,
+      /@media \(hover: none\), \(max-width: 768px\)[\s\S]*?\.explore-card-hover-actions/s,
     );
     assert.match(
       styles,
-      /@media \(hover: none\)[\s\S]*?\.explore-hover-icon[\s\S]*?pointer-events:\s*auto/s,
+      /@media \(hover: none\), \(max-width: 768px\)[\s\S]*?\.explore-card-hover-actions\s*\{[^}]*pointer-events:\s*none/s,
+    );
+    assert.match(
+      styles,
+      /@media \(hover: none\), \(max-width: 768px\)[\s\S]*?\.explore-hover-icon[\s\S]*?pointer-events:\s*auto/s,
+    );
+  });
+
+  it("collapses /search chrome so the query field wins the phone fold", () => {
+    assert.match(styles, /\.media-browse-filters-toggle/);
+    assert.match(
+      styles,
+      /@media \(max-width: 768px\)[\s\S]*?\.media-browse-filters-toggle\s*\{[^}]*min-height:\s*var\(--tap-min\)/s,
+    );
+    assert.match(
+      styles,
+      /@media \(max-width: 768px\)[\s\S]*?\.media-browse-secondary-actions[\s\S]*?display:\s*none/s,
+    );
+    assert.match(
+      styles,
+      /@media \(max-width: 720px\)[\s\S]*?\.search-page \.explore-search\s*\{[^}]*flex-direction:\s*row/s,
+    );
+    const page = readFileSync(join(here, "../pages/LibraryBrowsePage.jsx"), "utf8");
+    assert.match(page, /isSearchRoute \? null/);
+    assert.doesNotMatch(page, /title=\{isSearchRoute \? "Search"/);
+    assert.match(
+      styles,
+      /@media \(max-width: 768px\)[\s\S]*?\.explore-poster-wall\s*\{[^}]*grid-template-columns:\s*repeat\(2/s,
     );
   });
 
@@ -126,6 +152,51 @@ describe("native mobile admin contract (phone 768)", () => {
     assert.match(styles, /\.wizard-note[\s\S]{0,80}\.wizard-summary\s*\{[^}]*font-size:\s*14px/s);
     assert.match(styles, /\.service-card-actions\s*\{[^}]*gap:\s*12px/s);
     assert.match(styles, /\.service-fields > button[^{]*\{[^}]*align-self:\s*end/s);
+  });
+});
+
+describe("narrow pane fit (Simple Browser + phone)", () => {
+  it("never ellipsis-clips the Projectionist wordmark", () => {
+    assert.match(styles, /\.primary-topbar \.app-topbar-brand\s*\{[^}]*overflow:\s*visible/s);
+    assert.match(styles, /\.primary-topbar \.app-topbar-brand\s*\{[^}]*min-width:\s*max-content/s);
+    assert.doesNotMatch(
+      styles,
+      /\.primary-topbar \.app-topbar-brand h1\s*\{[^}]*text-overflow:\s*ellipsis/s,
+    );
+  });
+
+  it("hides peer icons into the hamburger at ≤900px instead of crowding the brand", () => {
+    assert.match(
+      styles,
+      /@media \(max-width: 900px\)[\s\S]*?\.primary-topbar \.app-topbar-peers\s*\{[^}]*display:\s*none/s,
+    );
+    assert.match(styles, /\.app-topbar-peers\b/);
+    assert.match(styles, /\.app-topbar-cluster\b/);
+  });
+
+  it("pins the chat shell to the visible viewport so the composer cannot fall below the fold", () => {
+    assert.match(styles, /\.app-root\.workspace\s*\{[^}]*position:\s*fixed/s);
+    assert.match(styles, /\.app-root\.workspace\s*\{[^}]*inset:\s*0/s);
+    assert.match(styles, /html:has\(\.app-root\.workspace\)[\s\S]*?overflow:\s*hidden/s);
+    assert.match(styles, /\.composer\s*\{[^}]*position:\s*sticky/s);
+  });
+
+  it("keeps the phone composer to input + send (no mood-chip wall)", () => {
+    assert.match(
+      styles,
+      /@media \(max-width: 768px\)[\s\S]*?\.ambient-context-tag\s*\{[^}]*display:\s*none/s,
+    );
+    assert.match(
+      styles,
+      /@media \(max-width: 768px\)[\s\S]*?\.composer \.composer-mood-row\s*\{[^}]*display:\s*none/s,
+    );
+  });
+
+  it("stacks Overview glance tiles 2-col on a narrow pane", () => {
+    assert.match(
+      styles,
+      /\.owner-health-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
+    );
   });
 });
 
