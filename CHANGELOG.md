@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### Highlights
+- **Phone that feels native.** Chat, library, title sheets, Live watch, and member settings use 44px taps, 16px inputs, and safe-area chrome instead of a shrunk desktop page.
+- **Admin works on a phone too.** Overview, Libraries, Live Channels, and Newsletters keep the 1.35.1 gold/14px rhythm and now meet the same tap and overflow bar.
+
+### Added
+- Interactive UI QA `mobile.*` IDs (member living-room + full owner admin pass) at 390×844; Playwright `mobile` project (`e2e/mobile-native.spec.ts`) on mocked **8799**.
+- Shared tokens `--tap-min` / `--font-size-input`, `interactive-widget=resizes-content`, touch-action / tap-highlight chrome.
+
+### Changed
+- Title overlay becomes a safe-area sheet on phones; Explore/poster actions are visible without hover; composer/mic/send stay 44px and sticky.
+
+### Verification
+- Frontend unit includes `nativeMobile.test.mjs`; mocked Playwright `mobile` project; Interactive UI QA dual-role campaign (desktop + 390×844).
+
 ## [1.35.1] — 2026-09-13
 
 Live Channels chrome matches the rest of Admin, failed Plex jobs unlock, and village consults finish their sentences.

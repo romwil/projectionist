@@ -8,12 +8,18 @@ Each ID:
 | Field | Meaning |
 |-------|---------|
 | **roles** | Who must run this ID (`member`, `owner`, `youth`, `guest`, `guest-tour`, or `*`) |
-| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `live`, `shell`, `login`, `tour`, `invite`, `access-request`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`, `lobby`, `theater`) |
+| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `live`, `shell`, `login`, `tour`, `invite`, `access-request`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`, `lobby`, `theater`, `mobile`) |
 | **source** | Primary frontend file(s) |
 | **steps** | Required interactions (page-load alone ≠ pass) |
 | **pass** | Observable pass criteria |
 
-Target: `http://10.10.1.202:8790`. Creds: `projectionist-qa-scripts/.env.qa`.
+Target: `http://10.10.1.202:8790` (never prod `:8788`). Creds: `projectionist-qa-scripts/.env.qa`.
+Phone campaigns set the browser to **390×844**. If `:8790` is occupied or not on this branch, run the same IDs against local mocked e2e **`:8799`** (or Vite) — never an SSH tunnel to prod.
+
+**Dual-role native-mobile campaign** (delta tags `mobile` + living-room / admin):
+
+1. **Member pass** — desktop existing `chat.*` / `library.*` / `settings.notifications-*` IDs, then phone IDs `mobile.chat-*` … `mobile.settings-notifications`.
+2. **Admin / owner pass** — desktop `admin.*` chrome IDs, then phone `mobile.admin-*`. Full second pass (not “only if 44px fails”).
 
 ---
 
@@ -1128,6 +1134,94 @@ after direct URL navigation.
 
 ---
 
+## Native mobile (phone ~390×844)
+
+Run these with the browser viewport at **390×844**. Target QA `:8790` when it serves this branch; otherwise local mocked e2e `:8799` / Vite. Never prod `:8788`.
+
+Dual-role: **member living-room first**, then a **full admin/owner second pass**.
+
+### `mobile.chat-composer`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `chat`, `scroll`
+- **source:** `frontend/src/styles/05-chat-responsive.css`, `frontend/src/App.jsx`
+- **steps:** At 390×844 on `/chat`, confirm `composer-input` is ≥16px, `send-button` is ≥44px, composer is sticky at the visual bottom (not covered by home-indicator chrome). Type a short message and send. Confirm no horizontal page bounce (`100vw` overflow).
+- **pass:** Send works; composer stays on-screen; tap targets meet 44px; no horizontal overflow.
+
+### `mobile.chat-conversation`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `chat`, `scroll`
+- **source:** `frontend/src/App.jsx`, `frontend/src/lib/chatLayout.js`, `frontend/src/styles/02-nav-chrome.css`
+- **steps:** Send a user turn. Confirm the “I asked” user bubble stays readable. Scroll the transcript up if content allows. If `new-reply-chip` appears, confirm it sits **above** the composer (1.35.2 placement) and is ≥44px. Completed poster strips: horizontal swipe only — no nested vertical scrollbar.
+- **pass:** User turn visible; chip never overlays mid-sentence bubbles; strip `overflow-y` is not a nested scrollport.
+
+### `mobile.library-browse`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `library`, `scroll`
+- **source:** `frontend/src/pages/LibraryBrowsePage.jsx`, `frontend/src/styles/09-title-detail-home.css`
+- **steps:** Open `/search` or Library browse. Confirm poster wall (or empty). Confirm browse controls are ≥44px. Confirm no page-level horizontal bounce. Poster hover icons (Play / trailer) must be tappable without hover.
+- **pass:** Grid usable with thumbs; no hover-only actions; no `100vw` bounce.
+
+### `mobile.title-overlay`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `library`, `explore`
+- **source:** `frontend/src/components/TitleDetailDrawer.jsx`, `frontend/src/styles/10-explore-delight.css`
+- **steps:** Tap a library/explore poster to open `title-detail-drawer`. Confirm a phone sheet (safe-area top/bottom), close ≥44px, content scrolls inside the sheet. Dismiss.
+- **pass:** Sheet opens and closes; does not overflow the 390px canvas.
+
+### `mobile.live-watch`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `live`
+- **source:** `frontend/src/pages/LivePage.jsx`, `frontend/src/styles/12-live.css`
+- **steps:** Open `/live` (watch or guide). Confirm `live-chrome` and mode controls are ≥44px with safe-area padding. Confirm no horizontal bounce. Do not start Repair / Rebuild.
+- **pass:** Watch chrome is thumb-reachable. Empty/disabled Live is PASS if the empty card CTA is ≥44px.
+
+### `mobile.settings-notifications`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `settings`, `notifications`
+- **source:** `frontend/src/pages/settings/NotificationsSettingsPage.jsx`
+- **steps:** Open Settings → Notifications. Confirm email input is 16px (no iOS zoom). Confirm `notifications-save` and toggles are ≥44px. Confirm 14px field hints. Confirm no overflow.
+- **pass:** Form is usable one-handed; save control meets tap minimum.
+
+### `mobile.admin-overview`
+
+- **roles:** `owner`
+- **tags:** `mobile`, `admin`
+- **source:** `frontend/src/pages/ConfigPage.jsx`, `frontend/src/lib/adminChrome.test.mjs`
+- **steps:** At 390×844, open `/admin/overview`. Confirm hamburger (`app-nav-toggle` ≥44px) opens Admin links. Confirm one gold primary per region (`service-card-actions`), 14px notes (`wizard-note` / panel leads), 12px action gaps. Confirm no stretched gold slabs. Confirm no horizontal bounce.
+- **pass:** Overview usable on a phone without restyling Admin into iOS kitsch. Screenshot required.
+
+### `mobile.admin-libraries`
+
+- **roles:** `owner`
+- **tags:** `mobile`, `admin`, `library`
+- **source:** `frontend/src/pages/ConfigPage.jsx`
+- **steps:** Open `/admin/libraries`. Confirm `plex-library-mapping` (or library sync card) is reachable. Confirm inputs ≥16px, primary actions ≥44px, no 100vw overflow. Do not run a destructive sync if the campaign is read-only.
+- **pass:** Libraries admin is usable at 390px; overflow is local scroll, not page bounce.
+
+### `mobile.admin-live-channels`
+
+- **roles:** `owner`
+- **tags:** `mobile`, `admin`, `live`
+- **source:** `frontend/src/pages/admin/LiveChannelsSection.jsx`
+- **steps:** Open `/admin/live-channels`. Confirm tabs (`live-channels-tab-stations` / installation) are ≥44px. Confirm infra notes stay 14px. Confirm no page overflow. Do **not** click Rebuild / Repair Plex.
+- **pass:** Stations/Setup chrome is thumb-reachable. Refresh remains the default Plex action.
+
+### `mobile.admin-newsletters`
+
+- **roles:** `owner`
+- **tags:** `mobile`, `admin`, `notifications`
+- **source:** `frontend/src/pages/NewslettersPage.jsx`, `frontend/src/styles/06-reading-admin-settings.css`
+- **steps:** Open Admin → Ops → Newsletters (`/admin/newsletters`). Scroll the full page. Confirm weekly + YIR panels remain reachable (no sticky chrome pinning content off-screen). Confirm save/generate controls ≥44px.
+- **pass:** Both panels reachable at 390px. Historical Mail sticky-bar footgun does not return.
+
+---
+
 ## Delta selection cheat sheet
 
 | Tag | Typical surfaces |
@@ -1162,6 +1256,7 @@ after direct URL navigation.
 | `export` | Export Markdown/JSON/text/PDF from saved library |
 | `lists` | Settings → Lists create/add/remove/rename/delete |
 | `watchlist` | Pin to watchlist; pin persistence |
+| `mobile` | Phone 390×844 dual-role campaign: member living-room + full admin pass |
 
 ---
 
@@ -1290,3 +1385,13 @@ after direct URL navigation.
 | `youth.filter.watchlist-lists` | youth |
 | `youth.filter.route-action-gates` | youth, guest |
 | `youth.filter.no-transient-leak` | youth |
+| `mobile.chat-composer` | member, owner |
+| `mobile.chat-conversation` | member, owner |
+| `mobile.library-browse` | member, owner |
+| `mobile.title-overlay` | member, owner |
+| `mobile.live-watch` | member, owner |
+| `mobile.settings-notifications` | member, owner |
+| `mobile.admin-overview` | owner |
+| `mobile.admin-libraries` | owner |
+| `mobile.admin-live-channels` | owner |
+| `mobile.admin-newsletters` | owner |

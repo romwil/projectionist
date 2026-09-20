@@ -610,6 +610,34 @@
   outline: none;
 }
 
+/* Touch: poster actions cannot live behind hover. Keep Play/trailer/recommend
+   tappable, but do not let the full-bleed layer eat the poster tap (sheet). */
+@media (hover: none) {
+  .explore-card-hover-actions {
+    opacity: 1;
+    pointer-events: none;
+  }
+
+  .explore-cinema-card .explore-hover-icon {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .explore-hover-icon,
+  .explore-hover-icon-watch {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    width: var(--tap-min);
+    height: var(--tap-min);
+  }
+
+  .thread-delete-btn {
+    opacity: 0.9;
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+}
+
 /* Thread delete */
 .thread-item-row {
   display: flex;
@@ -1667,7 +1695,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   left: 50%;
   bottom: max(1.25rem, 3vh);
   z-index: 90;
-  width: min(44rem, calc(100vw - 1.5rem));
+  width: min(44rem, calc(100% - 1.5rem));
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -1693,6 +1721,42 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   .title-detail-drawer-panel,
   .title-detail-drawer-panel--modal {
     animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .title-detail-drawer-panel,
+  .title-detail-drawer-panel--modal {
+    top: env(safe-area-inset-top);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    transform: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation-name: title-detail-drawer-in-phone;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .title-detail-drawer-close {
+    width: var(--tap-min);
+    height: var(--tap-min);
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+}
+
+@keyframes title-detail-drawer-in-phone {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
@@ -1722,8 +1786,10 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
   padding: 0;
   border-radius: 999px;
 }
