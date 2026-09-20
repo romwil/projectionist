@@ -171,7 +171,8 @@
   background: transparent;
   color: var(--muted);
   padding: 0.4rem 0.85rem;
-  min-height: 2.25rem;
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
   font: inherit;
   font-size: var(--text-sm, 0.9rem);
   cursor: pointer;
@@ -770,5 +771,18 @@
   }
   .live-chrome-actions .live-chrome-link {
     display: none;
+  }
+  .live-chrome {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+  .live-chrome-icon-btn,
+  .live-mode-toggle button,
+  .live-osd-btn {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+  .live-osd-inner {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
 }

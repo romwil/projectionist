@@ -538,17 +538,21 @@ button.app-topbar-icon:focus-visible {
   min-width: 0;
 }
 
+/* Lives between the transcript and the composer — never sticky inside
+   `.chat-scroll-region`, where it overlays bubbles mid-sentence. */
 .new-reply-chip {
-  position: sticky;
-  bottom: 8px;
+  flex-shrink: 0;
   align-self: center;
-  z-index: 2;
+  width: max-content;
+  margin: 6px auto 10px;
+  z-index: 1;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface) 94%, transparent);
   color: var(--text);
   border-radius: 999px;
   padding: 8px 16px;
-  font-size: 13px;
+  min-height: var(--tap-min);
+  font-size: 14px;
   font-weight: 500;
   cursor: pointer;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);

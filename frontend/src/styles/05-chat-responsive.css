@@ -46,17 +46,10 @@
     min-width: 0;
   }
 
-  /* Peer cluster stays whole: tighten the gutters (and the 44px tap squares to
-     40px) before the row can overflow the header on phones. */
+  /* Peer cluster stays whole: tighten gutters, keep 44px taps. Overflow
+     scrolls the action row on the smallest phones (see 560px). */
   .primary-topbar .app-topbar-actions {
     gap: var(--space-1);
-  }
-
-  .primary-topbar a.app-topbar-icon,
-  .primary-topbar button.app-topbar-icon {
-    width: 40px;
-    min-width: 40px;
-    max-width: 40px;
   }
 
   .app-topbar-actions .app-topbar-meta {
@@ -148,6 +141,8 @@
     flex: 1;
     min-width: 0;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
   }
 
   .chat-scroll-region {
@@ -156,6 +151,7 @@
     padding: var(--space-4);
     padding-left: max(var(--space-4), env(safe-area-inset-left));
     padding-right: max(var(--space-4), env(safe-area-inset-right));
+    overscroll-behavior: contain;
   }
 
   .composer {
@@ -163,6 +159,7 @@
     max-width: none;
     position: sticky;
     bottom: 0;
+    margin-top: auto;
     padding: var(--space-3) var(--space-4);
     padding-left: max(var(--space-4), env(safe-area-inset-left));
     padding-right: max(var(--space-4), env(safe-area-inset-right));
@@ -170,22 +167,110 @@
   }
 
   .composer textarea {
-    font-size: 16px; /* avoid iOS focus zoom */
-    min-height: 44px;
+    font-size: var(--font-size-input); /* avoid iOS focus zoom */
+    min-height: var(--tap-min);
   }
 
-  .composer-send {
-    width: 44px;
-    height: 44px;
+  .composer-send,
+  .composer-mic,
+  .composer-tts-mute,
+  .composer-surprise {
+    width: var(--tap-min);
+    height: var(--tap-min);
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+
+  .composer-mood-chip,
+  .persona-trigger,
+  .welcome-starter-chip,
+  .welcome-context-chip,
+  .user-menu-trigger,
+  .user-menu-link,
+  .slash-command-palette-item {
+    min-height: var(--tap-min);
+  }
+
+  .composer-toolbar {
+    flex-wrap: wrap;
+    row-gap: var(--space-2);
+  }
+
+  /* Member copy: 14px like Admin wizard-note — --text-sm reads cramped on a phone. */
+  .welcome-panel-hint,
+  .message-text,
+  .markdown-body,
+  .ambient-context-tag,
+  .typing-indicator-label,
+  .settings-field-hint,
+  .settings-page-lead,
+  .settings-toggle-row,
+  .settings-switch,
+  .settings-checklist label,
+  .explore-section-subtitle,
+  .explore-empty,
+  .explore-card-meta {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]),
+  select,
+  textarea {
+    font-size: var(--font-size-input);
+  }
+
+  .settings-switch,
+  .settings-toggle-row,
+  .settings-checklist label,
+  .settings-drawer-toggle,
+  .settings-actions button,
+  .settings-actions .btn-link,
+  .settings-panel-footer button,
+  button.primary,
+  button.btn-danger,
+  .login-primary,
+  .login-secondary,
+  .login-field input,
+  .login-token-field input,
+  .media-browse-controls select,
+  .media-browse-sort-direction {
+    min-height: var(--tap-min);
+  }
+
+  .live-chrome {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  .live-chrome-icon-btn,
+  .live-mode-toggle button,
+  .live-osd-btn,
+  .live-empty-card .btn {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+
+  .live-channels-tabs {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .live-channels-tab {
+    min-height: var(--tap-min);
+  }
+
+  .thread-item,
+  .thread-new-btn,
+  .thread-delete-btn {
+    min-height: var(--tap-min);
   }
 
   .thread-item {
-    min-height: 44px;
     padding: var(--space-3);
   }
 
   .thread-new-btn {
-    min-height: 44px;
     padding: var(--space-2) var(--space-3);
   }
 
@@ -198,7 +283,7 @@
   }
 
   .welcome-starter-chip {
-    min-height: 44px;
+    min-height: var(--tap-min);
   }
 }
 

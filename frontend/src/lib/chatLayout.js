@@ -6,6 +6,9 @@
 /** CSS class applied to the scrollable transcript host. */
 export const CHAT_SCROLL_REGION_CLASS = "chat-scroll-region";
 
+/** CSS class for the New reply chip — lives above the composer, not in the transcript. */
+export const NEW_REPLY_CHIP_CLASS = "new-reply-chip";
+
 /** CSS containment classes for assistant/user message shells. */
 export const MESSAGE_CONTAINMENT_CLASSES = ["message", "message-contained"];
 
