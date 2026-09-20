@@ -54,6 +54,10 @@
 .media-browse-sort-direction {
   min-height: 34px;
 }
+.media-browse-filters-toggle {
+  display: none;
+}
+
 @media (max-width: 768px) {
   .media-browse-controls select,
   .media-browse-sort-direction,
@@ -64,6 +68,60 @@
 
   .title-card.compact .title-card-overlay-actions button {
     min-height: var(--tap-min);
+  }
+
+  /* Phone: Filters accordion. Desktop keeps the full toolbar visible
+     even when <details> is closed (UA hides non-summary children). */
+  .media-browse-filters-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .media-browse-filters-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .media-browse-filters-toggle::after {
+    content: "tune";
+    font-family: "Material Symbols Outlined", sans-serif;
+    font-size: 20px;
+    font-weight: 400;
+    opacity: 0.8;
+  }
+
+  .media-browse-filters[open] .media-browse-filters-toggle {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  }
+
+  .media-browse-filters[open] .media-browse-controls {
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .media-browse-secondary-actions,
+  .explore-section-bulk,
+  .media-browse-view-control,
+  .media-browse-controls label:has([data-testid="media-browse-page-size"]) {
+    display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  .media-browse-filters > .media-browse-controls {
+    display: grid;
   }
 }
 .media-browse-menu-wrap,

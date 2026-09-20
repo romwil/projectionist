@@ -482,6 +482,32 @@
   .explore-search-submit {
     padding: var(--space-3) var(--space-5);
   }
+  /* /search is already Search — keep field + submit on one row so the
+     gold button does not become a second full-width slab. */
+  .search-page .explore-search {
+    flex-direction: row;
+    align-items: stretch;
+    margin: 0 0 var(--space-3);
+  }
+  .search-page .explore-search .library-search--hero {
+    padding: 10px 12px;
+    font-size: var(--font-size-input);
+  }
+  .search-page .explore-search .library-search--hero input {
+    font-size: var(--font-size-input);
+  }
+  .search-page .explore-search-submit {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    padding: 0 14px;
+    width: auto;
+    flex: 0 0 auto;
+    border-radius: var(--radius);
+  }
+  .search-page .explore-section-hero,
+  .search-page-hero {
+    padding-bottom: var(--space-3);
+  }
   .explore-footer {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -612,7 +638,19 @@
 
 /* Touch: poster actions cannot live behind hover. Keep Play/trailer/recommend
    tappable, but do not let the full-bleed layer eat the poster tap (sheet). */
-@media (hover: none) {
+@media (max-width: 768px) {
+  .explore-section-bulk {
+    display: none;
+  }
+
+  .explore-section-toolbar-row:has([data-testid="library-browse-selection-summary"]) .explore-section-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+}
+
+@media (hover: none), (max-width: 768px) {
   .explore-card-hover-actions {
     opacity: 1;
     pointer-events: none;
@@ -1909,8 +1947,14 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 }
 .owner-health-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+@media (min-width: 901px) {
+  .owner-health-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  }
 }
 .owner-health-tile {
   display: flex;

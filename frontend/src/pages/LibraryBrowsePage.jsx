@@ -469,13 +469,21 @@ export default function LibraryBrowsePage({ embedded = false }) {
   const pageBody = (
     <>
       {!embedded ? (
-      <section className="explore-section-hero" data-testid="library-browse-hero">
-        <p className="person-eyebrow">{isSearchRoute ? "Search" : "Explore"}</p>
-        <h1 data-testid="library-browse-title">{browseHeading(browse.media_type, q)}</h1>
-        <p className="explore-section-subtitle">{browseSubtitle(browse.media_type, q)}</p>
+      <section
+        className={`explore-section-hero${isSearchRoute ? " search-page-hero" : ""}`}
+        data-testid="library-browse-hero"
+      >
+        {isSearchRoute ? null : (
+          <>
+            <p className="person-eyebrow">Explore</p>
+            <h1 data-testid="library-browse-title">{browseHeading(browse.media_type, q)}</h1>
+            <p className="explore-section-subtitle">{browseSubtitle(browse.media_type, q)}</p>
+          </>
+        )}
         <LibrarySearchBar
           className="library-browse-search"
           testId="library-browse-search"
+          placeholder="Search titles…"
           value={draftQ}
           onChange={(event) => setDraftQ(event.target.value)}
           onSubmit={handleSearchSubmit}
@@ -484,15 +492,18 @@ export default function LibraryBrowsePage({ embedded = false }) {
       ) : null}
 
       <div className="explore-section-toolbar" data-testid="library-browse-toolbar">
-        <MediaBrowseControls
-          state={browse}
-          onChange={updateBrowse}
-          columns={columns}
-          onColumnsChange={setColumns}
-          columnScope="browse"
-          filterOptions={filterOptions}
-          pageSizes={MEDIA_BROWSE_PAGE_SIZES}
-        />
+        <details className="media-browse-filters" data-testid="library-browse-filters">
+          <summary className="media-browse-filters-toggle">Filters &amp; sort</summary>
+          <MediaBrowseControls
+            state={browse}
+            onChange={updateBrowse}
+            columns={columns}
+            onColumnsChange={setColumns}
+            columnScope="browse"
+            filterOptions={filterOptions}
+            pageSizes={MEDIA_BROWSE_PAGE_SIZES}
+          />
+        </details>
         <div className="explore-section-toolbar-row">
           <div className="explore-section-toolbar-primary">
             <p className="explore-section-pagination-summary" data-testid="library-browse-summary">
@@ -734,8 +745,6 @@ export default function LibraryBrowsePage({ embedded = false }) {
       className={`app-root explore-section-page library-browse-page${isSearchRoute ? " search-page" : ""}`}
       testId={isSearchRoute ? "search-page" : "library-browse-page"}
       variant={isSearchRoute ? "topbar" : "browse"}
-      title={isSearchRoute ? "Search" : undefined}
-      eyebrow={isSearchRoute ? "Your collection and beyond" : undefined}
       leading={
         isSearchRoute ? null : <BackLink fallbackTo={ROUTES.explore} testId="library-browse-back" />
       }

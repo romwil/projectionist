@@ -223,7 +223,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **tags:** `search`
 - **source:** `frontend/src/pages/ExplorePage.jsx`, `frontend/src/pages/SearchPage.jsx` → `LibraryBrowsePage.jsx`, `frontend/src/lib/browseLinks.js`, `frontend/src/lib/progressiveBrowseSearch.js`
 - **steps:** Open `/search` via topbar Search (or Explore `explore-search-input` + submit). On Search, use the on-page bar (`library-browse-search-input`) with a known title fragment — progressive as-you-type is enough; submit optional.
-- **pass:** URL becomes `/search?q=…` (or equivalent); `library-browse-title` / results / empty reflect that `q`. Emptying the input restores full browse (no `q`, “Browse library” / full grid).
+- **pass:** URL becomes `/search?q=…` (or equivalent); `library-browse-search-input` / results / empty / `library-browse-summary` reflect that `q`. Emptying the input restores full browse (no `q`, full grid). `/search` does not render a second “Browse library” H1 — the route is already Search.
 
 ### `search.progressive`
 
@@ -231,7 +231,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **tags:** `search`
 - **source:** `frontend/src/pages/LibraryBrowsePage.jsx`, `frontend/src/lib/progressiveBrowseSearch.js`
 - **steps:** On `/search` with a populated library, type a title fragment into `library-browse-search-input` without pressing Search/Enter. Wait briefly (~200ms debounce). Clear the input.
-- **pass:** While typing, results update without requiring Enter (`q` in URL, grid/empty/heading follow). Clearing restores full browse. Filters/sort still apply with an active `q`.
+- **pass:** While typing, results update without requiring Enter (`q` in URL, grid/empty/summary follow). Clearing restores full browse. Filters/sort still apply with an active `q`.
 
 ### `inbox.empty-or-item`
 
@@ -991,7 +991,7 @@ QA library is fully synced — assert real posters/results, not just empty state
 - **tags:** `search`, `library`, `explore`
 - **source:** `frontend/src/pages/ExplorePage.jsx`, `LibraryBrowsePage.jsx`, `TitleDetailPage.jsx`
 - **steps:** From Explore search (`explore-search-input` + submit) **or** on-page Search (`library-browse-search-input`, progressive or submit) enter a known title fragment. On the results, open a poster to `title-detail-page`.
-- **pass:** Query lands on `/search?q=…` with matching `library-browse-title`/results; opening a card reaches `title-detail-page` with hero (`title-detail-hero`) for that title. Full search→detail flow completes.
+- **pass:** Query lands on `/search?q=…` with matching results; opening a card reaches `title-detail-page` with hero (`title-detail-hero`) for that title. Full search→detail flow completes.
 
 ### `explore.facets`
 
@@ -1145,8 +1145,8 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **roles:** `member`, `owner`
 - **tags:** `mobile`, `chat`, `scroll`
 - **source:** `frontend/src/styles/05-chat-responsive.css`, `frontend/src/App.jsx`
-- **steps:** At 390×844 on `/chat`, confirm `composer-input` is ≥16px, `send-button` is ≥44px, composer is sticky at the visual bottom (not covered by home-indicator chrome). Type a short message and send. Confirm no horizontal page bounce (`100vw` overflow).
-- **pass:** Send works; composer stays on-screen; tap targets meet 44px; no horizontal overflow.
+- **steps:** At 390×844 **and** a short/narrow pane (~560×640, Simple Browser class) on `/chat`, confirm `composer-input` is on-screen (not below the fold), ≥16px, `send-button` is ≥44px. Confirm the wordmark reads the full **Projectionist** (never “Projectioni”). Confirm welcome/starters scroll in `chat-scroll-region` above the composer. Type a short message and send. Confirm no horizontal page bounce (`100vw` overflow).
+- **pass:** Composer is visible without scrolling the page; thread/welcome occupies the remaining height; brand is unclipped; tap targets meet 44px; no horizontal overflow.
 
 ### `mobile.chat-conversation`
 
@@ -1161,8 +1161,8 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **roles:** `member`, `owner`
 - **tags:** `mobile`, `library`, `scroll`
 - **source:** `frontend/src/pages/LibraryBrowsePage.jsx`, `frontend/src/styles/09-title-detail-home.css`
-- **steps:** Open `/search` or Library browse. Confirm poster wall (or empty). Confirm browse controls are ≥44px. Confirm no page-level horizontal bounce. Poster hover icons (Play / trailer) must be tappable without hover.
-- **pass:** Grid usable with thumbs; no hover-only actions; no `100vw` bounce.
+- **steps:** Open `/search` or Library browse. Confirm the query field is on-screen (no “Browse library” / “Every title in your library” hero, no second Search H1). Confirm poster wall (or empty) without scrolling past a filter wall — Filters may live in an accordion. Confirm browse controls that remain are ≥44px. Confirm no page-level horizontal bounce. Poster hover icons (Play / trailer) must be tappable without hover.
+- **pass:** Query field + results win the fold; no duplicate H1; grid usable with thumbs; no hover-only actions; no `100vw` bounce.
 
 ### `mobile.title-overlay`
 
@@ -1193,8 +1193,8 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 - **roles:** `owner`
 - **tags:** `mobile`, `admin`
 - **source:** `frontend/src/pages/ConfigPage.jsx`, `frontend/src/lib/adminChrome.test.mjs`
-- **steps:** At 390×844, open `/admin/overview`. Confirm hamburger (`app-nav-toggle` ≥44px) opens Admin links. Confirm one gold primary per region (`service-card-actions`), 14px notes (`wizard-note` / panel leads), 12px action gaps. Confirm no stretched gold slabs. Confirm no horizontal bounce.
-- **pass:** Overview usable on a phone without restyling Admin into iOS kitsch. Screenshot required.
+- **steps:** At 390×844 **and** a narrow pane (~560–800px), open `/admin/overview`. Confirm the wordmark is the full **Projectionist** (never clipped). Confirm hamburger (`app-nav-toggle` ≥44px) opens Admin links; peer icons may live in the drawer at this width. Confirm glance tiles (`household-health-grid`) are 2-col (never a squeezed third tile). Confirm one gold primary per region (`service-card-actions`), 14px notes (`wizard-note` / panel leads), 12px action gaps. Confirm no stretched gold slabs. Confirm no horizontal bounce.
+- **pass:** Overview usable on a phone / narrow pane: unclipped brand, 2-col tiles, no restyling Admin into iOS kitsch. Screenshot required.
 
 ### `mobile.admin-libraries`
 

@@ -12,6 +12,12 @@
 
 ### Changed
 - Title overlay becomes a safe-area sheet on phones; Explore/poster actions are visible without hover; composer/mic/send stay 44px and sticky.
+- Narrow panes (phone **and** Simple Browser ~360–900px): hamburger + full **Projectionist** wordmark + theme/account cluster. Peer icons live in the drawer — the name is never clipped to “Projectioni”.
+- Chat shell is pinned to the visible viewport (`position: fixed; inset: 0`). Welcome/thread scroll in the middle; the composer stays on-screen instead of falling below the fold.
+- Phone composer is input + send (16px / 44px). The “General Exploration” tag and mood-chip wall hide so they cannot push compose off-screen. Theme cycles from Settings.
+- Overview glance tiles use a 2-column grid on narrow widths so the third tile is never squeezed.
+- `/search` drops the repeated “Search / Browse library” heroes — query field + results win. Phone filters collapse into a 44px accordion; Columns / Export / per-page stay desktop.
+- Phone living-room is designed for the device: Search is a query hero + filter sheet + 2-col posters; chat welcome keeps starters with a short invite; Library is one title + tabs; Explore search sits in a thumb row; Live keeps Guide/Watch and Plex, hides pop-out.
 
 ### Verification
 - Frontend unit includes `nativeMobile.test.mjs`; mocked Playwright `mobile` project; Interactive UI QA dual-role campaign (desktop + 390×844).
