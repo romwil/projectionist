@@ -141,6 +141,7 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .chat-scroll-region {
@@ -157,6 +158,7 @@
     max-width: none;
     position: sticky;
     bottom: 0;
+    flex: 0 0 auto;
     margin-top: auto;
     padding: 8px 12px;
     padding-left: max(12px, env(safe-area-inset-left));
@@ -435,6 +437,30 @@
 
   .welcome-starter-chip {
     min-height: var(--tap-min);
+  }
+}
+
+/* Short Simple Browser / landscape phone: keep the composer in the pane
+   without relying on 100vh. Mood chips wrap; the input must stay. */
+@media (max-height: 640px) {
+  .composer {
+    padding-top: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+
+  .composer-shell {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .composer .composer-mood-row {
+    display: none;
+  }
+
+  .welcome-panel {
+    padding-top: var(--space-3);
+    gap: var(--space-2);
   }
 }
 

@@ -198,8 +198,14 @@ describe("narrow pane fit (Simple Browser + phone)", () => {
   it("pins the chat shell to the visible viewport so the composer cannot fall below the fold", () => {
     assert.match(styles, /\.app-root\.workspace\s*\{[^}]*position:\s*fixed/s);
     assert.match(styles, /\.app-root\.workspace\s*\{[^}]*inset:\s*0/s);
+    assert.match(styles, /\.app-root\.workspace\s*\{[^}]*min-height:\s*0/s);
+    assert.match(styles, /\.app-root\.workspace\s*\{[^}]*max-height:\s*100%/s);
+    assert.match(styles, /\.app-root\.workspace\s*\{[^}]*height:\s*100%/s);
+    assert.doesNotMatch(styles, /\.app-root\.workspace\s*\{[^}]*max-height:\s*none/s);
     assert.match(styles, /html:has\(\.app-root\.workspace\)[\s\S]*?overflow:\s*hidden/s);
+    assert.match(styles, /html:has\(\.app-root\.workspace\)[\s\S]*?min-height:\s*0/s);
     assert.match(styles, /\.composer\s*\{[^}]*position:\s*sticky/s);
+    assert.match(styles, /\.composer\s*\{[^}]*margin-top:\s*auto/s);
   });
 
   it("keeps the phone composer to input + send (no mood-chip wall)", () => {

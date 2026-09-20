@@ -194,14 +194,18 @@ a {
   transition: background 0.55s ease;
 }
 
-/* Chat living-room: pin the shell to the *visible* viewport (Simple Browser
-   pane, phone, iOS chrome). 100dvh can exceed the pane and hide the composer
-   below the fold — never size this as a tall document. */
+/* Chat living-room: pin the shell to the *iframe / visual* viewport.
+   Cursor Simple Browser (and some nested webviews) report 100vh / 100dvh as
+   the parent editor window, not the pane. `.app-root { min-height: 100vh }`
+   plus `max-height: none` grows the workspace past the fold; `overflow: hidden`
+   then clips the composer — after the exploration tag is hidden, the whole
+   chat window disappears. Size only with inset + 100%, never vh/dvh. */
 html:has(.app-root.workspace),
 html:has(.app-root.workspace) body,
 html:has(.app-root.workspace) #root {
   height: 100%;
   max-height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -210,8 +214,10 @@ html:has(.app-root.workspace) #root {
   inset: 0;
   display: flex;
   flex-direction: column;
-  height: auto;
-  max-height: none;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
   overflow: hidden;
   background:
     radial-gradient(ellipse 100% 70% at 40% -25%, color-mix(in srgb, var(--ambient-accent) 22%, transparent), transparent 58%),
