@@ -1302,6 +1302,16 @@ def watchlist_page() -> HTMLResponse:
     return _serve_index()
 
 
+@app.get("/library", response_class=HTMLResponse)
+@app.get("/library/saved", response_class=HTMLResponse)
+@app.get("/library/saved/{page_id}", response_class=HTMLResponse)
+@app.get("/library/shelves/{list_id}", response_class=HTMLResponse)
+@app.get("/library/collections/{list_id}", response_class=HTMLResponse)
+def library_hub_page(page_id: str = "", list_id: str = "") -> HTMLResponse:
+    del page_id, list_id
+    return _serve_index()
+
+
 @app.get("/live", response_class=HTMLResponse)
 @app.get("/live/watch", response_class=HTMLResponse)
 @app.get("/live/popout", response_class=HTMLResponse)
@@ -6174,6 +6184,79 @@ def admin_radarr_register_existing(
         "already": already,
         "failed": failed,
     }
+
+
+class SonarrMissingScanPayload(BaseModel):
+    include_specials: bool = False
+
+
+class SonarrMissingSearchPayload(BaseModel):
+    episode_ids: Optional[List[int]] = None
+    search_all: bool = False
+
+
+def _require_sonarr_client() -> SonarrClient:
+    settings = _settings()
+    if not str(settings.sonarr_url or "").strip() or not str(settings.sonarr_api_key or "").strip():
+        raise HTTPException(status_code=400, detail="Sonarr is not configured")
+    return SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
+
+
+@app.post("/api/admin/sonarr/missing/scan")
+def admin_sonarr_missing_scan(
+    payload: Optional[SonarrMissingScanPayload] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Start a background scan of aired+monitored Sonarr episodes with no file."""
+    del user
+    from projectionist.library.sonarr_missing import start_scan_job
+
+    body = payload or SonarrMissingScanPayload()
+    client = _require_sonarr_client()
+    snap = start_scan_job(
+        client,
+        include_specials=bool(body.include_specials),
+        data_dir=DATA_DIR,
+    )
+    if not snap.get("accepted"):
+        raise HTTPException(
+            status_code=409,
+            detail=str(snap.get("message") or "A Sonarr missing job is already running."),
+        )
+    return snap
+
+
+@app.get("/api/admin/sonarr/missing/status")
+def admin_sonarr_missing_status(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Progress plus last scan summary (scan found M; Wanted lists N)."""
+    del user
+    from projectionist.library.sonarr_missing import build_status
+
+    return build_status(data_dir=DATA_DIR)
+
+
+@app.post("/api/admin/sonarr/missing/search")
+def admin_sonarr_missing_search(
+    payload: Optional[SonarrMissingSearchPayload] = None,
+    user=Depends(require_role("owner")),
+) -> Dict[str, Any]:
+    """Queue EpisodeSearch batches for scanned (or supplied) episode ids."""
+    del user
+    from projectionist.library.sonarr_missing import start_search_job
+
+    body = payload or SonarrMissingSearchPayload()
+    client = _require_sonarr_client()
+    snap = start_search_job(
+        client,
+        episode_ids=body.episode_ids or [],
+        search_all=bool(body.search_all),
+        data_dir=DATA_DIR,
+    )
+    if not snap.get("accepted"):
+        detail = str(snap.get("message") or "Could not start EpisodeSearch.")
+        status = 409 if snap.get("busy") else 400
+        raise HTTPException(status_code=status, detail=detail)
+    return snap
 
 
 @app.get("/api/watchlist", response_model=WatchlistListResponse)

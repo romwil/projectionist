@@ -325,6 +325,17 @@ curl -s -X POST http://localhost:8788/api/library/sync
 curl -s http://localhost:8788/api/library/stats | python3 -m json.tool
 ```
 
+### Find all missing (Sonarr)
+
+Sonarr’s **Wanted** list is not the source of truth here. **Find all missing** on **Admin → Libraries** (`/admin/libraries`) re-derives gaps from every monitored series’ episode records: aired, monitored, no file. Specials (S00) stay off unless you turn **Include specials** on. The card compares “Library scan found M; Sonarr Wanted lists N”, then **Search these** queues Sonarr `EpisodeSearch` commands in batches of about 50 — it does not fire `MissingEpisodeSearch` (that uses Wanted). Many EpisodeSearch commands can rate-limit Sonarr; watch the job progress on the card.
+
+```bash
+# Owner host — start a dry scan, then search the last result
+curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/scan -H 'Content-Type: application/json' -d '{"include_specials":false}'
+curl -s http://localhost:8788/api/admin/sonarr/missing/status
+curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/search -H 'Content-Type: application/json' -d '{"search_all":true}'
+```
+
 ### Search beyond the collection — how acquisition works
 
 The member-facing **Search beyond your collection** action (see the member half above) is backed by an authenticated endpoint that queries TMDB, de-dupes the hits against your library and Radarr/Sonarr queue, and returns cards flagged with `in_library` / `in_radarr` / `in_sonarr` / `already_queued`. TMDB must be configured for it to work; when it isn't, the endpoint returns `503` and the UI hides the affordance behind a short note (no provider detail leaks to members).

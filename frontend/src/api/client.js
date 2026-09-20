@@ -252,6 +252,27 @@ export async function registerRadarrExisting(payload = {}) {
   });
 }
 
+/** Owner: start a Sonarr aired-missing scan (background job). */
+export async function startSonarrMissingScan(payload = {}) {
+  return api("/admin/sonarr/missing/scan", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+/** Owner: poll Sonarr missing-scan progress and last result. */
+export async function getSonarrMissingStatus() {
+  return api("/admin/sonarr/missing/status");
+}
+
+/** Owner: queue EpisodeSearch batches for scanned (or supplied) episode ids. */
+export async function searchSonarrMissing(payload = {}) {
+  return api("/admin/sonarr/missing/search", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function startPlexPinLogin({ inviteToken } = {}) {
   const search = new URLSearchParams();
   if (inviteToken) search.set("invite_token", inviteToken);
