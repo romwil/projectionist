@@ -7,7 +7,25 @@ import {
   assertNoHorizontalPageOverflow,
   assertPinnedNearViewportBottom,
   computedOverflowY,
+  measureRail,
+  swipeRail,
 } from "./fixtures/nativeMobile";
+
+const RAIL_TITLES = [
+  { id: 11, title: "Heat", year: 1995, media_type: "movie", tmdb_id: 949, rating_key: "plex-949", poster_url: "" },
+  { id: 12, title: "Alien", year: 1979, media_type: "movie", tmdb_id: 348, rating_key: "plex-348", poster_url: "" },
+  { id: 13, title: "Blade Runner", year: 1982, media_type: "movie", tmdb_id: 78, rating_key: "plex-78", poster_url: "" },
+  { id: 14, title: "Chinatown", year: 1974, media_type: "movie", tmdb_id: 829, rating_key: "plex-829", poster_url: "" },
+];
+
+function neighborEdge(peer: (typeof RAIL_TITLES)[number], toId: number) {
+  return {
+    relation: "neighbor",
+    to_id: toId,
+    peer: { ...peer, in_library: true },
+    why: { label: "Strong plot kinship", surprise_flavor: null },
+  };
+}
 
 /**
  * Native-mobile UX contract at iPhone-class 390×844.
@@ -140,6 +158,85 @@ test.describe("Native mobile — member living-room", () => {
     await expect(drawer).toHaveCount(0);
   });
 
+  test("explore card rails swipe horizontally without nested vertical scroll", async ({ page }) => {
+    await page.route("**/api/library/feeds/continue-watching**", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          feed: "continue-watching",
+          total: RAIL_TITLES.length,
+          note: null,
+          items: RAIL_TITLES,
+        }),
+      });
+    });
+
+    await page.goto("/explore");
+    const rail = page.getByTestId("explore-continue-watching-rail");
+    await expect(rail).toBeVisible();
+    const before = await measureRail(rail);
+    expect(before.overflowX).toBe("auto");
+    expect(before.overflowY).toBe("hidden");
+    expect(before.canScrollX).toBeTruthy();
+    expect(before.scrollLeft).toBe(0);
+
+    const swipe = await swipeRail(rail, 200);
+    expect(swipe.after).toBeGreaterThan(swipe.before);
+    expect(swipe.pageDelta).toBe(0);
+    const after = await measureRail(rail);
+    expect(after.scrollLeft).toBeGreaterThan(0);
+    expect(after.overflowY).toBe("hidden");
+  });
+
+  test("phone title sheet shows a swipeable More like this rail", async ({ page }) => {
+    await page.route("**/api/title/movie/348**", async (route) => {
+      const url = route.request().url();
+      if (url.includes("/relations") || url.includes("/neighbors")) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            items: [
+              neighborEdge(RAIL_TITLES[0], 11),
+              neighborEdge(RAIL_TITLES[2], 13),
+              neighborEdge(RAIL_TITLES[3], 14),
+            ],
+          }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          media_type: "movie",
+          title: "Alien",
+          year: 1979,
+          tmdb_id: 348,
+          overview: "In space no one can hear you scream.",
+          in_library: true,
+          rating_key: "plex-348",
+        }),
+      });
+    });
+
+    await page.goto("/search");
+    await expect(page.getByTestId("library-browse-results")).toBeVisible();
+    await page.getByTestId("library-browse-card").first().locator(".explore-cinema-card-link").click();
+    const drawer = page.getByTestId("title-detail-drawer");
+    await expect(drawer).toBeVisible();
+    const track = drawer.locator(".title-neighbors-track").first();
+    await expect(page.getByTestId("title-neighbors")).toBeVisible();
+    await expect(track).toBeVisible();
+    const before = await measureRail(track);
+    expect(before.overflowX).toBe("auto");
+    expect(before.overflowY).toBe("hidden");
+    expect(before.canScrollX).toBeTruthy();
+    const swipe = await swipeRail(track, 160);
+    expect(swipe.after).toBeGreaterThan(swipe.before);
+  });
+
   test("Live watch chrome is thumb-reachable and does not bounce horizontally", async ({ page }) => {
     await page.goto("/live?mode=watch");
     await expect(page.getByTestId("live-page").or(page.getByTestId("live-watch-page"))).toBeVisible({
@@ -238,6 +335,8 @@ test.describe("Native mobile — admin pass", () => {
               type: "title_cards",
               items: [
                 { media_type: "movie", title: "Blade Runner", year: 1982, tmdb_id: 78, poster_url: "", in_library: false },
+                { media_type: "movie", title: "Chinatown", year: 1974, tmdb_id: 829, poster_url: "", in_library: false },
+                { media_type: "movie", title: "Heat", year: 1995, tmdb_id: 949, poster_url: "", in_library: false },
               ],
             },
           ],
@@ -261,5 +360,10 @@ test.describe("Native mobile — admin pass", () => {
     const strip = page.locator(".chat-scroll-region .inline-cards").first();
     await expect(strip).toBeVisible();
     expect(await computedOverflowY(strip)).toBe("hidden");
+    const before = await measureRail(strip);
+    expect(before.overflowX).toBe("auto");
+    expect(before.canScrollX).toBeTruthy();
+    const swipe = await swipeRail(strip, 180);
+    expect(swipe.after).toBeGreaterThan(swipe.before);
   });
 });

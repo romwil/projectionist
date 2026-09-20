@@ -40,3 +40,27 @@ export async function assertPinnedNearViewportBottom(
 export async function computedOverflowY(locator: Locator) {
   return locator.evaluate((el) => getComputedStyle(el).overflowY);
 }
+
+export async function measureRail(locator: Locator) {
+  return locator.evaluate((el) => ({
+    scrollLeft: el.scrollLeft,
+    scrollWidth: el.scrollWidth,
+    clientWidth: el.clientWidth,
+    overflowX: getComputedStyle(el).overflowX,
+    overflowY: getComputedStyle(el).overflowY,
+    canScrollX: el.scrollWidth > el.clientWidth + 1,
+  }));
+}
+
+export async function swipeRail(locator: Locator, delta = 180) {
+  return locator.evaluate((el, d) => {
+    const before = el.scrollLeft;
+    const pageBefore = window.scrollY;
+    el.scrollBy({ left: d, behavior: "instant" });
+    return {
+      before,
+      after: el.scrollLeft,
+      pageDelta: window.scrollY - pageBefore,
+    };
+  }, delta);
+}

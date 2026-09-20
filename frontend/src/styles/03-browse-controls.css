@@ -508,7 +508,13 @@
   max-height: none;
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior-x: contain;
   align-content: start;
+  scroll-snap-type: x mandatory;
+}
+
+.chat-scroll-region .inline-cards .title-card {
+  scroll-snap-align: start;
 }
 
 .chat-scroll-region .inline-cards.chat-inline-cards--streaming {
@@ -589,6 +595,16 @@
 .title-card-pin.pinned {
   background: rgba(251, 191, 36, 0.18);
   border-color: rgba(251, 191, 36, 0.45);
+}
+
+@media (hover: none), (max-width: 768px) {
+  .poster-action-grip,
+  .title-card-pin {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    width: var(--tap-min);
+    height: var(--tap-min);
+  }
 }
 
 .title-card-progress-ring {

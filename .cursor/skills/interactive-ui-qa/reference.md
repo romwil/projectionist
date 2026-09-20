@@ -190,8 +190,8 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **roles:** `member`, `owner`, `youth`, `guest`
 - **tags:** `chat`, `scroll`
 - **source:** `frontend/src/styles/02-nav-chrome.css`, `frontend/src/lib/chatLayout.js`, `frontend/src/lib/chatCardScroll.js`
-- **steps:** Produce or open a completed recommendation/poster strip in chat. Attempt horizontal scroll on the strip; inspect for nested vertical scrollbar on the strip container.
-- **pass:** Horizontal scroll works; strip does **not** show its own nested vertical scrollbar (page/transcript may scroll vertically).
+- **steps:** Produce or open a completed recommendation/poster strip in chat with **multiple** cards (do not pass a single-card mock). Attempt horizontal scroll on the strip; inspect for nested vertical scrollbar on the strip container. Measure `scrollLeft` before/after swipe. Tap a poster → title.
+- **pass:** Horizontal scroll works (`scrollLeft` increases); strip does **not** show its own nested vertical scrollbar (page/transcript may scroll vertically). Multi-card strip peeks the next poster. Tap opens title.
 
 ### `explore.open-card`
 
@@ -645,9 +645,9 @@ Owner peers: member set **plus** Admin (before My Journey).
 
 - **roles:** `member`, `owner`
 - **tags:** `explore`, `neighbors`
-- **source:** `frontend/src/components/SurprisingNeighborsShowcase.jsx`, `frontend/src/pages/TitleDetailPage.jsx`
-- **steps:** Open a title detail (or Plot Lab / neighbors surface) that shows surprising neighbors (`title-neighbors-surprising` or showcase `data-testid` such as `explore-neighbors-rail`). Confirm featured card + why copy (`*-featured`, `*-featured-why` or equivalent). If `*-show-more` is present, expand then collapse.
-- **pass:** Showcase renders with intro and at least one featured neighbor when data exists; why signals/headline visible. Show more toggles extra cells when hidden count > 0. Empty/missing neighbors → N/A (not FAIL).
+- **source:** `frontend/src/components/SurprisingNeighborsShowcase.jsx`, `frontend/src/pages/TitleDetailPage.jsx`, `frontend/src/components/TitleNeighborsRails.jsx`
+- **steps:** Open a title detail (or Plot Lab / neighbors surface) that shows surprising neighbors (`title-neighbors-surprising` or showcase `data-testid` such as `explore-neighbors-rail`). Confirm featured card + why copy (`*-featured`, `*-featured-why` or equivalent). If `*-show-more` is present, expand then collapse. On phone (390×844), also confirm the title **sheet** (`title-detail-drawer`) mounts `title-neighbors` / `.title-neighbors-track` when relations exist — not only the full page.
+- **pass:** Showcase renders with intro and at least one featured neighbor when data exists; why signals/headline visible. Show more toggles extra cells when hidden count > 0. Phone sheet includes a swipeable More like this track when neighbors exist. Empty/missing neighbors → N/A (not FAIL).
 
 ---
 
@@ -982,8 +982,8 @@ QA library is fully synced — assert real posters/results, not just empty state
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `explore`, `scroll`
 - **source:** `frontend/src/pages/ExplorePage.jsx` (`explore-card-rail`)
-- **steps:** On `/explore`, find a populated rail (`explore-section-*`). Scroll it horizontally; inspect for a nested vertical scrollbar on the rail container.
-- **pass:** Rail scrolls horizontally; no nested vertical scrollbar on the rail (page scrolls vertically). Matches `chat.poster-scroll` rule for rails.
+- **steps:** On `/explore`, find a populated rail (`explore-section-*`). Scroll it horizontally; inspect for a nested vertical scrollbar on the rail container. On 390×844, measure `scrollLeft` before/after swipe, confirm the next poster peeks, and confirm the last card is fully in view at max scroll (not clipped). Tap a poster → title sheet.
+- **pass:** Rail scrolls horizontally (`scrollLeft` increases); no nested vertical scrollbar on the rail (page scrolls vertically). Next poster peeks. Last card not clipped. Poster tap opens title. Matches `chat.poster-scroll` rule for rails. Mid-rail poster actions are ≥44px and work without hover.
 
 ### `library.search-to-detail`
 
