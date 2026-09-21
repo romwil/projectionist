@@ -13,8 +13,8 @@ Each ID:
 | **steps** | Required interactions (page-load alone ≠ pass) |
 | **pass** | Observable pass criteria |
 
-Target: `http://10.10.1.202:8790` (never prod `:8788`). Creds: `projectionist-qa-scripts/.env.qa`.
-Phone campaigns set the browser to **390×844**. If `:8790` is occupied or not on this branch, run the same IDs against local mocked e2e **`:8799`** (or Vite) — never an SSH tunnel to prod.
+Target: `http://10.10.1.202:8792` (never prod `:8788`, never smartmap `:8790`). Creds: `projectionist-qa-scripts/.env.qa`.
+Phone campaigns set the browser to **390×844**. If QA `:8792` is down or not on this branch, run the same IDs against local mocked e2e **`:8799`** (or Vite) — never an SSH tunnel to prod.
 
 **Dual-role native-mobile campaign** (delta tags `mobile` + living-room / admin):
 
@@ -411,10 +411,10 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 
 ### `theater.kiosk-shell`
 
-- **roles:** `*` (unauthenticated LAN; use theater host port, not main QA `:8790`/`:8793`)
+- **roles:** `*` (unauthenticated LAN; use theater host port, not main QA `:8792`/`:8793`)
 - **tags:** `lobby`, `theater`
 - **source:** `projectionist/theater/static/index.html`, `projectionist/theater/static/theater.css`, `projectionist/theater/app.py`
-- **steps:** Open the QA theater base URL (e.g. `http://10.10.1.202:8792/` when main QA is remapped off `:8790`). Confirm pure black stage, lightbox bezel, header plate, and **no** title/viewer metadata text on the board. If theater is disabled, confirm the quiet disabled note instead.
+- **steps:** Open the QA theater base URL (e.g. `http://10.10.1.202:8795/` when QA is up on `:8792`). Confirm pure black stage, lightbox bezel, header plate, and **no** title/viewer metadata text on the board. If theater is disabled, confirm the quiet disabled note instead.
 - **pass:** Kiosk shell renders (enabled: board or empty well; disabled: `disabled-note`). Zero descriptive metadata text on the poster board. Screenshot required.
 
 ### `theater.sse-hydrate`
@@ -1136,7 +1136,7 @@ after direct URL navigation.
 
 ## Native mobile (phone ~390×844)
 
-Run these with the browser viewport at **390×844**. Target QA `:8790` when it serves this branch; otherwise local mocked e2e `:8799` / Vite. Never prod `:8788`.
+Run these with the browser viewport at **390×844**. Target QA `:8792` when the sidecar is up on this branch; otherwise local mocked e2e `:8799` / Vite. Never prod `:8788`. Never smartmap `:8790`.
 
 Dual-role: **member living-room first**, then a **full admin/owner second pass**.
 
