@@ -1,5 +1,5 @@
 ---
-description: When the user asks for browser/UI/role QA, absolute baseline, or delta regression, follow the interactive-ui-qa skill (authored checklists only; QA :8790 never prod :8788).
+description: When the user asks for browser/UI/role QA, absolute baseline, or delta regression, follow the interactive-ui-qa skill (authored checklists only; QA :8792 never prod :8788 never smartmap :8790).
 alwaysApply: false
 ---
 
@@ -11,8 +11,9 @@ If the user asks for **browser QA**, **UI QA**, **role QA**, **absolute baseline
 1. Read and follow [`.cursor/skills/interactive-ui-qa/SKILL.md`](../skills/interactive-ui-qa/SKILL.md).
 2. Execute **only** authored IDs in
    [`.cursor/skills/interactive-ui-qa/reference.md`](../skills/interactive-ui-qa/reference.md).
-3. Target maintainer QA **`http://10.10.1.202:8790`** +
-   `/Volumes/appdata/projectionist-qa-scripts/.env.qa` — **never** production **`:8788`**.
+3. Target maintainer QA **`http://10.10.1.202:8792`** +
+   `/Volumes/appdata/projectionist-qa-scripts/.env.qa` — **never** production **`:8788`**,
+   **never** smartmap **`:8790`**. If QA is down, spin it on `:8792` or use mocked e2e `:8799`.
 4. Write artifacts under `/Volumes/appdata/projectionist-qa-scripts/qa-runs/`.
 5. Verdict **FAIL** if any `blocker` / `major` remains open.
 

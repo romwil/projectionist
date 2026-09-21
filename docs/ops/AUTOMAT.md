@@ -11,9 +11,13 @@ Jump to: [LAN hosts](#lan-hosts-source-of-truth) · [Rollout](#rollout--appdata)
 | Role | Base URL | Use for |
 |------|----------|---------|
 | **Production** | `http://10.10.1.202:8788` | Version, `/api/health`, admin UI, “is prod on X.Y.Z?” |
-| **QA sidecar** | `http://10.10.1.202:8790` | Interactive UI QA, multi-role smoke; prefer **Hub-pulled** tag (Path B) for release/CA proof |
-| **QA lobby theater** | `http://10.10.1.202:8792` | Open LAN lightbox for the QA sidecar (maps container `8791`) |
+| **Prod lobby theater** | `http://10.10.1.202:8791` | Open LAN lightbox for **prod** (container `8791`) — do not reuse for QA |
+| **smartmap** | `http://10.10.1.202:8790` | Household smartmap. **Never stop it** for Projectionist QA. |
+| **QA sidecar** (ephemeral) | `http://10.10.1.202:8792` | Interactive UI QA / Path B Hub pull only when a campaign is active |
+| **QA lobby theater** | `http://10.10.1.202:8795` | QA lightbox when the sidecar is up (maps container `8791`) |
 | **Public hostname** | `https://projectionist.automat.vip` | Member-facing access only — **not** version or admin truth |
+
+**Port contract (do not invert):** `:8788` = prod Projectionist. `:8790` = smartmap. `:8792` = maintainer QA when it exists. Never bind `projectionist-qa` to `:8790`. Never park smartmap to steal that port. If QA is idle, leave it **stopped** — do not occupy `:8790`.
 
 ### Why the public URL is not truth
 
@@ -39,13 +43,13 @@ Automat members reach the household at `https://projectionist.automat.vip`. That
 
 | Topic | Automat note |
 |-------|----------------|
-| **Bind** | Prod/QA listen on `0.0.0.0:8788` / `:8790` inside Docker. `172.17.0.1` is the bridge — **setup** pre-selects Public Household; **runtime WAN interlock** does **not** lock that peer (would brick Unraid single-owner). RFC 6598 `100.64.0.0/10` (Tailscale/CGNAT) is **not** a visible public peer — runtime WAN interlock and setup halt treat it as LAN. |
+| **Bind** | Prod listens on host `:8788` (theater `:8791`). QA, when up, listens on host `:8792` (theater `:8795`). **`:8790` is smartmap.** `172.17.0.1` is the bridge — **setup** pre-selects Public Household; **runtime WAN interlock** does **not** lock that peer (would brick Unraid single-owner). RFC 6598 `100.64.0.0/10` (Tailscale/CGNAT) is **not** a visible public peer — runtime WAN interlock and setup halt treat it as LAN. |
 | **WAN lock** | Blocks only a **visible public client IP**. Docker-bridge and Tailscale/CGNAT (`100.64.0.0/10`) peers are not WAN. Trusted `X-Forwarded-Proto: https` alone is not WAN. Spoofed forwarded headers without `PROJECTIONIST_TRUST_PROXY_HEADERS` are ignored. |
 | **Proxy trust** | Set `PROJECTIONIST_TRUST_PROXY_HEADERS=1` (or the wizard TLS-edge confirm) **only** on the container behind Caddy/NPM. Never on a laptop tunnel. |
 | **Bare 8788** | Do not port-forward prod `:8788` to the internet. Public DNS should hit the proxy, not the app port. |
 | **MCP** | Keep `/mcp` off the WAN hostname. |
 | **SETUP_MODE** | Existing Automat installs already have an owner → `setup_state=active`. Wizard endpoints 404. Do not re-run `/api/setup/commit` against prod. |
-| **QA** | Glass-door `/login` / `/join`, honeypot, no `/tour`: Interactive UI QA on **`:8790` only**. |
+| **QA** | Glass-door `/login` / `/join`, honeypot, no `/tour`: Interactive UI QA on **`:8792` only** when the sidecar is up. Never `:8790` (smartmap) or prod `:8788`. |
 
 ---
 
@@ -117,18 +121,19 @@ No tokens, Apprise URLs, or other secrets belong in this runbook — they live i
 - **Do not** `docker build` on Automat and treat that image as Unraid CA / release proof (Path A). CA installs pull Hub tags.
 - **Do not** promote prod from a host-built or untagged WIP image — only `./rollout.sh X.Y.Z` after Hub has `:X.Y.Z`.
 - **Do not** claim prod is on `X.Y.Z` from the public hostname; use LAN `:8788` (table above).
+- **Do not** stop smartmap or bind QA to `:8790`. QA is ephemeral on `:8792`. The 2026-09-12 “park smartmap for QA” pattern is retired.
 
 
 ---
 
 ## UI verification
 
-When someone reports UI missing or broken — **especially after attaching a screenshot** — verify with a real browser against the **correct LAN host** (prod `:8788` or QA `:8790`), not from:
+When someone reports UI missing or broken — **especially after attaching a screenshot** — verify with a real browser against the **correct LAN host** (prod `:8788` or QA `:8792`), not from:
 
 - grepping the built JS bundle for string presence, or
 - arguing that the reporter “didn’t scroll.”
 
-Trust a scrolled-to-bottom report plus screenshot. For authored Interactive UI QA campaigns (absolute baseline / delta), follow [`.cursor/skills/interactive-ui-qa/SKILL.md`](../../.cursor/skills/interactive-ui-qa/SKILL.md): target **`:8790` only**, never production `:8788`.
+Trust a scrolled-to-bottom report plus screenshot. For authored Interactive UI QA campaigns (absolute baseline / delta), follow [`.cursor/skills/interactive-ui-qa/SKILL.md`](../../.cursor/skills/interactive-ui-qa/SKILL.md): target **QA `:8792`** (spin the sidecar up on that port if needed), never production `:8788`, never smartmap `:8790`.
 
 ---
 
@@ -165,7 +170,7 @@ Canonical ship order (full detail: [RELEASE.md](../RELEASE.md)):
 3. **CA proof** — pull Hub tag onto QA / disposable container (**Path B**). This is the Unraid CA install path.
 4. **Prod** — only when asked: `./rollout.sh X.Y.Z` (pull-only). Never stop prod while iterating on QA.
 
-After a successful Docker Hub publish, **spin down** maintainer QA (`projectionist-qa` on `:8790`) unless an active QA/test campaign is in progress. **Never** stop production `projectionist` / port **`:8788`**.
+After a successful Docker Hub publish, **spin down** maintainer QA (`projectionist-qa` on `:8792`) unless an active QA/test campaign is in progress. **Never** stop production `projectionist` / port **`:8788`**. **Never** stop smartmap / `:8790`.
 
 ### QA image paths (host `QA-REDEPLOY.md`)
 
@@ -179,15 +184,15 @@ Agents must not write “CA / Unraid path verified” after a Path A recreate. P
 
 Maintainer QA scripts and dated run artifacts live on the host under `/Volumes/appdata/projectionist-qa-scripts/` (not in this git tree). Lifecycle notes there: `qa-runs/QA-LIFECYCLE.md` when present.
 
-### Maintainer pentest (QA `:8790` only)
+### Maintainer pentest (QA `:8792` only)
 
-Authorized campaign against the maintainer’s own QA sidecar — not a general exploit pack, not prod.
+Authorized campaign against the maintainer’s own QA sidecar — not a general exploit pack, not prod, not smartmap.
 
 ```bash
-# Sidecar is idle-stopped; start QA only
+# Sidecar is idle-stopped; recreate/start QA on :8792 only (never :8790)
 ssh automat 'docker start projectionist-qa'
 cd /Volumes/appdata/projectionist-qa-scripts/pentest
-./run.sh    # loads ../.env.qa; refuses :8788 and automat.vip
+./run.sh    # loads ../.env.qa; refuses :8788, :8790, and automat.vip
 ```
 
 In-process lab checklists remain in git: `python3 scripts/security/pentest/run-checklist.py`. The live kit expands handshake / honeypot / invite / IDOR / WAN-header coverage; reports go to `qa-runs/YYYY-MM-DD-maintainer-pentest/` (no passwords, cookies redacted).
@@ -215,8 +220,8 @@ Or wait for the next container start / history ingest after upgrading to **1.32.
 
 - `.cursor/rules/automat-environments.mdc` — always-on agent summary of this runbook
 - `.cursor/rules/e2e-port-8788.mdc` — mocked e2e uses **8799**, not tunnel/prod 8788
-- `.cursor/rules/interactive-ui-qa.mdc` + skill — authored QA on `:8790`
+- `.cursor/rules/interactive-ui-qa.mdc` + skill — authored QA on `:8792` (never smartmap `:8790`)
 - `.cursor/rules/release.mdc` · [RELEASE.md](../RELEASE.md) — version bump, Hub publish, QA teardown
-- Maintainer pentest kit (host-local): `/Volumes/appdata/projectionist-qa-scripts/pentest/` — QA `:8790` only
+- Maintainer pentest kit (host-local): `/Volumes/appdata/projectionist-qa-scripts/pentest/` — QA `:8792` only
 - [DOCKER.md](../DOCKER.md) · [wiki/Unraid.md](../wiki/Unraid.md) — generic Unraid install / Force Update
 - [AGENTS.md](../../AGENTS.md) — Cursor Cloud / agent quickstart (links here)
