@@ -6,13 +6,20 @@
  * @typedef {"in_library" | "requestable" | "not_here"} AvailabilityStatus
  */
 
+/** True when the title is already on the Plex/library shelves. */
+export function itemHasLibraryIdentity(item) {
+  if (!item || typeof item !== "object") return false;
+  if (item.in_library) return true;
+  return Boolean(String(item.rating_key || item.plex_rating_key || "").trim());
+}
+
 /**
  * @param {Record<string, unknown> | null | undefined} item
  * @param {{ requestPath?: string, seerrEnabled?: boolean }} [options]
  * @returns {{ status: AvailabilityStatus, label: string, shortLabel: string }}
  */
 export function titleAvailability(item, { requestPath = "arr", seerrEnabled } = {}) {
-  if (item?.in_library) {
+  if (itemHasLibraryIdentity(item)) {
     return {
       status: "in_library",
       label: "In your library ✓",

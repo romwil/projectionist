@@ -66,6 +66,7 @@ test("results map to loaded when hits exist, empty otherwise", () => {
 test("already-in-library and queued titles are de-duped (not acquirable)", () => {
   assert.equal(isBeyondItemAcquirable({ tmdb_id: 1 }), true);
   assert.equal(isBeyondItemAcquirable({ tmdb_id: 1, in_library: true }), false);
+  assert.equal(isBeyondItemAcquirable({ tmdb_id: 1, rating_key: "42" }), false);
   assert.equal(isBeyondItemAcquirable({ tmdb_id: 1, already_queued: true }), false);
   assert.equal(isBeyondItemAcquirable({ tmdb_id: 1, in_radarr: true }), false);
   assert.equal(isBeyondItemAcquirable({ tmdb_id: 1, in_sonarr: true }), false);

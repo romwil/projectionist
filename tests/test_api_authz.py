@@ -234,6 +234,18 @@ class ApiAuthzTests(unittest.TestCase):
         missing = self.client.get("/api/jobs/nonexistent-id")
         self.assertEqual(missing.status_code, 404)
 
+    def test_sonarr_missing_blocked_for_member(self) -> None:
+        self._enable_multi_user_via_api()
+        self._login_as(1, "Owner")
+        self.client.post("/api/auth/logout")
+        self._login_as(2, "Member")
+        self.assertEqual(self.client.post("/api/admin/sonarr/missing/scan", json={}).status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/sonarr/missing/status").status_code, 403)
+        self.assertEqual(
+            self.client.post("/api/admin/sonarr/missing/search", json={"search_all": True}).status_code,
+            403,
+        )
+
     def test_guest_role_patch_rejected(self) -> None:
         self._enable_multi_user_via_api()
         self._login_as(1, "Owner")

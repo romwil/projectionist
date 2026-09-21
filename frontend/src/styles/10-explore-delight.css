@@ -482,6 +482,32 @@
   .explore-search-submit {
     padding: var(--space-3) var(--space-5);
   }
+  /* /search is already Search — keep field + submit on one row so the
+     gold button does not become a second full-width slab. */
+  .search-page .explore-search {
+    flex-direction: row;
+    align-items: stretch;
+    margin: 0 0 var(--space-3);
+  }
+  .search-page .explore-search .library-search--hero {
+    padding: 10px 12px;
+    font-size: var(--font-size-input);
+  }
+  .search-page .explore-search .library-search--hero input {
+    font-size: var(--font-size-input);
+  }
+  .search-page .explore-search-submit {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    padding: 0 14px;
+    width: auto;
+    flex: 0 0 auto;
+    border-radius: var(--radius);
+  }
+  .search-page .explore-section-hero,
+  .search-page-hero {
+    padding-bottom: var(--space-3);
+  }
   .explore-footer {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -608,6 +634,46 @@
 .explore-hover-icon:focus-visible {
   background: rgba(10, 12, 16, 0.62);
   outline: none;
+}
+
+/* Touch: poster actions cannot live behind hover. Keep Play/trailer/recommend
+   tappable, but do not let the full-bleed layer eat the poster tap (sheet). */
+@media (max-width: 768px) {
+  .explore-section-bulk {
+    display: none;
+  }
+
+  .explore-section-toolbar-row:has([data-testid="library-browse-selection-summary"]) .explore-section-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+}
+
+@media (hover: none), (max-width: 768px) {
+  .explore-card-hover-actions {
+    opacity: 1;
+    pointer-events: none;
+  }
+
+  .explore-cinema-card .explore-hover-icon {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .explore-hover-icon,
+  .explore-hover-icon-watch {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    width: var(--tap-min);
+    height: var(--tap-min);
+  }
+
+  .thread-delete-btn {
+    opacity: 0.9;
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
 }
 
 /* Thread delete */
@@ -1667,7 +1733,7 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   left: 50%;
   bottom: max(1.25rem, 3vh);
   z-index: 90;
-  width: min(44rem, calc(100vw - 1.5rem));
+  width: min(44rem, calc(100% - 1.5rem));
   display: flex;
   flex-direction: column;
   background: var(--surface);
@@ -1693,6 +1759,42 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   .title-detail-drawer-panel,
   .title-detail-drawer-panel--modal {
     animation: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .title-detail-drawer-panel,
+  .title-detail-drawer-panel--modal {
+    top: env(safe-area-inset-top);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    max-width: 100%;
+    transform: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    animation-name: title-detail-drawer-in-phone;
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .title-detail-drawer-close {
+    width: var(--tap-min);
+    height: var(--tap-min);
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+}
+
+@keyframes title-detail-drawer-in-phone {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem);
+  }
+  to {
+    opacity: 1;
+    transform: none;
   }
 }
 
@@ -1722,8 +1824,10 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: var(--tap-min);
+  height: var(--tap-min);
+  min-width: var(--tap-min);
+  min-height: var(--tap-min);
   padding: 0;
   border-radius: 999px;
 }
@@ -1738,6 +1842,12 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
   overflow: auto;
   overscroll-behavior: contain;
   padding: 0 var(--space-4) var(--space-5);
+}
+
+.title-detail-drawer-body .title-neighbors,
+.title-detail-drawer-body .title-relations-entry {
+  width: 100%;
+  padding-inline: 0;
 }
 
 .title-detail-drawer-loading,
@@ -1843,8 +1953,14 @@ html[data-theme="lights-up"] .scheduled-tasks-page .dash-title {
 }
 .owner-health-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
+}
+
+@media (min-width: 901px) {
+  .owner-health-grid {
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  }
 }
 .owner-health-tile {
   display: flex;
@@ -2159,7 +2275,94 @@ a.weekly-digest-stat:focus-visible {
 }
 
 .tonight-double-feature {
-  margin: 1.25rem 0;
+  margin: 0.85rem 0 0;
+}
+
+.tonight-double-feature .explore-section-header {
+  margin-bottom: var(--space-2);
+  gap: var(--space-2);
+}
+
+.tonight-double-feature h2 {
+  font-size: var(--text-lg);
+}
+
+.tonight-double-feature .explore-section-subtitle {
+  font-size: var(--text-xs);
+  max-width: 36rem;
+}
+
+.tonight-double-feature .double-feature-card {
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+}
+
+.tonight-double-feature .double-feature-pair {
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tonight-double-feature .double-feature-slot {
+  flex: 0 0 auto;
+  width: 9.5rem;
+  max-width: 9.5rem;
+}
+
+.tonight-double-feature .title-card.compact .poster-wrap {
+  max-height: 148px;
+}
+
+.tonight-double-feature .double-feature-bridge {
+  min-width: 0;
+  max-width: 14rem;
+  flex: 1 1 8rem;
+  padding: var(--space-1) var(--space-2);
+  gap: var(--space-1);
+}
+
+.tonight-double-feature .double-feature-bridge::before {
+  inset: var(--space-1);
+}
+
+.tonight-double-feature .double-feature-bridge-icon {
+  font-size: 1.1rem;
+}
+
+.tonight-double-feature .double-feature-runtime {
+  margin-top: var(--space-2);
+}
+
+@media (max-width: 768px) {
+  .tonight-double-feature {
+    margin: 0.65rem 0 0;
+  }
+
+  .tonight-double-feature .double-feature-slot {
+    width: 7rem;
+    max-width: 7rem;
+  }
+
+  .tonight-double-feature .title-card.compact .poster-wrap {
+    max-height: 112px;
+  }
+
+  .tonight-double-feature .double-feature-bridge {
+    max-width: 5.75rem;
+    flex-basis: 5rem;
+    padding: var(--space-1);
+  }
+
+  .tonight-double-feature .double-feature-bridge-text {
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .tonight-double-feature .title-card.compact .card-body {
+    padding: var(--space-2) 0 0;
+  }
 }
 
 .explore-live-suggest,

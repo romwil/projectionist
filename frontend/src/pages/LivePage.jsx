@@ -241,7 +241,7 @@ export default function LivePage({ popout = false }) {
                 data-testid="live-mode-watch"
                 onClick={() => activeChannel && handleTune(activeChannel.id)}
               >
-                Watch here
+                Watch
               </button>
             </div>
           ) : (

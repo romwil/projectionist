@@ -4,6 +4,7 @@ import MarkBadMediaDialog from "./MarkBadMediaDialog.jsx";
 import RecommendModal from "./RecommendModal";
 import RemovalSummaryDialog from "./RemovalSummaryDialog.jsx";
 import TitleDetailContent from "./TitleDetailContent";
+import TitleNeighborsRails from "./TitleNeighborsRails";
 import TitleReviewModal from "./TitleReviewModal";
 import { useTitleDetail } from "../hooks/useTitleDetail.js";
 import { useTitleDetailInteractions } from "../hooks/useTitleDetailInteractions.js";
@@ -214,30 +215,39 @@ function getFocusableElements(root) {
                   {error}
                 </p>
               ) : detail ? (
-                <TitleDetailContent
-                  detail={detail}
-                  variant="compact"
-                  fullPageHref={fullPageHref}
-                  onExpandFullPage={requestClose}
-                  titleId={titleId}
-                  multiUserEnabled={interactions.multiUserEnabled}
-                  userRole={interactions.userRole}
-                  requestPath={interactions.requestPath}
-                  addStatus={interactions.addStatus}
-                  addMessage={interactions.addMessage}
-                  watchStatus={interactions.watchStatus}
-                  watchMessage={interactions.watchMessage}
-                  deleting={interactions.deleting}
-                  markingBadMedia={interactions.badMediaLoading}
-                  badMediaMessage={interactions.badMediaMessage}
-                  onRequestAdd={interactions.handleRequestAdd}
-                  onToggleWatched={interactions.handleToggleWatched}
-                  onOpenTrailer={() => setTrailerOpen(true)}
-                  onOpenReview={() => setReviewOpen(true)}
-                  onOpenRecommend={() => setRecommendOpen(true)}
-                  onOpenDelete={interactions.openLibraryDelete}
-                  onOpenMarkBadMedia={interactions.openMarkBadMedia}
-                />
+                <>
+                  <TitleDetailContent
+                    detail={detail}
+                    variant="compact"
+                    fullPageHref={fullPageHref}
+                    onExpandFullPage={requestClose}
+                    titleId={titleId}
+                    multiUserEnabled={interactions.multiUserEnabled}
+                    userRole={interactions.userRole}
+                    requestPath={interactions.requestPath}
+                    addStatus={interactions.addStatus}
+                    addMessage={interactions.addMessage}
+                    watchStatus={interactions.watchStatus}
+                    watchMessage={interactions.watchMessage}
+                    deleting={interactions.deleting}
+                    markingBadMedia={interactions.badMediaLoading}
+                    badMediaMessage={interactions.badMediaMessage}
+                    onRequestAdd={interactions.handleRequestAdd}
+                    onToggleWatched={interactions.handleToggleWatched}
+                    onOpenTrailer={() => setTrailerOpen(true)}
+                    onOpenReview={() => setReviewOpen(true)}
+                    onOpenRecommend={() => setRecommendOpen(true)}
+                    onOpenDelete={interactions.openLibraryDelete}
+                    onOpenMarkBadMedia={interactions.openMarkBadMedia}
+                  />
+                  <TitleNeighborsRails
+                    mediaType={mediaType}
+                    itemId={itemId}
+                    idType={idType}
+                    detail={detail}
+                    compact
+                  />
+                </>
               ) : null}
             </div>
           </aside>

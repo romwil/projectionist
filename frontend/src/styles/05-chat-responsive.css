@@ -19,8 +19,6 @@
 /* Stage C: phone/tablet — fullscreen chrome + threads drawer */
 @media (max-width: 768px) {
   .app-root.workspace {
-    height: 100dvh;
-    max-height: 100dvh;
     overflow: hidden;
   }
 
@@ -46,17 +44,10 @@
     min-width: 0;
   }
 
-  /* Peer cluster stays whole: tighten the gutters (and the 44px tap squares to
-     40px) before the row can overflow the header on phones. */
+  /* Peer cluster stays whole: tighten gutters, keep 44px taps. Overflow
+     scrolls the action row on the smallest phones (see 560px). */
   .primary-topbar .app-topbar-actions {
     gap: var(--space-1);
-  }
-
-  .primary-topbar a.app-topbar-icon,
-  .primary-topbar button.app-topbar-icon {
-    width: 40px;
-    min-width: 40px;
-    max-width: 40px;
   }
 
   .app-topbar-actions .app-topbar-meta {
@@ -148,6 +139,9 @@
     flex: 1;
     min-width: 0;
     min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   .chat-scroll-region {
@@ -156,6 +150,7 @@
     padding: var(--space-4);
     padding-left: max(var(--space-4), env(safe-area-inset-left));
     padding-right: max(var(--space-4), env(safe-area-inset-right));
+    overscroll-behavior: contain;
   }
 
   .composer {
@@ -163,29 +158,272 @@
     max-width: none;
     position: sticky;
     bottom: 0;
-    padding: var(--space-3) var(--space-4);
-    padding-left: max(var(--space-4), env(safe-area-inset-left));
-    padding-right: max(var(--space-4), env(safe-area-inset-right));
-    padding-bottom: max(var(--space-3), env(safe-area-inset-bottom));
+    flex: 0 0 auto;
+    margin-top: auto;
+    padding: 8px 12px;
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  /* Phone composer is input + send — not a second desktop toolbar. */
+  .ambient-context-tag {
+    display: none;
+  }
+
+  .composer-shell {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .composer-chrome {
+    padding: 4px 8px 6px;
+    gap: 4px;
   }
 
   .composer textarea {
-    font-size: 16px; /* avoid iOS focus zoom */
-    min-height: 44px;
+    font-size: var(--font-size-input); /* avoid iOS focus zoom */
+    min-height: var(--tap-min);
+    max-height: 96px;
+    padding: 10px 8px 0;
   }
 
-  .composer-send {
-    width: 44px;
-    height: 44px;
+  .composer-send,
+  .composer-mic,
+  .composer-tts-mute,
+  .composer-surprise {
+    width: var(--tap-min);
+    height: var(--tap-min);
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+
+  .persona-trigger,
+  .welcome-starter-chip,
+  .welcome-context-chip,
+  .user-menu-trigger,
+  .user-menu-link,
+  .slash-command-palette-item {
+    min-height: var(--tap-min);
+  }
+
+  .composer-toolbar {
+    flex-wrap: nowrap;
+    row-gap: 0;
+  }
+
+  .explore-media-tab,
+  .app-nav-link {
+    min-height: var(--tap-min);
+  }
+
+  .search-page .app-shell-page-bar,
+  .explore-page .app-shell-page-bar,
+  .library-hub-page .app-shell-page-bar {
+    display: none;
+  }
+
+  .search-page-hero {
+    padding-bottom: var(--space-3);
+  }
+
+  /* Competing headers / desktop-only extras — keep useful controls. */
+  .app-shell-page-titles .app-topbar-eyebrow,
+  .app-topbar-eyebrow,
+  .library-hub-lede,
+  .explore-hub-card p,
+  .settings-rail-brand .eyebrow,
+  .settings-shell .app-footer,
+  .live-chrome-secondary [data-testid="live-popout"] {
+    display: none;
+  }
+
+  .welcome-panel {
+    padding-top: var(--space-4);
+    gap: var(--space-2);
+  }
+
+  .welcome-panel-greeting {
+    font-size: var(--text-xl);
+  }
+
+  .welcome-panel-starters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .welcome-starter-chip {
+    width: 100%;
+    text-align: left;
+    padding: 12px 14px;
+  }
+
+  .library-hub-hero {
+    padding-bottom: var(--space-2);
+  }
+
+  .library-hub-hero h1 {
+    margin: 0;
+    font-size: var(--text-xl);
+  }
+
+  .library-hub-saved-row {
+    margin: var(--space-2) 0 0;
+  }
+
+  .explore-poster-wall {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3);
+  }
+
+  .chat-scroll-region .inline-cards {
+    grid-auto-columns: minmax(168px, 70vw);
+    padding-inline-end: var(--rail-peek);
+    scroll-padding-inline: var(--space-3);
+  }
+
+  .explore-page .explore-search {
+    flex-direction: row;
+    align-items: stretch;
+    margin: 0 0 var(--space-3);
+  }
+
+  .explore-page .explore-search .library-search--hero {
+    padding: 10px 12px;
+    font-size: var(--font-size-input);
+  }
+
+  .explore-page .explore-search .library-search--hero input,
+  .explore-page .explore-search-submit {
+    font-size: var(--font-size-input);
+  }
+
+  .explore-page .explore-search-submit {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    padding: 0 14px;
+    width: auto;
+    flex: 0 0 auto;
+    border-radius: var(--radius);
+  }
+
+  .explore-hub-links {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+    margin-bottom: var(--space-3);
+  }
+
+  .explore-hub-card {
+    padding: 12px;
+  }
+
+  .explore-hub-card h2 {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .library-hub-tabs {
+    margin-bottom: var(--space-3);
+  }
+
+  /* 09-title-detail-home sets .explore-section-bulk { display: flex } later
+     than the 03 hide — idle Select/Clear steal the fold. Show only after a pick. */
+  .explore-section-bulk {
+    display: none;
+  }
+
+  .explore-section-toolbar-row:has([data-testid="library-browse-selection-summary"]) .explore-section-bulk {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  /* Mood labels wrap into a wall and hide the thread. Surprise stays 44px.
+     Two-class selector beats later unscoped `.composer-mood-row { display: flex }`. */
+  .composer .composer-mood-row {
+    display: none;
+  }
+
+  /* Theme lives in Settings — don't compete with the wordmark. */
+  .primary-topbar .app-topbar-cluster > .app-topbar-icon {
+    display: none;
+  }
+
+  /* Member copy: 14px like Admin wizard-note — --text-sm reads cramped on a phone. */
+  .welcome-panel-hint,
+  .message-text,
+  .markdown-body,
+  .ambient-context-tag,
+  .typing-indicator-label,
+  .settings-field-hint,
+  .settings-page-lead,
+  .settings-toggle-row,
+  .settings-switch,
+  .settings-checklist label,
+  .explore-section-subtitle,
+  .explore-empty,
+  .explore-card-meta {
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]),
+  select,
+  textarea {
+    font-size: var(--font-size-input);
+  }
+
+  .settings-switch,
+  .settings-toggle-row,
+  .settings-checklist label,
+  .settings-drawer-toggle,
+  .settings-actions button,
+  .settings-actions .btn-link,
+  .settings-panel-footer button,
+  button.primary,
+  button.btn-danger,
+  .login-primary,
+  .login-secondary,
+  .login-field input,
+  .login-token-field input,
+  .media-browse-controls select,
+  .media-browse-sort-direction {
+    min-height: var(--tap-min);
+  }
+
+  .live-chrome {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  .live-chrome-icon-btn,
+  .live-mode-toggle button,
+  .live-osd-btn,
+  .live-empty-card .btn {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+
+  .live-channels-tabs {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .live-channels-tab {
+    min-height: var(--tap-min);
+  }
+
+  .thread-item,
+  .thread-new-btn,
+  .thread-delete-btn {
+    min-height: var(--tap-min);
   }
 
   .thread-item {
-    min-height: 44px;
     padding: var(--space-3);
   }
 
   .thread-new-btn {
-    min-height: 44px;
     padding: var(--space-2) var(--space-3);
   }
 
@@ -198,7 +436,31 @@
   }
 
   .welcome-starter-chip {
-    min-height: 44px;
+    min-height: var(--tap-min);
+  }
+}
+
+/* Short Simple Browser / landscape phone: keep the composer in the pane
+   without relying on 100vh. Mood chips wrap; the input must stay. */
+@media (max-height: 640px) {
+  .composer {
+    padding-top: 8px;
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+    gap: 6px;
+  }
+
+  .composer-shell {
+    padding: 8px;
+    gap: 6px;
+  }
+
+  .composer .composer-mood-row {
+    display: none;
+  }
+
+  .welcome-panel {
+    padding-top: var(--space-3);
+    gap: var(--space-2);
   }
 }
 
@@ -233,29 +495,13 @@
   }
 }
 
-/* Smallest phones: an owner's peer cluster genuinely cannot fit. Scroll it
-   horizontally rather than clipping Settings and the user menu off-screen.
-   Tooltips are suppressed here — they would be cropped by the scroll box, and
-   `hover: none` already drops them on touch. */
+/* Compact chrome (≤900px) already hides peers. Keep the brand readable on
+   the smallest phones — never ellipsis-clip "Projectionist". */
 @media (max-width: 560px) {
   .primary-topbar .app-topbar-brand {
-    flex: 0 1 auto;
-    min-width: 0;
-  }
-
-  .primary-topbar .app-topbar-actions {
-    flex: 1 1 auto;
-    justify-content: flex-end;
-    min-width: 0;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
-  }
-
-  .primary-topbar .app-topbar-actions::-webkit-scrollbar {
-    display: none;
+    flex: 0 0 auto;
+    min-width: max-content;
+    overflow: visible;
   }
 
   .primary-topbar .app-topbar-icon[data-tooltip]::after {

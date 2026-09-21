@@ -11,9 +11,7 @@ import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { ROUTES, chatFromRailHref } from "../lib/backNav.js";
 import {
-  JOURNEY_EYEBROW,
   JOURNEY_HERO_LEDE,
-  YOUTH_JOURNEY_EYEBROW,
   YOUTH_JOURNEY_HERO_LEDE,
   hasExplorationContent,
   insightBrowseHref,
@@ -205,7 +203,6 @@ export default function MyJourneyPage() {
   }
 
   const data = state.data;
-  const eyebrow = isYouth ? YOUTH_JOURNEY_EYEBROW : JOURNEY_EYEBROW;
   const heroLede = isYouth ? YOUTH_JOURNEY_HERO_LEDE : JOURNEY_HERO_LEDE;
   const showPeopleRails = !isYouth;
   const showInsights = !isYouth;
@@ -215,7 +212,6 @@ export default function MyJourneyPage() {
       className="app-root my-journey-page"
       testId="my-journey-page"
       title="My Journey"
-      eyebrow={eyebrow}
     >
       <main className="explore-main journey-main">
         <section className="journey-hero" data-testid="journey-hero">

@@ -147,6 +147,9 @@ E2E_PORT=8799 npm run test:e2e
 | `e2e/drag-to-dock.spec.ts` | Status dock drop hint only while dragging |
 | `e2e/ca-release.spec.ts` | Health + app load, sync progress friendly label/%, no Phase labels |
 | `e2e/live.spec.ts` | Opt-in real-stack smoke (`CURATORX_E2E_LIVE=1`) |
+| `e2e/mobile-native.spec.ts` | Playwright **mobile** project (Chromium + iPhone 12 viewport 390×844): member living-room + admin chrome (sticky composer, 44px taps, no 100vw overflow, title sheet, Live, notifications, Overview / Libraries / Live Channels). Mocked on **8799** only |
+
+Playwright projects: `chromium` (Desktop Chrome, ignores `mobile-native.spec.ts`) and `mobile` (Chromium + iPhone 12 390×844, only `e2e/mobile-native.spec.ts`). Interactive UI QA phone IDs live under tag `mobile` in `.cursor/skills/interactive-ui-qa/reference.md` (dual-role member + owner). QA sidecar is **`:8790`**; never point these suites at prod `:8788`.
 
 Mocked suites intercept `/api/chat`, `/api/setup/test/*`, `/api/plex/sections`, `/api/features`,
 `/api/auth/*`, `/api/setup/status`, and (for sync UI) `/api/jobs` so CI passes without Anthropic or

@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 import { readAllStyles } from "./readStyles.mjs";
 
+const here = dirname(fileURLToPath(import.meta.url));
 const styles = readAllStyles();
+const explorePage = readFileSync(join(here, "../pages/ExplorePage.jsx"), "utf8");
 
 describe("explore and recommendations responsive layout", () => {
   it("contains explore page overflow and local poster-rail scrolling", () => {
@@ -55,5 +60,26 @@ describe("explore and recommendations responsive layout", () => {
     );
     assert.match(styles, /\.recommendation-card-body\s*\{[^}]*min-width:\s*0/s);
     assert.match(styles, /\.recommendations-inbox\s*\{[^}]*min-width:\s*0/s);
+  });
+
+  it("puts tonight's double feature after the seasonal rail and omits Live", () => {
+    assert.doesNotMatch(explorePage, /WhatsOnTonightHabit/);
+    assert.doesNotMatch(explorePage, /liveWatchHref/);
+    assert.doesNotMatch(explorePage, /anniversaryLiveStarter/);
+    const seasonalIdx = explorePage.indexOf('id="seasonal-spotlight"');
+    const doubleIdx = explorePage.indexOf("<TonightDoubleFeatureHabit");
+    assert.ok(seasonalIdx > 0 && doubleIdx > seasonalIdx);
+  });
+
+  it("keeps tonight's double feature a compact pair", () => {
+    assert.match(styles, /\.tonight-double-feature \.double-feature-slot\s*\{[^}]*max-width:\s*9\.5rem/s);
+    assert.match(
+      styles,
+      /\.tonight-double-feature \.title-card\.compact \.poster-wrap\s*\{[^}]*max-height:\s*148px/s,
+    );
+    assert.match(
+      styles,
+      /\.tonight-double-feature \.double-feature-slot\s*\{[^}]*max-width:\s*7rem/s,
+    );
   });
 });
