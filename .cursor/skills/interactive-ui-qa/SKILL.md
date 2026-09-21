@@ -1,10 +1,10 @@
 ---
 name: interactive-ui-qa
 description: >-
-  Run authored Interactive UI QA against Projectionist maintainer QA (:8790) in full
+  Run authored Interactive UI QA against Projectionist maintainer QA (:8792) in full
   (absolute baseline) or delta (open bugs + tagged subset) mode. Use when the
   user asks for browser QA, UI QA, role QA, absolute baseline, or delta
-  regression — never exploratory pathway discovery; never prod :8788.
+  regression — never exploratory pathway discovery; never prod :8788; never smartmap :8790.
 ---
 
 # Interactive UI QA
@@ -26,12 +26,12 @@ Do **not** use this skill for free-form exploratory testing, fixing product bugs
 
 | Item | Value |
 |------|--------|
-| Base URL | `http://10.10.1.202:8790` (`QA_BASE_URL` in maintainer scripts) |
+| Base URL | `http://10.10.1.202:8792` (`QA_BASE_URL` in maintainer scripts) |
 | Credentials | `/Volumes/appdata/projectionist-qa-scripts/.env.qa` — `QA_OWNER_*`, `QA_MEMBER_*`, `QA_YOUTH_*`, `QA_GUEST_*` |
-| Never | Production / tunnel **`:8788`** — refuse and redirect to `:8790` |
+| Never | Production / tunnel **`:8788`**; smartmap **`:8790`**. QA is ephemeral on **`:8792` only**. |
 | Artifacts | `/Volumes/appdata/projectionist-qa-scripts/qa-runs/` |
 | Phone viewport | **390×844** (iPhone 12 class) for every `mobile.*` ID |
-| Fallback | If `:8790` is occupied (e.g. smartmap) or not on this branch, use local mocked e2e **`:8799`** or Vite — **never** an SSH tunnel to prod |
+| Fallback | If QA `:8792` is down or not on this branch, use local mocked e2e **`:8799`** or Vite — **never** prod, never steal smartmap `:8790` |
 
 If `.env.qa` is missing, stop and tell the user to copy `.env.qa.example` and seed roles. Do not invent passwords. Do not log passwords into reports.
 

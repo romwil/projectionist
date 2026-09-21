@@ -155,7 +155,7 @@ Run these before tagging when the ship matches the trigger. Lab / QA only — ne
 | Trigger | Recommended gate | Command / action |
 |---------|------------------|------------------|
 | Security-touching (authz, MCP, prompt fencing, sessions, webhooks, headers, packaging) | Pentest harness green | `python3 scripts/security/pentest/run-checklist.py` (disposable lab; see [security/pentests/README.md](security/pentests/README.md)) |
-| Chrome / gating / role-shell ships | Interactive UI QA **delta** on `:8790` (Hub-pulled tag / Path B for release candidates) | `.cursor/skills/interactive-ui-qa` — open bugs + tagged IDs; never `:8788` |
+| Chrome / gating / role-shell ships | Interactive UI QA **delta** on `:8792` (Hub-pulled tag / Path B for release candidates) | `.cursor/skills/interactive-ui-qa` — open bugs + tagged IDs; never `:8788`; never smartmap `:8790` |
 | Major chrome / periodic audit | Absolute baseline refresh | Same skill, mode `full` → host `qa-runs/ABSOLUTE_BASELINE.md` |
 
 Layer map: [Feature testing environment blueprint](superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md).
@@ -280,11 +280,11 @@ ssh automat 'docker pull romwil/projectionist:X.Y.Z'
 | **A — host build** | `docker build` on Automat from a checkout | **No** for release/CA proof (WIP / debug only) |
 | **C — restart** | Restart existing container | **No** — no new bits |
 
-Interactive UI QA may still use `:8790`, but for a release candidate the sidecar image must be the **Hub tag** (Path B). Document Path A only as secondary WIP iteration — never as “CA tested.”
+Interactive UI QA may still use `:8792`, but for a release candidate the sidecar image must be the **Hub tag** (Path B). Document Path A only as secondary WIP iteration — never as “CA tested.” Never park smartmap or bind QA to `:8790`.
 
 ## Spin down maintainer QA (after Hub publish)
 
-After a successful Docker Hub publish (`scripts/docker-release.sh`), **spin down the maintainer QA container** (`projectionist-qa` on `:8790`) unless an active Interactive UI QA / Playwright role suite / agent probe is in progress. Spin up again when the next test pass needs `:8790`.
+After a successful Docker Hub publish (`scripts/docker-release.sh`), **spin down the maintainer QA container** (`projectionist-qa` on `:8792`) unless an active Interactive UI QA / Playwright role suite / agent probe is in progress. Spin up again when the next test pass needs `:8792`. Never stop smartmap / `:8790`.
 
 - **Do** stop only QA: `ssh automat 'docker stop projectionist-qa'` (keeps image + volume for a fast `docker start`).
 - **Do not** stop, rm, or recreate production `projectionist` / `:8788`.
@@ -345,12 +345,12 @@ A follow-up `chore: refresh release-notes.json timestamp for vX.Y.Z` commit some
 □ CHANGELOG: release heading for X.Y.Z, Highlights + technical + Verification
 □ Docs updated if user-facing
 □ (Recommended) Security-touching: pentest harness green
-□ (Recommended) Chrome/gating: Interactive UI QA on :8790 against Hub-pulled tag (Path B), never :8788
+□ (Recommended) Chrome/gating: Interactive UI QA on :8792 against Hub-pulled tag (Path B), never :8788, never smartmap :8790
 □ ./scripts/generate-release-notes.sh --require-version X.Y.Z
 □ 1. ./scripts/docker-release.sh X.Y.Z  → Hub has romwil/projectionist:X.Y.Z
 □ 2. Merge PR → main (never direct-push/bypass); then tag vX.Y.Z on merged main; gh release create with Highlights
 □ 3. CA proof: pull Hub tag (Path B) — NOT host docker build (Path A)
 □ 4. Prod only if asked: ./rollout.sh X.Y.Z (pull-only)
-□ Spin down projectionist-qa (:8790) unless QA campaign still running — never touch prod :8788
+□ Spin down projectionist-qa (:8792) unless QA campaign still running — never touch prod :8788; never stop smartmap :8790
 □ Do NOT claim “X.Y.Z released” if Hub lacks :X.Y.Z
 ```
