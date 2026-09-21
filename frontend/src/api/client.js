@@ -273,6 +273,11 @@ export async function searchSonarrMissing(payload = {}) {
   });
 }
 
+/** Owner: cancel remaining queued EpisodeSearch commands in Sonarr. */
+export async function cancelSonarrMissing() {
+  return api("/admin/sonarr/missing/cancel", { method: "POST" });
+}
+
 export async function startPlexPinLogin({ inviteToken } = {}) {
   const search = new URLSearchParams();
   if (inviteToken) search.set("invite_token", inviteToken);

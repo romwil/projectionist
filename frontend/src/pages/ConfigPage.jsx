@@ -37,6 +37,7 @@ import {
   startSonarrMissingScan,
   getSonarrMissingStatus,
   searchSonarrMissing,
+  cancelSonarrMissing,
   resolveModelForProvider,
   revealSettingsSecret,
   rotateMcpKey,
@@ -56,9 +57,12 @@ import {
 import {
   sonarrFindMissingButtonClass,
   sonarrMissingBySeries,
+  sonarrMissingCanCancel,
+  sonarrMissingDisplayPercent,
   sonarrMissingPhaseLabel,
   sonarrMissingProgressLine,
   sonarrMissingScanReady,
+  sonarrMissingSecondsAgo,
   sonarrSearchMissingButtonClass,
   sonarrWantedDeltaCopy,
 } from "../lib/sonarrMissing.js";
@@ -2562,6 +2566,19 @@ export default function ConfigPage() {
     }
   }
 
+  async function handleSonarrMissingCancel() {
+    setActionFeedback("sonarr-missing", null);
+    try {
+      const snap = await cancelSonarrMissing();
+      setSonarrMissing(snap);
+    } catch (error) {
+      setActionFeedback("sonarr-missing", {
+        type: "error",
+        message: error.message || "Could not cancel remaining EpisodeSearch commands.",
+      });
+    }
+  }
+
   function formatLastSync(lastSync) {
     return formatLastSyncRelative(lastSync);
   }
@@ -3353,9 +3370,9 @@ export default function ConfigPage() {
           <h2>Sonarr — find all missing</h2>
           <p className="wizard-note">
             Re-derives gaps from each series’ episode records (aired, monitored, no file) instead of
-            trusting Sonarr’s Wanted list. After the scan, confirm to queue EpisodeSearch in batches.
-            Many EpisodeSearch commands can rate-limit Sonarr — watch progress here rather than
-            firing them all at once from Wanted.
+            trusting Sonarr’s Wanted list. After the scan, confirm to submit EpisodeSearch in batches.
+            Sonarr then runs those commands on its own queue — often a few at a time — so watch
+            queued / running / completed here. That is not the same as a download-client grab.
           </p>
           <label className="config-toggle" data-testid="sonarr-include-specials">
             <input
@@ -3374,7 +3391,9 @@ export default function ConfigPage() {
               onClick={handleSonarrMissingScan}
               disabled={Boolean(sonarrMissing?.busy)}
             >
-              {sonarrMissing?.busy && sonarrMissing?.phase !== "searching" ? "Scanning…" : "Find all missing"}
+              {sonarrMissing?.busy && !["searching", "executing"].includes(String(sonarrMissing?.phase || ""))
+                ? "Scanning…"
+                : "Find all missing"}
             </button>
             <button
               type="button"
@@ -3383,8 +3402,22 @@ export default function ConfigPage() {
               onClick={handleSonarrMissingSearch}
               disabled={!sonarrMissingScanReady(sonarrMissing) || Boolean(sonarrMissing?.busy)}
             >
-              {sonarrMissing?.phase === "searching" ? "Searching…" : "Search these"}
+              {sonarrMissing?.phase === "searching"
+                ? "Submitting…"
+                : sonarrMissing?.phase === "executing"
+                  ? "Sonarr searching…"
+                  : "Search these"}
             </button>
+            {sonarrMissingCanCancel(sonarrMissing) ? (
+              <button
+                type="button"
+                className="ghost"
+                data-testid="sonarr-cancel-missing-button"
+                onClick={handleSonarrMissingCancel}
+              >
+                Cancel remaining
+              </button>
+            ) : null}
           </div>
           {sonarrMissingProgressLine(sonarrMissing) ? (
             <div className="library-sync-progress" data-testid="sonarr-missing-progress">
@@ -3392,22 +3425,57 @@ export default function ConfigPage() {
                 <strong>
                   {sonarrMissingPhaseLabel(sonarrMissing?.phase)}
                 </strong>
-                {typeof sonarrMissing?.percent === "number" ? ` · ${sonarrMissing.percent}%` : ""}
+                {typeof sonarrMissingDisplayPercent(sonarrMissing) === "number"
+                  ? ` · ${sonarrMissingDisplayPercent(sonarrMissing)}%`
+                  : ""}
               </p>
               <p className="library-sync-progress-detail status status-secondary">
                 {sonarrMissingProgressLine(sonarrMissing)}
               </p>
-              {typeof sonarrMissing?.percent === "number" && sonarrMissing?.busy ? (
+              {sonarrMissing?.execution && Number(sonarrMissing.execution.total) > 0 ? (
+                <div className="sonarr-missing-counts" data-testid="sonarr-missing-execution">
+                  <span>{Number(sonarrMissing.execution.queued) || 0} queued</span>
+                  <span>{Number(sonarrMissing.execution.running) || 0} running</span>
+                  <span>{Number(sonarrMissing.execution.completed) || 0} completed</span>
+                  <span data-tone={Number(sonarrMissing.execution.failed) ? "failed" : undefined}>
+                    {Number(sonarrMissing.execution.failed) || 0} failed
+                  </span>
+                  {Number(sonarrMissing.execution.cancelled) ? (
+                    <span>{Number(sonarrMissing.execution.cancelled)} cancelled</span>
+                  ) : null}
+                </div>
+              ) : null}
+              {sonarrMissing?.execution?.current ? (
+                <p className="wizard-note" data-testid="sonarr-missing-current">
+                  Current: {sonarrMissing.execution.current.message || sonarrMissing.execution.current.name} (
+                  {sonarrMissing.execution.current.status})
+                </p>
+              ) : null}
+              {sonarrMissingSecondsAgo(sonarrMissing?.execution?.seconds_since_last_completion) ? (
+                <p className="wizard-note">{sonarrMissingSecondsAgo(sonarrMissing.execution.seconds_since_last_completion)}</p>
+              ) : null}
+              {sonarrMissing?.execution?.last_error ? (
+                <p className="status status-error" data-testid="sonarr-missing-last-error">
+                  Last command error: {sonarrMissing.execution.last_error}
+                </p>
+              ) : null}
+              {sonarrMissing?.execution?.throttle_note &&
+              ["searching", "executing"].includes(String(sonarrMissing?.phase || "")) ? (
+                <p className="wizard-note" data-testid="sonarr-missing-throttle-note">
+                  {sonarrMissing.execution.throttle_note}
+                </p>
+              ) : null}
+              {typeof sonarrMissingDisplayPercent(sonarrMissing) === "number" && sonarrMissing?.busy ? (
                 <div
                   className="library-sync-progress-bar"
                   role="progressbar"
-                  aria-valuenow={sonarrMissing.percent}
+                  aria-valuenow={sonarrMissingDisplayPercent(sonarrMissing)}
                   aria-valuemin={0}
                   aria-valuemax={100}
                 >
                   <span
                     className="library-sync-progress-fill"
-                    style={{ width: `${sonarrMissing.percent}%` }}
+                    style={{ width: `${sonarrMissingDisplayPercent(sonarrMissing)}%` }}
                   />
                 </div>
               ) : null}

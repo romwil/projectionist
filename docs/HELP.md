@@ -327,13 +327,17 @@ curl -s http://localhost:8788/api/library/stats | python3 -m json.tool
 
 ### Find all missing (Sonarr)
 
-Sonarr’s **Wanted** list is not the source of truth here. **Find all missing** on **Admin → Libraries** (`/admin/libraries`) re-derives gaps from every monitored series’ episode records: aired, monitored, no file. Specials (S00) stay off unless you turn **Include specials** on. The card compares “Library scan found M; Sonarr Wanted lists N”, then **Search these** queues Sonarr `EpisodeSearch` commands in batches of about 50 — it does not fire `MissingEpisodeSearch` (that uses Wanted). Many EpisodeSearch commands can rate-limit Sonarr; watch the job progress on the card.
+Sonarr’s **Wanted** list is not the source of truth here. **Find all missing** on **Admin → Libraries** (`/admin/libraries`) re-derives gaps from every monitored series’ episode records: aired, monitored, no file. Specials (S00) stay off unless you turn **Include specials** on. The card compares “Library scan found M; Sonarr Wanted lists N”, then **Search these** submits Sonarr `EpisodeSearch` commands in batches of about 50 — it does not fire `MissingEpisodeSearch` (that uses Wanted).
+
+Submitting to Sonarr is only the first step. Sonarr then runs those commands from its own command queue, often a few at a time — many EpisodeSearch commands can rate-limit Sonarr, which is why the card watches that queue instead of firing Wanted’s MissingEpisodeSearch. Counts are queued, running, completed, and failed (command-level — not SABnzbd / download-client aborts). **Cancel remaining** stops Projectionist from sending more batches and deletes queued (not yet started) EpisodeSearch commands. A command that is already running is left to finish.
 
 ```bash
-# Owner host — start a dry scan, then search the last result
+# Owner host — scan, watch status (including Sonarr command counts), search, optional cancel
 curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/scan -H 'Content-Type: application/json' -d '{"include_specials":false}'
 curl -s http://localhost:8788/api/admin/sonarr/missing/status
 curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/search -H 'Content-Type: application/json' -d '{"search_all":true}'
+# After submit, status.phase is "executing" until Sonarr finishes the commands
+curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/cancel
 ```
 
 ### Search beyond the collection — how acquisition works

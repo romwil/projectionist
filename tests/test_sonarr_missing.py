@@ -10,7 +10,7 @@ import time
 import unittest
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Sequence
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
@@ -21,9 +21,12 @@ from projectionist.library.sonarr_missing import (
     compare_to_wanted,
     filter_aired_missing_episodes,
     is_aired_missing_episode,
+    normalize_command_status,
     queue_episode_searches,
+    refresh_execution,
     reset_sonarr_missing_for_tests,
     scan_monitored_series,
+    summarize_episode_search_commands,
 )
 from projectionist.web.auth import SESSION_COOKIE_NAME
 from projectionist.web.rate_limit import clear_rate_limits
@@ -288,6 +291,9 @@ class FakeSonarr:
             }
         ]
         self.search_calls: List[List[int]] = []
+        self.commands: List[Dict[str, Any]] = []
+        self.cancelled_ids: List[int] = []
+        self._next_command_id = 500
 
     def series_list(self) -> List[SonarrSeries]:
         return list(self.series)
@@ -307,7 +313,47 @@ class FakeSonarr:
     def search_episodes(self, episode_ids: List[int]) -> Mapping[str, Any]:
         ids = [int(value) for value in episode_ids]
         self.search_calls.append(ids)
-        return {"name": "EpisodeSearch", "episodeIds": ids}
+        command_id = self._next_command_id
+        self._next_command_id += 1
+        record = {
+            "id": command_id,
+            "name": "EpisodeSearch",
+            "status": "queued",
+            "message": "",
+            "exception": None,
+            "queued": "2026-09-21T17:00:00Z",
+            "started": None,
+            "ended": None,
+            "body": {"episodeIds": ids, "name": "EpisodeSearch"},
+            "episodeIds": ids,
+        }
+        self.commands.append(record)
+        return dict(record)
+
+    def list_commands(self) -> List[Mapping[str, Any]]:
+        return [dict(item) for item in self.commands]
+
+    def cancel_command(self, command_id: int) -> None:
+        self.cancelled_ids.append(int(command_id))
+        for item in self.commands:
+            if int(item.get("id") or 0) == int(command_id) and str(item.get("status")) == "queued":
+                item["status"] = "cancelled"
+                item["ended"] = "2026-09-21T17:01:00Z"
+                return
+
+    def complete_commands(self, *, failed_ids: Optional[Sequence[int]] = None) -> None:
+        failed = {int(value) for value in (failed_ids or [])}
+        for item in self.commands:
+            command_id = int(item.get("id") or 0)
+            if str(item.get("status")) in {"completed", "failed", "aborted", "cancelled"}:
+                continue
+            if command_id in failed:
+                item["status"] = "failed"
+                item["exception"] = "Download client is unavailable"
+                item["ended"] = "2026-09-21T17:02:00Z"
+            else:
+                item["status"] = "completed"
+                item["ended"] = "2026-09-21T17:02:00Z"
 
     def search_series(self, series_id: int) -> Mapping[str, Any]:
         raise AssertionError(f"SeriesSearch must not be the missing path ({series_id})")
@@ -342,12 +388,30 @@ class ScanAndSearchTests(unittest.TestCase):
         self.assertEqual(len(fake.search_calls[0]), 50)
         self.assertEqual(len(fake.search_calls[1]), 41)
         self.assertEqual(queued["command"], "EpisodeSearch")
+        self.assertEqual([row["id"] for row in queued["commands"]], [500, 501])
 
     def test_explicit_episode_ids_search_does_not_require_last_scan(self) -> None:
         fake = FakeSonarr()
         queued = queue_episode_searches(fake, [501, 502], chunk_size=50)
         self.assertEqual(fake.search_calls, [[501, 502]])
         self.assertEqual(queued["searches_queued"], 1)
+
+    def test_queue_stops_when_cancel_requested_between_chunks(self) -> None:
+        fake = FakeSonarr()
+        ids = list(range(1, 92))
+        calls = {"n": 0}
+
+        def should_continue() -> bool:
+            calls["n"] += 1
+            return calls["n"] <= 1
+
+        queued = queue_episode_searches(
+            fake, ids, chunk_size=50, should_continue=should_continue
+        )
+        self.assertEqual(queued["searches_queued"], 1)
+        self.assertEqual(len(fake.search_calls), 1)
+        self.assertTrue(queued["stopped_early"])
+        self.assertEqual(queued["pending_submit"], 1)
 
 
 class SonarrClientHttpTests(unittest.TestCase):
@@ -411,6 +475,25 @@ class SonarrClientHttpTests(unittest.TestCase):
         self.assertEqual(bodies[0]["name"], "EpisodeSearch")
         self.assertNotEqual(bodies[0]["name"], "MissingEpisodeSearch")
         self.assertEqual(bodies[0]["episodeIds"], [1, 2, 3])
+
+    def test_list_commands_and_cancel_hit_command_endpoints(self) -> None:
+        calls: List[Dict[str, Any]] = []
+
+        def fake_request(url: str, **kwargs: Any) -> Any:
+            calls.append({"url": url, "method": kwargs.get("method", "GET")})
+            if kwargs.get("method") == "DELETE":
+                self.assertTrue(url.endswith("/api/v3/command/77"))
+                return None
+            self.assertTrue(url.endswith("/api/v3/command"))
+            return [{"id": 77, "name": "EpisodeSearch", "status": "queued"}]
+
+        with patch("projectionist.connectors.sonarr.request_json", side_effect=fake_request):
+            client = SonarrClient("http://sonarr.test", "key")
+            listed = client.list_commands()
+            client.cancel_command(77)
+        self.assertEqual(listed[0]["id"], 77)
+        self.assertEqual(calls[0]["method"], "GET")
+        self.assertEqual(calls[1]["method"], "DELETE")
 
     def test_episode_search_chunk_size_is_in_locked_range(self) -> None:
         self.assertGreaterEqual(EPISODE_SEARCH_CHUNK, 40)
@@ -487,18 +570,21 @@ class SonarrMissingApiTests(unittest.TestCase):
         )
         self.client.cookies.set(SESSION_COOKIE_NAME, create_session_token("member-1"))
 
-    def _wait_idle(self) -> Dict[str, Any]:
-        deadline = time.time() + 3
+    def _wait_until(self, predicate, *, timeout: float = 3.0) -> Dict[str, Any]:
+        deadline = time.time() + timeout
         payload: Dict[str, Any] = {}
         while time.time() < deadline:
             resp = self.client.get("/api/admin/sonarr/missing/status")
             self.assertEqual(resp.status_code, 200, resp.text)
             payload = resp.json()
-            if not payload.get("busy"):
+            if predicate(payload):
                 return payload
             time.sleep(0.02)
-        self.fail(f"job stayed busy: {payload}")
+        self.fail(f"status never matched: {payload}")
         return payload
+
+    def _wait_idle(self) -> Dict[str, Any]:
+        return self._wait_until(lambda payload: not payload.get("busy"))
 
     def test_member_gets_403_on_scan_status_and_search(self) -> None:
         self._login_member()
@@ -508,6 +594,7 @@ class SonarrMissingApiTests(unittest.TestCase):
             self.client.post("/api/admin/sonarr/missing/search", json={"search_all": True}).status_code,
             403,
         )
+        self.assertEqual(self.client.post("/api/admin/sonarr/missing/cancel", json={}).status_code, 403)
 
     def test_scan_returns_immediately_then_status_has_result(self) -> None:
         self._login_owner()
@@ -537,14 +624,119 @@ class SonarrMissingApiTests(unittest.TestCase):
             self.client.post("/api/admin/sonarr/missing/scan", json={})
             self._wait_idle()
             resp = self.client.post("/api/admin/sonarr/missing/search", json={"search_all": True})
-        self.assertEqual(resp.status_code, 200, resp.text)
-        self.assertTrue(resp.json().get("accepted"))
-        status = self._wait_idle()
-        self.assertIn(status["phase"], {"done", "searched"})
-        self.assertGreaterEqual(status.get("searches_queued") or 0, 1)
+            self.assertEqual(resp.status_code, 200, resp.text)
+            self.assertTrue(resp.json().get("accepted"))
+            status = self._wait_until(
+                lambda payload: payload.get("phase") in {"executing", "searched", "error"}
+            )
         self.assertEqual(fake.search_calls, [[11, 31]])
+        self.assertEqual(status["phase"], "executing")
+        self.assertTrue(status["busy"])
+        self.assertLess(int(status.get("percent") or 0), 100)
+        self.assertTrue(status.get("can_cancel"))
+        self.assertEqual(status["execution"]["queued"], 1)
+        self.assertEqual(status["execution"]["kind"], "command")
         last_path = Path(self._tmpdir.name) / "sonarr_missing_last.json"
         self.assertTrue(last_path.is_file())
+        with patch("projectionist.web.app.SonarrClient", return_value=fake):
+            fake.complete_commands()
+            finished = self._wait_idle()
+        self.assertEqual(finished["phase"], "searched")
+        self.assertEqual(finished["percent"], 100)
+        self.assertEqual(finished["execution"]["completed"], 1)
+        self.assertFalse(finished.get("can_cancel"))
+
+    def test_cancel_stops_queued_sonarr_commands_not_started(self) -> None:
+        self._login_owner()
+        fake = FakeSonarr()
+        fake.search_episodes([11])
+        fake.search_episodes([31])
+        fake.commands[0]["status"] = "started"
+        with patch("projectionist.web.app.SonarrClient", return_value=fake):
+            from projectionist.library import sonarr_missing as missing
+
+            store = missing.progress_store()
+            store.begin(kind="search")
+            store.set_commands(
+                [dict(item) for item in fake.commands],
+                searches_queued=2,
+                searches_total=2,
+            )
+            store.update("executing", "Waiting on Sonarr to run EpisodeSearch…")
+            resp = self.client.post("/api/admin/sonarr/missing/cancel", json={})
+        self.assertEqual(resp.status_code, 200, resp.text)
+        body = resp.json()
+        self.assertEqual(fake.cancelled_ids, [501])
+        self.assertEqual(body["execution"]["cancelled"], 1)
+        self.assertEqual(body["execution"]["running"], 1)
+        self.assertIn(body["phase"], {"executing", "cancelled"})
+        self.assertNotIn("SABnzbd", json.dumps(body))
+
+
+class CommandProgressTests(unittest.TestCase):
+    def test_normalize_maps_sonarr_status_values(self) -> None:
+        self.assertEqual(normalize_command_status("queued"), "queued")
+        self.assertEqual(normalize_command_status("started"), "started")
+        self.assertEqual(normalize_command_status("completed"), "completed")
+        self.assertEqual(normalize_command_status("failed"), "failed")
+        self.assertEqual(normalize_command_status("aborted"), "aborted")
+        self.assertEqual(normalize_command_status("cancelled"), "cancelled")
+
+    def test_summarize_counts_queued_running_completed_failed_not_sab(self) -> None:
+        tracked = [
+            {"id": 1, "name": "EpisodeSearch", "status": "queued"},
+            {"id": 2, "name": "EpisodeSearch", "status": "started", "message": "Doctor Who"},
+            {"id": 3, "name": "EpisodeSearch", "status": "completed", "ended": "2026-09-21T17:02:00Z"},
+            {
+                "id": 4,
+                "name": "EpisodeSearch",
+                "status": "failed",
+                "exception": "Command failed: index is unavailable",
+            },
+        ]
+        summary = summarize_episode_search_commands(tracked, live=[], pending_submit=2)
+        self.assertEqual(summary["queued"], 1)
+        self.assertEqual(summary["running"], 1)
+        self.assertEqual(summary["completed"], 1)
+        self.assertEqual(summary["failed"], 1)
+        self.assertEqual(summary["pending_submit"], 2)
+        self.assertEqual(summary["total"], 6)
+        self.assertEqual(summary["finished"], 2)
+        self.assertLess(summary["percent"], 100)
+        self.assertEqual(summary["current"]["id"], 2)
+        self.assertIn("index is unavailable", summary["last_error"])
+        self.assertIn("Sonarr", summary["throttle_note"])
+        self.assertNotIn("SABnzbd", summary["throttle_note"])
+        self.assertEqual(summary["kind"], "command")
+
+    def test_summarize_merges_live_sonarr_status_over_stale_tracked(self) -> None:
+        tracked = [{"id": 9, "name": "EpisodeSearch", "status": "queued"}]
+        live = [{"id": 9, "name": "EpisodeSearch", "status": "completed", "ended": "2026-09-21T17:09:00Z"}]
+        summary = summarize_episode_search_commands(tracked, live)
+        self.assertEqual(summary["completed"], 1)
+        self.assertEqual(summary["queued"], 0)
+
+    def test_refresh_keeps_executing_until_sonarr_commands_finish(self) -> None:
+        from projectionist.library import sonarr_missing as missing
+
+        reset_sonarr_missing_for_tests()
+        fake = FakeSonarr()
+        store = missing.progress_store()
+        store.begin(kind="search")
+        queued = queue_episode_searches(fake, [11, 31], chunk_size=50)
+        store.set_commands(queued["commands"], searches_queued=1, searches_total=1)
+        store.update("executing", "Waiting on Sonarr to run EpisodeSearch…")
+        snap = refresh_execution(fake, store)
+        self.assertEqual(snap["phase"], "executing")
+        self.assertTrue(snap["busy"])
+        self.assertLess(int(snap["percent"] or 0), 100)
+        self.assertEqual(snap["execution"]["queued"], 1)
+        fake.complete_commands()
+        snap = refresh_execution(fake, store)
+        self.assertEqual(snap["phase"], "searched")
+        self.assertFalse(snap["busy"])
+        self.assertEqual(snap["percent"], 100)
+        self.assertEqual(snap["execution"]["completed"], 1)
 
 
 if __name__ == "__main__":
