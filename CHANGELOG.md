@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.35.3] — 2026-09-21
+
 After **Search these**, Admin → Libraries stays with the Sonarr command queue so you can see queued / running / completed / failed and cancel what’s still waiting.
 
 ### Highlights
@@ -17,6 +19,8 @@ After **Search these**, Admin → Libraries stays with the Sonarr command queue 
 - Find-all-missing phases: `searching` (submit) → `executing` (Sonarr running) → `searched` / `cancelled`. Percent tracks command completion, not POST-to-Sonarr.
 
 ### Verification
+- Backend: 2,150 passed, 6 skipped, 36 subtests passed; 76.45% coverage (74% required).
+- Frontend unit: 764 passed; ESLint 0 errors (136 warnings pre-existing); production Vite build passed.
 - Focused: `tests/test_sonarr_missing.py`, `tests/test_api_authz.py` (cancel 403), `frontend/src/lib/sonarrMissing.test.mjs`.
 
 ## [1.35.2] — 2026-09-21
