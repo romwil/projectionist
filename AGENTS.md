@@ -34,7 +34,7 @@ own port, which proxies `/api` to `:8788`).
 - **Mocked e2e:** `npm run test:e2e` (needs `npx playwright install chromium` once). Playwright starts
   its **own** temp server via `node scripts/start-e2e-server.mjs` on **port 8799** (NOT 8788 — see
   `.cursor/rules/e2e-port-8788.mdc`) using the `.venv` python; no live Plex/LLM needed.
-- **Full-stack QA layers** (CI, maintainer `:8790` sidecar, Interactive UI QA, pentest harness):
+- **Full-stack QA layers** (CI, maintainer `:8792` sidecar, Interactive UI QA, pentest harness):
   [docs/superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md](docs/superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md).
 
 ### Rate limits in API tests
@@ -54,10 +54,11 @@ When checking the live Automat Unraid stack, use LAN hosts — **not** the publi
 | Role | URL |
 |------|-----|
 | Prod | `http://10.10.1.202:8788` |
-| QA sidecar | `http://10.10.1.202:8790` |
+| smartmap | `http://10.10.1.202:8790` (never stop for QA) |
+| QA sidecar | `http://10.10.1.202:8792` (ephemeral; never bind `:8790`) |
 
 Do **not** treat `https://projectionist.automat.vip` (or ad-hoc SSH tunnels / `localhost:8788` tunnels)
 as authoritative for version or admin UI. Rollout kit: `/mnt/user/appdata/projectionist` (often
 `/Volumes/appdata/projectionist`). Full runbook: [docs/ops/AUTOMAT.md](docs/ops/AUTOMAT.md).
-Agent rule: `.cursor/rules/automat-environments.mdc`. Interactive UI QA → `:8790` only
+Agent rule: `.cursor/rules/automat-environments.mdc`. Interactive UI QA → `:8792` only
 (`.cursor/skills/interactive-ui-qa/SKILL.md`).
