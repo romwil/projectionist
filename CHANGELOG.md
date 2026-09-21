@@ -2,14 +2,20 @@
 
 ## [Unreleased]
 
+## [1.35.2] — 2026-09-21
+
+The phone living-room is designed for a phone, and owners can find aired Sonarr gaps without trusting Wanted.
+
 ### Highlights
 - **Phone that feels native.** Chat, library, title sheets, Live watch, and member settings use 44px taps, 16px inputs, and safe-area chrome instead of a shrunk desktop page.
 - **Admin works on a phone too.** Overview, Libraries, Live Channels, and Newsletters keep the 1.35.1 gold/14px rhythm and now meet the same tap and overflow bar.
 - **Explore leads with the shelves.** Tonight’s double feature sits after the seasonal rail as a compact closer; Live Channels stay on Live. In-library posters no longer flash a false Add to Radarr banner.
+- **Fill the aired gaps.** **Find all missing** on Admin → Libraries scans monitored series and queues real Sonarr episode searches — it does not fire Wanted’s MissingEpisodeSearch.
 
 ### Added
 - Interactive UI QA `mobile.*` IDs (member living-room + full owner admin pass) at 390×844; Playwright `mobile` project (`e2e/mobile-native.spec.ts`) on mocked **8799**.
 - Shared tokens `--tap-min` / `--font-size-input`, `interactive-widget=resizes-content`, touch-action / tap-highlight chrome.
+- Owner **Find all missing** (Sonarr): scan aired+monitored+no-file episodes, compare against Wanted, queue `EpisodeSearch` in batches. Specials stay off unless **Include specials** is on.
 
 ### Changed
 - Title overlay becomes a safe-area sheet on phones; Explore/poster actions are visible without hover; composer/mic/send stay 44px and sticky.
@@ -20,9 +26,12 @@
 - `/search` drops the repeated “Search / Browse library” heroes — query field + results win. Phone filters collapse into a 44px accordion; Columns / Export / per-page stay desktop.
 - Phone living-room is designed for the device: Search is a query hero + filter sheet + 2-col posters; chat welcome keeps starters with a short invite; Library is one title + tabs; Explore search sits in a thumb row; Live keeps Guide/Watch and Plex, hides pop-out.
 - Explore: Tonight’s double feature moves below the seasonal rail and shrinks to a compact pair; What’s on tonight / Live starters leave this page (Live nav is unchanged). Poster Add to Radarr hides for in-library, Plex-backed, or already-queued titles.
+- Deep-link `/library` routes return the SPA (not a stale 404). Chat consult poll merges optimistic follow-ups without duplicating bubbles.
 
 ### Verification
-- Frontend unit includes `nativeMobile.test.mjs`; mocked Playwright `mobile` project; Interactive UI QA dual-role campaign (desktop + 390×844).
+- Backend: 2,143 passed, 6 skipped, 36 subtests passed; 76.39% coverage (74% required).
+- Frontend unit: 763 passed; ESLint 0 errors (136 warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_sonarr_missing.py`, `frontend/src/lib/nativeMobile.test.mjs`, `frontend/src/lib/sonarrMissing.test.mjs`; mocked Playwright `mobile` project; Interactive UI QA dual-role campaign (desktop + 390×844).
 
 ## [1.35.1] — 2026-09-13
 
