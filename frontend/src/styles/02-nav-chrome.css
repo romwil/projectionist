@@ -1087,6 +1087,19 @@ button.app-topbar-icon:focus-visible {
   transition: width 0.25s ease;
 }
 
+.sonarr-missing-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.sonarr-missing-counts [data-tone="failed"] {
+  color: var(--danger, #ff6b6b);
+}
+
 .status.status-error {
   color: var(--danger, #ff6b6b);
 }

@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+After **Search these**, Admin → Libraries stays with the Sonarr command queue so you can see queued / running / completed / failed and cancel what’s still waiting.
+
+### Highlights
+- **Honest missing-episode search.** Submitting to Sonarr is no longer dressed up as 100% done. The Libraries card follows EpisodeSearch through Sonarr’s command queue.
+- **Control the dribble.** **Cancel remaining** stops Projectionist from sending more batches and drops queued (not started) commands. Failures are Sonarr commands, not download-client aborts.
+
+### Added
+- Owner `GET /api/admin/sonarr/missing/status` now includes `execution` (`queued`, `running`, `completed`, `failed`, `cancelled`, current command, last error, throttle note) by polling Sonarr `GET /api/v3/command`.
+- Owner `POST /api/admin/sonarr/missing/cancel` — stop local submit + `DELETE` queued EpisodeSearch commands.
+- Libraries card: live counts, last command error, Sonarr throttle note, **Cancel remaining**.
+
+### Changed
+- Find-all-missing phases: `searching` (submit) → `executing` (Sonarr running) → `searched` / `cancelled`. Percent tracks command completion, not POST-to-Sonarr.
+
+### Verification
+- Focused: `tests/test_sonarr_missing.py`, `tests/test_api_authz.py` (cancel 403), `frontend/src/lib/sonarrMissing.test.mjs`.
+
 ## [1.35.2] — 2026-09-21
 
 The phone living-room is designed for a phone, and owners can find aired Sonarr gaps without trusting Wanted.

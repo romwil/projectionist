@@ -6202,6 +6202,13 @@ def _require_sonarr_client() -> SonarrClient:
     return SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
 
 
+def _optional_sonarr_client() -> Optional[SonarrClient]:
+    try:
+        return _require_sonarr_client()
+    except HTTPException:
+        return None
+
+
 @app.post("/api/admin/sonarr/missing/scan")
 def admin_sonarr_missing_scan(
     payload: Optional[SonarrMissingScanPayload] = None,
@@ -6232,7 +6239,7 @@ def admin_sonarr_missing_status(user=Depends(require_role("owner"))) -> Dict[str
     del user
     from projectionist.library.sonarr_missing import build_status
 
-    return build_status(data_dir=DATA_DIR)
+    return build_status(data_dir=DATA_DIR, client=_optional_sonarr_client())
 
 
 @app.post("/api/admin/sonarr/missing/search")
@@ -6257,6 +6264,16 @@ def admin_sonarr_missing_search(
         status = 409 if snap.get("busy") else 400
         raise HTTPException(status_code=status, detail=detail)
     return snap
+
+
+@app.post("/api/admin/sonarr/missing/cancel")
+def admin_sonarr_missing_cancel(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    """Cancel remaining queued EpisodeSearch commands; leave started ones running."""
+    del user
+    from projectionist.library.sonarr_missing import cancel_remaining_searches
+
+    client = _require_sonarr_client()
+    return cancel_remaining_searches(client, data_dir=DATA_DIR)
 
 
 @app.get("/api/watchlist", response_model=WatchlistListResponse)

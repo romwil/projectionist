@@ -156,6 +156,10 @@ describe("native mobile admin contract (phone 768)", () => {
       styles,
       /@media \(max-width: 768px\)[\s\S]*?button\.primary[\s\S]*?min-height:\s*var\(--tap-min\)/s,
     );
+    assert.match(
+      styles,
+      /@media \(max-width: 768px\)[\s\S]*?\.config-actions button[\s\S]*?min-height:\s*var\(--tap-min\)/s,
+    );
   });
 
   it("gives Live Channels tabs and Libraries browse controls 44px taps", () => {

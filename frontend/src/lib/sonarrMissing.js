@@ -6,8 +6,10 @@ const PHASE_LABELS = {
   scanning: "Scanning series",
   comparing: "Comparing to Wanted",
   done: "Scan finished",
-  searching: "Queueing searches",
-  searched: "Searches queued",
+  searching: "Submitting to Sonarr",
+  executing: "Sonarr searching",
+  searched: "Searches finished",
+  cancelled: "Cancelled",
   error: "Failed",
 };
 
@@ -34,7 +36,7 @@ export function sonarrMissingScanReady(status) {
     Number(result.scan_count) ||
     (Array.isArray(result.episode_ids) ? result.episode_ids.length : 0);
   if (count <= 0) return false;
-  return phase === "done" || phase === "searched" || phase === "idle";
+  return phase === "done" || phase === "searched" || phase === "idle" || phase === "cancelled";
 }
 
 export function sonarrFindMissingButtonClass(status) {
@@ -45,10 +47,63 @@ export function sonarrSearchMissingButtonClass(status) {
   return sonarrMissingScanReady(status) ? "primary" : "ghost";
 }
 
+export function sonarrMissingCanCancel(status) {
+  if (!status) return false;
+  if (status.can_cancel === true) return true;
+  const execution = status.execution || {};
+  const phase = String(status.phase || "");
+  return (
+    phase === "searching" ||
+    phase === "executing" ||
+    Number(execution.queued) > 0 ||
+    Number(execution.pending_submit) > 0
+  );
+}
+
+export function sonarrMissingDisplayPercent(status) {
+  if (!status) return null;
+  const phase = String(status.phase || "");
+  const execution = status.execution;
+  if (phase === "executing" && execution && typeof execution.percent === "number") {
+    return execution.percent;
+  }
+  if (typeof status.percent === "number") return status.percent;
+  return null;
+}
+
+function executionCountLine(execution) {
+  if (!execution) return "";
+  const bits = [];
+  const pending = Number(execution.pending_submit) || 0;
+  if (pending) bits.push(`${pending} submitting`);
+  bits.push(`${Number(execution.queued) || 0} queued`);
+  bits.push(`${Number(execution.running) || 0} running`);
+  bits.push(`${Number(execution.completed) || 0} completed`);
+  bits.push(`${Number(execution.failed) || 0} failed`);
+  const cancelled = Number(execution.cancelled) || 0;
+  if (cancelled) bits.push(`${cancelled} cancelled`);
+  return bits.join(" · ");
+}
+
 export function sonarrMissingProgressLine(status) {
   if (!status) return "";
   const phase = String(status.phase || "idle");
   if (phase === "idle" && !status.result) return "";
+  const execution = status.execution;
+  const hasCommands =
+    execution &&
+    (Number(execution.total) > 0 ||
+      Number(execution.queued) > 0 ||
+      Number(execution.running) > 0 ||
+      Number(execution.completed) > 0 ||
+      Number(execution.failed) > 0);
+  if (hasCommands && (phase === "searching" || phase === "executing" || phase === "searched" || phase === "cancelled")) {
+    const bits = [];
+    const message = String(status.message || "").trim();
+    if (message && !/\d+ queued/.test(message)) bits.push(message);
+    bits.push(executionCountLine(execution));
+    return bits.filter(Boolean).join(" · ");
+  }
   const bits = [];
   const message = String(status.message || "").trim();
   if (message) bits.push(message);
@@ -60,8 +115,8 @@ export function sonarrMissingProgressLine(status) {
     bits.push(`${missing} missing`);
   }
   const queued = Number(status.searches_queued) || 0;
-  if (phase === "searching" || phase === "searched" || queued) {
-    bits.push(`${queued} searches queued`);
+  if (phase === "searching" && queued) {
+    bits.push(`${queued} submitted to Sonarr`);
   }
   return bits.join(" · ");
 }
@@ -76,4 +131,12 @@ export function sonarrMissingBySeries(result) {
       episodes: Array.isArray(group.episodes) ? group.episodes : [],
     }))
     .filter((group) => group.count > 0);
+}
+
+export function sonarrMissingSecondsAgo(seconds) {
+  const value = Number(seconds);
+  if (!Number.isFinite(value) || value < 0) return "";
+  if (value < 60) return `${Math.round(value)}s since last completion`;
+  const minutes = Math.round(value / 60);
+  return `${minutes}m since last completion`;
 }
