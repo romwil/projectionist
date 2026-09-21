@@ -308,6 +308,32 @@ class SonarrClient:
         )
         return payload if isinstance(payload, dict) else {}
 
+    def list_commands(self) -> List[Mapping[str, Any]]:
+        """Queued, started, and recently finished Sonarr commands."""
+        payload = request_json(
+            f"{self.base_url}/api/v3/command",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, list) else []
+
+    def get_command(self, command_id: int) -> Mapping[str, Any]:
+        payload = request_json(
+            f"{self.base_url}/api/v3/command/{int(command_id)}",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+        return payload if isinstance(payload, dict) else {}
+
+    def cancel_command(self, command_id: int) -> None:
+        """Cancel a queued Sonarr command (DELETE). Started commands are left running."""
+        request_json(
+            f"{self.base_url}/api/v3/command/{int(command_id)}",
+            method="DELETE",
+            headers=self._headers(),
+            timeout=self.timeout,
+        )
+
     def quality_profiles(self) -> List[Mapping[str, Any]]:
         payload = request_json(
             f"{self.base_url}/api/v3/qualityprofile",

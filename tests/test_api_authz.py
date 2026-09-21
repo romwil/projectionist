@@ -245,6 +245,7 @@ class ApiAuthzTests(unittest.TestCase):
             self.client.post("/api/admin/sonarr/missing/search", json={"search_all": True}).status_code,
             403,
         )
+        self.assertEqual(self.client.post("/api/admin/sonarr/missing/cancel", json={}).status_code, 403)
 
     def test_guest_role_patch_rejected(self) -> None:
         self._enable_multi_user_via_api()
