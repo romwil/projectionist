@@ -196,7 +196,7 @@ class SonarrClient:
         include_specials: bool = False,
         series: Optional[Mapping[str, Any]] = None,
         now: Optional[datetime] = None,
-    ) -> List[Mapping[str, Any]]:
+    ) -> List[dict[str, Any]]:
         """Aired, monitored episodes with no file for one series (specials opt-in)."""
         from projectionist.library.sonarr_missing import filter_aired_missing_episodes
 
