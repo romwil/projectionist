@@ -9,7 +9,6 @@ import {
   getExploreFeedRecentlyAdded,
   getExploreFeedRevisitThese,
   getExploreFeedSeasonalSpotlight,
-  anniversaryLiveStarter,
   getPickForMeFeed,
   getLibraryHealth,
   getLibraryOverview,
@@ -22,14 +21,12 @@ import LibraryMediaCard from "../components/LibraryMediaCard";
 import MediaBrowseControls from "../components/MediaBrowseControls";
 import MediaBrowseResults from "../components/MediaBrowseResults";
 import TonightDoubleFeatureHabit from "../components/TonightDoubleFeatureHabit";
-import WhatsOnTonightHabit from "../components/WhatsOnTonightHabit";
 import OwnerEmptyStateCta from "../components/OwnerEmptyStateCta";
 import PosterRailLoader from "../components/PosterRailLoader";
 import RecommendModal from "../components/RecommendModal";
 import { useAuthGate } from "../components/UserMenu";
 import AppShell from "../layouts/AppShell";
 import { chatFromRailHref } from "../lib/backNav.js";
-import { liveWatchHref } from "../lib/liveChannels.js";
 import { ROUTES, decadeYearRange, exploreSectionPath, libraryBrowsePath } from "../lib/browseLinks.js";
 import { formatLanguageName } from "../lib/languageNames.js";
 import { buildPulseStats, normalizeFeed } from "../lib/exploreFeeds.js";
@@ -233,8 +230,6 @@ export default function ExplorePage() {
 
   const [pulse, setPulse] = useState({ loading: true, stats: [], error: "" });
   const [facetWall, setFacetWall] = useState({ loading: false, items: [], note: null, error: "", label: "" });
-  const [anniversaryNote, setAnniversaryNote] = useState("");
-  const [anniversaryBusy, setAnniversaryBusy] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -452,18 +447,6 @@ export default function ExplorePage() {
                 : null)
             }
           >
-            {pickForMe.meta?.live_station?.id ? (
-              <p className="explore-live-suggest" data-testid="explore-pick-for-me-live">
-                Live is on — try{" "}
-                <Link to={liveWatchHref(pickForMe.meta.live_station.id)}>
-                  {pickForMe.meta.live_station.name || "a youth-safe station"}
-                </Link>
-                {pickForMe.meta.live_station.now_title
-                  ? ` (now: ${pickForMe.meta.live_station.now_title})`
-                  : ""}
-                .
-              </p>
-            ) : null}
             <FeedRail
               testId="explore-pick-for-me-rail"
               items={pickForMe.items}
@@ -479,10 +462,6 @@ export default function ExplorePage() {
             />
           </ExploreSection>
         ) : null}
-
-        {!isYouth ? <TonightDoubleFeatureHabit /> : null}
-
-        <WhatsOnTonightHabit compact isYouth={isYouth} />
 
         <ExploreSection
           id="recently-added"
@@ -577,50 +556,6 @@ export default function ExplorePage() {
           empty={onThisDay.error || (!onThisDay.loading && !onThisDay.items.length ? onThisDay.note : null)}
           note={onThisDay.items.length && onThisDay.note && !onThisDay.error ? onThisDay.note : null}
         >
-          {isOwner && onThisDay.items.length ? (
-            <div className="explore-anniversary-live" data-testid="explore-anniversary-live">
-              <button
-                type="button"
-                className="ghost"
-                disabled={anniversaryBusy}
-                data-testid="explore-anniversary-live-suggest"
-                onClick={async () => {
-                  setAnniversaryBusy(true);
-                  setAnniversaryNote("");
-                  try {
-                    const preview = await anniversaryLiveStarter({ confirm: false });
-                    if (preview?.needs_confirm) {
-                      const ok = window.confirm(
-                        preview.message || "Put a Live starter on the air for today’s On This Day?",
-                      );
-                      if (!ok) return;
-                      const confirmed = await anniversaryLiveStarter({
-                        confirm: true,
-                        motifHint: preview.motif_hint || "",
-                      });
-                      setAnniversaryNote(
-                        confirmed.message ||
-                          "Starter ready — confirm publish in Live Channels → Stations.",
-                      );
-                    } else {
-                      setAnniversaryNote(preview.message || "No starter available.");
-                    }
-                  } catch (err) {
-                    setAnniversaryNote(err.message || "Could not suggest a Live starter.");
-                  } finally {
-                    setAnniversaryBusy(false);
-                  }
-                }}
-              >
-                {anniversaryBusy ? "Suggesting…" : "Suggest a Live starter for today"}
-              </button>
-              {anniversaryNote ? (
-                <p className="status status-secondary" data-testid="explore-anniversary-live-note">
-                  {anniversaryNote}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
           <FeedRail
             testId="explore-on-this-day-rail"
             items={onThisDay.items}
@@ -681,6 +616,8 @@ export default function ExplorePage() {
             />
           </ExploreSection>
         ) : null}
+
+        {!isYouth ? <TonightDoubleFeatureHabit /> : null}
 
         <div className="explore-footer" data-testid="explore-footer">
         <ExploreSection

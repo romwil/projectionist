@@ -113,6 +113,7 @@ class DoubleFeatureTests(unittest.TestCase):
                 self.assertNotIn("first half", why.casefold())
                 self.assertNotIn("second half", why.casefold())
                 self.assertEqual(item.get("why"), item.get("recommendation_reason"))
+                self.assertTrue(item.get("in_library"))
 
     def test_pairing_why_cites_shared_genre_years_and_runtime(self) -> None:
         bridge = build_pairing_why(

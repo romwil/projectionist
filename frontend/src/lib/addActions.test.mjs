@@ -4,6 +4,8 @@ import test from "node:test";
 import {
   collectAddableFromMessage,
   groupAddableItems,
+  isAddableToRadarr,
+  itemIsAcquirable,
   lastAssistantHasTitleCards,
   normalizePendingTokens,
   normalizeUserRole,
@@ -203,4 +205,26 @@ test("groupAddableItems treats legacy guest as member", () => {
   const member = groupAddableItems(items, { requestPath: "seerr", role: "member" });
   assert.equal(member.seerr.length, 2);
   assert.equal(member.radarr.length, 0);
+});
+
+test("isAddableToRadarr hides owned, queued, and Plex-backed titles", () => {
+  const gap = { title: "Gap", media_type: "movie", tmdb_id: 4 };
+  assert.equal(isAddableToRadarr(gap), true);
+  assert.equal(itemIsAcquirable(gap), true);
+  assert.equal(isAddableToRadarr({ ...gap, in_library: true }), false);
+  assert.equal(isAddableToRadarr({ ...gap, rating_key: "101" }), false);
+  assert.equal(isAddableToRadarr({ ...gap, in_radarr: true }), false);
+  assert.equal(isAddableToRadarr({ ...gap, already_queued: true }), false);
+});
+
+test("groupAddableItems skips owned and queued movies", () => {
+  const items = [
+    { title: "Owned flag", media_type: "movie", tmdb_id: 1, in_library: true },
+    { title: "Owned plex", media_type: "movie", tmdb_id: 2, rating_key: "99" },
+    { title: "Queued", media_type: "movie", tmdb_id: 3, in_radarr: true },
+    { title: "Gap", media_type: "movie", tmdb_id: 4 },
+  ];
+  const owner = groupAddableItems(items, { requestPath: "arr", role: "owner" });
+  assert.equal(owner.radarr.length, 1);
+  assert.equal(owner.radarr[0].title, "Gap");
 });
