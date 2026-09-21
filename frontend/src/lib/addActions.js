@@ -1,14 +1,26 @@
+import { itemHasLibraryIdentity } from "./titleAvailability.js";
+
+/** True when Radarr/Sonarr already has this title (queued or downloaded). */
+export function itemIsAlreadyQueued(item) {
+  return Boolean(item?.already_queued || item?.in_radarr || item?.in_sonarr);
+}
+
+/** Titles that still need an Add/Request CTA — not owned, not already queued. */
+export function itemIsAcquirable(item) {
+  return Boolean(item && !itemHasLibraryIdentity(item) && !itemIsAlreadyQueued(item));
+}
+
 export function isAddableToRadarr(item) {
-  return Boolean(!item?.in_library && item?.media_type === "movie" && item?.tmdb_id);
+  return Boolean(itemIsAcquirable(item) && item?.media_type === "movie" && item?.tmdb_id);
 }
 
 export function isAddableToSonarr(item) {
-  return Boolean(!item?.in_library && item?.media_type === "show" && item?.tvdb_id);
+  return Boolean(itemIsAcquirable(item) && item?.media_type === "show" && item?.tvdb_id);
 }
 
 export function isRequestableInSeerr(item) {
   return Boolean(
-    !item?.in_library &&
+    itemIsAcquirable(item) &&
       item?.tmdb_id &&
       (item?.media_type === "movie" || item?.media_type === "show"),
   );
@@ -61,8 +73,7 @@ export function resolveAddCapability({
 /** True when a non-library title would otherwise show an Add/Request affordance. */
 export function itemNeedsAddGuidance(item) {
   return Boolean(
-    item &&
-      !item.in_library &&
+    itemIsAcquirable(item) &&
       (item.tmdb_id || item.tvdb_id) &&
       (item.media_type === "movie" || item.media_type === "show" || !item.media_type),
   );

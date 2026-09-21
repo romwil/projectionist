@@ -7,6 +7,8 @@
  * unit-testable and consistent across light/dark themes.
  */
 
+import { itemIsAlreadyQueued } from "./addActions.js";
+import { itemHasLibraryIdentity } from "./titleAvailability.js";
 import { turnstyleItemCount } from "./turnstyleItems.js";
 
 /** Title shown on the turnstyle overlay opened from the Beyond section. */
@@ -92,19 +94,13 @@ export function beyondErrorNote() {
 
 /** Suppress add/request for titles already owned or queued — badge them instead. */
 export function isBeyondItemAcquirable(item) {
-  return Boolean(
-    item &&
-      !item.in_library &&
-      !item.already_queued &&
-      !item.in_radarr &&
-      !item.in_sonarr,
-  );
+  return Boolean(item && !itemHasLibraryIdentity(item) && !itemIsAlreadyQueued(item));
 }
 
 /** Badge shown on a beyond result, mirroring TitleCard's own badge logic. */
 export function beyondItemBadge(item) {
-  if (item?.in_library) return "In library";
-  if (item?.already_queued || item?.in_radarr || item?.in_sonarr) return "In queue";
+  if (itemHasLibraryIdentity(item)) return "In library";
+  if (itemIsAlreadyQueued(item)) return "In queue";
   return "New";
 }
 

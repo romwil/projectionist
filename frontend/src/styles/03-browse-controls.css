@@ -657,6 +657,7 @@
 .title-card.compact .title-card-overlay-actions button {
   pointer-events: auto;
   width: 100%;
+  min-height: var(--tap-min);
   padding: 7px 10px;
   line-height: 1.2;
   touch-action: manipulation;
@@ -730,6 +731,7 @@
 .title-card.compact .title-card-overlay-actions .title-card-plex-link {
   pointer-events: auto;
   width: 100%;
+  min-height: var(--tap-min);
   padding: 7px 10px;
   line-height: 1.2;
   border-radius: 8px;

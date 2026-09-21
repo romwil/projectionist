@@ -16,6 +16,15 @@ describe("titleAvailability", () => {
     assert.equal(result.shortLabel, "In library");
   });
 
+  it("treats a Plex rating key as in-library even without the flag", () => {
+    const result = titleAvailability(
+      { tmdb_id: 1, media_type: "movie", rating_key: "12345", in_radarr: true },
+      { requestPath: "arr" },
+    );
+    assert.equal(result.status, "in_library");
+    assert.equal(result.shortLabel, "In library");
+  });
+
   it("marks Seerr-path titles requestable when not in library", () => {
     const result = titleAvailability(
       { in_library: false, tmdb_id: 42, media_type: "movie" },
