@@ -96,11 +96,11 @@ Saved pages preserve the structured text, title cards, reply chips, and any quot
 **[Explore](/explore) is cinema browse** over the same SQLite feeds the curator uses. Open it to skim:
 
 - **Continue Watching** — in-progress titles from Plex On Deck (resume + Play), not a live "now playing" session list
-- **What’s on tonight** — persona-voiced glance at every airing Live station (when Live Channels is on). Dig into a row for **Watch here** / **Also in Plex**; youth accounts only see age-friendly stations. Optional **Tonight’s queue** pins titles for this browser session only
 - **Recently Added** and **Recent Releases**
 - **Revisit These** — partially watched TV that's been idle 60+ days
 - **On This Day**
 - A daily-rotating **director filmography** and **genre**, plus a nearby calendar-occasion rail (holidays and observances, including Arbor Day) or a gentle season-of-the-year fallback
+- **Tonight’s double feature** — a compact pair of owned movies with a why, after the seasonal rail. Ask Companion or Concierge in Chat for another pair. Live Channels live on **[Live](/live)**, not this page.
 
 **Chat about a rail.** Most Explore rails offer **Chat about these** — it opens a new conversation seeded with that rail's titles, stable library identities, and the persona *why* when present, so the curator discusses those same in-library picks (not outside search replacements). Posters and title detail also offer **Chat about this** for a single title — same Chat deep link, with a *Let's discuss* opener.
 
@@ -112,14 +112,14 @@ When the household owner turns **Live Channels** on and publishes stations, **[L
 
 **Shortest path tonight**
 
-1. Open **[Explore](/explore)** and skim **What’s on tonight**, or go straight to **[Live](/live)**.
+1. Open **[Live](/live)** from the top bar (after Explore).
 2. On Live, use **Guide** for the channel × time grid, or **Watch** to tune the selected station. Click a guide cell (or press Enter) to start watching.
 3. Prefer a dedicated TV window? Tap **Pop out** — Projectionist opens a watch-first window and leaves the original tab on the guide so you aren't running two streams of the same channel.
-4. Prefer living-room apps? Use **Also in Plex** (What’s on tonight) or **Open in Plex Live TV** (Live chrome) — same stations, Plex clients.
+4. Prefer living-room apps? Use **Open in Plex Live TV** from Live chrome — same stations, Plex clients.
 
 **While you watch.** Arrow keys change channels; Space / `K` pauses; `C` opens captions when available; `F` toggles fullscreen. Tap the video stage to pause or resume.
 
-> **Example:** Explore shows **101 · Chaos Night** with *Heat* at 45%. Tap **Watch here** → Live opens on that station mid-airing. Later on the couch, **Also in Plex Live TV** opens the same lineup in the Plex app — you didn't lose the channel.
+> **Example:** Live’s Guide shows **101 · Chaos Night** with *Heat* at 45%. Tap the cell → Watch opens on that station mid-airing. Later on the couch, **Open in Plex Live TV** opens the same lineup in the Plex app — you didn't lose the channel.
 
 **How it works / honest limits.** Live only appears when stations are on the air. Youth mode may hide some stations by content rating. Guests see Live when the owner enabled it for the household — empty states invite you to ask the owner rather than dump Admin steps. Projectionist Live and Plex Live TV share the guide; neither replaces the other.
 
@@ -323,6 +323,17 @@ Kick off a sync from the terminal if you prefer (single-owner install shown):
 curl -s -X POST http://localhost:8788/api/library/sync
 # Watch counts climb
 curl -s http://localhost:8788/api/library/stats | python3 -m json.tool
+```
+
+### Find all missing (Sonarr)
+
+Sonarr’s **Wanted** list is not the source of truth here. **Find all missing** on **Admin → Libraries** (`/admin/libraries`) re-derives gaps from every monitored series’ episode records: aired, monitored, no file. Specials (S00) stay off unless you turn **Include specials** on. The card compares “Library scan found M; Sonarr Wanted lists N”, then **Search these** queues Sonarr `EpisodeSearch` commands in batches of about 50 — it does not fire `MissingEpisodeSearch` (that uses Wanted). Many EpisodeSearch commands can rate-limit Sonarr; watch the job progress on the card.
+
+```bash
+# Owner host — start a dry scan, then search the last result
+curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/scan -H 'Content-Type: application/json' -d '{"include_specials":false}'
+curl -s http://localhost:8788/api/admin/sonarr/missing/status
+curl -s -X POST http://localhost:8788/api/admin/sonarr/missing/search -H 'Content-Type: application/json' -d '{"search_all":true}'
 ```
 
 ### Search beyond the collection — how acquisition works

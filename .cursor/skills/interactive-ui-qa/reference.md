@@ -8,12 +8,18 @@ Each ID:
 | Field | Meaning |
 |-------|---------|
 | **roles** | Who must run this ID (`member`, `owner`, `youth`, `guest`, `guest-tour`, or `*`) |
-| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `live`, `shell`, `login`, `tour`, `invite`, `access-request`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`, `lobby`, `theater`) |
+| **tags** | Delta selection keys (`gating`, `nav`, `scroll`, `theme`, `journey`, `chat`, `explore`, `search`, `inbox`, `notifications`, `recommend`, `settings`, `admin`, `live`, `shell`, `login`, `tour`, `invite`, `access-request`, `persona`, `library`, `youth`, `save`, `export`, `lists`, `watchlist`, `lobby`, `theater`, `mobile`) |
 | **source** | Primary frontend file(s) |
 | **steps** | Required interactions (page-load alone ≠ pass) |
 | **pass** | Observable pass criteria |
 
-Target: `http://10.10.1.202:8790`. Creds: `projectionist-qa-scripts/.env.qa`.
+Target: `http://10.10.1.202:8790` (never prod `:8788`). Creds: `projectionist-qa-scripts/.env.qa`.
+Phone campaigns set the browser to **390×844**. If `:8790` is occupied or not on this branch, run the same IDs against local mocked e2e **`:8799`** (or Vite) — never an SSH tunnel to prod.
+
+**Dual-role native-mobile campaign** (delta tags `mobile` + living-room / admin):
+
+1. **Member pass** — desktop existing `chat.*` / `library.*` / `settings.notifications-*` IDs, then phone IDs `mobile.chat-*` … `mobile.settings-notifications`.
+2. **Admin / owner pass** — desktop `admin.*` chrome IDs, then phone `mobile.admin-*`. Full second pass (not “only if 44px fails”).
 
 ---
 
@@ -184,8 +190,8 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **roles:** `member`, `owner`, `youth`, `guest`
 - **tags:** `chat`, `scroll`
 - **source:** `frontend/src/styles/02-nav-chrome.css`, `frontend/src/lib/chatLayout.js`, `frontend/src/lib/chatCardScroll.js`
-- **steps:** Produce or open a completed recommendation/poster strip in chat. Attempt horizontal scroll on the strip; inspect for nested vertical scrollbar on the strip container.
-- **pass:** Horizontal scroll works; strip does **not** show its own nested vertical scrollbar (page/transcript may scroll vertically).
+- **steps:** Produce or open a completed recommendation/poster strip in chat with **multiple** cards (do not pass a single-card mock). Attempt horizontal scroll on the strip; inspect for nested vertical scrollbar on the strip container. Measure `scrollLeft` before/after swipe. Tap a poster → title.
+- **pass:** Horizontal scroll works (`scrollLeft` increases); strip does **not** show its own nested vertical scrollbar (page/transcript may scroll vertically). Multi-card strip peeks the next poster. Tap opens title.
 
 ### `explore.open-card`
 
@@ -217,7 +223,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **tags:** `search`
 - **source:** `frontend/src/pages/ExplorePage.jsx`, `frontend/src/pages/SearchPage.jsx` → `LibraryBrowsePage.jsx`, `frontend/src/lib/browseLinks.js`, `frontend/src/lib/progressiveBrowseSearch.js`
 - **steps:** Open `/search` via topbar Search (or Explore `explore-search-input` + submit). On Search, use the on-page bar (`library-browse-search-input`) with a known title fragment — progressive as-you-type is enough; submit optional.
-- **pass:** URL becomes `/search?q=…` (or equivalent); `library-browse-title` / results / empty reflect that `q`. Emptying the input restores full browse (no `q`, “Browse library” / full grid).
+- **pass:** URL becomes `/search?q=…` (or equivalent); `library-browse-search-input` / results / empty / `library-browse-summary` reflect that `q`. Emptying the input restores full browse (no `q`, full grid). `/search` does not render a second “Browse library” H1 — the route is already Search.
 
 ### `search.progressive`
 
@@ -225,7 +231,7 @@ Topbar and hamburger drawer share one model (`primaryNav.js`): whatever peers a 
 - **tags:** `search`
 - **source:** `frontend/src/pages/LibraryBrowsePage.jsx`, `frontend/src/lib/progressiveBrowseSearch.js`
 - **steps:** On `/search` with a populated library, type a title fragment into `library-browse-search-input` without pressing Search/Enter. Wait briefly (~200ms debounce). Clear the input.
-- **pass:** While typing, results update without requiring Enter (`q` in URL, grid/empty/heading follow). Clearing restores full browse. Filters/sort still apply with an active `q`.
+- **pass:** While typing, results update without requiring Enter (`q` in URL, grid/empty/summary follow). Clearing restores full browse. Filters/sort still apply with an active `q`.
 
 ### `inbox.empty-or-item`
 
@@ -639,9 +645,9 @@ Owner peers: member set **plus** Admin (before My Journey).
 
 - **roles:** `member`, `owner`
 - **tags:** `explore`, `neighbors`
-- **source:** `frontend/src/components/SurprisingNeighborsShowcase.jsx`, `frontend/src/pages/TitleDetailPage.jsx`
-- **steps:** Open a title detail (or Plot Lab / neighbors surface) that shows surprising neighbors (`title-neighbors-surprising` or showcase `data-testid` such as `explore-neighbors-rail`). Confirm featured card + why copy (`*-featured`, `*-featured-why` or equivalent). If `*-show-more` is present, expand then collapse.
-- **pass:** Showcase renders with intro and at least one featured neighbor when data exists; why signals/headline visible. Show more toggles extra cells when hidden count > 0. Empty/missing neighbors → N/A (not FAIL).
+- **source:** `frontend/src/components/SurprisingNeighborsShowcase.jsx`, `frontend/src/pages/TitleDetailPage.jsx`, `frontend/src/components/TitleNeighborsRails.jsx`
+- **steps:** Open a title detail (or Plot Lab / neighbors surface) that shows surprising neighbors (`title-neighbors-surprising` or showcase `data-testid` such as `explore-neighbors-rail`). Confirm featured card + why copy (`*-featured`, `*-featured-why` or equivalent). If `*-show-more` is present, expand then collapse. On phone (390×844), also confirm the title **sheet** (`title-detail-drawer`) mounts `title-neighbors` / `.title-neighbors-track` when relations exist — not only the full page.
+- **pass:** Showcase renders with intro and at least one featured neighbor when data exists; why signals/headline visible. Show more toggles extra cells when hidden count > 0. Phone sheet includes a swipeable More like this track when neighbors exist. Empty/missing neighbors → N/A (not FAIL).
 
 ---
 
@@ -976,8 +982,8 @@ QA library is fully synced — assert real posters/results, not just empty state
 - **roles:** `member`, `owner`, `youth`
 - **tags:** `explore`, `scroll`
 - **source:** `frontend/src/pages/ExplorePage.jsx` (`explore-card-rail`)
-- **steps:** On `/explore`, find a populated rail (`explore-section-*`). Scroll it horizontally; inspect for a nested vertical scrollbar on the rail container.
-- **pass:** Rail scrolls horizontally; no nested vertical scrollbar on the rail (page scrolls vertically). Matches `chat.poster-scroll` rule for rails.
+- **steps:** On `/explore`, find a populated rail (`explore-section-*`). Scroll it horizontally; inspect for a nested vertical scrollbar on the rail container. On 390×844, measure `scrollLeft` before/after swipe, confirm the next poster peeks, and confirm the last card is fully in view at max scroll (not clipped). Tap a poster → title sheet.
+- **pass:** Rail scrolls horizontally (`scrollLeft` increases); no nested vertical scrollbar on the rail (page scrolls vertically). Next poster peeks. Last card not clipped. Poster tap opens title. Matches `chat.poster-scroll` rule for rails. Mid-rail poster actions are ≥44px and work without hover.
 
 ### `library.search-to-detail`
 
@@ -985,7 +991,7 @@ QA library is fully synced — assert real posters/results, not just empty state
 - **tags:** `search`, `library`, `explore`
 - **source:** `frontend/src/pages/ExplorePage.jsx`, `LibraryBrowsePage.jsx`, `TitleDetailPage.jsx`
 - **steps:** From Explore search (`explore-search-input` + submit) **or** on-page Search (`library-browse-search-input`, progressive or submit) enter a known title fragment. On the results, open a poster to `title-detail-page`.
-- **pass:** Query lands on `/search?q=…` with matching `library-browse-title`/results; opening a card reaches `title-detail-page` with hero (`title-detail-hero`) for that title. Full search→detail flow completes.
+- **pass:** Query lands on `/search?q=…` with matching results; opening a card reaches `title-detail-page` with hero (`title-detail-hero`) for that title. Full search→detail flow completes.
 
 ### `explore.facets`
 
@@ -1128,6 +1134,94 @@ after direct URL navigation.
 
 ---
 
+## Native mobile (phone ~390×844)
+
+Run these with the browser viewport at **390×844**. Target QA `:8790` when it serves this branch; otherwise local mocked e2e `:8799` / Vite. Never prod `:8788`.
+
+Dual-role: **member living-room first**, then a **full admin/owner second pass**.
+
+### `mobile.chat-composer`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `chat`, `scroll`
+- **source:** `frontend/src/styles/05-chat-responsive.css`, `frontend/src/App.jsx`
+- **steps:** At 390×844 **and** a short/narrow pane (~560×640, Simple Browser class) on `/chat`, confirm `composer-input` is on-screen (not below the fold), ≥16px, `send-button` is ≥44px. Confirm the wordmark reads the full **Projectionist** (never “Projectioni”). Confirm welcome/starters scroll in `chat-scroll-region` above the composer. Type a short message and send. Confirm no horizontal page bounce (`100vw` overflow).
+- **pass:** Composer is visible without scrolling the page; thread/welcome occupies the remaining height; brand is unclipped; tap targets meet 44px; no horizontal overflow.
+
+### `mobile.chat-conversation`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `chat`, `scroll`
+- **source:** `frontend/src/App.jsx`, `frontend/src/lib/chatLayout.js`, `frontend/src/styles/02-nav-chrome.css`
+- **steps:** Send a user turn. Confirm the “I asked” user bubble stays readable. Scroll the transcript up if content allows. If `new-reply-chip` appears, confirm it sits **above** the composer (1.35.2 placement) and is ≥44px. Completed poster strips: horizontal swipe only — no nested vertical scrollbar.
+- **pass:** User turn visible; chip never overlays mid-sentence bubbles; strip `overflow-y` is not a nested scrollport.
+
+### `mobile.library-browse`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `library`, `scroll`
+- **source:** `frontend/src/pages/LibraryBrowsePage.jsx`, `frontend/src/styles/09-title-detail-home.css`
+- **steps:** Open `/search` or Library browse. Confirm the query field is on-screen (no “Browse library” / “Every title in your library” hero, no second Search H1). Confirm poster wall (or empty) without scrolling past a filter wall — Filters may live in an accordion. Confirm browse controls that remain are ≥44px. Confirm no page-level horizontal bounce. Poster hover icons (Play / trailer) must be tappable without hover.
+- **pass:** Query field + results win the fold; no duplicate H1; grid usable with thumbs; no hover-only actions; no `100vw` bounce.
+
+### `mobile.title-overlay`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `library`, `explore`
+- **source:** `frontend/src/components/TitleDetailDrawer.jsx`, `frontend/src/styles/10-explore-delight.css`
+- **steps:** Tap a library/explore poster to open `title-detail-drawer`. Confirm a phone sheet (safe-area top/bottom), close ≥44px, content scrolls inside the sheet. Dismiss.
+- **pass:** Sheet opens and closes; does not overflow the 390px canvas.
+
+### `mobile.live-watch`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `live`
+- **source:** `frontend/src/pages/LivePage.jsx`, `frontend/src/styles/12-live.css`
+- **steps:** Open `/live` (watch or guide). Confirm `live-chrome` and mode controls are ≥44px with safe-area padding. Confirm no horizontal bounce. Do not start Repair / Rebuild.
+- **pass:** Watch chrome is thumb-reachable. Empty/disabled Live is PASS if the empty card CTA is ≥44px.
+
+### `mobile.settings-notifications`
+
+- **roles:** `member`, `owner`
+- **tags:** `mobile`, `settings`, `notifications`
+- **source:** `frontend/src/pages/settings/NotificationsSettingsPage.jsx`
+- **steps:** Open Settings → Notifications. Confirm email input is 16px (no iOS zoom). Confirm `notifications-save` and toggles are ≥44px. Confirm 14px field hints. Confirm no overflow.
+- **pass:** Form is usable one-handed; save control meets tap minimum.
+
+### `mobile.admin-overview`
+
+- **roles:** `owner`
+- **tags:** `mobile`, `admin`
+- **source:** `frontend/src/pages/ConfigPage.jsx`, `frontend/src/lib/adminChrome.test.mjs`
+- **steps:** At 390×844 **and** a narrow pane (~560–800px), open `/admin/overview`. Confirm the wordmark is the full **Projectionist** (never clipped). Confirm hamburger (`app-nav-toggle` ≥44px) opens Admin links; peer icons may live in the drawer at this width. Confirm glance tiles (`household-health-grid`) are 2-col (never a squeezed third tile). Confirm one gold primary per region (`service-card-actions`), 14px notes (`wizard-note` / panel leads), 12px action gaps. Confirm no stretched gold slabs. Confirm no horizontal bounce.
+- **pass:** Overview usable on a phone / narrow pane: unclipped brand, 2-col tiles, no restyling Admin into iOS kitsch. Screenshot required.
+
+### `mobile.admin-libraries`
+
+- **roles:** `owner`
+- **tags:** `mobile`, `admin`, `library`
+- **source:** `frontend/src/pages/ConfigPage.jsx`
+- **steps:** Open `/admin/libraries`. Confirm `plex-library-mapping` (or library sync card) is reachable. Confirm inputs ≥16px, primary actions ≥44px, no 100vw overflow. Do not run a destructive sync if the campaign is read-only.
+- **pass:** Libraries admin is usable at 390px; overflow is local scroll, not page bounce.
+
+### `mobile.admin-live-channels`
+
+- **roles:** `owner`
+- **tags:** `mobile`, `admin`, `live`
+- **source:** `frontend/src/pages/admin/LiveChannelsSection.jsx`
+- **steps:** Open `/admin/live-channels`. Confirm tabs (`live-channels-tab-stations` / installation) are ≥44px. Confirm infra notes stay 14px. Confirm no page overflow. Do **not** click Rebuild / Repair Plex.
+- **pass:** Stations/Setup chrome is thumb-reachable. Refresh remains the default Plex action.
+
+### `mobile.admin-newsletters`
+
+- **roles:** `owner`
+- **tags:** `mobile`, `admin`, `notifications`
+- **source:** `frontend/src/pages/NewslettersPage.jsx`, `frontend/src/styles/06-reading-admin-settings.css`
+- **steps:** Open Admin → Ops → Newsletters (`/admin/newsletters`). Scroll the full page. Confirm weekly + YIR panels remain reachable (no sticky chrome pinning content off-screen). Confirm save/generate controls ≥44px.
+- **pass:** Both panels reachable at 390px. Historical Mail sticky-bar footgun does not return.
+
+---
+
 ## Delta selection cheat sheet
 
 | Tag | Typical surfaces |
@@ -1162,6 +1256,7 @@ after direct URL navigation.
 | `export` | Export Markdown/JSON/text/PDF from saved library |
 | `lists` | Settings → Lists create/add/remove/rename/delete |
 | `watchlist` | Pin to watchlist; pin persistence |
+| `mobile` | Phone 390×844 dual-role campaign: member living-room + full admin pass |
 
 ---
 
@@ -1290,3 +1385,13 @@ after direct URL navigation.
 | `youth.filter.watchlist-lists` | youth |
 | `youth.filter.route-action-gates` | youth, guest |
 | `youth.filter.no-transient-leak` | youth |
+| `mobile.chat-composer` | member, owner |
+| `mobile.chat-conversation` | member, owner |
+| `mobile.library-browse` | member, owner |
+| `mobile.title-overlay` | member, owner |
+| `mobile.live-watch` | member, owner |
+| `mobile.settings-notifications` | member, owner |
+| `mobile.admin-overview` | owner |
+| `mobile.admin-libraries` | owner |
+| `mobile.admin-live-channels` | owner |
+| `mobile.admin-newsletters` | owner |

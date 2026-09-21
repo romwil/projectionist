@@ -2,6 +2,28 @@
 
 ## [Unreleased]
 
+### Highlights
+- **Phone that feels native.** Chat, library, title sheets, Live watch, and member settings use 44px taps, 16px inputs, and safe-area chrome instead of a shrunk desktop page.
+- **Admin works on a phone too.** Overview, Libraries, Live Channels, and Newsletters keep the 1.35.1 gold/14px rhythm and now meet the same tap and overflow bar.
+- **Explore leads with the shelves.** Tonight’s double feature sits after the seasonal rail as a compact closer; Live Channels stay on Live. In-library posters no longer flash a false Add to Radarr banner.
+
+### Added
+- Interactive UI QA `mobile.*` IDs (member living-room + full owner admin pass) at 390×844; Playwright `mobile` project (`e2e/mobile-native.spec.ts`) on mocked **8799**.
+- Shared tokens `--tap-min` / `--font-size-input`, `interactive-widget=resizes-content`, touch-action / tap-highlight chrome.
+
+### Changed
+- Title overlay becomes a safe-area sheet on phones; Explore/poster actions are visible without hover; composer/mic/send stay 44px and sticky.
+- Narrow panes (phone **and** Simple Browser ~360–900px): hamburger + full **Projectionist** wordmark + theme/account cluster. Peer icons live in the drawer — the name is never clipped to “Projectioni”.
+- Chat shell is pinned to the iframe (`position: fixed; inset: 0; height/max-height: 100%; min-height: 0`). `100vh` in Simple Browser is the parent editor window — using it grew the workspace past the pane and `overflow: hidden` clipped the composer (the chat window). Welcome/thread scroll in the middle; compose stays on-screen.
+- Phone composer is input + send (16px / 44px). The “General Exploration” tag and mood-chip wall hide so they cannot push compose off-screen. Theme cycles from Settings.
+- Overview glance tiles use a 2-column grid on narrow widths so the third tile is never squeezed.
+- `/search` drops the repeated “Search / Browse library” heroes — query field + results win. Phone filters collapse into a 44px accordion; Columns / Export / per-page stay desktop.
+- Phone living-room is designed for the device: Search is a query hero + filter sheet + 2-col posters; chat welcome keeps starters with a short invite; Library is one title + tabs; Explore search sits in a thumb row; Live keeps Guide/Watch and Plex, hides pop-out.
+- Explore: Tonight’s double feature moves below the seasonal rail and shrinks to a compact pair; What’s on tonight / Live starters leave this page (Live nav is unchanged). Poster Add to Radarr hides for in-library, Plex-backed, or already-queued titles.
+
+### Verification
+- Frontend unit includes `nativeMobile.test.mjs`; mocked Playwright `mobile` project; Interactive UI QA dual-role campaign (desktop + 390×844).
+
 ## [1.35.1] — 2026-09-13
 
 Live Channels chrome matches the rest of Admin, failed Plex jobs unlock, and village consults finish their sentences.

@@ -30,8 +30,19 @@ Do **not** use this skill for free-form exploratory testing, fixing product bugs
 | Credentials | `/Volumes/appdata/projectionist-qa-scripts/.env.qa` — `QA_OWNER_*`, `QA_MEMBER_*`, `QA_YOUTH_*`, `QA_GUEST_*` |
 | Never | Production / tunnel **`:8788`** — refuse and redirect to `:8790` |
 | Artifacts | `/Volumes/appdata/projectionist-qa-scripts/qa-runs/` |
+| Phone viewport | **390×844** (iPhone 12 class) for every `mobile.*` ID |
+| Fallback | If `:8790` is occupied (e.g. smartmap) or not on this branch, use local mocked e2e **`:8799`** or Vite — **never** an SSH tunnel to prod |
 
 If `.env.qa` is missing, stop and tell the user to copy `.env.qa.example` and seed roles. Do not invent passwords. Do not log passwords into reports.
+
+## Dual-role campaigns (member + admin)
+
+A native-mobile or chrome ship is **not done** after a member-only pass.
+
+1. **Member / living-room** — chat composer, library, title overlay, “I asked” conversation, Live watch, member settings. Run desktop authored IDs **and** `mobile.*` member IDs at 390×844.
+2. **Admin / owner** — full second pass: Overview / Libraries / Live Channels / Newsletters plus 1.35.1 chrome (one gold primary, 14px notes, 12px gaps, no stretched slabs). Same 44px / overflow / no-hover-only / safe-area contracts. Admin is not “only if 44px fails.”
+
+Prefer Cursor browser MCP. Set the tab to desktop (~1280×800) then 390×844. Exercise real clicks. Page-load alone is never PASS.
 
 ## Modes
 

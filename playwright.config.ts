@@ -25,6 +25,21 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      testIgnore: [/mobile-native\.spec\.ts/],
+    },
+    {
+      // iPhone 12 class — 390×844 on Chromium (do not use devices["iPhone 12"]:
+      // that launches WebKit and a 664px visual viewport).
+      name: "mobile",
+      use: {
+        ...devices["Desktop Chrome"],
+        browserName: "chromium",
+        viewport: { width: 390, height: 844 },
+        isMobile: true,
+        hasTouch: true,
+        deviceScaleFactor: 2,
+      },
+      testMatch: /mobile-native\.spec\.ts/,
     },
   ],
   webServer: {

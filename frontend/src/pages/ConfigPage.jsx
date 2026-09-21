@@ -34,6 +34,9 @@ import {
   putSystemConfig,
   registerRadarrExisting,
   listRadarrOwnedNotIndexed,
+  startSonarrMissingScan,
+  getSonarrMissingStatus,
+  searchSonarrMissing,
   resolveModelForProvider,
   revealSettingsSecret,
   rotateMcpKey,
@@ -50,6 +53,15 @@ import {
   formatLastSyncRelative,
   formatSyncJobDetails,
 } from "../lib/jobProgress.js";
+import {
+  sonarrFindMissingButtonClass,
+  sonarrMissingBySeries,
+  sonarrMissingPhaseLabel,
+  sonarrMissingProgressLine,
+  sonarrMissingScanReady,
+  sonarrSearchMissingButtonClass,
+  sonarrWantedDeltaCopy,
+} from "../lib/sonarrMissing.js";
 import { liveChannelsStartTimeoutAlertType } from "../lib/liveChannelsEngineFeedback.js";
 import { craftSoftCapHonestyNote, liveOnboardingTip, liveOverviewLine } from "../lib/liveChannelsCopy.js";
 import { isLiveJobBusy } from "../lib/liveChannelsJob.js";
@@ -477,6 +489,8 @@ export default function ConfigPage() {
   const [syncingLibrary, setSyncingLibrary] = useState(false);
   const [registeringRadarr, setRegisteringRadarr] = useState(false);
   const [radarrGapStats, setRadarrGapStats] = useState(null);
+  const [sonarrMissing, setSonarrMissing] = useState(null);
+  const [sonarrIncludeSpecials, setSonarrIncludeSpecials] = useState(false);
   const [activeSyncJob, setActiveSyncJob] = useState(null);
   const [featureFlags, setFeatureFlags] = useState(null);
   const [appVersion, setAppVersion] = useState("");
@@ -824,6 +838,27 @@ export default function ConfigPage() {
     // Poll at a fixed 2s while Config is open. Do not depend on syncingLibrary —
     // setSyncingLibrary inside this effect would re-run it and stack intervals.
     const interval = setInterval(pollSyncJobs, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [showWizard]);
+
+  useEffect(() => {
+    if (showWizard) return undefined;
+    let cancelled = false;
+
+    async function pollSonarrMissing() {
+      try {
+        const status = await getSonarrMissingStatus();
+        if (!cancelled) setSonarrMissing(status);
+      } catch {
+        /* keep last snapshot */
+      }
+    }
+
+    pollSonarrMissing();
+    const interval = setInterval(pollSonarrMissing, 2000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -2501,6 +2536,32 @@ export default function ConfigPage() {
     }
   }
 
+  async function handleSonarrMissingScan() {
+    setActionFeedback("sonarr-missing", null);
+    try {
+      const snap = await startSonarrMissingScan({ include_specials: sonarrIncludeSpecials });
+      setSonarrMissing(snap);
+    } catch (error) {
+      setActionFeedback("sonarr-missing", {
+        type: "error",
+        message: error.message || "Could not start the Sonarr missing scan.",
+      });
+    }
+  }
+
+  async function handleSonarrMissingSearch() {
+    setActionFeedback("sonarr-missing", null);
+    try {
+      const snap = await searchSonarrMissing({ search_all: true });
+      setSonarrMissing(snap);
+    } catch (error) {
+      setActionFeedback("sonarr-missing", {
+        type: "error",
+        message: error.message || "Could not queue EpisodeSearch.",
+      });
+    }
+  }
+
   function formatLastSync(lastSync) {
     return formatLastSyncRelative(lastSync);
   }
@@ -3285,6 +3346,100 @@ export default function ConfigPage() {
           <InlineAlert
             type={actionAlert?.area === "radarr-register" ? actionAlert.type : null}
             message={actionAlert?.area === "radarr-register" ? actionAlert.message : null}
+          />
+        </section>
+
+        <section className="config-section" data-testid="sonarr-find-missing-card">
+          <h2>Sonarr — find all missing</h2>
+          <p className="wizard-note">
+            Re-derives gaps from each series’ episode records (aired, monitored, no file) instead of
+            trusting Sonarr’s Wanted list. After the scan, confirm to queue EpisodeSearch in batches.
+            Many EpisodeSearch commands can rate-limit Sonarr — watch progress here rather than
+            firing them all at once from Wanted.
+          </p>
+          <label className="config-toggle" data-testid="sonarr-include-specials">
+            <input
+              type="checkbox"
+              checked={sonarrIncludeSpecials}
+              onChange={(event) => setSonarrIncludeSpecials(event.target.checked)}
+              disabled={Boolean(sonarrMissing?.busy)}
+            />
+            <span>Include specials</span>
+          </label>
+          <div className="config-actions">
+            <button
+              type="button"
+              className={sonarrFindMissingButtonClass(sonarrMissing)}
+              data-testid="sonarr-find-missing-button"
+              onClick={handleSonarrMissingScan}
+              disabled={Boolean(sonarrMissing?.busy)}
+            >
+              {sonarrMissing?.busy && sonarrMissing?.phase !== "searching" ? "Scanning…" : "Find all missing"}
+            </button>
+            <button
+              type="button"
+              className={sonarrSearchMissingButtonClass(sonarrMissing)}
+              data-testid="sonarr-search-missing-button"
+              onClick={handleSonarrMissingSearch}
+              disabled={!sonarrMissingScanReady(sonarrMissing) || Boolean(sonarrMissing?.busy)}
+            >
+              {sonarrMissing?.phase === "searching" ? "Searching…" : "Search these"}
+            </button>
+          </div>
+          {sonarrMissingProgressLine(sonarrMissing) ? (
+            <div className="library-sync-progress" data-testid="sonarr-missing-progress">
+              <p className="library-sync-progress-headline">
+                <strong>
+                  {sonarrMissingPhaseLabel(sonarrMissing?.phase)}
+                </strong>
+                {typeof sonarrMissing?.percent === "number" ? ` · ${sonarrMissing.percent}%` : ""}
+              </p>
+              <p className="library-sync-progress-detail status status-secondary">
+                {sonarrMissingProgressLine(sonarrMissing)}
+              </p>
+              {typeof sonarrMissing?.percent === "number" && sonarrMissing?.busy ? (
+                <div
+                  className="library-sync-progress-bar"
+                  role="progressbar"
+                  aria-valuenow={sonarrMissing.percent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <span
+                    className="library-sync-progress-fill"
+                    style={{ width: `${sonarrMissing.percent}%` }}
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          {sonarrMissing?.result ? (
+            <p className="status status-secondary" data-testid="sonarr-missing-wanted-delta">
+              {sonarrWantedDeltaCopy(sonarrMissing.result)}
+            </p>
+          ) : null}
+          {sonarrMissingBySeries(sonarrMissing?.result).length ? (
+            <div data-testid="sonarr-missing-by-series">
+              {sonarrMissingBySeries(sonarrMissing.result).map((group) => (
+                <details key={group.seriesId} className="config-advanced-details">
+                  <summary>
+                    {group.seriesTitle} · {group.count} missing
+                  </summary>
+                  <ul>
+                    {group.episodes.map((episode) => (
+                      <li key={episode.episodeId}>
+                        {`S${String(episode.season ?? 0).padStart(2, "0")}E${String(episode.episode ?? 0).padStart(2, "0")}`}
+                        {episode.title ? ` ${episode.title}` : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              ))}
+            </div>
+          ) : null}
+          <InlineAlert
+            type={actionAlert?.area === "sonarr-missing" ? actionAlert.type : null}
+            message={actionAlert?.area === "sonarr-missing" ? actionAlert.message : null}
           />
         </section>
 

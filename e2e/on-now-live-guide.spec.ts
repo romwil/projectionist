@@ -7,7 +7,7 @@ import {
 } from "./fixtures/api-mocks";
 
 /**
- * Focused dual-watch smoke: Explore What’s on tonight + /live guide when Live is ready.
+ * Focused dual-watch smoke: Explore stays library rails; Live guide when Live is ready.
  * Uses API mocks only — not the opt-in live-stack suite.
  */
 test.describe("On now + Live guide (mocked)", () => {
@@ -21,15 +21,11 @@ test.describe("On now + Live guide (mocked)", () => {
     await mockLiveChannelsHousehold(page, { enabled: true, ready: true });
   });
 
-  test("Explore shows What’s on tonight when Live is ready", async ({ page }) => {
+  test("Explore omits Live What’s on tonight", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/explore");
     await expect(page.getByTestId("explore-page")).toBeVisible();
-    await expect(page.getByTestId("whats-on-tonight")).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId("whats-on-tonight-list")).toBeVisible();
-    await expect(page.getByTestId("whats-on-tonight-row").first()).toContainText("Noir Alley");
-    await expect(page.getByTestId("whats-on-tonight-watch-cta")).toBeVisible();
-    await expect(page.getByTestId("whats-on-tonight-line")).toBeVisible();
+    await expect(page.getByTestId("whats-on-tonight")).toHaveCount(0);
   });
 
   test("Live guide grid renders stations and cells", async ({ page }) => {

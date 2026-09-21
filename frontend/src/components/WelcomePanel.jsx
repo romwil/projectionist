@@ -22,7 +22,7 @@ export default function WelcomePanel({
     <section className="welcome-panel" data-testid="welcome-panel" aria-label="Welcome">
       <p className="welcome-panel-greeting">{resolvedGreeting}</p>
       <p className="welcome-panel-hint">
-        Try a starter prompt, or type `/help` for slash commands. Sync your Plex library from Config when you are ready.
+        Try a starter, or just ask — I’m here.
       </p>
       {contextChips?.length ? (
         <div className="welcome-panel-context" data-testid="welcome-panel-context">

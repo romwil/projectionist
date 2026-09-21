@@ -211,6 +211,8 @@ def _feed_item(row: Mapping[str, Any], **extra: Any) -> Dict[str, Any]:
         item["collection_name"] = str(row["collection_name"])
     if "tmdb_collection_id" in row.keys() and row["tmdb_collection_id"] is not None:
         item["tmdb_collection_id"] = int(row["tmdb_collection_id"])
+    # Feed rows are always library_items — TitleCard needs this to hide Add/Radarr.
+    item["in_library"] = True
     item.update(extra)
     return item
 

@@ -54,6 +54,76 @@
 .media-browse-sort-direction {
   min-height: 34px;
 }
+.media-browse-filters-toggle {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .media-browse-controls select,
+  .media-browse-sort-direction,
+  .media-browse-view-control button,
+  .media-browse-pagination-controls button {
+    min-height: var(--tap-min);
+  }
+
+  .title-card.compact .title-card-overlay-actions button {
+    min-height: var(--tap-min);
+  }
+
+  /* Phone: Filters accordion. Desktop keeps the full toolbar visible
+     even when <details> is closed (UA hides non-summary children). */
+  .media-browse-filters-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--tap-min);
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--surface);
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    list-style: none;
+  }
+
+  .media-browse-filters-toggle::-webkit-details-marker {
+    display: none;
+  }
+
+  .media-browse-filters-toggle::after {
+    content: "tune";
+    font-family: "Material Symbols Outlined", sans-serif;
+    font-size: 20px;
+    font-weight: 400;
+    opacity: 0.8;
+  }
+
+  .media-browse-filters[open] .media-browse-filters-toggle {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  }
+
+  .media-browse-filters[open] .media-browse-controls {
+    margin-top: var(--space-3);
+    padding: var(--space-3);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+
+  .media-browse-secondary-actions,
+  .explore-section-bulk,
+  .media-browse-view-control,
+  .media-browse-controls label:has([data-testid="media-browse-page-size"]) {
+    display: none;
+  }
+}
+
+@media (min-width: 769px) {
+  .media-browse-filters > .media-browse-controls {
+    display: grid;
+  }
+}
 .media-browse-menu-wrap,
 .media-browse-filter-menu,
 .poster-action-menu {
@@ -235,6 +305,9 @@
 .media-list-scroll {
   position: relative;
   overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 .media-list-view {
   display: grid;
@@ -435,7 +508,13 @@
   max-height: none;
   overflow-x: auto;
   overflow-y: hidden;
+  overscroll-behavior-x: contain;
   align-content: start;
+  scroll-snap-type: x mandatory;
+}
+
+.chat-scroll-region .inline-cards .title-card {
+  scroll-snap-align: start;
 }
 
 .chat-scroll-region .inline-cards.chat-inline-cards--streaming {
@@ -518,6 +597,16 @@
   border-color: rgba(251, 191, 36, 0.45);
 }
 
+@media (hover: none), (max-width: 768px) {
+  .poster-action-grip,
+  .title-card-pin {
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+    width: var(--tap-min);
+    height: var(--tap-min);
+  }
+}
+
 .title-card-progress-ring {
   position: absolute;
   bottom: 8px;
@@ -568,6 +657,7 @@
 .title-card.compact .title-card-overlay-actions button {
   pointer-events: auto;
   width: 100%;
+  min-height: var(--tap-min);
   padding: 7px 10px;
   line-height: 1.2;
   touch-action: manipulation;
@@ -641,6 +731,7 @@
 .title-card.compact .title-card-overlay-actions .title-card-plex-link {
   pointer-events: auto;
   width: 100%;
+  min-height: var(--tap-min);
   padding: 7px 10px;
   line-height: 1.2;
   border-radius: 8px;

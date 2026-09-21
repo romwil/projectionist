@@ -1748,8 +1748,8 @@ export default function App() {
                 streaming={loading}
               />
             ) : null}
-            <NewReplyChip visible={showNewReplyChip} onClick={() => scrollToLatestTurn("smooth")} />
           </div>
+          <NewReplyChip visible={showNewReplyChip} onClick={() => scrollToLatestTurn("smooth")} />
 
           <form
             className="composer composer-raised"

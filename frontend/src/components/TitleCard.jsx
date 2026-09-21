@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { getPlexMachineId } from "../api/client";
-import { itemNeedsAddGuidance, resolveAddCapability } from "../lib/addActions.js";
+import {
+  isAddableToRadarr,
+  isAddableToSonarr,
+  isRequestableInSeerr,
+  itemIsAcquirable,
+  itemNeedsAddGuidance,
+  resolveAddCapability,
+} from "../lib/addActions.js";
 import { setTitleCardDragData } from "../lib/easterEggs.js";
 import { formatMatchPercent } from "../lib/matchScore.js";
 import { displayRecommendationReason } from "../lib/recommendationReason.js";
@@ -93,22 +100,14 @@ export default function TitleCard({
   const userStars = item.user_stars;
   const capability = resolveAddCapability({ role: userRole, requestPath, multiUserEnabled });
   const canRequestSeerr =
-    capability.canRequest && !item.in_library && item.tmdb_id && addStatus !== "success";
+    capability.canRequest && isRequestableInSeerr(item) && addStatus !== "success";
   const canAddRadarr =
-    capability.canAdd &&
-    !item.in_library &&
-    item.media_type === "movie" &&
-    item.tmdb_id &&
-    addStatus !== "success";
+    capability.canAdd && isAddableToRadarr(item) && addStatus !== "success";
   const canAddSonarr =
-    capability.canAdd &&
-    !item.in_library &&
-    item.media_type === "show" &&
-    item.tvdb_id &&
-    addStatus !== "success";
+    capability.canAdd && isAddableToSonarr(item) && addStatus !== "success";
   const sonarrBlockedReason =
     capability.canAdd &&
-    !item.in_library &&
+    itemIsAcquirable(item) &&
     item.media_type === "show" &&
     !item.tvdb_id &&
     addStatus !== "success"

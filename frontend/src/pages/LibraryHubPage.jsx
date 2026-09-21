@@ -1,6 +1,5 @@
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import AppShell from "../layouts/AppShell";
-import BackLink from "../components/BackLink";
 import { ROUTES } from "../lib/backNav.js";
 import {
   DEFAULT_LIBRARY_TAB,
@@ -28,12 +27,13 @@ export default function LibraryHubPage() {
   }
 
   return (
-    <AppShell className="app-root library-hub-page" testId="library-hub-page" variant="browse" leading={<BackLink fallbackTo={ROUTES.chat} testId="library-hub-back" />}>
-      <section className="explore-section-hero" data-testid="library-hub-hero">
-        <p className="person-eyebrow">Library</p>
-        <h1 data-testid="library-hub-title">Your shelves & catalog</h1>
-        <p className="explore-section-subtitle">
-          Lists, watchlist pins, published collections, and the full index — one place.{" "}
+    <AppShell className="app-root library-hub-page" testId="library-hub-page" variant="topbar">
+      <section className="explore-section-hero library-hub-hero" data-testid="library-hub-hero">
+        <h1 data-testid="library-hub-title">Library</h1>
+        <p className="explore-section-subtitle library-hub-lede">
+          Lists, watchlist pins, published collections, and the full index — one place.
+        </p>
+        <p className="library-hub-saved-row">
           <Link to={librarySavedPath()} className="library-hub-saved-link" data-testid="library-hub-saved-link">Saved curator responses</Link>
         </p>
       </section>

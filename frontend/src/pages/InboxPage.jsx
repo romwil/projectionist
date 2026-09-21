@@ -87,7 +87,6 @@ export default function InboxPage() {
       className="app-root inbox-page"
       testId="inbox-page"
       title="Inbox"
-      eyebrow="Recommendations & notifications"
       inboxUnreadCount={state.unread}
     >
       <main className="explore-main inbox-main">

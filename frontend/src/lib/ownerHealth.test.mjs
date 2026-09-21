@@ -81,5 +81,9 @@ describe("owner health hero theme-safe styles", () => {
     assert.match(styles, /\.owner-health-tile\b/);
     assert.match(styles, /\.owner-health-tile\.tone-warn\b/);
     assert.match(styles, /\.admin-rail-badge\b/);
+    assert.match(
+      styles,
+      /\.owner-health-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,\s*minmax\(0,\s*1fr\)\)/s,
+    );
   });
 });

@@ -14,9 +14,16 @@
   --text-xs: 0.75rem;
   --text-sm: 0.8125rem;
   --text-md: 0.9375rem;
+  --text-base: 1rem;
   --text-lg: 1.125rem;
   --text-xl: 1.375rem;
   --text-2xl: 1.75rem;
+  /* Native-feeling phone chrome — 44px Apple HIG / 16px iOS zoom floor */
+  --tap-min: 44px;
+  --font-size-input: 16px;
+  /* Phone poster rails: two cards + a real peek, last card not flush. */
+  --rail-card-width: 132px;
+  --rail-peek: 56px;
   --leading-tight: 1.25;
   --leading-body: 1.55;
   --base-font-size: 15px;
@@ -100,6 +107,9 @@ html[data-theme="lights-up"] {
 }
 
 html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
   transition:
     color 300ms ease-in-out,
     background-color 300ms ease-in-out,
@@ -108,6 +118,24 @@ html {
 
 * {
   box-sizing: border-box;
+}
+
+html,
+body {
+  max-width: 100%;
+  overscroll-behavior-x: none;
+}
+
+button,
+a,
+summary,
+[role="button"],
+[role="tab"],
+input,
+select,
+textarea,
+label {
+  touch-action: manipulation;
 }
 
 body {
@@ -166,13 +194,30 @@ a {
   transition: background 0.55s ease;
 }
 
+/* Chat living-room: pin the shell to the *iframe / visual* viewport.
+   Cursor Simple Browser (and some nested webviews) report 100vh / 100dvh as
+   the parent editor window, not the pane. `.app-root { min-height: 100vh }`
+   plus `max-height: none` grows the workspace past the fold; `overflow: hidden`
+   then clips the composer — after the exploration tag is hidden, the whole
+   chat window disappears. Size only with inset + 100%, never vh/dvh. */
+html:has(.app-root.workspace),
+html:has(.app-root.workspace) body,
+html:has(.app-root.workspace) #root {
+  height: 100%;
+  max-height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .app-root.workspace {
+  position: fixed;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  height: 100dvh;
-  max-height: 100vh;
-  max-height: 100dvh;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  max-height: 100%;
   overflow: hidden;
   background:
     radial-gradient(ellipse 100% 70% at 40% -25%, color-mix(in srgb, var(--ambient-accent) 22%, transparent), transparent 58%),
