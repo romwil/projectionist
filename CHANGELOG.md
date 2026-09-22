@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [1.35.4] — 2026-09-22
+
+Admin buttons that start real work now keep a live job card — not a spinner and silence. Register in Radarr shows the title queue; newsletters, Year in Review, weekly digest, and weekly rails reuse the same Sonarr-missing snapshot.
+
+### Highlights
+- **See Register in Radarr work.** Admin → Libraries lists each title as queued, in flight, registered, already tracked, or failed. Cancel remaining skips titles that have not started.
+- **Same card across Admin.** Weekly newsletter, Year in Review, and This week’s digest use the same phase / counts / current item / last error pattern as Find all missing.
+
+### Added
+- Shared `AdminExecutionStore` snapshot (`phase`, `busy`, `can_cancel`, `execution`, per-item queue) used by Register in Radarr, newsletter, Year in Review, digest, and weekly rails.
+- Owner `GET/POST` status + cancel for `/api/admin/radarr/register-existing`, `/api/admin/weekly-newsletter`, `/api/admin/year-in-review`, `/api/admin/weekly-digest`, `/api/admin/weekly-rail`.
+- Libraries / Newsletters / Dashboard / Notifications job cards with title-or-member queues.
+
+### Changed
+- Those POSTs return immediately and run in a background thread. Poll status — never treat “submitted” as 100% done.
+
+### Verification
+- Backend: 2,155 passed, 6 skipped, 36 subtests passed; 76.59% coverage (74% required).
+- Frontend unit: 769 passed; ESLint 0 errors on touched files.
+- Focused: `tests/test_admin_execution.py`, `tests/test_notifications_mail.py`, `tests/test_year_in_review.py`, `tests/test_weekly_digest.py`, `tests/test_taste_engagement.py`, `frontend/src/lib/adminExecution.test.mjs`.
+
 ## [1.35.3] — 2026-09-21
 
 After **Search these**, Admin → Libraries stays with the Sonarr command queue so you can see queued / running / completed / failed and cancel what’s still waiting.

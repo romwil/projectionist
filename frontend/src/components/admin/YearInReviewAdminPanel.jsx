@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { generateYearInReview } from "../../api/client";
+import { cancelYearInReview, generateYearInReview, getYearInReviewStatus } from "../../api/client";
 import { yirPathFromGenerateResult } from "../../lib/yearInReview";
+import AdminExecutionCard from "../AdminExecutionCard";
 import InlineAlert from "../InlineAlert";
 import SettingsPanel from "../settings/SettingsPanel";
 import SettingsToggle from "../settings/SettingsToggle";
@@ -18,6 +19,47 @@ export default function YearInReviewAdminPanel({
   const [yirNotify, setYirNotify] = useState(true);
   const [yirStatus, setYirStatus] = useState(null);
   const [yirPath, setYirPath] = useState(null);
+  const [yirJob, setYirJob] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const snap = await getYearInReviewStatus();
+        if (cancelled) return;
+        setYirJob(snap);
+        setSendingYir(Boolean(snap?.busy));
+        const result = snap?.result;
+        if (!snap?.busy && result) {
+          const path = yirPathFromGenerateResult(result);
+          if (path) setYirPath(path);
+          const year = result.year;
+          const delivered = Number(result.delivered) || 0;
+          if (result.status === "empty" || (!path && Number(result.skipped_empty) > 0)) {
+            setYirStatus({
+              type: "error",
+              message: year
+                ? `Not enough tracked finishes for ${year} yet (year to date). Keep watching, then try again.`
+                : "Not enough tracked finishes for this year yet.",
+            });
+          } else if (path) {
+            setYirStatus({
+              type: "success",
+              message: `Ready for ${year}. Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}.`,
+            });
+          }
+        }
+      } catch {
+        /* keep last snapshot */
+      }
+    }
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
 
   async function handleGenerateYir() {
     if (
@@ -33,40 +75,13 @@ export default function YearInReviewAdminPanel({
     setYirStatus(null);
     setYirPath(null);
     try {
-      const result = await generateYearInReview({ scope: "self", notify: Boolean(yirNotify) });
-      const path = yirPathFromGenerateResult(result);
-      const delivered = Number(result?.delivered) || 0;
-      const year = result?.year;
-      const status = result?.status;
-      setYirPath(path);
-      if (status === "empty" || (!path && Number(result?.skipped_empty) > 0)) {
-        setYirStatus({
-          type: "error",
-          message: year
-            ? `Not enough tracked finishes for ${year} yet (year to date). Keep watching, then try again.`
-            : "Not enough tracked finishes for this year yet.",
-        });
-      } else if (path) {
-        setYirStatus({
-          type: "success",
-          message: yirNotify
-            ? `Ready for ${year}. Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"} — reopen anytime from Inbox.`
-            : `Ready for ${year} — open your reel below.`,
-        });
-      } else {
-        setYirStatus({
-          type: yirNotify && delivered > 0 ? "success" : "error",
-          message: yirNotify
-            ? `Generated. Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}. Check Inbox for the link.`
-            : "Generated, but the reel isn’t ready to open yet.",
-        });
-      }
+      const snap = await generateYearInReview({ scope: "self", notify: Boolean(yirNotify) });
+      setYirJob(snap);
     } catch (error) {
       setYirStatus({
         type: "error",
         message: error.message || "Could not generate Year in Review.",
       });
-    } finally {
       setSendingYir(false);
     }
   }
@@ -101,12 +116,24 @@ export default function YearInReviewAdminPanel({
           type="button"
           className="primary"
           onClick={handleGenerateYir}
-          disabled={sendingYir}
+          disabled={sendingYir || Boolean(yirJob?.busy)}
           data-testid={`${testIdPrefix}-yir-self-generate`}
         >
-          {sendingYir ? "Generating…" : "Generate my Year in Review"}
+          {yirJob?.busy ? "Generating…" : "Generate my Year in Review"}
         </button>
       </div>
+      <AdminExecutionCard
+        job={yirJob}
+        testId={`${testIdPrefix}-yir-progress`}
+        phaseLabels={{ generating: "Generating reel", done: "Reel ready" }}
+        onCancel={async () => {
+          try {
+            setYirJob(await cancelYearInReview());
+          } catch (error) {
+            setYirStatus({ type: "error", message: error.message || "Could not cancel." });
+          }
+        }}
+      />
       <InlineAlert
         type={yirStatus?.type}
         message={yirStatus?.message}

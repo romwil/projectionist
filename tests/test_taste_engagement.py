@@ -17,6 +17,7 @@ from projectionist.config_store import Settings
 from projectionist.web.auth import clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
+from tests.admin_job_helpers import reset_admin_jobs, wait_admin_job
 
 
 class TasteEngagementDbTests(unittest.TestCase):
@@ -109,6 +110,7 @@ class TasteEngagementApiTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
+        reset_admin_jobs()
         import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
@@ -161,6 +163,7 @@ class TasteEngagementApiTests(unittest.TestCase):
         self.db.set_user_taste_weight("bootstrap-owner", "science fiction", 0.9, explicit_lock=True)
         gen = self.client.post("/api/admin/weekly-rail/generate")
         self.assertEqual(gen.status_code, 200)
+        wait_admin_job(self.client, "/api/admin/weekly-rail/status")
         feed = self.client.get("/api/library/feeds/for-you")
         self.assertEqual(feed.status_code, 200)
         payload = feed.json()

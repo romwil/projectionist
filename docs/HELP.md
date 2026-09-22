@@ -325,6 +325,19 @@ curl -s -X POST http://localhost:8788/api/library/sync
 curl -s http://localhost:8788/api/library/stats | python3 -m json.tool
 ```
 
+### Register on disk (Radarr)
+
+Movies already in Plex but missing from Radarr can be registered without starting a download search. **Register up to 25 in Radarr** on **Admin → Libraries** (`/admin/libraries`) queues those titles and shows each one as queued, in flight, registered, already tracked, or failed. Submitting the batch is not “done” — watch the card until remaining titles finish. **Cancel remaining** skips titles that have not started; a title already talking to Radarr is left to finish. Titles without a TMDB id need a Plex rematch first.
+
+```bash
+# Owner host — start, watch per-title status, optional cancel
+curl -s -X POST http://localhost:8788/api/admin/radarr/register-existing -H 'Content-Type: application/json' -d '{"limit":25}'
+curl -s http://localhost:8788/api/admin/radarr/register-existing/status
+curl -s -X POST http://localhost:8788/api/admin/radarr/register-existing/cancel
+```
+
+The same live card (phase, queued / running / completed / failed, current item, last error, cancel remaining) appears on **Send weekly newsletter**, **Generate my Year in Review**, and **This week in your library → Generate now**. Library sync, Sonarr Find all missing, Live Channels jobs, and Scheduled Tasks already had their own progress rails — those stay.
+
 ### Find all missing (Sonarr)
 
 Sonarr’s **Wanted** list is not the source of truth here. **Find all missing** on **Admin → Libraries** (`/admin/libraries`) re-derives gaps from every monitored series’ episode records: aired, monitored, no file. Specials (S00) stay off unless you turn **Include specials** on. The card compares “Library scan found M; Sonarr Wanted lists N”, then **Search these** submits Sonarr `EpisodeSearch` commands in batches of about 50 — it does not fire `MissingEpisodeSearch` (that uses Wanted).
