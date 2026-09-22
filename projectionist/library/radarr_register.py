@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any, Dict, List, Mapping, Sequence
 
 from projectionist.agent.tools import check_radarr_already_exists, mark_in_radarr
 from projectionist.config_store import (
