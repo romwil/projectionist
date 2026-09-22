@@ -1,6 +1,38 @@
 {
-  "generated_at": "2026-09-22T13:41:37Z",
+  "generated_at": "2026-09-22T20:44:37Z",
   "releases": [
+    {
+      "version": "1.35.5",
+      "date": "2026-09-22",
+      "summary": "Register in Radarr now tells you whether a title is already tracked or whether Radarr already owns that folder under a different movie — no more raw 400 JSON dumps.",
+      "highlights": [
+        "**Already in Radarr is a skip, not a failure.** If Radarr already has that TMDB id, Register in Radarr marks it tracked and moves on.",
+        "**Path conflict is a real mismatch.** When the folder is already used by a different movie, you get a clear path-conflict message instead of a JSON dump, and we do not pretend it is in Radarr."
+      ],
+      "sections": [
+        {
+          "title": "Changed",
+          "bullets": [
+            "Register in Radarr looks up the Radarr catalog by TMDB id **then folder path** before POSTing. Same TMDB is **Already in Radarr** (skip). A folder owned by a **different** TMDB is a **path conflict** (identification mismatch / possible duplicate) — not a raw HTTP 400 dump, and not silently marked in Radarr.",
+            "Admin job cards count skipped titles separately from completed/failed."
+          ]
+        },
+        {
+          "title": "Fixed",
+          "bullets": [
+            "`MoviePathValidator` 400s no longer surface `formattedMessagePlaceholderValues` JSON to the operator."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend: 2,174 passed, 6 skipped, 36 subtests passed; 76.59% coverage (74% required).",
+            "Frontend unit: 769 passed; ESLint 0 errors (136 warnings pre-existing); production Vite build passed.",
+            "Focused: `tests/test_arr_errors.py`, `tests/test_radarr.py`, `tests/test_radarr_register_existing.py`, `tests/test_admin_execution.py`, `frontend/src/lib/adminExecution.test.mjs`."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.35.4",
       "date": "2026-09-22",

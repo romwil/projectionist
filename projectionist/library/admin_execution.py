@@ -18,10 +18,13 @@ logger = logging.getLogger(__name__)
 TERMINAL_PHASES = {"idle", "done", "searched", "cancelled", "error"}
 QUEUED_ITEM_STATUSES = {"queued", "pending"}
 RUNNING_ITEM_STATUSES = {"running", "started"}
-COMPLETED_ITEM_STATUSES = {"completed", "skipped"}
+COMPLETED_ITEM_STATUSES = {"completed"}
+SKIPPED_ITEM_STATUSES = {"skipped"}
 FAILED_ITEM_STATUSES = {"failed"}
 CANCELLED_ITEM_STATUSES = {"cancelled"}
-TERMINAL_ITEM_STATUSES = COMPLETED_ITEM_STATUSES | FAILED_ITEM_STATUSES | CANCELLED_ITEM_STATUSES
+TERMINAL_ITEM_STATUSES = (
+    COMPLETED_ITEM_STATUSES | SKIPPED_ITEM_STATUSES | FAILED_ITEM_STATUSES | CANCELLED_ITEM_STATUSES
+)
 
 RunFn = Callable[["AdminExecutionStore", threading.Event], Mapping[str, Any]]
 
@@ -42,6 +45,7 @@ def summarize_items(
     queued = 0
     running = 0
     completed = 0
+    skipped = 0
     failed = 0
     cancelled = 0
     current: Optional[Dict[str, Any]] = None
@@ -66,6 +70,8 @@ def summarize_items(
                         row.get("message") or row.get("title") or row.get("name") or "Working"
                     ),
                 }
+        elif status in SKIPPED_ITEM_STATUSES:
+            skipped += 1
         elif status in COMPLETED_ITEM_STATUSES:
             completed += 1
         elif status in FAILED_ITEM_STATUSES:
@@ -86,7 +92,7 @@ def summarize_items(
                 last_completed_at = ended
 
     total = len(rows)
-    finished = completed + failed + cancelled
+    finished = completed + skipped + failed + cancelled
     if total <= 0:
         percent = 0
     elif finished >= total and queued == 0 and running == 0:
@@ -102,6 +108,7 @@ def summarize_items(
         "queued": queued,
         "running": running,
         "completed": completed,
+        "skipped": skipped,
         "failed": failed,
         "cancelled": cancelled,
         "pending_submit": queued,
@@ -121,8 +128,11 @@ def execution_message(summary: Mapping[str, Any], *, current_label: str = "") ->
         f"{_int(summary.get('queued'))} queued",
         f"{_int(summary.get('running'))} running",
         f"{_int(summary.get('completed'))} completed",
-        f"{_int(summary.get('failed'))} failed",
     ]
+    skipped = _int(summary.get("skipped"))
+    if skipped:
+        bits.append(f"{skipped} skipped")
+    bits.append(f"{_int(summary.get('failed'))} failed")
     cancelled = _int(summary.get("cancelled"))
     if cancelled:
         bits.append(f"{cancelled} cancelled")
@@ -140,20 +150,25 @@ def finished_message(
     action: str = "finished",
 ) -> str:
     completed = _int(summary.get("completed"))
+    skipped = _int(summary.get("skipped"))
     failed = _int(summary.get("failed"))
     cancelled = _int(summary.get("cancelled"))
     total = _int(summary.get("total"))
     plural = f"{noun}s" if total != 1 else noun
-    if cancelled and completed == 0 and failed == 0:
+    if cancelled and completed == 0 and skipped == 0 and failed == 0:
         return f"Cancelled remaining {plural} ({cancelled} cancelled)."
+    parts = []
+    if completed:
+        parts.append(f"{completed} completed")
+    if skipped:
+        parts.append(f"{skipped} already in Radarr")
     if failed:
-        extra = f" · {cancelled} cancelled" if cancelled else ""
-        return (
-            f"{action.capitalize()} {total} {plural}: "
-            f"{completed} completed · {failed} failed{extra}."
-        )
+        parts.append(f"{failed} failed")
     if cancelled:
-        return f"{action.capitalize()} {completed} {plural}; {cancelled} cancelled."
+        parts.append(f"{cancelled} cancelled")
+    if failed or skipped or cancelled:
+        extra = " · ".join(parts) if parts else "0 completed"
+        return f"{action.capitalize()} {total} {plural}: {extra}."
     return f"{action.capitalize()} {completed} {plural}."
 
 
