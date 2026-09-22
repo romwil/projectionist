@@ -56,6 +56,8 @@ export function adminExecutionCountLine(execution) {
   bits.push(`${Number(execution.queued) || 0} queued`);
   bits.push(`${Number(execution.running) || 0} running`);
   bits.push(`${Number(execution.completed) || 0} completed`);
+  const skipped = Number(execution.skipped) || 0;
+  if (skipped) bits.push(`${skipped} skipped`);
   bits.push(`${Number(execution.failed) || 0} failed`);
   const cancelled = Number(execution.cancelled) || 0;
   if (cancelled) bits.push(`${cancelled} cancelled`);
@@ -73,7 +75,8 @@ export function adminProgressLine(job) {
       Number(execution.queued) > 0 ||
       Number(execution.running) > 0 ||
       Number(execution.completed) > 0 ||
-      Number(execution.failed) > 0);
+      Number(execution.failed) > 0 ||
+      Number(execution.skipped) > 0);
   const bits = [];
   const message = String(job.message || "").trim();
   if (message && !/\d+ queued/.test(message)) bits.push(message);
@@ -84,13 +87,15 @@ export function adminProgressLine(job) {
 
 export function adminItemStatusLabel(item) {
   const outcome = String(item?.outcome || "").trim();
+  const status = String(item?.status || "queued").trim();
   if (outcome === "registered") return "registered";
-  if (outcome === "already") return "already tracked";
+  if (outcome === "already") return "already in Radarr";
+  if (outcome === "path_conflict") return "path conflict";
   if (outcome === "delivered") return "delivered";
   if (outcome === "skipped") return "skipped";
   if (outcome === "built" || outcome === "ready") return "done";
   if (outcome === "empty") return "empty";
-  const status = String(item?.status || "queued").trim();
+  if (status === "skipped") return "already in Radarr";
   if (status === "running") return "in flight";
   if (status === "completed") return "done";
   if (status === "failed") return "failed";

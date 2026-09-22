@@ -3375,8 +3375,10 @@ export default function ConfigPage() {
         <section className="config-section" data-testid="radarr-register-existing-card">
           <h2>Radarr — register on disk</h2>
           <p className="wizard-note">
-            Movies already in Plex but missing from Radarr can be registered without starting a
-            download search. Titles without a TMDB id need a Plex rematch first.
+            Movies already in Plex but missing from Radarr by TMDB id can be registered
+            without starting a download search. A path conflict means Radarr already owns
+            that folder under a different identity — rematch, don’t ignore. Titles without
+            a TMDB id need a Plex rematch first.
           </p>
           <p className="status status-secondary" data-testid="radarr-owned-not-indexed-stats">
             {radarrGapStats

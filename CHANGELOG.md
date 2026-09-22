@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- Register in Radarr looks up the Radarr catalog by TMDB id **then folder path** before POSTing. Same TMDB is **Already in Radarr** (skip). A folder owned by a **different** TMDB is a **path conflict** (identification mismatch / possible duplicate) — not a raw HTTP 400 dump, and not silently marked in Radarr.
+
 ## [1.35.4] — 2026-09-22
 
 Admin buttons that start real work now keep a live job card — not a spinner and silence. Register in Radarr shows the title queue; newsletters, Year in Review, weekly digest, and weekly rails reuse the same Sonarr-missing snapshot.

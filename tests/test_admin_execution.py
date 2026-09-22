@@ -53,6 +53,18 @@ class SummarizeItemsTests(unittest.TestCase):
         self.assertEqual(summary["failed"], 1)
         self.assertEqual(summary["last_error"], "timeout")
 
+    def test_skipped_already_in_radarr_is_not_failed(self) -> None:
+        summary = summarize_items(
+            [
+                {"id": 1, "status": "skipped", "outcome": "already"},
+                {"id": 2, "status": "failed", "outcome": "path_conflict", "error": "Path conflict"},
+            ]
+        )
+        self.assertEqual(summary["skipped"], 1)
+        self.assertEqual(summary["completed"], 0)
+        self.assertEqual(summary["failed"], 1)
+        self.assertEqual(summary["percent"], 100)
+
 
 class StoreCancelTests(unittest.TestCase):
     def test_cancel_leaves_in_flight_and_marks_queued(self) -> None:
@@ -83,6 +95,9 @@ class FakeRadarr:
 
     def movie_by_tmdb_id(self, tmdb_id: int) -> None:
         return None
+
+    def movies(self) -> List[Any]:
+        return []
 
     def add_movie(self, tmdb_id: int, **kwargs: Any) -> Dict[str, Any]:
         self.added.append(int(tmdb_id))
