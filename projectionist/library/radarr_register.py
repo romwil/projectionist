@@ -5,14 +5,19 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Mapping, Sequence
 
-from projectionist.agent.tools import check_radarr_already_exists, mark_in_radarr
+from projectionist.agent.tools import mark_in_radarr
 from projectionist.config_store import (
     radarr_add_configuration_error,
     resolve_radarr_root_folder,
     validate_arr_root_folder,
 )
-from projectionist.connectors.arr_errors import ArrTitleExistsError
-from projectionist.connectors.radarr import RadarrClient
+from projectionist.connectors.arr_errors import (
+    classify_radarr_add_error,
+    classify_radarr_catalog,
+    folder_path_from_arr_error,
+    intended_movie_folder,
+)
+from projectionist.connectors.radarr import RadarrClient, index_radarr_movies, movie_occupying_folder
 from projectionist.library.admin_execution import (
     finished_message,
     flatten_result,
@@ -179,44 +184,100 @@ def _register_batch(
     failed: List[Dict[str, Any]] = []
     cancelled = 0
     store.update("registering", "Registering titles in Radarr…")
+    catalog: List[Any] = []
+    try:
+        catalog = list(client.movies())
+    except Exception as error:  # noqa: BLE001 — still try per-title add
+        logger.warning("Radarr register could not load movie catalog: %s", error)
+    by_tmdb, by_path = index_radarr_movies(catalog)
+    root_folder = resolve_radarr_root_folder(settings)
     for row in rows:
         item_id = int(row["id"])
         tmdb_id = int(row["tmdb_id"])
         title = str(row.get("title") or "")
+        year = row.get("year")
         if cancel.is_set():
             store.set_item(item_id, "cancelled", outcome="cancelled")
             cancelled += 1
             continue
         store.set_item(item_id, "running", message=f"Registering {title}…")
-        try:
-            existing = check_radarr_already_exists(client, tmdb_id, title=title)
-            if existing:
+        intended_path = intended_movie_folder(
+            root_folder=root_folder,
+            title=title,
+            year=year,
+        )
+        classified = classify_radarr_catalog(
+            intended_tmdb_id=tmdb_id,
+            intended_title=title,
+            intended_path=intended_path,
+            by_tmdb=by_tmdb.get(tmdb_id),
+            by_path=movie_occupying_folder(by_path, intended_path),
+        )
+        if classified is None:
+            try:
+                client.add_movie(
+                    tmdb_id,
+                    root_folder=root_folder,
+                    quality_profile_id=settings.radarr_quality_profile_id,
+                    search_for_movie=False,
+                )
                 mark_in_radarr(db, tmdb_id, title=title)
-                already += 1
-                store.set_item(item_id, "completed", outcome="already")
+                registered += 1
+                store.set_item(item_id, "completed", outcome="registered")
+            except Exception as error:  # noqa: BLE001 — continue remaining titles
+                occupant = movie_occupying_folder(
+                    by_path,
+                    folder_path_from_arr_error(error) or intended_path,
+                )
+                classified = classify_radarr_add_error(
+                    error,
+                    intended_tmdb_id=tmdb_id,
+                    intended_title=title,
+                    occupant=occupant,
+                )
+            else:
                 continue
-            client.add_movie(
-                tmdb_id,
-                root_folder=resolve_radarr_root_folder(settings),
-                quality_profile_id=settings.radarr_quality_profile_id,
-                search_for_movie=False,
-            )
-            mark_in_radarr(db, tmdb_id, title=title)
-            registered += 1
-            store.set_item(item_id, "completed", outcome="registered")
-        except ArrTitleExistsError as error:
-            mark_in_radarr(db, tmdb_id, title=title or error.title)
+        if classified.kind == "already":
+            mark_in_radarr(db, tmdb_id, title=title or classified.occupant_title)
             already += 1
-            store.set_item(item_id, "completed", outcome="already")
-        except Exception as error:  # noqa: BLE001 — continue remaining titles
-            failed.append({"tmdb_id": tmdb_id, "title": title, "error": str(error)})
-            store.set_item(item_id, "failed", error=str(error)[:400], outcome="failed")
+            store.set_item(
+                item_id,
+                "skipped",
+                outcome="already",
+                message=classified.message,
+            )
+            continue
+        if classified.kind == "path_conflict":
+            failed.append(
+                {
+                    "tmdb_id": tmdb_id,
+                    "title": title,
+                    "error": classified.message,
+                    "outcome": "path_conflict",
+                }
+            )
+            store.set_item(
+                item_id,
+                "failed",
+                error=classified.message[:400],
+                outcome="path_conflict",
+            )
             logger.warning(
-                "Radarr register-existing failed tmdb_id=%s title=%r: %s",
+                "Radarr register path conflict tmdb_id=%s title=%r occupant_tmdb=%s path=%s",
                 tmdb_id,
                 title,
-                error,
+                classified.occupant_tmdb_id,
+                classified.folder_path,
             )
+            continue
+        failed.append({"tmdb_id": tmdb_id, "title": title, "error": classified.message})
+        store.set_item(item_id, "failed", error=classified.message[:400], outcome="failed")
+        logger.warning(
+            "Radarr register-existing failed tmdb_id=%s title=%r: %s",
+            tmdb_id,
+            title,
+            classified.message,
+        )
     snap = store.snapshot()
     result = {
         "dry_run": False,

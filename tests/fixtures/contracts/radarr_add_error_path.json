@@ -1,0 +1,7 @@
+{
+  "service": "radarr",
+  "operation": "add_error_path",
+  "description": "Radarr HTTP body when the movie folder is already owned (MoviePathValidator)",
+  "http_status": 400,
+  "response_body": "[{\"propertyName\":\"Path\",\"errorMessage\":\"Path '/movies/Presence (2025)' is already configured for an existing movie\",\"attemptedValue\":\"/movies/Presence (2025)\",\"severity\":\"error\",\"errorCode\":\"MoviePathValidator\",\"formattedMessageArguments\":[],\"formattedMessagePlaceholderValues\":{\"path\":\"/movies/Presence (2025)\"}}]"
+}
