@@ -1100,6 +1100,36 @@ button.app-topbar-icon:focus-visible {
   color: var(--danger, #ff6b6b);
 }
 
+.admin-execution-items {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.admin-execution-items li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+}
+
+.admin-execution-item-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.admin-execution-items [data-status="running"] .admin-execution-item-status {
+  color: var(--accent);
+}
+
+.admin-execution-items [data-status="failed"] .admin-execution-item-status {
+  color: var(--danger, #ff6b6b);
+}
+
 .status.status-error {
   color: var(--danger, #ff6b6b);
 }

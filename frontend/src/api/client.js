@@ -226,6 +226,14 @@ export async function generateWeeklyNewsletter(payload = {}) {
   });
 }
 
+export async function getWeeklyNewsletterStatus() {
+  return api("/admin/weekly-newsletter/status");
+}
+
+export async function cancelWeeklyNewsletter() {
+  return api("/admin/weekly-newsletter/cancel", { method: "POST" });
+}
+
 /** Member: fetch own Year in Review reel for a calendar year. */
 export async function getYearInReview(year) {
   return api(`/year-in-review/${encodeURIComponent(year)}`);
@@ -239,6 +247,14 @@ export async function generateYearInReview(payload = {}) {
   });
 }
 
+export async function getYearInReviewStatus() {
+  return api("/admin/year-in-review/status");
+}
+
+export async function cancelYearInReview() {
+  return api("/admin/year-in-review/cancel", { method: "POST" });
+}
+
 /** Owner: list Plex movies missing from Radarr. */
 export async function listRadarrOwnedNotIndexed(limit = 50) {
   return api(`/admin/radarr/owned-not-indexed?limit=${encodeURIComponent(limit)}`);
@@ -250,6 +266,16 @@ export async function registerRadarrExisting(payload = {}) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+/** Owner: poll Register in Radarr progress. */
+export async function getRadarrRegisterStatus() {
+  return api("/admin/radarr/register-existing/status");
+}
+
+/** Owner: cancel remaining Register in Radarr titles. */
+export async function cancelRadarrRegister() {
+  return api("/admin/radarr/register-existing/cancel", { method: "POST" });
 }
 
 /** Owner: start a Sonarr aired-missing scan (background job). */
@@ -935,6 +961,14 @@ export async function tuneLiveChannel(channelId) {
 /** Owner-only: assemble and store the digest for the current week on demand. */
 export async function generateWeeklyDigest() {
   return api("/admin/weekly-digest/generate", { method: "POST" });
+}
+
+export async function getWeeklyDigestStatus() {
+  return api("/admin/weekly-digest/status");
+}
+
+export async function cancelWeeklyDigest() {
+  return api("/admin/weekly-digest/cancel", { method: "POST" });
 }
 
 export async function getPersonas() {

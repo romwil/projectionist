@@ -246,6 +246,13 @@ class ApiAuthzTests(unittest.TestCase):
             403,
         )
         self.assertEqual(self.client.post("/api/admin/sonarr/missing/cancel", json={}).status_code, 403)
+        self.assertEqual(self.client.post("/api/admin/radarr/register-existing", json={}).status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/radarr/register-existing/status").status_code, 403)
+        self.assertEqual(self.client.post("/api/admin/radarr/register-existing/cancel").status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/weekly-newsletter/status").status_code, 403)
+        self.assertEqual(self.client.post("/api/admin/weekly-newsletter/cancel").status_code, 403)
+        self.assertEqual(self.client.get("/api/admin/year-in-review/status").status_code, 403)
+        self.assertEqual(self.client.post("/api/admin/weekly-digest/cancel").status_code, 403)
 
     def test_guest_role_patch_rejected(self) -> None:
         self._enable_multi_user_via_api()

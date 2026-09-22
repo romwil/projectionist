@@ -27,6 +27,7 @@ from projectionist.year_in_review.delivery import (
     prior_calendar_year,
 )
 from projectionist.year_in_review.snapshot import build_reel_for_user, get_snapshot
+from tests.admin_job_helpers import reset_admin_jobs, wait_admin_job
 from projectionist.year_in_review.chapters import (
     build_honesty,
     build_monthly_rhythm,
@@ -194,6 +195,7 @@ class YearInReviewAdminApiTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
+        reset_admin_jobs()
         import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
@@ -265,12 +267,13 @@ class YearInReviewAdminApiTests(unittest.TestCase):
                 json={"scope": "self", "notify": True},
             )
         self.assertEqual(resp.status_code, 200, resp.text)
-        body = resp.json()
-        self.assertEqual(body["year"], year)
-        self.assertEqual(body["status"], "ready")
-        self.assertEqual(body["path"], f"/year-in-review/{year}")
-        self.assertEqual(body["delivered"], 1)
-        self.assertEqual(body["generated"], 1)
+        body = wait_admin_job(self.client, "/api/admin/year-in-review/status")
+        result = body.get("result") or body
+        self.assertEqual(result["year"], year)
+        self.assertEqual(result["status"], "ready")
+        self.assertEqual(result["path"], f"/year-in-review/{year}")
+        self.assertEqual(result["delivered"], 1)
+        self.assertEqual(result["generated"], 1)
 
         got = self.client.get(f"/api/year-in-review/{year}")
         self.assertEqual(got.status_code, 200, got.text)
@@ -289,10 +292,11 @@ class YearInReviewAdminApiTests(unittest.TestCase):
             json={"scope": "self", "notify": False, "year": year},
         )
         self.assertEqual(resp.status_code, 200, resp.text)
-        body = resp.json()
-        self.assertEqual(body["year"], year)
-        self.assertEqual(body["status"], "empty")
-        self.assertIsNone(body.get("path"))
+        body = wait_admin_job(self.client, "/api/admin/year-in-review/status")
+        result = body.get("result") or body
+        self.assertEqual(result["year"], year)
+        self.assertEqual(result["status"], "empty")
+        self.assertIsNone(result.get("path"))
         self.assertEqual(
             self.client.get(f"/api/year-in-review/{year}").status_code,
             404,
