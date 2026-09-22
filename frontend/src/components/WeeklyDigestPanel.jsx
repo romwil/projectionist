@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { generateWeeklyDigest, getWeeklyDigest } from "../api/client";
+import { cancelWeeklyDigest, generateWeeklyDigest, getWeeklyDigest, getWeeklyDigestStatus } from "../api/client";
+import AdminExecutionCard from "./AdminExecutionCard";
 import TitleDetailLink from "./TitleDetailLink";
 import { titleDetailPath } from "../lib/titleLinks.js";
 import { formatDigestTitle, normalizeWeeklyDigest } from "../lib/weeklyDigest.js";
@@ -11,6 +12,7 @@ export default function WeeklyDigestPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [digestJob, setDigestJob] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -29,15 +31,37 @@ export default function WeeklyDigestPanel() {
     load();
   }, [load]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const snap = await getWeeklyDigestStatus();
+        if (cancelled) return;
+        setDigestJob(snap);
+        setBusy(Boolean(snap?.busy));
+        if (!snap?.busy && snap?.result?.latest) {
+          setLatest(snap.result.latest);
+        }
+      } catch {
+        /* keep last snapshot */
+      }
+    }
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
   async function handleGenerate() {
     setBusy(true);
     setError("");
     try {
-      const data = await generateWeeklyDigest();
-      setLatest(data?.latest || null);
+      const snap = await generateWeeklyDigest();
+      setDigestJob(snap);
     } catch (err) {
       setError(err.message || "Could not generate the digest.");
-    } finally {
       setBusy(false);
     }
   }
@@ -60,12 +84,24 @@ export default function WeeklyDigestPanel() {
           type="button"
           className="ghost"
           data-testid="weekly-digest-generate"
-          disabled={busy}
+          disabled={busy || Boolean(digestJob?.busy)}
           onClick={handleGenerate}
         >
-          {busy ? "Generating…" : "Generate now"}
+          {digestJob?.busy ? "Generating…" : "Generate now"}
         </button>
       </div>
+      <AdminExecutionCard
+        job={digestJob}
+        testId="weekly-digest-progress"
+        phaseLabels={{ generating: "Assembling digest", done: "Digest ready" }}
+        onCancel={async () => {
+          try {
+            setDigestJob(await cancelWeeklyDigest());
+          } catch (err) {
+            setError(err.message || "Could not cancel.");
+          }
+        }}
+      />
 
       {error ? <p className="dash-panel-error">{error}</p> : null}
 

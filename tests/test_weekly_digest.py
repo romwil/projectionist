@@ -18,6 +18,7 @@ from projectionist.library.db import Database
 from projectionist.web.auth import SESSION_COOKIE_NAME, clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache, create_session_token
+from tests.admin_job_helpers import reset_admin_jobs, wait_admin_job
 
 
 def _seed(db: Database, rating_key: str, title: str, media_type: str = "movie") -> None:
@@ -94,6 +95,7 @@ class WeeklyDigestApiTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
+        reset_admin_jobs()
         import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
@@ -127,7 +129,8 @@ class WeeklyDigestApiTests(unittest.TestCase):
         _seed(self.app_mod._db(), "m1", "Alpha")
         gen = self.client.post("/api/admin/weekly-digest/generate")
         self.assertEqual(gen.status_code, 200)
-        self.assertTrue(gen.json()["latest"])
+        done = wait_admin_job(self.client, "/api/admin/weekly-digest/status")
+        self.assertTrue((done.get("result") or done).get("latest") or done.get("latest"))
         got = self.client.get("/api/admin/weekly-digest")
         self.assertEqual(got.status_code, 200)
         self.assertTrue(got.json()["latest"])

@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { generateWeeklyNewsletter, listUsers } from "../../api/client";
+import {
+  cancelWeeklyNewsletter,
+  generateWeeklyNewsletter,
+  getWeeklyNewsletterStatus,
+  listUsers,
+} from "../../api/client";
+import AdminExecutionCard from "../AdminExecutionCard";
 import InlineAlert from "../InlineAlert";
 import SettingsPanel from "../settings/SettingsPanel";
 import {
@@ -22,6 +28,7 @@ export default function WeeklyNewsletterPanel({
   const [selectedIds, setSelectedIds] = useState([]);
   const [sendingNewsletter, setSendingNewsletter] = useState(false);
   const [newsletterStatus, setNewsletterStatus] = useState(null);
+  const [newsletterJob, setNewsletterJob] = useState(null);
   const [membersError, setMembersError] = useState(null);
 
   useEffect(() => {
@@ -41,6 +48,27 @@ export default function WeeklyNewsletterPanel({
         setMembers([]);
         setMembersError(error?.message || "Could not load household members.");
       });
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const snap = await getWeeklyNewsletterStatus();
+        if (!cancelled) {
+          setNewsletterJob(snap);
+          setSendingNewsletter(Boolean(snap?.busy));
+        }
+      } catch {
+        /* keep last snapshot */
+      }
+    }
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   function toggleMember(id) {
@@ -63,14 +91,13 @@ export default function WeeklyNewsletterPanel({
         newsletterScope === "users"
           ? { scope: "users", user_ids: selectedIds }
           : { scope: newsletterScope };
-      const result = await generateWeeklyNewsletter(payload);
-      setNewsletterStatus({ type: "success", message: newsletterResultMessage(result) });
+      const snap = await generateWeeklyNewsletter(payload);
+      setNewsletterJob(snap);
     } catch (error) {
       setNewsletterStatus({
         type: "error",
         message: error.message || "Could not send the weekly newsletter.",
       });
-    } finally {
       setSendingNewsletter(false);
     }
   }
@@ -157,15 +184,35 @@ export default function WeeklyNewsletterPanel({
           type="button"
           className="primary"
           onClick={handleSendNewsletter}
-          disabled={sendingNewsletter}
+          disabled={sendingNewsletter || Boolean(newsletterJob?.busy)}
           data-testid={`${testIdPrefix}-newsletter-send`}
         >
-          {sendingNewsletter ? "Sending…" : "Send weekly newsletter now"}
+          {newsletterJob?.busy ? "Sending…" : "Send weekly newsletter now"}
         </button>
       </div>
+      <AdminExecutionCard
+        job={newsletterJob}
+        testId={`${testIdPrefix}-newsletter-progress`}
+        phaseLabels={{ sending: "Sending newsletter", done: "Newsletter finished" }}
+        onCancel={async () => {
+          try {
+            setNewsletterJob(await cancelWeeklyNewsletter());
+          } catch (error) {
+            setNewsletterStatus({ type: "error", message: error.message || "Could not cancel." });
+          }
+        }}
+      />
       <InlineAlert
-        type={newsletterStatus?.type}
-        message={newsletterStatus?.message}
+        type={
+          newsletterStatus?.type ||
+          (!newsletterJob?.busy && newsletterJob?.result ? "success" : null)
+        }
+        message={
+          newsletterStatus?.message ||
+          (!newsletterJob?.busy && newsletterJob?.result
+            ? newsletterResultMessage(newsletterJob.result)
+            : null)
+        }
         testId={`${testIdPrefix}-newsletter-status`}
         onDismiss={() => setNewsletterStatus(null)}
       />
