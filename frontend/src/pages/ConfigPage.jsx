@@ -33,6 +33,8 @@ import {
   putPersona,
   putSystemConfig,
   registerRadarrExisting,
+  getRadarrRegisterStatus,
+  cancelRadarrRegister,
   listRadarrOwnedNotIndexed,
   startSonarrMissingScan,
   getSonarrMissingStatus,
@@ -54,6 +56,7 @@ import {
   formatLastSyncRelative,
   formatSyncJobDetails,
 } from "../lib/jobProgress.js";
+import AdminExecutionCard from "../components/AdminExecutionCard";
 import {
   sonarrFindMissingButtonClass,
   sonarrMissingBySeries,
@@ -493,6 +496,7 @@ export default function ConfigPage() {
   const [syncingLibrary, setSyncingLibrary] = useState(false);
   const [registeringRadarr, setRegisteringRadarr] = useState(false);
   const [radarrGapStats, setRadarrGapStats] = useState(null);
+  const [radarrRegister, setRadarrRegister] = useState(null);
   const [sonarrMissing, setSonarrMissing] = useState(null);
   const [sonarrIncludeSpecials, setSonarrIncludeSpecials] = useState(false);
   const [activeSyncJob, setActiveSyncJob] = useState(null);
@@ -863,6 +867,37 @@ export default function ConfigPage() {
 
     pollSonarrMissing();
     const interval = setInterval(pollSonarrMissing, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [showWizard]);
+
+  useEffect(() => {
+    if (showWizard) return undefined;
+    let cancelled = false;
+    let wasBusy = false;
+
+    async function pollRadarrRegister() {
+      try {
+        const status = await getRadarrRegisterStatus();
+        if (cancelled) return;
+        setRadarrRegister(status);
+        const busy = Boolean(status?.busy);
+        setRegisteringRadarr(busy);
+        if (wasBusy && !busy) {
+          listRadarrOwnedNotIndexed(5)
+            .then(setRadarrGapStats)
+            .catch(() => {});
+        }
+        wasBusy = busy;
+      } catch {
+        /* keep last snapshot */
+      }
+    }
+
+    pollRadarrRegister();
+    const interval = setInterval(pollRadarrRegister, 2000);
     return () => {
       cancelled = true;
       clearInterval(interval);
@@ -2517,26 +2552,29 @@ export default function ConfigPage() {
   }
 
   async function handleRegisterRadarrExisting() {
-    setRegisteringRadarr(true);
     setActionFeedback("radarr-register", null);
     try {
-      const result = await registerRadarrExisting({ limit: 25, dry_run: false });
-      const failed = Array.isArray(result.failed) ? result.failed.length : 0;
-      setActionFeedback("radarr-register", {
-        type: failed && !result.registered ? "error" : "success",
-        message: `Registered ${result.registered || 0} · already tracked ${result.already || 0}${
-          failed ? ` · ${failed} failed` : ""
-        }.`,
-      });
-      const refreshed = await listRadarrOwnedNotIndexed(5);
-      setRadarrGapStats(refreshed);
+      const snap = await registerRadarrExisting({ limit: 25, dry_run: false });
+      setRadarrRegister(snap);
+      setRegisteringRadarr(Boolean(snap?.busy));
     } catch (error) {
       setActionFeedback("radarr-register", {
         type: "error",
         message: error.message || "Could not register titles in Radarr.",
       });
-    } finally {
-      setRegisteringRadarr(false);
+    }
+  }
+
+  async function handleRadarrRegisterCancel() {
+    setActionFeedback("radarr-register", null);
+    try {
+      const snap = await cancelRadarrRegister();
+      setRadarrRegister(snap);
+    } catch (error) {
+      setActionFeedback("radarr-register", {
+        type: "error",
+        message: error.message || "Could not cancel remaining Radarr registrations.",
+      });
     }
   }
 
@@ -3355,11 +3393,17 @@ export default function ConfigPage() {
               className="primary"
               data-testid="radarr-register-existing-button"
               onClick={handleRegisterRadarrExisting}
-              disabled={registeringRadarr || !radarrGapStats?.total}
+              disabled={registeringRadarr || Boolean(radarrRegister?.busy) || !radarrGapStats?.total}
             >
-              {registeringRadarr ? "Registering…" : "Register up to 25 in Radarr"}
+              {radarrRegister?.busy ? "Registering…" : "Register up to 25 in Radarr"}
             </button>
           </div>
+          <AdminExecutionCard
+            job={radarrRegister}
+            testId="radarr-register-progress"
+            phaseLabels={{ registering: "Registering in Radarr", done: "Registration finished" }}
+            onCancel={handleRadarrRegisterCancel}
+          />
           <InlineAlert
             type={actionAlert?.area === "radarr-register" ? actionAlert.type : null}
             message={actionAlert?.area === "radarr-register" ? actionAlert.message : null}

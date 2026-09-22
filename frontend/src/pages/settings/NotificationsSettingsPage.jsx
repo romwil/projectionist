@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
 import {
+  cancelWeeklyNewsletter,
+  cancelYearInReview,
   generateWeeklyNewsletter,
   generateYearInReview,
   getAuthMe,
   getFeatures,
+  getWeeklyNewsletterStatus,
+  getYearInReviewStatus,
   patchAuthMe,
 } from "../../api/client";
+import AdminExecutionCard from "../../components/AdminExecutionCard";
 import AppriseDestinationsEditor from "../../components/settings/AppriseDestinationsEditor";
 import SettingsPageHeader from "../../components/settings/SettingsPageHeader";
 import SettingsPanel from "../../components/settings/SettingsPanel";
@@ -18,7 +23,6 @@ import {
   newsletterConfirmMessage,
   newsletterResultMessage,
 } from "../../lib/weeklyNewsletter.js";
-import { yirPathFromGenerateResult } from "../../lib/yearInReview.js";
 
 function ChannelRequirementBadge({ requiresOwner, available, ownerConfigured }) {
   if (requiresOwner) {
@@ -62,8 +66,10 @@ export default function NotificationsSettingsPage() {
   const [ready, setReady] = useState(false);
   const [sendingSelf, setSendingSelf] = useState(false);
   const [selfStatus, setSelfStatus] = useState(null);
+  const [newsletterJob, setNewsletterJob] = useState(null);
   const [sendingYir, setSendingYir] = useState(false);
   const [yirStatus, setYirStatus] = useState(null);
+  const [yirJob, setYirJob] = useState(null);
 
   useEffect(() => {
     Promise.all([getAuthMe(), getFeatures().catch(() => null)])
@@ -85,6 +91,32 @@ export default function NotificationsSettingsPage() {
       })
       .catch(() => setReady(true));
   }, []);
+
+  useEffect(() => {
+    if (!isOwner) return undefined;
+    let cancelled = false;
+    async function poll() {
+      try {
+        const [nl, yir] = await Promise.all([
+          getWeeklyNewsletterStatus(),
+          getYearInReviewStatus(),
+        ]);
+        if (cancelled) return;
+        setNewsletterJob(nl);
+        setSendingSelf(Boolean(nl?.busy));
+        setYirJob(yir);
+        setSendingYir(Boolean(yir?.busy));
+      } catch {
+        /* keep last snapshot */
+      }
+    }
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [isOwner]);
 
   function channelMeta(id) {
     return channels.find((entry) => entry.id === id) || null;
@@ -134,14 +166,13 @@ export default function NotificationsSettingsPage() {
     setSendingSelf(true);
     setSelfStatus(null);
     try {
-      const result = await generateWeeklyNewsletter({ scope: "self" });
-      setSelfStatus({ type: "success", message: newsletterResultMessage(result) });
+      const snap = await generateWeeklyNewsletter({ scope: "self" });
+      setNewsletterJob(snap);
     } catch (error) {
       setSelfStatus({
         type: "error",
         message: error.message || "Could not send the newsletter.",
       });
-    } finally {
       setSendingSelf(false);
     }
   }
@@ -164,31 +195,13 @@ export default function NotificationsSettingsPage() {
     setSendingYir(true);
     setYirStatus(null);
     try {
-      const result = await generateYearInReview({ scope: "self", notify: true });
-      const year = result?.year;
-      const path = yirPathFromGenerateResult(result);
-      const delivered = Number(result?.delivered) || 0;
-      if (result?.status === "empty" || (!path && Number(result?.skipped_empty) > 0)) {
-        setYirStatus({
-          type: "error",
-          message: year
-            ? `Not enough tracked finishes for ${year} yet (year to date).`
-            : "Not enough tracked finishes for this year yet.",
-        });
-      } else {
-        setYirStatus({
-          type: path || delivered > 0 ? "success" : "error",
-          message: path
-            ? `Ready for ${year} — delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}. Reopen from Inbox or ${path}.`
-            : `Generated. Delivered to ${delivered} inbox${delivered === 1 ? "" : "es"}. Check Inbox for the link.`,
-        });
-      }
+      const snap = await generateYearInReview({ scope: "self", notify: true });
+      setYirJob(snap);
     } catch (error) {
       setYirStatus({
         type: "error",
         message: error.message || "Could not generate Year in Review.",
       });
-    } finally {
       setSendingYir(false);
     }
   }
@@ -338,17 +351,26 @@ export default function NotificationsSettingsPage() {
             type="button"
             className="primary"
             onClick={handleSendSelf}
-            disabled={sendingSelf}
+            disabled={sendingSelf || Boolean(newsletterJob?.busy)}
             data-testid="notifications-newsletter-self-send"
           >
-            {sendingSelf ? "Sending…" : "Send to me now"}
+            {newsletterJob?.busy ? "Sending…" : "Send to me now"}
           </button>
+          <AdminExecutionCard
+            job={newsletterJob}
+            testId="notifications-newsletter-progress"
+            onCancel={async () => setNewsletterJob(await cancelWeeklyNewsletter())}
+          />
           {selfStatus ? (
             <p
               className={`status ${selfStatus.type === "error" ? "status-error" : "status-success"}`}
               data-testid="notifications-newsletter-self-status"
             >
               {selfStatus.message}
+            </p>
+          ) : !newsletterJob?.busy && newsletterJob?.result ? (
+            <p className="status status-success" data-testid="notifications-newsletter-self-status">
+              {newsletterResultMessage(newsletterJob.result)}
             </p>
           ) : null}
         </SettingsPanel>
@@ -366,11 +388,16 @@ export default function NotificationsSettingsPage() {
             type="button"
             className="primary"
             onClick={handleGenerateYir}
-            disabled={sendingYir}
+            disabled={sendingYir || Boolean(yirJob?.busy)}
             data-testid="notifications-yir-self-generate"
           >
-            {sendingYir ? "Generating…" : "Generate & send to me"}
+            {yirJob?.busy ? "Generating…" : "Generate & send to me"}
           </button>
+          <AdminExecutionCard
+            job={yirJob}
+            testId="notifications-yir-progress"
+            onCancel={async () => setYirJob(await cancelYearInReview())}
+          />
           {yirStatus ? (
             <p
               className={`status ${yirStatus.type === "error" ? "status-error" : "status-success"}`}

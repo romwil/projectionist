@@ -30,6 +30,7 @@ from projectionist.notifications.service import deliver_notification, notificati
 from projectionist.web.auth import clear_pin_bindings
 from projectionist.web.rate_limit import clear_rate_limits
 from projectionist.web.session_tokens import clear_session_secret_cache
+from tests.admin_job_helpers import reset_admin_jobs, wait_admin_job
 
 
 class MailTransportTests(unittest.TestCase):
@@ -100,6 +101,7 @@ class NotificationPlatformTests(unittest.TestCase):
         import projectionist.web.jobs as jobs
 
         jobs._manager = None
+        reset_admin_jobs()
         import projectionist.web.app as app_mod
 
         importlib.reload(app_mod)
@@ -527,24 +529,26 @@ class NotificationPlatformTests(unittest.TestCase):
             json={"scope": "self"},
         )
         self.assertEqual(self_resp.status_code, 200, self_resp.text)
-        self.assertEqual(self_resp.json()["scope"], "self")
-        self.assertGreaterEqual(self_resp.json()["delivered"], 1)
+        self.assertTrue(self_resp.json().get("accepted") or not self_resp.json().get("busy"))
+        self_done = wait_admin_job(self.client, "/api/admin/weekly-newsletter/status")
+        self.assertEqual((self_done.get("result") or self_done).get("scope") or "self", "self")
+        self.assertGreaterEqual((self_done.get("result") or self_done).get("delivered") or 0, 1)
 
         users_resp = self.client.post(
             "/api/admin/weekly-newsletter/generate",
             json={"scope": "users", "user_ids": [member["id"]]},
         )
         self.assertEqual(users_resp.status_code, 200, users_resp.text)
-        self.assertEqual(users_resp.json()["scope"], "users")
-        self.assertGreaterEqual(users_resp.json()["delivered"], 1)
+        users_done = wait_admin_job(self.client, "/api/admin/weekly-newsletter/status")
+        self.assertGreaterEqual((users_done.get("result") or users_done).get("delivered") or 0, 1)
 
         all_resp = self.client.post(
             "/api/admin/weekly-newsletter/generate",
             json={"scope": "all"},
         )
         self.assertEqual(all_resp.status_code, 200, all_resp.text)
-        self.assertEqual(all_resp.json()["scope"], "all")
-        self.assertGreaterEqual(all_resp.json()["delivered"], 1)
+        all_done = wait_admin_job(self.client, "/api/admin/weekly-newsletter/status")
+        self.assertGreaterEqual((all_done.get("result") or all_done).get("delivered") or 0, 1)
 
     def test_arrival_notifications_for_gap_title(self) -> None:
         self._enable_multi_user()

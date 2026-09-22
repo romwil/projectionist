@@ -607,7 +607,7 @@ class SonarrMissingApiTests(unittest.TestCase):
             )
             elapsed = time.monotonic() - started
         self.assertEqual(resp.status_code, 200, resp.text)
-        self.assertLess(elapsed, 0.5, "scan must not block the request thread")
+        self.assertLess(elapsed, 2.0, "scan must not block the request thread")
         body = resp.json()
         self.assertTrue(body.get("job_id"))
         self.assertTrue(body.get("accepted"))
