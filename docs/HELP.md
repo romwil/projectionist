@@ -327,7 +327,7 @@ curl -s http://localhost:8788/api/library/stats | python3 -m json.tool
 
 ### Register on disk (Radarr)
 
-Movies already in Plex but missing from Radarr can be registered without starting a download search. **Register up to 25 in Radarr** on **Admin → Libraries** (`/admin/libraries`) queues those titles and shows each one as queued, in flight, registered, already tracked, or failed. Submitting the batch is not “done” — watch the card until remaining titles finish. **Cancel remaining** skips titles that have not started; a title already talking to Radarr is left to finish. Titles without a TMDB id need a Plex rematch first.
+Movies already in Plex but missing from Radarr (by TMDB id) can be registered without starting a download search. **Register up to 25 in Radarr** on **Admin → Libraries** (`/admin/libraries`) queues those titles and shows each one as queued, in flight, registered, already in Radarr, path conflict, or failed. A path conflict means Radarr already owns that folder under a different TMDB id — that is an identification mismatch, not “not in Plex.” Submitting the batch is not “done” — watch the card until remaining titles finish. **Cancel remaining** skips titles that have not started; a title already talking to Radarr is left to finish. Titles without a TMDB id need a Plex rematch first.
 
 ```bash
 # Owner host — start, watch per-title status, optional cancel

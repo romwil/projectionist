@@ -34,7 +34,8 @@ describe("admin execution card helpers", () => {
   it("labels Radarr item outcomes", () => {
     assert.equal(adminItemStatusLabel({ status: "running" }), "in flight");
     assert.equal(adminItemStatusLabel({ status: "completed", outcome: "registered" }), "registered");
-    assert.equal(adminItemStatusLabel({ status: "completed", outcome: "already" }), "already tracked");
+    assert.equal(adminItemStatusLabel({ status: "skipped", outcome: "already" }), "already in Radarr");
+    assert.equal(adminItemStatusLabel({ status: "failed", outcome: "path_conflict" }), "path conflict");
     assert.equal(adminItemStatusLabel({ status: "failed" }), "failed");
     assert.equal(adminPhaseLabel("registering"), "Registering");
   });

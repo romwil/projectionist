@@ -7,8 +7,13 @@ import unittest
 from unittest.mock import patch
 
 from projectionist.config_store import pick_arr_root_folder
-from projectionist.connectors.arr_errors import ArrTitleExistsError
-from projectionist.connectors.radarr import RadarrClient, RadarrMovie
+from projectionist.connectors.arr_errors import ArrPathConflictError, ArrTitleExistsError
+from projectionist.connectors.radarr import (
+    RadarrClient,
+    RadarrMovie,
+    index_radarr_movies,
+    movie_occupying_folder,
+)
 
 
 class PickArrRootFolderTests(unittest.TestCase):
@@ -210,6 +215,108 @@ class RadarrClientTests(unittest.TestCase):
                 client.add_movie(35669, root_folder="/media/movies", quality_profile_id=1)
 
         self.assertEqual(ctx.exception.arr_id, 9)
+
+    def test_index_finds_movie_by_folder_path(self) -> None:
+        occupant = RadarrMovie(
+            id=9,
+            title="Presence",
+            year=2025,
+            tmdb_id=111,
+            monitored=True,
+            has_file=True,
+            folder_path="/movies/Presence (2025)",
+            file_path="/movies/Presence (2025)/Presence.mkv",
+        )
+        by_tmdb, by_path = index_radarr_movies([occupant])
+        self.assertEqual(by_tmdb[111].id, 9)
+        found = movie_occupying_folder(by_path, "/movies/Presence (2025)/")
+        self.assertIsNotNone(found)
+        assert found is not None
+        self.assertEqual(found.tmdb_id, 111)
+
+    def test_add_movie_path_validator_different_tmdb_is_conflict(self) -> None:
+        client = RadarrClient("http://radarr", "secret")
+        lookup = {
+            "title": "Presence",
+            "year": 2025,
+            "tmdbId": 1388150,
+            "path": "/movies/Presence (2025)",
+        }
+        occupant = RadarrMovie(
+            id=9,
+            title="Presence",
+            year=2025,
+            tmdb_id=111,
+            monitored=True,
+            has_file=True,
+            folder_path="/movies/Presence (2025)",
+        )
+        error_body = json.dumps(
+            [
+                {
+                    "propertyName": "Path",
+                    "errorMessage": (
+                        "Path '/movies/Presence (2025)' is already configured "
+                        "for an existing movie"
+                    ),
+                    "attemptedValue": "/movies/Presence (2025)",
+                    "errorCode": "MoviePathValidator",
+                    "formattedMessagePlaceholderValues": {
+                        "path": "/movies/Presence (2025)"
+                    },
+                }
+            ]
+        )
+
+        def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):
+            if method == "POST":
+                raise RuntimeError(f"HTTP 400 from http://10.10.1.210/api/v3/movie: {error_body}")
+            return {}
+
+        with patch.object(client, "movie_by_tmdb_id", return_value=None), patch.object(
+            client, "lookup_tmdb", return_value=lookup
+        ), patch.object(client, "root_folders", return_value=[{"path": "/movies"}]), patch.object(
+            client, "movies", return_value=[occupant]
+        ), patch(
+            "projectionist.connectors.radarr.request_json", side_effect=fake_request_json
+        ):
+            with self.assertRaises(ArrPathConflictError) as ctx:
+                client.add_movie(1388150, root_folder="/movies", quality_profile_id=1)
+
+        self.assertEqual(ctx.exception.occupant_tmdb_id, 111)
+        self.assertEqual(ctx.exception.intended_tmdb_id, 1388150)
+        self.assertNotIn("formattedMessagePlaceholderValues", str(ctx.exception))
+
+    def test_add_movie_skips_post_when_folder_already_owned(self) -> None:
+        client = RadarrClient("http://radarr", "secret")
+        lookup = {
+            "title": "Presence",
+            "year": 2025,
+            "tmdbId": 1388150,
+            "path": "/movies/Presence (2025)",
+        }
+        occupant = RadarrMovie(
+            id=9,
+            title="Presence",
+            year=2025,
+            tmdb_id=111,
+            monitored=True,
+            has_file=True,
+            folder_path="/movies/Presence (2025)",
+        )
+
+        def fake_request_json(url, *, method="GET", headers=None, body=None, timeout=30):
+            raise AssertionError(f"must not POST into a taken folder: {method} {url}")
+
+        with patch.object(client, "movie_by_tmdb_id", return_value=None), patch.object(
+            client, "lookup_tmdb", return_value=lookup
+        ), patch.object(client, "root_folders", return_value=[{"path": "/movies"}]), patch.object(
+            client, "movies", return_value=[occupant]
+        ), patch(
+            "projectionist.connectors.radarr.request_json", side_effect=fake_request_json
+        ):
+            with self.assertRaises(ArrPathConflictError):
+                client.add_movie(1388150, root_folder="/movies", quality_profile_id=1)
 
 
 if __name__ == "__main__":

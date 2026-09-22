@@ -47,6 +47,7 @@ export default function AdminExecutionCard({
           <span>{Number(execution.queued) || 0} queued</span>
           <span>{Number(execution.running) || 0} running</span>
           <span>{Number(execution.completed) || 0} completed</span>
+          {Number(execution.skipped) ? <span>{Number(execution.skipped)} skipped</span> : null}
           <span data-tone={Number(execution.failed) ? "failed" : undefined}>
             {Number(execution.failed) || 0} failed
           </span>
