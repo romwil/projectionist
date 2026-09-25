@@ -50,21 +50,22 @@ import {
 } from "../api/client";
 import AdvancedSettings from "../components/AdvancedSettings";
 import PersonaSection from "../components/PersonaSection";
-import LiveChannelsSection, { isLiveChannelsLaunched, LiveJobRail } from "./admin/LiveChannelsSection";
+import LiveChannelsSection, { isLiveChannelsLaunched } from "./admin/LiveChannelsSection";
 import HouseholdSection from "./admin/HouseholdSection";
 import LibrariesSection from "./admin/LibrariesSection";
+import OverviewSection from "./admin/OverviewSection";
+import ConnectionsSection from "./admin/ConnectionsSection";
+import SeerrSection from "./admin/SeerrSection";
 import { liveChannelsStartTimeoutAlertType } from "../lib/liveChannelsEngineFeedback.js";
-import { craftSoftCapHonestyNote, liveOnboardingTip, liveOverviewLine } from "../lib/liveChannelsCopy.js";
+import { craftSoftCapHonestyNote } from "../lib/liveChannelsCopy.js";
 import { isLiveJobBusy } from "../lib/liveChannelsJob.js";
 import { filterLiveCollections } from "../lib/liveChannelsCraft.js";
-import { buildHouseholdHealthChips } from "../lib/householdHealth.js";
 import {
   canToggleSecretVisibility,
   isSecretConfigured,
   secretPlaceholder,
   seerrSecretPlaceholder,
 } from "../lib/secretField.js";
-import SectionHelp from "../components/SectionHelp";
 
 const ADMIN_SECTIONS = new Set([
   "overview",
@@ -2661,135 +2662,21 @@ export default function ConfigPage() {
     return (
       <>
         {showSection("overview") ? (
-        <section className="config-section owner-health-hero" data-testid="household-health-hero">
-          <div className="dashboard-header owner-health-hero-head">
-            <div>
-              <p className="eyebrow">At a glance</p>
-              <h2 className="dash-title">
-                Household health{" "}
-                <SectionHelp glossaryKey="Setup" testId="household-health-help" />
-              </h2>
-              <p className="wizard-note">
-                Stack readiness for the living room — Plex, library, and Live in one place.
-              </p>
-            </div>
-            <button type="button" className="ghost" data-testid="rerun-wizard" onClick={() => setShowWizard(true)}>
-              Re-run setup
-            </button>
-          </div>
-          <div className="owner-health-grid" data-testid="household-health-grid">
-            {buildHouseholdHealthChips({
-              libraryHealth,
-              libraryStats,
-              plexConnected: Boolean(verification.plex || settings?.plex_token_set),
-              sectionsCount: sections.length,
-              liveEnabled: Boolean(settings?.features?.live_channels_enabled),
-              liveReady: Boolean(featureFlags?.features?.live_channels_ready),
-              stationCount: Number(liveChannelsStatus?.channel_count) || 0,
-            }).map((chip) => (
-              <Link
-                key={chip.id}
-                to={chip.to}
-                className={`owner-health-tile tone-${chip.tone}`}
-                data-testid={`household-health-chip-${chip.id}`}
-              >
-                <span className="owner-health-tile-value">{chip.value}</span>
-                <span className="owner-health-tile-label">{chip.label}</span>
-                <span className="owner-health-tile-detail">{chip.detail}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-        ) : null}
-
-        {showSection("overview")
-          ? (() => {
-              const liveOn = Boolean(settings?.features?.live_channels_enabled);
-              const tip = liveOnboardingTip({
-                liveEnabled: liveOn,
-                libraryMapped: sections.length > 0,
-                syncHealthy: Boolean(libraryStats?.last_sync),
-              });
-              if (!liveOn && !tip) return null;
-              return (
-                <section className="config-section" data-testid="live-channels-overview-echo">
-                  {liveOn ? (
-                    <>
-                      <h2>Live Channels</h2>
-                      <p data-testid="live-channels-overview-health">
-                        {liveOverviewLine(liveChannelsStatus)}
-                      </p>
-                      <LiveJobRail job={liveChannelsStatus?.job} compact />
-                      <div className="config-actions">
-                        <Link to="/admin/live-channels" className="btn-link" data-testid="live-overview-open">
-                          Open Live Channels
-                        </Link>
-                      </div>
-                    </>
-                  ) : tip ? (
-                    <>
-                      <h2>{tip.title}</h2>
-                      <p>{tip.body}</p>
-                      <div className="config-actions">
-                        <Link to={tip.ctaTo} className="btn-link" data-testid="live-onboarding-cta">
-                          {tip.ctaLabel}
-                        </Link>
-                      </div>
-                    </>
-                  ) : null}
-                </section>
-              );
-            })()
-          : null}
-
-        {showSection("overview") ? (
-        <section className="config-section" data-testid="training-corpus-export">
-          <h2>Export taste data</h2>
-          <p className="wizard-note">
-            Download your chat reactions, saved preferences, and personal reviews as JSON — useful for
-            backup or offline experiments.
-          </p>
-          <div className="config-actions">
-            <button
-              type="button"
-              data-testid="training-corpus-export-button"
-              className="primary"
-              onClick={handleExportTrainingCorpus}
-              disabled={exportingCorpus}
-            >
-              {exportingCorpus ? "Preparing export…" : "Download taste data"}
-            </button>
-          </div>
-          <InlineAlert
-            type={actionAlert?.area === "training-export" ? actionAlert.type : null}
-            message={actionAlert?.area === "training-export" ? actionAlert.message : null}
+          <OverviewSection
+            libraryHealth={libraryHealth}
+            libraryStats={libraryStats}
+            verification={verification}
+            settings={settings}
+            sections={sections}
+            featureFlags={featureFlags}
+            liveChannelsStatus={liveChannelsStatus}
+            setShowWizard={setShowWizard}
+            handleExportTrainingCorpus={handleExportTrainingCorpus}
+            exportingCorpus={exportingCorpus}
+            handleDownloadAdminSnapshot={handleDownloadAdminSnapshot}
+            exportingSnapshot={exportingSnapshot}
+            actionAlert={actionAlert}
           />
-        </section>
-        ) : null}
-
-        {showSection("overview") ? (
-        <section className="config-section" data-testid="admin-backup-snapshot">
-          <h2>Settings + database snapshot</h2>
-          <p className="wizard-note">
-            Download a WAL-safe zip of <code>settings.json</code> and the library database for off-box
-            backup. Keep your secrets key with the zip if fields are encrypted at rest.
-          </p>
-          <div className="config-actions">
-            <button
-              type="button"
-              className="primary"
-              data-testid="admin-backup-snapshot-button"
-              onClick={handleDownloadAdminSnapshot}
-              disabled={exportingSnapshot}
-            >
-              {exportingSnapshot ? "Preparing snapshot…" : "Download snapshot zip"}
-            </button>
-          </div>
-          <InlineAlert
-            type={actionAlert?.area === "admin-snapshot" ? actionAlert.type : null}
-            message={actionAlert?.area === "admin-snapshot" ? actionAlert.message : null}
-          />
-        </section>
         ) : null}
 
         {showSection("persona") ? (
@@ -2812,257 +2699,29 @@ export default function ConfigPage() {
         ) : null}
 
         {showSection("connections") ? (
-        <>
-        <section className="config-section">
-          <h2>Language model</h2>
-          <p className="wizard-note">The AI that powers chat recommendations. Bring your own key or run Ollama locally.</p>
-          <div className="connections-field-grid" data-testid="connections-llm-fields">
-            <label>
-              <span>Provider</span>
-              <ProviderSelect
-                value={settings.llm_provider}
-                onChange={(event) => handleProviderChange(event.target.value)}
-              />
-            </label>
-            <label>
-              <span>API base URL</span>
-              <input
-                type="text"
-                value={settings.llm_base_url ?? ""}
-                onChange={(event) => updateSettings({ llm_base_url: event.target.value })}
-                placeholder={LLM_PROVIDER_DEFAULTS[settings.llm_provider] || "https://api.openai.com/v1"}
-              />
-            </label>
-            <label>
-              <span>API key</span>
-              {renderSecretInput("llm_api_key", {
-                placeholder: secretPlaceholder(settings, "llm_api_key", "Required except for Ollama"),
-              })}
-            </label>
-            <label>
-              <span>Model name</span>
-              <input
-                type="text"
-                list="llm-model-options-connections"
-                value={settings.llm_model ?? ""}
-                onChange={(event) => updateSettings({ llm_model: event.target.value })}
-                placeholder={LLM_MODEL_DEFAULTS[settings.llm_provider] || "gpt-4o-mini"}
-                data-testid="llm-model-input-llm-model-options-connections"
-              />
-              <datalist id="llm-model-options-connections">
-                {modelPickerOptions().map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.hint === "cheaper-tier" ? "cheaper tier" : row.hint === "standard-tier" ? "standard" : ""}
-                  </option>
-                ))}
-              </datalist>
-            </label>
-          </div>
-          {(() => {
-            const options = modelPickerOptions();
-            const cheaper = options.filter((row) => row.hint === "cheaper-tier").slice(0, 4);
-            return (
-              <>
-                {cheaper.length ? (
-                  <div className="llm-cheaper-picks" data-testid="llm-cheaper-picks-llm-model-options-connections">
-                    {cheaper.map((row) => (
-                      <button
-                        key={row.id}
-                        type="button"
-                        className="ghost"
-                        onClick={() => updateSettings({ llm_model: row.id })}
-                      >
-                        {row.id}
-                        <span className="llm-model-hint">cheaper</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <p className="llm-model-catalog-note">
-                  {modelCatalogLoading
-                    ? "Loading provider model list…"
-                    : modelCatalog?.source === "pinned"
-                      ? modelCatalog?.note || modelCatalog?.error || "Showing pinned model options."
-                      : `Loaded ${options.length} models from ${modelCatalog?.source || "provider"}.`}
-                  {" "}
-                  <button type="button" className="ghost" onClick={() => refreshModelCatalog()} disabled={modelCatalogLoading}>
-                    Refresh models
-                  </button>
-                </p>
-              </>
-            );
-          })()}
-          <div className="connections-llm-actions">
-            <button type="button" className="primary" onClick={() => runTest("llm")} disabled={testing === "llm"}>
-              Test connection
-            </button>
-            <CertifiedBadge certified={certifications.llm?.certified} testing={testing === "llm"} serviceId="llm" />
-          </div>
-          {(() => {
-            const alert = connectionStatusAlert(
-              actionAlert,
-              "llm",
-              testResults.llm,
-              certifications.llm?.certified,
-            );
-            return <InlineAlert type={alert.type} message={alert.message} />;
-          })()}
-        </section>
-
-        <section className="config-section">
-          <h2>Plex, Radarr &amp; Sonarr</h2>
-          <p className="wizard-note">
-            Library and download stack. Plex is required; Radarr and Sonarr unlock add/remove after you confirm in chat.
-          </p>
-          <div className="service-cards">
-            {[
-              { id: "plex", label: "Plex", fields: ["plex_url", "plex_token"] },
-              { id: "radarr", label: "Radarr", fields: ["radarr_url", "radarr_api_key"] },
-              { id: "sonarr", label: "Sonarr", fields: ["sonarr_url", "sonarr_api_key"] },
-            ].map(({ id, label, fields }) => {
-              const result = testResults[id];
-              return (
-                <div key={id} className={`service-card ${result?.state === "success" ? "service-ok" : ""} ${testing === id ? "service-loading" : ""} ${result?.state === "error" ? "service-error" : ""}`}>
-                  <div className="service-card-header">
-                    <div className="service-card-title">
-                      <h3>{label}</h3>
-                      <CertifiedBadge
-                        certified={certifications[id]?.certified}
-                        testing={testing === id}
-                        serviceId={id}
-                      />
-                    </div>
-                    <div className="service-card-actions">
-                      <button type="button" className="primary" onClick={() => runTest(id)} disabled={testing === id}>
-                        {testing === id ? "Testing…" : "Test"}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="service-fields">
-                    {fields.map((field) => (
-                      <label key={field}>
-                        <span>{fieldLabel(field)}</span>
-                        {SECRET_FIELDS.includes(field) ? (
-                          renderSecretInput(field, { placeholder: FIELD_PLACEHOLDERS[field] })
-                        ) : (
-                          <input
-                            type="text"
-                            value={settings[field] ?? ""}
-                            placeholder={FIELD_PLACEHOLDERS[field] || ""}
-                            onChange={(event) => updateSettings({ [field]: event.target.value })}
-                          />
-                        )}
-                        {FIELD_HELP[field] ? (
-                          <span className="wizard-note field-help">{FIELD_HELP[field]}</span>
-                        ) : null}
-                      </label>
-                    ))}
-                  </div>
-                  {(() => {
-                    const alert = connectionStatusAlert(
-                      actionAlert,
-                      id,
-                      result,
-                      certifications[id]?.certified,
-                    );
-                    return alert.message ? (
-                      <InlineAlert
-                        type={alert.type}
-                        message={alert.message}
-                      />
-                    ) : null;
-                  })()}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="config-section">
-          <h2>Optional enrichments</h2>
-          <p className="wizard-note">
-            TMDB improves discovery and artwork. Wikipedia research is available without a key; OMDb and TVDB are optional
-            research sources. Fanart.tv and Tautulli are optional extras.
-          </p>
-          <div className="service-cards">
-            {OPTIONAL_SERVICES.map(({ id, label, fields }) => {
-              const result = testResults[id];
-              return (
-                <div key={id} className={`service-card ${result?.state === "success" ? "service-ok" : ""} ${testing === id ? "service-loading" : ""} ${result?.state === "error" ? "service-error" : ""}`}>
-                  <div className="service-card-header">
-                    <div className="service-card-title">
-                      <h3>{label}</h3>
-                      <CertifiedBadge
-                        certified={certifications[id]?.certified}
-                        testing={testing === id}
-                        serviceId={id}
-                      />
-                    </div>
-                    <div className="service-card-actions">
-                      <button type="button" className="primary" onClick={() => runTest(id)} disabled={testing === id}>
-                        {testing === id ? "Testing…" : "Test"}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="service-fields">
-                    {fields.map((field) => (
-                      <label key={field}>
-                        <span>{fieldLabel(field)}</span>
-                        {SECRET_FIELDS.includes(field) ? (
-                          renderSecretInput(field, { placeholder: FIELD_PLACEHOLDERS[field] })
-                        ) : (
-                          <input
-                            type="text"
-                            value={settings[field] ?? ""}
-                            placeholder={FIELD_PLACEHOLDERS[field] || ""}
-                            onChange={(event) => updateSettings({ [field]: event.target.value })}
-                          />
-                        )}
-                        {FIELD_HELP[field] ? (
-                          <span className="wizard-note field-help">{FIELD_HELP[field]}</span>
-                        ) : null}
-                      </label>
-                    ))}
-                  </div>
-                  {(() => {
-                    const alert = connectionStatusAlert(
-                      actionAlert,
-                      id,
-                      result,
-                      certifications[id]?.certified,
-                    );
-                    return alert.message ? (
-                      <InlineAlert
-                        type={alert.type}
-                        message={alert.message}
-                      />
-                    ) : null;
-                  })()}
-                </div>
-              );
-            })}
-          </div>
-          <p className="wizard-note" data-testid="research-source-readiness">
-            Chat research sources: TMDB {settings.tmdb_api_key_set ? "configured" : "needs an API key"} · Wikipedia available
-            without a key · OMDb {settings.omdb_api_key_set ? "configured" : "optional (API key)"} · TVDB{" "}
-            {settings.tvdb_api_key_set ? "configured" : "optional (v4 API key/subscription)"}.
-          </p>
-          <div className="service-fields">
-            <label>
-              <span>OMDb API key (optional)</span>
-              {renderSecretInput("omdb_api_key", {
-                placeholder: secretPlaceholder(settings, "omdb_api_key", "Optional IMDb-aligned research"),
-              })}
-            </label>
-            <label>
-              <span>TVDB API key (optional)</span>
-              {renderSecretInput("tvdb_api_key", {
-                placeholder: secretPlaceholder(settings, "tvdb_api_key", "Optional TVDB v4 key"),
-              })}
-            </label>
-          </div>
-        </section>
-        </>
+          <ConnectionsSection
+            settings={settings}
+            updateSettings={updateSettings}
+            handleProviderChange={handleProviderChange}
+            renderSecretInput={renderSecretInput}
+            modelPickerOptions={modelPickerOptions}
+            modelCatalog={modelCatalog}
+            modelCatalogLoading={modelCatalogLoading}
+            refreshModelCatalog={refreshModelCatalog}
+            runTest={runTest}
+            testing={testing}
+            certifications={certifications}
+            testResults={testResults}
+            actionAlert={actionAlert}
+            CertifiedBadge={CertifiedBadge}
+            ProviderSelect={ProviderSelect}
+            connectionStatusAlert={connectionStatusAlert}
+            OPTIONAL_SERVICES={OPTIONAL_SERVICES}
+            SECRET_FIELDS={SECRET_FIELDS}
+            FIELD_PLACEHOLDERS={FIELD_PLACEHOLDERS}
+            FIELD_HELP={FIELD_HELP}
+            fieldLabel={fieldLabel}
+          />
         ) : null}
 
         {!showWizard && showSection("household") ? (
@@ -3087,115 +2746,20 @@ export default function ConfigPage() {
 
 
         {!showWizard && showSection("seerr") ? (
-          <section className="config-section" data-testid="seerr-settings">
-            <h2>Overseerr / Seerr (optional)</h2>
-            <p className="wizard-note">
-              Let household members request titles through Overseerr or Jellyseerr instead of managing Radarr/Sonarr directly.
-            </p>
-            <label className="config-toggle" data-testid="seerr-enabled-toggle">
-              <input
-                type="checkbox"
-                checked={Boolean(settings?.features?.seerr_enabled)}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  updateFeatureFlags({ seerr_enabled: enabled });
-                  persistSettings({
-                    features: { ...(settings.features || {}), seerr_enabled: enabled },
-                  })
-                    .then(() =>
-                      setActionFeedback(
-                        "seerr",
-                        "success",
-                        enabled ? "Seerr requests enabled." : "Seerr requests disabled.",
-                      ),
-                    )
-                    .catch((error) => setActionFeedback("seerr", "error", error.message));
-                }}
-              />
-              <span>Route household requests through Seerr</span>
-            </label>
-            <div className={`service-card ${testResults.seerr?.state === "success" ? "service-ok" : ""} ${testing === "seerr" ? "service-loading" : ""} ${testResults.seerr?.state === "error" ? "service-error" : ""}`}>
-                <div className="service-card-header">
-                  <div className="service-card-title">
-                    <h3>Seerr server</h3>
-                    <CertifiedBadge
-                      certified={certifications.seerr?.certified}
-                      testing={testing === "seerr"}
-                      serviceId="seerr"
-                    />
-                  </div>
-                  <div className="service-card-actions">
-                    <button
-                      type="button"
-                      className="primary"
-                      data-testid="verify-seerr"
-                      onClick={() => runTest("seerr")}
-                      disabled={testing === "seerr"}
-                    >
-                      {testing === "seerr" ? "Testing…" : "Test connection"}
-                    </button>
-                  </div>
-                </div>
-                <div className="service-fields">
-                  <label>
-                    <span>Server URL</span>
-                    <input
-                      type="text"
-                      data-testid="seerr-url"
-                      value={settings?.seerr?.url ?? ""}
-                      placeholder="http://192.168.1.50:5055"
-                      onChange={(event) => updateSeerrSettings({ url: event.target.value })}
-                      onBlur={() =>
-                        persistSettings({
-                          seerr: { ...(settings.seerr || {}), url: settings?.seerr?.url ?? "" },
-                        }).catch((error) => setActionFeedback("seerr", "error", error.message))
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>API key</span>
-                    {renderSeerrSecretInput({ disabled: testing === "seerr" })}
-                  </label>
-                </div>
-                <label className="config-toggle" data-testid="seerr-link-on-login">
-                  <input
-                    type="checkbox"
-                    checked={settings?.seerr?.link_on_login !== false}
-                    onChange={(event) => {
-                      const linkOnLogin = event.target.checked;
-                      updateSeerrSettings({ link_on_login: linkOnLogin });
-                      persistSettings({
-                        seerr: { ...(settings.seerr || {}), link_on_login: linkOnLogin },
-                      }).catch((error) => setActionFeedback("seerr", "error", error.message));
-                    }}
-                  />
-                  <span>Match Plex users to Seerr accounts when they sign in</span>
-                </label>
-                <label className="config-toggle" data-testid="seerr-require-linked-user">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(settings?.seerr?.require_linked_user_for_requests)}
-                    onChange={(event) => {
-                      const required = event.target.checked;
-                      updateSeerrSettings({ require_linked_user_for_requests: required });
-                      persistSettings({
-                        seerr: {
-                          ...(settings.seerr || {}),
-                          require_linked_user_for_requests: required,
-                        },
-                      }).catch((error) => setActionFeedback("seerr", "error", error.message));
-                    }}
-                  />
-                  <span>Only allow requests after a Seerr account is linked</span>
-                </label>
-                {testResults.seerr?.message ? (
-                  <InlineAlert
-                    type={actionAlert?.area === "seerr" ? actionAlert.type : testResults.seerr.state}
-                    message={actionAlert?.area === "seerr" ? actionAlert.message : testResults.seerr.message}
-                  />
-                ) : null}
-              </div>
-          </section>
+          <SeerrSection
+            settings={settings}
+            persistSettings={persistSettings}
+            updateFeatureFlags={updateFeatureFlags}
+            updateSeerrSettings={updateSeerrSettings}
+            testing={testing}
+            testResults={testResults}
+            certifications={certifications}
+            runTest={runTest}
+            actionAlert={actionAlert}
+            setActionFeedback={setActionFeedback}
+            CertifiedBadge={CertifiedBadge}
+            renderSeerrSecretInput={renderSeerrSecretInput}
+          />
         ) : null}
 
         {!showWizard && showSection("live-channels") ? (

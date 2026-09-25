@@ -66,7 +66,7 @@ describe("new reply chip placement", () => {
   });
 
   it("renders as a sibling between the scroll region and the composer", () => {
-    const appJsx = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
+    const appJsx = readFileSync(new URL("../components/ChatWorkspace.jsx", import.meta.url), "utf8");
     const workspace = appJsx.match(/<main className="workspace-main"[^>]*>[\s\S]*?<\/main>/)?.[0] || "";
     assert.match(workspace, /<NewReplyChip\b/);
 
@@ -126,8 +126,10 @@ describe("1.36.5 whisper/tonight chat home", () => {
 
   it("saves to the holdable shelf without a prompt H1 and shows resume + shelf on chat home", () => {
     const appJsx = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
+    const workspaceJsx = readFileSync(new URL("../components/ChatWorkspace.jsx", import.meta.url), "utf8");
     assert.doesNotMatch(appJsx, /window\.prompt\(/);
-    assert.match(appJsx, /data-testid="holdable-shelf"/);
+    assert.doesNotMatch(workspaceJsx, /window\.prompt\(/);
+    assert.match(workspaceJsx, /data-testid="holdable-shelf"/);
     assert.match(appJsx, /resumeChipFromThread/);
     assert.match(appJsx, /refreshSavedShelf/);
   });
