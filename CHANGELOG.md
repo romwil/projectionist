@@ -3,10 +3,10 @@
 ## [Unreleased]
 
 ### Highlights
-- **Investigate says when it could not read the files.** If Sonarr paths are not mounted into the container, those rows fail instead of reporting 80 completed with no stills. Bind-mount the TV library at the same path Sonarr uses, then run Investigate again.
+- **Investigate maps Sonarr paths before it grabs stills.** `/tv/Show/...` is tried as-is, then the Sonarr root is rewritten onto configured TV/Sonarr roots and Plex library locations. The first existing file wins. Rows that still cannot be read fail instead of completing Uncertain with no stills.
 
 ### Fixed
-- Episode investigation marks unreadable media paths as failed (`stills_error=unreadable_path`) and the review summary tells the owner to bind-mount the Sonarr TV library. Unknown-scope rows no longer say “other show.”
+- Episode investigation translates Sonarr episode paths for ffmpeg stills, runtime, OSHash, and Identify. Unreadable paths are `stills_error=unreadable_path` (failed, not completed). Unknown-scope rows no longer say “other show.”
 
 ## [1.36.1] — 2026-09-25
 

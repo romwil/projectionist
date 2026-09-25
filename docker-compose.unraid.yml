@@ -56,10 +56,6 @@ services:
     volumes:
       # Host appdata config — do not use docker volume rm / wipe this path
       - ./config:/config
-      # OPTIONAL — Investigate stills / Identify: mount the Sonarr TV library at
-      # the same container path Sonarr reports (often /tv). ffmpeg ships in the
-      # image; without this bind every row finishes Uncertain with no stills.
-      # - /mnt/user/data/media/tv:/tv:ro
       # OPTIONAL — Live Channels managed Tunarr (root-equivalent). Off by default.
       # Uncomment only if you want Projectionist to pull/start/stop a Tunarr sibling.
       # Same opt-in as Unraid CA template path "Docker Socket".

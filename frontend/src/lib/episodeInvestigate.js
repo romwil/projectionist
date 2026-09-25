@@ -10,7 +10,7 @@ export const FFMPEG_MISSING =
   "This running container cannot find ffmpeg on PATH. The Projectionist image should include it — that is a bad image or PATH, not a host install. Set FFMPEG_PATH and FFPROBE_PATH only to override.";
 
 export const UNREADABLE_MEDIA =
-  "Sonarr's files are not visible inside this container. Bind-mount the TV library at the same path Sonarr uses, then Investigate again.";
+  "Sonarr's files are not visible inside this container after mapping configured TV/Sonarr roots and Plex library locations.";
 
 export function defaultRowSelected(row) {
   if (!row) return false;

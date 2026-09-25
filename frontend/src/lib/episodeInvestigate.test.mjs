@@ -113,7 +113,7 @@ describe("episode investigate selection", () => {
       { ffmpegReady: true, visionOn: true, identifyConfigured: false },
     );
     assert.match(unreadable, /No stills were extracted/);
-    assert.match(unreadable, /Bind-mount the TV library/);
+    assert.match(unreadable, /mapping configured TV\/Sonarr roots/);
     assert.match(unreadable, new RegExp(UNREADABLE_MEDIA.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
     assert.doesNotMatch(libraries, /row\.same_show === false \? " · other show/);
   });
