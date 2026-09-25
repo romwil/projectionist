@@ -1,10 +1,10 @@
 import {
   adminCanCancel,
+  adminCompletionCopy,
   adminDisplayPercent,
   adminItemStatusLabel,
   adminPhaseLabel,
   adminProgressLine,
-  adminSecondsAgo,
   adminShouldShowCard,
 } from "../lib/adminExecution.js";
 
@@ -29,7 +29,7 @@ export default function AdminExecutionCard({
   const showCounts = Number(execution.total) > 0;
   const current = execution.current || job?.current;
   const lastError = execution.last_error || job?.error;
-  const secondsAgo = adminSecondsAgo(execution.seconds_since_last_completion);
+  const completion = adminCompletionCopy(job);
 
   return (
     <div className="library-sync-progress" data-testid={testId}>
@@ -59,7 +59,11 @@ export default function AdminExecutionCard({
           Current: {current.message || current.name} ({current.status})
         </p>
       ) : null}
-      {secondsAgo ? <p className="wizard-note">{secondsAgo}</p> : null}
+      {completion ? (
+        <p className="wizard-note" data-testid={`${testId}-completion`}>
+          {completion}
+        </p>
+      ) : null}
       {lastError ? (
         <p className="status status-error" data-testid={`${testId}-last-error`}>
           Last error: {lastError}

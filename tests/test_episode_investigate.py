@@ -13,7 +13,11 @@ from unittest.mock import patch
 
 from projectionist.library.admin_execution import reset_admin_execution_for_tests
 from projectionist.library.episode_investigate.apply import apply_rows, plex_proper_path, undo_apply
-from projectionist.library.episode_investigate.capabilities import health_payload, llm_accepts_images
+from projectionist.library.episode_investigate.capabilities import (
+    FFMPEG_NOTE,
+    health_payload,
+    llm_accepts_images,
+)
 from projectionist.library.episode_investigate.catalog import list_investigate_shows, merge_tmdb_runtimes
 from projectionist.library.episode_investigate.filenames import (
     claimed_from_path,
@@ -342,6 +346,10 @@ class CapabilitiesTests(unittest.TestCase):
         self.assertTrue(payload["vision"]["leaves_lan"])
         self.assertFalse(payload["acrcloud"]["available"])
         self.assertFalse(payload["acrcloud"]["deferred"])
+        self.assertIn("container", FFMPEG_NOTE)
+        self.assertIn("FFMPEG_PATH", FFMPEG_NOTE)
+        self.assertNotIn("Install a host binary", FFMPEG_NOTE)
+        self.assertNotIn("not bundled", FFMPEG_NOTE)
 
 
 class JobHappyPathTests(unittest.TestCase):

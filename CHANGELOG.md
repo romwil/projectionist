@@ -5,12 +5,17 @@
 ### Highlights
 - **First-boot stays on the LAN.** If the database is down, household APIs no longer fail open. Setup from a public or Docker-NAT address cannot probe Plex/TMDB or create the owner unless `PROJECTIONIST_OWNER_PASSWORD` is already on the host.
 - **Chat links stay on the allowlist.** Assistant markdown only follows http(s), in-app title and library paths, and hash jumps. Other schemes show as plain text. Streaming chat now POSTs the message in the body, capped at 8,000 characters.
+- **Investigate review stays scannable.** Eighty episode rows are a compact table, not stacked cards. Finished jobs say the run ended. Idle Apply no longer shows a mystery Ready 0% card. If this container has no ffmpeg, the summary says so — not “install a host binary.”
 
 ### Security
 - Auth middleware returns `503 Service unavailable` for `/api/*` (except `/api/health` and `/api/features`) when the job manager or database cannot be opened, instead of passing the request through.
 - SETUP_MODE applies the same WAN interlock as single-owner ACTIVE. Plex/TMDB connection tests are allowlisted only when handshake classification is LAN. Commit from a WAN or `public_failsafe` peer requires `PROJECTIONIST_OWNER_PASSWORD`.
 - Assistant markdown hrefs allow `http:`, `https:`, in-app `/title` and `/library` paths, and `#` fragments. Other schemes (`javascript:`, `data:`, `vbscript:`) render as text. `rehype-sanitize` is on; `rehype-raw` is not.
 - `POST /api/chat/stream` takes `ChatRequest` JSON (`message` 1–8000 characters). The same cap applies to `POST /api/chat`. `GET /api/chat/stream` returns 410 for one release (query-string messages are gone). The client uses fetch + a stream reader and does not reconstruct `EventSource` after a dropped socket.
+
+### Fixed
+- Investigate review uses a dense table with sticky Apply/Cancel. Admin execution cards hide empty idle snapshots (including Investigate Apply `Nothing to apply` / Ready 0%). Terminal jobs stop the “since last completion” timer and say the run ended. Apply is gold only when at least one same-show row is selected.
+- Investigate no longer tells owners to install a host ffmpeg binary. Missing ffmpeg is a container PATH / image problem; `FFMPEG_PATH` / `FFPROBE_PATH` remain overrides. The review summary explains empty evidence (no stills, no vision, no Identify) when fusion has already finished.
 
 ## [1.36.0] — 2026-09-25
 
