@@ -1,9 +1,18 @@
+import { useEffect, useMemo, useState } from "react";
 import InlineAlert from "../../components/InlineAlert";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
+import { api } from "../../api/client";
 import {
   formatLastSyncRelative,
   formatSyncJobDetails,
 } from "../../lib/jobProgress.js";
+import {
+  SCENE_NAMES_NOT_EVIDENCE,
+  STILLS_LEAVE_LAN,
+  confidenceLabel,
+  selectedFileIds,
+  selectionMap,
+} from "../../lib/episodeInvestigate.js";
 import {
   sonarrFindMissingButtonClass,
   sonarrMissingBySeries,
@@ -329,6 +338,8 @@ export default function LibrariesSection({
           />
         </section>
 
+        <InvestigatePanel />
+
         <section className="config-section" data-testid="plex-library-mapping">
           <h2>Plex libraries</h2>
           <p className="wizard-note">Choose which movie and TV libraries Projectionist indexes. Update these if you rename or add libraries in Plex.</p>
@@ -446,5 +457,353 @@ export default function LibrariesSection({
           />
         </section>
         </>
+  );
+}
+
+function InvestigatePanel() {
+  const [health, setHealth] = useState(null);
+  const [shows, setShows] = useState([]);
+  const [showId, setShowId] = useState("");
+  const [season, setSeason] = useState("");
+  const [useVision, setUseVision] = useState(true);
+  const [job, setJob] = useState(null);
+  const [applyJob, setApplyJob] = useState(null);
+  const [selected, setSelected] = useState({});
+  const [reviewOpen, setReviewOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [busyStart, setBusyStart] = useState(false);
+
+  const rows = useMemo(() => {
+    const result = job?.result;
+    return Array.isArray(result?.rows) ? result.rows : [];
+  }, [job]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      try {
+        const [nextHealth, nextShows] = await Promise.all([
+          api("/admin/investigate/health"),
+          api("/admin/investigate/shows"),
+        ]);
+        if (cancelled) return;
+        setHealth(nextHealth);
+        setShows(Array.isArray(nextShows?.items) ? nextShows.items : []);
+        if (nextHealth?.vision?.default_on === false) setUseVision(false);
+      } catch (err) {
+        if (!cancelled) setError(err.message || "Could not load Investigate.");
+      }
+    }
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function poll() {
+      try {
+        const [status, applyStatus] = await Promise.all([
+          api("/admin/investigate/status"),
+          api("/admin/investigate/apply/status"),
+        ]);
+        if (cancelled) return;
+        setJob(status);
+        setApplyJob(applyStatus);
+        if (status?.phase === "done" && Array.isArray(status?.result?.rows)) {
+          setReviewOpen(true);
+        }
+      } catch {
+        /* keep last snapshot */
+      }
+    }
+    poll();
+    const interval = setInterval(poll, 2000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!reviewOpen || !rows.length) return;
+    setSelected((prev) => {
+      if (Object.keys(prev).length) return prev;
+      return selectionMap(rows);
+    });
+  }, [reviewOpen, rows]);
+
+  const selectedIds = selectedFileIds(rows, selected);
+  const investigating = Boolean(job?.busy);
+  const applying = Boolean(applyJob?.busy);
+  const visionAvailable = Boolean(health?.vision?.available);
+  const ffmpegReady = health?.ffmpeg?.available !== false;
+
+  async function handleStart() {
+    setError("");
+    setBusyStart(true);
+    setReviewOpen(false);
+    setSelected({});
+    try {
+      const snap = await api("/admin/investigate/start", {
+        method: "POST",
+        body: JSON.stringify({
+          show_id: Number(showId),
+          season: season === "" ? null : Number(season),
+          use_vision: visionAvailable ? useVision : false,
+        }),
+      });
+      setJob(snap);
+    } catch (err) {
+      setError(err.message || "Investigate failed to start.");
+    } finally {
+      setBusyStart(false);
+    }
+  }
+
+  async function handleCancelJob() {
+    try {
+      const snap = await api("/admin/investigate/cancel", { method: "POST" });
+      setJob(snap);
+    } catch (err) {
+      setError(err.message || "Could not cancel.");
+    }
+  }
+
+  async function handleApply() {
+    setError("");
+    try {
+      const snap = await api("/admin/investigate/apply", {
+        method: "POST",
+        body: JSON.stringify({ file_ids: selectedIds }),
+      });
+      setApplyJob(snap);
+    } catch (err) {
+      setError(err.message || "Apply failed to start.");
+    }
+  }
+
+  async function handleUndo() {
+    const applyId = applyJob?.result?.apply_id || applyJob?.apply_id;
+    if (!applyId) return;
+    try {
+      const snap = await api("/admin/investigate/undo", {
+        method: "POST",
+        body: JSON.stringify({ apply_id: applyId }),
+      });
+      setApplyJob(snap);
+    } catch (err) {
+      setError(err.message || "Undo failed.");
+    }
+  }
+
+  function toggleRow(id) {
+    setSelected((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  const currentShow = shows.find((item) => String(item.id) === String(showId));
+  const seasonOptions = [];
+  if (currentShow?.season_count) {
+    for (let n = 1; n <= Number(currentShow.season_count); n += 1) seasonOptions.push(n);
+  }
+
+  return (
+    <section className="config-section" data-testid="episode-investigate-card">
+      <h2>Investigate episodes</h2>
+      <p className="wizard-note">{SCENE_NAMES_NOT_EVIDENCE}</p>
+      <p className="wizard-note" data-testid="investigate-stills-leave-lan">
+        {STILLS_LEAVE_LAN}
+      </p>
+      {!health?.sonarr?.configured ? (
+        <p className="status status-secondary">Sonarr is required so Investigate can see episode files.</p>
+      ) : null}
+      {health?.ffmpeg?.note ? (
+        <p className="wizard-note" data-testid="investigate-ffmpeg-note">
+          {health.ffmpeg.note}
+        </p>
+      ) : null}
+      <div className="section-dropdowns">
+        <label>
+          <span>Show</span>
+          <select
+            data-testid="investigate-show"
+            value={showId}
+            onChange={(event) => {
+              setShowId(event.target.value);
+              setSeason("");
+            }}
+            disabled={investigating || applying}
+          >
+            <option value="">Select a show</option>
+            {shows.map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.title}
+                {item.year ? ` (${item.year})` : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Season (optional)</span>
+          <select
+            data-testid="investigate-season"
+            value={season}
+            onChange={(event) => setSeason(event.target.value)}
+            disabled={investigating || applying || !showId}
+          >
+            <option value="">All seasons</option>
+            {seasonOptions.map((n) => (
+              <option key={n} value={n}>
+                Season {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <label className="config-toggle" data-testid="investigate-vision-toggle">
+        <input
+          type="checkbox"
+          checked={visionAvailable && useVision}
+          onChange={(event) => setUseVision(event.target.checked)}
+          disabled={!visionAvailable || investigating || applying}
+        />
+        <span>Include vision (default when the chat LLM accepts images)</span>
+      </label>
+      <div className="config-actions">
+        <button
+          type="button"
+          className="primary"
+          data-testid="investigate-start"
+          onClick={handleStart}
+          disabled={!showId || investigating || applying || busyStart || !health?.sonarr?.configured}
+        >
+          {investigating || busyStart ? "Investigating…" : "Investigate"}
+        </button>
+      </div>
+      <AdminExecutionCard
+        job={job}
+        testId="investigate-progress"
+        phaseLabels={{ running: "Investigating", queued: "Queued" }}
+        onCancel={handleCancelJob}
+      />
+      <AdminExecutionCard
+        job={applyJob}
+        testId="investigate-apply-progress"
+        phaseLabels={{ running: "Applying", queued: "Queued" }}
+      />
+      {applyJob?.result?.apply_id && !applyJob?.busy && !applyJob?.result?.undo ? (
+        <div className="config-actions">
+          <button type="button" className="ghost" data-testid="investigate-undo" onClick={handleUndo}>
+            Undo last apply
+          </button>
+        </div>
+      ) : null}
+      {reviewOpen && rows.length && !investigating ? (
+        <div data-testid="investigate-review">
+          <p className="wizard-note">
+            Certain and Likely start selected. Uncertain stays off. Deselect any row. Apply remaps
+            the same show only.
+          </p>
+          {rows.map((row) => (
+            <div
+              key={row.id}
+              className="config-advanced-details"
+              data-testid={`investigate-row-${row.id}`}
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 1fr",
+                gap: 16,
+                marginTop: 16,
+                paddingTop: 16,
+                borderTop: "1px solid var(--border-subtle)",
+              }}
+            >
+              <div data-testid={`investigate-claimed-${row.id}`}>
+                <p>
+                  <strong>Filename claim</strong> — not evidence
+                </p>
+                <p className="status status-secondary">{row.filename}</p>
+                <p className="status status-secondary">
+                  File {row.claimed?.label || "unparsed"}
+                  {row.sonarr?.label ? ` · Sonarr ${row.sonarr.label}` : ""}
+                  {row.sonarr?.title ? ` ${row.sonarr.title}` : ""}
+                </p>
+              </div>
+              <div>
+                <label className="config-toggle">
+                  <input
+                    type="checkbox"
+                    data-testid={`investigate-select-${row.id}`}
+                    checked={Boolean(selected[row.id])}
+                    onChange={() => toggleRow(row.id)}
+                    disabled={row.same_show === false}
+                  />
+                  <span>
+                    {confidenceLabel(row.confidence)}
+                    {row.proposed?.scope === "this_series" && row.proposed?.season != null
+                      ? ` · S${String(row.proposed.season).padStart(2, "0")}E${String(row.proposed.episode).padStart(2, "0")}`
+                      : ""}
+                    {row.proposed?.title ? ` ${row.proposed.title}` : ""}
+                    {row.same_show === false ? " · other show (not this sprint)" : ""}
+                  </span>
+                </label>
+                {(row.reasons || []).length ? (
+                  <p className="wizard-note">{row.reasons.join(" · ")}</p>
+                ) : null}
+                <div
+                  style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}
+                  data-testid={`investigate-stills-${row.id}`}
+                >
+                  {(row.stills || []).slice(0, 3).map((src, index) => (
+                    <img
+                      key={`file-${index}`}
+                      src={src}
+                      alt={`File still ${index + 1}`}
+                      style={{ width: 120, height: 68, objectFit: "cover", background: "var(--surface)" }}
+                    />
+                  ))}
+                  {(row.tmdb_stills || []).slice(0, 3).map((src, index) => (
+                    <img
+                      key={`tmdb-${index}`}
+                      src={src}
+                      alt={`TMDB still ${index + 1}`}
+                      style={{ width: 120, height: 68, objectFit: "cover", background: "var(--surface)" }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          ))}
+          <div className="config-actions">
+            <button
+              type="button"
+              className="primary"
+              data-testid="investigate-apply"
+              onClick={handleApply}
+              disabled={!selectedIds.length || applying}
+            >
+              {applying ? "Applying…" : "Apply selected"}
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              data-testid="investigate-cancel-review"
+              onClick={() => setReviewOpen(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+      {error ? (
+        <p className="status status-error" data-testid="investigate-error">
+          {error}
+        </p>
+      ) : null}
+      {!ffmpegReady ? (
+        <p className="status status-secondary">Stills need a host ffmpeg binary.</p>
+      ) : null}
+    </section>
   );
 }
