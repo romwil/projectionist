@@ -1346,6 +1346,22 @@ export async function getExploreFeedContinueWatching({ limit = 12 } = {}) {
   return api(`/library/feeds/continue-watching?${params}`);
 }
 
+export async function getExploreFeedUnfinished({ limit = 12, idleDays = 60 } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    idle_days: String(idleDays),
+  });
+  return api(`/library/feeds/unfinished?${params}`);
+}
+
+export async function getExploreFeedAfterglow({ limit = 12, days = 14 } = {}) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    days: String(days),
+  });
+  return api(`/library/feeds/afterglow?${params}`);
+}
+
 export async function getExploreFeedForYou({ limit = 12 } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   return api(`/library/feeds/for-you?${params}`);

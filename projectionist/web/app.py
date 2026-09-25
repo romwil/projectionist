@@ -82,6 +82,7 @@ from projectionist.library.episodes import (
 )
 from projectionist.library.facets import library_facet_catalog
 from projectionist.library.feeds import (
+    feed_afterglow,
     feed_continue_watching,
     feed_director_spotlight,
     feed_genre_spotlight,
@@ -90,6 +91,7 @@ from projectionist.library.feeds import (
     feed_recently_added,
     feed_revisit_these,
     feed_seasonal_spotlight,
+    feed_unfinished,
     neighbors_payload,
 )
 from projectionist.library.query import (
@@ -3521,6 +3523,35 @@ def library_feed_continue_watching(
         )
     return _sanitize_library_payload(
         feed_continue_watching(_db(), limit=limit, plex_client=plex_client),
+        user,
+    )
+
+
+@app.get("/api/library/feeds/unfinished")
+def library_feed_unfinished(
+    limit: int = 12,
+    idle_days: int = 60,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore Unfinished rail — leftover runtime, not 60-day idle Revisit These."""
+    return _sanitize_library_payload(
+        feed_unfinished(_db(), limit=limit, idle_days=idle_days),
+        user,
+    )
+
+
+@app.get("/api/library/feeds/afterglow")
+def library_feed_afterglow(
+    limit: int = 12,
+    days: int = 14,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore Afterglow rail — post-watch review dialogue from persona presets."""
+    user_id = None
+    if user is not None and getattr(user, "id", None):
+        user_id = str(user.id)
+    return _sanitize_library_payload(
+        feed_afterglow(_db(), limit=limit, days=days, user_id=user_id),
         user,
     )
 
