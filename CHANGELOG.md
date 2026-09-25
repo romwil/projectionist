@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [1.36.2] — 2026-09-25
+
+TV and movie libraries are inside the container, read-write, so Investigate can see the files and Apply can rename them.
+
 ### Highlights
 - **TV and movie libraries are bind-mounted read-write.** The container sees `/tv` and `/movies` (and the same host path on Unraid) so Investigate can read files and Apply can rename them on disk. Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
 - **Investigate maps Sonarr paths before it grabs stills.** `/tv/Show/...` is tried as-is, then the Sonarr root is rewritten onto configured TV/Sonarr roots and Plex library locations. The first existing file wins. Rows that still cannot be read fail instead of completing Uncertain with no stills.
@@ -13,6 +17,11 @@
 ### Fixed
 - Episode investigation translates Sonarr episode paths for ffmpeg stills, runtime, OSHash, and Identify. Unreadable paths are `stills_error=unreadable_path` (failed, not completed). Unknown-scope rows no longer say “other show.”
 - Investigate path mapper treats `tv_root` / `movies_root` as first-class local roots, then `/tv` and `/movies`.
+
+### Verification
+- Backend: 2,310 passed, 6 skipped, 36 subtests passed; 77.02% coverage (74% required).
+- Frontend unit: 805 passed; ESLint 0 errors (pre-existing warnings OK); production Vite build passed.
+- Focused: `tests/test_config_store.py` (branded media env wins); `tests/test_episode_investigate.py::PathMapTests`.
 
 ## [1.36.1] — 2026-09-25
 
