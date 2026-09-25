@@ -1,6 +1,48 @@
 {
-  "generated_at": "2026-09-22T20:44:37Z",
+  "generated_at": "2026-09-25T05:00:42Z",
   "releases": [
+    {
+      "version": "1.36.0",
+      "date": "2026-09-25",
+      "summary": "The house can investigate a mislabeled episode, rematch a movie that is not who it claims, sit with afterglow and tonight's table, whisper a pick to one member, write the owner a letter, and walk a title like a scholar — all before anything leaves the shelf.",
+      "highlights": [
+        "**Investigate, don't trust the filename.** Pick a show on Admin → Libraries. Stills, runtime, and Identify are evidence; `SxxEyy` stays a claim. Apply remaps the same show only.",
+        "**Rematch when the folder already belongs to someone else.** Libraries scans Plex vs Radarr vs path. Repair the miss speaks in human copy. Arrivals are Good News, not download-complete.",
+        "**An evening that remembers.** Afterglow asks while it's warm. Unfinished is leftover runtime. Tonight's table seats two short unwatched titles and one comfort. Each member gets a whisper with a twelve-word why. The phone composer stays pinned.",
+        "**A letter and a walk.** The house writes unwatched hours and dead weight as a letter, not tiles. Chat footnotes open a sheet. Scholar walks stay in conversation."
+      ],
+      "sections": [
+        {
+          "title": "Added",
+          "bullets": [
+            "Episode investigation on Admin → Libraries (`episode-investigate-card`): ffmpeg stills vs TMDB, OSHash → OpenSubtitles, runtime; Certain/Likely start selected; Apply remaps same-show only (Sonarr episode-file + Plex-proper names + refresh + undo).",
+            "ACRCloud Identify lane (~12s clip from 40% in, HMAC `/v1/identify`); miss does not fail the job; new-show attach requires per-row opt-in.",
+            "Rematch studio + Repair the miss (`GET /api/admin/rematch/scan`, skip/retry/repairs) and persona-voiced Good News arrivals.",
+            "Explore rails: afterglow, unfinished (leftover runtime, not 60-day idle), and tonight's table (two unwatched under 2h + one comfort).",
+            "Named-member whisper inbox (`GET /api/whispers`, `/whisper`) with a 12-word why; resume chip and holdable Save-to-library shelf; phone Play (`plex://preplay`) with pinned composer at 390×844.",
+            "House letter, seasonal preview + veto, gift queue, and trust diary (`/admin/house`).",
+            "Scholar footnote sheet from `[^1]`; village pending copy (“they have not called back”); course resume pointer; six chat walks (lineage, canon, map, compare-two-rated, silent seminar, consented gap list).",
+            "Authored Interactive UI QA IDs for Investigate, rematch, afterglow/unfinished, tonight's table, whisper, house letter, scholar footnotes, and H1 admin chrome."
+          ]
+        },
+        {
+          "title": "Changed",
+          "bullets": [
+            "H1 shell extract: Admin Overview / Connections / Seerr leave ConfigPage; chat chrome lives in `ChatWorkspace`; SPA routes in `AppRoutes`; `app.py` registers spa, auth, and setup routers. Behavior-neutral.",
+            "Craft hygiene (docs): Phase 6 / 1.36 Delight spec, wishlist pointer, Live Channels deferred truth-up, architecture-letter still-open refresh, CuratorX keep-vs-sunset note.",
+            "UI & Testing Architecture rule: adversarial triad (unit / Playwright / axe), semantic locators, empty/loading/overflow, hostile paste, races, overlay Escape. Interactive UI QA stays authored checklists on `:8792`."
+          ]
+        },
+        {
+          "title": "Verification",
+          "bullets": [
+            "Backend: 2,288 passed, 6 skipped, 36 subtests passed; 76.64% coverage (74% required).",
+            "Frontend unit: 795 passed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.",
+            "Focused: `tests/test_release_notes_static.py` (H1 spa_routes patch), `frontend/src/lib/whisperInbox.test.mjs` (ChatWorkspace / AppRoutes)."
+          ]
+        }
+      ]
+    },
     {
       "version": "1.35.5",
       "date": "2026-09-22",

@@ -2,101 +2,35 @@
 
 ## [Unreleased]
 
-### 1.36.7 — House letter and gifts
+## [1.36.0] — 2026-09-25
 
-The house writes a letter, not a tile wall: unwatched hours, dead weight, and disk, in the curator’s voice. Upcoming seasonal rails can be previewed and vetoed before they publish. The gift queue reuses the weekly newsletter / nudge cadence — one member, one title, confirm before it leaves. The trust diary links rematch, Investigate, and job cards.
-
-### Highlights
-- **Letter, not tiles.** Admin → House tells the owner story: how many hours nobody has sat with, what has been sitting long enough to weigh on disk, and what the disks actually hold. Nothing is purged from the letter.
-- **Seasonal preview + veto.** Upcoming holiday rails show their titles. Veto keeps one title off that rail. Restore puts it back. The calendar itself stays on Holidays.
-- **Gift queue.** Queue a title for one household member with a short why. Deliver now (after confirm) or wait for the weekly `gift_queue` task. Never a household blast.
-- **Trust diary.** Rematch skips and repairs, Investigate job cards, and recent house-care tasks in one timeline, each linking back.
-
-### Added
-- Owner `GET /api/admin/house/letter`, seasonal preview + veto, gift queue CRUD/deliver, and `GET /api/admin/house/trust-diary`.
-- Scheduler task `gift_queue` on the same weekly cadence as `member_newsletter` / `enthusiast_nudge`.
-- Admin → House (`/admin/house`) — letter, preview, queue, diary.
-
-### H1 — Shell extract (craft)
-
-Continue the god-file peel after Wave 0 Libraries and Wave 2 chatLayout. Admin Overview, Connections, and Seerr leave ConfigPage the same way Household and Libraries already did. Chat chrome lives in ChatWorkspace; SPA routes live in AppRoutes. app.py registers spa, auth, and setup routers instead of defining those handlers inline. Behavior-neutral — no delight feature number.
-
-### 1.36.9 — Scholar walks
-
-The Scholar can walk a title in chat instead of dumping a lecture. Lineage, canon, map, compare-two-rated, silent seminar, and a consented gap reading list reuse the village, the syllabus resume pointer, and the footnote sheet. Nothing is published.
+The house can investigate a mislabeled episode, rematch a movie that is not who it claims, sit with afterglow and tonight's table, whisper a pick to one member, write the owner a letter, and walk a title like a scholar — all before anything leaves the shelf.
 
 ### Highlights
-- **Walks, not pages.** Six household walks stay in chat: lineage, canon, a thematic map, compare two titles you already rated, a silent seminar, and a gap reading list you have to consent to.
-- **Explain the why.** Each walk says why it exists before it starts. Village pending copy still says they have not called back.
-- **Confirm before a gap list.** Titles a course names that are not on the shelf are proposed, not fetched. Confirm writes the list. It does not request, search, or add.
+- **Investigate, don't trust the filename.** Pick a show on Admin → Libraries. Stills, runtime, and Identify are evidence; `SxxEyy` stays a claim. Apply remaps the same show only.
+- **Rematch when the folder already belongs to someone else.** Libraries scans Plex vs Radarr vs path. Repair the miss speaks in human copy. Arrivals are Good News, not download-complete.
+- **An evening that remembers.** Afterglow asks while it's warm. Unfinished is leftover runtime. Tonight's table seats two short unwatched titles and one comfort. Each member gets a whisper with a twelve-word why. The phone composer stays pinned.
+- **A letter and a walk.** The house writes unwatched hours and dead weight as a letter, not tiles. Chat footnotes open a sheet. Scholar walks stay in conversation.
 
 ### Added
-- `build_scholar_walk` in `projectionist/syllabus/walks.py` — six walk kinds with cited stops, household chat prompts, and optional syllabus resume.
-- Village Professor specialty gathers a named walk; silent seminar uses a seminar quote lead; gap walks stay confirm-gated.
-- Footnote sheet labels walk sources (`Lineage source 1`) from `[^lineage-1]` ids.
-
-### 1.36.5 — Whisper and tonight
-
-Chat home on a phone plays to the Plex client with the composer pinned. Save to library is the holdable shelf — no extra heading. A resume chip returns to the last conversation. Explore’s tonight table seats two unwatched under-two-hour titles and one comfort, apart from afterglow, unfinished, and revisit. Each named household member gets a whisper inbox with a twelve-word why — not owner-only Good News, and never a download-complete ping.
-
-### Added
-- `feed_tonight_table` / `GET /api/library/feeds/tonight-table` — two unwatched under 2h plus one comfort.
-- Explore **Tonight's table** rail (after Continue Watching, before Unfinished).
-- Phone Play (`plex://preplay`) at 390-wide viewports; composer stays sticky on 390×844.
-- Resume chip on empty chat home; holdable shelf of saved curator responses (existing Save to library, no extra H1).
-- Named-member **whisper inbox** (`GET /api/whispers`, `/whisper`) — one quiet pick per member per week with a 12-word why. Chat home opens it. Distinct from Good News arrivals.
-
-### 1.36.2 — Rematch and Good News
-
-Admin → Libraries now has a Rematch studio for movie identity mismatches, Repair the miss on failed search/register, and Good News arrival copy in the curator’s voice.
-
-### Highlights
-- **Rematch studio.** Scan Plex GUID vs Radarr TMDB vs folder — the Presence / Savages class of bug. Same title is not the same identity when the path already belongs to someone else. FileBot, Plex Match, and Gracenote are not investigators.
-- **Repair the miss.** Failed Register in Radarr or Sonarr search offers rematch, skip, retry, or Investigate. Human copy only — no JSON dump.
-- **Good News.** Watchlist and gap arrivals speak in persona voice. This is not a “download complete” ping. Named-member whispers live in the 1.36.5 inbox.
-
-### Added
-- Owner `GET /api/admin/rematch/scan`, `POST /api/admin/rematch/skip`, `POST /api/admin/rematch/retry`, `GET /api/admin/rematch/repairs`.
-- Rematch studio + Repair the miss on Admin → Libraries (`LibrariesSection`).
-- `format_good_news` arrival copy in `projectionist/notifications/`.
-
-### 1.36.1 — Identify lanes (ACRCloud)
-
-Investigate can now hear a show, not just see it. ACRCloud Identification (Music / Audio Recognition — not Broadcast Monitoring) takes a ~12s clip from 40% in, HMAC POSTs `/v1/identify`, and maps the title to TMDB. Theme/score hits are show-level; stills and vision still pick the episode. A miss does not fail the job. If Identify names a series that is not in Plex or Sonarr, Apply asks the owner to opt in per row before creating or attaching.
-
-### Added
-- Encrypted ACRCloud host / `access_key` / `access_secret` (env wins) and owner Identify settings + test-clip routes. Test clip never renames a library file.
-- Identify lane in episode investigation: one request per file, rate-limited, mapped to TMDB or Uncertain evidence.
-- New-show prompt on fusion/apply: creating or attaching a series the household does not have requires per-row opt-in.
-
-### 1.36.8 — Scholar core
-
-Scholar citations open a footnote sheet from `[^1]` instead of a raw dump. Village pending consults say they have not called back. A course resume pointer picks up the next unfinished syllabus session.
-
-### Added
-- Chat markdown footnote refs (`[^1]`) open a source sheet in `MessageText` and hide the GFM dump.
-- Village pending consults use household copy (“{name} has not called back”) instead of spinner JSON.
-- `course_resume_pointer` in `projectionist/syllabus/` points at the next unfinished session (or a finished course).
-
-### 1.36.4 — Afterglow and unfinished
-
-Explore now has a post-watch afterglow and a leftover-runtime rail that is not the two-month idle shelf.
-
-### Highlights
-- **Afterglow.** After a recent finish — or a sitting that’s almost done — Explore asks for a take while it’s still warm, using the existing persona review dialogue.
-- **Unfinished is leftover runtime.** Minutes or episodes you can still finish, last touched inside 60 days. Revisit These stays the idle-two-months shelf.
-
-### Added
-- `feed_afterglow` / `GET /api/library/feeds/afterglow` — recently finished or ≥85% unrated titles with persona opener and questions.
-- `feed_unfinished` / `GET /api/library/feeds/unfinished` — leftover playhead / leftover episodes, excluding 60-day idle titles.
-- Explore rails for both (Unfinished and Afterglow sit under Continue Watching).
-
-### 1.36.0 — Episode investigation
-
-On Admin → Libraries, pick a show (optional season) and Investigate. ffmpeg stills are compared to TMDB episode stills, plus runtime and OSHash → OpenSubtitles when that path exists. Filename and Sonarr `SxxEyy` stay in the left column — they are a claim, not evidence. If the chat LLM accepts images, fusion includes vision unless you turn it off (three stills; copy says stills leave the LAN). Review is side-by-side; Certain and Likely start selected, Uncertain stays off. Apply remaps the **same show only** (Sonarr episode-file + Plex-proper names + Plex refresh + undo). Job progress matches Find all missing. ACRCloud Identify waits for 1.36.1. ffmpeg is not in the image — use a host binary on PATH (`FFMPEG_PATH` / `FFPROBE_PATH`).
+- Episode investigation on Admin → Libraries (`episode-investigate-card`): ffmpeg stills vs TMDB, OSHash → OpenSubtitles, runtime; Certain/Likely start selected; Apply remaps same-show only (Sonarr episode-file + Plex-proper names + refresh + undo).
+- ACRCloud Identify lane (~12s clip from 40% in, HMAC `/v1/identify`); miss does not fail the job; new-show attach requires per-row opt-in.
+- Rematch studio + Repair the miss (`GET /api/admin/rematch/scan`, skip/retry/repairs) and persona-voiced Good News arrivals.
+- Explore rails: afterglow, unfinished (leftover runtime, not 60-day idle), and tonight's table (two unwatched under 2h + one comfort).
+- Named-member whisper inbox (`GET /api/whispers`, `/whisper`) with a 12-word why; resume chip and holdable Save-to-library shelf; phone Play (`plex://preplay`) with pinned composer at 390×844.
+- House letter, seasonal preview + veto, gift queue, and trust diary (`/admin/house`).
+- Scholar footnote sheet from `[^1]`; village pending copy (“they have not called back”); course resume pointer; six chat walks (lineage, canon, map, compare-two-rated, silent seminar, consented gap list).
+- Authored Interactive UI QA IDs for Investigate, rematch, afterglow/unfinished, tonight's table, whisper, house letter, scholar footnotes, and H1 admin chrome.
 
 ### Changed
-- **1.36.3 craft hygiene (docs).** Phase 6 / 1.36 Delight program spec, wishlist pointer, Live Channels deferred truth-up, architecture-letter still-open refresh, and CuratorX keep-vs-sunset note. No product behavior change. Prod stays 1.35.5 until the 1.36 end gate.
+- H1 shell extract: Admin Overview / Connections / Seerr leave ConfigPage; chat chrome lives in `ChatWorkspace`; SPA routes in `AppRoutes`; `app.py` registers spa, auth, and setup routers. Behavior-neutral.
+- Craft hygiene (docs): Phase 6 / 1.36 Delight spec, wishlist pointer, Live Channels deferred truth-up, architecture-letter still-open refresh, CuratorX keep-vs-sunset note.
+- UI & Testing Architecture rule: adversarial triad (unit / Playwright / axe), semantic locators, empty/loading/overflow, hostile paste, races, overlay Escape. Interactive UI QA stays authored checklists on `:8792`.
+
+### Verification
+- Backend: 2,288 passed, 6 skipped, 36 subtests passed; 76.64% coverage (74% required).
+- Frontend unit: 795 passed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_release_notes_static.py` (H1 spa_routes patch), `frontend/src/lib/whisperInbox.test.mjs` (ChatWorkspace / AppRoutes).
 
 ## [1.35.5] — 2026-09-22
 
