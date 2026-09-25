@@ -4,7 +4,9 @@ description: >-
   Run authored Interactive UI QA against Projectionist maintainer QA (:8792) in full
   (absolute baseline) or delta (open bugs + tagged subset) mode. Use when the
   user asks for browser QA, UI QA, role QA, absolute baseline, or delta
-  regression — never exploratory pathway discovery; never prod :8788; never smartmap :8790.
+  regression. Checklists must also prove the UI & Testing Architecture visual
+  triad and adversarial spots — never exploratory pathway discovery; never prod
+  :8788; never smartmap :8790.
 ---
 
 # Interactive UI QA
@@ -53,7 +55,7 @@ When: first stand-up, major chrome releases, periodic audit, or user says “ful
 1. Run **every** checklist ID in [reference.md](reference.md) for the requested role(s) (default campaign: member; prefer also owner, youth, guest-tour when user allows).
 2. Recheck every open bug listed in `qa-runs/BASELINE.md` (if any).
 3. Theme both ways where `theme` tags apply (Lights Up + Lights Down at least once each).
-4. Scroll/overflow checks only where the checklist names them.
+4. Visual triad (empty / loading / overflow) plus adversarial spots on Investigate, Explore, chat, and admin — see Architecture proofs. Older IDs that omit them still get those checks when the surface is in scope.
 5. Write/overwrite `qa-runs/ABSOLUTE_BASELINE.md` and a dated `YYYY-MM-DD-<role>-full.md`.
 6. Seed/update `qa-runs/BASELINE.md` open-bug board from graded findings.
 
@@ -86,10 +88,31 @@ If absolute baseline is still a stub, say so in the report and still grade the s
 
 Page-load alone is **never** PASS. Each ID requires its specified interaction and pass criteria.
 
+## Architecture proofs (does not replace authored IDs)
+
+[UI & Testing Architecture](../../rules/ui-testing-architecture.mdc) is the source of truth
+for *what* a checklist ID must prove. This skill stays checklist-only.
+
+When an ID’s surface can accept input, show async state, or host an overlay, also prove:
+
+- **Visual triad** — empty/unlit, loading (no CLS), overflow/boundary. Not page-load alone.
+- **Semantic locators** — prefer role/label (`getByRole`, `getByLabel`). Authored
+  `data-testid` steps stay until rewritten; do not invent CSS / DOM-path clicks.
+- **Adversarial spots** (hostile paste, click-spam, out-of-order / stalled jobs, Escape
+  restores trigger) on:
+  - **Investigate** — owner Admin → Libraries → Investigate episodes
+    (`#episode-investigate` / `episode-investigate-card`). Not a `/investigate` route.
+    Never “Repair Plex.”
+  - **Explore** — `/explore`
+  - **Chat** — `/chat` (`App.jsx` workspace, composer, stream)
+  - **Admin** — `/admin` chrome (`AppShell.jsx`, `PrimaryTopbar.jsx`, `AdminLayout.jsx`)
+
+Stay defensive: no exploit PoCs. Campaign host remains **`:8792`**.
+
 ## Hard rules (both modes)
 
 1. **Authored IDs only** — no pathway discovery. New UI → edit `reference.md` in the same change (or immediately after).
-2. Grade visual / a11y / hydration / scroll / wrong gating as bugs with severity.
+2. Grade visual triad / a11y / hydration / scroll / wrong gating / hostile-input failures as bugs with severity.
 3. Capture screenshots for fails and for representative passes on gating/theme/scroll IDs.
 4. Prefer Cursor browser MCP against `QA_BASE_URL`; do not start Playwright suites unless the user asks.
 5. Never commit `qa-runs/` contents into the projectionist git tree (host-local under `projectionist-qa-scripts/`).
@@ -121,4 +144,6 @@ Page-load alone is **never** PASS. Each ID requires its specified interaction an
 - Nav gating: `frontend/src/lib/primaryNav.js`, `frontend/src/components/PrimaryTopbar.jsx`
 - Shells: `frontend/src/layouts/AppShell.jsx`, `frontend/src/lib/memberShell.js`
 - Admin gate: `frontend/src/layouts/AdminLayout.jsx` (non-owner → `/settings`)
+- Investigate: `frontend/src/pages/admin/LibrariesSection.jsx` (`InvestigatePanel`)
+- Adversarial proofs: [UI & Testing Architecture](../../rules/ui-testing-architecture.mdc)
 - Checklist inventory: [reference.md](reference.md) — includes `inbox`, `notifications`, `recommend` tags for delta selection

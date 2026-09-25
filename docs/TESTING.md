@@ -231,6 +231,11 @@ For CA release readiness without Playwright (or when no browser deps are install
 
 ## Maintenance
 
-- Prefer `data-testid` attributes for stable selectors (see components under `frontend/src/`).
+Adversarial UI standard (unit / Playwright / axe, hostility, races, visual triad):
+[UI & Testing Architecture](../.cursor/rules/ui-testing-architecture.mdc).
+
+- **New** Playwright tests: semantic locators only (`getByRole`, `getByLabel`). Do not add
+  CSS class, internal id, or DOM-path selectors. Existing `data-testid` coverage and
+  `e2e/fixtures/selectors.ts` CSS helpers are legacy — do not mass-rewrite in the same change.
 - Shared mocks live in `e2e/fixtures/api-mocks.ts`.
 - Page helpers: `e2e/fixtures/helpers.ts`, `e2e/fixtures/selectors.ts`.
