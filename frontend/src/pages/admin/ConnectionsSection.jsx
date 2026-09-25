@@ -199,6 +199,43 @@ export default function ConnectionsSection({
         </div>
       </section>
 
+      <section className="config-section" data-testid="library-folder-paths">
+        <h2>Library folders</h2>
+        <p className="wizard-note">
+          Paths this container uses for TV and movies. Bind-mount them read-write
+          (<code>/tv</code> and <code>/movies</code>, or the same host path) so Investigate can rename files on disk.
+          <code>PROJECTIONIST_TV_MEDIA</code> / <code>PROJECTIONIST_MOVIE_MEDIA</code> win when set on the host.
+        </p>
+        <div className="connections-field-grid">
+          <label>
+            <span>{fieldLabel("tv_root")}</span>
+            <input
+              type="text"
+              value={settings.tv_root ?? ""}
+              onChange={(event) => updateSettings({ tv_root: event.target.value })}
+              placeholder="/tv or /mnt/user/data/media/tv"
+              data-testid="tv-library-path"
+            />
+            {FIELD_HELP.tv_root ? (
+              <span className="wizard-note field-help">{FIELD_HELP.tv_root}</span>
+            ) : null}
+          </label>
+          <label>
+            <span>{fieldLabel("movies_root")}</span>
+            <input
+              type="text"
+              value={settings.movies_root ?? ""}
+              onChange={(event) => updateSettings({ movies_root: event.target.value })}
+              placeholder="/movies or /mnt/user/data/media/movies"
+              data-testid="movie-library-path"
+            />
+            {FIELD_HELP.movies_root ? (
+              <span className="wizard-note field-help">{FIELD_HELP.movies_root}</span>
+            ) : null}
+          </label>
+        </div>
+      </section>
+
       <section className="config-section">
         <h2>Optional enrichments</h2>
         <p className="wizard-note">

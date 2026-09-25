@@ -650,6 +650,21 @@ class PathMapTests(unittest.TestCase):
         self.assertEqual(probed, [str(visible)])
         self.assertEqual(extracted, [str(visible)])
 
+    def test_settings_roots_are_first_class_before_container_namespaces(self) -> None:
+        from projectionist.library.episode_investigate.path_map import configured_local_roots
+
+        settings = SimpleNamespace(
+            tv_root="/mnt/user/data/media/tv",
+            movies_root="/mnt/user/data/media/movies",
+            sonarr_root_folder="/tv",
+            radarr_root_folder="/movies",
+        )
+        roots = configured_local_roots(settings)
+        self.assertEqual(roots[0], "/mnt/user/data/media/tv")
+        self.assertEqual(roots[1], "/mnt/user/data/media/movies")
+        self.assertIn("/tv", roots)
+        self.assertIn("/movies", roots)
+
     def test_translation_logs_once_per_job(self) -> None:
         from projectionist.library.episode_investigate.path_map import TranslationLog
 

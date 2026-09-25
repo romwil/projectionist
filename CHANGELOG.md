@@ -3,10 +3,16 @@
 ## [Unreleased]
 
 ### Highlights
+- **TV and movie libraries are bind-mounted read-write.** The container sees `/tv` and `/movies` (and the same host path on Unraid) so Investigate can read files and Apply can rename them on disk. Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
 - **Investigate maps Sonarr paths before it grabs stills.** `/tv/Show/...` is tried as-is, then the Sonarr root is rewritten onto configured TV/Sonarr roots and Plex library locations. The first existing file wins. Rows that still cannot be read fail instead of completing Uncertain with no stills.
+
+### Added
+- `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (env wins over settings) plus existing `TV_ROOT` / `MOVIES_ROOT`. Owner Settings: **Connections → Library folders** and Advanced disk paths (`tv_root` / `movies_root`). Paths are not secrets.
+- Unraid CA Path mounts, `docker-compose.yml`, `docker-compose.unraid.yml`, and `rollout.sh` bind those host folders **read-write** at `/tv` and `/movies` (same-path too on Unraid). Never `:ro`.
 
 ### Fixed
 - Episode investigation translates Sonarr episode paths for ffmpeg stills, runtime, OSHash, and Identify. Unreadable paths are `stills_error=unreadable_path` (failed, not completed). Unknown-scope rows no longer say “other show.”
+- Investigate path mapper treats `tv_root` / `movies_root` as first-class local roots, then `/tv` and `/movies`.
 
 ## [1.36.1] — 2026-09-25
 
