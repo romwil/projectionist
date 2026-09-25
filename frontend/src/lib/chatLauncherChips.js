@@ -36,5 +36,8 @@ export function resolveChatLauncherChipAction(chip) {
   if (action.type === "prefill") {
     return { type: "prefill", text: String(action.text ?? "") };
   }
+  if (action.type === "resume" && String(action.threadId || "").trim()) {
+    return { type: "resume", threadId: String(action.threadId).trim() };
+  }
   return null;
 }

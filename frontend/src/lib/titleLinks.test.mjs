@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   canWatchOnPlex,
+  plexClientPlayUrl,
   plexPlayRatingKey,
   plexWatchUrl,
+  preferPhonePlexPlayHref,
   titleDetailPath,
   titleDetailTo,
 } from "./titleLinks.js";
@@ -80,9 +82,30 @@ test("plexWatchUrl requires rating key and machine id", () => {
   assert.equal(plexWatchUrl("", "server-1"), "");
   assert.equal(plexWatchUrl("99", ""), "");
   assert.equal(
-    plexWatchUrl("99", "machine-abc"),
+    plexWatchUrl("99", "machine-abc", { toClient: false }),
     "https://app.plex.tv/desktop/#!/server/machine-abc/details?key=%2Flibrary%2Fmetadata%2F99",
   );
+});
+
+test("phone Play uses the Plex client scheme", () => {
+  assert.equal(
+    plexClientPlayUrl("99", "machine-abc"),
+    "plex://preplay/?metadataKey=%2Flibrary%2Fmetadata%2F99&server=machine-abc",
+  );
+  assert.equal(
+    plexWatchUrl("99", "machine-abc", { toClient: true }),
+    plexClientPlayUrl("99", "machine-abc"),
+  );
+  assert.equal(
+    plexWatchUrl("99", "machine-abc", { viewportWidth: 390 }),
+    plexClientPlayUrl("99", "machine-abc"),
+  );
+  const desktop = plexWatchUrl("99", "machine-abc", { toClient: false });
+  assert.equal(
+    preferPhonePlexPlayHref(desktop, { viewportWidth: 390 }),
+    plexClientPlayUrl("99", "machine-abc"),
+  );
+  assert.equal(preferPhonePlexPlayHref(desktop, { viewportWidth: 1024 }), desktop);
 });
 
 test("canWatchOnPlex only when in library with rating_key", () => {

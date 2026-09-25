@@ -10,6 +10,7 @@ import {
   getExploreFeedRecentlyAdded,
   getExploreFeedRevisitThese,
   getExploreFeedSeasonalSpotlight,
+  getExploreFeedTonightTable,
   getExploreFeedUnfinished,
   getPickForMeFeed,
   getLibraryHealth,
@@ -220,6 +221,7 @@ export default function ExplorePage() {
   const [facetColumns, setFacetColumns] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const continueWatching = useFeed(() => getExploreFeedContinueWatching({ limit: 12 }), []);
+  const tonightTable = useFeed(() => getExploreFeedTonightTable({ limit: 3 }), []);
   const unfinished = useFeed(() => getExploreFeedUnfinished({ limit: 12, idleDays: 60 }), []);
   const afterglow = useFeed(() => getExploreFeedAfterglow({ limit: 12, days: 14 }), []);
   const pickForMe = useFeed(() => getPickForMeFeed({ limit: 8 }), []);
@@ -434,6 +436,34 @@ export default function ExplorePage() {
                   })
                 : null
             }
+            {...recommendProps}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="tonight-table"
+          title="Tonight's table"
+          subtitle="Under two hours — two unwatched seats and one comfort, not leftover or afterglow"
+          isOwner={isOwner}
+          empty={
+            tonightTable.error ||
+            (!tonightTable.loading && !tonightTable.items.length ? tonightTable.note : null)
+          }
+        >
+          <FeedRail
+            testId="explore-tonight-table-rail"
+            items={tonightTable.items}
+            loading={tonightTable.loading}
+            cardMeta={(item) => item.why || null}
+            chatHref={
+              tonightTable.items.length
+                ? chatFromRailHref({
+                    railTitle: "Tonight's table",
+                    items: tonightTable.items,
+                  })
+                : null
+            }
+            chatLabel="Set the table"
             {...recommendProps}
           />
         </ExploreSection>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, getPlexMachineId } from "../api/client";
-import { canWatchOnPlex, plexPlayRatingKey, plexWatchUrl } from "../lib/titleLinks.js";
+import { canWatchOnPlex, plexPlayRatingKey, plexWatchUrl, preferPhonePlexPlayHref } from "../lib/titleLinks.js";
 import { watchProgressState } from "../lib/watchProgress.js";
 import PosterActionMenu from "./PosterActionMenu";
 import WatchProgressBadge from "./WatchProgressBadge";
@@ -48,7 +48,7 @@ export default function PosterOverlayControls({
   useEffect(() => {
     const provided = String(item?.plex_watch_url || "").trim();
     if (provided) {
-      setPlexHref(provided);
+      setPlexHref(preferPhonePlexPlayHref(provided));
       return undefined;
     }
     if (!showWatch) {

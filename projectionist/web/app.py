@@ -91,6 +91,7 @@ from projectionist.library.feeds import (
     feed_recently_added,
     feed_revisit_these,
     feed_seasonal_spotlight,
+    feed_tonight_table,
     feed_unfinished,
     neighbors_payload,
 )
@@ -3561,6 +3562,18 @@ def library_feed_afterglow(
         user_id = str(user.id)
     return _sanitize_library_payload(
         feed_afterglow(_db(), limit=limit, days=days, user_id=user_id),
+        user,
+    )
+
+
+@app.get("/api/library/feeds/tonight-table")
+def library_feed_tonight_table(
+    limit: int = 3,
+    user=Depends(get_current_user_dep),
+) -> Dict[str, Any]:
+    """Explore Tonight's table — two unwatched under 2h plus one comfort."""
+    return _sanitize_library_payload(
+        feed_tonight_table(_db(), limit=limit),
         user,
     )
 

@@ -6,6 +6,9 @@
 /** CSS class applied to the scrollable transcript host. */
 export const CHAT_SCROLL_REGION_CLASS = "chat-scroll-region";
 
+/** Phone Play (390×844) opens the Plex client; composer stays pinned. */
+export const PHONE_PLAY_MAX_WIDTH = 390;
+
 /** CSS class for the New reply chip — lives above the composer, not in the transcript. */
 export const NEW_REPLY_CHIP_CLASS = "new-reply-chip";
 
@@ -42,4 +45,45 @@ export function messageTextContainmentStyle() {
     wordBreak: "break-word",
     overflowX: "clip",
   };
+}
+
+export function isPhonePlayViewport(width) {
+  const value = Number(width);
+  if (Number.isFinite(value) && value > 0) return value <= PHONE_PLAY_MAX_WIDTH;
+  if (typeof window !== "undefined" && Number.isFinite(window.innerWidth)) {
+    return window.innerWidth <= PHONE_PLAY_MAX_WIDTH;
+  }
+  return false;
+}
+
+/** Most recently updated thread that is not the empty chat-home session. */
+export function pickResumeThread(threads, activeSessionId) {
+  const active = String(activeSessionId || "").trim();
+  const list = Array.isArray(threads) ? threads : [];
+  return (
+    list.find((thread) => {
+      const id = String(thread?.id || "").trim();
+      if (!id || id === active) return false;
+      return Boolean(String(thread?.thread_title || "").trim());
+    }) || null
+  );
+}
+
+export function resumeChipFromThread(thread) {
+  if (!thread?.id) return null;
+  const title = String(thread.thread_title || "").trim() || "last chat";
+  return {
+    id: "resume",
+    label: `Resume ${title}`,
+    testId: "chat-resume-chip",
+    action: { type: "resume", threadId: String(thread.id) },
+  };
+}
+
+/** Saved-library shelf on chat home — no extra H1; existing Save to library. */
+export function holdableShelfPages(pages, { limit = 6 } = {}) {
+  const list = Array.isArray(pages) ? pages : [];
+  return list
+    .filter((page) => page?.id && String(page.name || "").trim())
+    .slice(0, Math.max(0, Number(limit) || 0));
 }
