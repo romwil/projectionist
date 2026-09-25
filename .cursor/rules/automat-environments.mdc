@@ -25,7 +25,7 @@ Authoritative hosts for the Automat Unraid deployment. Full human runbook:
 
 When the user reports UI missing/broken — **especially with a screenshot** — verify with **cursor-ide-browser** against the correct LAN host above. Do **not** argue from bundle string greps or “you didn’t scroll.” Trust scrolled-to-bottom + screenshot reports.
 
-Interactive UI QA campaigns: [interactive-ui-qa skill](../skills/interactive-ui-qa/SKILL.md) → target **QA `:8792`**, never prod `:8788`, never smartmap `:8790`.
+Interactive UI QA campaigns: [interactive-ui-qa skill](../skills/interactive-ui-qa/SKILL.md) → target **QA `:8792`**, never prod `:8788`, never smartmap `:8790`. Adversarial UI proofs: [ui-testing-architecture.mdc](ui-testing-architecture.mdc).
 
 ## Ops UI (post-1.32.2)
 
