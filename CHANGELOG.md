@@ -13,7 +13,31 @@ Chat home on a phone plays to the Plex client with the composer pinned. Save to 
 - Resume chip on empty chat home; holdable shelf of saved curator responses (existing Save to library, no extra H1).
 
 ### Deferred
-- **TODO:** Whisper inbox (named member, 12-word why) follows the v1.36.2 Good News merge — `projectionist/notifications/**` is locked by that sibling.
+- Whisper inbox (named member, 12-word why) — remaining 1.36.5 slice now that Good News owns `projectionist/notifications/**`.
+
+### 1.36.2 — Rematch and Good News
+
+Admin → Libraries now has a Rematch studio for movie identity mismatches, Repair the miss on failed search/register, and Good News arrival copy in the curator’s voice.
+
+### Highlights
+- **Rematch studio.** Scan Plex GUID vs Radarr TMDB vs folder — the Presence / Savages class of bug. Same title is not the same identity when the path already belongs to someone else. FileBot, Plex Match, and Gracenote are not investigators.
+- **Repair the miss.** Failed Register in Radarr or Sonarr search offers rematch, skip, retry, or Investigate. Human copy only — no JSON dump.
+- **Good News.** Watchlist and gap arrivals speak in persona voice. This is not a “download complete” ping. Member whisper inbox waits for 1.36.5.
+
+### Added
+- Owner `GET /api/admin/rematch/scan`, `POST /api/admin/rematch/skip`, `POST /api/admin/rematch/retry`, `GET /api/admin/rematch/repairs`.
+- Rematch studio + Repair the miss on Admin → Libraries (`LibrariesSection`).
+- `format_good_news` arrival copy in `projectionist/notifications/`.
+
+### 1.36.1 — Identify lanes (ACRCloud)
+
+Investigate can now hear a show, not just see it. ACRCloud Identification (Music / Audio Recognition — not Broadcast Monitoring) takes a ~12s clip from 40% in, HMAC POSTs `/v1/identify`, and maps the title to TMDB. Theme/score hits are show-level; stills and vision still pick the episode. A miss does not fail the job. If Identify names a series that is not in Plex or Sonarr, Apply asks the owner to opt in per row before creating or attaching.
+
+### Added
+- Encrypted ACRCloud host / `access_key` / `access_secret` (env wins) and owner Identify settings + test-clip routes. Test clip never renames a library file.
+- Identify lane in episode investigation: one request per file, rate-limited, mapped to TMDB or Uncertain evidence.
+- New-show prompt on fusion/apply: creating or attaching a series the household does not have requires per-row opt-in.
+>>>>>>> origin/release/1.36
 
 ### 1.36.8 — Scholar core
 

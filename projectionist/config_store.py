@@ -655,6 +655,16 @@ class YouthSettings:
 
 
 @dataclass
+class AcrcloudSettings:
+    """ACRCloud Identification API (Music / Audio Recognition). Env wins."""
+
+    # Region host, e.g. identify-us-west-2.acrcloud.com — not Broadcast Monitoring.
+    host: str = ""
+    access_key: str = ""
+    access_secret: str = ""
+
+
+@dataclass
 class TheaterSettings:
     """Lobby theater kiosk (open LAN display on a dedicated port)."""
 
@@ -684,6 +694,7 @@ NESTED_SETTINGS_TYPES.update(
         "apprise": AppriseSettings,
         "youth": YouthSettings,
         "theater": TheaterSettings,
+        "acrcloud": AcrcloudSettings,
     }
 )
 
@@ -754,6 +765,7 @@ class Settings:
     apprise: AppriseSettings = field(default_factory=AppriseSettings)
     youth: YouthSettings = field(default_factory=YouthSettings)
     theater: TheaterSettings = field(default_factory=TheaterSettings)
+    acrcloud: AcrcloudSettings = field(default_factory=AcrcloudSettings)
 
     def apply_to_environ(self) -> None:
         for env_name, field_name in ENV_TO_FIELD.items():
@@ -901,7 +913,30 @@ def load_merged_settings(data_dir: Path) -> Settings:
             continue
         merged[int_field] = int(env_value)
     merged = _apply_tunarr_env_overrides(merged, file_data)
+    merged = _apply_acrcloud_env_overrides(merged)
     return normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
+
+
+def _apply_acrcloud_env_overrides(merged: Dict[str, Any]) -> Dict[str, Any]:
+    """H4: ACRCloud host / keys — environment wins when set."""
+    nested = dict(merged.get("acrcloud") or {})
+    host = resolve_env("PROJECTIONIST_ACRCLOUD_HOST") or resolve_env("ACRCLOUD_HOST")
+    key = resolve_env("PROJECTIONIST_ACRCLOUD_ACCESS_KEY") or resolve_env("ACRCLOUD_ACCESS_KEY")
+    secret = resolve_env("PROJECTIONIST_ACRCLOUD_ACCESS_SECRET") or resolve_env(
+        "ACRCLOUD_ACCESS_SECRET"
+    )
+    if host:
+        nested["host"] = host.strip()
+        logger.debug("Secret field acrcloud.host taken from env (env wins)")
+    if key:
+        nested["access_key"] = key.strip()
+        logger.debug("Secret field acrcloud.access_key taken from env (env wins)")
+    if secret:
+        nested["access_secret"] = secret.strip()
+        logger.debug("Secret field acrcloud.access_secret taken from env (env wins)")
+    if nested:
+        merged["acrcloud"] = nested
+    return merged
 
 
 def _apply_tunarr_env_overrides(

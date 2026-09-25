@@ -79,6 +79,56 @@ def opensubtitles_api_key(settings: Any = None) -> str:
     return ""
 
 
+def acrcloud_config(settings: Any = None) -> Dict[str, Any]:
+    """Region host + keys. Environment wins over encrypted settings."""
+    host = str(
+        os.environ.get("PROJECTIONIST_ACRCLOUD_HOST")
+        or os.environ.get("ACRCLOUD_HOST")
+        or ""
+    ).strip()
+    key = str(
+        os.environ.get("PROJECTIONIST_ACRCLOUD_ACCESS_KEY")
+        or os.environ.get("ACRCLOUD_ACCESS_KEY")
+        or ""
+    ).strip()
+    secret = str(
+        os.environ.get("PROJECTIONIST_ACRCLOUD_ACCESS_SECRET")
+        or os.environ.get("ACRCLOUD_ACCESS_SECRET")
+        or ""
+    ).strip()
+    nested = getattr(settings, "acrcloud", None) if settings is not None else None
+    if not host and nested is not None:
+        host = str(getattr(nested, "host", "") or "").strip()
+    if not key and nested is not None:
+        key = str(getattr(nested, "access_key", "") or "").strip()
+    if not secret and nested is not None:
+        secret = str(getattr(nested, "access_secret", "") or "").strip()
+    return {
+        "host": host,
+        "access_key": key,
+        "access_secret": secret,
+        "available": bool(key and secret),
+        "host_source": _acrcloud_source("HOST", host, nested, "host"),
+        "access_key_source": _acrcloud_source("ACCESS_KEY", key, nested, "access_key"),
+        "access_secret_source": _acrcloud_source("ACCESS_SECRET", secret, nested, "access_secret"),
+    }
+
+
+def _acrcloud_source(suffix: str, resolved: str, nested: Any, field: str) -> str:
+    if not resolved:
+        return ""
+    env = str(
+        os.environ.get(f"PROJECTIONIST_ACRCLOUD_{suffix}")
+        or os.environ.get(f"ACRCLOUD_{suffix}")
+        or ""
+    ).strip()
+    if env:
+        return "env"
+    if nested is not None and str(getattr(nested, field, "") or "").strip():
+        return "file"
+    return ""
+
+
 def health_payload(settings: Any = None) -> Dict[str, Any]:
     ffmpeg = resolve_ffmpeg()
     ffprobe = resolve_ffprobe()
@@ -90,6 +140,7 @@ def health_payload(settings: Any = None) -> Dict[str, Any]:
         and str(getattr(settings, "sonarr_api_key", "") or "").strip()
     )
     os_key = opensubtitles_api_key(settings)
+    acr = acrcloud_config(settings)
     return {
         "status": "ok",
         "available": True,
@@ -111,7 +162,12 @@ def health_payload(settings: Any = None) -> Dict[str, Any]:
         "tmdb": {"configured": tmdb},
         "sonarr": {"configured": sonarr},
         "stills_leave_lan": vision,
-        "acrcloud": {"available": False, "deferred": "v1.36.1"},
+        "acrcloud": {
+            "available": bool(acr.get("available")),
+            "configured": bool(acr.get("available")),
+            "host": str(acr.get("host") or ""),
+            "deferred": False,
+        },
     }
 
 

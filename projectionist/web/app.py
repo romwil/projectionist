@@ -219,6 +219,7 @@ from projectionist.web.knowledge_ops_routes import register_knowledge_ops_routes
 from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
 from projectionist.web.investigate_routes import register_investigate_routes
+from projectionist.web.rematch_routes import register_rematch_routes
 from projectionist.web.setup import (
     REVEALABLE_SECRET_FIELDS,
     SECRET_FIELDS,
@@ -1075,6 +1076,13 @@ def _mask_settings(settings: Settings) -> Dict[str, Any]:
     apprise_payload["configured"] = apprise_install_configured(settings)
     apprise_payload["package_available"] = apprise_available()
     payload["apprise"] = apprise_payload
+    acrcloud = getattr(settings, "acrcloud", None)
+    acr_payload = dict(payload.get("acrcloud") or {})
+    acr_payload["access_key_set"] = bool(getattr(acrcloud, "access_key", ""))
+    acr_payload["access_secret_set"] = bool(getattr(acrcloud, "access_secret", ""))
+    acr_payload["access_key"] = ""
+    acr_payload["access_secret"] = ""
+    payload["acrcloud"] = acr_payload
     from projectionist.theater.normalize import normalize_theater_settings, theater_host_port_hint
 
     theater = normalize_theater_settings(getattr(settings, "theater", None))
@@ -1924,6 +1932,7 @@ register_live_channels_routes(
     data_dir=DATA_DIR,
 )
 register_investigate_routes(app)
+register_rematch_routes(app)
 
 
 def _scheduler_trigger_background(name: str) -> Dict[str, Any]:

@@ -1,4 +1,4 @@
-"""Episode investigation HTTP routes (v1.36.0).
+"""Episode investigation HTTP routes (v1.36.0 + Identify v1.36.1).
 
 Registered via ``register_investigate_routes`` so app.py stays the composition
 root — same pattern as ``live_channels_routes``.
@@ -6,6 +6,7 @@ root — same pattern as ``live_channels_routes``.
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -13,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from projectionist.config_store import load_merged_settings
+from projectionist.config_store import AcrcloudSettings, load_merged_settings, save_settings, Settings
 from projectionist.web.auth import require_role
 
 router = APIRouter(tags=["investigate"])
@@ -27,6 +28,18 @@ class InvestigateStartPayload(BaseModel):
 
 class InvestigateApplyPayload(BaseModel):
     file_ids: List[str] = Field(default_factory=list)
+    create_opt_in: List[str] = Field(default_factory=list)
+
+
+class IdentifySettingsPayload(BaseModel):
+    host: str = ""
+    access_key: str = ""
+    access_secret: str = ""
+
+
+class IdentifyTestPayload(BaseModel):
+    path: str = ""
+    file_id: str = ""
 
 
 class InvestigateUndoPayload(BaseModel):
@@ -111,7 +124,11 @@ def investigate_apply(
     del user
     from projectionist.library.episode_investigate.job import start_apply_job
 
-    snap = start_apply_job(_settings(), file_ids=payload.file_ids)
+    snap = start_apply_job(
+        _settings(),
+        file_ids=payload.file_ids,
+        create_opt_in=payload.create_opt_in,
+    )
     if snap.get("accepted") is False and snap.get("error"):
         raise HTTPException(status_code=400, detail=str(snap.get("error")))
     return snap
@@ -143,6 +160,96 @@ def investigate_undo(
     snap = start_undo_job(_settings(), apply_id=payload.apply_id)
     if snap.get("accepted") is False and snap.get("error"):
         raise HTTPException(status_code=400, detail=str(snap.get("error")))
+    return snap
+
+
+@router.get("/api/admin/investigate/identify/settings")
+def identify_settings(user=Depends(require_role("owner"))) -> Dict[str, Any]:
+    del user
+    from projectionist.library.episode_investigate.acrcloud import DEFAULT_HOST
+    from projectionist.library.episode_investigate.capabilities import acrcloud_config
+
+    creds = acrcloud_config(_settings())
+    return {
+        "host": str(creds.get("host") or ""),
+        "default_host": DEFAULT_HOST,
+        "access_key_set": bool(creds.get("access_key")),
+        "access_secret_set": bool(creds.get("access_secret")),
+        "available": bool(creds.get("available")),
+        "source": {
+            "host": creds.get("host_source") or "",
+            "access_key": creds.get("access_key_source") or "",
+            "access_secret": creds.get("access_secret_source") or "",
+        },
+    }
+
+
+@router.put("/api/admin/investigate/identify/settings")
+def identify_settings_save(
+    payload: IdentifySettingsPayload, user=Depends(require_role("owner"))
+) -> Dict[str, Any]:
+    del user
+    from projectionist.library.episode_investigate.acrcloud import normalize_identify_host
+    from projectionist.library.episode_investigate.capabilities import acrcloud_config
+
+    data_dir = _data_dir()
+    current = load_merged_settings(data_dir)
+    existing = getattr(current, "acrcloud", AcrcloudSettings())
+    host = str(payload.host or "").strip()
+    if host:
+        try:
+            host = normalize_identify_host(host)
+        except ValueError as error:
+            raise HTTPException(status_code=400, detail=str(error)) from error
+    else:
+        host = str(existing.host or "").strip()
+    access_key = str(payload.access_key or "").strip() or str(existing.access_key or "")
+    access_secret = str(payload.access_secret or "").strip() or str(existing.access_secret or "")
+    updated = Settings.from_mapping(
+        {
+            **asdict(current),
+            "acrcloud": {
+                "host": host,
+                "access_key": access_key,
+                "access_secret": access_secret,
+            },
+        }
+    )
+    save_settings(data_dir, updated)
+    creds = acrcloud_config(load_merged_settings(data_dir))
+    return {
+        "ok": True,
+        "host": str(creds.get("host") or host),
+        "access_key_set": bool(creds.get("access_key")),
+        "access_secret_set": bool(creds.get("access_secret")),
+        "available": bool(creds.get("available")),
+        "source": {
+            "host": creds.get("host_source") or "",
+            "access_key": creds.get("access_key_source") or "",
+            "access_secret": creds.get("access_secret_source") or "",
+        },
+    }
+
+
+@router.post("/api/admin/investigate/identify/test")
+def identify_test(
+    payload: IdentifyTestPayload, user=Depends(require_role("owner"))
+) -> Dict[str, Any]:
+    del user
+    from projectionist.library.episode_investigate.acrcloud import test_identify_clip
+    from projectionist.library.episode_investigate.job import build_status
+
+    path = str(payload.path or "").strip()
+    if not path and payload.file_id:
+        snap = build_status()
+        result = snap.get("result") if isinstance(snap.get("result"), dict) else {}
+        for row in result.get("rows") or []:
+            if str(row.get("id") or "") == str(payload.file_id):
+                path = str(row.get("path") or "")
+                break
+    snap = test_identify_clip(settings=_settings(), path=path, dest_dir=_data_dir() / "investigate" / "identify-test")
+    if snap.get("renamed"):
+        snap["renamed"] = False
     return snap
 
 
