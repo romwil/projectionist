@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Highlights
+- **Investigate maps Sonarr paths before it grabs stills.** `/tv/Show/...` is tried as-is, then the Sonarr root is rewritten onto configured TV/Sonarr roots and Plex library locations. The first existing file wins. Rows that still cannot be read fail instead of completing Uncertain with no stills.
+
+### Fixed
+- Episode investigation translates Sonarr episode paths for ffmpeg stills, runtime, OSHash, and Identify. Unreadable paths are `stills_error=unreadable_path` (failed, not completed). Unknown-scope rows no longer say “other show.”
+
 ## [1.36.1] — 2026-09-25
 
 Investigate stills ship inside the image, review is a table you can scan, idle Ready 0% is gone, and first-boot plus chat stay on the LAN allowlist.

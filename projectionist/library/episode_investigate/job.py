@@ -25,6 +25,11 @@ from projectionist.library.episode_investigate.catalog import (
 from projectionist.library.episode_investigate.ffmpeg import extract_stills, probe_runtime_seconds
 from projectionist.library.episode_investigate.fusion import fuse_row
 from projectionist.library.episode_investigate.oshash import file_oshash, lookup_opensubtitles
+from projectionist.library.episode_investigate.path_map import (
+    TranslationLog,
+    discover_media_roots,
+    resolve_visible_media_path,
+)
 from projectionist.library.episode_investigate.stills import still_url, stills_dir
 from projectionist.library.episode_investigate.tmdb_stills import (
     download_episode_stills,
@@ -39,6 +44,12 @@ KIND = "episode_investigate"
 APPLY_KIND = "episode_investigate_apply"
 IDLE_MESSAGE = "Pick a show to investigate"
 APPLY_IDLE = "Nothing to apply"
+UNREADABLE_PATH = "unreadable_path"
+UNREADABLE_REASON = (
+    "Episode file is not readable in this container. "
+    "Sonarr's path could not be mapped to a file visible here "
+    "(configured TV/Sonarr roots and Plex library locations were tried)."
+)
 
 
 def build_status() -> Dict[str, Any]:
@@ -122,7 +133,11 @@ def start_investigate_job(
             "show": show,
             "season": season,
             "use_vision": vision_on,
-            "vision_used": vision_on and llm_accepts_images(settings),
+            "vision_used": bool(
+                vision_on
+                and llm_accepts_images(settings)
+                and any(row.get("stills") for row in rows)
+            ),
             "stills_leave_lan": vision_on and llm_accepts_images(settings),
             "rows": rows,
             "series_id": inventory.get("series_id"),
@@ -279,6 +294,8 @@ def investigate_files(
                 fetched.extend(season_episodes(tmdb_client, int(show["tmdb_id"]), season_n))
             tmdb_catalog = merge_tmdb_runtimes(catalog, fetched)
 
+    extra_roots = discover_media_roots(settings)
+    translation_log = TranslationLog()
     rows: List[Dict[str, Any]] = []
     for file_row in files:
         file_id = str(file_row.get("id"))
@@ -288,11 +305,15 @@ def investigate_files(
             continue
         if store is not None:
             store.set_item(file_id, "running", message=_item_title(file_row))
+        sonarr_path = str(file_row.get("path") or "")
+        resolved = resolve_visible_media_path(sonarr_path, settings, extra_roots=extra_roots)
+        translation_log.emit(sonarr_path, resolved)
+        mapped_row = {**dict(file_row), "resolved_path": resolved or ""}
         try:
             row = investigate_one(
                 settings,
                 show,
-                file_row,
+                mapped_row,
                 catalog=tmdb_catalog,
                 use_vision=use_vision,
                 household=household,
@@ -304,7 +325,15 @@ def investigate_files(
             )
             rows.append(row)
             if store is not None:
-                store.set_item(file_id, "completed", outcome=str(row.get("confidence") or ""))
+                if row.get("stills_error") == UNREADABLE_PATH:
+                    store.set_item(
+                        file_id,
+                        "failed",
+                        error=UNREADABLE_REASON,
+                        outcome="unreadable",
+                    )
+                else:
+                    store.set_item(file_id, "completed", outcome=str(row.get("confidence") or ""))
         except Exception as error:  # noqa: BLE001
             logger.warning("investigate file failed id=%s error=%s", file_id, error)
             if store is not None:
@@ -326,11 +355,16 @@ def investigate_one(
     tmdb_client: Any = None,
     series_id: Any = None,
 ) -> Dict[str, Any]:
-    path = str(file_row.get("path") or "")
+    sonarr_path = str(file_row.get("path") or "")
+    resolved = str(file_row.get("resolved_path") or "").strip()
+    if not resolved and sonarr_path:
+        resolved = resolve_visible_media_path(sonarr_path, settings) or ""
+    media_path = resolved or sonarr_path
+    readable = bool(media_path) and Path(media_path).is_file()
     dest = stills_dir(data_dir, job_id, str(file_row.get("id")))
-    runtime = probe_runtime_seconds(path) if path else None
-    extracted = extract_stills(path, dest, runtime_seconds=runtime) if path else []
-    digest = file_oshash(path) if path else None
+    runtime = probe_runtime_seconds(media_path) if readable else None
+    extracted = extract_stills(media_path, dest, runtime_seconds=runtime) if readable else []
+    digest = file_oshash(media_path) if readable else None
     opensub = lookup_opensubtitles(digest or "", settings=settings) if digest else None
     vision = None
     if use_vision and extracted and llm_accepts_images(settings):
@@ -343,13 +377,13 @@ def investigate_one(
     identify = None
     try:
         identify = identify_file(
-            path,
+            media_path if readable else sonarr_path,
             dest,
             settings=settings,
             runtime_seconds=runtime,
             tmdb_client=tmdb_client,
             this_show=show,
-            file_key=str(file_row.get("id") or path),
+            file_key=str(file_row.get("id") or sonarr_path),
         )
     except Exception as error:  # noqa: BLE001 — Identify miss must not fail the job
         logger.info("identify lane skipped id=%s error=%s", file_row.get("id"), error)
@@ -381,12 +415,17 @@ def investigate_one(
             dest,
         )
     file_id = str(file_row.get("id"))
+    reasons = list(fused.get("reasons") or [])
+    stills_error = UNREADABLE_PATH if not readable else ""
+    if stills_error and UNREADABLE_REASON not in reasons:
+        reasons.insert(0, UNREADABLE_REASON)
     return {
         "id": file_id,
         "file_id": file_row.get("file_id"),
         "series_id": series_id or file_row.get("series_id"),
-        "path": path,
-        "filename": (file_row.get("claimed") or {}).get("filename") or Path(path).name,
+        "path": sonarr_path,
+        "resolved_path": media_path if readable else "",
+        "filename": (file_row.get("claimed") or {}).get("filename") or Path(sonarr_path or media_path).name,
         "claimed": file_row.get("claimed") or {},
         "sonarr": file_row.get("sonarr") or {},
         "runtime_seconds": runtime,
@@ -396,7 +435,9 @@ def investigate_one(
         "tmdb_stills": [still_url(job_id, file_id, path.name) for path in tmdb_still_paths],
         "vision": vision,
         "identify": identify,
+        "stills_error": stills_error,
         **fused,
+        "reasons": reasons,
     }
 
 

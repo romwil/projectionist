@@ -9,6 +9,9 @@ export const SCENE_NAMES_NOT_EVIDENCE =
 export const FFMPEG_MISSING =
   "This running container cannot find ffmpeg on PATH. The Projectionist image should include it — that is a bad image or PATH, not a host install. Set FFMPEG_PATH and FFPROBE_PATH only to override.";
 
+export const UNREADABLE_MEDIA =
+  "Sonarr's files are not visible inside this container after mapping configured TV/Sonarr roots and Plex library locations.";
+
 export function defaultRowSelected(row) {
   if (!row) return false;
   if (row.same_show === false) return false;
@@ -44,6 +47,10 @@ export function applyButtonClass(selectedCount) {
 
 export function rowHasStills(row) {
   return Boolean((row?.stills || []).length);
+}
+
+export function rowUnreadable(row) {
+  return String(row?.stills_error || "") === "unreadable_path";
 }
 
 export function rowHasIdentify(row) {
@@ -85,6 +92,9 @@ export function reviewEvidenceSummary(rows, options = {}) {
   }
   if (noStills === list.length) {
     bits.push("No stills were extracted.");
+  }
+  if (list.length && list.every(rowUnreadable)) {
+    bits.push(UNREADABLE_MEDIA);
   }
   if (!visionOn) {
     bits.push("Vision was off.");
