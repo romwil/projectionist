@@ -4,16 +4,14 @@
 
 ### 1.36.5 — Whisper and tonight
 
-Chat home on a phone plays to the Plex client with the composer pinned. Save to library is the holdable shelf — no extra heading. A resume chip returns to the last conversation. Explore’s tonight table seats two unwatched under-two-hour titles and one comfort, apart from afterglow, unfinished, and revisit.
+Chat home on a phone plays to the Plex client with the composer pinned. Save to library is the holdable shelf — no extra heading. A resume chip returns to the last conversation. Explore’s tonight table seats two unwatched under-two-hour titles and one comfort, apart from afterglow, unfinished, and revisit. Each named household member gets a whisper inbox with a twelve-word why — not owner-only Good News, and never a download-complete ping.
 
 ### Added
 - `feed_tonight_table` / `GET /api/library/feeds/tonight-table` — two unwatched under 2h plus one comfort.
 - Explore **Tonight's table** rail (after Continue Watching, before Unfinished).
 - Phone Play (`plex://preplay`) at 390-wide viewports; composer stays sticky on 390×844.
 - Resume chip on empty chat home; holdable shelf of saved curator responses (existing Save to library, no extra H1).
-
-### Deferred
-- Whisper inbox (named member, 12-word why) — remaining 1.36.5 slice now that Good News owns `projectionist/notifications/**`.
+- Named-member **whisper inbox** (`GET /api/whispers`, `/whisper`) — one quiet pick per member per week with a 12-word why. Chat home opens it. Distinct from Good News arrivals.
 
 ### 1.36.2 — Rematch and Good News
 
@@ -22,7 +20,7 @@ Admin → Libraries now has a Rematch studio for movie identity mismatches, Repa
 ### Highlights
 - **Rematch studio.** Scan Plex GUID vs Radarr TMDB vs folder — the Presence / Savages class of bug. Same title is not the same identity when the path already belongs to someone else. FileBot, Plex Match, and Gracenote are not investigators.
 - **Repair the miss.** Failed Register in Radarr or Sonarr search offers rematch, skip, retry, or Investigate. Human copy only — no JSON dump.
-- **Good News.** Watchlist and gap arrivals speak in persona voice. This is not a “download complete” ping. Member whisper inbox waits for 1.36.5.
+- **Good News.** Watchlist and gap arrivals speak in persona voice. This is not a “download complete” ping. Named-member whispers live in the 1.36.5 inbox.
 
 ### Added
 - Owner `GET /api/admin/rematch/scan`, `POST /api/admin/rematch/skip`, `POST /api/admin/rematch/retry`, `GET /api/admin/rematch/repairs`.
