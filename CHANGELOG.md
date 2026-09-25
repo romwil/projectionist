@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### 1.36.4 — Afterglow and unfinished
+
+Explore now has a post-watch afterglow and a leftover-runtime rail that is not the two-month idle shelf.
+
+### Highlights
+- **Afterglow.** After a recent finish — or a sitting that’s almost done — Explore asks for a take while it’s still warm, using the existing persona review dialogue.
+- **Unfinished is leftover runtime.** Minutes or episodes you can still finish, last touched inside 60 days. Revisit These stays the idle-two-months shelf.
+
+### Added
+- `feed_afterglow` / `GET /api/library/feeds/afterglow` — recently finished or ≥85% unrated titles with persona opener and questions.
+- `feed_unfinished` / `GET /api/library/feeds/unfinished` — leftover playhead / leftover episodes, excluding 60-day idle titles.
+- Explore rails for both (Unfinished and Afterglow sit under Continue Watching).
+
 ## [1.35.5] — 2026-09-22
 
 Register in Radarr now tells you whether a title is already tracked or whether Radarr already owns that folder under a different movie — no more raw 400 JSON dumps.
