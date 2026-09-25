@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Highlights
+- **First-boot stays on the LAN.** If the database is down, household APIs no longer fail open. Setup from a public or Docker-NAT address cannot probe Plex/TMDB or create the owner unless `PROJECTIONIST_OWNER_PASSWORD` is already on the host.
+
+### Security
+- Auth middleware returns `503 Service unavailable` for `/api/*` (except `/api/health` and `/api/features`) when the job manager or database cannot be opened, instead of passing the request through.
+- SETUP_MODE applies the same WAN interlock as single-owner ACTIVE. Plex/TMDB connection tests are allowlisted only when handshake classification is LAN. Commit from a WAN or `public_failsafe` peer requires `PROJECTIONIST_OWNER_PASSWORD`.
+
 ## [1.36.0] — 2026-09-25
 
 The house can investigate a mislabeled episode, rematch a movie that is not who it claims, sit with afterglow and tonight's table, whisper a pick to one member, write the owner a letter, and walk a title like a scholar — all before anything leaves the shelf.
