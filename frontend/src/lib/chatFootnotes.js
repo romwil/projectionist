@@ -1,5 +1,32 @@
 const DEFINITION_RE = /^\[\^([^\]]+)\]:\s*(.+)$/gm;
 const HREF_ID_RE = /(?:user-content-)?fn(?:ref)?-([A-Za-z0-9_-]+)/i;
+const WALK_ID_RE = /^(lineage|canon|map|compare|seminar|gap)-(.+)$/i;
+
+export const WALK_SHEET_LABELS = {
+  lineage: "Lineage",
+  canon: "Canon",
+  map: "Map",
+  compare: "Compare",
+  seminar: "Seminar",
+  gap: "Gap list",
+};
+
+export function footnoteWalkKind(id) {
+  const match = String(id || "").trim().match(WALK_ID_RE);
+  return match ? match[1].toLowerCase() : "";
+}
+
+export function footnoteSheetLabel(note) {
+  const id = String(note?.id ?? note ?? "").trim();
+  const match = id.match(WALK_ID_RE);
+  if (match) {
+    const kind = match[1].toLowerCase();
+    const suffix = match[2];
+    const label = WALK_SHEET_LABELS[kind] || "Walk";
+    return `${label} source ${suffix}`;
+  }
+  return id ? `Source ${id}` : "Source";
+}
 
 export function parseMarkdownFootnotes(markdown) {
   const notes = [];
