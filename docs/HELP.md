@@ -331,6 +331,24 @@ Movies already in Plex but missing from Radarr (by TMDB id) can be registered wi
 
 **Rematch studio** on the same page compares Plex GUID, Radarr TMDB, and the folder (Presence / Savages). Same title vs path conflict stays honest — FileBot, Plex Match, and Gracenote are not investigators. Failed register or Sonarr search rows offer **Rematch**, **Skip**, **Retry**, or **Investigate** with human copy, not a JSON dump.
 
+### House letter
+
+**Admin → House** (`/admin/house`) is a letter about the house — not a dashboard of tiles. It names unwatched hours, dead weight that has sat more than 90 days, and what the disks hold. The letter will not start a purge. If you want the house lighter, open **Health** and confirm each title.
+
+Upcoming seasonal rails (the same calendar as **Admin → Holidays**) can be previewed here. **Veto** keeps one title off that rail before it publishes; **Restore** puts it back.
+
+The **gift queue** is one member, one owned title, a short why. Queue it for the weekly gift task (same cadence as the member newsletter and enthusiast nudge) or **Deliver now** after you confirm. This is not a household blast.
+
+The **trust diary** links rematch skips and repairs, Investigate job cards, and recent house-care tasks so you can see what the house already decided.
+
+```bash
+# Owner host — letter, upcoming rails, gift queue, trust diary
+curl -s http://localhost:8788/api/admin/house/letter | python3 -m json.tool
+curl -s http://localhost:8788/api/admin/house/seasonal-preview | python3 -m json.tool
+curl -s http://localhost:8788/api/admin/house/gifts | python3 -m json.tool
+curl -s http://localhost:8788/api/admin/house/trust-diary | python3 -m json.tool
+```
+
 ```bash
 # Owner host — start, watch per-title status, optional cancel
 curl -s -X POST http://localhost:8788/api/admin/radarr/register-existing -H 'Content-Type: application/json' -d '{"limit":25}'

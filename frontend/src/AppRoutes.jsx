@@ -39,6 +39,7 @@ import NewslettersPage from "./pages/NewslettersPage";
 import AccessRequestsPage from "./pages/AccessRequestsPage";
 import LogsPage from "./pages/LogsPage";
 import HolidaysPage from "./pages/HolidaysPage";
+import HouseLetterPage from "./pages/HouseLetterPage";
 import StagedAugmentationsPage from "./pages/StagedAugmentationsPage";
 import JoinPage from "./pages/JoinPage";
 import SetupWizardPage from "./pages/SetupWizardPage";
@@ -121,6 +122,7 @@ export default function AppRoutes() {
         <Route path="tasks" element={<ScheduledTasksPage />} />
         <Route path="youth" element={<YouthReviewPage />} />
         <Route path="holidays" element={<HolidaysPage />} />
+        <Route path="house" element={<HouseLetterPage />} />
         <Route path="taxonomy" element={<StagedAugmentationsPage />} />
         <Route path="access" element={<AccessRequestsPage />} />
         <Route path="mail" element={<MailSettingsPage />} />
