@@ -58,3 +58,18 @@ test("footnote sheet CSS lives next to MessageText", () => {
   assert.match(css, /chat-footnote-sheet/);
   assert.match(css, /role|dialog|sheet/);
 });
+
+test("walk footnote ids get a walk sheet label", async () => {
+  const { footnoteSheetLabel, footnoteWalkKind } = await import("./chatFootnotes.js");
+  assert.equal(footnoteSheetLabel({ id: "lineage-1" }), "Lineage source 1");
+  assert.equal(footnoteSheetLabel({ id: "gap-2" }), "Gap list source 2");
+  assert.equal(footnoteSheetLabel({ id: "1" }), "Source 1");
+  assert.equal(footnoteWalkKind("seminar-3"), "seminar");
+  assert.equal(footnoteWalkKind("1"), "");
+});
+
+test("MessageText labels walk footnote sheets", () => {
+  const src = readFileSync(join(root, "src/components/MessageText.jsx"), "utf8");
+  assert.match(src, /footnoteSheetLabel/);
+  assert.match(src, /data-walk-kind/);
+});
