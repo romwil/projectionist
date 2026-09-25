@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Set
 from projectionist.config_store import Settings
 from projectionist.library.db import Database
 from projectionist.library.feeds import feed_recently_added
+from projectionist.notifications.good_news import format_good_news, persona_from_db
 from projectionist.notifications.service import deliver_notification
 
 logger = logging.getLogger(__name__)
@@ -140,9 +141,14 @@ def notify_arrivals(
 
         title = str(item.get("title") or "A title").strip()
         year = item.get("year")
-        year_bit = f" ({year})" if year else ""
-        headline = f"Now in your library: {title}{year_bit}"
-        why = "A collection gap just closed." if is_gap else "Something from a watchlist just arrived."
+        curator_name, preset_id = persona_from_db(db)
+        headline, why = format_good_news(
+            title=title,
+            year=year,
+            source="gap" if is_gap else "watchlist",
+            curator_name=curator_name,
+            preset_id=preset_id,
+        )
         recipients: List[str] = []
         if is_gap:
             recipients.extend(owners)
