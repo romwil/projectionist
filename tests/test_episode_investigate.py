@@ -348,6 +348,10 @@ class CapabilitiesTests(unittest.TestCase):
         self.assertTrue(payload["vision"]["leaves_lan"])
         self.assertFalse(payload["acrcloud"]["available"])
         self.assertFalse(payload["acrcloud"]["deferred"])
+        self.assertIn("container", FFMPEG_NOTE)
+        self.assertIn("FFMPEG_PATH", FFMPEG_NOTE)
+        self.assertNotIn("Install a host binary", FFMPEG_NOTE)
+        self.assertNotIn("not bundled", FFMPEG_NOTE)
 
     def test_resolve_uses_path_binaries(self) -> None:
         with patch.dict(os.environ, {"FFMPEG_PATH": "", "FFPROBE_PATH": ""}, clear=False), patch(

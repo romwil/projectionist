@@ -9,9 +9,12 @@ import {
   formatSyncJobDetails,
 } from "../../lib/jobProgress.js";
 import {
+  FFMPEG_MISSING,
   SCENE_NAMES_NOT_EVIDENCE,
   STILLS_LEAVE_LAN,
+  applyButtonClass,
   confidenceLabel,
+  reviewEvidenceSummary,
   selectedFileIds,
   selectionMap,
 } from "../../lib/episodeInvestigate.js";
@@ -639,6 +642,11 @@ function InvestigatePanel({ focusHint }) {
   const applying = Boolean(applyJob?.busy);
   const visionAvailable = Boolean(health?.vision?.available);
   const ffmpegReady = health?.ffmpeg?.available !== false;
+  const evidenceSummary = reviewEvidenceSummary(rows, {
+    ffmpegReady,
+    visionOn: visionAvailable && useVision,
+    identifyConfigured: health?.acrcloud?.available !== false,
+  });
 
   async function handleStart() {
     setError("");
@@ -718,9 +726,9 @@ function InvestigatePanel({ focusHint }) {
       {!health?.sonarr?.configured ? (
         <p className="status status-secondary">Sonarr is required so Investigate can see episode files.</p>
       ) : null}
-      {health?.ffmpeg?.note ? (
-        <p className="wizard-note" data-testid="investigate-ffmpeg-note">
-          {health.ffmpeg.note}
+      {!ffmpegReady ? (
+        <p className="status status-error" data-testid="investigate-ffmpeg-note">
+          {FFMPEG_MISSING}
         </p>
       ) : null}
       <div className="section-dropdowns">
@@ -800,85 +808,42 @@ function InvestigatePanel({ focusHint }) {
         </div>
       ) : null}
       {reviewOpen && rows.length && !investigating ? (
-        <div data-testid="investigate-review">
+        <div className="investigate-review" data-testid="investigate-review">
           <p className="wizard-note">
             Certain and Likely start selected. Uncertain stays off. Deselect any row. Apply remaps
             the same show only.
           </p>
-          {rows.map((row) => (
-            <div
-              key={row.id}
-              className="config-advanced-details"
-              data-testid={`investigate-row-${row.id}`}
-              style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 1fr",
-                gap: 16,
-                marginTop: 16,
-                paddingTop: 16,
-                borderTop: "1px solid var(--border-subtle)",
-              }}
-            >
-              <div data-testid={`investigate-claimed-${row.id}`}>
-                <p>
-                  <strong>Filename claim</strong> — not evidence
-                </p>
-                <p className="status status-secondary">{row.filename}</p>
-                <p className="status status-secondary">
-                  File {row.claimed?.label || "unparsed"}
-                  {row.sonarr?.label ? ` · Sonarr ${row.sonarr.label}` : ""}
-                  {row.sonarr?.title ? ` ${row.sonarr.title}` : ""}
-                </p>
-              </div>
-              <div>
-                <label className="config-toggle">
-                  <input
-                    type="checkbox"
-                    data-testid={`investigate-select-${row.id}`}
+          {evidenceSummary ? (
+            <p className="status status-secondary" data-testid="investigate-evidence-summary">
+              {evidenceSummary}
+            </p>
+          ) : null}
+          <div className="investigate-review-table-wrap">
+            <table className="investigate-review-table">
+              <thead>
+                <tr>
+                  <th scope="col">Apply</th>
+                  <th scope="col">Filename claim</th>
+                  <th scope="col">File / Sonarr</th>
+                  <th scope="col">Evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <InvestigateReviewRow
+                    key={row.id}
+                    row={row}
                     checked={Boolean(selected[row.id])}
-                    onChange={() => toggleRow(row.id)}
-                    disabled={row.same_show === false}
+                    onToggle={toggleRow}
                   />
-                  <span>
-                    {confidenceLabel(row.confidence)}
-                    {row.proposed?.scope === "this_series" && row.proposed?.season != null
-                      ? ` · S${String(row.proposed.season).padStart(2, "0")}E${String(row.proposed.episode).padStart(2, "0")}`
-                      : ""}
-                    {row.proposed?.title ? ` ${row.proposed.title}` : ""}
-                    {row.same_show === false ? " · other show (not this sprint)" : ""}
-                  </span>
-                </label>
-                {(row.reasons || []).length ? (
-                  <p className="wizard-note">{row.reasons.join(" · ")}</p>
-                ) : null}
-                <div
-                  style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}
-                  data-testid={`investigate-stills-${row.id}`}
-                >
-                  {(row.stills || []).slice(0, 3).map((src, index) => (
-                    <img
-                      key={`file-${index}`}
-                      src={src}
-                      alt={`File still ${index + 1}`}
-                      style={{ width: 120, height: 68, objectFit: "cover", background: "var(--surface)" }}
-                    />
-                  ))}
-                  {(row.tmdb_stills || []).slice(0, 3).map((src, index) => (
-                    <img
-                      key={`tmdb-${index}`}
-                      src={src}
-                      alt={`TMDB still ${index + 1}`}
-                      style={{ width: 120, height: 68, objectFit: "cover", background: "var(--surface)" }}
-                    />
-                  ))}
-                </div>
-              </div>
-            </div>
-          ))}
-          <div className="config-actions">
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="investigate-review-actions">
             <button
               type="button"
-              className="primary"
+              className={applyButtonClass(selectedIds.length)}
               data-testid="investigate-apply"
               onClick={handleApply}
               disabled={!selectedIds.length || applying}
@@ -901,9 +866,63 @@ function InvestigatePanel({ focusHint }) {
           {error}
         </p>
       ) : null}
-      {!ffmpegReady ? (
-        <p className="status status-secondary">Stills need a host ffmpeg binary.</p>
-      ) : null}
     </section>
+  );
+}
+
+function InvestigateReviewRow({ row, checked, onToggle }) {
+  const reasons = Array.isArray(row.reasons) ? row.reasons : [];
+  const proposed =
+    row.proposed?.scope === "this_series" && row.proposed?.season != null
+      ? `S${String(row.proposed.season).padStart(2, "0")}E${String(row.proposed.episode).padStart(2, "0")}${
+          row.proposed?.title ? ` ${row.proposed.title}` : ""
+        }`
+      : "";
+  const stills = (row.stills || []).slice(0, 3);
+  const tmdbStills = (row.tmdb_stills || []).slice(0, 3);
+  return (
+    <tr data-testid={`investigate-row-${row.id}`}>
+      <td>
+        <label className="config-toggle investigate-review-select">
+          <input
+            type="checkbox"
+            data-testid={`investigate-select-${row.id}`}
+            checked={checked}
+            onChange={() => onToggle(row.id)}
+            disabled={row.same_show === false}
+          />
+          <span className="sr-only">Select {row.filename || row.id}</span>
+        </label>
+      </td>
+      <td data-testid={`investigate-claimed-${row.id}`}>
+        <p className="investigate-filename" title={row.filename || ""}>
+          {row.filename}
+        </p>
+      </td>
+      <td className="status status-secondary">
+        File {row.claimed?.label || "unparsed"}
+        {row.sonarr?.label ? ` · Sonarr ${row.sonarr.label}` : ""}
+        {row.sonarr?.title ? ` ${row.sonarr.title}` : ""}
+      </td>
+      <td>
+        <details className="investigate-review-evidence">
+          <summary>
+            {confidenceLabel(row.confidence)}
+            {proposed ? ` · ${proposed}` : ""}
+            {row.same_show === false ? " · other show (not this sprint)" : ""}
+            {reasons.length ? ` · ${reasons[0]}` : ""}
+          </summary>
+          {reasons.length > 1 ? <p className="wizard-note">{reasons.join(" · ")}</p> : null}
+          <div className="investigate-review-stills" data-testid={`investigate-stills-${row.id}`}>
+            {stills.map((src, index) => (
+              <img key={`file-${index}`} src={src} alt={`File still ${index + 1}`} />
+            ))}
+            {tmdbStills.map((src, index) => (
+              <img key={`tmdb-${index}`} src={src} alt={`TMDB still ${index + 1}`} />
+            ))}
+          </div>
+        </details>
+      </td>
+    </tr>
   );
 }
