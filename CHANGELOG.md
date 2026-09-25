@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Highlights
+- **Investigate says when it could not read the files.** If Sonarr paths are not mounted into the container, those rows fail instead of reporting 80 completed with no stills. Bind-mount the TV library at the same path Sonarr uses, then run Investigate again.
+
+### Fixed
+- Episode investigation marks unreadable media paths as failed (`stills_error=unreadable_path`) and the review summary tells the owner to bind-mount the Sonarr TV library. Unknown-scope rows no longer say “other show.”
+
 ## [1.36.1] — 2026-09-25
 
 Investigate stills ship inside the image, review is a table you can scan, idle Ready 0% is gone, and first-boot plus chat stay on the LAN allowlist.

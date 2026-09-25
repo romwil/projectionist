@@ -13,6 +13,7 @@ import {
   reviewEvidenceSummary,
   selectedFileIds,
   selectionMap,
+  UNREADABLE_MEDIA,
 } from "./episodeInvestigate.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -106,5 +107,14 @@ describe("episode investigate selection", () => {
       { ffmpegReady: true, visionOn: true, identifyConfigured: true },
     );
     assert.equal(mixed, "");
+
+    const unreadable = reviewEvidenceSummary(
+      emptyEvidenceRows.map((row) => ({ ...row, stills_error: "unreadable_path" })),
+      { ffmpegReady: true, visionOn: true, identifyConfigured: false },
+    );
+    assert.match(unreadable, /No stills were extracted/);
+    assert.match(unreadable, /Bind-mount the TV library/);
+    assert.match(unreadable, new RegExp(UNREADABLE_MEDIA.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.doesNotMatch(libraries, /row\.same_show === false \? " · other show/);
   });
 });
