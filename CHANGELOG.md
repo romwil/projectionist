@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### H1 — Shell extract (craft)
+
+Continue the god-file peel after Wave 0 Libraries and Wave 2 chatLayout. Admin Overview, Connections, and Seerr leave ConfigPage the same way Household and Libraries already did. Chat chrome lives in ChatWorkspace; SPA routes live in AppRoutes. app.py registers spa, auth, and setup routers instead of defining those handlers inline. Behavior-neutral — no delight feature number.
+
 ### 1.36.9 — Scholar walks
 
 The Scholar can walk a title in chat instead of dumping a lecture. Lineage, canon, map, compare-two-rated, silent seminar, and a consented gap reading list reuse the village, the syllabus resume pointer, and the footnote sheet. Nothing is published.
