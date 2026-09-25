@@ -7,8 +7,9 @@ import shutil
 from typing import Any, Dict, Mapping, Optional
 
 FFMPEG_NOTE = (
-    "ffmpeg is not bundled in the Projectionist image. Install a host binary on "
-    "PATH, or set FFMPEG_PATH and FFPROBE_PATH."
+    "This running container cannot find ffmpeg on PATH. The Projectionist image "
+    "should include it — that is a bad image or PATH, not a host install. "
+    "Set FFMPEG_PATH and FFPROBE_PATH only to override."
 )
 
 _VISION_MODEL_HINTS = (
