@@ -334,7 +334,14 @@ class ConfigStoreTests(unittest.TestCase):
             self.assertEqual(loaded.seerr.api_key, "secret")
 
     def test_load_merged_settings_normalizes_empty_path_fields(self) -> None:
-        env_keys = ("MOVIES_ROOT", "TV_ROOT", "RADARR_ROOT_FOLDER", "SONARR_ROOT_FOLDER")
+        env_keys = (
+            "MOVIES_ROOT",
+            "TV_ROOT",
+            "PROJECTIONIST_TV_MEDIA",
+            "PROJECTIONIST_MOVIE_MEDIA",
+            "RADARR_ROOT_FOLDER",
+            "SONARR_ROOT_FOLDER",
+        )
         saved = {k: os.environ.pop(k, None) for k in env_keys}
         try:
             with tempfile.TemporaryDirectory() as tmp:
@@ -349,6 +356,33 @@ class ConfigStoreTests(unittest.TestCase):
         finally:
             for k, v in saved.items():
                 if v is not None:
+                    os.environ[k] = v
+
+    def test_branded_media_env_wins_over_settings_file(self) -> None:
+        env_keys = (
+            "MOVIES_ROOT",
+            "TV_ROOT",
+            "PROJECTIONIST_TV_MEDIA",
+            "PROJECTIONIST_MOVIE_MEDIA",
+        )
+        saved = {k: os.environ.pop(k, None) for k in env_keys}
+        try:
+            os.environ["PROJECTIONIST_TV_MEDIA"] = "/mnt/user/data/media/tv"
+            os.environ["PROJECTIONIST_MOVIE_MEDIA"] = "/mnt/user/data/media/movies"
+            with tempfile.TemporaryDirectory() as tmp:
+                data_dir = Path(tmp)
+                save_settings(
+                    data_dir,
+                    Settings(tv_root="/media/tv", movies_root="/media/movies"),
+                )
+                loaded = load_merged_settings(data_dir)
+                self.assertEqual(loaded.tv_root, "/mnt/user/data/media/tv")
+                self.assertEqual(loaded.movies_root, "/mnt/user/data/media/movies")
+        finally:
+            for k, v in saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
                     os.environ[k] = v
 
 

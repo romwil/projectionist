@@ -53,9 +53,17 @@ services:
       PROJECTIONIST_MCP_FULL_CONFIRM: ${PROJECTIONIST_MCP_FULL_CONFIRM:-${CURATORX_MCP_FULL_CONFIRM:-}}
       PROJECTIONIST_SECRETS_KEY: ${PROJECTIONIST_SECRETS_KEY:-}
       PROJECTIONIST_LOG_LEVEL: ${PROJECTIONIST_LOG_LEVEL:-${CURATORX_LOG_LEVEL:-INFO}}
+      # Host media paths (env wins in settings). Bind-mounted rw at /tv and /movies.
+      PROJECTIONIST_TV_MEDIA: ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}
+      PROJECTIONIST_MOVIE_MEDIA: ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}
     volumes:
       # Host appdata config — do not use docker volume rm / wipe this path
       - ./config:/config
+      # Read-write — Investigate Apply renames episode files. Never :ro.
+      - ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}:/tv
+      - ${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}:${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}
+      - ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}:/movies
+      - ${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}:${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}
       # OPTIONAL — Live Channels managed Tunarr (root-equivalent). Off by default.
       # Uncomment only if you want Projectionist to pull/start/stop a Tunarr sibling.
       # Same opt-in as Unraid CA template path "Docker Socket".

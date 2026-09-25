@@ -51,6 +51,9 @@ THEATER_HOST_PORT="${THEATER_HOST_PORT:-8791}"
 CONTAINER_NAME="${CONTAINER_NAME:-projectionist}"
 IMAGE="romwil/projectionist:${IMAGE_TAG}"
 CONFIG_DIR="$SCRIPT_DIR/config"
+# Host media libraries — rw so Investigate Apply can rename files. Automat defaults.
+TV_MEDIA="${PROJECTIONIST_TV_MEDIA:-/mnt/user/data/media/tv}"
+MOVIE_MEDIA="${PROJECTIONIST_MOVIE_MEDIA:-/mnt/user/data/media/movies}"
 # Optional Live Channels managed Tunarr (root-equivalent). Set in .env:
 #   MOUNT_DOCKER_SOCK=1
 # or DOCKER_SOCK=/var/run/docker.sock
@@ -107,6 +110,8 @@ ENV_KEYS=(
   PROJECTIONIST_HOST_IP HOST_IP
   PROJECTIONIST_TUNARR_PUBLIC_URL PROJECTIONIST_TUNARR_HOST_PORT PROJECTIONIST_TUNARR_HDHR_PORT
   PROJECTIONIST_TUNARR_MEDIA_BINDS
+  PROJECTIONIST_TV_MEDIA PROJECTIONIST_MOVIE_MEDIA
+  TV_ROOT MOVIES_ROOT
   CURATORX_OWNER_USERNAME CURATORX_OWNER_PASSWORD
   CURATORX_SESSION_SECRET CURATORX_WEBHOOK_SECRET
   CURATORX_MCP_API_KEY CURATORX_MCP_FULL_API_KEY
@@ -131,6 +136,25 @@ run_plain_docker() {
     -p "${THEATER_HOST_PORT}:8791"
     -v "${CONFIG_DIR}:/config"
     --add-host=host.docker.internal:host-gateway
+  )
+  _mount_media_rw() {
+    local host_path="$1" container_path="$2" label="$3"
+    if [[ ! -d "$host_path" ]]; then
+      log "WARN: $label host path missing ($host_path) — skipping bind (Investigate cannot rename under $container_path)."
+      return 0
+    fi
+    log "Mounting $label $host_path → $container_path (rw)"
+    run_args+=(-v "${host_path}:${container_path}")
+    if [[ "$host_path" != "$container_path" ]]; then
+      log "Mounting $label same-path $host_path → $host_path (rw)"
+      run_args+=(-v "${host_path}:${host_path}")
+    fi
+  }
+  _mount_media_rw "$TV_MEDIA" /tv "TV library"
+  _mount_media_rw "$MOVIE_MEDIA" /movies "Movie library"
+  run_args+=(
+    -e "PROJECTIONIST_TV_MEDIA=${TV_MEDIA}"
+    -e "PROJECTIONIST_MOVIE_MEDIA=${MOVIE_MEDIA}"
     -e DATA_DIR=/config
     -e PORT=8788
     -e PROJECTIONIST_THEATER_PORT=8791
@@ -259,6 +283,8 @@ if [[ -n "$DOCKER_SOCK" ]]; then
   log "Docker socket: ${DOCKER_SOCK} → /var/run/docker.sock"
 fi
 log "Config bind: $CONFIG_DIR → /config (preserved)"
+log "TV library (rw): $TV_MEDIA → /tv (and same-path when host dir exists)"
+log "Movie library (rw): $MOVIE_MEDIA → /movies (and same-path when host dir exists)"
 log "Host data dir (Tunarr binds): PROJECTIONIST_HOST_DATA_DIR=$CONFIG_DIR"
 
 # Compose reference YAML keeps docker.sock commented (opt-in). When the host

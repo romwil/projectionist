@@ -121,8 +121,8 @@ const FIELD_LABELS = {
   long_synopsis_source: "Long synopsis source",
   tautulli_url: "Tautulli URL",
   tautulli_api_key: "API key",
-  movies_root: "Movies folder path",
-  tv_root: "TV folder path",
+  movies_root: "Movie library path",
+  tv_root: "TV library path",
   radarr_root_folder: "Radarr root folder",
   sonarr_root_folder: "Sonarr root folder",
   library_sync_interval_hours: "Auto-sync every (hours)",
@@ -150,8 +150,10 @@ const FIELD_HELP = {
   long_synopsis_source:
     "Defaults to wikipedia (free, no key, deeper plot without LLM). Set to off to disable, or omdb / auto.",
   tautulli_url: "Optional: watch history for purge suggestions and “what we’ve been watching”.",
-  movies_root: "Host path Radarr uses for movies (advanced; usually matches Radarr).",
-  tv_root: "Host path Sonarr uses for TV (advanced; usually matches Sonarr).",
+  movies_root:
+    "Path this container uses for movies (usually /movies or the host folder bind-mounted read-write). PROJECTIONIST_MOVIE_MEDIA wins when set. Needed so Investigate can rename files.",
+  tv_root:
+    "Path this container uses for TV (usually /tv or the host folder bind-mounted read-write). PROJECTIONIST_TV_MEDIA wins when set. Investigate Apply renames episode files here — the bind must be rw, not :ro.",
   library_enrich_workers: "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
 };
 
