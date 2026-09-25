@@ -7,7 +7,9 @@ import shutil
 from typing import Any, Dict, Mapping, Optional
 
 FFMPEG_NOTE = (
-    "Image includes ffmpeg; override with FFMPEG_PATH / FFPROBE_PATH."
+    "This running container cannot find ffmpeg on PATH. Image includes ffmpeg; "
+    "a missing binary is a bad image or PATH, not a host install. "
+    "Set FFMPEG_PATH and FFPROBE_PATH only to override."
 )
 
 _VISION_MODEL_HINTS = (
