@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 1.36.8 — Scholar core
+
+Scholar citations open a footnote sheet from `[^1]` instead of a raw dump. Village pending consults say they have not called back. A course resume pointer picks up the next unfinished syllabus session.
+
+### Added
+- Chat markdown footnote refs (`[^1]`) open a source sheet in `MessageText` and hide the GFM dump.
+- Village pending consults use household copy (“{name} has not called back”) instead of spinner JSON.
+- `course_resume_pointer` in `projectionist/syllabus/` points at the next unfinished session (or a finished course).
+
 ## [1.35.5] — 2026-09-22
 
 Register in Radarr now tells you whether a title is already tracked or whether Radarr already owns that folder under a different movie — no more raw 400 JSON dumps.
