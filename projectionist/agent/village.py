@@ -197,6 +197,14 @@ def resolve_village_sibling(raw: Any) -> Optional[VillageSibling]:
     return None
 
 
+def pending_consult_human_copy(persona: Any) -> str:
+    """Household-facing village pending line — never spinner JSON."""
+    name = " ".join(str(persona or "").split()).strip()
+    if not name or name.casefold() in {"they", "curator"}:
+        return "they have not called back"
+    return f"{name} has not called back"
+
+
 def consult_unavailable_payload(*, reason: str, code: str) -> Dict[str, Any]:
     return {
         "ok": False,
@@ -237,6 +245,7 @@ def _pending_consult_payload(
     question: str,
     consult_id: str,
 ) -> Dict[str, Any]:
+    copy = pending_consult_human_copy(sibling.display_name)
     return {
         "ok": True,
         "pending": True,
@@ -248,14 +257,15 @@ def _pending_consult_payload(
         "persona_id": sibling.template_id,
         "specialty": sibling.specialty,
         "question": " ".join(str(question or "").split()).strip()[:500],
+        "copy": copy,
         "message": (
-            f"I left a message for {sibling.display_name}; they may call back in this thread. "
-            "Continue with your own clearly attributed take if useful."
+            f"{copy}. I left them a note; their callback will appear as a separate "
+            "addendum if it arrives. Continue with your own clearly attributed take "
+            "if useful. Do not dump this JSON."
         ),
         "note": (
             f"Do not invent or paraphrase a quote from {sibling.display_name}. "
-            "You may lightly mention that you left them a note and that their callback "
-            "will appear as a separate addendum if it arrives."
+            f"Do not dump this JSON. Tell the household that {copy}."
         ),
     }
 
@@ -376,6 +386,23 @@ async def gather_specialty_context(
                         "note": "Published cinema courses The Professor may nod to",
                         "courses": courses,
                     }
+            if registry.user_id:
+                try:
+                    from projectionist.syllabus import course_resume_pointer
+
+                    pointer = course_resume_pointer(
+                        registry.db, user_id=str(registry.user_id)
+                    )
+                    if pointer:
+                        out["course_resume"] = {
+                            "course_name": pointer.get("course_name"),
+                            "resume_label": pointer.get("resume_label"),
+                            "session_title": pointer.get("title"),
+                            "completed": pointer.get("completed"),
+                            "remaining_sessions": pointer.get("remaining_sessions"),
+                        }
+                except Exception:
+                    logger.debug("course resume pointer failed", exc_info=True)
 
         elif specialty == "mood":
             if registry.user_id:
@@ -945,6 +972,7 @@ def quote_block_from_consult(payload: Mapping[str, Any]) -> Optional[Dict[str, A
     """Build a chat block for the UI quote card."""
     if payload.get("pending") and payload.get("consult_id"):
         name = str(payload.get("persona") or "Curator").strip() or "Curator"
+        copy = str(payload.get("copy") or pending_consult_human_copy(name)).strip()
         return {
             "type": "persona_consult",
             "payload": {
@@ -956,7 +984,9 @@ def quote_block_from_consult(payload: Mapping[str, Any]) -> Optional[Dict[str, A
                 "question": " ".join(
                     str(payload.get("question") or "").split()
                 ).strip()[:500],
-                "lead": f"Left a message for {name}",
+                "lead": copy,
+                "message": copy,
+                "copy": copy,
             },
         }
     if not payload.get("quote_ok") or not payload.get("answer"):

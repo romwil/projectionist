@@ -1,0 +1,74 @@
+.chat-footnote-sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--bg) 55%, transparent);
+}
+
+.chat-footnote-sheet {
+  width: min(36rem, 100%);
+  max-height: min(70vh, 28rem);
+  overflow: auto;
+  padding: var(--space-5);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  background: var(--surface-raised, var(--bg));
+  color: var(--text);
+  box-shadow: 0 -8px 32px color-mix(in srgb, #000 35%, transparent);
+}
+
+.chat-footnote-sheet-label {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.chat-footnote-sheet-body {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-md);
+  line-height: var(--leading-body);
+}
+
+.chat-footnote-sheet-close {
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+}
+
+.markdown-body button.markdown-footnote-ref {
+  display: inline;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-size: 0.75em;
+  font-weight: 600;
+  line-height: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.markdown-body .markdown-footnotes[hidden] {
+  display: none;
+}
+
+@media (min-width: 720px) {
+  .chat-footnote-sheet-scrim {
+    align-items: center;
+  }
+
+  .chat-footnote-sheet {
+    border-radius: var(--radius-lg);
+  }
+}

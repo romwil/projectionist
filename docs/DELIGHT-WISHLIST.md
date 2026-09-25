@@ -4,9 +4,9 @@ Living backlog for experiences that make Projectionist feel more generous. Tags 
 
 The backlog is delivered in **phases**, each one a self-contained milestone that ships and releases on its own. Phases 1 and 2 are done; Phases 3–5 below reflect a **full persona re-survey** (human + AI archetypes) and the locked planning decisions that close the former open questions. A contributor can pick up any remaining phase and plan it without re-deriving the groundwork.
 
-**Phases 1–5 are complete.** The post–Phase-5 program (residual Live trust, gaps/MCP, Admin rail + LLM ops, persona working tone, and a new persona delight sequence A–E) lives in the Cursor unified plan `unified_gaps_and_delight_b1cef49d` (local path `~/.cursor/plans/unified_gaps_and_delight_b1cef49d.plan.md` — not in-repo). Prefer that plan over inventing a Phase 6 here.
+**Phases 1–5 are complete.** The next program is **Phase 6 / 1.36** — honesty and identity, adult evening, owner story, scholar, and craft — specified in [2026-09-24-delight-phase-6.md](superpowers/specs/2026-09-24-delight-phase-6.md). Prefer that spec (and the Cursor plan `persona_delight_top_10_a8ebd6a0`) over inventing a new phase here. The older post–Phase-5 Cursor plan `unified_gaps_and_delight_b1cef49d` is historical.
 
-Jump to: [Roadmap at a glance](#roadmap-at-a-glance) · [Locked decisions](#locked-decisions) · [Phase 3 — adult everyday](#phase-3--adult-everyday--notifications--engagement) · [Phase 4 — youth & guest](#phase-4--distinct-youth--guest-doors) · [Phase 5 — curator depth](#phase-5--giving-the-curators-room-to-shine) · [Persona backlog](#persona--archetype-backlog-the-source-of-the-phases)
+Jump to: [Roadmap at a glance](#roadmap-at-a-glance) · [Locked decisions](#locked-decisions) · [Phase 3 — adult everyday](#phase-3--adult-everyday--notifications--engagement) · [Phase 4 — youth & guest](#phase-4--distinct-youth--guest-doors) · [Phase 5 — curator depth](#phase-5--giving-the-curators-room-to-shine) · [Phase 6 — 1.36](#phase-6--136-honesty-evening-owner-scholar-craft) · [Persona backlog](#persona--archetype-backlog-the-source-of-the-phases)
 
 ---
 
@@ -24,7 +24,7 @@ The delight work is sequenced by *who* it serves, easiest-to-reach substrate fir
 | **3** | Adult everyday — where-to-watch, synced lists, continue-watching, inbox + mail, taste/weekly rail, **engagement substrate**   | Adult household member (+ owner mail platform)  | ✅ P3a **1.20.0**; P3b **1.21.0**; P3c **1.22.0** |
 | **4** | Distinct youth + guest doors — fail-closed rating gate, youth-safe engagement presets, tour shell, Projectionist request-access    | Youth members, guests                           | ✅ Shipped **1.23.0** |
 | **5** | Curator depth — Enthusiast nudge (no live now-watching), Scholar syllabus, Concierge acquire path, Companion mood + callbacks | The four curator archetypes                     | ✅ Shipped **1.24.0** |
-| **Next** | Post–Phase-5 program (gaps/MCP, Live residuals, Admin rail, LLM ops, delight A–E) | Household + curators | → Cursor unified plan `unified_gaps_and_delight_b1cef49d` |
+| **6** | Honesty, evening, owner story, scholar, craft — Investigate / Identify, rematch + Good News, afterglow, whisper, house letter, scholar walks | Owner + adult household + Scholar / Concierge / Companion | **In flight — 1.36** ([spec](superpowers/specs/2026-09-24-delight-phase-6.md)) |
 
 
 ```mermaid
@@ -33,14 +33,14 @@ flowchart LR
   P2 --> P3["Phase 3<br/>Adult + engagement + mail"]
   P3 --> P4["Phase 4<br/>Distinct youth + guest"]
   P4 --> P5["Phase 5<br/>Curator depth"]
-  P5 --> Next["Post–Phase-5<br/>unified gaps + delight"]
+  P5 --> P6["Phase 6 / 1.36<br/>honesty + evening + scholar"]
 ```
 
 
 
 **How to read the phases below.** Each one calls out what it can **build on** (shipped substrate) versus what is **greenfield** (no code exists yet), so nobody plans a milestone assuming a transport or connector that isn't there. Capabilities keep the doc's **Must / Love / Like** priority framing. Planning unknowns that once lived as "open questions" are recorded under [Locked decisions](#locked-decisions).
 
-**Out of scope for Phases 3–5 (explicit):** external streaming "on Netflix/Max" connectors; live Plex session / now-watching polling; replacing Seerr for post-member *media* acquisition (Projectionist owns *account* access requests only).
+**Out of scope for Phases 3–6 (explicit):** external streaming "on Netflix/Max" connectors; live Plex session / now-watching polling; replacing Seerr for post-member *media* acquisition (Projectionist owns *account* access requests only). Phase 6 adds: no public pages; no Postgres/Redis rewrite; no yanking `CURATORX_*` without a CA note.
 
 ---
 
@@ -164,6 +164,29 @@ Resolved from the Phase 3–5 planning re-survey. These replace the former open-
 - **Must (✅ shipped 1.10.0):** fail-closed long-term memory. *Build on:* `user_memory_notes` via `UserMemoryService`.
 - **Love:** ✅ one-shot mood check-in that biases a *single* pick without overwriting the durable profile. Optional mood chips before **Surprise Me** (`GET /api/library/quick-pick?mood=`).
 - **Like:** ✅ consented "callbacks" memory class (`kind=callback`) under the existing privacy / purge / export guarantees.
+
+---
+
+
+
+### Phase 6 — 1.36 honesty, evening, owner, scholar, craft
+
+**Why this matters / who it delights.** Phases 1–5 shipped memory, owner tools, adult everyday, youth/guest doors, and curator depth. Phase 6 is the next honesty layer: the owner can investigate a misnamed episode, rematch a movie that is not the movie on disk, and hear Good News instead of “download complete.” Adults get afterglow, an unfinished rail, whisper, and tonight’s table. The owner gets a house letter. The Scholar gets footnotes and walks. Craft stays incremental — no rewrite.
+
+**Status:** In flight on `release/1.36`. Prod stays **1.35.5** until the end gate. GitHub tags each sprint (`v1.36.x`); Automat `:8788` waits for Interactive UI QA on **`:8792`**. Never steal smartmap **`:8790`**. Never Repair Plex.
+
+**Read this, not a new invention here:** [2026-09-24-delight-phase-6.md](superpowers/specs/2026-09-24-delight-phase-6.md) — waves, file locks, vision-default fusion, ACRCloud Identify, CuratorX keep-vs-sunset, end-gate QA.
+
+**Must (program)**
+
+- Episode investigation with stills + OSHash + runtime; vision fusion **on by default** when the chat LLM accepts images (stills leave the LAN; copy says so).
+- ACRCloud **Identification API** only (not Broadcast Monitoring / Custom File Scan) as an Identify lane.
+- Rematch studio + repair-the-miss + Good News.
+- Afterglow, unfinished (≠ Revisit These), whisper inbox, phone Play, tonight’s table.
+- Owner letter + seasonal preview/veto + gift queue + trust diary.
+- Scholar footnotes, village “they have not called back,” syllabus resume, then walks.
+
+**Out of scope (same locks as Phases 3–5, plus craft):** live Plex session polling; Netflix-availability; public pages; Postgres/Redis rewrite; yanking `CURATORX_*` without a CA note.
 
 ---
 

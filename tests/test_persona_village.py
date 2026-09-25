@@ -16,6 +16,7 @@ from projectionist.agent.village import (
     build_shared_consult_context,
     cancel_unpromised_persona_consults,
     clip_consult_answer,
+    pending_consult_human_copy,
     quote_block_from_consult,
     resolve_village_sibling,
     run_persona_consult,
@@ -452,6 +453,35 @@ class TestConsultQuoteBlocks(unittest.TestCase):
         _append_persona_consult_blocks(blocks, _Reg())  # type: ignore[arg-type]
         self.assertEqual(len(blocks), 2)
         self.assertEqual(blocks[1]["type"], "persona_consult")
+
+    def test_pending_consult_uses_human_copy_not_json(self) -> None:
+        sibling = resolve_village_sibling("The Professor")
+        assert sibling is not None
+        copy = pending_consult_human_copy(sibling.display_name)
+        self.assertEqual(copy, "The Professor has not called back")
+        self.assertNotIn("{", copy)
+        self.assertNotIn("pending", copy.casefold())
+
+        payload = {
+            "ok": True,
+            "pending": True,
+            "code": "consult_pending",
+            "consult_id": "abc123",
+            "persona": sibling.display_name,
+            "persona_id": sibling.template_id,
+            "specialty": sibling.specialty,
+            "question": "Compare the two cuts",
+            "message": copy,
+        }
+        block = quote_block_from_consult(payload)
+        self.assertIsNotNone(block)
+        assert block is not None
+        lead = str(block["payload"].get("lead") or "")
+        message = str(block["payload"].get("message") or "")
+        self.assertIn("not called back", lead)
+        self.assertIn("not called back", message)
+        self.assertNotIn("{", lead)
+        self.assertNotIn("consult_pending", lead)
 
     def test_household_summary_for_consult(self) -> None:
         self.assertEqual(

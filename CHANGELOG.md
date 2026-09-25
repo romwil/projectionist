@@ -2,8 +2,34 @@
 
 ## [Unreleased]
 
+### 1.36.8 — Scholar core
+
+Scholar citations open a footnote sheet from `[^1]` instead of a raw dump. Village pending consults say they have not called back. A course resume pointer picks up the next unfinished syllabus session.
+
 ### Added
-- **1.36.0 Episode investigation.** On Admin → Libraries, pick a show (optional season) and Investigate. ffmpeg stills are compared to TMDB episode stills, plus runtime and OSHash → OpenSubtitles when that path exists. Filename and Sonarr `SxxEyy` stay in the left column — they are a claim, not evidence. If the chat LLM accepts images, fusion includes vision unless you turn it off (three stills; copy says stills leave the LAN). Review is side-by-side; Certain and Likely start selected, Uncertain stays off. Apply remaps the **same show only** (Sonarr episode-file + Plex-proper names + Plex refresh + undo). Job progress matches Find all missing. ACRCloud Identify waits for 1.36.1. ffmpeg is not in the image — use a host binary on PATH (`FFMPEG_PATH` / `FFPROBE_PATH`).
+- Chat markdown footnote refs (`[^1]`) open a source sheet in `MessageText` and hide the GFM dump.
+- Village pending consults use household copy (“{name} has not called back”) instead of spinner JSON.
+- `course_resume_pointer` in `projectionist/syllabus/` points at the next unfinished session (or a finished course).
+
+### 1.36.4 — Afterglow and unfinished
+
+Explore now has a post-watch afterglow and a leftover-runtime rail that is not the two-month idle shelf.
+
+### Highlights
+- **Afterglow.** After a recent finish — or a sitting that’s almost done — Explore asks for a take while it’s still warm, using the existing persona review dialogue.
+- **Unfinished is leftover runtime.** Minutes or episodes you can still finish, last touched inside 60 days. Revisit These stays the idle-two-months shelf.
+
+### Added
+- `feed_afterglow` / `GET /api/library/feeds/afterglow` — recently finished or ≥85% unrated titles with persona opener and questions.
+- `feed_unfinished` / `GET /api/library/feeds/unfinished` — leftover playhead / leftover episodes, excluding 60-day idle titles.
+- Explore rails for both (Unfinished and Afterglow sit under Continue Watching).
+
+### 1.36.0 — Episode investigation
+
+On Admin → Libraries, pick a show (optional season) and Investigate. ffmpeg stills are compared to TMDB episode stills, plus runtime and OSHash → OpenSubtitles when that path exists. Filename and Sonarr `SxxEyy` stay in the left column — they are a claim, not evidence. If the chat LLM accepts images, fusion includes vision unless you turn it off (three stills; copy says stills leave the LAN). Review is side-by-side; Certain and Likely start selected, Uncertain stays off. Apply remaps the **same show only** (Sonarr episode-file + Plex-proper names + Plex refresh + undo). Job progress matches Find all missing. ACRCloud Identify waits for 1.36.1. ffmpeg is not in the image — use a host binary on PATH (`FFMPEG_PATH` / `FFPROBE_PATH`).
+
+### Changed
+- **1.36.3 craft hygiene (docs).** Phase 6 / 1.36 Delight program spec, wishlist pointer, Live Channels deferred truth-up, architecture-letter still-open refresh, and CuratorX keep-vs-sunset note. No product behavior change. Prod stays 1.35.5 until the 1.36 end gate.
 
 ## [1.35.5] — 2026-09-22
 
