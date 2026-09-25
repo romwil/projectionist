@@ -7,6 +7,7 @@ import MessageText from "../components/MessageText";
 import TitleCard from "../components/TitleCard";
 import AgentAvatar from "../components/AgentAvatar";
 import ShareActionMenu from "../components/ShareActionMenu";
+import { savedLibraryChatHref } from "../lib/backNav.js";
 import { libraryHubPath, librarySavedPath } from "../lib/libraryTabs.js";
 import { librarySharePrivacyNote } from "../lib/householdSocial.js";
 import { savedLibraryBlocks } from "../lib/savedLibraryBlocks";
@@ -81,7 +82,7 @@ export default function LibraryPage() {
                         type="button"
                         className="suggested-reply-chip"
                         key={reply}
-                        onClick={() => navigate(`/?saved_library=${encodeURIComponent(page.id)}&follow_up=${encodeURIComponent(reply)}`)}
+                        onClick={() => navigate(savedLibraryChatHref(page.id, reply))}
                       >
                         {reply}
                       </button>
@@ -110,7 +111,7 @@ export default function LibraryPage() {
                 name={page.name}
                 sourceSessionId={page.source_session_id}
                 sourceMessageId={page.source_message_id}
-                extraActions={[{ label: "Chat from here", icon: "forum", onClick: () => navigate(`/?saved_library=${encodeURIComponent(page.id)}`) }]}
+                extraActions={[{ label: "Chat from here", icon: "forum", onClick: () => navigate(savedLibraryChatHref(page.id)) }]}
               />
             </div> : null}
           </section>
@@ -140,7 +141,7 @@ export default function LibraryPage() {
               sourceMessageId={entry.source_message_id}
               extraActions={[
                 { label: "Open", icon: "open_in_new", onClick: () => navigate(`${librarySavedPath()}/${encodeURIComponent(entry.id)}`) },
-                { label: "Chat from here", icon: "forum", onClick: () => navigate(`/?saved_library=${encodeURIComponent(entry.id)}`) },
+                { label: "Chat from here", icon: "forum", onClick: () => navigate(savedLibraryChatHref(entry.id)) },
                 { label: "Archive", icon: "archive", onClick: () => archive(entry) },
               ]}
             />

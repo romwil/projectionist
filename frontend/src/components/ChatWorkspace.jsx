@@ -18,6 +18,7 @@ import SlashCommandPalette from "./SlashCommandPalette";
 import OnThisDayCard from "./OnThisDayCard";
 import LibraryGlanceCard from "./LibraryGlanceCard";
 import { lastAssistantHasTitleCards } from "../lib/addActions.js";
+import { savedLibraryChatHref } from "../lib/backNav.js";
 import { shouldSubmitComposerOnEnter } from "../lib/composerKeyboard.js";
 import { createId } from "../lib/id.js";
 import { createKonamiTracker, easterEggResponse } from "../lib/easterEggs.js";
@@ -327,7 +328,7 @@ authReady,
                     {shelfPages.map((page) => (
                       <Link
                         key={page.id}
-                        to={`/?saved_library=${encodeURIComponent(page.id)}`}
+                        to={savedLibraryChatHref(page.id)}
                         className="holdable-shelf-chip"
                         data-testid="holdable-shelf-chip"
                       >
