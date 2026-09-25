@@ -17,6 +17,8 @@ from projectionist.library.episode_investigate.capabilities import (
     FFMPEG_NOTE,
     health_payload,
     llm_accepts_images,
+    resolve_ffmpeg,
+    resolve_ffprobe,
 )
 from projectionist.library.episode_investigate.catalog import list_investigate_shows, merge_tmdb_runtimes
 from projectionist.library.episode_investigate.filenames import (
@@ -350,6 +352,50 @@ class CapabilitiesTests(unittest.TestCase):
         self.assertIn("FFMPEG_PATH", FFMPEG_NOTE)
         self.assertNotIn("Install a host binary", FFMPEG_NOTE)
         self.assertNotIn("not bundled", FFMPEG_NOTE)
+
+    def test_resolve_uses_path_binaries(self) -> None:
+        with patch.dict(os.environ, {"FFMPEG_PATH": "", "FFPROBE_PATH": ""}, clear=False), patch(
+            "projectionist.library.episode_investigate.capabilities.shutil.which",
+            side_effect=lambda name: f"/usr/bin/{name}" if name in {"ffmpeg", "ffprobe"} else None,
+        ):
+            self.assertEqual(resolve_ffmpeg(), "/usr/bin/ffmpeg")
+            self.assertEqual(resolve_ffprobe(), "/usr/bin/ffprobe")
+            payload = health_payload()
+            self.assertTrue(payload["ffmpeg"]["available"])
+            self.assertEqual(payload["ffmpeg"]["path"], "/usr/bin/ffmpeg")
+            self.assertEqual(payload["ffmpeg"]["note"], "")
+            self.assertTrue(payload["ffprobe"]["available"])
+            self.assertEqual(payload["ffprobe"]["path"], "/usr/bin/ffprobe")
+
+    def test_resolve_prefers_env_override(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            ffmpeg = Path(tmp) / "custom-ffmpeg"
+            ffprobe = Path(tmp) / "custom-ffprobe"
+            ffmpeg.write_text("#!/bin/sh\n")
+            ffprobe.write_text("#!/bin/sh\n")
+            ffmpeg.chmod(0o755)
+            ffprobe.chmod(0o755)
+            with patch.dict(
+                os.environ,
+                {"FFMPEG_PATH": str(ffmpeg), "FFPROBE_PATH": str(ffprobe)},
+                clear=False,
+            ), patch(
+                "projectionist.library.episode_investigate.capabilities.shutil.which",
+                return_value="/usr/bin/should-not-win",
+            ):
+                self.assertEqual(resolve_ffmpeg(), str(ffmpeg))
+                self.assertEqual(resolve_ffprobe(), str(ffprobe))
+
+    def test_health_note_when_binaries_missing(self) -> None:
+        with patch.dict(os.environ, {"FFMPEG_PATH": "", "FFPROBE_PATH": ""}, clear=False), patch(
+            "projectionist.library.episode_investigate.capabilities.shutil.which",
+            return_value=None,
+        ):
+            payload = health_payload()
+            self.assertFalse(payload["ffmpeg"]["available"])
+            self.assertEqual(payload["ffmpeg"]["note"], FFMPEG_NOTE)
+            self.assertIn("Image includes ffmpeg", payload["ffmpeg"]["note"])
+            self.assertFalse(payload["ffprobe"]["available"])
 
 
 class JobHappyPathTests(unittest.TestCase):
