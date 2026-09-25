@@ -81,6 +81,21 @@ export function rateFlowHref() {
   return `${ROUTES.chat}?${RATE_FLOW_PARAM}=1`;
 }
 
+/** Query flag that continues a saved-library page in chat. */
+export const SAVED_LIBRARY_PARAM = "saved_library";
+const SAVED_LIBRARY_FOLLOW_UP_PARAM = "follow_up";
+
+/** Deep-link to /chat so `/` → `/chat` replace cannot drop saved_library. */
+export function savedLibraryChatHref(pageId, followUp = "") {
+  const id = String(pageId || "").trim();
+  if (!id) return ROUTES.chat;
+  const params = new URLSearchParams();
+  params.set(SAVED_LIBRARY_PARAM, id);
+  const nextStep = String(followUp || "").trim();
+  if (nextStep) params.set(SAVED_LIBRARY_FOLLOW_UP_PARAM, nextStep);
+  return `${ROUTES.chat}?${params.toString()}`;
+}
+
 /** Deep-link to chat and seed a discussion based on a library title. */
 export function recommendLikeHref(item) {
   const params = new URLSearchParams();

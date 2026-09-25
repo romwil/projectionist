@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { savedLibraryChatHref } from "./backNav.js";
 import {
   CHAT_SCROLL_REGION_CLASS,
   MESSAGE_CONTAINMENT_CLASSES,
@@ -127,9 +128,15 @@ describe("1.36.5 whisper/tonight chat home", () => {
   it("saves to the holdable shelf without a prompt H1 and shows resume + shelf on chat home", () => {
     const appJsx = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
     const workspaceJsx = readFileSync(new URL("../components/ChatWorkspace.jsx", import.meta.url), "utf8");
+    const libraryJsx = readFileSync(new URL("../pages/LibraryPage.jsx", import.meta.url), "utf8");
     assert.doesNotMatch(appJsx, /window\.prompt\(/);
     assert.doesNotMatch(workspaceJsx, /window\.prompt\(/);
     assert.match(workspaceJsx, /data-testid="holdable-shelf"/);
+    assert.match(workspaceJsx, /savedLibraryChatHref\(page\.id\)/);
+    assert.match(savedLibraryChatHref("sunday-stack"), /\/chat\?saved_library=/);
+    assert.doesNotMatch(workspaceJsx, /\/\?saved_library=/);
+    assert.doesNotMatch(libraryJsx, /\/\?saved_library=/);
+    assert.match(libraryJsx, /savedLibraryChatHref\(/);
     assert.match(appJsx, /resumeChipFromThread/);
     assert.match(appJsx, /refreshSavedShelf/);
   });
