@@ -3860,15 +3860,24 @@ def list_thread_feedback(
 
 
 @app.get("/api/chat/stream")
+async def chat_stream_get_gone() -> None:
+    """GET query-string stream is gone. Stub stays for one release, then delete."""
+    raise HTTPException(
+        status_code=410,
+        detail="GET /api/chat/stream is gone. POST a JSON body to /api/chat/stream.",
+    )
+
+
+@app.post("/api/chat/stream")
 async def chat_stream(
     request: Request,
-    message: str,
-    session_id: Optional[str] = None,
-    lens_id: Optional[str] = None,
-    persona_id: Optional[str] = None,
+    payload: ChatRequest,
     user=Depends(get_current_user_dep),
 ) -> EventSourceResponse:
     """SSE endpoint for token-by-token chat streaming.
+
+    Native EventSource cannot POST. Clients must use fetch + a stream reader
+    and must not reconstruct EventSource after a dropped socket.
 
     Events emitted:
 
@@ -3881,8 +3890,8 @@ async def chat_stream(
     scheduler = _idle_scheduler()
     if scheduler is not None:
         scheduler.record_activity()
-    sid = session_id or uuid.uuid4().hex
-    resolved_lens = _resolve_lens_id(lens_id)
+    sid = payload.session_id or uuid.uuid4().hex
+    resolved_lens = _resolve_lens_id(payload.lens_id)
     scoped = _scoped_user_id(user)
 
     async def event_generator():
@@ -3892,12 +3901,12 @@ async def chat_stream(
                 _db(),
                 _settings(),
                 sid,
-                message,
+                payload.message,
                 lens_id=resolved_lens,
                 user_id=scoped,
                 seerr_user_id=user.seerr_user_id,
                 user_role=user.role,
-                persona_id=persona_id,
+                persona_id=payload.persona_id,
                 is_youth=bool(getattr(user, "is_youth", False)),
             ):
                 data = json.loads(chunk)
@@ -3905,14 +3914,14 @@ async def chat_stream(
 
                 if event_type in ("tool_start", "tool_result"):
                     status = "start" if event_type == "tool_start" else "complete"
-                    payload = {"name": data.get("name"), "status": status}
+                    event_payload = {"name": data.get("name"), "status": status}
                     if event_type == "tool_start" and data.get("args") is not None:
-                        payload["args"] = data.get("args")
+                        event_payload["args"] = data.get("args")
                     if event_type == "tool_result" and data.get("summary") is not None:
-                        payload["summary"] = data.get("summary")
+                        event_payload["summary"] = data.get("summary")
                     yield {
                         "event": "tool_call",
-                        "data": json.dumps(payload),
+                        "data": json.dumps(event_payload),
                     }
                 else:
                     if event_type == "done":
