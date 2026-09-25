@@ -1,0 +1,3 @@
+#!/bin/sh
+# post-commit — after a local commit
+. "$(dirname "$0")/codegraph-sync.sh"

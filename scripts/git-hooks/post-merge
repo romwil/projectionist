@@ -1,0 +1,3 @@
+#!/bin/sh
+# post-merge — after git pull / merge
+. "$(dirname "$0")/codegraph-sync.sh"
