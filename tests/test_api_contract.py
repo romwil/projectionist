@@ -520,7 +520,14 @@ class ApiContractTests(unittest.TestCase):
 
     @patch.dict(os.environ, {}, clear=False)
     def test_settings_put_restores_empty_root_folders(self) -> None:
-        for key in ("MOVIES_ROOT", "TV_ROOT", "RADARR_ROOT_FOLDER", "SONARR_ROOT_FOLDER"):
+        for key in (
+            "MOVIES_ROOT",
+            "TV_ROOT",
+            "PROJECTIONIST_TV_MEDIA",
+            "PROJECTIONIST_MOVIE_MEDIA",
+            "RADARR_ROOT_FOLDER",
+            "SONARR_ROOT_FOLDER",
+        ):
             os.environ.pop(key, None)
         self.client.put(
             "/api/settings",

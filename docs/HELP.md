@@ -281,6 +281,10 @@ Tune **name**, **identity**, **presets**, and **behavior sliders** — how the c
 
 If an older install still has a legacy custom prompt, Admin shows a one-click **reset to slider-based persona** instead of exposing the raw text.
 
+### Library folders (Investigate / ffmpeg)
+
+Bind the host TV and movie libraries **read-write** into the container (`/tv` and `/movies`, or the same host path). Investigate Apply renames episode files on disk — a read-only bind will fail. Set **Admin → Connections → Library folders** (`tv_root` / `movies_root`), or host env `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (those win when set). Unraid/Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
+
 ### After sync
 
 1. Run **Sync library** from **Admin → Libraries** (`/admin/libraries`) — library sources and the refresh control live on the same page. Bookmarks to `/admin/sync` redirect there. (Or type `/sync` in chat when multi-user is off.)
