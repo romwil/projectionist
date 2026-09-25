@@ -535,6 +535,75 @@ button.app-topbar-icon:focus-visible {
   background: color-mix(in srgb, var(--ambient-accent) 16%, var(--surface-2));
 }
 
+.whisper-home-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3);
+}
+
+.whisper-inbox-link {
+  text-decoration: none;
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+}
+
+.whisper-inbox-page .whisper-inbox-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.whisper-inbox-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.whisper-card {
+  border: 1px solid var(--border-subtle);
+  background: var(--surface-2);
+  border-radius: var(--radius-md, 12px);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.whisper-card-eyebrow {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted, var(--text-secondary));
+}
+
+.whisper-card-title {
+  margin: 0;
+  font-family: var(--font-display, Fraunces, serif);
+  font-size: var(--text-lg);
+}
+
+.whisper-card-title-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.whisper-card-title-link:hover,
+.whisper-card-title-link:focus-visible {
+  text-decoration: underline;
+}
+
+.whisper-card-why {
+  margin: 0;
+  font-size: var(--text-md, 1rem);
+}
+
+.whisper-card-dismiss,
+.whisper-inbox-clear {
+  align-self: flex-start;
+  min-height: var(--tap-min);
+}
+
 .holdable-shelf {
   display: flex;
   flex-wrap: wrap;

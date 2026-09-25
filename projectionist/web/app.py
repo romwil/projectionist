@@ -220,6 +220,7 @@ from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
 from projectionist.web.investigate_routes import register_investigate_routes
 from projectionist.web.rematch_routes import register_rematch_routes
+from projectionist.web.whisper_routes import register_whisper_routes
 from projectionist.web.setup import (
     REVEALABLE_SECRET_FIELDS,
     SECRET_FIELDS,
@@ -1933,6 +1934,7 @@ register_live_channels_routes(
 )
 register_investigate_routes(app)
 register_rematch_routes(app)
+register_whisper_routes(app)
 
 
 def _scheduler_trigger_background(name: str) -> Dict[str, Any]:
