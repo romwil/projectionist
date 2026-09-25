@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import InlineAlert from "../../components/InlineAlert";
 import AdminExecutionCard from "../../components/AdminExecutionCard";
 import { api } from "../../api/client";
+import RematchStudio from "./RematchStudio";
+import RepairMiss from "./RepairMiss";
 import {
   formatLastSyncRelative,
   formatSyncJobDetails,
@@ -66,9 +68,75 @@ export default function LibrariesSection({
   setActionFeedback,
   CertifiedBadge,
 }) {
+  const [investigateHint, setInvestigateHint] = useState(null);
+  const [repairRetryingId, setRepairRetryingId] = useState("");
+  const [repairSkippingId, setRepairSkippingId] = useState("");
+  const [hiddenRepairs, setHiddenRepairs] = useState(() => new Set());
+
   function formatLastSync(lastSync) {
     return formatLastSyncRelative(lastSync);
   }
+
+  function scrollToId(id) {
+    if (typeof document === "undefined") return;
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function handleRepairRematch() {
+    scrollToId("rematch-studio");
+  }
+
+  function handleRepairInvestigate(item) {
+    setInvestigateHint({ title: item?.title || "", source: item?.source || "" });
+    scrollToId("episode-investigate");
+  }
+
+  async function handleRepairRetry(item) {
+    if (item?.source === "sonarr_missing") {
+      handleSonarrMissingSearch?.();
+      return;
+    }
+    if (item?.id == null) return;
+    setRepairRetryingId(String(item.id));
+    try {
+      await api("/admin/rematch/retry", {
+        method: "POST",
+        body: JSON.stringify({ item_id: Number(item.id) }),
+      });
+    } catch {
+      /* job card + repair copy stay visible */
+    } finally {
+      setRepairRetryingId("");
+    }
+  }
+
+  async function handleRepairSkip(item) {
+    setRepairSkippingId(String(item.id));
+    try {
+      if (item?.source === "radarr_register" && item.id != null) {
+        await api("/admin/rematch/skip", {
+          method: "POST",
+          body: JSON.stringify({ item_id: Number(item.id), skipped: true }),
+        });
+      }
+      setHiddenRepairs((prev) => new Set(prev).add(`${item.source}-${item.id}`));
+    } catch {
+      /* keep the row */
+    } finally {
+      setRepairSkippingId("");
+    }
+  }
+
+  const repairRegister = useMemo(() => {
+    const items = (radarrRegister?.items || []).filter(
+      (row) => !hiddenRepairs.has(`radarr_register-${row.id}`),
+    );
+    return { ...radarrRegister, items };
+  }, [radarrRegister, hiddenRepairs]);
+
+  const repairSonarr = hiddenRepairs.has("sonarr_missing-sonarr-miss")
+    ? { ...sonarrMissing, execution: { ...(sonarrMissing?.execution || {}), failed: 0, last_error: "" }, error: "" }
+    : sonarrMissing;
 
   return (
         <>
@@ -192,6 +260,16 @@ export default function LibrariesSection({
             message={actionAlert?.area === "radarr-register" ? actionAlert.message : null}
           />
         </section>
+
+        <RepairMiss
+          radarrRegister={repairRegister}
+          onRematch={handleRepairRematch}
+          onRetry={handleRepairRetry}
+          onSkip={handleRepairSkip}
+          onInvestigate={handleRepairInvestigate}
+          retryingId={repairRetryingId}
+          skippingId={repairSkippingId}
+        />
 
         <section className="config-section" data-testid="sonarr-find-missing-card">
           <h2>Sonarr — find all missing</h2>
@@ -338,7 +416,22 @@ export default function LibrariesSection({
           />
         </section>
 
-        <InvestigatePanel />
+        <RepairMiss
+          sonarrMissing={repairSonarr}
+          onRematch={handleRepairRematch}
+          onRetry={handleRepairRetry}
+          onSkip={handleRepairSkip}
+          onInvestigate={handleRepairInvestigate}
+          retryingId={repairRetryingId}
+          skippingId={repairSkippingId}
+        />
+
+        <RematchStudio
+          onInvestigate={handleRepairInvestigate}
+          onHighlight={handleRepairRematch}
+        />
+
+        <InvestigatePanel focusHint={investigateHint} />
 
         <section className="config-section" data-testid="plex-library-mapping">
           <h2>Plex libraries</h2>
@@ -460,7 +553,7 @@ export default function LibrariesSection({
   );
 }
 
-function InvestigatePanel() {
+function InvestigatePanel({ focusHint }) {
   const [health, setHealth] = useState(null);
   const [shows, setShows] = useState([]);
   const [showId, setShowId] = useState("");
@@ -525,6 +618,13 @@ function InvestigatePanel() {
       clearInterval(interval);
     };
   }, []);
+
+  useEffect(() => {
+    if (!focusHint?.title || !shows.length) return;
+    const needle = String(focusHint.title).toLowerCase();
+    const match = shows.find((item) => String(item.title || "").toLowerCase().includes(needle));
+    if (match) setShowId(String(match.id));
+  }, [focusHint, shows]);
 
   useEffect(() => {
     if (!reviewOpen || !rows.length) return;
@@ -609,7 +709,7 @@ function InvestigatePanel() {
   }
 
   return (
-    <section className="config-section" data-testid="episode-investigate-card">
+    <section className="config-section" data-testid="episode-investigate-card" id="episode-investigate">
       <h2>Investigate episodes</h2>
       <p className="wizard-note">{SCENE_NAMES_NOT_EVIDENCE}</p>
       <p className="wizard-note" data-testid="investigate-stills-leave-lan">

@@ -329,11 +329,15 @@ curl -s http://localhost:8788/api/library/stats | python3 -m json.tool
 
 Movies already in Plex but missing from Radarr (by TMDB id) can be registered without starting a download search. **Register up to 25 in Radarr** on **Admin → Libraries** (`/admin/libraries`) queues those titles and shows each one as queued, in flight, registered, already in Radarr, path conflict, or failed. A path conflict means Radarr already owns that folder under a different TMDB id — that is an identification mismatch, not “not in Plex.” Submitting the batch is not “done” — watch the card until remaining titles finish. **Cancel remaining** skips titles that have not started; a title already talking to Radarr is left to finish. Titles without a TMDB id need a Plex rematch first.
 
+**Rematch studio** on the same page compares Plex GUID, Radarr TMDB, and the folder (Presence / Savages). Same title vs path conflict stays honest — FileBot, Plex Match, and Gracenote are not investigators. Failed register or Sonarr search rows offer **Rematch**, **Skip**, **Retry**, or **Investigate** with human copy, not a JSON dump.
+
 ```bash
 # Owner host — start, watch per-title status, optional cancel
 curl -s -X POST http://localhost:8788/api/admin/radarr/register-existing -H 'Content-Type: application/json' -d '{"limit":25}'
 curl -s http://localhost:8788/api/admin/radarr/register-existing/status
 curl -s -X POST http://localhost:8788/api/admin/radarr/register-existing/cancel
+# Rematch studio
+curl -s http://localhost:8788/api/admin/rematch/scan
 ```
 
 The same live card (phase, queued / running / completed / failed, current item, last error, cancel remaining) appears on **Send weekly newsletter**, **Generate my Year in Review**, and **This week in your library → Generate now**. Library sync, Sonarr Find all missing, Live Channels jobs, and Scheduled Tasks already had their own progress rails — those stay.
