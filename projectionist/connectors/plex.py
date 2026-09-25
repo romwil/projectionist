@@ -90,6 +90,7 @@ class PlexSection:
     key: str
     title: str
     type: str
+    locations: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -273,11 +274,17 @@ class PlexClient:
             key = directory.attrib.get("key")
             if not key:
                 continue
+            locations = [
+                str(loc.attrib.get("path") or "").strip()
+                for loc in directory.findall(".//Location")
+                if str(loc.attrib.get("path") or "").strip()
+            ]
             sections.append(
                 PlexSection(
                     key=key,
                     title=str(directory.attrib.get("title") or ""),
                     type=str(directory.attrib.get("type") or ""),
+                    locations=locations,
                 )
             )
         return sections

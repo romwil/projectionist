@@ -97,6 +97,7 @@ def apply_rows(
         if not current_path:
             failed.append({"id": file_id, "error": "Missing file path"})
             continue
+        resolved_path = str(row.get("resolved_path") or "").strip() or current_path
         created_meta = row.get("created_series") if isinstance(row.get("created_series"), Mapping) else None
         show_title = str(proposed.get("series_title") or show.get("title") or "Show")
         has_episode = proposed.get("season") is not None and proposed.get("episode") is not None
@@ -115,12 +116,17 @@ def apply_rows(
             )
             continue
         target_path = plex_proper_path(show_title, proposed, current_path)
+        target_resolved = (
+            str(Path(resolved_path).with_name(Path(target_path).name))
+            if resolved_path != current_path
+            else target_path
+        )
         try:
             if current_path != target_path:
-                if exists(target_path):
+                if exists(target_resolved):
                     raise RuntimeError("A file already uses the Plex-proper name")
-                if exists(current_path):
-                    rename(current_path, target_path)
+                if exists(resolved_path):
+                    rename(resolved_path, target_resolved)
             remap_fn = sonarr_remap or remap_sonarr_episode_file
             remap_fn(
                 settings,
@@ -137,6 +143,8 @@ def apply_rows(
                     "series_id": row.get("series_id"),
                     "from_path": current_path,
                     "to_path": target_path,
+                    "from_resolved": resolved_path,
+                    "to_resolved": target_resolved,
                     "from_episode_id": (row.get("sonarr") or {}).get("episode_id"),
                     "to_episode_id": proposed.get("sonarr_episode_id"),
                     "from_season": (row.get("sonarr") or {}).get("season"),
@@ -185,11 +193,13 @@ def undo_apply(
             continue
         to_path = str(change.get("to_path") or "")
         from_path = str(change.get("from_path") or "")
+        to_resolved = str(change.get("to_resolved") or "").strip() or to_path
+        from_resolved = str(change.get("from_resolved") or "").strip() or from_path
         try:
-            if to_path and from_path and to_path != from_path and exists(to_path):
-                if exists(from_path):
+            if to_path and from_path and to_path != from_path and exists(to_resolved):
+                if exists(from_resolved):
                     raise RuntimeError("Original path is occupied — cannot undo rename")
-                rename(to_path, from_path)
+                rename(to_resolved, from_resolved)
             remap_fn(
                 settings,
                 file_id=int(change.get("file_id") or 0),
