@@ -441,6 +441,73 @@ class JobHappyPathTests(unittest.TestCase):
         self.assertEqual(row["confidence"], "certain")
         self.assertEqual(row["proposed"]["episode"], 7)
         self.assertFalse(row["claimed"]["evidence"])
+        self.assertEqual(row["stills_error"], "")
+
+    def test_unreadable_path_is_failed_not_completed(self) -> None:
+        from projectionist.library.episode_investigate.job import (
+            UNREADABLE_PATH,
+            UNREADABLE_REASON,
+            investigate_files,
+            investigate_one,
+        )
+
+        recorded: list[tuple] = []
+
+        class _Store:
+            def set_item(self, item_id, status, **kwargs):
+                recorded.append((item_id, status, kwargs.get("outcome"), kwargs.get("error")))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = str(Path(tmp) / "missing" / "Expedition.Unknown.S15E04.mkv")
+            row = investigate_one(
+                SimpleNamespace(llm_provider="anthropic", llm_model="claude-sonnet-4-6", tmdb_api_key=""),
+                _show(),
+                {
+                    "id": "80",
+                    "file_id": 80,
+                    "series_id": 4,
+                    "path": missing,
+                    "claimed": claimed_from_path(missing),
+                    "sonarr": {"season": 15, "episode": 4, "title": "Shipwreck", "evidence": False},
+                },
+                catalog=_catalog(),
+                use_vision=True,
+                household=["The Bear"],
+                job_id="job2",
+                data_dir=Path(tmp),
+            )
+            self.assertEqual(row["stills_error"], UNREADABLE_PATH)
+            self.assertEqual(row["stills"], [])
+            self.assertIsNone(row["runtime_seconds"])
+            self.assertIn(UNREADABLE_REASON, row["reasons"])
+            self.assertIsNone(row["vision"])
+
+            investigate_files(
+                SimpleNamespace(llm_provider="anthropic", llm_model="claude-sonnet-4-6", tmdb_api_key=""),
+                _show(),
+                [
+                    {
+                        "id": "80",
+                        "file_id": 80,
+                        "series_id": 4,
+                        "path": missing,
+                        "claimed": claimed_from_path(missing),
+                        "sonarr": {"season": 15, "episode": 4, "title": "Shipwreck", "evidence": False},
+                    }
+                ],
+                catalog=_catalog(),
+                season=None,
+                use_vision=True,
+                household=["The Bear"],
+                job_id="job2",
+                data_dir=Path(tmp),
+                store=_Store(),
+            )
+        failed = [item for item in recorded if item[1] == "failed"]
+        completed = [item for item in recorded if item[1] == "completed"]
+        self.assertTrue(failed)
+        self.assertEqual(failed[-1][2], "unreadable")
+        self.assertEqual(completed, [])
 
 
 class CatalogSonarrTests(unittest.TestCase):
