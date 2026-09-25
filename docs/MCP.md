@@ -53,7 +53,7 @@ Plex/Fanart thumbs (including any URL containing `X-Plex-Token`) are cleared rat
 
 Owners can **generate / regenerate** privacy and full MCP keys, see a last-4 hint (never the full secret on list GETs), and copy a newly generated key once. Keys persist to `settings.json` (file overrides empty-or-absent env after rotate). Unraid templates also expose both env vars.
 
-Prefer `PROJECTIONIST_*`. Matching `CURATORX_*` keys still work during the compatibility window when the new name is unset.
+Use `PROJECTIONIST_*` only. In-app `CURATORX_*` reads closed in **1.34.0**. Compose/Unraid templates may still map a leftover `CURATORX_*` name into `PROJECTIONIST_*` at the shell layer; do not rely on that for new installs. See the keep-vs-sunset list in [Phase 6 spec](superpowers/specs/2026-09-24-delight-phase-6.md#curatorx-keep-vs-sunset-do-not-yank-aliases-in-1363).
 
 | Env / setting | Mode |
 |---------------|------|
@@ -165,7 +165,7 @@ Empty neighbor/relation results mean the idle scheduler has not materialized the
 
 Privacy mode callers receive an error if they invoke propose/confirm tools. There is no silent `require_confirmation=false` path.
 
-**Active-curation scope (H3).** A full key can always *propose* and *cancel*. Whether it may *confirm/execute* its own proposals is a scope bound to key issuance: set `mcp_full_confirm_enabled` (Admin → rotate the full key with the active-curation scope) or `PROJECTIONIST_MCP_FULL_CONFIRM=1` (alias `CURATORX_MCP_FULL_CONFIRM`) for stdio / Unraid CA. Without the scope, `confirm_pending_action` returns `requires_human_confirmation` and the pending token survives so a human can confirm it in the web UI status dock (or `POST /api/actions/confirm`). This lets you issue read+propose keys for untrusted models and reserve self-confirming keys for trusted in-stack automation.
+**Active-curation scope (H3).** A full key can always *propose* and *cancel*. Whether it may *confirm/execute* its own proposals is a scope bound to key issuance: set `mcp_full_confirm_enabled` (Admin → rotate the full key with the active-curation scope) or `PROJECTIONIST_MCP_FULL_CONFIRM=1` for stdio / Unraid CA. Without the scope, `confirm_pending_action` returns `requires_human_confirmation` and the pending token survives so a human can confirm it in the web UI status dock (or `POST /api/actions/confirm`). This lets you issue read+propose keys for untrusted models and reserve self-confirming keys for trusted in-stack automation.
 
 ## See also
 

@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 1.36.8 — Scholar core
+
+Scholar citations open a footnote sheet from `[^1]` instead of a raw dump. Village pending consults say they have not called back. A course resume pointer picks up the next unfinished syllabus session.
+
+### Added
+- Chat markdown footnote refs (`[^1]`) open a source sheet in `MessageText` and hide the GFM dump.
+- Village pending consults use household copy (“{name} has not called back”) instead of spinner JSON.
+- `course_resume_pointer` in `projectionist/syllabus/` points at the next unfinished session (or a finished course).
+
 ### 1.36.4 — Afterglow and unfinished
 
 Explore now has a post-watch afterglow and a leftover-runtime rail that is not the two-month idle shelf.
@@ -14,6 +23,9 @@ Explore now has a post-watch afterglow and a leftover-runtime rail that is not t
 - `feed_afterglow` / `GET /api/library/feeds/afterglow` — recently finished or ≥85% unrated titles with persona opener and questions.
 - `feed_unfinished` / `GET /api/library/feeds/unfinished` — leftover playhead / leftover episodes, excluding 60-day idle titles.
 - Explore rails for both (Unfinished and Afterglow sit under Continue Watching).
+
+### Changed
+- **1.36.3 craft hygiene (docs).** Phase 6 / 1.36 Delight program spec, wishlist pointer, Live Channels deferred truth-up, architecture-letter still-open refresh, and CuratorX keep-vs-sunset note. No product behavior change. Prod stays 1.35.5 until the 1.36 end gate.
 
 ## [1.35.5] — 2026-09-22
 

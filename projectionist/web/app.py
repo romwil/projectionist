@@ -217,6 +217,7 @@ from projectionist.web.augmentation_routes import register_augmentation_routes
 from projectionist.web.knowledge_ops_routes import register_knowledge_ops_routes
 from projectionist.web.holidays_routes import register_holidays_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
+from projectionist.web.investigate_routes import register_investigate_routes
 from projectionist.web.setup import (
     REVEALABLE_SECRET_FIELDS,
     SECRET_FIELDS,
@@ -1921,6 +1922,9 @@ register_live_channels_routes(
     safe_error_detail=_safe_error_detail,
     data_dir=DATA_DIR,
 )
+register_investigate_routes(app)
+
+
 def _scheduler_trigger_background(name: str) -> Dict[str, Any]:
     scheduler = _idle_scheduler()
     if scheduler is None:
