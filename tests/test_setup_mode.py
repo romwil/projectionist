@@ -18,6 +18,8 @@ from projectionist.web.setup_mode import (
     RECOVERY_KEY_HASH_KEY,
     SETUP_SNAPSHOT_KEY,
     SETUP_STATE_KEY,
+    WAN_COMMIT_OWNER_PASSWORD_DETAIL,
+    is_setup_public_path,
     resolve_commit_household_domain,
     resolve_commit_invite_only,
     resolve_commit_trust_proxy,
@@ -43,7 +45,7 @@ class SetupModeApiTests(unittest.TestCase):
 
         importlib.reload(app_mod)
         self.app_mod = app_mod
-        self.client = TestClient(app_mod.app, client=("172.17.0.1", 43210))
+        self.client = TestClient(app_mod.app, client=("192.168.1.20", 43210))
 
     def tearDown(self) -> None:
         import projectionist.web.jobs as jobs
@@ -58,13 +60,15 @@ class SetupModeApiTests(unittest.TestCase):
             "DATA_DIR",
             "HOST",
             "PROJECTIONIST_SETUP_STATE",
-            "PROJECTIONIST_SETUP_STATE",
+            "PROJECTIONIST_OWNER_PASSWORD",
+            "PROJECTIONIST_OWNER_USERNAME",
         ):
             os.environ.pop(key, None)
         self._tmpdir.cleanup()
 
     def test_docker_nat_handshake_preselects_public(self) -> None:
-        resp = self.client.get("/api/setup/handshake")
+        docker = self._client_at("172.17.0.1")
+        resp = docker.get("/api/setup/handshake")
         self.assertEqual(resp.status_code, 200, resp.text)
         body = resp.json()
         self.assertEqual(body["classification"], "public_failsafe")
@@ -97,9 +101,7 @@ class SetupModeApiTests(unittest.TestCase):
     def test_wan_peer_commit_is_rejected(self) -> None:
         wan = self._client_at("8.8.8.8")
         handshake = wan.get("/api/setup/handshake")
-        self.assertEqual(handshake.status_code, 200, handshake.text)
-        self.assertTrue(handshake.json()["halt"])
-        self.assertEqual(handshake.json()["classification"], "halt_wan")
+        self.assertEqual(handshake.status_code, 403, handshake.text)
 
         commit = wan.post(
             "/api/setup/commit",
@@ -111,6 +113,69 @@ class SetupModeApiTests(unittest.TestCase):
         )
         self.assertEqual(commit.status_code, 403, commit.text)
         self._assert_setup_uncommitted()
+
+    def test_wan_peer_blocks_setup_tests_health_stays_open(self) -> None:
+        wan = self._client_at("8.8.8.8")
+        self.assertEqual(wan.get("/api/health").status_code, 200)
+        self.assertEqual(wan.get("/api/features").status_code, 200)
+        plex = wan.post(
+            "/api/setup/test/plex",
+            json={"plex_url": "http://plex.local", "plex_token": "x"},
+        )
+        self.assertEqual(plex.status_code, 403, plex.text)
+        tmdb = wan.post("/api/setup/test/tmdb", json={"tmdb_api_key": "x"})
+        self.assertEqual(tmdb.status_code, 403, tmdb.text)
+
+        lan = self._client_at("192.168.1.20")
+        lan_plex = lan.post(
+            "/api/setup/test/plex",
+            json={"plex_url": "http://invalid.local", "plex_token": "bad"},
+        )
+        self.assertEqual(lan_plex.status_code, 200, lan_plex.text)
+        self.assertFalse(lan_plex.json()["ok"])
+
+    def test_docker_nat_setup_tests_are_not_allowlisted(self) -> None:
+        docker = self._client_at("172.17.0.1")
+        plex = docker.post(
+            "/api/setup/test/plex",
+            json={"plex_url": "http://plex.local", "plex_token": "x"},
+        )
+        self.assertEqual(plex.status_code, 404, plex.text)
+
+    def test_public_failsafe_commit_requires_owner_password(self) -> None:
+        docker = self._client_at("172.17.0.1")
+        commit = docker.post(
+            "/api/setup/commit",
+            json={
+                "profile": "public",
+                "username": "owner",
+                "password": "password123",
+                "household_domain": "movies.example.com",
+                "trust_proxy": True,
+            },
+        )
+        self.assertEqual(commit.status_code, 403, commit.text)
+        self.assertEqual(commit.json()["detail"], WAN_COMMIT_OWNER_PASSWORD_DETAIL)
+        self._assert_setup_uncommitted()
+
+    def test_public_failsafe_commit_allowed_when_owner_password_set(self) -> None:
+        os.environ["PROJECTIONIST_OWNER_PASSWORD"] = "host-owner-password"
+        docker = self._client_at("172.17.0.1")
+        try:
+            commit = docker.post(
+                "/api/setup/commit",
+                json={
+                    "profile": "public",
+                    "username": "owner",
+                    "password": "password123",
+                    "household_domain": "movies.example.com",
+                    "trust_proxy": True,
+                },
+            )
+        finally:
+            os.environ.pop("PROJECTIONIST_OWNER_PASSWORD", None)
+        self.assertEqual(commit.status_code, 200, commit.text)
+        self.assertEqual(commit.json()["setup_state"], "active")
 
     def test_wan_peer_commit_public_profile_is_still_rejected(self) -> None:
         wan = self._client_at("8.8.8.8")
@@ -290,6 +355,22 @@ class SetupModeApiTests(unittest.TestCase):
             },
         )
         self.assertEqual(again.status_code, 404)
+
+
+class SetupPublicPathTests(unittest.TestCase):
+    def test_exact_allowlist_ignores_classification(self) -> None:
+        self.assertTrue(is_setup_public_path("GET", "/api/health"))
+        self.assertTrue(is_setup_public_path("POST", "/api/setup/commit", classification="halt_wan"))
+        self.assertTrue(is_setup_public_path("POST", "/api/setup/handshake", classification="public_failsafe"))
+
+    def test_plex_tmdb_tests_only_when_lan(self) -> None:
+        self.assertTrue(is_setup_public_path("POST", "/api/setup/test/plex", classification="lan"))
+        self.assertTrue(is_setup_public_path("POST", "/api/setup/test/tmdb", classification="lan"))
+        self.assertFalse(is_setup_public_path("POST", "/api/setup/test/plex"))
+        self.assertFalse(
+            is_setup_public_path("POST", "/api/setup/test/plex", classification="public_failsafe")
+        )
+        self.assertFalse(is_setup_public_path("POST", "/api/setup/test/tmdb", classification="halt_wan"))
 
 
 class ResolveCommitInviteOnlyTests(unittest.TestCase):
