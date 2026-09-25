@@ -1,11 +1,14 @@
 """Explore hub feed helpers — recently added, recent releases, on-this-day, revisit,
-continue-watching.
+continue-watching, unfinished leftover runtime, and post-watch afterglow.
 
 Honest empties: recent-releases returns ``[]`` when no ``release_date`` /
 ``first_air_date`` rows exist. On-this-day prefers calendar month-day matches
 from those dates; when none exist it falls back to the legacy milestone-year
 anniversaries behavior used by ``GET /api/library/anniversaries``.
 Revisit These samples partially watched TV idle for 60+ days.
+Unfinished is leftover runtime last touched inside that idle window — not the
+two-month forgotten shelf.
+Afterglow attaches the existing persona review dialogue to recent finishes.
 Continue Watching prefers live Plex on-deck reads, then local in-progress rows.
 """
 
@@ -30,6 +33,8 @@ MAX_FEED_LIMIT = 48
 MAX_PAGE_LIMIT = 100
 REVISIT_DEFAULT_LIMIT = 20
 REVISIT_IDLE_DAYS = 60
+AFTERGLOW_DEFAULT_DAYS = 14
+AFTERGLOW_NEAR_COMPLETE_PCT = 85.0
 MILESTONE_AGES = (5, 10, 15, 20, 25, 30, 40, 50, 75)
 DIRECTOR_MIN_TITLES = 3
 GENRE_MIN_TITLES = 4
@@ -1289,4 +1294,336 @@ def feed_continue_watching(
         "limit": capped,
         "note": note,
         "plex_error": plex_error,
+    }
+
+
+def _row_int(row: Mapping[str, Any], key: str) -> Optional[int]:
+    keys = row.keys() if hasattr(row, "keys") else row
+    if key not in keys or row[key] is None:
+        return None
+    try:
+        return int(row[key])
+    except (TypeError, ValueError):
+        return None
+
+
+def _duration_ms_from_row(row: Mapping[str, Any]) -> Optional[int]:
+    duration = _row_int(row, "duration_ms")
+    if duration and duration > 0:
+        return duration
+    runtime = _row_int(row, "runtime_minutes")
+    if runtime and runtime > 0:
+        return runtime * 60_000
+    return None
+
+
+def _completion_pct_from_row(row: Mapping[str, Any]) -> Optional[float]:
+    offset = _row_int(row, "view_offset_ms") or 0
+    duration = _duration_ms_from_row(row)
+    if offset > 0 and duration and duration > 0:
+        return min(100.0, (float(offset) / float(duration)) * 100.0)
+    return None
+
+
+def _leftover_ms_from_row(row: Mapping[str, Any]) -> Optional[int]:
+    offset = _row_int(row, "view_offset_ms") or 0
+    duration = _duration_ms_from_row(row)
+    if offset > 0 and duration and duration > offset:
+        return duration - offset
+    return None
+
+
+def _leftover_runtime_label(
+    *,
+    leftover_ms: Optional[int] = None,
+    leftover_episodes: Optional[int] = None,
+) -> str:
+    parts: List[str] = []
+    if leftover_episodes and leftover_episodes > 0:
+        noun = "episode" if leftover_episodes == 1 else "episodes"
+        parts.append(f"{leftover_episodes} {noun} left")
+    if leftover_ms and leftover_ms > 0:
+        mins = max(1, int(round(leftover_ms / 60_000)))
+        hours, rem = divmod(mins, 60)
+        if hours and rem:
+            parts.append(f"{hours}h {rem}m left")
+        elif hours:
+            parts.append(f"{hours}h left")
+        else:
+            parts.append(f"{mins} minute{'s' if mins != 1 else ''} left")
+    return " · ".join(parts) if parts else "Leftover runtime"
+
+
+def _feed_persona(db: Database) -> tuple[Optional[str], str]:
+    persona = db.get_persona()
+    if persona is None:
+        return None, "Curator"
+    preset_id = None
+    if "persona_preset_id" in persona.keys() and persona["persona_preset_id"]:
+        preset_id = str(persona["persona_preset_id"])
+    name = "Curator"
+    if "curator_name" in persona.keys() and persona["curator_name"]:
+        name = str(persona["curator_name"]).strip() or "Curator"
+    return preset_id, name
+
+
+def _reviewed_rating_keys(db: Database, *, user_id: Optional[str] = None) -> set[str]:
+    cleaned = str(user_id or "").strip()
+    try:
+        with db.connect() as conn:
+            if cleaned:
+                rows = conn.execute(
+                    """
+                    SELECT rating_key FROM user_title_reviews
+                    WHERE rating_key IS NOT NULL AND rating_key != ''
+                      AND (user_id = ? OR user_id IS NULL)
+                    """,
+                    (cleaned,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    """
+                    SELECT rating_key FROM user_title_reviews
+                    WHERE rating_key IS NOT NULL AND rating_key != ''
+                    """
+                ).fetchall()
+    except Exception:  # noqa: BLE001 — bare test doubles / pre-migration
+        return set()
+    return {str(row["rating_key"]) for row in rows if row["rating_key"]}
+
+
+def feed_unfinished(
+    db: Database,
+    *,
+    limit: int = DEFAULT_FEED_LIMIT,
+    idle_days: int = REVISIT_IDLE_DAYS,
+) -> Dict[str, Any]:
+    """Leftover runtime still in play — not the 60-day idle Revisit These shelf.
+
+    Movies: unfinished playhead with remaining minutes, last touched inside
+    ``idle_days``. Near-complete sittings (≥85%) belong on Afterglow instead.
+    Shows: leftover episodes last touched inside ``idle_days`` (idle partials
+    stay on Revisit These).
+    """
+    capped = _cap_limit(limit)
+    window = _cap_days(idle_days, default=REVISIT_IDLE_DAYS)
+    cutoff = int(time.time()) - window * 86400
+    items: List[Dict[str, Any]] = []
+    with db.connect() as conn:
+        movie_rows = conn.execute(
+            """
+            SELECT *
+            FROM library_items
+            WHERE media_type = 'movie'
+              AND view_offset_ms IS NOT NULL
+              AND view_offset_ms > 0
+              AND COALESCE(last_viewed_at, 0) >= ?
+            ORDER BY COALESCE(last_viewed_at, 0) DESC, title ASC
+            LIMIT ?
+            """,
+            (cutoff, max(capped * 3, 24)),
+        ).fetchall()
+        show_rows = conn.execute(
+            """
+            SELECT *
+            FROM library_items
+            WHERE media_type = 'show'
+              AND total_episode_count > 0
+              AND unwatched_episode_count > 0
+              AND unwatched_episode_count < total_episode_count
+              AND COALESCE(last_viewed_at, last_episode_watched_at, 0) >= ?
+            ORDER BY COALESCE(last_viewed_at, last_episode_watched_at, 0) DESC, title ASC
+            LIMIT ?
+            """,
+            (cutoff, max(capped * 2, 16)),
+        ).fetchall()
+
+    for row in movie_rows:
+        leftover = _leftover_ms_from_row(row)
+        completion = _completion_pct_from_row(row)
+        if completion is not None and completion >= AFTERGLOW_NEAR_COMPLETE_PCT:
+            continue
+        # Playhead without duration is still leftover runtime we can surface.
+        if leftover is None and (_row_int(row, "view_offset_ms") or 0) <= 0:
+            continue
+        label = _leftover_runtime_label(leftover_ms=leftover)
+        items.append(
+            _feed_item(
+                row,
+                in_library=True,
+                card_kind="unfinished",
+                leftover_label=label,
+                leftover_ms=leftover,
+                why=label,
+                watch_state="partial",
+                play_rating_key=str(row["rating_key"] or ""),
+            )
+        )
+
+    for row in show_rows:
+        leftover_eps = _row_int(row, "unwatched_episode_count") or 0
+        if leftover_eps <= 0:
+            continue
+        leftover_ms = _leftover_ms_from_row(row)
+        label = _leftover_runtime_label(
+            leftover_ms=leftover_ms,
+            leftover_episodes=leftover_eps,
+        )
+        items.append(
+            _feed_item(
+                row,
+                in_library=True,
+                card_kind="unfinished",
+                leftover_label=label,
+                leftover_ms=leftover_ms,
+                leftover_episodes=leftover_eps,
+                why=label,
+                watch_state="partial",
+                play_rating_key=str(row["rating_key"] or ""),
+            )
+        )
+
+    def _unfinished_sort(item: Mapping[str, Any]) -> tuple[int, str]:
+        leftover_ms = int(item.get("leftover_ms") or 0)
+        leftover_eps = int(item.get("leftover_episodes") or 0)
+        # Finishable leftover first (smaller remaining), then title.
+        remaining = leftover_ms if leftover_ms > 0 else leftover_eps * 45 * 60_000
+        return (remaining if remaining > 0 else 10**12, str(item.get("title") or "").casefold())
+
+    items.sort(key=_unfinished_sort)
+    items = items[:capped]
+    note = None
+    if not items:
+        note = (
+            "Nothing leftover to finish right now — leftover runtime lives here, "
+            "not titles idle for two months."
+        )
+    return {
+        "feed": "unfinished",
+        "idle_days": window,
+        "items": items,
+        "total": len(items),
+        "limit": capped,
+        "note": note,
+    }
+
+
+def feed_afterglow(
+    db: Database,
+    *,
+    limit: int = DEFAULT_FEED_LIMIT,
+    days: int = AFTERGLOW_DEFAULT_DAYS,
+    user_id: Optional[str] = None,
+    preset_id: Optional[str] = None,
+    curator_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Post-watch review afterglow using the existing persona review dialogue.
+
+    Recently finished titles, plus near-complete sittings (≥85%), that the
+    household has not already reviewed. Idle unfinished leftovers stay off
+    this rail (Unfinished / Revisit These).
+    """
+    from projectionist.persona.presets import build_review_dialogue
+
+    capped = _cap_limit(limit)
+    window = _cap_days(days, default=AFTERGLOW_DEFAULT_DAYS)
+    cutoff = int(time.time()) - window * 86400
+    resolved_preset, resolved_name = _feed_persona(db)
+    if preset_id is not None:
+        resolved_preset = preset_id
+    if curator_name:
+        resolved_name = curator_name
+    reviewed = _reviewed_rating_keys(db, user_id=user_id)
+    candidates: List[tuple[Mapping[str, Any], float, str]] = []
+    with db.connect() as conn:
+        movie_rows = conn.execute(
+            """
+            SELECT *
+            FROM library_items
+            WHERE media_type = 'movie'
+              AND rating_key IS NOT NULL AND rating_key != ''
+              AND COALESCE(last_viewed_at, 0) >= ?
+              AND plex_user_rating_stars IS NULL
+            ORDER BY COALESCE(last_viewed_at, 0) DESC, title ASC
+            LIMIT ?
+            """,
+            (cutoff, max(capped * 4, 32)),
+        ).fetchall()
+        show_rows = conn.execute(
+            """
+            SELECT *
+            FROM library_items
+            WHERE media_type = 'show'
+              AND rating_key IS NOT NULL AND rating_key != ''
+              AND total_episode_count > 0
+              AND unwatched_episode_count = 0
+              AND COALESCE(last_viewed_at, last_episode_watched_at, 0) >= ?
+              AND plex_user_rating_stars IS NULL
+            ORDER BY COALESCE(last_viewed_at, last_episode_watched_at, 0) DESC, title ASC
+            LIMIT ?
+            """,
+            (cutoff, max(capped * 2, 16)),
+        ).fetchall()
+
+    for row in movie_rows:
+        key = str(row["rating_key"] or "")
+        if not key or key in reviewed:
+            continue
+        view_count = _row_int(row, "view_count") or 0
+        completion = _completion_pct_from_row(row)
+        finished = view_count > 0
+        near = completion is not None and completion >= AFTERGLOW_NEAR_COMPLETE_PCT
+        if not finished and not near:
+            continue
+        pct = 100.0 if finished and (completion is None or completion >= 99) else float(completion or 100.0)
+        candidates.append((row, pct, "near_complete"))
+
+    for row in show_rows:
+        key = str(row["rating_key"] or "")
+        if not key or key in reviewed:
+            continue
+        candidates.append((row, 100.0, "near_complete"))
+
+    items: List[Dict[str, Any]] = []
+    for row, pct, template_key in candidates[:capped]:
+        dialogue = build_review_dialogue(
+            resolved_preset,
+            template_key,
+            curator_name=resolved_name,
+            title=str(row["title"] or ""),
+            media_type=str(row["media_type"] or "movie"),
+            rating_key=str(row["rating_key"] or "") or None,
+            completion_pct=pct,
+        )
+        opener = str(dialogue.get("opener") or "")
+        items.append(
+            _feed_item(
+                row,
+                in_library=True,
+                card_kind="afterglow",
+                why=opener,
+                afterglow_opener=opener,
+                afterglow_questions=list(dialogue.get("questions") or []),
+                review_dialogue=dialogue,
+                dialogue_band=dialogue.get("dialogue_band"),
+                template_key=template_key,
+                completion_pct=pct,
+                watch_state="watched" if pct >= 99 else "partial",
+            )
+        )
+
+    note = None
+    if not items:
+        note = (
+            "No recent finishes waiting for a take — watch something, then "
+            "come back while it's still warm."
+        )
+    return {
+        "feed": "afterglow",
+        "days": window,
+        "items": items,
+        "total": len(items),
+        "limit": capped,
+        "dialogue_band": items[0]["dialogue_band"] if items else None,
+        "note": note,
     }

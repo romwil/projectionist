@@ -19,6 +19,7 @@ from projectionist.agent.tools import ToolRegistry
 from projectionist.config_store import Settings
 from projectionist.library.db import DEFAULT_LENS_ID, Database
 from projectionist.library.feeds import (
+    feed_afterglow,
     feed_continue_watching,
     feed_director_spotlight,
     feed_genre_spotlight,
@@ -27,8 +28,11 @@ from projectionist.library.feeds import (
     feed_recently_added,
     feed_revisit_these,
     feed_seasonal_spotlight,
+    feed_unfinished,
     neighbors_payload,
 )
+from projectionist.persona.presets import get_preset
+from projectionist.reviews.store import save_review
 from projectionist.library.query import LibraryFilters, query_library
 from projectionist.library.relations import refresh_title_relations
 from projectionist.scheduler.tasks import title_relations_refresh
@@ -412,6 +416,200 @@ class FeedHelperTests(unittest.TestCase):
             self.assertEqual(payload["items"], [])
             self.assertIn("in progress", (payload["note"] or "").lower())
 
+    def test_unfinished_selects_leftover_runtime_not_idle_revisit(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            now = int(time.time())
+            stale = now - 90 * 86400
+            recent = now - 2 * 86400
+            db.upsert_library_item(
+                {
+                    "rating_key": "leftover-movie",
+                    "media_type": "movie",
+                    "title": "Forty Minutes Left",
+                    "year": 2021,
+                    "view_count": 0,
+                    "view_offset_ms": 3_600_000,
+                    "duration_ms": 6_000_000,
+                    "last_viewed_at": recent,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "idle-movie",
+                    "media_type": "movie",
+                    "title": "Forgotten Sitting",
+                    "year": 2019,
+                    "view_count": 0,
+                    "view_offset_ms": 1_200_000,
+                    "duration_ms": 6_000_000,
+                    "last_viewed_at": stale,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "fresh-partial-show",
+                    "media_type": "show",
+                    "title": "Still Going",
+                    "year": 2022,
+                    "total_episode_count": 10,
+                    "unwatched_episode_count": 3,
+                    "last_viewed_at": recent,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "stale-partial-show",
+                    "media_type": "show",
+                    "title": "Idle Show",
+                    "year": 2018,
+                    "total_episode_count": 10,
+                    "unwatched_episode_count": 4,
+                    "last_viewed_at": stale,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "near-complete",
+                    "media_type": "movie",
+                    "title": "Almost Done",
+                    "year": 2020,
+                    "view_count": 0,
+                    "view_offset_ms": 5_400_000,
+                    "duration_ms": 6_000_000,
+                    "last_viewed_at": recent,
+                }
+            )
+            unfinished = feed_unfinished(db, limit=12, idle_days=60)
+            titles = {item["title"] for item in unfinished["items"]}
+            self.assertEqual(unfinished["feed"], "unfinished")
+            self.assertEqual(unfinished["idle_days"], 60)
+            self.assertIn("Forty Minutes Left", titles)
+            self.assertIn("Still Going", titles)
+            self.assertNotIn("Forgotten Sitting", titles)
+            self.assertNotIn("Idle Show", titles)
+            self.assertNotIn("Almost Done", titles)
+            leftover_movie = next(item for item in unfinished["items"] if item["title"] == "Forty Minutes Left")
+            self.assertEqual(leftover_movie["card_kind"], "unfinished")
+            self.assertIn("minutes left", leftover_movie["leftover_label"])
+            leftover_show = next(item for item in unfinished["items"] if item["title"] == "Still Going")
+            self.assertIn("episodes left", leftover_show["leftover_label"])
+
+            revisit = feed_revisit_these(db, limit=20, idle_days=60)
+            revisit_titles = {item["title"] for item in revisit["items"]}
+            self.assertIn("Idle Show", revisit_titles)
+            self.assertNotIn("Still Going", revisit_titles)
+            self.assertTrue(titles.isdisjoint(revisit_titles))
+
+    def test_unfinished_honest_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            payload = feed_unfinished(db, limit=12, idle_days=60)
+            self.assertEqual(payload["items"], [])
+            self.assertIn("leftover", (payload["note"] or "").lower())
+
+    def test_afterglow_uses_existing_review_dialogue(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            now = int(time.time())
+            preset = get_preset("classic-curator")
+            assert preset is not None
+            db.upsert_persona(
+                persona_preset_id=preset.id,
+                curator_name="Atlas",
+                val_bro_prof=preset.val_bro_prof,
+                val_dipl_snark=preset.val_dipl_snark,
+                val_pass_auto=preset.val_pass_auto,
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "just-finished",
+                    "media_type": "movie",
+                    "title": "Warm Credits",
+                    "year": 2024,
+                    "view_count": 1,
+                    "view_offset_ms": 0,
+                    "duration_ms": 6_000_000,
+                    "last_viewed_at": now - 3600,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "near-done",
+                    "media_type": "movie",
+                    "title": "Almost Through",
+                    "year": 2023,
+                    "view_count": 0,
+                    "view_offset_ms": 5_400_000,
+                    "duration_ms": 6_000_000,
+                    "last_viewed_at": now - 1800,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "already-reviewed",
+                    "media_type": "movie",
+                    "title": "Already Rated",
+                    "year": 2022,
+                    "view_count": 1,
+                    "last_viewed_at": now - 1200,
+                }
+            )
+            save_review(
+                db,
+                stars=4,
+                title="Already Rated",
+                media_type="movie",
+                rating_key="already-reviewed",
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "old-finish",
+                    "media_type": "movie",
+                    "title": "Last Year",
+                    "year": 2020,
+                    "view_count": 1,
+                    "last_viewed_at": now - 40 * 86400,
+                }
+            )
+            db.upsert_library_item(
+                {
+                    "rating_key": "mid-sit",
+                    "media_type": "movie",
+                    "title": "Halfway",
+                    "year": 2021,
+                    "view_count": 0,
+                    "view_offset_ms": 1_200_000,
+                    "duration_ms": 6_000_000,
+                    "last_viewed_at": now - 600,
+                }
+            )
+            payload = feed_afterglow(db, limit=12, days=14)
+            titles = {item["title"] for item in payload["items"]}
+            self.assertEqual(payload["feed"], "afterglow")
+            self.assertEqual(payload["days"], 14)
+            self.assertIn("Warm Credits", titles)
+            self.assertIn("Almost Through", titles)
+            self.assertNotIn("Already Rated", titles)
+            self.assertNotIn("Last Year", titles)
+            self.assertNotIn("Halfway", titles)
+            finished = next(item for item in payload["items"] if item["title"] == "Warm Credits")
+            self.assertEqual(finished["card_kind"], "afterglow")
+            self.assertIn("Warm Credits", finished["afterglow_opener"])
+            self.assertGreaterEqual(len(finished["afterglow_questions"]), 3)
+            self.assertEqual(finished["dialogue_band"], "warm")
+            self.assertEqual(finished["review_dialogue"]["questions"], finished["afterglow_questions"])
+            self.assertIn("still warm", finished["afterglow_opener"])
+            near = next(item for item in payload["items"] if item["title"] == "Almost Through")
+            self.assertGreaterEqual(near["completion_pct"], 85)
+
+    def test_afterglow_honest_empty(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Database(Path(tmp) / "test.db")
+            payload = feed_afterglow(db, limit=12, days=14)
+            self.assertEqual(payload["items"], [])
+            self.assertIn("warm", (payload["note"] or "").lower())
+
     def test_on_this_day_calendar_mode(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             db = Database(Path(tmp) / "test.db")
@@ -728,7 +926,7 @@ class ExploreFeedApiTests(unittest.TestCase):
         self.assertEqual(otd.json()["feed"], "on-this-day")
         self.assertIn(otd.json()["mode"], {"calendar", "milestone_fallback"})
 
-        for feed in ("director-spotlight", "genre-spotlight", "seasonal-spotlight"):
+        for feed in ("director-spotlight", "genre-spotlight", "seasonal-spotlight", "unfinished", "afterglow"):
             spotlight = self.client.get(f"/api/library/feeds/{feed}")
             self.assertEqual(spotlight.status_code, 200)
             self.assertEqual(spotlight.json()["feed"], feed)
