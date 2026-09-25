@@ -5,6 +5,10 @@
 ### Highlights
 - **First-boot stays on the LAN.** If the database is down, household APIs no longer fail open. Setup from a public or Docker-NAT address cannot probe Plex/TMDB or create the owner unless `PROJECTIONIST_OWNER_PASSWORD` is already on the host.
 - **Chat links stay on the allowlist.** Assistant markdown only follows http(s), in-app title and library paths, and hash jumps. Other schemes show as plain text. Streaming chat now POSTs the message in the body, capped at 8,000 characters.
+- **Investigate stills work in the container.** New images ship `ffmpeg` and `ffprobe` on PATH, so Automat no longer needs a host binary. `FFMPEG_PATH` / `FFPROBE_PATH` still override.
+
+### Changed
+- Docker runtime installs the Debian `ffmpeg` package (includes `ffprobe`) in an early BuildKit-cached apt layer so app `COPY` does not re-download it. Capabilities resolve `ffmpeg` / `ffprobe` on PATH; `FFMPEG_PATH` / `FFPROBE_PATH` still override.
 
 ### Security
 - Auth middleware returns `503 Service unavailable` for `/api/*` (except `/api/health` and `/api/features`) when the job manager or database cannot be opened, instead of passing the request through.

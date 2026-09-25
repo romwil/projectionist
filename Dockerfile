@@ -26,9 +26,17 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates gosu \
-    && rm -rf /var/lib/apt/lists/*
+# Investigate stills / Identify clips: Debian `ffmpeg` ships ffmpeg + ffprobe
+# on PATH for the app user. Override with FFMPEG_PATH / FFPROBE_PATH.
+# Early RUN (before any COPY) so app edits never bust this layer. Cache mounts
+# keep .debs/lists across rebuilds when the slim FROM line does change.
+# slim images delete downloaded packages unless docker-clean is removed.
+RUN rm -f /etc/apt/apt.conf.d/docker-clean \
+    && echo 'Binary::apt::APT::Keep-Downloaded-Packages "true";' > /etc/apt/apt.conf.d/keep-cache
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates gosu ffmpeg
 
 # Install Python deps from manifests only (stub package). Real sources come next so
 # app edits do not re-download wheels. Version ARG/LABEL intentionally come AFTER
