@@ -54,6 +54,31 @@ def same_show_proposal(show: Mapping[str, Any], proposed: Mapping[str, Any]) -> 
     return bool(show_title) and show_title == prop_title
 
 
+def household_has_series(
+    *,
+    title: str = "",
+    tmdb_id: Any = None,
+    household_titles: Sequence[str] = (),
+    household_tmdb_ids: Sequence[Any] = (),
+) -> bool:
+    needle = str(title or "").strip().lower()
+    if needle and any(str(item).strip().lower() == needle for item in household_titles):
+        return True
+    if tmdb_id in (None, ""):
+        return False
+    try:
+        wanted = int(tmdb_id)
+    except (TypeError, ValueError):
+        return False
+    for item in household_tmdb_ids:
+        try:
+            if int(item) == wanted:
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
+
 def fuse_row(
     *,
     show: Mapping[str, Any],
@@ -62,6 +87,8 @@ def fuse_row(
     opensubtitles: Optional[Mapping[str, Any]],
     vision: Optional[Mapping[str, Any]],
     household_titles: Sequence[str] = (),
+    household_tmdb_ids: Sequence[Any] = (),
+    identify: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Pick a proposed episode and confidence from independent evidence only."""
     catalog_by_se = {}
@@ -153,6 +180,7 @@ def fuse_row(
         "episode": proposed_key[1] if proposed_key and scope == "this_series" else vision_map.get("episode"),
         "title": "",
         "sonarr_episode_id": None,
+        "tvdb_id": show.get("tvdb_id") if scope == "this_series" else None,
     }
     if catalog_hit and scope == "this_series":
         proposed["title"] = str(catalog_hit.get("title") or "")
@@ -162,19 +190,88 @@ def fuse_row(
     elif vision_this:
         proposed["title"] = str(vision_map.get("episode_title") or "")
 
+    identify_map = identify if isinstance(identify, Mapping) else {}
+    new_show = False
+    create_attach = False
+    identify_same = False
+    if identify_map.get("found"):
+        mapped_title = str(identify_map.get("series_title") or "").strip()
+        mapped_tmdb = identify_map.get("tmdb_id")
+        identify_same = _identify_same_show(show, identify_map)
+        if identify_same:
+            reasons.append("Identify heard this series")
+        elif identify_map.get("mapped") and (mapped_title or mapped_tmdb):
+            in_house = household_has_series(
+                title=mapped_title,
+                tmdb_id=mapped_tmdb,
+                household_titles=household_titles,
+                household_tmdb_ids=household_tmdb_ids,
+            )
+            if in_house:
+                if scope == "unknown":
+                    scope = "household"
+                    proposed["scope"] = "household"
+                    proposed["series_title"] = mapped_title or _guess_household(
+                        mapped_title, household_titles
+                    )
+                    proposed["tmdb_id"] = mapped_tmdb
+                    proposed["tvdb_id"] = identify_map.get("tvdb_id")
+                    confidence = UNCERTAIN
+                reasons.append("Identify heard a household show")
+            else:
+                new_show = True
+                create_attach = True
+                if scope == "unknown":
+                    scope = "new_show"
+                    proposed["scope"] = "new_show"
+                    proposed["series_title"] = mapped_title
+                    proposed["tmdb_id"] = mapped_tmdb
+                    proposed["tvdb_id"] = identify_map.get("tvdb_id")
+                    confidence = UNCERTAIN
+                reasons.append(
+                    "Identify heard a series that is not in Plex or Sonarr — "
+                    "applying would create and attach it"
+                )
+        else:
+            reasons.append(
+                "Identify heard a title that is not a known series"
+                + (f" ({identify_map.get('title')})" if identify_map.get("title") else "")
+            )
+            if scope == "unknown":
+                confidence = UNCERTAIN
+
     same = same_show_proposal(show, proposed)
     return {
         "proposed": proposed,
         "confidence": confidence,
         "reasons": reasons,
-        "selected_default": default_selected(confidence) and same,
+        "selected_default": default_selected(confidence) and same and not new_show,
         "same_show": same,
+        "new_show": new_show,
+        "create_attach": create_attach,
+        "create_opt_in_required": new_show,
         "signals": {
             "runtime_key": list(runtime_key) if runtime_key else None,
             "oshash_key": list(os_key) if os_same_show and os_key else None,
             "vision_key": list(vision_key) if vision_this and vision_key else None,
+            "identify_same_show": identify_same,
+            "identify_title": str(identify_map.get("title") or "") or None,
         },
     }
+
+
+def _identify_same_show(show: Mapping[str, Any], identify: Mapping[str, Any]) -> bool:
+    show_tmdb = show.get("tmdb_id")
+    ident_tmdb = identify.get("tmdb_id")
+    if show_tmdb and ident_tmdb:
+        try:
+            if int(show_tmdb) == int(ident_tmdb):
+                return True
+        except (TypeError, ValueError):
+            pass
+    show_title = str(show.get("title") or "").strip().lower()
+    ident_title = str(identify.get("series_title") or "").strip().lower()
+    return bool(show_title) and show_title == ident_title
 
 
 def _label(season: int, episode: int) -> str:

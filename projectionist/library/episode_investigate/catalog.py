@@ -54,14 +54,51 @@ def list_investigate_shows(db: Any) -> List[Dict[str, Any]]:
 
 
 def household_titles(db: Any, *, limit: int = 40) -> List[str]:
-    titles = []
+    return list(household_series(db).get("titles") or [])[:limit]
+
+
+def household_series(db: Any, settings: Any = None, *, limit: int = 80) -> Dict[str, Any]:
+    """Plex library + Sonarr series — used to decide the new-show prompt."""
+    titles: List[str] = []
+    tmdb_ids: List[int] = []
+    seen_titles = set()
+    seen_tmdb = set()
     for show in list_investigate_shows(db):
         title = str(show.get("title") or "").strip()
-        if title:
+        if title and title.lower() not in seen_titles:
             titles.append(title)
+            seen_titles.add(title.lower())
+        tmdb = show.get("tmdb_id")
+        try:
+            tmdb_i = int(tmdb) if tmdb not in (None, "") else None
+        except (TypeError, ValueError):
+            tmdb_i = None
+        if tmdb_i is not None and tmdb_i not in seen_tmdb:
+            tmdb_ids.append(tmdb_i)
+            seen_tmdb.add(tmdb_i)
         if len(titles) >= limit:
             break
-    return titles
+    if settings is not None and sonarr_configured(settings):
+        try:
+            from projectionist.connectors.sonarr import SonarrClient
+
+            client = SonarrClient(settings.sonarr_url, settings.sonarr_api_key)
+            for series in client.series_list():
+                title = str(getattr(series, "title", "") or "").strip()
+                if title and title.lower() not in seen_titles:
+                    titles.append(title)
+                    seen_titles.add(title.lower())
+                tmdb = getattr(series, "tmdb_id", None)
+                try:
+                    tmdb_i = int(tmdb) if tmdb not in (None, "") else None
+                except (TypeError, ValueError):
+                    tmdb_i = None
+                if tmdb_i is not None and tmdb_i not in seen_tmdb:
+                    tmdb_ids.append(tmdb_i)
+                    seen_tmdb.add(tmdb_i)
+        except Exception as error:  # noqa: BLE001
+            logger.info("household sonarr list failed: %s", error)
+    return {"titles": titles, "tmdb_ids": tmdb_ids}
 
 
 def load_show(db: Any, show_id: int) -> Optional[Dict[str, Any]]:
