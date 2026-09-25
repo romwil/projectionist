@@ -2,6 +2,8 @@
 
 Projectionist is packaged for Unraid Community Applications as a single container with one config volume. The CA template uses **`romwil/projectionist:latest`**. Pin a minor line (e.g. `:1.12`) or an exact release (e.g. `:1.12.0`) if you prefer a fixed tag.
 
+CA stays a free self-host household app. New releases are **AGPL-3.0-only** (source on GitHub). Already-shipped Hub tags through **1.36.0** remain MIT.
+
 CA packaging in this repo:
 
 | File | Role |

@@ -7,7 +7,7 @@ name = "projectionist"
 version = "1.36.0"
 description = "Agentic Plex collection curator with BYOP LLM, RAG, and Radarr/Sonarr integration."
 readme = "README.md"
-license = { text = "MIT" }
+license = { text = "AGPL-3.0-only" }
 requires-python = ">=3.10"
 authors = [{ name = "romwil" }]
 keywords = ["plex", "radarr", "sonarr", "media", "curator", "ai", "unraid"]
@@ -15,7 +15,7 @@ classifiers = [
     "Development Status :: 5 - Production/Stable",
     "Environment :: Web Environment",
     "Intended Audience :: End Users/Desktop",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU Affero General Public License v3",
     "Programming Language :: Python :: 3",
     "Topic :: Multimedia :: Video",
 ]
