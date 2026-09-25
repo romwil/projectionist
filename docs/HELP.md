@@ -25,6 +25,7 @@ Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [P
 | Curated shelves | [Lists & playlists](/lists) |
 | Personal prefs | [Settings](/settings) |
 | Version & release notes | [About](/about) |
+| License | [About](/about#license) · AGPL-3.0-only |
 | Data use | [Privacy](/privacy) |
 
 Keyboard cheat sheet: press `?` (outside a text field). Slash commands in chat: type `/help`.
@@ -268,6 +269,18 @@ Households that chose **Public Household** during setup are **invite-only**. Pri
 There is no public guest tour and no self-serve signup. `/tour` sends you back to sign-in.
 
 If you don't have a link yet, use **Need an invite?** on `/login`. The owner sees it in their inbox and in **Admin → Access**.
+
+---
+
+## License
+
+Projectionist’s **code** is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`). The source is the [GitHub repo](https://github.com/romwil/projectionist). Releases **through 1.36.0** were MIT — those shipped Hub tags stay MIT.
+
+Unraid Community Applications and Docker Hub stay a **free self-host** household app. If you run a modified copy for other people over a network, you must offer them the corresponding source.
+
+The name **Projectionist** and the logo stay Will’s. The license is not a grant to call a fork “Projectionist.”
+
+See [About](/about#license) for the in-app note.
 
 ---
 

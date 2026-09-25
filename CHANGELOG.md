@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Highlights
+- **AGPL-3.0-only going forward.** New code and future releases use the GNU Affero GPL v3.0 only. Household / Unraid CA / Hub stay a free self-host app. If you run a modified copy for other people over a network, you offer them the source. Already-shipped tags through 1.36.0 stay MIT.
+
+### Changed
+- Project license is `AGPL-3.0-only` (official GNU text in `LICENSE`). About, README, Help, package metadata, and Docker labels match. The name and logo are not a grant to call forks “Projectionist.”
+
 ## [1.36.0] — 2026-09-25
 
 The house can investigate a mislabeled episode, rematch a movie that is not who it claims, sit with afterglow and tonight's table, whisper a pick to one member, write the owner a letter, and walk a title like a scholar — all before anything leaves the shelf.

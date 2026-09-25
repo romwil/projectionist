@@ -1,6 +1,6 @@
 # Projectionist
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![License: AGPL-3.0-only](https://img.shields.io/badge/License-AGPL--3.0--only-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![Docker Hub](https://img.shields.io/badge/docker-romwil%2Fprojectionist-2496ED?logo=docker&logoColor=white)](https://hub.docker.com/r/romwil/projectionist)
 [![Version](https://img.shields.io/badge/version-1.36.0-green.svg)](CHANGELOG.md)
@@ -277,10 +277,18 @@ CA-focused suites and live optional gates: [TESTING.md](docs/TESTING.md). Full-s
 
 **Docs gate:** user-facing changes update the relevant guide **and** add a benefit-led CHANGELOG `### Highlights` entry, meeting [docs/DOCS_STYLE.md](docs/DOCS_STYLE.md). Documentation is a first-class deliverable, checked in every PR.
 
+No CLA. Inbound contributions use the same AGPL-3.0-only license.
+
 Open [issues](https://github.com/romwil/projectionist/issues) for ideas and bugs.
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Projectionist is licensed under the **GNU Affero General Public License v3.0 only** (`AGPL-3.0-only`). See [LICENSE](LICENSE).
+
+Household, Unraid Community Applications, and Docker Hub installs stay a free self-host app. If you run a modified copy as a network service, you must offer the corresponding source to its users.
+
+Releases **through 1.36.0** — including already-shipped Hub tags — remain MIT. This change applies to new code and future releases.
+
+The name **Projectionist** and the logo are not a grant to call forks “Projectionist.”
