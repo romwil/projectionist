@@ -149,6 +149,8 @@ Install from the Community Applications template (`templates/projectionist.xml` 
 |---------|-------|
 | **Port** | 8788 |
 | **Config path** | `/mnt/user/appdata/projectionist/config` → `/config` (legacy …/curatorx/config OK if never migrated) |
+| **TV library (rw)** | `/mnt/user/data/media/tv` → `/tv` (and same-path). Read-write so Investigate can rename files. Env: `PROJECTIONIST_TV_MEDIA` |
+| **Movie library (rw)** | `/mnt/user/data/media/movies` → `/movies` (and same-path). Env: `PROJECTIONIST_MOVIE_MEDIA` |
 | **Image** | `romwil/projectionist:latest` (or a `:X.Y` line / `:X.Y.Z` pin) — multi-arch amd64+arm64 |
 
 Optional advanced env (or generate in **Admin → Advanced**): `PROJECTIONIST_MCP_API_KEY` (privacy) and `PROJECTIONIST_MCP_FULL_API_KEY` (full; must differ). See [MCP.md](MCP.md) and [PRIVACY.md](PRIVACY.md).

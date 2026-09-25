@@ -16,13 +16,24 @@ from projectionist.config_store import normalize_root_path
 
 logger = logging.getLogger(__name__)
 
+# Sonarr / Radarr namespaces this image bind-mounts read-write.
+CONTAINER_MEDIA_ROOTS = (
+    "/tv",
+    "/movies",
+)
+
 # Tried only when the directory already exists in *this* container.
 HOST_HINT_ROOTS = (
     "/mnt/user/data/media/tv",
+    "/mnt/user/data/media/movies",
     "/mnt/user/media/tv",
+    "/mnt/user/media/movies",
     "/data/media/tv",
+    "/data/media/movies",
     "/data/tv",
+    "/data/movies",
     "/media/tv",
+    "/media/movies",
 )
 
 IsFileFn = Callable[[Path], bool]
@@ -68,13 +79,19 @@ def configured_remote_roots(settings: Any) -> List[str]:
 
 
 def configured_local_roots(settings: Any) -> List[str]:
-    """Configured roots that might be visible in this container."""
+    """Configured roots that might be visible in this container.
+
+    Settings ``tv_root`` / ``movies_root`` are first-class (env
+    ``PROJECTIONIST_TV_MEDIA`` / ``PROJECTIONIST_MOVIE_MEDIA``), then *arr
+    folders, then the Sonarr/Radarr container namespaces.
+    """
     return _dedupe(
         (
             getattr(settings, "tv_root", ""),
-            getattr(settings, "sonarr_root_folder", ""),
             getattr(settings, "movies_root", ""),
+            getattr(settings, "sonarr_root_folder", ""),
             getattr(settings, "radarr_root_folder", ""),
+            *CONTAINER_MEDIA_ROOTS,
         )
     )
 

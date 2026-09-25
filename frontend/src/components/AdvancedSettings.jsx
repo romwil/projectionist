@@ -1,8 +1,8 @@
 import { Link } from "react-router-dom";
 
 const FIELD_LABELS = {
-  movies_root: "Movies folder path",
-  tv_root: "TV folder path",
+  movies_root: "Movie library path",
+  tv_root: "TV library path",
   radarr_root_folder: "Radarr root folder",
   sonarr_root_folder: "Sonarr root folder",
   library_sync_interval_hours: "Auto-sync every (hours)",
@@ -12,8 +12,10 @@ const FIELD_LABELS = {
 };
 
 const FIELD_HELP = {
-  movies_root: "Host path Radarr uses for movies (usually matches Radarr).",
-  tv_root: "Host path Sonarr uses for TV (usually matches Sonarr).",
+  movies_root:
+    "Container path for movies (usually /movies). Bind-mount the host library read-write. PROJECTIONIST_MOVIE_MEDIA wins when set.",
+  tv_root:
+    "Container path for TV (usually /tv). Bind-mount the host library read-write so Investigate can rename files. PROJECTIONIST_TV_MEDIA wins when set.",
   library_enrich_workers: "Titles enriched in parallel during sync. Lower if the host feels busy.",
 };
 
@@ -152,7 +154,8 @@ export default function AdvancedSettings({
           <header className="config-panel-header">
             <h2>Disk paths</h2>
             <p className="config-panel-lead">
-              Host folder paths for Radarr and Sonarr. Most installs can leave these as-is.
+              TV and movie library paths this container can see. Bind-mount them
+              read-write (<code>/tv</code> and <code>/movies</code>) so Investigate can rename files on disk.
             </p>
           </header>
           <div className="config-grid config-grid-2col">

@@ -25,6 +25,8 @@ ENV_TO_FIELD = {
     "SONARR_API_KEY": "sonarr_api_key",
     "MOVIES_ROOT": "movies_root",
     "TV_ROOT": "tv_root",
+    "PROJECTIONIST_MOVIE_MEDIA": "movies_root",
+    "PROJECTIONIST_TV_MEDIA": "tv_root",
     "RADARR_ROOT_FOLDER": "radarr_root_folder",
     "SONARR_ROOT_FOLDER": "sonarr_root_folder",
     "RADARR_QUALITY_PROFILE_ID": "radarr_quality_profile_id",
@@ -914,7 +916,23 @@ def load_merged_settings(data_dir: Path) -> Settings:
         merged[int_field] = int(env_value)
     merged = _apply_tunarr_env_overrides(merged, file_data)
     merged = _apply_acrcloud_env_overrides(merged)
+    merged = _apply_media_root_env_overrides(merged)
     return normalize_path_settings(normalize_settings_llm(Settings.from_mapping(merged)))
+
+
+def _apply_media_root_env_overrides(merged: Dict[str, Any]) -> Dict[str, Any]:
+    """TV / movie library roots: branded env wins when set (Docker bind source of truth)."""
+    tv = resolve_env("PROJECTIONIST_TV_MEDIA")
+    movies = resolve_env("PROJECTIONIST_MOVIE_MEDIA")
+    if tv:
+        merged["tv_root"] = tv.strip()
+        logger.debug("Settings field tv_root taken from env PROJECTIONIST_TV_MEDIA (env wins)")
+    if movies:
+        merged["movies_root"] = movies.strip()
+        logger.debug(
+            "Settings field movies_root taken from env PROJECTIONIST_MOVIE_MEDIA (env wins)"
+        )
+    return merged
 
 
 def _apply_acrcloud_env_overrides(merged: Dict[str, Any]) -> Dict[str, Any]:
