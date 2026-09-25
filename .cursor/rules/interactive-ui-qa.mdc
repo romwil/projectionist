@@ -16,5 +16,8 @@ If the user asks for **browser QA**, **UI QA**, **role QA**, **absolute baseline
    **never** smartmap **`:8790`**. If QA is down, spin it on `:8792` or use mocked e2e `:8799`.
 4. Write artifacts under `/Volumes/appdata/projectionist-qa-scripts/qa-runs/`.
 5. Verdict **FAIL** if any `blocker` / `major` remains open.
+6. Prove the visual triad, semantic locators, and adversarial spots required by
+   [UI & Testing Architecture](ui-testing-architecture.mdc). The skill stays
+   authored-checklist-only; the architecture rule is what those IDs must show.
 
 Do not invent pathways. New UI → update `reference.md`.
