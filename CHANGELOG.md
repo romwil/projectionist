@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### 1.36.2 — Rematch and Good News
+
+Admin → Libraries now has a Rematch studio for movie identity mismatches, Repair the miss on failed search/register, and Good News arrival copy in the curator’s voice.
+
+### Highlights
+- **Rematch studio.** Scan Plex GUID vs Radarr TMDB vs folder — the Presence / Savages class of bug. Same title is not the same identity when the path already belongs to someone else. FileBot, Plex Match, and Gracenote are not investigators.
+- **Repair the miss.** Failed Register in Radarr or Sonarr search offers rematch, skip, retry, or Investigate. Human copy only — no JSON dump.
+- **Good News.** Watchlist and gap arrivals speak in persona voice. This is not a “download complete” ping. Member whisper inbox waits for 1.36.5.
+
+### Added
+- Owner `GET /api/admin/rematch/scan`, `POST /api/admin/rematch/skip`, `POST /api/admin/rematch/retry`, `GET /api/admin/rematch/repairs`.
+- Rematch studio + Repair the miss on Admin → Libraries (`LibrariesSection`).
+- `format_good_news` arrival copy in `projectionist/notifications/`.
+
 ### 1.36.8 — Scholar core
 
 Scholar citations open a footnote sheet from `[^1]` instead of a raw dump. Village pending consults say they have not called back. A course resume pointer picks up the next unfinished syllabus session.
