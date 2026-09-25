@@ -141,6 +141,7 @@ import TypingIndicator from "./components/TypingIndicator";
 import UndoToast from "./components/UndoToast";
 import WatchlistPanel from "./components/WatchlistPanel";
 import WelcomePanel from "./components/WelcomePanel";
+import WhisperInboxLink from "./components/WhisperInboxLink";
 import SlashCommandPalette from "./components/SlashCommandPalette";
 import OnThisDayCard from "./components/OnThisDayCard";
 import LibraryGlanceCard from "./components/LibraryGlanceCard";
@@ -1721,6 +1722,7 @@ export default function App() {
                   contextChips={homeChips}
                   onContextChip={handleContextChip}
                 />
+                <WhisperInboxLink />
                 {shelfPages.length ? (
                   <div className="holdable-shelf" data-testid="holdable-shelf">
                     {shelfPages.map((page) => (
