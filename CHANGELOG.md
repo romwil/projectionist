@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### 1.36.1 — Identify lanes (ACRCloud)
+
+Investigate can now hear a show, not just see it. ACRCloud Identification (Music / Audio Recognition — not Broadcast Monitoring) takes a ~12s clip from 40% in, HMAC POSTs `/v1/identify`, and maps the title to TMDB. Theme/score hits are show-level; stills and vision still pick the episode. A miss does not fail the job. If Identify names a series that is not in Plex or Sonarr, Apply asks the owner to opt in per row before creating or attaching.
+
+### Added
+- Encrypted ACRCloud host / `access_key` / `access_secret` (env wins) and owner Identify settings + test-clip routes. Test clip never renames a library file.
+- Identify lane in episode investigation: one request per file, rate-limited, mapped to TMDB or Uncertain evidence.
+- New-show prompt on fusion/apply: creating or attaching a series the household does not have requires per-row opt-in.
+
 ### 1.36.8 — Scholar core
 
 Scholar citations open a footnote sheet from `[^1]` instead of a raw dump. Village pending consults say they have not called back. A course resume pointer picks up the next unfinished syllabus session.

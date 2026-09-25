@@ -1,4 +1,4 @@
-"""Episode investigation — stills, runtime, OSHash, optional vision. No ACRCloud here."""
+"""Episode investigation — stills, runtime, OSHash, optional vision, ACRCloud Identify."""
 
 from projectionist.library.episode_investigate.capabilities import (
     ffmpeg_note,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import struct
 import tempfile
 import unittest
@@ -339,7 +340,8 @@ class CapabilitiesTests(unittest.TestCase):
         self.assertTrue(payload["available"])
         self.assertTrue(payload["vision"]["default_on"])
         self.assertTrue(payload["vision"]["leaves_lan"])
-        self.assertEqual(payload["acrcloud"]["deferred"], "v1.36.1")
+        self.assertFalse(payload["acrcloud"]["available"])
+        self.assertFalse(payload["acrcloud"]["deferred"])
 
 
 class JobHappyPathTests(unittest.TestCase):
@@ -648,3 +650,330 @@ class RemapAndVisionTests(unittest.TestCase):
             rows = season_episodes(_Tmdb(), 136315, 1)
         self.assertEqual(rows[0]["title"], "System")
         self.assertTrue(rows[0]["still_url"].endswith("/x.jpg"))
+
+
+class IdentifyLaneTests(unittest.TestCase):
+    def tearDown(self) -> None:
+        from projectionist.library.episode_investigate.acrcloud import reset_identify_throttle_for_tests
+
+        reset_identify_throttle_for_tests()
+        for key in (
+            "PROJECTIONIST_ACRCLOUD_HOST",
+            "PROJECTIONIST_ACRCLOUD_ACCESS_KEY",
+            "PROJECTIONIST_ACRCLOUD_ACCESS_SECRET",
+            "ACRCLOUD_HOST",
+            "ACRCLOUD_ACCESS_KEY",
+            "ACRCLOUD_ACCESS_SECRET",
+        ):
+            os.environ.pop(key, None)
+
+    def test_theme_title_strips_to_series(self) -> None:
+        from projectionist.library.episode_investigate.acrcloud import series_title_from_acr
+
+        self.assertEqual(series_title_from_acr("The Bear (Main Title Theme)"), "The Bear")
+        self.assertEqual(series_title_from_acr("The Studio Theme"), "The Studio")
+
+    def test_hmac_and_parse(self) -> None:
+        from projectionist.library.episode_investigate.acrcloud import parse_identify_payload, sign_identify
+
+        signature = sign_identify(access_key="key", access_secret="secret", timestamp="1700000000")
+        self.assertTrue(signature)
+        parsed = parse_identify_payload(
+            {
+                "status": {"code": 0, "msg": "Success"},
+                "metadata": {"music": [{"title": "The Bear Main Title", "score": 100}]},
+            }
+        )
+        self.assertTrue(parsed["found"])
+        self.assertEqual(parsed["series_title"], "The Bear")
+        miss = parse_identify_payload({"status": {"code": 1001, "msg": "No result"}})
+        self.assertFalse(miss["found"])
+        self.assertTrue(miss["ok"])
+
+    def test_map_prefers_this_show(self) -> None:
+        from projectionist.library.episode_investigate.acrcloud import map_acr_title_to_tmdb
+
+        mapped = map_acr_title_to_tmdb(
+            "The Bear Theme",
+            search=lambda _q: [
+                {"id": 9, "name": "Other"},
+                {"id": 136315, "name": "The Bear"},
+            ],
+            this_show=_show(),
+        )
+        self.assertEqual(mapped["tmdb_id"], 136315)
+
+    def test_host_rejects_broadcast(self) -> None:
+        from projectionist.library.episode_investigate.acrcloud import normalize_identify_host
+
+        self.assertEqual(
+            normalize_identify_host("identify-eu-west-1.acrcloud.com"),
+            "identify-eu-west-1.acrcloud.com",
+        )
+        with self.assertRaises(ValueError):
+            normalize_identify_host("bm-us-west-2.acrcloud.com")
+
+    def test_fusion_identify_this_show_does_not_pick_episode(self) -> None:
+        fused = fuse_row(
+            show=_show(),
+            catalog=_catalog(),
+            runtime_seconds=None,
+            opensubtitles=None,
+            vision=None,
+            identify={
+                "found": True,
+                "mapped": True,
+                "title": "The Bear Main Title",
+                "series_title": "The Bear",
+                "tmdb_id": 136315,
+            },
+        )
+        self.assertEqual(fused["confidence"], "uncertain")
+        self.assertTrue(any("Identify heard this series" in item for item in fused["reasons"]))
+        self.assertIsNone(fused["proposed"]["episode"])
+        self.assertFalse(fused["new_show"])
+
+    def test_fusion_unmapped_is_uncertain_evidence(self) -> None:
+        fused = fuse_row(
+            show=_show(),
+            catalog=_catalog(),
+            runtime_seconds=None,
+            opensubtitles=None,
+            vision=None,
+            identify={"found": True, "mapped": False, "title": "Random Cue", "series_title": "Random Cue"},
+        )
+        self.assertEqual(fused["confidence"], "uncertain")
+        self.assertTrue(any("not a known series" in item for item in fused["reasons"]))
+
+    def test_fusion_new_show_requires_opt_in(self) -> None:
+        fused = fuse_row(
+            show=_show(),
+            catalog=_catalog(),
+            runtime_seconds=None,
+            opensubtitles=None,
+            vision=None,
+            household_titles=["The Bear"],
+            household_tmdb_ids=[136315],
+            identify={
+                "found": True,
+                "mapped": True,
+                "title": "The Studio Theme",
+                "series_title": "The Studio",
+                "tmdb_id": 222222,
+            },
+        )
+        self.assertTrue(fused["new_show"])
+        self.assertTrue(fused["create_attach"])
+        self.assertTrue(fused["create_opt_in_required"])
+        self.assertEqual(fused["proposed"]["scope"], "new_show")
+        self.assertFalse(fused["selected_default"])
+
+    def test_apply_new_show_skips_without_opt_in(self) -> None:
+        result = apply_rows(
+            SimpleNamespace(),
+            _show(),
+            [
+                {
+                    "id": "1",
+                    "path": "/tv/x.mkv",
+                    "new_show": True,
+                    "create_attach": True,
+                    "proposed": {
+                        "scope": "new_show",
+                        "series_title": "The Studio",
+                        "tmdb_id": 222222,
+                    },
+                }
+            ],
+            ["1"],
+            rename=lambda *_a: None,
+            exists=lambda _p: True,
+            sonarr_remap=lambda **_k: {},
+            plex_refresh=lambda _s: None,
+        )
+        self.assertEqual(result["applied"], 0)
+        self.assertEqual(result["skipped"], 1)
+        self.assertIn("opt in", result["skipped_rows"][0]["reason"])
+
+    def test_apply_new_show_creates_when_opted_in(self) -> None:
+        created = []
+        result = apply_rows(
+            SimpleNamespace(),
+            _show(),
+            [
+                {
+                    "id": "1",
+                    "file_id": 1,
+                    "path": "/tv/x.mkv",
+                    "new_show": True,
+                    "create_attach": True,
+                    "proposed": {
+                        "scope": "new_show",
+                        "series_title": "The Studio",
+                        "tmdb_id": 222222,
+                        "tvdb_id": 99,
+                    },
+                }
+            ],
+            ["1"],
+            create_opt_in=["1"],
+            rename=lambda *_a: None,
+            exists=lambda _p: True,
+            sonarr_remap=lambda **_k: {},
+            plex_refresh=lambda _s: None,
+            create_series=lambda _settings, proposed: created.append(proposed) or {
+                "series_id": 8,
+                "created": True,
+                "title": "The Studio",
+            },
+        )
+        self.assertEqual(len(created), 1)
+        self.assertEqual(result["applied"], 1)
+        self.assertTrue(result["changes"][0]["created_series"]["created"])
+        self.assertFalse(result["changes"][0]["attached"])
+
+    def test_clip_uses_forty_percent(self) -> None:
+        from projectionist.library.episode_investigate.ffmpeg import extract_identify_clip
+
+        calls = []
+
+        def runner(cmd, **_kwargs):
+            calls.append(cmd)
+            Path(cmd[-1]).write_bytes(b"RIFF")
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "a.mkv"
+            src.write_bytes(b"video")
+            dest = Path(tmp) / "identify.wav"
+            written = extract_identify_clip(
+                str(src),
+                dest,
+                ffmpeg="/bin/ffmpeg",
+                runtime_seconds=100,
+                runner=runner,
+            )
+        self.assertEqual(written, dest)
+        self.assertIn("-ss", calls[0])
+        self.assertEqual(calls[0][calls[0].index("-ss") + 1], "40.00")
+        self.assertEqual(calls[0][calls[0].index("-t") + 1], "12.00")
+
+    def test_one_identify_per_file_and_miss_is_not_failure(self) -> None:
+        from projectionist.library.episode_investigate.acrcloud import identify_file
+        from projectionist.library.episode_investigate.job import investigate_one
+
+        fetches = []
+
+        def fetch(_url, _sample, _name, _fields):
+            fetches.append(1)
+            raise RuntimeError("network down")
+
+        settings = SimpleNamespace(
+            llm_provider="ollama",
+            llm_model="llama3",
+            tmdb_api_key="",
+            acrcloud=SimpleNamespace(host="identify-us-west-2.acrcloud.com", access_key="k", access_secret="s"),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "a.mkv"
+            path.write_bytes(b"video")
+            with patch(
+                "projectionist.library.episode_investigate.job.probe_runtime_seconds",
+                return_value=100,
+            ), patch(
+                "projectionist.library.episode_investigate.job.extract_stills",
+                return_value=[],
+            ), patch(
+                "projectionist.library.episode_investigate.job.file_oshash",
+                return_value=None,
+            ), patch(
+                "projectionist.library.episode_investigate.acrcloud.extract_identify_clip",
+                return_value=path,
+            ), patch(
+                "projectionist.library.episode_investigate.acrcloud.identify_bytes",
+                side_effect=lambda *_a, **_k: {"found": False, "ok": True, "title": "", "message": "miss"},
+            ):
+                row = investigate_one(
+                    settings,
+                    _show(),
+                    {
+                        "id": "9",
+                        "file_id": 9,
+                        "series_id": 4,
+                        "path": str(path),
+                        "claimed": {"filename": "a.mkv", "label": "S01E01", "evidence": False},
+                        "sonarr": {"season": 1, "episode": 1, "evidence": False},
+                    },
+                    catalog=_catalog(),
+                    use_vision=False,
+                    household=["The Bear"],
+                    job_id="job1",
+                    data_dir=Path(tmp),
+                )
+            first = identify_file(
+                str(path),
+                Path(tmp),
+                settings=settings,
+                file_key="same-ep",
+                extract=lambda *_a, **_k: path,
+                fetch=fetch,
+            )
+            second = identify_file(
+                str(path),
+                Path(tmp),
+                settings=settings,
+                file_key="same-ep",
+                extract=lambda *_a, **_k: path,
+                fetch=fetch,
+            )
+        self.assertEqual(row["confidence"], "uncertain")
+        self.assertFalse((row.get("identify") or {}).get("found"))
+        self.assertIsNone(second)
+        self.assertIsNotNone(first)
+
+    def test_env_wins_over_settings(self) -> None:
+        from projectionist.config_store import AcrcloudSettings, Settings, save_settings, load_merged_settings
+        from projectionist.library.episode_investigate.capabilities import acrcloud_config, health_payload
+
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp)
+            save_settings(
+                data_dir,
+                Settings(
+                    acrcloud=AcrcloudSettings(
+                        host="identify-us-west-2.acrcloud.com",
+                        access_key="file-k",
+                        access_secret="file-s",
+                    )
+                ),
+            )
+            raw = (data_dir / "settings.json").read_text(encoding="utf-8")
+            self.assertIn("enc:v1:", raw)
+            self.assertNotIn("file-k", raw)
+            self.assertNotIn("file-s", raw)
+            os.environ["PROJECTIONIST_ACRCLOUD_ACCESS_KEY"] = "env-k"
+            os.environ["PROJECTIONIST_ACRCLOUD_ACCESS_SECRET"] = "env-s"
+            loaded = load_merged_settings(data_dir)
+            creds = acrcloud_config(loaded)
+            self.assertEqual(creds["access_key"], "env-k")
+            self.assertEqual(creds["access_key_source"], "env")
+            health = health_payload(loaded)
+            self.assertTrue(health["acrcloud"]["available"])
+
+    def test_test_clip_never_renames(self) -> None:
+        from projectionist.library.episode_investigate.acrcloud import test_identify_clip
+
+        settings = SimpleNamespace(
+            acrcloud=SimpleNamespace(
+                host="identify-us-west-2.acrcloud.com",
+                access_key="k",
+                access_secret="s",
+            )
+        )
+        result = test_identify_clip(
+            settings=settings,
+            fetch=lambda *_a, **_k: {"status": {"code": 1001, "msg": "No result"}},
+        )
+        self.assertFalse(result["renamed"])
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["source"], "silent")

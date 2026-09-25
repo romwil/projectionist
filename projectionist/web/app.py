@@ -1074,6 +1074,13 @@ def _mask_settings(settings: Settings) -> Dict[str, Any]:
     apprise_payload["configured"] = apprise_install_configured(settings)
     apprise_payload["package_available"] = apprise_available()
     payload["apprise"] = apprise_payload
+    acrcloud = getattr(settings, "acrcloud", None)
+    acr_payload = dict(payload.get("acrcloud") or {})
+    acr_payload["access_key_set"] = bool(getattr(acrcloud, "access_key", ""))
+    acr_payload["access_secret_set"] = bool(getattr(acrcloud, "access_secret", ""))
+    acr_payload["access_key"] = ""
+    acr_payload["access_secret"] = ""
+    payload["acrcloud"] = acr_payload
     from projectionist.theater.normalize import normalize_theater_settings, theater_host_port_hint
 
     theater = normalize_theater_settings(getattr(settings, "theater", None))
