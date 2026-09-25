@@ -1,0 +1,68 @@
+---
+description: >-
+  UI & Testing Architecture — adversarial front-end testing triad (unit,
+  Playwright, axe). Source of truth when writing or reviewing frontend UI,
+  e2e, locators, or Interactive UI QA. Prohibits mocked-state-toggle tests.
+globs: frontend/**/*,e2e/**/*,playwright.config.ts,docs/TESTING.md,.cursor/skills/interactive-ui-qa/**
+alwaysApply: false
+---
+
+# UI & Testing Architecture
+
+The front-end is the outermost perimeter. Tests prove **real DOM truth**, structural
+integrity, and resilience under hostile interaction. Testing arithmetic or mocked
+state toggles is **prohibited**.
+
+```js
+// ❌ BAD — mock toggle / spy theater
+expect(setBusy).toHaveBeenCalled()
+
+// ✅ GOOD — unit: real function vs hostile input
+assert.equal(clampPaste(huge).length, MAX)
+assert.equal(sanitizeTitle("<script>x</script>"), "x")
+
+// ✅ GOOD — Playwright: visible contract
+await expect(page.getByRole("button", { name: "Investigate" })).toBeDisabled()
+```
+
+Port, host, and campaign procedure stay in their own files — do not fork them here:
+
+- Mocked e2e port **8799**, never **8788**: [e2e-port-8788.mdc](e2e-port-8788.mdc)
+- Interactive UI QA (authored IDs, `:8792`): [interactive-ui-qa skill](../skills/interactive-ui-qa/SKILL.md)
+- Hub-first ship / Automat: [release.mdc](release.mdc)
+
+## Testing triad
+
+| Slot | This repo | Proves |
+|------|-----------|--------|
+| **Unit** (generic name: Vitest) | `cd frontend && npm run test:unit` — Node `node --test` on `frontend/src/lib/*.test.mjs`. **Not Vitest.** Do not migrate the runner to satisfy the name. | Isolated lib contracts, validation, malformed-payload fuzz. In-memory. |
+| **Playwright** | `npm run test:e2e` via `scripts/start-e2e-server.mjs` on **8799**. Campaigns: skill on **QA `:8792`**. Never prod `:8788`. Never smartmap `:8790`. | Journeys, physical layout, 390×844, slow-socket, browser races. |
+| **axe-core** | WCAG 2.1 AA. **Not a CI job today** — editor/browser audit, or a local Playwright+axe check. Do not invent a fail-the-build number. | Semantics, focus traps, keyboard escape, Lights Down contrast. |
+
+## Guardrails
+
+1. **Payload hostility.** XSS / raw script / unescaped HTML / malformed unicode on every text surface. Never unvetted `dangerouslySetInnerHTML` / raw HTML. Truncation vs multi-MB paste, deep JSON, zero-width floods — clamp/wrap/ellipse without freezing the event loop. Form tampering: disabled, throttle, optimistic banners not bypassable by click spam / key-repeat / out-of-order responses.
+2. **Races.** Interleave requests; slow-path must not overwrite newer state. Stalls, 500/502, socket death mid-stream → bounded recovery, no unhandled rejections, no whiteouts. Chat stream + Investigate/job cards are the usual offenders.
+3. **Layout / focus.** **New** tests: semantic locators only (`getByRole`, `getByLabel`). Ban CSS class / internal id / DOM-path selectors. Existing `data-testid` / `e2e/fixtures/selectors.ts` CSS are **legacy** — do not mass-rewrite in the same change. Visual triad: **empty/unlit**, **loading (no CLS)**, **overflow/boundary**. Overlays: focus trap + Escape restores the trigger.
+
+Stay **defensive**. No exploit PoCs, no offensive pentest payloads.
+
+## Cadence
+
+Hub-first. Tags live on `release/1.36`. **Prod Automat waits for end-gate.**
+
+### Minor / patch / sprint PRs (1.36.x)
+
+- Unit: touched contracts + boundary fuzz on modified inputs. `npm run test:unit` 100% pass.
+- Playwright: **targeted** e2e for the touched feature/route. Skip a full multi-browser matrix.
+- axe: editor/passive OK. Full-page audit only if shell/layout chrome moved (`App.jsx` chat, `AppShell.jsx`, `PrimaryTopbar.jsx`, `GlassDoor.jsx` / `/login`, `AdminLayout.jsx`).
+- Gate: zero unit failures. ESLint **0 errors** at release; **pre-existing warnings are allowed** (`eslint.config.js` downgrades). New code must not add warnings. `npm run build` succeeds. No bundle-size CI budget — flag an unexplained huge jump in review only.
+
+### Major / structural / end-gate (merge `release/1.36` → main, Interactive UI QA, Hub, Automat)
+
+- Full unit suite.
+- Playwright: **desktop + 390×844** (existing `mobile` project). 1080p if cheap. **Do not** require 4K or kiosk. Auth, session revoke, route gates. Layout under throttle. Streaming / job-card races must not stall or thrash.
+- axe WCAG 2.1 AA on `/` (→ `/chat`), `/login`, `/admin`, `/chat`, `/explore`. Lights Down contrast. There is **no `/theater` route** — Live theater is `/live/watch`; lobby theater is `/admin/lobby`.
+- Client-side fuzz of unauthenticated routes (`/login`, `/join`, `/privacy`, `/help`): no secrets in `localStorage` / `sessionStorage` / console. Defensive only.
+
+Interactive UI QA stays authored checklists on `:8792` after code-complete. This rule **adds** what those IDs must prove (hostile input, races, visual triad, focus). It does not replace the skill.
