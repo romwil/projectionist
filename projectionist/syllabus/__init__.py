@@ -315,3 +315,21 @@ def syllabus_chat_prompt(session: Dict[str, Any], *, course_name: str = "") -> s
     if footnotes:
         body += f"\n\nAssigned sources:\n{footnotes}"
     return body
+
+
+def build_scholar_walk(*args: Any, **kwargs: Any) -> Dict[str, Any]:
+    from projectionist.syllabus.walks import build_scholar_walk as _build
+
+    return _build(*args, **kwargs)
+
+
+def detect_walk_kind(text: Any) -> Optional[str]:
+    from projectionist.syllabus.walks import detect_walk_kind as _detect
+
+    return _detect(text)
+
+
+def scholar_walk_chat_prompt(walk: Dict[str, Any]) -> str:
+    from projectionist.syllabus.walks import scholar_walk_chat_prompt as _prompt
+
+    return _prompt(walk)

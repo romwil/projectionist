@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+### 1.36.9 — Scholar walks
+
+The Scholar can walk a title in chat instead of dumping a lecture. Lineage, canon, map, compare-two-rated, silent seminar, and a consented gap reading list reuse the village, the syllabus resume pointer, and the footnote sheet. Nothing is published.
+
+### Highlights
+- **Walks, not pages.** Six household walks stay in chat: lineage, canon, a thematic map, compare two titles you already rated, a silent seminar, and a gap reading list you have to consent to.
+- **Explain the why.** Each walk says why it exists before it starts. Village pending copy still says they have not called back.
+- **Confirm before a gap list.** Titles a course names that are not on the shelf are proposed, not fetched. Confirm writes the list. It does not request, search, or add.
+
+### Added
+- `build_scholar_walk` in `projectionist/syllabus/walks.py` — six walk kinds with cited stops, household chat prompts, and optional syllabus resume.
+- Village Professor specialty gathers a named walk; silent seminar uses a seminar quote lead; gap walks stay confirm-gated.
+- Footnote sheet labels walk sources (`Lineage source 1`) from `[^lineage-1]` ids.
+
 ### 1.36.5 — Whisper and tonight
 
 Chat home on a phone plays to the Plex client with the composer pinned. Save to library is the holdable shelf — no extra heading. A resume chip returns to the last conversation. Explore’s tonight table seats two unwatched under-two-hour titles and one comfort, apart from afterglow, unfinished, and revisit. Each named household member gets a whisper inbox with a twelve-word why — not owner-only Good News, and never a download-complete ping.
