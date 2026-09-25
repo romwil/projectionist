@@ -124,6 +124,14 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(allowed.status_code, 200, allowed.text)
         self.assertTrue(allowed.json()["features"]["multi_user_enabled"])
 
+    def test_auth_middleware_fail_closed_when_db_unavailable(self) -> None:
+        with patch("projectionist.web.jobs.get_job_manager", side_effect=RuntimeError("db down")):
+            stats = self.client.get("/api/library/stats")
+            self.assertEqual(stats.status_code, 503, stats.text)
+            self.assertEqual(stats.json()["detail"], "Service unavailable")
+            health = self.client.get("/api/health")
+            self.assertEqual(health.status_code, 200, health.text)
+
     def test_public_allowlist_stays_open(self) -> None:
         self._write_multi_user_settings()
         self.client.cookies.clear()
