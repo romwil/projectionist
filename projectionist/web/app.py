@@ -217,6 +217,7 @@ from projectionist.web.webhooks import register_webhook_routes
 from projectionist.web.augmentation_routes import register_augmentation_routes
 from projectionist.web.knowledge_ops_routes import register_knowledge_ops_routes
 from projectionist.web.holidays_routes import register_holidays_routes
+from projectionist.web.house_routes import register_house_routes
 from projectionist.web.live_channels_routes import register_live_channels_routes
 from projectionist.web.investigate_routes import register_investigate_routes
 from projectionist.web.rematch_routes import register_rematch_routes
@@ -1325,6 +1326,7 @@ def _scheduler_trigger_background(name: str) -> Dict[str, Any]:
 
 
 register_holidays_routes(app, db_factory=_db)
+register_house_routes(app, db_factory=_db, settings_factory=_settings)
 register_augmentation_routes(
     app,
     db_factory=_db,

@@ -1953,3 +1953,48 @@ export async function searchHolidayLibrary(q, { limit = 12 } = {}) {
 export async function refreshHolidaySchedule() {
   return api("/admin/holidays-schedule/refresh", { method: "POST" });
 }
+
+export async function getHouseLetter() {
+  return api("/admin/house/letter");
+}
+
+export async function getHouseSeasonalPreview() {
+  return api("/admin/house/seasonal-preview");
+}
+
+export async function vetoHouseSeasonalTitle(payload) {
+  return api("/admin/house/seasonal-preview/veto", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function restoreHouseSeasonalVeto(scopeId, libraryItemId) {
+  return api(
+    `/admin/house/seasonal-preview/veto/${encodeURIComponent(scopeId)}/${encodeURIComponent(libraryItemId)}`,
+    { method: "DELETE" },
+  );
+}
+
+export async function listHouseGifts() {
+  return api("/admin/house/gifts");
+}
+
+export async function enqueueHouseGift(payload) {
+  return api("/admin/house/gifts", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function removeHouseGift(giftId) {
+  return api(`/admin/house/gifts/${encodeURIComponent(giftId)}`, { method: "DELETE" });
+}
+
+export async function deliverHouseGift(giftId) {
+  return api(`/admin/house/gifts/${encodeURIComponent(giftId)}/deliver`, { method: "POST" });
+}
+
+export async function getHouseTrustDiary() {
+  return api("/admin/house/trust-diary");
+}

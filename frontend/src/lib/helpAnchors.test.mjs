@@ -15,6 +15,7 @@ test("slugify matches the Help anchors used across the app", () => {
   assert.equal(slugify("Telemetry & tuning"), "telemetry--tuning");
   assert.equal(slugify("LLM vs free sources"), "llm-vs-free-sources");
   assert.equal(slugify("What knowledge coverage means"), "what-knowledge-coverage-means");
+  assert.equal(slugify("House letter"), "house-letter");
 });
 
 test("slugify reproduces GitHub's em-dash / ampersand double hyphens", () => {
