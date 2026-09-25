@@ -16,6 +16,32 @@
   }
 }
 
+/* 390×844 phone: Play goes to the Plex client; composer stays pinned. */
+@media (max-width: 390px) {
+  .app-root.workspace {
+    overflow: hidden;
+  }
+
+  .workspace-main {
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .composer,
+  .composer.composer-raised {
+    position: sticky;
+    bottom: 0;
+    flex: 0 0 auto;
+    z-index: 8;
+    margin-top: auto;
+  }
+
+  .holdable-shelf-chip,
+  .welcome-context-chip {
+    min-height: var(--tap-min);
+  }
+}
+
 /* Stage C: phone/tablet — fullscreen chrome + threads drawer */
 @media (max-width: 768px) {
   .app-root.workspace {

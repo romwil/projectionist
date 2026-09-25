@@ -1,4 +1,5 @@
 import { returnStateFromLocation } from "./backNav.js";
+import { isPhonePlayViewport } from "./chatLayout.js";
 
 /** Build the in-app title detail route for a card/item, or null if not linkable. */
 export function titleDetailPath(item) {
@@ -38,18 +39,42 @@ export function titleDetailTo(item, fromLocation = null) {
 }
 
 /**
+ * Plex client deep link — phone Play should open the Plex app, not desktop web.
+ */
+export function plexClientPlayUrl(ratingKey, machineId = "") {
+  const key = String(ratingKey || "").trim();
+  const server = String(machineId || "").trim();
+  if (!key || !server) return "";
+  const metadataKey = encodeURIComponent(`/library/metadata/${key}`);
+  return `plex://preplay/?metadataKey=${metadataKey}&server=${encodeURIComponent(server)}`;
+}
+
+/**
  * Plex web deep link for a library title.
  * Requires rating_key; machineId makes the link open the correct server.
+ * On a 390-wide phone, prefer the Plex client scheme unless `toClient` is false.
  */
-export function plexWatchUrl(ratingKey, machineId = "") {
+export function plexWatchUrl(ratingKey, machineId = "", options = {}) {
   const key = String(ratingKey || "").trim();
   if (!key) return "";
-  const metadataKey = encodeURIComponent(`/library/metadata/${key}`);
   const server = String(machineId || "").trim();
-  if (server) {
-    return `https://app.plex.tv/desktop/#!/server/${encodeURIComponent(server)}/details?key=${metadataKey}`;
-  }
-  return "";
+  if (!server) return "";
+  const toClient = options.toClient ?? isPhonePlayViewport(options.viewportWidth);
+  if (toClient) return plexClientPlayUrl(key, server);
+  const metadataKey = encodeURIComponent(`/library/metadata/${key}`);
+  return `https://app.plex.tv/desktop/#!/server/${encodeURIComponent(server)}/details?key=${metadataKey}`;
+}
+
+/** Rewrite a desktop Plex href to the client scheme on phone viewports. */
+export function preferPhonePlexPlayHref(href, { viewportWidth, machineId } = {}) {
+  const url = String(href || "").trim();
+  if (!url || !isPhonePlayViewport(viewportWidth)) return url;
+  if (url.startsWith("plex://")) return url;
+  const keyMatch = url.match(/metadata%2F([^&]+)|\/metadata\/([^/?&]+)/i);
+  const key = decodeURIComponent(keyMatch?.[1] || keyMatch?.[2] || "");
+  const serverMatch = url.match(/\/server\/([^/]+)\//);
+  const server = decodeURIComponent(serverMatch?.[1] || "") || String(machineId || "").trim();
+  return plexClientPlayUrl(key, server) || url;
 }
 
 /** True when a card should offer a Watch on Plex action. */

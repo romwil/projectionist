@@ -83,6 +83,24 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(revisitBlock, /haven.t touched in over two months/);
   });
 
+  it("places tonight's table after continue watching and before leftover rails", () => {
+    assert.match(explorePage, /id="tonight-table"/);
+    assert.match(explorePage, /getExploreFeedTonightTable/);
+    assert.match(explorePage, /two unwatched seats and one comfort/);
+    const continueIdx = explorePage.indexOf('id="continue-watching"');
+    const tonightIdx = explorePage.indexOf('id="tonight-table"');
+    const unfinishedIdx = explorePage.indexOf('id="unfinished"');
+    const afterglowIdx = explorePage.indexOf('id="afterglow"');
+    const revisitIdx = explorePage.indexOf('id="revisit-these"');
+    assert.ok(continueIdx > 0 && tonightIdx > continueIdx);
+    assert.ok(unfinishedIdx > tonightIdx);
+    assert.ok(afterglowIdx > unfinishedIdx);
+    assert.ok(revisitIdx > afterglowIdx);
+    const tonightBlock = explorePage.slice(tonightIdx, unfinishedIdx);
+    assert.match(tonightBlock, /not leftover or afterglow/);
+    assert.doesNotMatch(tonightBlock, /Leftover runtime you can still finish/);
+  });
+
   it("puts tonight's double feature after the seasonal rail and omits Live", () => {
     assert.doesNotMatch(explorePage, /WhatsOnTonightHabit/);
     assert.doesNotMatch(explorePage, /liveWatchHref/);

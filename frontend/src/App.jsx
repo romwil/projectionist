@@ -17,6 +17,7 @@ import {
   getThreadFeedback,
   getThreadMessages,
   listJobs,
+  listLibraryPages,
   listNotifications,
   listReviewPrompts,
   listReviews,
@@ -79,6 +80,7 @@ import {
   CHAT_LAUNCHER_CHIPS,
   resolveChatLauncherChipAction,
 } from "./lib/chatLauncherChips.js";
+import { holdableShelfPages, pickResumeThread, resumeChipFromThread } from "./lib/chatLayout.js";
 import {
   filterSlashCommandPalette,
   formatSlashCommandInsert,
@@ -220,6 +222,7 @@ export default function App() {
   const [anniversaries, setAnniversaries] = useState([]);
   const [libraryGlance, setLibraryGlance] = useState(null);
   const [glanceShown, setGlanceShown] = useState(false);
+  const [savedShelf, setSavedShelf] = useState([]);
   const [quickPickLoading, setQuickPickLoading] = useState(false);
   const [surpriseMood, setSurpriseMood] = useState("");
   const [undoToast, setUndoToast] = useState(null);
@@ -637,22 +640,29 @@ export default function App() {
     [activeSessionId, messageFeedback]
   );
 
+  const refreshSavedShelf = useCallback(() => {
+    listLibraryPages("")
+      .then((pages) => setSavedShelf(holdableShelfPages(pages)))
+      .catch(() => setSavedShelf([]));
+  }, []);
+
   const handleSaveToLibrary = useCallback(
     async (message) => {
-      const name = window.prompt("Name this saved curator response", threads.find((thread) => thread.id === activeSessionId)?.thread_title || "Curator response");
-      if (!name?.trim()) return;
+      const name =
+        threads.find((thread) => thread.id === activeSessionId)?.thread_title || "Curator response";
       try {
         await saveLibraryPage({
-          name: name.trim(),
+          name,
           source_session_id: activeSessionId,
           source_message_id: message.id,
           content: { blocks: message.blocks },
         });
+        refreshSavedShelf();
       } catch (error) {
         setChatError(formatApiError(error));
       }
     },
-    [activeSessionId, threads],
+    [activeSessionId, refreshSavedShelf, threads],
   );
 
   function toggleSidebarRail() {
@@ -754,6 +764,7 @@ export default function App() {
         }
       })
       .catch(() => {});
+    refreshSavedShelf();
     const interval = setInterval(refreshJobs, 5000);
     const nightInterval = setInterval(() => setNightOwl(isNightOwlHour()), 60_000);
     return () => {
@@ -765,6 +776,7 @@ export default function App() {
     refreshPersonas,
     refreshRecommendations,
     refreshReviewData,
+    refreshSavedShelf,
     refreshWatchlist,
   ]);
 
@@ -923,6 +935,10 @@ export default function App() {
   function handleContextChip(chip) {
     const action = resolveChatLauncherChipAction(chip);
     if (!action) return;
+    if (action.type === "resume" && action.threadId) {
+      switchThread(action.threadId);
+      return;
+    }
     if (action.type === "send") {
       sendMessage(action.prompt);
       return;
@@ -1526,6 +1542,10 @@ export default function App() {
     personaUi?.accent_hue,
   );
   const showWelcomePanel = threadsReady && messages.length === 0;
+  const resumeThread = pickResumeThread(threads, activeSessionId);
+  const resumeChip = resumeChipFromThread(resumeThread);
+  const homeChips = [...(resumeChip ? [resumeChip] : []), ...CHAT_LAUNCHER_CHIPS];
+  const shelfPages = holdableShelfPages(savedShelf);
   const reviewPromptMessages = reviewPrompts.map((prompt) => ({
     id: `review-prompt-${prompt.id}`,
     role: "assistant",
@@ -1698,9 +1718,23 @@ export default function App() {
                   greeting={personaUi?.welcome_greeting}
                   starters={personaUi?.welcome_starters}
                   onStarterSelect={sendMessage}
-                  contextChips={CHAT_LAUNCHER_CHIPS}
+                  contextChips={homeChips}
                   onContextChip={handleContextChip}
                 />
+                {shelfPages.length ? (
+                  <div className="holdable-shelf" data-testid="holdable-shelf">
+                    {shelfPages.map((page) => (
+                      <Link
+                        key={page.id}
+                        to={`/?saved_library=${encodeURIComponent(page.id)}`}
+                        className="holdable-shelf-chip"
+                        data-testid="holdable-shelf-chip"
+                      >
+                        {page.name}
+                      </Link>
+                    ))}
+                  </div>
+                ) : null}
               </>
             ) : null}
             {!showWelcomePanel && libraryGlance && !glanceShown ? (

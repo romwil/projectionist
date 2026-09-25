@@ -15,7 +15,7 @@ import {
   titleAvailability,
   titleAvailabilityClassName,
 } from "../lib/titleAvailability.js";
-import { canWatchOnPlex, plexWatchUrl, titleDetailPath } from "../lib/titleLinks.js";
+import { canWatchOnPlex, plexWatchUrl, preferPhonePlexPlayHref, titleDetailPath } from "../lib/titleLinks.js";
 import { watchProgressState } from "../lib/watchProgress.js";
 import { allowWatchlistPin } from "../lib/watchlistPin.js";
 import { normalizeWatchSummary, trackedCompletionCardLabel } from "../lib/watchTracker.js";
@@ -136,7 +136,7 @@ export default function TitleCard({
   useEffect(() => {
     const provided = String(item?.plex_watch_url || "").trim();
     if (provided) {
-      setPlexHref(provided);
+      setPlexHref(preferPhonePlexPlayHref(provided));
       return;
     }
     if (!showWatchPlex) {
