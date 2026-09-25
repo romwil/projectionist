@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Added
+- **1.36.0 Episode investigation.** On Admin → Libraries, pick a show (optional season) and Investigate. ffmpeg stills are compared to TMDB episode stills, plus runtime and OSHash → OpenSubtitles when that path exists. Filename and Sonarr `SxxEyy` stay in the left column — they are a claim, not evidence. If the chat LLM accepts images, fusion includes vision unless you turn it off (three stills; copy says stills leave the LAN). Review is side-by-side; Certain and Likely start selected, Uncertain stays off. Apply remaps the **same show only** (Sonarr episode-file + Plex-proper names + Plex refresh + undo). Job progress matches Find all missing. ACRCloud Identify waits for 1.36.1. ffmpeg is not in the image — use a host binary on PATH (`FFMPEG_PATH` / `FFPROBE_PATH`).
+
 ## [1.35.5] — 2026-09-22
 
 Register in Radarr now tells you whether a title is already tracked or whether Radarr already owns that folder under a different movie — no more raw 400 JSON dumps.
