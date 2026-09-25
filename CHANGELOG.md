@@ -2,6 +2,9 @@
 
 ## [Unreleased]
 
+### Changed
+- **1.36.3 craft hygiene (docs).** Phase 6 / 1.36 Delight program spec, wishlist pointer, Live Channels deferred truth-up, architecture-letter still-open refresh, and CuratorX keep-vs-sunset note. No product behavior change. Prod stays 1.35.5 until the 1.36 end gate.
+
 ## [1.35.5] — 2026-09-22
 
 Register in Radarr now tells you whether a title is already tracked or whether Radarr already owns that folder under a different movie — no more raw 400 JSON dumps.

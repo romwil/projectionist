@@ -157,7 +157,7 @@ In-app at **`/privacy`** (no login), and the same document in [PRIVACY.md](PRIVA
 | `PROJECTIONIST_MCP_API_KEY` | **Privacy** — public content schema, read-only library tools |
 | `PROJECTIONIST_MCP_FULL_API_KEY` | **Full** — internal library fields + confirm-gated *arr propose tools |
 
-The two keys must differ. Either (or both) enables HTTP `/mcp`. Generate/rotate in **Admin → Advanced**, or set the env vars. Prefer `PROJECTIONIST_*`; matching `CURATORX_*` names still work during the compatibility window.
+The two keys must differ. Either (or both) enables HTTP `/mcp`. Generate/rotate in **Admin → Advanced**, or set the env vars. Use `PROJECTIONIST_*` only — in-app `CURATORX_*` reads closed in **1.34.0**. Compose/Unraid templates may still map a leftover `CURATORX_*` name into `PROJECTIONIST_*` at the shell layer; do not rely on that for new installs.
 
 ```bash
 docker run -d --name projectionist -p 8788:8788 \
