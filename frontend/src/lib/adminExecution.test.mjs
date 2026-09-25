@@ -14,6 +14,7 @@ import {
 
 const here = dirname(fileURLToPath(import.meta.url));
 const configPage = readFileSync(join(here, "../pages/ConfigPage.jsx"), "utf8");
+const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
 const client = readFileSync(join(here, "../api/client.js"), "utf8");
 const help = readFileSync(join(here, "../../../docs/HELP.md"), "utf8");
 
@@ -49,8 +50,8 @@ describe("admin execution card helpers", () => {
     assert.match(client, /export async function getRadarrRegisterStatus/);
     assert.match(client, /\/admin\/radarr\/register-existing\/status/);
     assert.match(client, /export async function cancelRadarrRegister/);
-    assert.match(configPage, /testId="radarr-register-progress"/);
-    assert.match(configPage, /AdminExecutionCard/);
+    assert.match(libraries, /testId="radarr-register-progress"/);
+    assert.match(libraries, /AdminExecutionCard/);
     assert.match(configPage, /getRadarrRegisterStatus/);
   });
 
