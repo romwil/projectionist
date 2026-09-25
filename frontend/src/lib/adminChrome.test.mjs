@@ -7,7 +7,12 @@ import { readAllStyles } from "./readStyles.mjs";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const styles = readAllStyles();
-const configPage = readFileSync(join(here, "../pages/ConfigPage.jsx"), "utf8");
+const configPage = [
+  readFileSync(join(here, "../pages/ConfigPage.jsx"), "utf8"),
+  readFileSync(join(here, "../pages/admin/OverviewSection.jsx"), "utf8"),
+  readFileSync(join(here, "../pages/admin/ConnectionsSection.jsx"), "utf8"),
+  readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8"),
+].join("\n");
 const holidaysPage = readFileSync(join(here, "../pages/HolidaysPage.jsx"), "utf8");
 const tasksPage = readFileSync(join(here, "../pages/ScheduledTasksPage.jsx"), "utf8");
 const lobbyPage = readFileSync(join(here, "../pages/LobbyDisplayPage.jsx"), "utf8");

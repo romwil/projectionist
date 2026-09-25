@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### H1 — Shell extract (craft)
+
+Continue the god-file peel after Wave 0 Libraries and Wave 2 chatLayout. Admin Overview, Connections, and Seerr leave ConfigPage the same way Household and Libraries already did. Chat chrome lives in ChatWorkspace; SPA routes live in AppRoutes. app.py registers spa, auth, and setup routers instead of defining those handlers inline. Behavior-neutral — no delight feature number.
+
 ### 1.36.5 — Whisper and tonight
 
 Chat home on a phone plays to the Plex client with the composer pinned. Save to library is the holdable shelf — no extra heading. A resume chip returns to the last conversation. Explore’s tonight table seats two unwatched under-two-hour titles and one comfort, apart from afterglow, unfinished, and revisit.
