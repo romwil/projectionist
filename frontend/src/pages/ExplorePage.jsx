@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
+  getExploreFeedAfterglow,
   getExploreFeedContinueWatching,
   getExploreFeedDirectorSpotlight,
   getExploreFeedGenreSpotlight,
@@ -9,6 +10,7 @@ import {
   getExploreFeedRecentlyAdded,
   getExploreFeedRevisitThese,
   getExploreFeedSeasonalSpotlight,
+  getExploreFeedUnfinished,
   getPickForMeFeed,
   getLibraryHealth,
   getLibraryOverview,
@@ -218,6 +220,8 @@ export default function ExplorePage() {
   const [facetColumns, setFacetColumns] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const continueWatching = useFeed(() => getExploreFeedContinueWatching({ limit: 12 }), []);
+  const unfinished = useFeed(() => getExploreFeedUnfinished({ limit: 12, idleDays: 60 }), []);
+  const afterglow = useFeed(() => getExploreFeedAfterglow({ limit: 12, days: 14 }), []);
   const pickForMe = useFeed(() => getPickForMeFeed({ limit: 8 }), []);
   const recentlyAdded = useFeed(() => getExploreFeedRecentlyAdded({ limit: 12, days: 30 }), []);
   const recentReleases = useFeed(() => getExploreFeedRecentReleases({ limit: 12, days: 90 }), []);
@@ -430,6 +434,64 @@ export default function ExplorePage() {
                   })
                 : null
             }
+            {...recommendProps}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="unfinished"
+          title="Unfinished"
+          subtitle="Leftover runtime you can still finish — not titles idle for two months"
+          isOwner={isOwner}
+          empty={
+            unfinished.error ||
+            (!unfinished.loading && !unfinished.items.length ? unfinished.note : null)
+          }
+        >
+          <FeedRail
+            testId="explore-unfinished-rail"
+            items={unfinished.items}
+            loading={unfinished.loading}
+            cardMeta={(item) => item.leftover_label || item.resume_label || null}
+            chatHref={
+              unfinished.items.length
+                ? chatFromRailHref({
+                    railTitle: "Unfinished",
+                    items: unfinished.items,
+                  })
+                : null
+            }
+            {...recommendProps}
+          />
+        </ExploreSection>
+
+        <ExploreSection
+          id="afterglow"
+          title="Afterglow"
+          subtitle="Still warm — a few questions while the credits fade"
+          isOwner={isOwner}
+          empty={
+            afterglow.error ||
+            (!afterglow.loading && !afterglow.items.length ? afterglow.note : null)
+          }
+        >
+          <FeedRail
+            testId="explore-afterglow-rail"
+            items={afterglow.items}
+            loading={afterglow.loading}
+            cardMeta={(item) => item.afterglow_opener || item.why || null}
+            chatHref={
+              afterglow.items.length
+                ? chatFromRailHref({
+                    railTitle: "Afterglow",
+                    items: afterglow.items.map((item) => ({
+                      ...item,
+                      why: item.afterglow_opener || item.why,
+                    })),
+                  })
+                : null
+            }
+            chatLabel="Review while it's warm"
             {...recommendProps}
           />
         </ExploreSection>
