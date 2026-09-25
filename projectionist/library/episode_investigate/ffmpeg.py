@@ -108,3 +108,72 @@ def extract_stills(
         if result.returncode == 0 and out.is_file() and out.stat().st_size > 0:
             written.append(out)
     return written
+
+
+IDENTIFY_CLIP_SECONDS = 12.0
+IDENTIFY_CLIP_FRACTION = 0.40
+IDENTIFY_MAX_BYTES = 2 * 1024 * 1024
+
+
+def extract_identify_clip(
+    path: str,
+    dest: Path,
+    *,
+    runtime_seconds: Optional[float] = None,
+    seconds: float = IDENTIFY_CLIP_SECONDS,
+    fraction: float = IDENTIFY_CLIP_FRACTION,
+    max_bytes: int = IDENTIFY_MAX_BYTES,
+    ffmpeg: Optional[str] = None,
+    runner: RunFn = subprocess.run,
+) -> Optional[Path]:
+    """~12s mono WAV from 40% in. Empty if ffmpeg is missing or the clip is over the cap."""
+    binary = ffmpeg or resolve_ffmpeg()
+    if not binary or not path or not Path(path).is_file():
+        return None
+    duration = runtime_seconds
+    if duration is None:
+        duration = probe_runtime_seconds(path, runner=runner)
+    if not duration or duration <= 1:
+        duration = 120.0
+    stamp = max(0.0, min(float(duration) * float(fraction), max(0.0, float(duration) - seconds)))
+    out = Path(dest)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        result = runner(
+            [
+                binary,
+                "-y",
+                "-ss",
+                f"{stamp:.2f}",
+                "-t",
+                f"{float(seconds):.2f}",
+                "-i",
+                path,
+                "-ac",
+                "1",
+                "-ar",
+                "16000",
+                "-c:a",
+                "pcm_s16le",
+                "-f",
+                "wav",
+                str(out),
+            ],
+            capture_output=True,
+            text=True,
+            timeout=90,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        logger.info("ffmpeg identify clip failed path=%s error=%s", path, error)
+        return None
+    if result.returncode != 0 or not out.is_file() or out.stat().st_size <= 0:
+        return None
+    if out.stat().st_size > int(max_bytes):
+        logger.info("identify clip over size cap path=%s size=%s", out, out.stat().st_size)
+        try:
+            out.unlink()
+        except OSError:
+            pass
+        return None
+    return out

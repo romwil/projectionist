@@ -51,6 +51,8 @@ NESTED_SECRET_PATHS = (
     ("auth", "oidc_client_secret"),
     ("apprise", "urls"),
     ("apprise", "config"),
+    ("acrcloud", "access_key"),
+    ("acrcloud", "access_secret"),
 )
 
 

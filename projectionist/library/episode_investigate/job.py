@@ -15,8 +15,9 @@ from projectionist.library.admin_execution import (
 )
 from projectionist.library.episode_investigate.apply import apply_rows, undo_apply
 from projectionist.library.episode_investigate.capabilities import llm_accepts_images
+from projectionist.library.episode_investigate.acrcloud import identify_file
 from projectionist.library.episode_investigate.catalog import (
-    household_titles,
+    household_series,
     list_episode_files,
     load_show,
     merge_tmdb_runtimes,
@@ -98,7 +99,7 @@ def start_investigate_job(
         return snap
 
     root = Path(data_dir) if data_dir is not None else _data_dir()
-    house = household_titles(db)
+    house = household_series(db, settings)
 
     def _run(job_store, cancel) -> Mapping[str, Any]:
         job_store.update("running", "Investigating episode files…")
@@ -109,7 +110,8 @@ def start_investigate_job(
             catalog=list(inventory.get("catalog") or []),
             season=season,
             use_vision=vision_on,
-            household=house,
+            household=house.get("titles") or [],
+            household_tmdb_ids=house.get("tmdb_ids") or [],
             job_id=job_id,
             data_dir=root,
             store=job_store,
@@ -151,6 +153,7 @@ def start_apply_job(
     file_ids: Sequence[str],
     rows: Optional[Sequence[Mapping[str, Any]]] = None,
     show: Optional[Mapping[str, Any]] = None,
+    create_opt_in: Optional[Sequence[str]] = None,
 ) -> Dict[str, Any]:
     snap = build_status()
     result = snap.get("result") if isinstance(snap.get("result"), Mapping) else {}
@@ -186,7 +189,13 @@ def start_apply_job(
         selected_rows = [row for row in review_rows if str(row.get("id")) in set(wanted)]
         for row in selected_rows:
             job_store.set_item(str(row.get("id")), "running", message=str(row.get("filename") or row.get("id")))
-        payload = apply_rows(settings, review_show, review_rows, wanted)
+        payload = apply_rows(
+            settings,
+            review_show,
+            review_rows,
+            wanted,
+            create_opt_in=create_opt_in or [],
+        )
         for change in payload.get("changes") or []:
             job_store.set_item(str(change.get("id")), "completed", outcome="applied")
         for skipped in payload.get("skipped_rows") or []:
@@ -243,6 +252,7 @@ def investigate_files(
     season: Optional[int],
     use_vision: bool,
     household: Sequence[str],
+    household_tmdb_ids: Sequence[Any] = (),
     job_id: str,
     data_dir: Path,
     store: Any = None,
@@ -252,21 +262,22 @@ def investigate_files(
     tmdb_catalog: List[Dict[str, Any]] = list(catalog)
     tmdb_client = None
     tmdb_key = str(getattr(settings, "tmdb_api_key", "") or "").strip()
-    if tmdb_key and show.get("tmdb_id"):
+    if tmdb_key:
         from projectionist.connectors.tmdb import TMDBClient
 
         tmdb_client = TMDBClient(tmdb_key)
-        seasons = [int(season)] if season is not None else []
-        if not seasons:
-            seasons = series_seasons(tmdb_client, int(show["tmdb_id"])) or sorted(
-                {int(item["season"]) for item in catalog if item.get("season") is not None}
-            )
-        fetched: List[Dict[str, Any]] = []
-        for season_n in seasons:
-            if season_n < 0:
-                continue
-            fetched.extend(season_episodes(tmdb_client, int(show["tmdb_id"]), season_n))
-        tmdb_catalog = merge_tmdb_runtimes(catalog, fetched)
+        if show.get("tmdb_id"):
+            seasons = [int(season)] if season is not None else []
+            if not seasons:
+                seasons = series_seasons(tmdb_client, int(show["tmdb_id"])) or sorted(
+                    {int(item["season"]) for item in catalog if item.get("season") is not None}
+                )
+            fetched: List[Dict[str, Any]] = []
+            for season_n in seasons:
+                if season_n < 0:
+                    continue
+                fetched.extend(season_episodes(tmdb_client, int(show["tmdb_id"]), season_n))
+            tmdb_catalog = merge_tmdb_runtimes(catalog, fetched)
 
     rows: List[Dict[str, Any]] = []
     for file_row in files:
@@ -285,6 +296,7 @@ def investigate_files(
                 catalog=tmdb_catalog,
                 use_vision=use_vision,
                 household=household,
+                household_tmdb_ids=household_tmdb_ids,
                 job_id=job_id,
                 data_dir=data_dir,
                 tmdb_client=tmdb_client,
@@ -308,6 +320,7 @@ def investigate_one(
     catalog: Sequence[Mapping[str, Any]],
     use_vision: bool,
     household: Sequence[str],
+    household_tmdb_ids: Sequence[Any] = (),
     job_id: str,
     data_dir: Path,
     tmdb_client: Any = None,
@@ -327,6 +340,20 @@ def investigate_one(
             this_series=str(show.get("title") or ""),
             household_shows=household,
         )
+    identify = None
+    try:
+        identify = identify_file(
+            path,
+            dest,
+            settings=settings,
+            runtime_seconds=runtime,
+            tmdb_client=tmdb_client,
+            this_show=show,
+            file_key=str(file_row.get("id") or path),
+        )
+    except Exception as error:  # noqa: BLE001 — Identify miss must not fail the job
+        logger.info("identify lane skipped id=%s error=%s", file_row.get("id"), error)
+        identify = {"found": False, "ok": True, "message": str(error)[:400], "title": ""}
     fused = fuse_row(
         show=show,
         catalog=catalog,
@@ -334,6 +361,8 @@ def investigate_one(
         opensubtitles=opensub,
         vision=vision,
         household_titles=household,
+        household_tmdb_ids=household_tmdb_ids,
+        identify=identify,
     )
     proposed = fused.get("proposed") or {}
     tmdb_still_paths: List[Path] = []
@@ -366,6 +395,7 @@ def investigate_one(
         "stills": [still_url(job_id, file_id, path.name) for path in extracted],
         "tmdb_stills": [still_url(job_id, file_id, path.name) for path in tmdb_still_paths],
         "vision": vision,
+        "identify": identify,
         **fused,
     }
 

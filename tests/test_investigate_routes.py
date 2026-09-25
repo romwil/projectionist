@@ -59,7 +59,8 @@ class InvestigateRoutesTests(unittest.TestCase):
         self.assertEqual(body["status"], "ok")
         self.assertTrue(body["available"])
         self.assertIn("leaves_lan", body["vision"])
-        self.assertEqual(body["acrcloud"]["deferred"], "v1.36.1")
+        self.assertFalse(body["acrcloud"]["available"])
+        self.assertFalse(body["acrcloud"]["deferred"])
 
     def test_investigate_shows_lists_library(self) -> None:
         db = Database(Path(self._tmpdir.name) / "projectionist.db")
@@ -173,3 +174,38 @@ class InvestigateRoutesTests(unittest.TestCase):
         self.assertTrue(callable(routes.investigate_start))
         self.assertTrue(callable(routes.investigate_apply))
         self.assertTrue(callable(routes.investigate_undo))
+        self.assertTrue(callable(routes.identify_settings))
+        self.assertTrue(callable(routes.identify_test))
+
+    def test_identify_settings_and_test_clip(self) -> None:
+        from projectionist.web.investigate_routes import router
+
+        paths = {getattr(route, "path", None) for route in router.routes}
+        self.assertIn("/api/admin/investigate/identify/settings", paths)
+        self.assertIn("/api/admin/investigate/identify/test", paths)
+        listed = self.client.get("/api/admin/investigate/identify/settings")
+        self.assertEqual(listed.status_code, 200)
+        self.assertFalse(listed.json()["available"])
+        saved = self.client.put(
+            "/api/admin/investigate/identify/settings",
+            json={
+                "host": "identify-eu-west-1.acrcloud.com",
+                "access_key": "k",
+                "access_secret": "s",
+            },
+        )
+        self.assertEqual(saved.status_code, 200)
+        self.assertTrue(saved.json()["available"])
+        self.assertEqual(saved.json()["host"], "identify-eu-west-1.acrcloud.com")
+        with patch(
+            "projectionist.library.episode_investigate.acrcloud.identify_bytes",
+            return_value={"ok": True, "found": False, "message": "No result", "title": "", "code": 1001},
+        ):
+            tested = self.client.post("/api/admin/investigate/identify/test", json={})
+        self.assertEqual(tested.status_code, 200)
+        self.assertFalse(tested.json()["renamed"])
+        rejected = self.client.put(
+            "/api/admin/investigate/identify/settings",
+            json={"host": "https://bm-us-west-2.acrcloud.com", "access_key": "k", "access_secret": "s"},
+        )
+        self.assertEqual(rejected.status_code, 400)
