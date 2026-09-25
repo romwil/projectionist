@@ -1,5 +1,6 @@
 """Explore hub feed helpers — recently added, recent releases, on-this-day, revisit,
-continue-watching, unfinished leftover runtime, and post-watch afterglow.
+continue-watching, unfinished leftover runtime, post-watch afterglow, and
+tonight's three-seat table.
 
 Honest empties: recent-releases returns ``[]`` when no ``release_date`` /
 ``first_air_date`` rows exist. On-this-day prefers calendar month-day matches
@@ -9,6 +10,8 @@ Revisit These samples partially watched TV idle for 60+ days.
 Unfinished is leftover runtime last touched inside that idle window — not the
 two-month forgotten shelf.
 Afterglow attaches the existing persona review dialogue to recent finishes.
+Tonight's table is under two hours: two unwatched seats and one comfort —
+never afterglow, unfinished, or revisit titles.
 Continue Watching prefers live Plex on-deck reads, then local in-progress rows.
 """
 
@@ -35,6 +38,21 @@ REVISIT_DEFAULT_LIMIT = 20
 REVISIT_IDLE_DAYS = 60
 AFTERGLOW_DEFAULT_DAYS = 14
 AFTERGLOW_NEAR_COMPLETE_PCT = 85.0
+TONIGHT_TABLE_LIMIT = 3
+TONIGHT_TABLE_UNWATCHED_SEATS = 2
+TONIGHT_TABLE_COMFORT_SEATS = 1
+TONIGHT_MAX_RUNTIME_MINUTES = 120
+COMFORT_GENRE_NEEDLES = (
+    "comedy",
+    "family",
+    "romance",
+    "animation",
+    "music",
+    "holiday",
+    "feel-good",
+    "feel good",
+    "musical",
+)
 MILESTONE_AGES = (5, 10, 15, 20, 25, 30, 40, 50, 75)
 DIRECTOR_MIN_TITLES = 3
 GENRE_MIN_TITLES = 4
@@ -1625,5 +1643,243 @@ def feed_afterglow(
         "total": len(items),
         "limit": capped,
         "dialogue_band": items[0]["dialogue_band"] if items else None,
+        "note": note,
+    }
+
+
+def _runtime_minutes_from_row(row: Mapping[str, Any]) -> Optional[int]:
+    runtime = _row_int(row, "runtime_minutes")
+    if runtime and runtime > 0:
+        return runtime
+    duration = _duration_ms_from_row(row)
+    if duration and duration > 0:
+        return max(1, int(round(duration / 60_000)))
+    return None
+
+
+def _row_genres(row: Mapping[str, Any]) -> List[str]:
+    keys = row.keys() if hasattr(row, "keys") else []
+    if "genres" not in keys:
+        return []
+    return _json_list(row["genres"])
+
+
+def _is_comfort_title(row: Mapping[str, Any]) -> bool:
+    genres = [str(genre).casefold() for genre in _row_genres(row)]
+    return any(
+        any(needle in genre for needle in COMFORT_GENRE_NEEDLES) for genre in genres
+    )
+
+
+def _is_unwatched_movie(row: Mapping[str, Any]) -> bool:
+    if str(row["media_type"] or "") != "movie":
+        return False
+    if (_row_int(row, "view_count") or 0) > 0:
+        return False
+    return (_row_int(row, "view_offset_ms") or 0) <= 0
+
+
+def _tonight_excluded_rating_keys(db: Database) -> set[str]:
+    """Rating keys that belong on afterglow, unfinished, or revisit — not tonight."""
+    now = int(time.time())
+    unfinished_cutoff = now - REVISIT_IDLE_DAYS * 86400
+    afterglow_cutoff = now - AFTERGLOW_DEFAULT_DAYS * 86400
+    keys: set[str] = set()
+    with db.connect() as conn:
+        for row in conn.execute(
+            """
+            SELECT rating_key, view_offset_ms, duration_ms, runtime_minutes
+            FROM library_items
+            WHERE media_type = 'movie'
+              AND rating_key IS NOT NULL AND rating_key != ''
+              AND view_offset_ms IS NOT NULL AND view_offset_ms > 0
+              AND COALESCE(last_viewed_at, 0) >= ?
+            """,
+            (unfinished_cutoff,),
+        ).fetchall():
+            completion = _completion_pct_from_row(row)
+            if completion is not None and completion >= AFTERGLOW_NEAR_COMPLETE_PCT:
+                continue
+            keys.add(str(row["rating_key"]))
+        for row in conn.execute(
+            """
+            SELECT rating_key
+            FROM library_items
+            WHERE media_type = 'show'
+              AND rating_key IS NOT NULL AND rating_key != ''
+              AND total_episode_count > 0
+              AND unwatched_episode_count > 0
+              AND unwatched_episode_count < total_episode_count
+              AND COALESCE(last_viewed_at, last_episode_watched_at, 0) >= ?
+            """,
+            (unfinished_cutoff,),
+        ).fetchall():
+            keys.add(str(row["rating_key"]))
+        for row in conn.execute(
+            """
+            SELECT *
+            FROM library_items
+            WHERE media_type = 'movie'
+              AND rating_key IS NOT NULL AND rating_key != ''
+              AND COALESCE(last_viewed_at, 0) >= ?
+            """,
+            (afterglow_cutoff,),
+        ).fetchall():
+            view_count = _row_int(row, "view_count") or 0
+            completion = _completion_pct_from_row(row)
+            finished = view_count > 0
+            near = completion is not None and completion >= AFTERGLOW_NEAR_COMPLETE_PCT
+            if finished or near:
+                keys.add(str(row["rating_key"]))
+        for row in conn.execute(
+            """
+            SELECT rating_key
+            FROM library_items
+            WHERE media_type = 'show'
+              AND rating_key IS NOT NULL AND rating_key != ''
+              AND total_episode_count > 0
+              AND unwatched_episode_count = 0
+              AND COALESCE(last_viewed_at, last_episode_watched_at, 0) >= ?
+            """,
+            (afterglow_cutoff,),
+        ).fetchall():
+            keys.add(str(row["rating_key"]))
+        for row in conn.execute(
+            """
+            SELECT rating_key
+            FROM library_items
+            WHERE media_type = 'show'
+              AND rating_key IS NOT NULL AND rating_key != ''
+              AND total_episode_count > 0
+              AND unwatched_episode_count > 0
+              AND unwatched_episode_count < total_episode_count
+              AND COALESCE(last_viewed_at, last_episode_watched_at) IS NOT NULL
+              AND COALESCE(last_viewed_at, last_episode_watched_at) > 0
+              AND COALESCE(last_viewed_at, last_episode_watched_at) < ?
+            """,
+            (unfinished_cutoff,),
+        ).fetchall():
+            keys.add(str(row["rating_key"]))
+    return keys
+
+
+def _tonight_why(*, seat: str, genres: Sequence[str], runtime_minutes: Optional[int]) -> str:
+    runtime = f"{runtime_minutes}m" if runtime_minutes else "under 2h"
+    if seat == "comfort":
+        comfort = next(
+            (
+                genre
+                for genre in genres
+                if any(needle in str(genre).casefold() for needle in COMFORT_GENRE_NEEDLES)
+            ),
+            "comfort",
+        )
+        return f"Comfort · {comfort} · {runtime}"
+    return f"Unwatched · {runtime}"
+
+
+def feed_tonight_table(
+    db: Database,
+    *,
+    limit: int = TONIGHT_TABLE_LIMIT,
+) -> Dict[str, Any]:
+    """Three-seat tonight table: two unwatched under 2h, one comfort.
+
+    Distinct from Afterglow (recent finish / near-complete), Unfinished
+    (leftover playhead inside 60 days), and Revisit These (60-day idle).
+    """
+    capped = min(
+        _cap_limit(limit, default=TONIGHT_TABLE_LIMIT, max_limit=TONIGHT_TABLE_LIMIT),
+        TONIGHT_TABLE_LIMIT,
+    )
+    excluded = _tonight_excluded_rating_keys(db)
+    unwatched_need = min(TONIGHT_TABLE_UNWATCHED_SEATS, capped)
+    comfort_need = min(TONIGHT_TABLE_COMFORT_SEATS, max(0, capped - unwatched_need))
+    if capped < TONIGHT_TABLE_LIMIT:
+        unwatched_need = min(unwatched_need, max(0, capped - comfort_need))
+    candidates: List[Mapping[str, Any]] = []
+    with db.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT *
+            FROM library_items
+            WHERE media_type = 'movie'
+              AND rating_key IS NOT NULL AND rating_key != ''
+            ORDER BY COALESCE(vote_average, 0) DESC, title ASC
+            LIMIT 120
+            """
+        ).fetchall()
+    for row in rows:
+        runtime = _runtime_minutes_from_row(row)
+        if runtime is None or runtime > TONIGHT_MAX_RUNTIME_MINUTES:
+            continue
+        key = str(row["rating_key"] or "")
+        if not key or key in excluded:
+            continue
+        candidates.append(row)
+
+    seated_keys: set[str] = set()
+    items: List[Dict[str, Any]] = []
+
+    def _append_seat(row: Mapping[str, Any], seat: str) -> None:
+        key = str(row["rating_key"] or "")
+        if not key or key in seated_keys:
+            return
+        runtime = _runtime_minutes_from_row(row)
+        genres = _row_genres(row)
+        seated_keys.add(key)
+        items.append(
+            _feed_item(
+                row,
+                in_library=True,
+                card_kind="tonight-table",
+                table_seat=seat,
+                why=_tonight_why(seat=seat, genres=genres, runtime_minutes=runtime),
+                runtime_minutes=runtime,
+                watch_state=(
+                    "unwatched"
+                    if seat == "unwatched" or (_row_int(row, "view_count") or 0) <= 0
+                    else "watched"
+                ),
+                play_rating_key=key,
+            )
+        )
+
+    for row in candidates:
+        if len([item for item in items if item.get("table_seat") == "unwatched"]) >= unwatched_need:
+            break
+        if _is_unwatched_movie(row):
+            _append_seat(row, "unwatched")
+
+    comfort_rows = [row for row in candidates if _is_comfort_title(row)]
+    comfort_rows.sort(
+        key=lambda row: (
+            0 if (_row_int(row, "view_count") or 0) > 0 else 1,
+            -(float(row["vote_average"]) if row["vote_average"] is not None else 0.0),
+            str(row["title"] or "").casefold(),
+        )
+    )
+    for row in comfort_rows:
+        if len([item for item in items if item.get("table_seat") == "comfort"]) >= comfort_need:
+            break
+        _append_seat(row, "comfort")
+
+    items = items[:capped]
+    note = None
+    if not items:
+        note = (
+            "No finishable under-two-hour seats right now — tonight's table "
+            "is two unwatched and one comfort, not leftover or afterglow."
+        )
+    return {
+        "feed": "tonight-table",
+        "items": items,
+        "total": len(items),
+        "limit": capped,
+        "seats": {
+            "unwatched": TONIGHT_TABLE_UNWATCHED_SEATS,
+            "comfort": TONIGHT_TABLE_COMFORT_SEATS,
+            "max_runtime_minutes": TONIGHT_MAX_RUNTIME_MINUTES,
+        },
         "note": note,
     }

@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### 1.36.5 — Whisper and tonight
+
+Chat home on a phone plays to the Plex client with the composer pinned. Save to library is the holdable shelf — no extra heading. A resume chip returns to the last conversation. Explore’s tonight table seats two unwatched under-two-hour titles and one comfort, apart from afterglow, unfinished, and revisit.
+
+### Added
+- `feed_tonight_table` / `GET /api/library/feeds/tonight-table` — two unwatched under 2h plus one comfort.
+- Explore **Tonight's table** rail (after Continue Watching, before Unfinished).
+- Phone Play (`plex://preplay`) at 390-wide viewports; composer stays sticky on 390×844.
+- Resume chip on empty chat home; holdable shelf of saved curator responses (existing Save to library, no extra H1).
+
+### Deferred
+- Whisper inbox (named member, 12-word why) — remaining 1.36.5 slice now that Good News owns `projectionist/notifications/**`.
+
 ### 1.36.2 — Rematch and Good News
 
 Admin → Libraries now has a Rematch studio for movie identity mismatches, Repair the miss on failed search/register, and Good News arrival copy in the curator’s voice.
@@ -24,6 +37,7 @@ Investigate can now hear a show, not just see it. ACRCloud Identification (Music
 - Encrypted ACRCloud host / `access_key` / `access_secret` (env wins) and owner Identify settings + test-clip routes. Test clip never renames a library file.
 - Identify lane in episode investigation: one request per file, rate-limited, mapped to TMDB or Uncertain evidence.
 - New-show prompt on fusion/apply: creating or attaching a series the household does not have requires per-row opt-in.
+>>>>>>> origin/release/1.36
 
 ### 1.36.8 — Scholar core
 
