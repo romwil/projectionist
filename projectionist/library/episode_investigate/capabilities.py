@@ -7,8 +7,8 @@ import shutil
 from typing import Any, Dict, Mapping, Optional
 
 FFMPEG_NOTE = (
-    "This running container cannot find ffmpeg on PATH. The Projectionist image "
-    "should include it — that is a bad image or PATH, not a host install. "
+    "This running container cannot find ffmpeg on PATH. Image includes ffmpeg; "
+    "a missing binary is a bad image or PATH, not a host install. "
     "Set FFMPEG_PATH and FFPROBE_PATH only to override."
 )
 
