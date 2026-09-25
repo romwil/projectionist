@@ -233,6 +233,67 @@ def mark_syllabus_session(
     return get_syllabus_session(db, user_id=user_id, session_id=session_id)
 
 
+def _course_name(db: Database, list_id: str) -> str:
+    course = db.get_published_list(list_id, include_items=False)
+    if course is None:
+        course = db.get_curated_list(list_id, user_id=None, include_items=False)
+    return str((course or {}).get("name") or "this course")
+
+
+def _user_syllabus_list_ids(db: Database, *, user_id: str) -> List[str]:
+    _ensure_syllabus_table(db)
+    with db.connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT list_id, MAX(updated_at) AS touched
+            FROM user_syllabus_sessions
+            WHERE user_id = ?
+            GROUP BY list_id
+            ORDER BY touched DESC
+            """,
+            (user_id,),
+        ).fetchall()
+    return [str(row["list_id"]) for row in rows]
+
+
+def course_resume_pointer(
+    db: Database,
+    *,
+    user_id: str,
+    list_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Point at the next unfinished syllabus session (or a finished course)."""
+    _ensure_syllabus_table(db)
+    list_ids = [list_id] if list_id else _user_syllabus_list_ids(db, user_id=user_id)
+    for lid in list_ids:
+        if not lid:
+            continue
+        sessions = list_syllabus_sessions(db, user_id=user_id, list_id=lid)
+        if not sessions:
+            continue
+        unfinished = [session for session in sessions if not session.get("completed_at")]
+        target = unfinished[0] if unfinished else sessions[-1]
+        remaining = len(unfinished)
+        completed = remaining == 0
+        course_name = _course_name(db, lid)
+        title = str(target.get("title") or "the next session")
+        label = f"Finished {course_name}" if completed else f"Resume {title}"
+        return {
+            "list_id": lid,
+            "course_name": course_name,
+            "session_id": target["id"],
+            "session_index": target["session_index"],
+            "title": title,
+            "focus_note": str(target.get("focus_note") or ""),
+            "chat_session_id": target.get("chat_session_id"),
+            "completed": completed,
+            "resume_label": label,
+            "chat_prompt": syllabus_chat_prompt(target, course_name=course_name),
+            "remaining_sessions": remaining,
+        }
+    return None
+
+
 def syllabus_chat_prompt(session: Dict[str, Any], *, course_name: str = "") -> str:
     """Seed text for chat-from-here on a syllabus session."""
     course = course_name or "this course"
