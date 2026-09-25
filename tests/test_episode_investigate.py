@@ -441,6 +441,224 @@ class JobHappyPathTests(unittest.TestCase):
         self.assertEqual(row["confidence"], "certain")
         self.assertEqual(row["proposed"]["episode"], 7)
         self.assertFalse(row["claimed"]["evidence"])
+        self.assertEqual(row["stills_error"], "")
+
+    def test_unreadable_path_is_failed_not_completed(self) -> None:
+        from projectionist.library.episode_investigate.job import (
+            UNREADABLE_PATH,
+            UNREADABLE_REASON,
+            investigate_files,
+            investigate_one,
+        )
+
+        recorded: list[tuple] = []
+
+        class _Store:
+            def set_item(self, item_id, status, **kwargs):
+                recorded.append((item_id, status, kwargs.get("outcome"), kwargs.get("error")))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            missing = str(Path(tmp) / "missing" / "Expedition.Unknown.S15E04.mkv")
+            row = investigate_one(
+                SimpleNamespace(llm_provider="anthropic", llm_model="claude-sonnet-4-6", tmdb_api_key=""),
+                _show(),
+                {
+                    "id": "80",
+                    "file_id": 80,
+                    "series_id": 4,
+                    "path": missing,
+                    "claimed": claimed_from_path(missing),
+                    "sonarr": {"season": 15, "episode": 4, "title": "Shipwreck", "evidence": False},
+                },
+                catalog=_catalog(),
+                use_vision=True,
+                household=["The Bear"],
+                job_id="job2",
+                data_dir=Path(tmp),
+            )
+            self.assertEqual(row["stills_error"], UNREADABLE_PATH)
+            self.assertEqual(row["stills"], [])
+            self.assertIsNone(row["runtime_seconds"])
+            self.assertIn(UNREADABLE_REASON, row["reasons"])
+            self.assertIsNone(row["vision"])
+
+            investigate_files(
+                SimpleNamespace(llm_provider="anthropic", llm_model="claude-sonnet-4-6", tmdb_api_key=""),
+                _show(),
+                [
+                    {
+                        "id": "80",
+                        "file_id": 80,
+                        "series_id": 4,
+                        "path": missing,
+                        "claimed": claimed_from_path(missing),
+                        "sonarr": {"season": 15, "episode": 4, "title": "Shipwreck", "evidence": False},
+                    }
+                ],
+                catalog=_catalog(),
+                season=None,
+                use_vision=True,
+                household=["The Bear"],
+                job_id="job2",
+                data_dir=Path(tmp),
+                store=_Store(),
+            )
+        failed = [item for item in recorded if item[1] == "failed"]
+        completed = [item for item in recorded if item[1] == "completed"]
+        self.assertTrue(failed)
+        self.assertEqual(failed[-1][2], "unreadable")
+        self.assertEqual(completed, [])
+        self.assertNotIn("Bind-mount", UNREADABLE_REASON)
+
+
+class PathMapTests(unittest.TestCase):
+    def test_prefix_translate_picks_existing_file(self) -> None:
+        from projectionist.library.episode_investigate.path_map import resolve_visible_media_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "media" / "tv"
+            dest = local / "Expedition Unknown (2015)" / "Season 15"
+            dest.mkdir(parents=True)
+            visible = dest / "Expedition.Unknown.S15E04.mkv"
+            visible.write_bytes(b"video")
+            settings = SimpleNamespace(
+                sonarr_root_folder="/tv",
+                tv_root=str(local),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            sonarr = "/tv/Expedition Unknown (2015)/Season 15/Expedition.Unknown.S15E04.mkv"
+            self.assertEqual(
+                resolve_visible_media_path(sonarr, settings, include_host_hints=False),
+                str(visible),
+            )
+
+    def test_missing_file_returns_none(self) -> None:
+        from projectionist.library.episode_investigate.path_map import resolve_visible_media_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "media" / "tv"
+            local.mkdir(parents=True)
+            settings = SimpleNamespace(
+                sonarr_root_folder="/tv",
+                tv_root=str(local),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            sonarr = "/tv/Expedition Unknown (2015)/Season 15/missing.mkv"
+            self.assertIsNone(resolve_visible_media_path(sonarr, settings, include_host_hints=False))
+
+    def test_first_existing_root_wins(self) -> None:
+        from projectionist.library.episode_investigate.path_map import resolve_visible_media_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            first = Path(tmp) / "first"
+            second = Path(tmp) / "second"
+            rel = Path("Show") / "Season 01" / "a.mkv"
+            for root in (first, second):
+                dest = root / rel
+                dest.parent.mkdir(parents=True)
+                dest.write_bytes(b"video")
+            settings = SimpleNamespace(
+                sonarr_root_folder="/tv",
+                tv_root=str(first),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            self.assertEqual(
+                resolve_visible_media_path(
+                    "/tv/Show/Season 01/a.mkv",
+                    settings,
+                    extra_roots=[str(second)],
+                    include_host_hints=False,
+                ),
+                str(first / rel),
+            )
+
+    def test_exact_path_wins_when_present(self) -> None:
+        from projectionist.library.episode_investigate.path_map import resolve_visible_media_path
+
+        with tempfile.TemporaryDirectory() as tmp:
+            exact = Path(tmp) / "exact" / "Show" / "a.mkv"
+            mapped = Path(tmp) / "mapped" / "Show" / "a.mkv"
+            for path in (exact, mapped):
+                path.parent.mkdir(parents=True)
+                path.write_bytes(b"video")
+            settings = SimpleNamespace(
+                sonarr_root_folder=str(Path(tmp) / "exact"),
+                tv_root=str(Path(tmp) / "mapped"),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            self.assertEqual(
+                resolve_visible_media_path(str(exact), settings, include_host_hints=False),
+                str(exact),
+            )
+
+    def test_investigate_one_uses_resolved_path_for_stills(self) -> None:
+        from projectionist.library.episode_investigate.job import investigate_one
+
+        probed: list[str] = []
+        extracted: list[str] = []
+
+        with tempfile.TemporaryDirectory() as tmp:
+            local = Path(tmp) / "media" / "tv"
+            dest = local / "Expedition Unknown (2015)" / "Season 15"
+            dest.mkdir(parents=True)
+            visible = dest / "Expedition.Unknown.S15E04.mkv"
+            visible.write_bytes(b"video")
+            sonarr = "/tv/Expedition Unknown (2015)/Season 15/Expedition.Unknown.S15E04.mkv"
+            settings = SimpleNamespace(
+                llm_provider="ollama",
+                llm_model="llama3",
+                tmdb_api_key="",
+                sonarr_root_folder="/tv",
+                tv_root=str(local),
+                movies_root="",
+                radarr_root_folder="",
+            )
+            with patch(
+                "projectionist.library.episode_investigate.job.probe_runtime_seconds",
+                side_effect=lambda path, **_kwargs: probed.append(path) or 120.0,
+            ), patch(
+                "projectionist.library.episode_investigate.job.extract_stills",
+                side_effect=lambda path, dest_dir, **_kwargs: extracted.append(path) or [],
+            ), patch(
+                "projectionist.library.episode_investigate.job.file_oshash",
+                return_value=None,
+            ):
+                row = investigate_one(
+                    settings,
+                    _show(title="Expedition Unknown"),
+                    {
+                        "id": "80",
+                        "file_id": 80,
+                        "series_id": 4,
+                        "path": sonarr,
+                        "claimed": claimed_from_path(sonarr),
+                        "sonarr": {"season": 15, "episode": 4, "title": "Shipwreck", "evidence": False},
+                    },
+                    catalog=_catalog(),
+                    use_vision=False,
+                    household=["The Bear"],
+                    job_id="job-map",
+                    data_dir=Path(tmp),
+                )
+        self.assertEqual(row["path"], sonarr)
+        self.assertEqual(row["resolved_path"], str(visible))
+        self.assertEqual(row["stills_error"], "")
+        self.assertEqual(probed, [str(visible)])
+        self.assertEqual(extracted, [str(visible)])
+
+    def test_translation_logs_once_per_job(self) -> None:
+        from projectionist.library.episode_investigate.path_map import TranslationLog
+
+        with patch("projectionist.library.episode_investigate.path_map.logger") as mock_log:
+            log = TranslationLog()
+            log.emit("/tv/Show/a.mkv", "/media/tv/Show/a.mkv")
+            log.emit("/tv/Show/b.mkv", "/media/tv/Show/b.mkv")
+            mock_log.info.assert_called_once()
+            self.assertIn("/tv/Show/a.mkv", mock_log.info.call_args[0][1])
 
 
 class CatalogSonarrTests(unittest.TestCase):
