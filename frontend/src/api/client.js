@@ -1362,6 +1362,11 @@ export async function getExploreFeedAfterglow({ limit = 12, days = 14 } = {}) {
   return api(`/library/feeds/afterglow?${params}`);
 }
 
+export async function getExploreFeedTonightTable({ limit = 3 } = {}) {
+  const params = new URLSearchParams({ limit: String(limit) });
+  return api(`/library/feeds/tonight-table?${params}`);
+}
+
 export async function getExploreFeedForYou({ limit = 12 } = {}) {
   const params = new URLSearchParams({ limit: String(limit) });
   return api(`/library/feeds/for-you?${params}`);

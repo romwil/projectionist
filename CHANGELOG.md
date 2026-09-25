@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### 1.36.5 — Whisper and tonight
+
+Chat home on a phone plays to the Plex client with the composer pinned. Save to library is the holdable shelf — no extra heading. A resume chip returns to the last conversation. Explore’s tonight table seats two unwatched under-two-hour titles and one comfort, apart from afterglow, unfinished, and revisit.
+
+### Added
+- `feed_tonight_table` / `GET /api/library/feeds/tonight-table` — two unwatched under 2h plus one comfort.
+- Explore **Tonight's table** rail (after Continue Watching, before Unfinished).
+- Phone Play (`plex://preplay`) at 390-wide viewports; composer stays sticky on 390×844.
+- Resume chip on empty chat home; holdable shelf of saved curator responses (existing Save to library, no extra H1).
+
+### Deferred
+- **TODO:** Whisper inbox (named member, 12-word why) follows the v1.36.2 Good News merge — `projectionist/notifications/**` is locked by that sibling.
+
 ### 1.36.8 — Scholar core
 
 Scholar citations open a footnote sheet from `[^1]` instead of a raw dump. Village pending consults say they have not called back. A course resume pointer picks up the next unfinished syllabus session.
