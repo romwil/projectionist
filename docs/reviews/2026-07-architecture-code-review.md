@@ -44,10 +44,10 @@ Design deltas vs original letter:
 |----|----------|--------|--------|------------------------|
 | H6 | High | M | **Done** | `.github/workflows/ci.yml` `docker-smoke` builds image + curls `/api/health` |
 | H7 | High | S | **Done** | Conditional chown in `scripts/docker-entrypoint.sh`; UID 1000 documented; no PUID/PGID |
-| H1 | High | L | Open (partial) | Finish router/tool/repo splits; carve `web/app.py`, `App.jsx`, `ConfigPage.jsx` |
+| H1 | High | L | Open (partial) | Finish router/tool/repo splits; carve `web/app.py` (~7244), `App.jsx` (~2025), `ConfigPage.jsx` (~3803) as of 1.35.5. Incremental carves landed (`live_channels_routes.py`, `LiveChannelsSection.jsx`, `HouseholdSection.jsx`). 1.36 Wave 0 extracts Libraries; Wave 3 finishes remaining H1. |
 | H4 | High | L | **Done** (Hybrid C) | Encrypt UI secrets; env wins; migrate plaintext; `credential_marker` rename |
 | H5 | High | M | **Done** (Multi-user gates B) | Gate personal agent writes when multi-user is on |
-| H8 | High | L | Open | Embeddings as JSON TEXT; `get_embeddings()` O(n); prefilter before marketing 10k+ |
+| H8 | High | L | Open | Embeddings as JSON TEXT; `get_embeddings()` still full-table `json.loads`. Optional sqlite-vec ANN is a prefilter only. Expand only if measured (1.36 craft rule). |
 | M1 | Medium | M | **Done** (Audit then enable A) | Orphan cleanup migration -> `PRAGMA foreign_keys=ON` (with M2) |
 | M2 | Medium | L | **Done** | `schema_version` + ordered migration module |
 | M3 | Medium | S | Open | Jittered retry for idempotent connector GETs |
@@ -57,13 +57,15 @@ Design deltas vs original letter:
 | M7 | Medium | M | **Done** (Prune + one story C) | Deleted stubs; ambient/chat-first narrative |
 | M8 | Medium | M | Open (partial) | AuthProvider; finish god-component extraction |
 | M9 | Medium | M | Open (partial) | Household authz e2e; continue raising coverage culture |
-| M10 | Medium | S | **Done** | WAL-safe backup docs in DOCKER.md / SECURITY.md (Admin snapshot deferred) |
+| M10 | Medium | S | **Done** | WAL-safe backup docs in DOCKER.md / SECURITY.md; Admin snapshot `GET /api/admin/backup/snapshot` shipped (CHANGELOG Phase E stretch) |
 | M12 | Medium | S | **Done** | Compose ↔ Unraid rollout env parity |
 | L1-L6 | Low | S-M | Backlog | A11y Modal, naming, cycles, version drift, CSP, session TTL |
 
 ### What "A or better" means here
 
 **Docker/Unraid ops -> A** after H6/H7 (done) plus M10/M12. Overall letter **A** still needs Trains 1-4: trust (**H4**/**H5**), integrity (**M1**/**M2**), backup/parity (**M10**/**M12**), and privacy/product honesty (**M4**/**M7**). Keep modularizing (**H1**); full god-file elimination and embedding scale (**H8**) can trail if sequenced honestly.
+
+**2026-09-24 hygiene (docs only, 1.35.5 trunk):** still-open rows above re-checked without rewriting the letter. H1/H8/M3/M6/M8 remain open. M10 snapshot is no longer deferred. 1.36 Wave 0/3 is the H1 path ([Phase 6 spec](../superpowers/specs/2026-09-24-delight-phase-6.md)).
 
 ---
 
