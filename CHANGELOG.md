@@ -37,7 +37,6 @@ Investigate can now hear a show, not just see it. ACRCloud Identification (Music
 - Encrypted ACRCloud host / `access_key` / `access_secret` (env wins) and owner Identify settings + test-clip routes. Test clip never renames a library file.
 - Identify lane in episode investigation: one request per file, rate-limited, mapped to TMDB or Uncertain evidence.
 - New-show prompt on fusion/apply: creating or attaching a series the household does not have requires per-row opt-in.
->>>>>>> origin/release/1.36
 
 ### 1.36.8 — Scholar core
 
