@@ -196,6 +196,21 @@ export async function markNotificationsSeen(payload) {
   });
 }
 
+export async function listWhispers(params = {}) {
+  const query = new URLSearchParams();
+  if (params.unread_only) query.set("unread_only", "true");
+  if (params.limit) query.set("limit", String(params.limit));
+  const suffix = query.toString() ? `?${query}` : "";
+  return api(`/whispers${suffix}`);
+}
+
+export async function markWhispersSeen(payload) {
+  return api("/whispers/seen", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function testMailSend(payload = {}) {
   return api("/admin/mail/test", {
     method: "POST",

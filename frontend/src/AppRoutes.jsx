@@ -23,6 +23,7 @@ import ExploreSectionPage from "./pages/ExploreSectionPage";
 import MyJourneyPage from "./pages/MyJourneyPage";
 import SearchPage from "./pages/SearchPage";
 import InboxPage from "./pages/InboxPage";
+import WhisperInboxPage from "./pages/WhisperInboxPage";
 import PersonPage from "./pages/PersonPage";
 import TagPage from "./pages/TagPage";
 import TagsPage from "./pages/TagsPage";
@@ -81,6 +82,7 @@ export default function AppRoutes() {
       <Route path="/chat" element={<App />} />
       <Route path="/search" element={<SearchPage />} />
       <Route path="/inbox" element={<InboxPage />} />
+      <Route path="/whisper" element={<WhisperInboxPage />} />
       <Route path="/year-in-review/:year" element={<YearInReviewPage />} />
       <Route path="/my-journey" element={<MyJourneyPage />} />
       <Route path="/explore" element={<ExplorePage />} />
