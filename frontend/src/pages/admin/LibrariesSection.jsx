@@ -909,7 +909,9 @@ function InvestigateReviewRow({ row, checked, onToggle }) {
           <summary>
             {confidenceLabel(row.confidence)}
             {proposed ? ` · ${proposed}` : ""}
-            {row.same_show === false ? " · other show (not this sprint)" : ""}
+            {row.proposed?.scope === "household" || row.proposed?.scope === "new_show"
+              ? " · other show (not this sprint)"
+              : ""}
             {reasons.length ? ` · ${reasons[0]}` : ""}
           </summary>
           {reasons.length > 1 ? <p className="wizard-note">{reasons.join(" · ")}</p> : null}

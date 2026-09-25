@@ -39,6 +39,11 @@ KIND = "episode_investigate"
 APPLY_KIND = "episode_investigate_apply"
 IDLE_MESSAGE = "Pick a show to investigate"
 APPLY_IDLE = "Nothing to apply"
+UNREADABLE_PATH = "unreadable_path"
+UNREADABLE_REASON = (
+    "Episode file is not readable in this container. "
+    "Bind-mount the Sonarr TV library at the same path Sonarr uses, then Investigate again."
+)
 
 
 def build_status() -> Dict[str, Any]:
@@ -122,7 +127,11 @@ def start_investigate_job(
             "show": show,
             "season": season,
             "use_vision": vision_on,
-            "vision_used": vision_on and llm_accepts_images(settings),
+            "vision_used": bool(
+                vision_on
+                and llm_accepts_images(settings)
+                and any(row.get("stills") for row in rows)
+            ),
             "stills_leave_lan": vision_on and llm_accepts_images(settings),
             "rows": rows,
             "series_id": inventory.get("series_id"),
@@ -304,7 +313,15 @@ def investigate_files(
             )
             rows.append(row)
             if store is not None:
-                store.set_item(file_id, "completed", outcome=str(row.get("confidence") or ""))
+                if row.get("stills_error") == UNREADABLE_PATH:
+                    store.set_item(
+                        file_id,
+                        "failed",
+                        error=UNREADABLE_REASON,
+                        outcome="unreadable",
+                    )
+                else:
+                    store.set_item(file_id, "completed", outcome=str(row.get("confidence") or ""))
         except Exception as error:  # noqa: BLE001
             logger.warning("investigate file failed id=%s error=%s", file_id, error)
             if store is not None:
@@ -327,9 +344,10 @@ def investigate_one(
     series_id: Any = None,
 ) -> Dict[str, Any]:
     path = str(file_row.get("path") or "")
+    readable = bool(path) and Path(path).is_file()
     dest = stills_dir(data_dir, job_id, str(file_row.get("id")))
-    runtime = probe_runtime_seconds(path) if path else None
-    extracted = extract_stills(path, dest, runtime_seconds=runtime) if path else []
+    runtime = probe_runtime_seconds(path) if readable else None
+    extracted = extract_stills(path, dest, runtime_seconds=runtime) if readable else []
     digest = file_oshash(path) if path else None
     opensub = lookup_opensubtitles(digest or "", settings=settings) if digest else None
     vision = None
@@ -381,6 +399,10 @@ def investigate_one(
             dest,
         )
     file_id = str(file_row.get("id"))
+    reasons = list(fused.get("reasons") or [])
+    stills_error = UNREADABLE_PATH if not readable else ""
+    if stills_error and UNREADABLE_REASON not in reasons:
+        reasons.insert(0, UNREADABLE_REASON)
     return {
         "id": file_id,
         "file_id": file_row.get("file_id"),
@@ -396,7 +418,9 @@ def investigate_one(
         "tmdb_stills": [still_url(job_id, file_id, path.name) for path in tmdb_still_paths],
         "vision": vision,
         "identify": identify,
+        "stills_error": stills_error,
         **fused,
+        "reasons": reasons,
     }
 
 
