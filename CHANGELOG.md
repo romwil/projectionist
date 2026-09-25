@@ -21,18 +21,30 @@ The house writes a letter, not a tile wall: unwatched hours, dead weight, and di
 
 Continue the god-file peel after Wave 0 Libraries and Wave 2 chatLayout. Admin Overview, Connections, and Seerr leave ConfigPage the same way Household and Libraries already did. Chat chrome lives in ChatWorkspace; SPA routes live in AppRoutes. app.py registers spa, auth, and setup routers instead of defining those handlers inline. Behavior-neutral — no delight feature number.
 
+### 1.36.9 — Scholar walks
+
+The Scholar can walk a title in chat instead of dumping a lecture. Lineage, canon, map, compare-two-rated, silent seminar, and a consented gap reading list reuse the village, the syllabus resume pointer, and the footnote sheet. Nothing is published.
+
+### Highlights
+- **Walks, not pages.** Six household walks stay in chat: lineage, canon, a thematic map, compare two titles you already rated, a silent seminar, and a gap reading list you have to consent to.
+- **Explain the why.** Each walk says why it exists before it starts. Village pending copy still says they have not called back.
+- **Confirm before a gap list.** Titles a course names that are not on the shelf are proposed, not fetched. Confirm writes the list. It does not request, search, or add.
+
+### Added
+- `build_scholar_walk` in `projectionist/syllabus/walks.py` — six walk kinds with cited stops, household chat prompts, and optional syllabus resume.
+- Village Professor specialty gathers a named walk; silent seminar uses a seminar quote lead; gap walks stay confirm-gated.
+- Footnote sheet labels walk sources (`Lineage source 1`) from `[^lineage-1]` ids.
+
 ### 1.36.5 — Whisper and tonight
 
-Chat home on a phone plays to the Plex client with the composer pinned. Save to library is the holdable shelf — no extra heading. A resume chip returns to the last conversation. Explore’s tonight table seats two unwatched under-two-hour titles and one comfort, apart from afterglow, unfinished, and revisit.
+Chat home on a phone plays to the Plex client with the composer pinned. Save to library is the holdable shelf — no extra heading. A resume chip returns to the last conversation. Explore’s tonight table seats two unwatched under-two-hour titles and one comfort, apart from afterglow, unfinished, and revisit. Each named household member gets a whisper inbox with a twelve-word why — not owner-only Good News, and never a download-complete ping.
 
 ### Added
 - `feed_tonight_table` / `GET /api/library/feeds/tonight-table` — two unwatched under 2h plus one comfort.
 - Explore **Tonight's table** rail (after Continue Watching, before Unfinished).
 - Phone Play (`plex://preplay`) at 390-wide viewports; composer stays sticky on 390×844.
 - Resume chip on empty chat home; holdable shelf of saved curator responses (existing Save to library, no extra H1).
-
-### Deferred
-- Whisper inbox (named member, 12-word why) — remaining 1.36.5 slice now that Good News owns `projectionist/notifications/**`.
+- Named-member **whisper inbox** (`GET /api/whispers`, `/whisper`) — one quiet pick per member per week with a 12-word why. Chat home opens it. Distinct from Good News arrivals.
 
 ### 1.36.2 — Rematch and Good News
 
@@ -41,7 +53,7 @@ Admin → Libraries now has a Rematch studio for movie identity mismatches, Repa
 ### Highlights
 - **Rematch studio.** Scan Plex GUID vs Radarr TMDB vs folder — the Presence / Savages class of bug. Same title is not the same identity when the path already belongs to someone else. FileBot, Plex Match, and Gracenote are not investigators.
 - **Repair the miss.** Failed Register in Radarr or Sonarr search offers rematch, skip, retry, or Investigate. Human copy only — no JSON dump.
-- **Good News.** Watchlist and gap arrivals speak in persona voice. This is not a “download complete” ping. Member whisper inbox waits for 1.36.5.
+- **Good News.** Watchlist and gap arrivals speak in persona voice. This is not a “download complete” ping. Named-member whispers live in the 1.36.5 inbox.
 
 ### Added
 - Owner `GET /api/admin/rematch/scan`, `POST /api/admin/rematch/skip`, `POST /api/admin/rematch/retry`, `GET /api/admin/rematch/repairs`.

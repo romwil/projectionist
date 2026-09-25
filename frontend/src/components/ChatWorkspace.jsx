@@ -13,6 +13,7 @@ import TypingIndicator from "./TypingIndicator";
 import UndoToast from "./UndoToast";
 import WatchlistPanel from "./WatchlistPanel";
 import WelcomePanel from "./WelcomePanel";
+import WhisperInboxLink from "./WhisperInboxLink";
 import SlashCommandPalette from "./SlashCommandPalette";
 import OnThisDayCard from "./OnThisDayCard";
 import LibraryGlanceCard from "./LibraryGlanceCard";
@@ -320,6 +321,7 @@ authReady,
                   contextChips={homeChips}
                   onContextChip={handleContextChip}
                 />
+                <WhisperInboxLink />
                 {shelfPages.length ? (
                   <div className="holdable-shelf" data-testid="holdable-shelf">
                     {shelfPages.map((page) => (

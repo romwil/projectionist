@@ -37,7 +37,8 @@
   }
 
   .holdable-shelf-chip,
-  .welcome-context-chip {
+  .welcome-context-chip,
+  .whisper-inbox-link {
     min-height: var(--tap-min);
   }
 }

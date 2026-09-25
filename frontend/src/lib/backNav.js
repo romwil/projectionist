@@ -15,6 +15,7 @@ export const ROUTES = {
   chat: "/chat",
   search: "/search",
   inbox: "/inbox",
+  whisper: "/whisper",
   myJourney: "/my-journey",
   explore: "/explore",
   tags: "/explore/tags",
