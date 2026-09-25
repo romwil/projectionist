@@ -13,6 +13,7 @@ from projectionist.config_store import Settings, save_settings
 from projectionist.library.db import Database
 from projectionist.web.auth import (
     _hash_password,
+    env_owner_password_configured,
     has_real_owner,
     row_to_current_user_from_dict,
 )
@@ -38,9 +39,19 @@ SETUP_API_ALLOWLIST_EXACT = frozenset(
         ("GET", "/api/setup/handshake"),
         ("POST", "/api/setup/handshake"),
         ("POST", "/api/setup/commit"),
+    }
+)
+
+SETUP_API_LAN_TEST_EXACT = frozenset(
+    {
         ("POST", "/api/setup/test/plex"),
         ("POST", "/api/setup/test/tmdb"),
     }
+)
+
+WAN_COMMIT_OWNER_PASSWORD_DETAIL = (
+    "First-boot from a public or Docker-NAT address requires "
+    "PROJECTIONIST_OWNER_PASSWORD on the host."
 )
 
 
@@ -81,10 +92,22 @@ def is_active_mode(db: Database) -> bool:
     return resolve_setup_state(db) == SETUP_STATE_ACTIVE
 
 
-def is_setup_public_path(method: str, path: str) -> bool:
+def is_setup_public_path(
+    method: str,
+    path: str,
+    request: Optional[Request] = None,
+    *,
+    classification: Optional[str] = None,
+) -> bool:
     cleaned = (path or "").split("?", 1)[0]
     key = (str(method or "GET").upper(), cleaned)
-    return key in SETUP_API_ALLOWLIST_EXACT
+    if key in SETUP_API_ALLOWLIST_EXACT:
+        return True
+    if key in SETUP_API_LAN_TEST_EXACT:
+        if classification is None and request is not None:
+            classification = str(classify_request(request).get("classification") or "")
+        return classification == "lan"
+    return False
 
 
 def setup_endpoint_locked(path: str) -> bool:
@@ -219,6 +242,10 @@ def commit_setup(
                 "Please complete initial setup via your local network or a trusted tunnel."
             ),
         )
+
+    if halt_classified["classification"] in {"public_failsafe", "halt_wan"}:
+        if not env_owner_password_configured():
+            raise HTTPException(status_code=403, detail=WAN_COMMIT_OWNER_PASSWORD_DETAIL)
 
     classified = classify_request(
         request, trusted_proxy=resolved_trust_proxy or trust_proxy_headers()
