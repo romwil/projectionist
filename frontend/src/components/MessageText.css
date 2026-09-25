@@ -29,6 +29,10 @@
   color: var(--muted);
 }
 
+.chat-footnote-sheet[data-walk-kind] .chat-footnote-sheet-label {
+  color: var(--accent);
+}
+
 .chat-footnote-sheet-body {
   margin: 0 0 var(--space-4);
   font-size: var(--text-md);

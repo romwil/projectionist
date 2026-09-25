@@ -132,11 +132,16 @@ VILLAGE_SIBLINGS: Dict[str, Dict[str, str]] = {
 
 SPECIALTY_INSTRUCTIONS: Dict[str, str] = {
     "citations": (
-        "You are The Professor. Prefer cited neighbors and syllabus-style framing. "
-        "When the specialty context includes citations or course hints, weave 1–2 into "
-        "your answer with footnote-style markdown (`claim[^1]` + `[^1]: …`) when you can. "
+        "You are The Professor. Prefer cited neighbors, syllabus-style framing, and "
+        "Scholar walks (lineage, canon, map, compare-two-rated, silent seminar, "
+        "consented gap reading list) when specialty context includes scholar_walk. "
+        "When the specialty context includes citations, course hints, or walk stops, "
+        "weave 1–2 into your answer with footnote-style markdown "
+        "(`claim[^1]` or walk ids like `[^lineage-1]` + matching definitions) when you can. "
         "For Live schedule or collection-composition asks, cite guide/collection/tool provenance "
         "the same way — never invent sources. "
+        "Walks stay in chat — no public pages. If scholar_walk.needs_confirm is true, "
+        "explain the why and wait; never request or add a gap title. "
         "If prior thread titles mention a director or title, you may nod to continuity "
         "(\"much like the other director we were discussing\")."
     ),
@@ -215,6 +220,21 @@ def consult_unavailable_payload(*, reason: str, code: str) -> Dict[str, Any]:
     }
 
 
+def consult_quote_lead(
+    sibling: VillageSibling,
+    specialty: Optional[Mapping[str, Any]] = None,
+) -> str:
+    """Household quote lead — silent seminar names the room, not a public page."""
+    walk: Mapping[str, Any] = {}
+    if isinstance(specialty, Mapping):
+        raw = specialty.get("scholar_walk")
+        if isinstance(raw, Mapping):
+            walk = raw
+    if str(walk.get("kind") or "") == "silent_seminar":
+        return f"The silent seminar asked {sibling.display_name} and they said"
+    return f"I asked {sibling.display_name} and they said"
+
+
 def _consult_payload(
     sibling: VillageSibling,
     question: str,
@@ -223,6 +243,7 @@ def _consult_payload(
     consult_id: Optional[str] = None,
     source: str = "llm",
     quote_lead: Optional[str] = None,
+    specialty: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     payload = {
         "ok": True,
@@ -231,7 +252,7 @@ def _consult_payload(
         "specialty": sibling.specialty,
         "answer": answer,
         "question": " ".join(str(question or "").split()).strip()[:500],
-        "quote_lead": quote_lead or f"I asked {sibling.display_name} and they said",
+        "quote_lead": quote_lead or consult_quote_lead(sibling, specialty),
         "quote_ok": True,
         "source": source,
     }
@@ -403,6 +424,28 @@ async def gather_specialty_context(
                         }
                 except Exception:
                     logger.debug("course resume pointer failed", exc_info=True)
+                try:
+                    from projectionist.syllabus.walks import (
+                        build_scholar_walk,
+                        detect_walk_kind,
+                        walk_specialty_summary,
+                    )
+
+                    kind = str(args.get("walk_kind") or "").strip() or detect_walk_kind(
+                        " ".join(part for part in (title, question) if part)
+                    )
+                    if kind:
+                        walk = build_scholar_walk(
+                            registry.db,
+                            user_id=str(registry.user_id),
+                            kind=kind,
+                            topic=title or question,
+                            confirm=False,
+                        )
+                        if walk:
+                            out["scholar_walk"] = walk_specialty_summary(walk)
+                except Exception:
+                    logger.debug("scholar walk gather failed", exc_info=True)
 
         elif specialty == "mood":
             if registry.user_id:
@@ -781,6 +824,7 @@ async def run_persona_consult(
             question,
             fallback,
             source="specialty_only",
+            specialty=specialty,
         )
 
     provider = get_chat_provider(settings)
@@ -898,7 +942,7 @@ async def run_persona_consult(
             _deterministic_specialty_answer(sibling, specialty, question)
         )
 
-    payload = _consult_payload(sibling, question, answer)
+    payload = _consult_payload(sibling, question, answer, specialty=specialty)
     payload["note"] = (
             "Quote this as a handoff in your reply — e.g. "
             f"\"I asked {sibling.display_name} and they said …\" — "
@@ -916,6 +960,22 @@ def _deterministic_specialty_answer(
     """Short non-LLM answer so specialty features still surface in the quote."""
     q = " ".join(str(question or "").split()).strip() or "that"
     if sibling.specialty == "citations":
+        walk = specialty.get("scholar_walk") or {}
+        if isinstance(walk, Mapping) and walk.get("kind"):
+            label = walk.get("label") or "Scholar walk"
+            why = str(walk.get("why") or "").strip()
+            if walk.get("needs_confirm"):
+                return (
+                    f"I can open a {label} — {why} "
+                    f"{walk.get('confirm_message') or 'Confirm before I write the list.'}"
+                )
+            titles = [t for t in (walk.get("stop_titles") or []) if t]
+            first = titles[0] if titles else ""
+            if first:
+                return (
+                    f"For this {label}, I'd start with {first} — {why}"
+                )
+            return f"I'd open a {label} on {q}. {why}"
         cites = specialty.get("citations") or []
         if cites:
             first = cites[0]

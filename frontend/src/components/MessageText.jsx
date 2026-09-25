@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { findFootnote, footnoteIdFromHref, parseMarkdownFootnotes } from "../lib/chatFootnotes.js";
+import {
+  findFootnote,
+  footnoteIdFromHref,
+  footnoteSheetLabel,
+  footnoteWalkKind,
+  parseMarkdownFootnotes,
+} from "../lib/chatFootnotes.js";
 import { linkifyKnownTitles, titleItemFromHref } from "../lib/titleDigIn.js";
 import TitleDetailLink from "./TitleDetailLink";
 import "./MessageText.css";
@@ -159,11 +165,12 @@ export default function MessageText({
               className="chat-footnote-sheet"
               role="dialog"
               aria-modal="true"
-              aria-label={`Source ${openNote.id}`}
+              aria-label={footnoteSheetLabel(openNote)}
               data-testid="chat-footnote-sheet"
+              data-walk-kind={footnoteWalkKind(openNote.id) || undefined}
               onClick={(event) => event.stopPropagation()}
             >
-              <p className="chat-footnote-sheet-label">{`Source ${openNote.id}`}</p>
+              <p className="chat-footnote-sheet-label">{footnoteSheetLabel(openNote)}</p>
               <p className="chat-footnote-sheet-body">{openNote.text}</p>
               <button
                 type="button"
