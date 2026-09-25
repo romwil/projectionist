@@ -1,6 +1,7 @@
 """Persona-voiced Good News copy for watchlist / gap arrivals.
 
-Arrival mail is never a download-client ping. Whisper inbox waits for v1.36.5.
+Arrival mail is never a download-client ping. Named-member whispers live in
+``projectionist.notifications.whisper``.
 """
 
 from __future__ import annotations

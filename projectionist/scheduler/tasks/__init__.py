@@ -41,6 +41,7 @@ def register_all(scheduler: IdleScheduler) -> None:
         arrival_notifications,
         enthusiast_nudge,
         gift_queue,
+        whisper_inbox,
         seasonal_rail,
         watch_history_ingest,
         year_in_review,
@@ -72,6 +73,7 @@ def register_all(scheduler: IdleScheduler) -> None:
     arrival_notifications.register(scheduler)
     enthusiast_nudge.register(scheduler)
     gift_queue.register(scheduler)
+    whisper_inbox.register(scheduler)
     seasonal_rail.register(scheduler)
     watch_history_ingest.register(scheduler)
     year_in_review.register(scheduler)

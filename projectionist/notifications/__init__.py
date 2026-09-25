@@ -14,6 +14,10 @@ from projectionist.notifications.nudges import (
     recently_watched_context,
 )
 from projectionist.notifications.gifts import deliver_house_gift
+from projectionist.notifications.whisper import (
+    deliver_member_whispers,
+    format_whisper_why,
+)
 
 __all__ = [
     "deliver_notification",
@@ -24,4 +28,6 @@ __all__ = [
     "deliver_enthusiast_nudges",
     "recently_watched_context",
     "deliver_house_gift",
+    "deliver_member_whispers",
+    "format_whisper_why",
 ]

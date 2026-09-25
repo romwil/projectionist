@@ -17,6 +17,7 @@ const IN_APP_ROUTES = new Set([
   "/chat",
   "/search",
   "/inbox",
+  "/whisper",
   "/my-journey",
   "/join",
   "/setup",

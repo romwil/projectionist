@@ -34,6 +34,9 @@ own port, which proxies `/api` to `:8788`).
 - **Mocked e2e:** `npm run test:e2e` (needs `npx playwright install chromium` once). Playwright starts
   its **own** temp server via `node scripts/start-e2e-server.mjs` on **port 8799** (NOT 8788 — see
   `.cursor/rules/e2e-port-8788.mdc`) using the `.venv` python; no live Plex/LLM needed.
+- **UI & Testing Architecture:** [`.cursor/rules/ui-testing-architecture.mdc`](.cursor/rules/ui-testing-architecture.mdc)
+  is the source of truth for adversarial front-end testing (unit / Playwright / axe). Mocked
+  state toggles are not enough. Interactive UI QA still uses the skill on `:8792`.
 - **Full-stack QA layers** (CI, maintainer `:8792` sidecar, Interactive UI QA, pentest harness):
   [docs/superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md](docs/superpowers/specs/2026-07-29-feature-testing-environment-blueprint.md).
 
