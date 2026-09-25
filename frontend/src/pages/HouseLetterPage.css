@@ -1,0 +1,99 @@
+.house-letter-page {
+  max-width: 46rem;
+}
+
+.house-letter {
+  margin: 0 0 1.75rem;
+  padding: 1.5rem 1.6rem 1.35rem;
+  border-left: 3px solid var(--gold, #c9a227);
+  background: color-mix(in srgb, var(--panel, #1a1814) 88%, transparent);
+  border-radius: 0 12px 12px 0;
+}
+
+.house-letter-salutation,
+.house-letter-signoff {
+  margin: 0 0 1rem;
+  font-style: italic;
+  color: var(--muted, #b7aea0);
+}
+
+.house-letter-signoff {
+  margin: 1.25rem 0 0;
+}
+
+.house-letter-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.house-letter-body p {
+  margin: 0;
+  line-height: 1.65;
+  font-size: 1.05rem;
+}
+
+.house-letter-meta {
+  margin: 0.85rem 0 0;
+  font-size: 0.85rem;
+  color: var(--muted, #b7aea0);
+}
+
+.house-rail-block + .house-rail-block {
+  margin-top: 1.4rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid color-mix(in srgb, var(--border, #3a342c) 70%, transparent);
+}
+
+.house-rail-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  align-items: baseline;
+  margin-bottom: 0.65rem;
+}
+
+.house-rail-head h4 {
+  margin: 0;
+}
+
+.house-rail-when {
+  margin: 0;
+  color: var(--muted, #b7aea0);
+  font-size: 0.9rem;
+}
+
+.house-title-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+}
+
+.house-title-row p {
+  margin: 0;
+}
+
+.house-diary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+
+.house-diary-why {
+  margin: 0.25rem 0 0;
+  color: var(--muted, #b7aea0);
+}
+
+.house-gift-form {
+  display: grid;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.house-gift-form label {
+  display: grid;
+  gap: 0.3rem;
+}

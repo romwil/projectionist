@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### 1.36.7 — House letter and gifts
+
+The house writes a letter, not a tile wall: unwatched hours, dead weight, and disk, in the curator’s voice. Upcoming seasonal rails can be previewed and vetoed before they publish. The gift queue reuses the weekly newsletter / nudge cadence — one member, one title, confirm before it leaves. The trust diary links rematch, Investigate, and job cards.
+
+### Highlights
+- **Letter, not tiles.** Admin → House tells the owner story: how many hours nobody has sat with, what has been sitting long enough to weigh on disk, and what the disks actually hold. Nothing is purged from the letter.
+- **Seasonal preview + veto.** Upcoming holiday rails show their titles. Veto keeps one title off that rail. Restore puts it back. The calendar itself stays on Holidays.
+- **Gift queue.** Queue a title for one household member with a short why. Deliver now (after confirm) or wait for the weekly `gift_queue` task. Never a household blast.
+- **Trust diary.** Rematch skips and repairs, Investigate job cards, and recent house-care tasks in one timeline, each linking back.
+
+### Added
+- Owner `GET /api/admin/house/letter`, seasonal preview + veto, gift queue CRUD/deliver, and `GET /api/admin/house/trust-diary`.
+- Scheduler task `gift_queue` on the same weekly cadence as `member_newsletter` / `enthusiast_nudge`.
+- Admin → House (`/admin/house`) — letter, preview, queue, diary.
+
 ### H1 — Shell extract (craft)
 
 Continue the god-file peel after Wave 0 Libraries and Wave 2 chatLayout. Admin Overview, Connections, and Seerr leave ConfigPage the same way Household and Libraries already did. Chat chrome lives in ChatWorkspace; SPA routes live in AppRoutes. app.py registers spa, auth, and setup routers instead of defining those handlers inline. Behavior-neutral — no delight feature number.

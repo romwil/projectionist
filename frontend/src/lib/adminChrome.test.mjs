@@ -14,6 +14,7 @@ const configPage = [
   readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8"),
 ].join("\n");
 const holidaysPage = readFileSync(join(here, "../pages/HolidaysPage.jsx"), "utf8");
+const housePage = readFileSync(join(here, "../pages/HouseLetterPage.jsx"), "utf8");
 const tasksPage = readFileSync(join(here, "../pages/ScheduledTasksPage.jsx"), "utf8");
 const lobbyPage = readFileSync(join(here, "../pages/LobbyDisplayPage.jsx"), "utf8");
 const notificationsPage = readFileSync(
@@ -41,9 +42,11 @@ describe("admin chrome — Live Channels type and buttons", () => {
     assert.match(configPage, /className="primary"[\s\S]*?data-testid="library-sync-button"/);
   });
 
-  it("uses one primary per region on Holidays, Tasks, Lobby, and member send slots", () => {
+  it("uses one primary per region on Holidays, House, Tasks, Lobby, and member send slots", () => {
     assert.match(holidaysPage, /className="primary"[^>]*data-testid="holidays-add"/);
     assert.match(holidaysPage, /className="ghost"[\s\S]*?data-testid="holidays-restore-defaults"/);
+    assert.match(housePage, /className="primary"[^>]*disabled=\{saving\}[^>]*data-testid="house-gift-queue"/);
+    assert.equal((housePage.match(/className="primary"/g) || []).length, 1);
     assert.match(tasksPage, /className="primary"[\s\S]*?data-testid="warm-explore-preset"/);
     assert.match(tasksPage, /className="primary"[\s\S]*?data-testid="task-detail-run-now"/);
     assert.match(lobbyPage, /className="btn-link"[\s\S]*?data-testid="lobby-open-kiosk"/);
