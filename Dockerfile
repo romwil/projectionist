@@ -76,7 +76,7 @@ LABEL org.opencontainers.image.title="Projectionist" \
       org.opencontainers.image.revision="${VCS_REF}" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.source="https://github.com/romwil/projectionist" \
-      org.opencontainers.image.licenses="MIT"
+      org.opencontainers.image.licenses="AGPL-3.0-only"
 
 # File-level cache bust for release uniqueness (labels alone are not enough for
 # some consumers). Does NOT make Unraid Force Update pull by itself — Dockerman

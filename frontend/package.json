@@ -2,6 +2,7 @@
   "name": "projectionist-frontend",
   "private": true,
   "version": "1.36.0",
+  "license": "AGPL-3.0-only",
   "type": "module",
   "scripts": {
     "dev": "vite",

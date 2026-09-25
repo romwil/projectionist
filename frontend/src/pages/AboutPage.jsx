@@ -114,6 +114,28 @@ export default function AboutPage() {
           )}
         </section>
 
+        <section
+          className="explore-section about-license"
+          id="license"
+          aria-labelledby="about-license-heading"
+        >
+          <div className="explore-section-header">
+            <h2 id="about-license-heading">License</h2>
+          </div>
+          <p data-testid="about-license">
+            Projectionist’s code is licensed under the GNU Affero General Public License
+            v3.0 only (AGPL-3.0-only). The source is the{" "}
+            <a href={GITHUB_URL} target="_blank" rel="noreferrer">
+              GitHub repo
+            </a>
+            . Previous releases through 1.36.0 were MIT.
+          </p>
+          <p>
+            The name Projectionist and the logo are not a grant to call forks
+            “Projectionist.”
+          </p>
+        </section>
+
         <section className="explore-section" aria-labelledby="about-links-heading">
           <div className="explore-section-header">
             <h2 id="about-links-heading">Links</h2>
@@ -142,7 +164,7 @@ export default function AboutPage() {
             </li>
             <li>
               <a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noreferrer">
-                License · MIT
+                License · AGPL-3.0-only
               </a>
             </li>
           </ul>
