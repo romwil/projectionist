@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+Failed library syncs keep a short friendly error in job history. The stack trace stays in the server log.
+
+### Highlights
+- **Failed library sync no longer shows a stack trace.** Job history keeps a short friendly error so `GET /api/jobs` does not leak frames from the host.
+
+### Security
+- Failed `library_sync` jobs store `summary.failed` and a friendly `error`. `Job.to_dict()` never includes a `traceback` key or frame strings, including jobs persisted before this change (P3-MED-01).
+
 ## [1.36.2] — 2026-09-25
 
 TV and movie libraries are inside the container, read-write, so Investigate can see the files and Apply can rename them.
