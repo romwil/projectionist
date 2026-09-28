@@ -29,7 +29,7 @@ class SlidingWindowRateLimiter:
             if len(q) >= limit:
                 retry_after = max(1, int(window_seconds - (now - q[0])) + 1)
                 if len(self._hits) > HITS_CAP:
-                    self._evict_hits(cutoff)
+                    self._evict_hits(protect=(bucket, key))
                 raise HTTPException(
                     status_code=429,
                     detail="Too many requests",
@@ -37,16 +37,13 @@ class SlidingWindowRateLimiter:
                 )
             q.append(now)
             if len(self._hits) > HITS_CAP:
-                self._evict_hits(cutoff)
+                self._evict_hits(protect=(bucket, key))
 
-    def _evict_hits(self, cutoff: float) -> None:
-        empty = []
-        for bucket_key, hits in self._hits.items():
-            while hits and hits[0] < cutoff:
-                hits.popleft()
-            if not hits:
-                empty.append(bucket_key)
+    def _evict_hits(self, *, protect: Tuple[str, str] | None = None) -> None:
+        empty = [bucket_key for bucket_key, hits in self._hits.items() if not hits]
         for bucket_key in empty:
+            if protect is not None and bucket_key == protect:
+                continue
             del self._hits[bucket_key]
         overflow = len(self._hits) - HITS_CAP
         if overflow <= 0:
@@ -55,8 +52,14 @@ class SlidingWindowRateLimiter:
             self._hits.items(),
             key=lambda item: item[1][0] if item[1] else 0.0,
         )
-        for bucket_key, _hits in oldest[:overflow]:
+        evicted = 0
+        for bucket_key, _hits in oldest:
+            if evicted >= overflow:
+                break
+            if protect is not None and bucket_key == protect:
+                continue
             del self._hits[bucket_key]
+            evicted += 1
 
     def clear(self) -> None:
         with self._lock:

@@ -15,7 +15,7 @@ Library stats stay cheap, a second Sync click joins the job already running, and
 - `GET /api/library/stats` uses `library_counts()` (`total` from `items`) and still returns `last_sync`, cached Plex name, `knowledge_coverage`, and the sanitized payload (P2-HIGH-01).
 - `start_sync` is single-flight under `_lock`: a queued or running `library_sync` is returned as 200 with that job (P2-HIGH-02).
 - `Database.close()` runs `PRAGMA wal_checkpoint(PASSIVE)` after the writer serializer stops. Never `TRUNCATE`.
-- Identify `_identified_keys` is an `OrderedDict` capped at 4096 (P2-MED-01). Rate-limit buckets evict after `check()` when over 4096 (P2-MED-02).
+- Identify `_identified_keys` is an `OrderedDict` capped at 4096 (P2-MED-01). Rate-limit buckets evict empty and oldest keys after `check()` when over 4096, without applying the caller’s window cutoff to other buckets (P2-MED-02).
 
 ### Security
 - Failed `library_sync` jobs store `summary.failed` and a friendly `error`. `Job.to_dict()` never includes a `traceback` key or frame strings, including jobs persisted before this change (P3-MED-01).
