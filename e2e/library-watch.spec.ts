@@ -11,6 +11,14 @@ seg0.ts
 `;
 
 async function mockLibraryPlayback(page: import("@playwright/test").Page, extras: Record<string, unknown> = {}) {
+  // Oversized poster dimension (not a real bitmap) — layout must not use intrinsic size.
+  const hugePoster =
+    typeof extras.poster_url === "string"
+      ? extras.poster_url
+      : "data:image/svg+xml," +
+        encodeURIComponent(
+          `<svg xmlns="http://www.w3.org/2000/svg" width="2400" height="3600"><rect width="100%" height="100%" fill="#2a6ebb"/><text x="50%" y="50%" fill="#fff" font-size="220" text-anchor="middle">POSTER</text></svg>`,
+        );
   await page.route("**/api/library/playback/**", async (route) => {
     const req = route.request();
     const url = new URL(req.url());
@@ -30,7 +38,7 @@ async function mockLibraryPlayback(page: import("@playwright/test").Page, extras
           episode: null,
           can_resume: Boolean(extras.can_resume),
           next_episode: extras.next_episode ?? null,
-          poster_url: "",
+          poster_url: hugePoster,
           rating_key: "plex-949",
           plex_watch_url: "https://app.plex.tv/desktop/#!/server/mock/details?key=%2Flibrary%2Fmetadata%2Fplex-949",
         }),
@@ -92,6 +100,76 @@ test.describe("In-app library Play", () => {
     await expect(page.getByTestId("library-player")).toBeVisible();
   });
 
+  test("theater stays viewport-bound even with a huge poster", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto("/watch/plex-949");
+    const shell = page.getByTestId("watch-theater-shell");
+    await expect(shell).toBeVisible();
+    const metrics = await page.evaluate(() => {
+      const el = document.querySelector("[data-testid='watch-theater-shell']");
+      const video = document.querySelector("[data-testid='library-player-video']");
+      const poster = document.querySelector("[data-testid='library-player-stage-poster']");
+      if (!el || !video) return null;
+      const shellBox = el.getBoundingClientRect();
+      const videoBox = video.getBoundingClientRect();
+      const posterBox = poster?.getBoundingClientRect();
+      return {
+        shellH: shellBox.height,
+        shellW: shellBox.width,
+        videoH: videoBox.height,
+        videoW: videoBox.width,
+        posterH: posterBox?.height ?? 0,
+        docScrollH: document.documentElement.scrollHeight,
+        innerH: window.innerHeight,
+        innerW: window.innerWidth,
+      };
+    });
+    expect(metrics).not.toBeNull();
+    expect(metrics!.shellH).toBeLessThanOrEqual(metrics!.innerH + 1);
+    expect(metrics!.shellW).toBeLessThanOrEqual(metrics!.innerW + 1);
+    expect(metrics!.videoH).toBeLessThanOrEqual(metrics!.innerH + 1);
+    expect(metrics!.videoW).toBeLessThanOrEqual(metrics!.innerW + 1);
+    expect(metrics!.posterH).toBeLessThanOrEqual(metrics!.innerH + 1);
+    expect(metrics!.docScrollH).toBeLessThanOrEqual(metrics!.innerH + 2);
+    await expect(page.getByTestId("library-play-toggle")).toBeVisible();
+    // Center play shows when paused; autoplay may already be "playing" in Chromium.
+    const center = page.getByTestId("library-center-play");
+    if (await center.count()) {
+      await expect(center).toBeVisible();
+    }
+  });
+
+  test("Play button is actionable on the OSD", async ({ page }) => {
+    await page.goto("/watch/plex-949");
+    const playBtn = page.getByTestId("library-play-toggle");
+    await expect(playBtn).toBeVisible();
+    await playBtn.click();
+    await expect(playBtn).toBeEnabled();
+    await expect(page.getByTestId("library-player-error")).toHaveCount(0);
+  });
+
+  test("phone 390 keeps theater inside the viewport", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/watch/plex-949");
+    const metrics = await page.evaluate(() => {
+      const el = document.querySelector("[data-testid='watch-theater-shell']");
+      const video = document.querySelector("[data-testid='library-player-video']");
+      if (!el || !video) return null;
+      return {
+        shellH: el.getBoundingClientRect().height,
+        videoH: video.getBoundingClientRect().height,
+        docScrollH: document.documentElement.scrollHeight,
+        innerH: window.innerHeight,
+      };
+    });
+    expect(metrics).not.toBeNull();
+    expect(metrics!.shellH).toBeLessThanOrEqual(metrics!.innerH + 1);
+    expect(metrics!.videoH).toBeLessThanOrEqual(metrics!.innerH + 1);
+    expect(metrics!.docScrollH).toBeLessThanOrEqual(metrics!.innerH + 2);
+    await expect(page.getByTestId("library-osd-more")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Pop-out" })).toHaveCount(0);
+  });
+
   test("double-click right third shows +15s chip", async ({ page }) => {
     await page.goto("/watch/plex-949");
     const player = page.getByTestId("library-player");
@@ -101,13 +179,15 @@ test.describe("In-app library Play", () => {
     const x = box!.x + box!.width * 0.85;
     const y = box!.y + box!.height * 0.4;
     await page.mouse.dblclick(x, y);
-    await expect(page.getByRole("status")).toContainText("+15s");
+    await expect(page.getByTestId("library-skip-chip")).toContainText("+15s");
   });
 
-  test("pop-out URL and Escape leave the theater", async ({ page }) => {
+  test("More menu exposes Pop-out; Escape leaves the theater", async ({ page }) => {
     await page.goto("/chat");
     await page.goto("/watch/plex-949");
-    await expect(page.getByRole("button", { name: "Pop-out" })).toBeVisible();
+    await page.getByTestId("library-osd-more").click();
+    await expect(page.getByTestId("library-osd-menu")).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: "Pop-out" })).toBeVisible();
     await page.goto("/watch/plex-949/popout");
     await expect(page).toHaveURL(/\/watch\/plex-949\/popout/);
     await page.goto("/chat");
