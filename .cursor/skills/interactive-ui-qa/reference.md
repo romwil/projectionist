@@ -1208,9 +1208,9 @@ Dual-role: **member living-room first**, then a **full admin/owner second pass**
 
 - **roles:** `member`, `owner`
 - **tags:** `watch`, `delight`, `library`
-- **source:** `frontend/src/components/TitleDetailContent.jsx`
-- **steps:** Open an in-library title (full page + drawer). Confirm one gold primary **Play** (`title-detail-play`). Confirm Trailer / Rate / Watched as ghost secondaries. Open **More** (`title-detail-cta-more`) for Open in Plex + owner Delete last. At 390, Chat / Watch together appear in More.
-- **pass:** No equal-weight button salad; destructive never peers Play.
+- **source:** `frontend/src/components/TitleCtaBar.jsx`, `frontend/src/lib/titleCta.js`
+- **steps:** Open an in-library title (full page + drawer). Confirm one gold primary **Play** (`title-detail-play`). Confirm icon-forward secondaries in order Trailer → Review → Watched → Chat → Together (`watch-trailer-button`, `title-reviews-cta`, `title-watched-cta`, `chat-about-title-link`, `recommend-title-button`) with tooltip/aria-label on hover/focus. Open **More** (`title-detail-cta-more`) — menu portals as `title-detail-cta-more-menu` (does **not** expand the sheet). Confirm Open in Plex + owner Delete last. At 390 / compact drawer, Chat / Together collapse into More; secondaries are ≥44px icon-only.
+- **pass:** No equal-weight button salad; More overlays; destructive never peers Play; icons match DESIGN.md Material Symbols table.
 
 ### `title.episode-detail`
 

@@ -295,17 +295,19 @@ export default function ShowSeasonsPanel({
                                   className="title-cta title-cta-primary show-episode-play"
                                   data-testid={`show-episode-play-${epKey}`}
                                   aria-label={`Play ${code} ${ep.title}`}
+                                  title="Play in Projectionist"
                                 >
                                   Play
                                 </Link>
                               ) : null}
-                              {plexHref ? (
+                              {!playTo && plexHref ? (
                                 <a
                                   className="ghost show-episode-plex"
                                   href={plexHref}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   data-testid={`show-episode-plex-${epKey}`}
+                                  title="Open in Plex"
                                 >
                                   Open in Plex
                                 </a>
