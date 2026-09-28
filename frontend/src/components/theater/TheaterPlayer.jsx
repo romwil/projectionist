@@ -147,30 +147,44 @@ export default function TheaterPlayer({
     bumpOsd();
   }
 
-  const gesture = useRef(
-    createStageGesture({
+  const gestureRef = useRef(null);
+  const stageRef = useRef({
+    onStageActivate,
+    onStageDoubleActivate,
+    toggleFullscreen,
+  });
+  useEffect(() => {
+    stageRef.current = { onStageActivate, onStageDoubleActivate, toggleFullscreen };
+  }, [onStageActivate, onStageDoubleActivate]);
+
+  useEffect(() => {
+    const handle = createStageGesture({
       onSingle: (event) => {
         if (isTheaterChromeTarget(event.target)) return;
-        onStageActivate?.(event, zoneFromEvent(event));
+        const zone = skipZoneFromClientX(
+          (event.clientX ?? event.changedTouches?.[0]?.clientX ?? 0) -
+            (rootRef.current?.getBoundingClientRect()?.left || 0),
+          rootRef.current?.getBoundingClientRect()?.width || 0,
+        );
+        stageRef.current.onStageActivate?.(event, zone);
       },
       onDouble: (event) => {
         if (isTheaterChromeTarget(event.target)) return;
-        const zone = zoneFromEvent(event);
-        if (onStageDoubleActivate) {
-          onStageDoubleActivate(event, zone);
+        const rect = rootRef.current?.getBoundingClientRect();
+        const zone = skipZoneFromClientX(
+          (event.clientX ?? event.changedTouches?.[0]?.clientX ?? 0) - (rect?.left || 0),
+          rect?.width || 0,
+        );
+        if (stageRef.current.onStageDoubleActivate) {
+          stageRef.current.onStageDoubleActivate(event, zone);
         } else if (zone === "center") {
-          toggleFullscreen();
+          stageRef.current.toggleFullscreen();
         }
       },
-    }),
-  );
-
-  function zoneFromEvent(event) {
-    const root = rootRef.current;
-    const rect = root?.getBoundingClientRect();
-    const x = event.clientX ?? event.changedTouches?.[0]?.clientX ?? 0;
-    return skipZoneFromClientX(x - (rect?.left || 0), rect?.width || 0);
-  }
+    });
+    gestureRef.current = handle;
+    return () => handle.cancel?.();
+  }, []);
 
   function handlePointerMove(event) {
     const pos = { x: event.clientX, y: event.clientY };
@@ -204,7 +218,7 @@ export default function TheaterPlayer({
       onPointerDown={handlePointerMove}
       onPointerUp={(event) => {
         if (event.pointerType === "mouse" && event.button !== 0) return;
-        gesture.current(event);
+        gestureRef.current?.(event);
       }}
       onKeyDown={handleKeyDown}
     >

@@ -94,7 +94,10 @@ class AuthTests(unittest.TestCase):
             set(body.keys()),
             {"features", "auth_methods", "setup_state", "authenticated", "user"},
         )
-        self.assertEqual(set(body["features"].keys()), {"multi_user_enabled"})
+        self.assertEqual(
+            set(body["features"].keys()),
+            {"multi_user_enabled", "access_requests_enabled"},
+        )
         for key in (
             "household_domain",
             "seerr",
