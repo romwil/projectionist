@@ -121,6 +121,7 @@ import {
 import { mergeRailSeedCards, takeRailSeed } from "./lib/railChatSeed.js";
 import { buildWatchlistLookup } from "./lib/watchlistKeys.js";
 import { applyOptimisticPinToggle, upsertPin } from "./lib/optimisticWatchlist.js";
+import { startVisibleBusyPoll, syncToastIsOpen } from "./lib/visibleBusyPoll.js";
 import ChatWorkspace from "./components/ChatWorkspace";
 import { useBulkActionProgress } from "./components/BulkActionProgress";
 import { useAuthGate } from "./components/UserMenu";
@@ -744,10 +745,8 @@ export default function App() {
       })
       .catch(() => {});
     refreshSavedShelf();
-    const interval = setInterval(refreshJobs, 5000);
     const nightInterval = setInterval(() => setNightOwl(isNightOwlHour()), 60_000);
     return () => {
-      clearInterval(interval);
       clearInterval(nightInterval);
     };
   }, [
@@ -783,6 +782,12 @@ export default function App() {
     }
     jobsRunningRef.current = running;
   }, [jobs, refreshReviewData, glanceShown]);
+
+  const chatSyncToastOpen = syncToastIsOpen(jobs);
+  useEffect(() => {
+    if (!chatSyncToastOpen) return undefined;
+    return startVisibleBusyPoll(refreshJobs, { isBusy: () => true });
+  }, [chatSyncToastOpen, refreshJobs]);
 
   useEffect(() => {
     if (!loading) return;

@@ -87,6 +87,19 @@ test.describe("Admin maintenance dashboard", () => {
     await expect(page.getByTestId("advanced-mcp")).toBeVisible();
   });
 
+  test("Identify settings say a clip leaves the LAN and test does not rename", async ({ page }) => {
+    await page.goto("/admin/libraries");
+    await expect(page.getByRole("heading", { name: "Libraries", level: 1 })).toBeVisible();
+    const identify = page.getByRole("region", { name: "Identify" });
+    await identify.scrollIntoViewIfNeeded();
+    await expect(identify.getByRole("heading", { name: "Identify", exact: true })).toBeVisible();
+    await expect(identify.getByText(/clip leaves the LAN/i)).toBeVisible();
+    await expect(identify.getByRole("button", { name: "Test Identify" })).toBeVisible();
+    await expect(identify.getByRole("button", { name: "Save Identify settings" })).toBeVisible();
+    await identify.getByRole("button", { name: "Test Identify" }).click();
+    await expect(identify.getByRole("status")).toContainText(/does not rename files/i);
+  });
+
   test("library sync card is on sync route", async ({ page }) => {
     await page.goto("/admin/sync");
     await expect(page.getByTestId("library-sync-card")).toBeVisible();
