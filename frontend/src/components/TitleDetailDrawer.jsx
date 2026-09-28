@@ -97,6 +97,11 @@ function getFocusableElements(root) {
         event.preventDefault();
         // Do not dismiss while a full remove is running or the summary is open.
         if (interactions.deleting || interactions.removalSummary) return;
+        // Portaled More / peer menus live on document.body above the sheet —
+        // let their Escape handler close first so More does not also close the drawer.
+        if (document.querySelector('[aria-expanded="true"][aria-haspopup="menu"]')) {
+          return;
+        }
         onClose?.();
         return;
       }

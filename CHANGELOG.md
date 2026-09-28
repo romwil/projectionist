@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [1.37.5] — 2026-09-28
+
+Title sheet **More** actually opens again — the overflow menu was portaling behind the drawer.
+
+### Highlights
+- **More menu visible on the mini sheet.** Pressing ⋯ on a title drawer now shows Open in Plex (and the rest of the overflow) instead of appearing to do nothing.
+- **Escape closes More first.** Esc dismisses the overflow menu without also slamming the title sheet shut.
+
+### Fixed
+- Portaled `.title-detail-cta-menu` z-index raised from 80 → 1000 so it stacks above the title drawer scrim (85) / panel (90).
+- `TitleDetailDrawer` Escape handler skips close while a `aria-haspopup="menu"` trigger is expanded.
+
+### Verification
+- Frontend unit: `titleCta.test.mjs` (portal z-index vs drawer panel); `bulkLibraryDelete.test.mjs` asserts delete CTA lives on `TitleCtaBar`.
+- Playwright: `e2e/title-cards.spec.ts` — title sheet More opens portaled Open in Plex above the drawer; Escape keeps the sheet open.
+
 ## [1.37.4] — 2026-09-28
 
 Title mini sheets stop looking like a button salad: one gold Play, icon-forward secondaries with tooltips, and a More menu that overlays instead of shoving the sheet apart.
