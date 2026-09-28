@@ -1400,17 +1400,15 @@ def start_library_sync(user=Depends(require_role("owner"))) -> Dict[str, Any]:
 @app.get("/api/library/stats")
 def library_stats(user=Depends(get_current_user_dep)) -> Dict[str, Any]:
     db = _db()
-    items = db.all_library_items()
-    movies = sum(1 for i in items if i["media_type"] == "movie")
-    shows = sum(1 for i in items if i["media_type"] == "show")
+    counts = db.library_counts()
     settings = _settings()
     plex_server_name = ""
     if settings.plex_url and settings.plex_token:
         plex_server_name = cached_plex_friendly_name(settings.plex_url, settings.plex_token, timeout=5)
     payload = {
-        "total": len(items),
-        "movies": movies,
-        "shows": shows,
+        "total": int(counts.get("items") or 0),
+        "movies": int(counts.get("movies") or 0),
+        "shows": int(counts.get("shows") or 0),
         "last_sync": db.get_sync_state("last_sync"),
         "plex_server_name": plex_server_name or None,
         # Phase A data surface for Admin/Explore knowledge-depth UI (Phase D).

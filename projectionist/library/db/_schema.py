@@ -7,6 +7,7 @@ single ``Database`` class in ``projectionist/library/db/__init__.py``.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import time
 from pathlib import Path
@@ -27,6 +28,8 @@ from ._shared import (
     T,
     run_with_db_lock_retry,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class SchemaMigrationsMixin:
@@ -69,10 +72,15 @@ class SchemaMigrationsMixin:
         return self._write_serializer.stats()
 
     def close(self) -> None:
-        """Drain and stop the write serializer (process shutdown)."""
+        """Drain the write serializer, then checkpoint WAL without truncating."""
         serializer = getattr(self, "_write_serializer", None)
         if serializer is not None:
             serializer.shutdown()
+        try:
+            with self.connect() as conn:
+                conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+        except Exception as error:  # noqa: BLE001 — shutdown must not raise
+            logger.warning("WAL PASSIVE checkpoint on close failed: %s", error)
 
     def _init_schema(self) -> None:
         from .migrations import run_migrations
