@@ -596,6 +596,11 @@ class NotificationPlatformTests(unittest.TestCase):
         self.assertGreaterEqual(result["created"], 1)
         unread = self.db.count_unread_notifications(owner["id"])
         self.assertGreaterEqual(unread, 1)
+        inbox = self.db.list_notifications_for_user(owner["id"], limit=5)
+        titles = " ".join(str(item.get("title") or "") for item in inbox)
+        bodies = " ".join(str(item.get("body") or "") for item in inbox)
+        self.assertNotIn("download complete", f"{titles} {bodies}".lower())
+        self.assertNotIn("Now in your library", titles)
 
 
 if __name__ == "__main__":

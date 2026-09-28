@@ -53,6 +53,8 @@ const env = {
   PORT,
   PROJECTIONIST_SKIP_DOTENV: "1",
   CURATORX_SKIP_DOTENV: "1",
+  // Prefer this checkout over an editable install that may point at another worktree.
+  PYTHONPATH: [ROOT, process.env.PYTHONPATH || ""].filter(Boolean).join(path.delimiter),
   // Mocked e2e is an already-provisioned LAN app, not first-boot SETUP_MODE.
   PROJECTIONIST_SETUP_STATE: process.env.PROJECTIONIST_SETUP_STATE || "active",
 };

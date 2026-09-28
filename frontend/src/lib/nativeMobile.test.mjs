@@ -8,7 +8,7 @@ import { readAllStyles } from "./readStyles.mjs";
 const here = dirname(fileURLToPath(import.meta.url));
 const styles = readAllStyles();
 const indexHtml = readFileSync(join(here, "../../index.html"), "utf8");
-const appJsx = readFileSync(join(here, "../App.jsx"), "utf8");
+const appJsx = readFileSync(join(here, "../components/ChatWorkspace.jsx"), "utf8");
 
 describe("native mobile tokens and global touch chrome", () => {
   it("exposes shared tap and input-size tokens", () => {
@@ -232,7 +232,7 @@ describe("narrow pane fit (Simple Browser + phone)", () => {
 });
 
 describe("New reply chip stays above the composer", () => {
-  it("mounts as a sibling between transcript and composer in App.jsx", () => {
+  it("mounts as a sibling between transcript and composer in ChatWorkspace", () => {
     const workspace = appJsx.match(/<main className="workspace-main"[^>]*>[\s\S]*?<\/main>/)?.[0] || "";
     const scrollAt = workspace.indexOf("chat-scroll-region");
     const chipAt = workspace.indexOf("<NewReplyChip");

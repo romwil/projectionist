@@ -62,6 +62,45 @@ describe("explore and recommendations responsive layout", () => {
     assert.match(styles, /\.recommendations-inbox\s*\{[^}]*min-width:\s*0/s);
   });
 
+  it("places unfinished leftover runtime and afterglow review rails on Explore", () => {
+    assert.match(explorePage, /id="unfinished"/);
+    assert.match(explorePage, /id="afterglow"/);
+    assert.match(explorePage, /getExploreFeedUnfinished/);
+    assert.match(explorePage, /getExploreFeedAfterglow/);
+    assert.match(explorePage, /Leftover runtime you can still finish/);
+    assert.match(explorePage, /Still warm — a few questions while the credits fade/);
+    assert.match(explorePage, /Review while it's warm/);
+    const unfinishedIdx = explorePage.indexOf('id="unfinished"');
+    const afterglowIdx = explorePage.indexOf('id="afterglow"');
+    const revisitIdx = explorePage.indexOf('id="revisit-these"');
+    assert.ok(unfinishedIdx > 0 && afterglowIdx > unfinishedIdx);
+    assert.ok(revisitIdx > afterglowIdx);
+    assert.match(explorePage, /idleDays: 60/);
+    const unfinishedBlock = explorePage.slice(unfinishedIdx, afterglowIdx);
+    assert.match(unfinishedBlock, /Leftover runtime you can still finish/);
+    assert.doesNotMatch(unfinishedBlock, /haven.t touched in over two months/);
+    const revisitBlock = explorePage.slice(revisitIdx, revisitIdx + 400);
+    assert.match(revisitBlock, /haven.t touched in over two months/);
+  });
+
+  it("places tonight's table after continue watching and before leftover rails", () => {
+    assert.match(explorePage, /id="tonight-table"/);
+    assert.match(explorePage, /getExploreFeedTonightTable/);
+    assert.match(explorePage, /two unwatched seats and one comfort/);
+    const continueIdx = explorePage.indexOf('id="continue-watching"');
+    const tonightIdx = explorePage.indexOf('id="tonight-table"');
+    const unfinishedIdx = explorePage.indexOf('id="unfinished"');
+    const afterglowIdx = explorePage.indexOf('id="afterglow"');
+    const revisitIdx = explorePage.indexOf('id="revisit-these"');
+    assert.ok(continueIdx > 0 && tonightIdx > continueIdx);
+    assert.ok(unfinishedIdx > tonightIdx);
+    assert.ok(afterglowIdx > unfinishedIdx);
+    assert.ok(revisitIdx > afterglowIdx);
+    const tonightBlock = explorePage.slice(tonightIdx, unfinishedIdx);
+    assert.match(tonightBlock, /not leftover or afterglow/);
+    assert.doesNotMatch(tonightBlock, /Leftover runtime you can still finish/);
+  });
+
   it("puts tonight's double feature after the seasonal rail and omits Live", () => {
     assert.doesNotMatch(explorePage, /WhatsOnTonightHabit/);
     assert.doesNotMatch(explorePage, /liveWatchHref/);

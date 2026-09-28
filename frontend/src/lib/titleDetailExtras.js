@@ -107,7 +107,8 @@ export function reviewsCtaForDetail(detail) {
   }
   return {
     kind: "rate",
-    label: "Leave a review",
+    label: "Review",
+    tooltip: "Leave a review",
     href: null,
     action: "inline",
   };

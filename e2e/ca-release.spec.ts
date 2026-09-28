@@ -24,6 +24,12 @@ test.describe("CA release mocked flows", () => {
     await expect(page.getByTestId("workspace-main")).toBeVisible();
   });
 
+  test("chat shows a sync toast while a library job is running", async ({ page }) => {
+    await mockLibrarySyncJobs(page, [runningLibrarySyncJob()]);
+    await page.goto("/chat");
+    await expect(page.getByText(/Scanning Plex movies/i)).toBeVisible();
+  });
+
   test("config library sync card shows friendly phase label and percent", async ({
     page,
     request,

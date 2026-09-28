@@ -24,14 +24,17 @@ describe("llm usage UI smoke", () => {
   });
 
   it("wires model catalog API into ConfigPage cheaper-tier picks", () => {
-    const src = readFileSync(join(__dirname, "../pages/ConfigPage.jsx"), "utf8");
+    const src = [
+      readFileSync(join(__dirname, "../pages/ConfigPage.jsx"), "utf8"),
+      readFileSync(join(__dirname, "../pages/admin/ConnectionsSection.jsx"), "utf8"),
+    ].join("\n");
     assert.match(src, /getLlmModelCatalog/);
     assert.match(src, /llm-cheaper-picks/);
     assert.match(src, /renderModelPicker/);
   });
 
   it("registers Health page with usage tab redirect", () => {
-    const src = readFileSync(join(__dirname, "../main.jsx"), "utf8");
+    const src = readFileSync(join(__dirname, "../AppRoutes.jsx"), "utf8");
     assert.match(src, /HealthPage/);
     assert.match(src, /path="health"/);
     assert.match(src, /path="usage"/);

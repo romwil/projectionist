@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
+import { savedLibraryChatHref } from "./backNav.js";
 import {
   CHAT_SCROLL_REGION_CLASS,
   MESSAGE_CONTAINMENT_CLASSES,
   NEW_REPLY_CHIP_CLASS,
+  PHONE_PLAY_MAX_WIDTH,
+  holdableShelfPages,
   isHorizontallyContained,
+  isPhonePlayViewport,
   messageTextContainmentStyle,
+  pickResumeThread,
+  resumeChipFromThread,
 } from "./chatLayout.js";
 import { readAllStyles } from "./readStyles.mjs";
 
@@ -61,7 +67,7 @@ describe("new reply chip placement", () => {
   });
 
   it("renders as a sibling between the scroll region and the composer", () => {
-    const appJsx = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
+    const appJsx = readFileSync(new URL("../components/ChatWorkspace.jsx", import.meta.url), "utf8");
     const workspace = appJsx.match(/<main className="workspace-main"[^>]*>[\s\S]*?<\/main>/)?.[0] || "";
     assert.match(workspace, /<NewReplyChip\b/);
 
@@ -76,5 +82,76 @@ describe("new reply chip placement", () => {
     const opens = (betweenScrollAndChip.match(/<div\b/g) || []).length;
     const closes = (betweenScrollAndChip.match(/<\/div>/g) || []).length;
     assert.equal(opens, closes, "chat-scroll-region is closed before NewReplyChip");
+  });
+});
+
+describe("1.36.5 whisper/tonight chat home", () => {
+  it("treats 390 as a phone Play viewport and wider panes as desktop", () => {
+    assert.equal(PHONE_PLAY_MAX_WIDTH, 390);
+    assert.equal(isPhonePlayViewport(390), true);
+    assert.equal(isPhonePlayViewport(844), false);
+    assert.equal(isPhonePlayViewport(1024), false);
+  });
+
+  it("picks a resume chip for the latest other thread", () => {
+    const resume = pickResumeThread(
+      [
+        { id: "empty-now", thread_title: "New chat" },
+        { id: "last-night", thread_title: "Noir for Sunday" },
+      ],
+      "empty-now",
+    );
+    assert.equal(resume.id, "last-night");
+    const chip = resumeChipFromThread(resume);
+    assert.equal(chip.testId, "chat-resume-chip");
+    assert.equal(chip.action.type, "resume");
+    assert.equal(chip.action.threadId, "last-night");
+    assert.match(chip.label, /Resume Noir for Sunday/);
+  });
+
+  it("builds a holdable shelf from saved library pages without inventing titles", () => {
+    const shelf = holdableShelfPages(
+      [
+        { id: "p1", name: "Sunday stack" },
+        { id: "", name: "skip" },
+        { id: "p2", name: "  " },
+        { id: "p3", name: "Keepers" },
+      ],
+      { limit: 2 },
+    );
+    assert.deepEqual(
+      shelf.map((page) => page.id),
+      ["p1", "p3"],
+    );
+  });
+
+  it("saves to the holdable shelf without a prompt H1 and shows resume + shelf on chat home", () => {
+    const appJsx = readFileSync(new URL("../App.jsx", import.meta.url), "utf8");
+    const workspaceJsx = readFileSync(new URL("../components/ChatWorkspace.jsx", import.meta.url), "utf8");
+    const libraryJsx = readFileSync(new URL("../pages/LibraryPage.jsx", import.meta.url), "utf8");
+    assert.doesNotMatch(appJsx, /window\.prompt\(/);
+    assert.doesNotMatch(workspaceJsx, /window\.prompt\(/);
+    assert.match(workspaceJsx, /data-testid="holdable-shelf"/);
+    assert.match(workspaceJsx, /savedLibraryChatHref\(page\.id\)/);
+    assert.match(savedLibraryChatHref("sunday-stack"), /\/chat\?saved_library=/);
+    assert.doesNotMatch(workspaceJsx, /\/\?saved_library=/);
+    assert.doesNotMatch(libraryJsx, /\/\?saved_library=/);
+    assert.match(libraryJsx, /savedLibraryChatHref\(/);
+    assert.match(appJsx, /resumeChipFromThread/);
+    assert.match(appJsx, /refreshSavedShelf/);
+    assert.match(appJsx, /savedLibraryStartedRef\.current = false/);
+    assert.match(appJsx, /arrServiceConnected/);
+  });
+
+  it("pins the composer at 390 so Play cannot push it off the phone fold", () => {
+    const styles = readAllStyles();
+    assert.match(
+      styles,
+      /@media \(max-width: 390px\)[\s\S]*?\.composer[\s\S]*?position:\s*sticky/s,
+    );
+    assert.match(
+      styles,
+      /@media \(max-width: 390px\)[\s\S]*?\.composer[\s\S]*?margin-top:\s*auto/s,
+    );
   });
 });

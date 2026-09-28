@@ -2,6 +2,230 @@
 
 ## [Unreleased]
 
+## [1.37.6] — 2026-09-28
+
+Library Play actually streams again — episode (and movie) HLS no longer dies on the first child playlist with a silent 502.
+
+### Highlights
+- **TV episodes play through.** Hitting Play on a show or episode warms the reel and keeps buffering instead of stalling on a poster with nothing on the wire.
+- **Same fix for movies that hit the relative playlist shape.** Masters that hand out `session/…` URIs now resolve under Plex’s universal transcoder path.
+
+### Fixed
+- HLS rewrite treated browser `index.m3u8` as the playlist directory, so Plex-relative `session/{id}/base/index.m3u8` was proxied as `/session/…` on the PMS root (4xx → household 502). Relatives now resolve under `video/:/transcode/universal/`; bare `session/…` proxy paths get the same prefix on fetch.
+
+### Verification
+- Backend: `tests/test_library_playback.py` — relative `session/…` rewrite under universal/, `plex_fetch_path` prefix, `proxy_session_asset` fetch URL.
+
+## [1.37.5] — 2026-09-28
+
+Title sheet **More** actually opens again — the overflow menu was portaling behind the drawer.
+
+### Highlights
+- **More menu visible on the mini sheet.** Pressing ⋯ on a title drawer now shows Open in Plex (and the rest of the overflow) instead of appearing to do nothing.
+- **Escape closes More first.** Esc dismisses the overflow menu without also slamming the title sheet shut.
+
+### Fixed
+- Portaled `.title-detail-cta-menu` z-index raised from 80 → 1000 so it stacks above the title drawer scrim (85) / panel (90).
+- `TitleDetailDrawer` Escape handler skips close while a `aria-haspopup="menu"` trigger is expanded.
+
+### Verification
+- Frontend unit: `titleCta.test.mjs` (portal z-index vs drawer panel); `bulkLibraryDelete.test.mjs` asserts delete CTA lives on `TitleCtaBar`.
+- Playwright: `e2e/title-cards.spec.ts` — title sheet More opens portaled Open in Plex above the drawer; Escape keeps the sheet open.
+
+## [1.37.4] — 2026-09-28
+
+Title mini sheets stop looking like a button salad: one gold Play, icon-forward secondaries with tooltips, and a More menu that overlays instead of shoving the sheet apart.
+
+### Highlights
+- **Quieter title CTAs.** Trailer, Review, Watched, Chat, and Together share one compact row with consistent Material icons and hover/focus explanations — not five equal-weight long pills.
+- **More overlays, never expands.** The overflow menu portals next to the button, so opening it no longer pushes synopsis and seasons down the mini sheet.
+- **Same grammar everywhere.** Full title page, chat mini sheet, episode detail, poster overlay, and chat cards follow the locked order and terms in `docs/DESIGN.md`.
+
+### Changed
+- New shared `TitleCtaBar` + `frontend/src/lib/titleCta.js` catalog (icons, labels, tooltips, secondary order, phone overflow).
+- `TitleDetailContent` / `EpisodeDetailPage` use the shared bar; More uses `useAnchoredPopover` + portal (not `<details>`).
+- Poster overlay / TitleCard / episode list: Play stays primary; Open in Plex demoted when Play is present; Watch together / Trailer icons aligned.
+- Interactive UI QA `title.cta-hierarchy` checklist updated for portaled More + icon-forward secondaries.
+
+### Verification
+- Frontend unit: `titleCta.test.mjs`, `titleDetailExtras.test.mjs`.
+- `npm run lint` (0 errors) + `npm run build`.
+
+## [1.37.3] — 2026-09-28
+
+Title surfaces get the same intentional CTA grammar as Play theater, plus a real episode detail page on the show → seasons → episode path.
+
+### Highlights
+- **One gold primary on title sheets.** Play (or Add when not in library) owns the CTA row; Trailer / Rate / Watched stay secondary; Open in Plex and destructive owner tools live under **More** — including on the mini drawer sheet.
+- **Episode detail like Plex.** Season list titles open `/title/episode/{ratingKey}` with air date, runtime, watched, Play → `/watch/{rk}`, and previous/next episode. The gold Play on the row still jumps straight into theater.
+- **Design decisions written down.** `docs/DESIGN.md` now records Playback & Title surface choices (theater composition, CTA hierarchy, show→episode path) so the living-room bar stays intentional.
+
+### Changed
+- `TitleDetailContent` CTA row: primary / secondary / More menu; phone collapses Chat / Watch together into More.
+- `GET /api/library/tv/episode/{rating_key}` + `EpisodeDetailPage` + seasons title links.
+- Design doc section **Playback & Title surfaces**.
+
+### Verification
+- Playwright: `e2e/library-watch.spec.ts` (episode title → detail → Play; direct Play still works).
+- Frontend unit: `titleLinks.test.mjs` (episode path helper).
+
+## [1.37.2] — 2026-09-28
+
+Play theater is a living-room composition again: one viewport, picture first, quiet chrome — not a scrollable poster with eight equal buttons.
+
+### Highlights
+- **One screen, one picture.** `/watch` locks to the viewport. Poster art is a blurred cover backdrop behind the video — never the thing that makes the page scroll.
+- **Chrome that knows its job.** Primary = Play/Pause + scrubber + time. ±15 stays discreet (double-tap thirds still skip). CC and Fullscreen sit secondary. PiP, Pop-out, Open in Plex, and Back live under **More**.
+- **Paused invites you in.** A large center play glyph when the reel is paused; OSD auto-hides until you move or tap. Tab-hide no longer leaves a dead Play control.
+
+### Fixed
+- Theater shell is `position: fixed; inset: 0` / `100dvh` with document pin via `html:has([data-theater-mode])`. Stage poster is a cover `<img>`; `<video>` no longer carries a layout-breaking `poster` attribute.
+- Redesigned `LibraryPlayer` OSD hierarchy + center play affordance; More menu for overflow actions; honest resume / error / end states with Try again + Open in Plex.
+- `togglePlayback` re-arms via `begin()` when the stream was cleared after visibility stop.
+- Playwright asserts viewport-bound poster/stage, phone hides Pop-out from the primary row, and More exposes Pop-out.
+
+### Verification
+- Frontend unit: `theaterPlayer.test.mjs`.
+- Targeted Playwright (chromium, :8799): `e2e/library-watch.spec.ts` (viewport-bound poster, phone 390, Play actionable, More/Pop-out, skip chip, HLS non-thrash).
+
+## [1.37.1] — 2026-09-28
+
+Play no longer flashes controls then stalls, and each TV episode on the title page has its own Play.
+
+### Highlights
+- **In-app Play sticks the landing.** Opening `/watch` no longer remounts the HLS session on every status tick (flash of OSD → poster → blank). The reel stays attached through loading → ready → playing.
+- **Episode Play on the seasons list.** Each SxxExx row has an obvious **Play** (and the title is a play link) that opens `/watch/{episodeRatingKey}`. Show-level Play still picks on-deck / first unwatched. **Open in Plex** stays overflow; **Remove** stays owner-only and no longer the only action.
+
+### Fixed
+- `TheaterPlayer` keeps parent `onStatus` / `onHlsRef` / `onVideoRef` in refs so the HLS attach effect depends only on `src` (and `autoFullscreen`). Inline callbacks from `LibraryPlayer` no longer tear down hls.js on every re-render.
+- `LibraryPlayer` surfaces an honest stall message when the player reports `error`, and clears it when playback recovers.
+- `ShowSeasonsPanel` episode rows expose in-app Play (≥44px) before Remove; episode titles link to the same `/watch` path.
+
+### Verification
+- Frontend unit: `theaterPlayer.test.mjs`, `titleLinks.test.mjs`, `showSeasons.test.mjs`.
+- Targeted Playwright (chromium, :8799): `e2e/library-watch.spec.ts` including HLS non-thrash + episode Play → `/watch/{episodeKey}`.
+
+## [1.37.0] — 2026-09-28
+
+Play opens titles in Projectionist instead of handing off to Plex. New code is AGPL-3.0-only; already-shipped tags through 1.36.2 stay MIT. Login and job APIs show less of the house.
+
+### Highlights
+- **Play stays in the house.** Poster, title sheet, and cards open `/watch` in Projectionist. Plex still transcodes; the browser never sees the server token. **Open in Plex** stays as overflow when a stream will not start.
+- **AGPL-3.0-only going forward.** New code and future releases use the GNU Affero GPL v3.0 only. Household / Unraid CA / Hub stay a free self-host app. If you run a modified copy for other people over a network, you offer them the source. Already-shipped tags through 1.36.2 stay MIT.
+- **The login screen learns less about the house.** Guests see whether multi-user is on, whether they can ask for an invite, and how they can sign in — not household domain, proxy, or Seerr flags. Setup status is owner-only; members still get Radarr/Sonarr readiness for dock-drop.
+- **Failed library sync no longer shows a stack trace.** Job history keeps a short friendly error so `GET /api/jobs` does not leak frames from the host.
+
+### Changed
+- Project license is `AGPL-3.0-only` (official GNU text in `LICENSE`). About, README, Help, package metadata, and Docker labels match. The name and logo are not a grant to call forks “Projectionist.”
+- `GET /api/library/stats` uses `library_counts()` (`total` from `items`) and still returns `last_sync`, cached Plex name, `knowledge_coverage`, and the sanitized payload (P2-HIGH-01).
+- `start_sync` is single-flight under `_lock`: a queued or running `library_sync` is returned as 200 with that job (P2-HIGH-02).
+- `Database.close()` runs `PRAGMA wal_checkpoint(PASSIVE)` after the writer serializer stops. Never `TRUNCATE`.
+- Identify `_identified_keys` is an `OrderedDict` capped at 4096 (P2-MED-01). Rate-limit buckets evict empty and oldest keys after `check()` when over 4096, without applying the caller’s window cutoff to other buckets (P2-MED-02).
+- Config / Libraries / chat job polls use a shared visible-busy helper (2s while busy, 8s idle, `document.hidden` pause). Chat `listJobs` runs only while a sync toast is open (P2-HIGH-03). Live Channels status depends on a busy boolean so a running job cannot remount the poll. Library Sync keeps `syncingLibrary` in a ref so the first click is not cleared by a stale `listJobs` tick.
+- Primary Play CTA is an in-app `/watch/{play_rating_key}` link on posters, title detail / sheet, chat cards, and the ⋮ menu. Overflow remains **Open in Plex**. Show keys resolve to an on-deck or first unwatched episode.
+
+### Security
+- Failed `library_sync` jobs store `summary.failed` and a friendly `error`. `Job.to_dict()` never includes a `traceback` key or frame strings, including jobs persisted before this change (P3-MED-01).
+- Plex webhook secrets compare SHA-256 of both sides so a length mismatch is 401, not 500. Empty secret or header is still 401. Header remains `X-Projectionist-Webhook-Secret` (P3-MED-03).
+- Unauthenticated `GET /api/features` returns only `features.multi_user_enabled`, `features.access_requests_enabled`, `auth_methods`, `setup_state`, `authenticated: false`, and `user: null` (P4-MED-01). When OIDC is a sign-in method, `oidc_provider_name` is included as the login button label. The login screen can hide Need an invite? when access requests are off.
+- `GET /api/setup/status` requires the owner role. Signed-in members get Radarr/Sonarr readiness from `features.arr` (P4-MED-04).
+- Identify test clips resolve under configured media roots (Plex / Radarr / Sonarr / `tv_root` / `movies_root` / `/tv` / `/movies`). A raw path is used only when it matches a snapshot row; `file_id` prefers the snapshot `resolved_path` so a mapped Sonarr path still works. Paths outside those roots return 400 (P3-MED-04).
+
+### Fixed
+- `/about#license` and `/about#release-notes` scroll to those sections after the shell is ready, instead of landing at the top.
+- Saved-library chips on chat home and Library continue that response on `/chat?saved_library=…` instead of dropping the query at the `/` redirect. A second chip on `/chat` starts that page; the first consume no longer leaves the starter stuck.
+- Members who cannot read `/api/setup/status` still get Radarr/Sonarr dock-drop from `features.arr` instead of looking disconnected.
+
+### Added
+- Identify settings and **Test Identify** on Admin → Libraries, with `IDENTIFY_LEAVES_LAN` (`IDENTIFY_CLIP_SECONDS` = 12). Test honesty is `renamed: false` (P4-MED-03).
+- In-app library Play: `POST /api/library/playback/start` plus session playlist/seek/progress/stop proxy. Shared `TheaterPlayer`, `LibraryPlayer`, `/watch/:ratingKey` (pop-out alias). Phone 390 uses double-tap ±15s, 44px safe-area OSD, fullscreen + PiP (no `plex://` primary, no pop-out).
+- Maintainer ops: `scripts/unraid-docker-directory-migrate.sh` (GUI Docker-off, cache-pool directory data-root, never Enable Docker / never stop projectionist or smartmap) and `docs/ops/UNRAID-API.md` (GraphQL telemetry and container start/stop only).
+
+### Verification
+- Backend: 2,357 passed, 6 skipped, 44 subtests passed; 77.04% coverage (74% required).
+- Frontend unit: 831 passed; ESLint 0 errors (pre-existing warnings OK); production Vite build passed.
+- Focused: `tests/test_library_playback.py`, `tests/test_license.py`, public `/api/features` sanitizer + OIDC login label; `theaterPlayer.test.mjs`, `titleLinks.test.mjs`.
+- Targeted Playwright (chromium, :8799) from the Play session: `e2e/library-watch.spec.ts`; mobile `e2e/mobile-native.spec.ts` in-app Play.
+
+## [1.36.2] — 2026-09-25
+
+TV and movie libraries are inside the container, read-write, so Investigate can see the files and Apply can rename them.
+
+### Highlights
+- **TV and movie libraries are bind-mounted read-write.** The container sees `/tv` and `/movies` (and the same host path on Unraid) so Investigate can read files and Apply can rename them on disk. Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
+- **Investigate maps Sonarr paths before it grabs stills.** `/tv/Show/...` is tried as-is, then the Sonarr root is rewritten onto configured TV/Sonarr roots and Plex library locations. The first existing file wins. Rows that still cannot be read fail instead of completing Uncertain with no stills.
+
+### Added
+- `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (env wins over settings) plus existing `TV_ROOT` / `MOVIES_ROOT`. Owner Settings: **Connections → Library folders** and Advanced disk paths (`tv_root` / `movies_root`). Paths are not secrets.
+- Unraid CA Path mounts, `docker-compose.yml`, `docker-compose.unraid.yml`, and `rollout.sh` bind those host folders **read-write** at `/tv` and `/movies` (same-path too on Unraid). Never `:ro`.
+
+### Fixed
+- Episode investigation translates Sonarr episode paths for ffmpeg stills, runtime, OSHash, and Identify. Unreadable paths are `stills_error=unreadable_path` (failed, not completed). Unknown-scope rows no longer say “other show.”
+- Investigate path mapper treats `tv_root` / `movies_root` as first-class local roots, then `/tv` and `/movies`.
+
+### Verification
+- Backend: 2,310 passed, 6 skipped, 36 subtests passed; 77.02% coverage (74% required).
+- Frontend unit: 805 passed; ESLint 0 errors (pre-existing warnings OK); production Vite build passed.
+- Focused: `tests/test_config_store.py` (branded media env wins); `tests/test_episode_investigate.py::PathMapTests`.
+
+## [1.36.1] — 2026-09-25
+
+Investigate stills ship inside the image, review is a table you can scan, idle Ready 0% is gone, and first-boot plus chat stay on the LAN allowlist.
+
+### Highlights
+- **Investigate stills work in the container.** New images ship `ffmpeg` and `ffprobe` on PATH, so Automat no longer needs a host binary. `FFMPEG_PATH` / `FFPROBE_PATH` still override.
+- **Investigate review stays scannable.** Eighty episode rows are a compact table, not stacked cards. Finished jobs say the run ended. Idle Apply no longer shows a mystery Ready 0% card. If this container has no ffmpeg, the summary says so — not “install a host binary.”
+- **First-boot stays on the LAN.** If the database is down, household APIs no longer fail open. Setup from a public or Docker-NAT address cannot probe Plex/TMDB or create the owner unless `PROJECTIONIST_OWNER_PASSWORD` is already on the host.
+- **Chat links stay on the allowlist.** Assistant markdown only follows http(s), in-app title and library paths, and hash jumps. Other schemes show as plain text. Streaming chat now POSTs the message in the body, capped at 8,000 characters.
+
+### Changed
+- Docker runtime installs the Debian `ffmpeg` package (includes `ffprobe`) in an early BuildKit-cached apt layer so app `COPY` does not re-download it. Capabilities resolve `ffmpeg` / `ffprobe` on PATH; `FFMPEG_PATH` / `FFPROBE_PATH` still override.
+
+### Security
+- Auth middleware returns `503 Service unavailable` for `/api/*` (except `/api/health` and `/api/features`) when the job manager or database cannot be opened, instead of passing the request through.
+- SETUP_MODE applies the same WAN interlock as single-owner ACTIVE. Plex/TMDB connection tests are allowlisted only when handshake classification is LAN. Commit from a WAN or `public_failsafe` peer requires `PROJECTIONIST_OWNER_PASSWORD`.
+- Assistant markdown hrefs allow `http:`, `https:`, in-app `/title` and `/library` paths, and `#` fragments. Other schemes (`javascript:`, `data:`, `vbscript:`) render as text. `rehype-sanitize` is on; `rehype-raw` is not.
+- `POST /api/chat/stream` takes `ChatRequest` JSON (`message` 1–8000 characters). The same cap applies to `POST /api/chat`. `GET /api/chat/stream` returns 410 for one release (query-string messages are gone). The client uses fetch + a stream reader and does not reconstruct `EventSource` after a dropped socket.
+
+### Fixed
+- Investigate review uses a dense table with sticky Apply/Cancel. Admin execution cards hide empty idle snapshots (including Investigate Apply `Nothing to apply` / Ready 0%). Terminal jobs stop the “since last completion” timer and say the run ended. Apply is gold only when at least one same-show row is selected.
+- Investigate no longer tells owners to install a host ffmpeg binary. Missing ffmpeg is a container PATH / image problem; `FFMPEG_PATH` / `FFPROBE_PATH` remain overrides. The review summary explains empty evidence (no stills, no vision, no Identify) when fusion has already finished.
+
+### Verification
+- Backend: 2,301 passed, 6 skipped, 36 subtests passed; 76.69% coverage (74% required).
+- Frontend unit: 805 passed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_episode_investigate.py::CapabilitiesTests`; `frontend/src/lib/episodeInvestigate.test.mjs`; `frontend/src/lib/adminExecution.test.mjs`.
+
+## [1.36.0] — 2026-09-25
+
+The house can investigate a mislabeled episode, rematch a movie that is not who it claims, sit with afterglow and tonight's table, whisper a pick to one member, write the owner a letter, and walk a title like a scholar — all before anything leaves the shelf.
+
+### Highlights
+- **Investigate, don't trust the filename.** Pick a show on Admin → Libraries. Stills, runtime, and Identify are evidence; `SxxEyy` stays a claim. Apply remaps the same show only.
+- **Rematch when the folder already belongs to someone else.** Libraries scans Plex vs Radarr vs path. Repair the miss speaks in human copy. Arrivals are Good News, not download-complete.
+- **An evening that remembers.** Afterglow asks while it's warm. Unfinished is leftover runtime. Tonight's table seats two short unwatched titles and one comfort. Each member gets a whisper with a twelve-word why. The phone composer stays pinned.
+- **A letter and a walk.** The house writes unwatched hours and dead weight as a letter, not tiles. Chat footnotes open a sheet. Scholar walks stay in conversation.
+
+### Added
+- Episode investigation on Admin → Libraries (`episode-investigate-card`): ffmpeg stills vs TMDB, OSHash → OpenSubtitles, runtime; Certain/Likely start selected; Apply remaps same-show only (Sonarr episode-file + Plex-proper names + refresh + undo).
+- ACRCloud Identify lane (~12s clip from 40% in, HMAC `/v1/identify`); miss does not fail the job; new-show attach requires per-row opt-in.
+- Rematch studio + Repair the miss (`GET /api/admin/rematch/scan`, skip/retry/repairs) and persona-voiced Good News arrivals.
+- Explore rails: afterglow, unfinished (leftover runtime, not 60-day idle), and tonight's table (two unwatched under 2h + one comfort).
+- Named-member whisper inbox (`GET /api/whispers`, `/whisper`) with a 12-word why; resume chip and holdable Save-to-library shelf; phone Play (`plex://preplay`) with pinned composer at 390×844.
+- House letter, seasonal preview + veto, gift queue, and trust diary (`/admin/house`).
+- Scholar footnote sheet from `[^1]`; village pending copy (“they have not called back”); course resume pointer; six chat walks (lineage, canon, map, compare-two-rated, silent seminar, consented gap list).
+- Authored Interactive UI QA IDs for Investigate, rematch, afterglow/unfinished, tonight's table, whisper, house letter, scholar footnotes, and H1 admin chrome.
+
+### Changed
+- H1 shell extract: Admin Overview / Connections / Seerr leave ConfigPage; chat chrome lives in `ChatWorkspace`; SPA routes in `AppRoutes`; `app.py` registers spa, auth, and setup routers. Behavior-neutral.
+- Craft hygiene (docs): Phase 6 / 1.36 Delight spec, wishlist pointer, Live Channels deferred truth-up, architecture-letter still-open refresh, CuratorX keep-vs-sunset note.
+- UI & Testing Architecture rule: adversarial triad (unit / Playwright / axe), semantic locators, empty/loading/overflow, hostile paste, races, overlay Escape. Interactive UI QA stays authored checklists on `:8792`.
+
+### Verification
+- Backend: 2,288 passed, 6 skipped, 36 subtests passed; 76.64% coverage (74% required).
+- Frontend unit: 795 passed; ESLint 0 errors (135 warnings pre-existing); production Vite build passed.
+- Focused: `tests/test_release_notes_static.py` (H1 spa_routes patch), `frontend/src/lib/whisperInbox.test.mjs` (ChatWorkspace / AppRoutes).
+
 ## [1.35.5] — 2026-09-22
 
 Register in Radarr now tells you whether a title is already tracked or whether Radarr already owns that folder under a different movie — no more raw 400 JSON dumps.

@@ -16,6 +16,7 @@ Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [P
 | Search your collection (and beyond) | [Search](/search) |
 | Browse rails & Pulse | [Explore](/explore) |
 | Watch household Live TV | [Live](/live) (when the owner has stations on the air) |
+| Play a library title in Projectionist | Tap **Play** on a poster, card, or title sheet — `/watch` |
 | Recommendations & notices | [Inbox](/inbox) |
 | Achievements & cinema pathways | [My Journey](/my-journey) |
 | Follow and explain title connections | [Related titles](/explore/related) |
@@ -25,6 +26,7 @@ Deep dive: [CURATOR_KNOWLEDGE.md](CURATOR_KNOWLEDGE.md) · [About](/about) · [P
 | Curated shelves | [Lists & playlists](/lists) |
 | Personal prefs | [Settings](/settings) |
 | Version & release notes | [About](/about) |
+| License | [About](/about#license) · AGPL-3.0-only |
 | Data use | [Privacy](/privacy) |
 
 Keyboard cheat sheet: press `?` (outside a text field). Slash commands in chat: type `/help`.
@@ -238,7 +240,13 @@ Three shelves, three different promises:
 
 Use the grip's **Add to list or playlist** chooser to place a title in more than one shelf.
 
-**The ⋮ action grip** is repeated on posters, title-card overlays, and list rows on purpose — so "open details," Plex playback when available, watchlist pinning, list/playlist membership, household recommendations, **Recommend like this in chat**, discovery, and **Report issue** all live in one place whether you browse with mouse, keyboard, or touch. The centered **Play** control appears only when a card is a library title with a playable Plex rating key; external discovery cards never show a dead Play action.
+**The ⋮ action grip** is repeated on posters, title-card overlays, and list rows on purpose — so "open details," **Play** in Projectionist when available, **Open in Plex** as overflow, watchlist pinning, list/playlist membership, household recommendations, **Recommend like this in chat**, discovery, and **Report issue** all live in one place whether you browse with mouse, keyboard, or touch. The centered **Play** control appears only when a card is a library title with a playable Plex rating key; it opens `/watch` in this app (phone included — not the `plex://` handoff). External discovery cards never show a dead Play action.
+
+### Play in Projectionist
+
+**Play** starts the title here. Movies and episodes play as themselves; a show card plays the on-deck or first unwatched episode. Projectionist asks Plex for an HLS transcode and keeps the Plex token on the server.
+
+On the player: Space or `k` play/pause; `j` / `l` or the arrows skip 15 seconds; double-click (or double-tap on a phone) the left or right third to skip, the center to go fullscreen; `f` fullscreen; `m` mute; `c` captions. Escape closes captions, then fullscreen, then leaves the player. Desktop can pop the player into its own window; a phone uses fullscreen and picture-in-picture so chat can stay up. If you were more than two minutes in, you get **Resume** or **Start over**. If the stream will not start, **Open in Plex** is still there.
 
 **Mark as watched — a guided one-tap.** For any title that lives in your Plex library, the grip offers **Mark as watched**. Say you just finished *Heat* on the TV downstairs but forgot to press play in Plex — open the ⋮ menu on its poster and choose **Mark as watched**. Projectionist records the view and tells Plex, so the poster's watched overlay turns on and the title stops showing up as "unwatched" everywhere it appears. Changed your mind, or marked the wrong one? The same spot now reads **Mark as unwatched** and reverses it. The action only appears on real library titles (the same rule as **Play**) — discovery cards for things you don't own never show it — and, like everything else, it's tied to *your* signed-in Plex context.
 
@@ -271,6 +279,18 @@ If you don't have a link yet, use **Need an invite?** on `/login`. The owner see
 
 ---
 
+## License
+
+Projectionist’s **code** is licensed under the GNU Affero General Public License v3.0 only (`AGPL-3.0-only`). The source is the [GitHub repo](https://github.com/romwil/projectionist). Releases **through 1.36.2** were MIT — those shipped Hub tags stay MIT.
+
+Unraid Community Applications and Docker Hub stay a **free self-host** household app. If you run a modified copy for other people over a network, you must offer them the corresponding source.
+
+The name **Projectionist** and the logo stay Will’s. The license is not a grant to call a fork “Projectionist.”
+
+See [About](/about#license) for the in-app note.
+
+---
+
 ## For owners — curation & scheduler
 
 Owners (or single-workspace installs with no login) also configure sync and idle enrichment. This half is hidden from members and guests, so API and config depth is welcome here.
@@ -280,6 +300,14 @@ Owners (or single-workspace installs with no login) also configure sync and idle
 Tune **name**, **identity**, **presets**, and **behavior sliders** — how the curator sounds when it recommends from your library. Builtin presets carry locked **nicknames** (The Professor, Spark, The Steward, The Host, The Ledger); the picker and Admin cards show **Nickname — Name**. This page is intentionally **not** a prompt editor: you cannot view or rewrite internal system prompts, tool lists, or function schemas from Admin. Capability wiring (search, gaps, acquisition, village consults, bad-media replace, etc.) is maintained in Projectionist releases.
 
 If an older install still has a legacy custom prompt, Admin shows a one-click **reset to slider-based persona** instead of exposing the raw text.
+
+### Library folders (Investigate / ffmpeg)
+
+Bind the host TV and movie libraries **read-write** into the container (`/tv` and `/movies`, or the same host path). Investigate Apply renames episode files on disk — a read-only bind will fail. Set **Admin → Connections → Library folders** (`tv_root` / `movies_root`), or host env `PROJECTIONIST_TV_MEDIA` / `PROJECTIONIST_MOVIE_MEDIA` (those win when set). Unraid/Automat defaults: `/mnt/user/data/media/tv` and `/mnt/user/data/media/movies`.
+
+### Identify (ACRCloud)
+
+**Admin → Libraries** has Identify settings and a **Test Identify** control next to Investigate. When Identify is on, a 12-second clip leaves the LAN so ACRCloud can listen. A miss does not rename files. **Test Identify** sends a silent clip (or a chosen file) and always reports that it did not rename anything — use it to check keys, not to fix a filename.
 
 ### After sync
 
@@ -329,11 +357,33 @@ curl -s http://localhost:8788/api/library/stats | python3 -m json.tool
 
 Movies already in Plex but missing from Radarr (by TMDB id) can be registered without starting a download search. **Register up to 25 in Radarr** on **Admin → Libraries** (`/admin/libraries`) queues those titles and shows each one as queued, in flight, registered, already in Radarr, path conflict, or failed. A path conflict means Radarr already owns that folder under a different TMDB id — that is an identification mismatch, not “not in Plex.” Submitting the batch is not “done” — watch the card until remaining titles finish. **Cancel remaining** skips titles that have not started; a title already talking to Radarr is left to finish. Titles without a TMDB id need a Plex rematch first.
 
+**Rematch studio** on the same page compares Plex GUID, Radarr TMDB, and the folder (Presence / Savages). Same title vs path conflict stays honest — FileBot, Plex Match, and Gracenote are not investigators. Failed register or Sonarr search rows offer **Rematch**, **Skip**, **Retry**, or **Investigate** with human copy, not a JSON dump.
+
+### House letter
+
+**Admin → House** (`/admin/house`) is a letter about the house — not a dashboard of tiles. It names unwatched hours, dead weight that has sat more than 90 days, and what the disks hold. The letter will not start a purge. If you want the house lighter, open **Health** and confirm each title.
+
+Upcoming seasonal rails (the same calendar as **Admin → Holidays**) can be previewed here. **Veto** keeps one title off that rail before it publishes; **Restore** puts it back.
+
+The **gift queue** is one member, one owned title, a short why. Queue it for the weekly gift task (same cadence as the member newsletter and enthusiast nudge) or **Deliver now** after you confirm. This is not a household blast.
+
+The **trust diary** links rematch skips and repairs, Investigate job cards, and recent house-care tasks so you can see what the house already decided.
+
+```bash
+# Owner host — letter, upcoming rails, gift queue, trust diary
+curl -s http://localhost:8788/api/admin/house/letter | python3 -m json.tool
+curl -s http://localhost:8788/api/admin/house/seasonal-preview | python3 -m json.tool
+curl -s http://localhost:8788/api/admin/house/gifts | python3 -m json.tool
+curl -s http://localhost:8788/api/admin/house/trust-diary | python3 -m json.tool
+```
+
 ```bash
 # Owner host — start, watch per-title status, optional cancel
 curl -s -X POST http://localhost:8788/api/admin/radarr/register-existing -H 'Content-Type: application/json' -d '{"limit":25}'
 curl -s http://localhost:8788/api/admin/radarr/register-existing/status
 curl -s -X POST http://localhost:8788/api/admin/radarr/register-existing/cancel
+# Rematch studio
+curl -s http://localhost:8788/api/admin/rematch/scan
 ```
 
 The same live card (phase, queued / running / completed / failed, current item, last error, cancel remaining) appears on **Send weekly newsletter**, **Generate my Year in Review**, and **This week in your library → Generate now**. Library sync, Sonarr Find all missing, Live Channels jobs, and Scheduled Tasks already had their own progress rails — those stay.

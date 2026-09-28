@@ -39,6 +39,8 @@ Canonical branded variables use the `PROJECTIONIST_*` prefix.
 | OMDb API key | `OMDB_API_KEY` | Required only when synopsis source is `omdb` (or `auto` fallback). Free OMDb key. |
 
 | Tautulli URL / key | `TAUTULLI_URL`, `TAUTULLI_API_KEY` | Watch stats for purge scoring |
+| TV library path | `PROJECTIONIST_TV_MEDIA` (wins when set) or `TV_ROOT` | Container-visible TV root (`tv_root`). Unraid/Automat host default `/mnt/user/data/media/tv`, bind-mounted **read-write** at `/tv` (and the same host path). Investigate Apply renames episode files — never `:ro`. |
+| Movie library path | `PROJECTIONIST_MOVIE_MEDIA` (wins when set) or `MOVIES_ROOT` | Container-visible movie root (`movies_root`). Unraid/Automat host default `/mnt/user/data/media/movies`, bind-mounted **read-write** at `/movies`. Paths are not secrets. |
 | Radarr root folder | `RADARR_ROOT_FOLDER` | Default path for movie adds |
 | Sonarr root folder | `SONARR_ROOT_FOLDER` | Default path for series adds |
 | Quality profile IDs | `RADARR_QUALITY_PROFILE_ID`, `SONARR_QUALITY_PROFILE_ID` | *arr quality profiles |

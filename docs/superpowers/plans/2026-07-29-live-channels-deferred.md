@@ -4,7 +4,9 @@
 **Status:** Living log — append freely; do not treat as a shipping checklist  
 **Related:** [implementation plan](./2026-07-29-live-channels-tunarr.md) · [product spec](../specs/2026-07-29-live-channels-tunarr.md)
 
-Durable parking lot for product deferrals, engineering gaps, and mid-build discoveries so parallel agents do not lose intelligence. Reconciled **2026-07-29** with [implementation plan Status](./2026-07-29-live-channels-tunarr.md): Phases 1–3 core done (Admin Live Channels enable flow, publish APIs, `CERTIFIED_SERVICES` `tunarr`, household on-now). Starter pack propose/publish + `TunarrClient.schedule_slots` client landed (see bullets below). Remaining: Automat Phase 0 pin/OpenAPI, richer Tunarr program IDs / wiring schedule-slots into publish modes, HELP/CHANGELOG Task 7 residual, e2e `FeatureFlags` + on-now, nudge once-ever, guide shape validation. Post–Phase-5 delight + residual trust backlog lives in the Cursor unified plan (`unified_gaps_and_delight_b1cef49d.plan.md`).
+Durable parking lot for product deferrals, engineering gaps, and mid-build discoveries so parallel agents do not lose intelligence. Reconciled **2026-07-29** with [implementation plan Status](./2026-07-29-live-channels-tunarr.md): Phases 1–3 core done (Admin Live Channels enable flow, publish APIs, `CERTIFIED_SERVICES` `tunarr`, household on-now). Starter pack propose/publish + `TunarrClient.schedule_slots` client landed (see bullets below).
+
+**Hygiene reconciliation 2026-09-24** (vs CHANGELOG through **1.35.5**): HELP/CHANGELOG Task 7, mocked e2e `FeatureFlags` + on-now (`e2e/on-now-live-guide.spec.ts`), ready-nudge reset on disable (`reset_live_channels_ready_nudge`), and Plex XMLTV attach API (**1.29.10+**) are **shipped** — do not re-open them. Remaining residual: Automat Phase 0 pin/OpenAPI + measured RAM/CPU, richer Tunarr program IDs / wiring schedule-slots into shuffle/Chaos publish, guide field-shape validation on Automat, newspaper EPG / remote chrome, weekly-rail Live slot, first-run `WIZARD_STEPS` Live integration, auto-refresh after sync, owner re-run starter pack. Active delight program is **Phase 6 / 1.36** ([spec](../specs/2026-09-24-delight-phase-6.md)), not the older unified-gaps Cursor plan.
 
 ---
 
@@ -212,16 +214,16 @@ Household on-now / Dashboard / Explore / ready nudge is largely **done** (`GET /
 
 #### No e2e for on-now
 
-- **Status:** `deferred`
-- **Why / note:** Unit/API coverage may exist, but there is no Playwright e2e asserting on-now on Dashboard/Explore.
-- **Suggested next phase:** With household e2e pass / shipping PR for Live Channels delight.
+- **Status:** `done` (mocked Playwright; **1.29.x** / Phase E stretch CHANGELOG)
+- **Why / note:** `e2e/on-now-live-guide.spec.ts` + `mockLiveChannelsHousehold` + `FeatureFlags.live_channels_*` defaults shipped. Matches the household on-now “do not regress” note above. Live Tunarr field-shape certification is still Automat Phase 0 (separate bullet).
+- **Suggested next phase:** Optional wizard e2e when Admin Live craft needs UI coverage.
 - **Owner surface:** household / e2e
 
 #### Ready nudge does not reset on disable/re-enable
 
-- **Status:** `deferred`
-- **Why / note:** Dedup is once-ever per user via `related_id=live-channels-ready`; disable→re-enable does not clear the related notification, so households never see a second “ready” nudge.
-- **Suggested next phase:** If product wants per enable-cycle; clear or version `related_id` on disable.
+- **Status:** `done` (`reset_live_channels_ready_nudge` + `delete_notifications_by_related` on Live disable)
+- **Why / note:** CHANGELOG Phase E stretch records disable→re-enable clearing the ready-nudge dedupe. Do not re-open this as a missing feature.
+- **Suggested next phase:** None for v1 core.
 - **Owner surface:** household / notifications
 
 #### Tunarr guide field shapes best-effort
@@ -233,9 +235,9 @@ Household on-now / Dashboard / Explore / ready nudge is largely **done** (`GET /
 
 #### HELP / CHANGELOG for Live Channels
 
-- **Status:** `deferred`
-- **Why / note:** Owner HELP + CHANGELOG Highlights still deferred to the shipping PR. `CONFIGURATION.md` already documents flag/env/Tunarr nest (Task 7 partial).
-- **Suggested next phase:** Shipping PR for the feature (finish Task 7).
+- **Status:** `done` (Task 7 shipped across **1.29.x–1.35.x** Highlights)
+- **Why / note:** Member `/live` HELP, owner Live Channels under `## For owners`, `CONFIGURATION.md` nest/flag/env, and many CHANGELOG Highlights (craft, attach, tune, job rail, phone admin) are on trunk through **1.35.5**. Residual docs belong with new work, not this parking-lot item.
+- **Suggested next phase:** None — do not treat Task 7 as open.
 - **Owner surface:** docs
 
 ### 2026-07-29 — Wizard/publish residuals (post enable-flow land)
@@ -272,9 +274,9 @@ Wizard agent completed guided Admin enable + publish APIs. Remaining gaps called
 
 ### 2026-07-29 — Plex UI has no XMLTV paste for HDHomeRun/Tunarr (Automat)
 
-- **Status:** `open` / `in progress` (API path sibling research)
-- **Why / note:** Owner screenshots on Automat confirm Device Settings, DVR Settings, and Tuner Setup EPG Location have **no** XMLTV URL field for the Tunarr HDHomeRun-style device — only commercial ZIP lineups in the wizard. 1.29.9 owner tip (“DVR Settings → add/switch XMLTV”) was false; 1.29.10 corrects attach/HELP/Config copy. Tunarr streams work; guide titles wrong until XMLTV attaches via a working path. **Landed 1.29.10:** Admin Attach Tunarr guide in Plex via PMS API (separate XMLTV DVR; OTA cloud DVR preserved). Verified on Automat (DVR 8 cloud + DVR 12 XMLTV).
-- **Suggested next phase:** Wire Admin “Attach guide” when a safe API path is verified (prefer separate Tunarr DVR / avoid clobbering OTA cloud EPG).
+- **Status:** `done` (API attach **1.29.10**; later attach/repair honesty through **1.35.x**)
+- **Why / note:** Owner screenshots on Automat confirm Device Settings, DVR Settings, and Tuner Setup EPG Location have **no** XMLTV URL field for the Tunarr HDHomeRun-style device — only commercial ZIP lineups in the wizard. 1.29.9 owner tip (“DVR Settings → add/switch XMLTV”) was false; 1.29.10 corrects attach/HELP/Config copy and lands Admin Attach via PMS API (separate XMLTV DVR; OTA cloud DVR preserved). Verified on Automat (DVR 8 cloud + DVR 12 XMLTV). Later releases added dead-tuner reregister and job-rail honesty — do not treat attach as unshipped.
+- **Suggested next phase:** None for zero-click (still impossible). Residual: never Repair Plex from QA agents; Refresh stays the default.
 - **Owner surface:** Admin → Live Channels → Plex attach / HELP
 
 ### 2026-07-30 — HDHR tune empty despite real guide titles
@@ -361,3 +363,14 @@ Parked from the persona UX build plan. **Do not schedule these until Phase 1 (Li
 - **Why / note:** Motif / taste / filtered craft still sample under a soft cap (~30–80) while collection/show full-run fills up to 1000. Admin craft preview + publish feedback now surface `fill_mode` / `soft_capped` / soft-cap honesty copy (`craft_soft_cap_honesty`, `craftSoftCapHonestyNote`).
 - **Suggested next phase:** Optional gap→station handoff after craft honesty (Phase B Love).
 - **Owner surface:** Admin Live Channels craft / publish feedback
+
+---
+
+## 2026-09-24 — Phase 6 hygiene (docs only)
+
+Reconciled this living log against CHANGELOG through **1.35.5** as part of **v1.36.3** craft hygiene. No product behavior change.
+
+- **Status:** `done` (docs reconciliation)
+- **Why / note:** Several discovery bullets still said `deferred` / `open` after the feature shipped (mocked on-now e2e, ready-nudge reset, HELP/CHANGELOG Task 7, XMLTV attach). Flipped those to `done` and pointed residual Live trust at Automat Phase 0 + schedule-slots wiring. Active delight program is [Phase 6 / 1.36](../specs/2026-09-24-delight-phase-6.md).
+- **Suggested next phase:** Leave residual engineering gaps; do not schedule newspaper EPG or `WIZARD_STEPS` Live hard-gate in 1.36.
+- **Owner surface:** docs / coordinator

@@ -17,6 +17,7 @@ export const ADMIN_NAV = [
   { to: "/admin/live-channels", id: "live-channels", label: "Live Channels" },
   { to: "/admin/lobby", id: "lobby", label: "Lobby" },
   { to: "/admin/holidays", id: "holidays", label: "Holidays" },
+  { to: "/admin/house", id: "house", label: "House", subtitle: "Letter & gifts" },
   { to: "/admin/seerr", id: "seerr", label: "Seerr" },
   { kind: "heading", id: "heading-platform", label: "Platform" },
   { to: "/admin/tasks", id: "tasks", label: "Tasks" },
@@ -45,13 +46,14 @@ export const SINGLE_USER_ADMIN_LINK_IDS = [
   "persona",
   "lobby",
   "live-channels",
+  "house",
   "tasks",
   "advanced",
   "logs",
 ];
 
 const SINGLE_USER_SETUP_IDS = ["overview", "connections", "libraries", "persona"];
-const SINGLE_USER_EXPERIENCE_IDS = ["lobby", "live-channels"];
+const SINGLE_USER_EXPERIENCE_IDS = ["lobby", "live-channels", "house"];
 const SINGLE_USER_PLATFORM_IDS = ["tasks", "advanced", "logs"];
 
 /** Copy grouping Lobby + Live Channels for living-room setup. */

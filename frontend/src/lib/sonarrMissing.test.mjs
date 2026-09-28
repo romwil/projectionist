@@ -15,7 +15,7 @@ import {
 } from "./sonarrMissing.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const configPage = readFileSync(join(here, "../pages/ConfigPage.jsx"), "utf8");
+const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
 const client = readFileSync(join(here, "../api/client.js"), "utf8");
 const help = readFileSync(join(here, "../../../docs/HELP.md"), "utf8");
 
@@ -148,16 +148,16 @@ describe("sonarr find-all-missing helpers", () => {
 
 describe("sonarr find-all-missing Admin Libraries card", () => {
   it("exposes the Libraries card, scan, search, and specials toggle", () => {
-    assert.match(configPage, /data-testid="sonarr-find-missing-card"/);
-    assert.match(configPage, /data-testid="sonarr-find-missing-button"/);
-    assert.match(configPage, /data-testid="sonarr-search-missing-button"/);
-    assert.match(configPage, /data-testid="sonarr-include-specials"/);
-    assert.match(configPage, /Find all missing/);
-    assert.match(configPage, /Search these/);
-    assert.match(configPage, /Include specials/);
-    assert.match(configPage, /data-testid="sonarr-cancel-missing-button"/);
-    assert.match(configPage, /Cancel remaining/);
-    assert.match(configPage, /data-testid="sonarr-missing-execution"/);
+    assert.match(libraries, /data-testid="sonarr-find-missing-card"/);
+    assert.match(libraries, /data-testid="sonarr-find-missing-button"/);
+    assert.match(libraries, /data-testid="sonarr-search-missing-button"/);
+    assert.match(libraries, /data-testid="sonarr-include-specials"/);
+    assert.match(libraries, /Find all missing/);
+    assert.match(libraries, /Search these/);
+    assert.match(libraries, /Include specials/);
+    assert.match(libraries, /data-testid="sonarr-cancel-missing-button"/);
+    assert.match(libraries, /Cancel remaining/);
+    assert.match(libraries, /data-testid="sonarr-missing-execution"/);
   });
 
   it("mirrors radarr register-existing client helpers", () => {

@@ -5,15 +5,18 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   adminCanCancel,
+  adminCompletionCopy,
   adminDisplayPercent,
   adminItemStatusLabel,
   adminPhaseLabel,
   adminProgressLine,
+  adminSecondsAgo,
   adminShouldShowCard,
 } from "./adminExecution.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const configPage = readFileSync(join(here, "../pages/ConfigPage.jsx"), "utf8");
+const libraries = readFileSync(join(here, "../pages/admin/LibrariesSection.jsx"), "utf8");
 const client = readFileSync(join(here, "../api/client.js"), "utf8");
 const help = readFileSync(join(here, "../../../docs/HELP.md"), "utf8");
 
@@ -43,14 +46,47 @@ describe("admin execution card helpers", () => {
   it("hides idle cards until work starts", () => {
     assert.equal(adminShouldShowCard({ phase: "idle", message: "Ready when you are" }), false);
     assert.equal(adminShouldShowCard({ phase: "queued", busy: true }), true);
+    assert.equal(
+      adminShouldShowCard({ phase: "idle", percent: 0, message: "Nothing to apply", result: null, items: [] }),
+      false,
+    );
+    assert.equal(adminShouldShowCard({ phase: "idle", percent: 0, message: "Pick a show to investigate" }), false);
+    assert.equal(adminShouldShowCard({ phase: "idle", result: {}, items: [] }), false);
+    assert.equal(adminShouldShowCard({ phase: "done", busy: false, percent: 100, result: { apply_id: "x" } }), true);
+    assert.equal(adminDisplayPercent({ phase: "idle", busy: false, percent: 0 }), null);
+  });
+
+  it("stops the live timer when the job is terminal", () => {
+    assert.equal(adminSecondsAgo(null), "");
+    assert.equal(adminSecondsAgo(undefined), "");
+    assert.equal(adminSecondsAgo(0), "0s since last completion");
+    assert.equal(adminSecondsAgo(180), "3m since last completion");
+    assert.equal(
+      adminCompletionCopy({
+        phase: "done",
+        busy: false,
+        percent: 100,
+        execution: { seconds_since_last_completion: 180 },
+      }),
+      "Run ended",
+    );
+    assert.equal(
+      adminCompletionCopy({
+        phase: "running",
+        busy: true,
+        execution: { seconds_since_last_completion: 12 },
+      }),
+      "12s since last completion",
+    );
+    assert.equal(adminCompletionCopy({ phase: "idle", busy: false, percent: 0, message: "Nothing to apply" }), "");
   });
 
   it("wires Register in Radarr status poll + cancel", () => {
     assert.match(client, /export async function getRadarrRegisterStatus/);
     assert.match(client, /\/admin\/radarr\/register-existing\/status/);
     assert.match(client, /export async function cancelRadarrRegister/);
-    assert.match(configPage, /testId="radarr-register-progress"/);
-    assert.match(configPage, /AdminExecutionCard/);
+    assert.match(libraries, /testId="radarr-register-progress"/);
+    assert.match(libraries, /AdminExecutionCard/);
     assert.match(configPage, /getRadarrRegisterStatus/);
   });
 

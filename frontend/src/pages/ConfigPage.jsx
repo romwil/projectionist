@@ -50,37 +50,23 @@ import {
 } from "../api/client";
 import AdvancedSettings from "../components/AdvancedSettings";
 import PersonaSection from "../components/PersonaSection";
-import LiveChannelsSection, { isLiveChannelsLaunched, LiveJobRail } from "./admin/LiveChannelsSection";
+import LiveChannelsSection, { isLiveChannelsLaunched } from "./admin/LiveChannelsSection";
 import HouseholdSection from "./admin/HouseholdSection";
-import {
-  formatLastSyncRelative,
-  formatSyncJobDetails,
-} from "../lib/jobProgress.js";
-import AdminExecutionCard from "../components/AdminExecutionCard";
-import {
-  sonarrFindMissingButtonClass,
-  sonarrMissingBySeries,
-  sonarrMissingCanCancel,
-  sonarrMissingDisplayPercent,
-  sonarrMissingPhaseLabel,
-  sonarrMissingProgressLine,
-  sonarrMissingScanReady,
-  sonarrMissingSecondsAgo,
-  sonarrSearchMissingButtonClass,
-  sonarrWantedDeltaCopy,
-} from "../lib/sonarrMissing.js";
+import LibrariesSection from "./admin/LibrariesSection";
+import OverviewSection from "./admin/OverviewSection";
+import ConnectionsSection from "./admin/ConnectionsSection";
+import SeerrSection from "./admin/SeerrSection";
 import { liveChannelsStartTimeoutAlertType } from "../lib/liveChannelsEngineFeedback.js";
-import { craftSoftCapHonestyNote, liveOnboardingTip, liveOverviewLine } from "../lib/liveChannelsCopy.js";
+import { craftSoftCapHonestyNote } from "../lib/liveChannelsCopy.js";
 import { isLiveJobBusy } from "../lib/liveChannelsJob.js";
 import { filterLiveCollections } from "../lib/liveChannelsCraft.js";
-import { buildHouseholdHealthChips } from "../lib/householdHealth.js";
 import {
   canToggleSecretVisibility,
   isSecretConfigured,
   secretPlaceholder,
   seerrSecretPlaceholder,
 } from "../lib/secretField.js";
-import SectionHelp from "../components/SectionHelp";
+import { jobIsActive, startVisibleBusyPoll } from "../lib/visibleBusyPoll.js";
 
 const ADMIN_SECTIONS = new Set([
   "overview",
@@ -136,8 +122,8 @@ const FIELD_LABELS = {
   long_synopsis_source: "Long synopsis source",
   tautulli_url: "Tautulli URL",
   tautulli_api_key: "API key",
-  movies_root: "Movies folder path",
-  tv_root: "TV folder path",
+  movies_root: "Movie library path",
+  tv_root: "TV library path",
   radarr_root_folder: "Radarr root folder",
   sonarr_root_folder: "Sonarr root folder",
   library_sync_interval_hours: "Auto-sync every (hours)",
@@ -165,8 +151,10 @@ const FIELD_HELP = {
   long_synopsis_source:
     "Defaults to wikipedia (free, no key, deeper plot without LLM). Set to off to disable, or omdb / auto.",
   tautulli_url: "Optional: watch history for purge suggestions and “what we’ve been watching”.",
-  movies_root: "Host path Radarr uses for movies (advanced; usually matches Radarr).",
-  tv_root: "Host path Sonarr uses for TV (advanced; usually matches Sonarr).",
+  movies_root:
+    "Path this container uses for movies (usually /movies or the host folder bind-mounted read-write). PROJECTIONIST_MOVIE_MEDIA wins when set. Needed so Investigate can rename files.",
+  tv_root:
+    "Path this container uses for TV (usually /tv or the host folder bind-mounted read-write). PROJECTIONIST_TV_MEDIA wins when set. Investigate Apply renames episode files here — the bind must be rw, not :ro.",
   library_enrich_workers: "How many titles to enrich at once during sync. Lower if Unraid feels busy.",
 };
 
@@ -550,6 +538,8 @@ export default function ConfigPage() {
   const [modelCatalogLoading, setModelCatalogLoading] = useState(false);
   const trackedSyncJobIdRef = useRef(null);
   const syncWasRunningRef = useRef(false);
+  const syncingLibraryRef = useRef(false);
+  syncingLibraryRef.current = syncingLibrary;
   const enginePollRef = useRef(null);
   const continuityPollRef = useRef(null);
   const publishPollRef = useRef(null);
@@ -712,18 +702,19 @@ export default function ConfigPage() {
     }
   }, [showWizard, section, settings?.features?.live_channels_enabled, settings?.tunarr?.url, settings?.tunarr?.docker_orchestration]);
 
+  const liveJobBusy = isLiveJobBusy(liveChannelsStatus?.job);
   useEffect(() => {
-    const jobBusy = isLiveJobBusy(liveChannelsStatus?.job);
     const localBusy = Boolean(liveBusy) && liveBusy !== "status" && liveBusy !== "attach";
-    if ((!jobBusy && !localBusy) || showWizard) return undefined;
+    if ((!liveJobBusy && !localBusy) || showWizard) return undefined;
     if (section !== "live-channels" && section !== "overview") return undefined;
-    const id = setInterval(() => {
-      getLiveChannelsStatus()
-        .then(setLiveChannelsStatus)
-        .catch(() => {});
-    }, 2000);
-    return () => clearInterval(id);
-  }, [liveChannelsStatus?.job, liveBusy, section, showWizard]);
+    return startVisibleBusyPoll(
+      () =>
+        getLiveChannelsStatus()
+          .then(setLiveChannelsStatus)
+          .catch(() => {}),
+      { isBusy: () => true },
+    );
+  }, [liveJobBusy, liveBusy, section, showWizard]);
 
   useEffect(() => {
     return () => {
@@ -811,7 +802,7 @@ export default function ConfigPage() {
   }, [showWizard]);
 
   useEffect(() => {
-    if (showWizard) return undefined;
+    if (showWizard || section !== "libraries") return undefined;
 
     let cancelled = false;
 
@@ -820,7 +811,7 @@ export default function ConfigPage() {
         const jobs = await listJobs();
         if (cancelled) return;
         const syncJobs = jobs.filter((job) => job.job_type === "library_sync");
-        const running = syncJobs.find((job) => job.status === "running" || job.status === "queued");
+        const running = syncJobs.find((job) => jobIsActive(job));
         const trackedId = trackedSyncJobIdRef.current;
         const tracked =
           (trackedId && syncJobs.find((job) => job.id === trackedId)) || syncJobs[0] || null;
@@ -842,41 +833,46 @@ export default function ConfigPage() {
       }
     }
 
-    pollSyncJobs();
-    // Poll at a fixed 2s while Config is open. Do not depend on syncingLibrary —
-    // setSyncingLibrary inside this effect would re-run it and stack intervals.
-    const interval = setInterval(pollSyncJobs, 2000);
+    const stop = startVisibleBusyPoll(pollSyncJobs, {
+      isBusy: () => Boolean(syncingLibraryRef.current || syncWasRunningRef.current),
+      isEnabled: () => !cancelled,
+    });
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
     };
-  }, [showWizard]);
+  }, [showWizard, section]);
 
   useEffect(() => {
-    if (showWizard) return undefined;
+    if (showWizard || section !== "libraries") return undefined;
     let cancelled = false;
+    let sonarrBusy = Boolean(sonarrMissing?.busy);
 
     async function pollSonarrMissing() {
       try {
         const status = await getSonarrMissingStatus();
-        if (!cancelled) setSonarrMissing(status);
+        if (cancelled) return;
+        setSonarrMissing(status);
+        sonarrBusy = Boolean(status?.busy);
       } catch {
         /* keep last snapshot */
       }
     }
 
-    pollSonarrMissing();
-    const interval = setInterval(pollSonarrMissing, 2000);
+    const stop = startVisibleBusyPoll(pollSonarrMissing, {
+      isBusy: () => sonarrBusy,
+      isEnabled: () => !cancelled,
+    });
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
     };
-  }, [showWizard]);
+  }, [showWizard, section, sonarrMissing?.busy]);
 
   useEffect(() => {
-    if (showWizard) return undefined;
+    if (showWizard || section !== "libraries") return undefined;
     let cancelled = false;
-    let wasBusy = false;
+    let wasBusy = Boolean(radarrRegister?.busy);
 
     async function pollRadarrRegister() {
       try {
@@ -896,13 +892,15 @@ export default function ConfigPage() {
       }
     }
 
-    pollRadarrRegister();
-    const interval = setInterval(pollRadarrRegister, 2000);
+    const stop = startVisibleBusyPoll(pollRadarrRegister, {
+      isBusy: () => wasBusy,
+      isEnabled: () => !cancelled,
+    });
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      stop();
     };
-  }, [showWizard]);
+  }, [showWizard, section, registeringRadarr, radarrRegister?.busy]);
 
   function updateSettings(patch) {
     setSettings((prev) => ({ ...prev, ...patch }));
@@ -2617,10 +2615,6 @@ export default function ConfigPage() {
     }
   }
 
-  function formatLastSync(lastSync) {
-    return formatLastSyncRelative(lastSync);
-  }
-
   async function handleExportTrainingCorpus() {
     setExportingCorpus(true);
     try {
@@ -2681,135 +2675,21 @@ export default function ConfigPage() {
     return (
       <>
         {showSection("overview") ? (
-        <section className="config-section owner-health-hero" data-testid="household-health-hero">
-          <div className="dashboard-header owner-health-hero-head">
-            <div>
-              <p className="eyebrow">At a glance</p>
-              <h2 className="dash-title">
-                Household health{" "}
-                <SectionHelp glossaryKey="Setup" testId="household-health-help" />
-              </h2>
-              <p className="wizard-note">
-                Stack readiness for the living room — Plex, library, and Live in one place.
-              </p>
-            </div>
-            <button type="button" className="ghost" data-testid="rerun-wizard" onClick={() => setShowWizard(true)}>
-              Re-run setup
-            </button>
-          </div>
-          <div className="owner-health-grid" data-testid="household-health-grid">
-            {buildHouseholdHealthChips({
-              libraryHealth,
-              libraryStats,
-              plexConnected: Boolean(verification.plex || settings?.plex_token_set),
-              sectionsCount: sections.length,
-              liveEnabled: Boolean(settings?.features?.live_channels_enabled),
-              liveReady: Boolean(featureFlags?.features?.live_channels_ready),
-              stationCount: Number(liveChannelsStatus?.channel_count) || 0,
-            }).map((chip) => (
-              <Link
-                key={chip.id}
-                to={chip.to}
-                className={`owner-health-tile tone-${chip.tone}`}
-                data-testid={`household-health-chip-${chip.id}`}
-              >
-                <span className="owner-health-tile-value">{chip.value}</span>
-                <span className="owner-health-tile-label">{chip.label}</span>
-                <span className="owner-health-tile-detail">{chip.detail}</span>
-              </Link>
-            ))}
-          </div>
-        </section>
-        ) : null}
-
-        {showSection("overview")
-          ? (() => {
-              const liveOn = Boolean(settings?.features?.live_channels_enabled);
-              const tip = liveOnboardingTip({
-                liveEnabled: liveOn,
-                libraryMapped: sections.length > 0,
-                syncHealthy: Boolean(libraryStats?.last_sync),
-              });
-              if (!liveOn && !tip) return null;
-              return (
-                <section className="config-section" data-testid="live-channels-overview-echo">
-                  {liveOn ? (
-                    <>
-                      <h2>Live Channels</h2>
-                      <p data-testid="live-channels-overview-health">
-                        {liveOverviewLine(liveChannelsStatus)}
-                      </p>
-                      <LiveJobRail job={liveChannelsStatus?.job} compact />
-                      <div className="config-actions">
-                        <Link to="/admin/live-channels" className="btn-link" data-testid="live-overview-open">
-                          Open Live Channels
-                        </Link>
-                      </div>
-                    </>
-                  ) : tip ? (
-                    <>
-                      <h2>{tip.title}</h2>
-                      <p>{tip.body}</p>
-                      <div className="config-actions">
-                        <Link to={tip.ctaTo} className="btn-link" data-testid="live-onboarding-cta">
-                          {tip.ctaLabel}
-                        </Link>
-                      </div>
-                    </>
-                  ) : null}
-                </section>
-              );
-            })()
-          : null}
-
-        {showSection("overview") ? (
-        <section className="config-section" data-testid="training-corpus-export">
-          <h2>Export taste data</h2>
-          <p className="wizard-note">
-            Download your chat reactions, saved preferences, and personal reviews as JSON — useful for
-            backup or offline experiments.
-          </p>
-          <div className="config-actions">
-            <button
-              type="button"
-              data-testid="training-corpus-export-button"
-              className="primary"
-              onClick={handleExportTrainingCorpus}
-              disabled={exportingCorpus}
-            >
-              {exportingCorpus ? "Preparing export…" : "Download taste data"}
-            </button>
-          </div>
-          <InlineAlert
-            type={actionAlert?.area === "training-export" ? actionAlert.type : null}
-            message={actionAlert?.area === "training-export" ? actionAlert.message : null}
+          <OverviewSection
+            libraryHealth={libraryHealth}
+            libraryStats={libraryStats}
+            verification={verification}
+            settings={settings}
+            sections={sections}
+            featureFlags={featureFlags}
+            liveChannelsStatus={liveChannelsStatus}
+            setShowWizard={setShowWizard}
+            handleExportTrainingCorpus={handleExportTrainingCorpus}
+            exportingCorpus={exportingCorpus}
+            handleDownloadAdminSnapshot={handleDownloadAdminSnapshot}
+            exportingSnapshot={exportingSnapshot}
+            actionAlert={actionAlert}
           />
-        </section>
-        ) : null}
-
-        {showSection("overview") ? (
-        <section className="config-section" data-testid="admin-backup-snapshot">
-          <h2>Settings + database snapshot</h2>
-          <p className="wizard-note">
-            Download a WAL-safe zip of <code>settings.json</code> and the library database for off-box
-            backup. Keep your secrets key with the zip if fields are encrypted at rest.
-          </p>
-          <div className="config-actions">
-            <button
-              type="button"
-              className="primary"
-              data-testid="admin-backup-snapshot-button"
-              onClick={handleDownloadAdminSnapshot}
-              disabled={exportingSnapshot}
-            >
-              {exportingSnapshot ? "Preparing snapshot…" : "Download snapshot zip"}
-            </button>
-          </div>
-          <InlineAlert
-            type={actionAlert?.area === "admin-snapshot" ? actionAlert.type : null}
-            message={actionAlert?.area === "admin-snapshot" ? actionAlert.message : null}
-          />
-        </section>
         ) : null}
 
         {showSection("persona") ? (
@@ -2832,257 +2712,29 @@ export default function ConfigPage() {
         ) : null}
 
         {showSection("connections") ? (
-        <>
-        <section className="config-section">
-          <h2>Language model</h2>
-          <p className="wizard-note">The AI that powers chat recommendations. Bring your own key or run Ollama locally.</p>
-          <div className="connections-field-grid" data-testid="connections-llm-fields">
-            <label>
-              <span>Provider</span>
-              <ProviderSelect
-                value={settings.llm_provider}
-                onChange={(event) => handleProviderChange(event.target.value)}
-              />
-            </label>
-            <label>
-              <span>API base URL</span>
-              <input
-                type="text"
-                value={settings.llm_base_url ?? ""}
-                onChange={(event) => updateSettings({ llm_base_url: event.target.value })}
-                placeholder={LLM_PROVIDER_DEFAULTS[settings.llm_provider] || "https://api.openai.com/v1"}
-              />
-            </label>
-            <label>
-              <span>API key</span>
-              {renderSecretInput("llm_api_key", {
-                placeholder: secretPlaceholder(settings, "llm_api_key", "Required except for Ollama"),
-              })}
-            </label>
-            <label>
-              <span>Model name</span>
-              <input
-                type="text"
-                list="llm-model-options-connections"
-                value={settings.llm_model ?? ""}
-                onChange={(event) => updateSettings({ llm_model: event.target.value })}
-                placeholder={LLM_MODEL_DEFAULTS[settings.llm_provider] || "gpt-4o-mini"}
-                data-testid="llm-model-input-llm-model-options-connections"
-              />
-              <datalist id="llm-model-options-connections">
-                {modelPickerOptions().map((row) => (
-                  <option key={row.id} value={row.id}>
-                    {row.hint === "cheaper-tier" ? "cheaper tier" : row.hint === "standard-tier" ? "standard" : ""}
-                  </option>
-                ))}
-              </datalist>
-            </label>
-          </div>
-          {(() => {
-            const options = modelPickerOptions();
-            const cheaper = options.filter((row) => row.hint === "cheaper-tier").slice(0, 4);
-            return (
-              <>
-                {cheaper.length ? (
-                  <div className="llm-cheaper-picks" data-testid="llm-cheaper-picks-llm-model-options-connections">
-                    {cheaper.map((row) => (
-                      <button
-                        key={row.id}
-                        type="button"
-                        className="ghost"
-                        onClick={() => updateSettings({ llm_model: row.id })}
-                      >
-                        {row.id}
-                        <span className="llm-model-hint">cheaper</span>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-                <p className="llm-model-catalog-note">
-                  {modelCatalogLoading
-                    ? "Loading provider model list…"
-                    : modelCatalog?.source === "pinned"
-                      ? modelCatalog?.note || modelCatalog?.error || "Showing pinned model options."
-                      : `Loaded ${options.length} models from ${modelCatalog?.source || "provider"}.`}
-                  {" "}
-                  <button type="button" className="ghost" onClick={() => refreshModelCatalog()} disabled={modelCatalogLoading}>
-                    Refresh models
-                  </button>
-                </p>
-              </>
-            );
-          })()}
-          <div className="connections-llm-actions">
-            <button type="button" className="primary" onClick={() => runTest("llm")} disabled={testing === "llm"}>
-              Test connection
-            </button>
-            <CertifiedBadge certified={certifications.llm?.certified} testing={testing === "llm"} serviceId="llm" />
-          </div>
-          {(() => {
-            const alert = connectionStatusAlert(
-              actionAlert,
-              "llm",
-              testResults.llm,
-              certifications.llm?.certified,
-            );
-            return <InlineAlert type={alert.type} message={alert.message} />;
-          })()}
-        </section>
-
-        <section className="config-section">
-          <h2>Plex, Radarr &amp; Sonarr</h2>
-          <p className="wizard-note">
-            Library and download stack. Plex is required; Radarr and Sonarr unlock add/remove after you confirm in chat.
-          </p>
-          <div className="service-cards">
-            {[
-              { id: "plex", label: "Plex", fields: ["plex_url", "plex_token"] },
-              { id: "radarr", label: "Radarr", fields: ["radarr_url", "radarr_api_key"] },
-              { id: "sonarr", label: "Sonarr", fields: ["sonarr_url", "sonarr_api_key"] },
-            ].map(({ id, label, fields }) => {
-              const result = testResults[id];
-              return (
-                <div key={id} className={`service-card ${result?.state === "success" ? "service-ok" : ""} ${testing === id ? "service-loading" : ""} ${result?.state === "error" ? "service-error" : ""}`}>
-                  <div className="service-card-header">
-                    <div className="service-card-title">
-                      <h3>{label}</h3>
-                      <CertifiedBadge
-                        certified={certifications[id]?.certified}
-                        testing={testing === id}
-                        serviceId={id}
-                      />
-                    </div>
-                    <div className="service-card-actions">
-                      <button type="button" className="primary" onClick={() => runTest(id)} disabled={testing === id}>
-                        {testing === id ? "Testing…" : "Test"}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="service-fields">
-                    {fields.map((field) => (
-                      <label key={field}>
-                        <span>{fieldLabel(field)}</span>
-                        {SECRET_FIELDS.includes(field) ? (
-                          renderSecretInput(field, { placeholder: FIELD_PLACEHOLDERS[field] })
-                        ) : (
-                          <input
-                            type="text"
-                            value={settings[field] ?? ""}
-                            placeholder={FIELD_PLACEHOLDERS[field] || ""}
-                            onChange={(event) => updateSettings({ [field]: event.target.value })}
-                          />
-                        )}
-                        {FIELD_HELP[field] ? (
-                          <span className="wizard-note field-help">{FIELD_HELP[field]}</span>
-                        ) : null}
-                      </label>
-                    ))}
-                  </div>
-                  {(() => {
-                    const alert = connectionStatusAlert(
-                      actionAlert,
-                      id,
-                      result,
-                      certifications[id]?.certified,
-                    );
-                    return alert.message ? (
-                      <InlineAlert
-                        type={alert.type}
-                        message={alert.message}
-                      />
-                    ) : null;
-                  })()}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        <section className="config-section">
-          <h2>Optional enrichments</h2>
-          <p className="wizard-note">
-            TMDB improves discovery and artwork. Wikipedia research is available without a key; OMDb and TVDB are optional
-            research sources. Fanart.tv and Tautulli are optional extras.
-          </p>
-          <div className="service-cards">
-            {OPTIONAL_SERVICES.map(({ id, label, fields }) => {
-              const result = testResults[id];
-              return (
-                <div key={id} className={`service-card ${result?.state === "success" ? "service-ok" : ""} ${testing === id ? "service-loading" : ""} ${result?.state === "error" ? "service-error" : ""}`}>
-                  <div className="service-card-header">
-                    <div className="service-card-title">
-                      <h3>{label}</h3>
-                      <CertifiedBadge
-                        certified={certifications[id]?.certified}
-                        testing={testing === id}
-                        serviceId={id}
-                      />
-                    </div>
-                    <div className="service-card-actions">
-                      <button type="button" className="primary" onClick={() => runTest(id)} disabled={testing === id}>
-                        {testing === id ? "Testing…" : "Test"}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="service-fields">
-                    {fields.map((field) => (
-                      <label key={field}>
-                        <span>{fieldLabel(field)}</span>
-                        {SECRET_FIELDS.includes(field) ? (
-                          renderSecretInput(field, { placeholder: FIELD_PLACEHOLDERS[field] })
-                        ) : (
-                          <input
-                            type="text"
-                            value={settings[field] ?? ""}
-                            placeholder={FIELD_PLACEHOLDERS[field] || ""}
-                            onChange={(event) => updateSettings({ [field]: event.target.value })}
-                          />
-                        )}
-                        {FIELD_HELP[field] ? (
-                          <span className="wizard-note field-help">{FIELD_HELP[field]}</span>
-                        ) : null}
-                      </label>
-                    ))}
-                  </div>
-                  {(() => {
-                    const alert = connectionStatusAlert(
-                      actionAlert,
-                      id,
-                      result,
-                      certifications[id]?.certified,
-                    );
-                    return alert.message ? (
-                      <InlineAlert
-                        type={alert.type}
-                        message={alert.message}
-                      />
-                    ) : null;
-                  })()}
-                </div>
-              );
-            })}
-          </div>
-          <p className="wizard-note" data-testid="research-source-readiness">
-            Chat research sources: TMDB {settings.tmdb_api_key_set ? "configured" : "needs an API key"} · Wikipedia available
-            without a key · OMDb {settings.omdb_api_key_set ? "configured" : "optional (API key)"} · TVDB{" "}
-            {settings.tvdb_api_key_set ? "configured" : "optional (v4 API key/subscription)"}.
-          </p>
-          <div className="service-fields">
-            <label>
-              <span>OMDb API key (optional)</span>
-              {renderSecretInput("omdb_api_key", {
-                placeholder: secretPlaceholder(settings, "omdb_api_key", "Optional IMDb-aligned research"),
-              })}
-            </label>
-            <label>
-              <span>TVDB API key (optional)</span>
-              {renderSecretInput("tvdb_api_key", {
-                placeholder: secretPlaceholder(settings, "tvdb_api_key", "Optional TVDB v4 key"),
-              })}
-            </label>
-          </div>
-        </section>
-        </>
+          <ConnectionsSection
+            settings={settings}
+            updateSettings={updateSettings}
+            handleProviderChange={handleProviderChange}
+            renderSecretInput={renderSecretInput}
+            modelPickerOptions={modelPickerOptions}
+            modelCatalog={modelCatalog}
+            modelCatalogLoading={modelCatalogLoading}
+            refreshModelCatalog={refreshModelCatalog}
+            runTest={runTest}
+            testing={testing}
+            certifications={certifications}
+            testResults={testResults}
+            actionAlert={actionAlert}
+            CertifiedBadge={CertifiedBadge}
+            ProviderSelect={ProviderSelect}
+            connectionStatusAlert={connectionStatusAlert}
+            OPTIONAL_SERVICES={OPTIONAL_SERVICES}
+            SECRET_FIELDS={SECRET_FIELDS}
+            FIELD_PLACEHOLDERS={FIELD_PLACEHOLDERS}
+            FIELD_HELP={FIELD_HELP}
+            fieldLabel={fieldLabel}
+          />
         ) : null}
 
         {!showWizard && showSection("household") ? (
@@ -3107,115 +2759,20 @@ export default function ConfigPage() {
 
 
         {!showWizard && showSection("seerr") ? (
-          <section className="config-section" data-testid="seerr-settings">
-            <h2>Overseerr / Seerr (optional)</h2>
-            <p className="wizard-note">
-              Let household members request titles through Overseerr or Jellyseerr instead of managing Radarr/Sonarr directly.
-            </p>
-            <label className="config-toggle" data-testid="seerr-enabled-toggle">
-              <input
-                type="checkbox"
-                checked={Boolean(settings?.features?.seerr_enabled)}
-                onChange={(event) => {
-                  const enabled = event.target.checked;
-                  updateFeatureFlags({ seerr_enabled: enabled });
-                  persistSettings({
-                    features: { ...(settings.features || {}), seerr_enabled: enabled },
-                  })
-                    .then(() =>
-                      setActionFeedback(
-                        "seerr",
-                        "success",
-                        enabled ? "Seerr requests enabled." : "Seerr requests disabled.",
-                      ),
-                    )
-                    .catch((error) => setActionFeedback("seerr", "error", error.message));
-                }}
-              />
-              <span>Route household requests through Seerr</span>
-            </label>
-            <div className={`service-card ${testResults.seerr?.state === "success" ? "service-ok" : ""} ${testing === "seerr" ? "service-loading" : ""} ${testResults.seerr?.state === "error" ? "service-error" : ""}`}>
-                <div className="service-card-header">
-                  <div className="service-card-title">
-                    <h3>Seerr server</h3>
-                    <CertifiedBadge
-                      certified={certifications.seerr?.certified}
-                      testing={testing === "seerr"}
-                      serviceId="seerr"
-                    />
-                  </div>
-                  <div className="service-card-actions">
-                    <button
-                      type="button"
-                      className="primary"
-                      data-testid="verify-seerr"
-                      onClick={() => runTest("seerr")}
-                      disabled={testing === "seerr"}
-                    >
-                      {testing === "seerr" ? "Testing…" : "Test connection"}
-                    </button>
-                  </div>
-                </div>
-                <div className="service-fields">
-                  <label>
-                    <span>Server URL</span>
-                    <input
-                      type="text"
-                      data-testid="seerr-url"
-                      value={settings?.seerr?.url ?? ""}
-                      placeholder="http://192.168.1.50:5055"
-                      onChange={(event) => updateSeerrSettings({ url: event.target.value })}
-                      onBlur={() =>
-                        persistSettings({
-                          seerr: { ...(settings.seerr || {}), url: settings?.seerr?.url ?? "" },
-                        }).catch((error) => setActionFeedback("seerr", "error", error.message))
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>API key</span>
-                    {renderSeerrSecretInput({ disabled: testing === "seerr" })}
-                  </label>
-                </div>
-                <label className="config-toggle" data-testid="seerr-link-on-login">
-                  <input
-                    type="checkbox"
-                    checked={settings?.seerr?.link_on_login !== false}
-                    onChange={(event) => {
-                      const linkOnLogin = event.target.checked;
-                      updateSeerrSettings({ link_on_login: linkOnLogin });
-                      persistSettings({
-                        seerr: { ...(settings.seerr || {}), link_on_login: linkOnLogin },
-                      }).catch((error) => setActionFeedback("seerr", "error", error.message));
-                    }}
-                  />
-                  <span>Match Plex users to Seerr accounts when they sign in</span>
-                </label>
-                <label className="config-toggle" data-testid="seerr-require-linked-user">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(settings?.seerr?.require_linked_user_for_requests)}
-                    onChange={(event) => {
-                      const required = event.target.checked;
-                      updateSeerrSettings({ require_linked_user_for_requests: required });
-                      persistSettings({
-                        seerr: {
-                          ...(settings.seerr || {}),
-                          require_linked_user_for_requests: required,
-                        },
-                      }).catch((error) => setActionFeedback("seerr", "error", error.message));
-                    }}
-                  />
-                  <span>Only allow requests after a Seerr account is linked</span>
-                </label>
-                {testResults.seerr?.message ? (
-                  <InlineAlert
-                    type={actionAlert?.area === "seerr" ? actionAlert.type : testResults.seerr.state}
-                    message={actionAlert?.area === "seerr" ? actionAlert.message : testResults.seerr.message}
-                  />
-                ) : null}
-              </div>
-          </section>
+          <SeerrSection
+            settings={settings}
+            persistSettings={persistSettings}
+            updateFeatureFlags={updateFeatureFlags}
+            updateSeerrSettings={updateSeerrSettings}
+            testing={testing}
+            testResults={testResults}
+            certifications={certifications}
+            runTest={runTest}
+            actionAlert={actionAlert}
+            setActionFeedback={setActionFeedback}
+            CertifiedBadge={CertifiedBadge}
+            renderSeerrSecretInput={renderSeerrSecretInput}
+          />
         ) : null}
 
         {!showWizard && showSection("live-channels") ? (
@@ -3290,390 +2847,41 @@ export default function ConfigPage() {
 
 
         {showSection("libraries") ? (
-        <>
-        <section className="config-section" data-testid="library-sync-card" id="library-sync">
-          <h2>Sync library</h2>
-          <p className="wizard-note">
-            Refresh Projectionist from your Plex libraries. The first sync can take a few minutes while titles
-            are indexed and enriched.
-          </p>
-          <div className="config-actions">
-            <button type="button" className="primary" data-testid="library-sync-button" onClick={handleLibrarySync} disabled={syncingLibrary}>
-              {syncingLibrary ? "Syncing…" : "Sync library"}
-            </button>
-          </div>
-          {(() => {
-            const details = formatSyncJobDetails(activeSyncJob, libraryStats);
-            if (!details) return null;
-            if (details.state === "running" || syncingLibrary) {
-              const live = details.state === "running" ? details : formatSyncJobDetails(
-                { ...(activeSyncJob || {}), status: "running", progress: activeSyncJob?.progress || { phase: "preparing", message: "Starting…" } },
-                libraryStats,
-              );
-              return (
-                <div className="library-sync-progress" data-testid="library-sync-job-status">
-                  <p className="library-sync-progress-headline">
-                    <strong>{live.headline}</strong>
-                    {typeof live.percent === "number" ? ` · ${live.percent}%` : ""}
-                  </p>
-                  <p className="library-sync-progress-detail status status-secondary">
-                    {live.detail}
-                    {live.countHint && !String(live.detail || "").includes(String(activeSyncJob?.progress?.current ?? ""))
-                      ? ` · ${live.countHint}`
-                      : ""}
-                  </p>
-                  {typeof live.percent === "number" ? (
-                    <div
-                      className="library-sync-progress-bar"
-                      role="progressbar"
-                      aria-valuenow={live.percent}
-                      aria-valuemin={0}
-                      aria-valuemax={100}
-                    >
-                      <span className="library-sync-progress-fill" style={{ width: `${live.percent}%` }} />
-                    </div>
-                  ) : null}
-                </div>
-              );
-            }
-            if (details.state === "failed") {
-              return (
-                <p className="status status-error" data-testid="library-sync-job-status">
-                  Sync failed: {details.detail}
-                </p>
-              );
-            }
-            if (details.state === "completed" && trackedSyncJobIdRef.current === activeSyncJob?.id) {
-              return (
-                <p className="status" data-testid="library-sync-job-status">
-                  {details.headline}
-                </p>
-              );
-            }
-            return null;
-          })()}
-          {libraryStats ? (
-            <p className="status status-secondary" data-testid="library-sync-stats">
-              {libraryStats.movies} movies · {libraryStats.shows} shows
-              {libraryStats.last_sync
-                ? ` · Last synced ${formatLastSync(libraryStats.last_sync)}`
-                : syncingLibrary
-                  ? " · Syncing…"
-                  : " · Never synced"}
-            </p>
-          ) : (
-            <p className="status status-secondary" data-testid="library-sync-stats">
-              No library indexed yet — run Sync library after Plex is connected.
-            </p>
-          )}
-          <InlineAlert
-            type={actionAlert?.area === "library-sync" ? actionAlert.type : null}
-            message={actionAlert?.area === "library-sync" ? actionAlert.message : null}
+          <LibrariesSection
+            syncingLibrary={syncingLibrary}
+            handleLibrarySync={handleLibrarySync}
+            activeSyncJob={activeSyncJob}
+            libraryStats={libraryStats}
+            trackedSyncJobId={trackedSyncJobIdRef.current}
+            actionAlert={actionAlert}
+            radarrGapStats={radarrGapStats}
+            registeringRadarr={registeringRadarr}
+            radarrRegister={radarrRegister}
+            handleRegisterRadarrExisting={handleRegisterRadarrExisting}
+            handleRadarrRegisterCancel={handleRadarrRegisterCancel}
+            sonarrIncludeSpecials={sonarrIncludeSpecials}
+            setSonarrIncludeSpecials={setSonarrIncludeSpecials}
+            sonarrMissing={sonarrMissing}
+            handleSonarrMissingScan={handleSonarrMissingScan}
+            handleSonarrMissingSearch={handleSonarrMissingSearch}
+            handleSonarrMissingCancel={handleSonarrMissingCancel}
+            certifications={certifications}
+            testing={testing}
+            runTest={runTest}
+            sections={sections}
+            settings={settings}
+            handleSectionChange={handleSectionChange}
+            movieSections={movieSections}
+            tvSections={tvSections}
+            handleSyncReviewsToggle={handleSyncReviewsToggle}
+            handlePlexCollectionsToggle={handlePlexCollectionsToggle}
+            handleEphemeralCollectionGcToggle={handleEphemeralCollectionGcToggle}
+            handleEphemeralCollectionGcDryRunToggle={handleEphemeralCollectionGcDryRunToggle}
+            updateSettings={updateSettings}
+            persistSettings={persistSettings}
+            setActionFeedback={setActionFeedback}
+            CertifiedBadge={CertifiedBadge}
           />
-        </section>
-
-        <section className="config-section" data-testid="radarr-register-existing-card">
-          <h2>Radarr — register on disk</h2>
-          <p className="wizard-note">
-            Movies already in Plex but missing from Radarr by TMDB id can be registered
-            without starting a download search. A path conflict means Radarr already owns
-            that folder under a different identity — rematch, don’t ignore. Titles without
-            a TMDB id need a Plex rematch first.
-          </p>
-          <p className="status status-secondary" data-testid="radarr-owned-not-indexed-stats">
-            {radarrGapStats
-              ? `${radarrGapStats.total} ready to register${
-                  radarrGapStats.needs_rematch
-                    ? ` · ${radarrGapStats.needs_rematch} need rematch`
-                    : ""
-                }`
-              : "Checking Radarr gaps…"}
-          </p>
-          <div className="config-actions">
-            <button
-              type="button"
-              className="primary"
-              data-testid="radarr-register-existing-button"
-              onClick={handleRegisterRadarrExisting}
-              disabled={registeringRadarr || Boolean(radarrRegister?.busy) || !radarrGapStats?.total}
-            >
-              {radarrRegister?.busy ? "Registering…" : "Register up to 25 in Radarr"}
-            </button>
-          </div>
-          <AdminExecutionCard
-            job={radarrRegister}
-            testId="radarr-register-progress"
-            phaseLabels={{ registering: "Registering in Radarr", done: "Registration finished" }}
-            onCancel={handleRadarrRegisterCancel}
-          />
-          <InlineAlert
-            type={actionAlert?.area === "radarr-register" ? actionAlert.type : null}
-            message={actionAlert?.area === "radarr-register" ? actionAlert.message : null}
-          />
-        </section>
-
-        <section className="config-section" data-testid="sonarr-find-missing-card">
-          <h2>Sonarr — find all missing</h2>
-          <p className="wizard-note">
-            Re-derives gaps from each series’ episode records (aired, monitored, no file) instead of
-            trusting Sonarr’s Wanted list. After the scan, confirm to submit EpisodeSearch in batches.
-            Sonarr then runs those commands on its own queue — often a few at a time — so watch
-            queued / running / completed here. That is not the same as a download-client grab.
-          </p>
-          <label className="config-toggle" data-testid="sonarr-include-specials">
-            <input
-              type="checkbox"
-              checked={sonarrIncludeSpecials}
-              onChange={(event) => setSonarrIncludeSpecials(event.target.checked)}
-              disabled={Boolean(sonarrMissing?.busy)}
-            />
-            <span>Include specials</span>
-          </label>
-          <div className="config-actions">
-            <button
-              type="button"
-              className={sonarrFindMissingButtonClass(sonarrMissing)}
-              data-testid="sonarr-find-missing-button"
-              onClick={handleSonarrMissingScan}
-              disabled={Boolean(sonarrMissing?.busy)}
-            >
-              {sonarrMissing?.busy && !["searching", "executing"].includes(String(sonarrMissing?.phase || ""))
-                ? "Scanning…"
-                : "Find all missing"}
-            </button>
-            <button
-              type="button"
-              className={sonarrSearchMissingButtonClass(sonarrMissing)}
-              data-testid="sonarr-search-missing-button"
-              onClick={handleSonarrMissingSearch}
-              disabled={!sonarrMissingScanReady(sonarrMissing) || Boolean(sonarrMissing?.busy)}
-            >
-              {sonarrMissing?.phase === "searching"
-                ? "Submitting…"
-                : sonarrMissing?.phase === "executing"
-                  ? "Sonarr searching…"
-                  : "Search these"}
-            </button>
-            {sonarrMissingCanCancel(sonarrMissing) ? (
-              <button
-                type="button"
-                className="ghost"
-                data-testid="sonarr-cancel-missing-button"
-                onClick={handleSonarrMissingCancel}
-              >
-                Cancel remaining
-              </button>
-            ) : null}
-          </div>
-          {sonarrMissingProgressLine(sonarrMissing) ? (
-            <div className="library-sync-progress" data-testid="sonarr-missing-progress">
-              <p className="library-sync-progress-headline">
-                <strong>
-                  {sonarrMissingPhaseLabel(sonarrMissing?.phase)}
-                </strong>
-                {typeof sonarrMissingDisplayPercent(sonarrMissing) === "number"
-                  ? ` · ${sonarrMissingDisplayPercent(sonarrMissing)}%`
-                  : ""}
-              </p>
-              <p className="library-sync-progress-detail status status-secondary">
-                {sonarrMissingProgressLine(sonarrMissing)}
-              </p>
-              {sonarrMissing?.execution && Number(sonarrMissing.execution.total) > 0 ? (
-                <div className="sonarr-missing-counts" data-testid="sonarr-missing-execution">
-                  <span>{Number(sonarrMissing.execution.queued) || 0} queued</span>
-                  <span>{Number(sonarrMissing.execution.running) || 0} running</span>
-                  <span>{Number(sonarrMissing.execution.completed) || 0} completed</span>
-                  <span data-tone={Number(sonarrMissing.execution.failed) ? "failed" : undefined}>
-                    {Number(sonarrMissing.execution.failed) || 0} failed
-                  </span>
-                  {Number(sonarrMissing.execution.cancelled) ? (
-                    <span>{Number(sonarrMissing.execution.cancelled)} cancelled</span>
-                  ) : null}
-                </div>
-              ) : null}
-              {sonarrMissing?.execution?.current ? (
-                <p className="wizard-note" data-testid="sonarr-missing-current">
-                  Current: {sonarrMissing.execution.current.message || sonarrMissing.execution.current.name} (
-                  {sonarrMissing.execution.current.status})
-                </p>
-              ) : null}
-              {sonarrMissingSecondsAgo(sonarrMissing?.execution?.seconds_since_last_completion) ? (
-                <p className="wizard-note">{sonarrMissingSecondsAgo(sonarrMissing.execution.seconds_since_last_completion)}</p>
-              ) : null}
-              {sonarrMissing?.execution?.last_error ? (
-                <p className="status status-error" data-testid="sonarr-missing-last-error">
-                  Last command error: {sonarrMissing.execution.last_error}
-                </p>
-              ) : null}
-              {sonarrMissing?.execution?.throttle_note &&
-              ["searching", "executing"].includes(String(sonarrMissing?.phase || "")) ? (
-                <p className="wizard-note" data-testid="sonarr-missing-throttle-note">
-                  {sonarrMissing.execution.throttle_note}
-                </p>
-              ) : null}
-              {typeof sonarrMissingDisplayPercent(sonarrMissing) === "number" && sonarrMissing?.busy ? (
-                <div
-                  className="library-sync-progress-bar"
-                  role="progressbar"
-                  aria-valuenow={sonarrMissingDisplayPercent(sonarrMissing)}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                >
-                  <span
-                    className="library-sync-progress-fill"
-                    style={{ width: `${sonarrMissingDisplayPercent(sonarrMissing)}%` }}
-                  />
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-          {sonarrMissing?.result ? (
-            <p className="status status-secondary" data-testid="sonarr-missing-wanted-delta">
-              {sonarrWantedDeltaCopy(sonarrMissing.result)}
-            </p>
-          ) : null}
-          {sonarrMissingBySeries(sonarrMissing?.result).length ? (
-            <div data-testid="sonarr-missing-by-series">
-              {sonarrMissingBySeries(sonarrMissing.result).map((group) => (
-                <details key={group.seriesId} className="config-advanced-details">
-                  <summary>
-                    {group.seriesTitle} · {group.count} missing
-                  </summary>
-                  <ul>
-                    {group.episodes.map((episode) => (
-                      <li key={episode.episodeId}>
-                        {`S${String(episode.season ?? 0).padStart(2, "0")}E${String(episode.episode ?? 0).padStart(2, "0")}`}
-                        {episode.title ? ` ${episode.title}` : ""}
-                      </li>
-                    ))}
-                  </ul>
-                </details>
-              ))}
-            </div>
-          ) : null}
-          <InlineAlert
-            type={actionAlert?.area === "sonarr-missing" ? actionAlert.type : null}
-            message={actionAlert?.area === "sonarr-missing" ? actionAlert.message : null}
-          />
-        </section>
-
-        <section className="config-section" data-testid="plex-library-mapping">
-          <h2>Plex libraries</h2>
-          <p className="wizard-note">Choose which movie and TV libraries Projectionist indexes. Update these if you rename or add libraries in Plex.</p>
-          <div className="wizard-actions">
-            <CertifiedBadge certified={certifications.plex?.certified} testing={testing === "plex"} serviceId="plex" />
-            {!sections.length ? (
-              <button type="button" className="ghost" onClick={() => runTest("plex")} disabled={testing === "plex"}>
-                {testing === "plex" ? "Loading libraries…" : "Reload Plex libraries"}
-              </button>
-            ) : null}
-          </div>
-          <div className="section-dropdowns">
-            <label>
-              <span>Movie library</span>
-              <select
-                data-testid="plex-movie-section"
-                value={settings.plex_movie_section ?? ""}
-                onChange={(event) => handleSectionChange("plex_movie_section", event.target.value)}
-                disabled={!sections.length}
-              >
-                <option value="">Select a movie library</option>
-                {movieSections.map((section) => (
-                  <option key={section.key} value={section.key}>
-                    {section.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>TV library</span>
-              <select
-                data-testid="plex-tv-section"
-                value={settings.plex_tv_section ?? ""}
-                onChange={(event) => handleSectionChange("plex_tv_section", event.target.value)}
-                disabled={!sections.length}
-              >
-                <option value="">Select a TV library</option>
-                {tvSections.map((section) => (
-                  <option key={section.key} value={section.key}>
-                    {section.title}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <label className="config-toggle" data-testid="sync-reviews-to-plex">
-            <input
-              type="checkbox"
-              checked={Boolean(settings.sync_reviews_to_plex)}
-              onChange={(event) => handleSyncReviewsToggle(event.target.checked)}
-            />
-            <span>Copy star ratings to Plex when you review a title</span>
-          </label>
-          <p className="wizard-note">
-            A 1–5 star review in Projectionist becomes the matching Plex rating (2, 4, 6, 8, or 10).
-          </p>
-          <label className="config-toggle" data-testid="plex-collections-enabled">
-            <input
-              type="checkbox"
-              checked={Boolean(settings?.features?.plex_collections_enabled)}
-              onChange={(event) => handlePlexCollectionsToggle(event.target.checked)}
-            />
-            <span>Let the curator propose Plex collections</span>
-          </label>
-          <p className="wizard-note">
-            The curator can suggest creating a collection or adding titles you already own — you always confirm first.
-            Agent / movie-night shelves are tagged with a <code>[Projectionist]</code> prefix and expire after the TTL below.
-          </p>
-          <label className="config-toggle" data-testid="ephemeral-collection-gc-toggle">
-            <input
-              type="checkbox"
-              checked={settings?.features?.ephemeral_collection_gc_enabled !== false}
-              onChange={(event) => handleEphemeralCollectionGcToggle(event.target.checked)}
-              disabled={!settings?.features?.plex_collections_enabled}
-            />
-            <span>Auto-clean expired Projectionist movie-night collections</span>
-          </label>
-          <label className="config-toggle" data-testid="ephemeral-collection-gc-dry-run-toggle">
-            <input
-              type="checkbox"
-              checked={Boolean(settings?.features?.ephemeral_collection_gc_dry_run)}
-              onChange={(event) => handleEphemeralCollectionGcDryRunToggle(event.target.checked)}
-              disabled={
-                !settings?.features?.plex_collections_enabled ||
-                settings?.features?.ephemeral_collection_gc_enabled === false
-              }
-            />
-            <span>Dry-run only (log what would be deleted)</span>
-          </label>
-          <label>
-            <span>Ephemeral collection TTL (hours)</span>
-            <input
-              type="number"
-              min={1}
-              data-testid="ephemeral-collection-ttl-hours"
-              value={settings?.ephemeral_collection_ttl_hours ?? 168}
-              onChange={(event) => {
-                const next = Math.max(1, Number(event.target.value) || 168);
-                updateSettings({ ephemeral_collection_ttl_hours: next });
-              }}
-              onBlur={() =>
-                persistSettings({
-                  ephemeral_collection_ttl_hours: Math.max(
-                    1,
-                    Number(settings?.ephemeral_collection_ttl_hours) || 168,
-                  ),
-                }).catch((error) => setActionFeedback("plex-sections", "error", error.message))
-              }
-              disabled={!settings?.features?.plex_collections_enabled}
-            />
-          </label>
-          <InlineAlert
-            type={actionAlert?.area === "plex-sections" ? actionAlert.type : null}
-            message={actionAlert?.area === "plex-sections" ? actionAlert.message : null}
-          />
-        </section>
-        </>
         ) : null}
 
         {showSection("advanced") ? (
