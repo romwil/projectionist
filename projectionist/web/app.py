@@ -1180,18 +1180,22 @@ def _features_payload(user=None, *, authenticated: bool = True) -> Dict[str, Any
 
     setup_state = resolve_setup_state(_db())
     if not authenticated:
-        return {
+        methods = available_auth_methods(settings)
+        public: Dict[str, Any] = {
             "features": {
                 "multi_user_enabled": settings.features.multi_user_enabled,
                 "access_requests_enabled": bool(
                     getattr(settings.features, "access_requests_enabled", True)
                 ),
             },
-            "auth_methods": available_auth_methods(settings),
+            "auth_methods": methods,
             "setup_state": setup_state,
             "authenticated": False,
             "user": None,
         }
+        if "oidc" in methods:
+            public["oidc_provider_name"] = settings.auth.oidc_provider_name or "SSO"
+        return public
     if user is None:
         user = bootstrap_owner(_db())
     request_path = "seerr" if uses_seerr_request_path(settings, role=user.role) else "arr"

@@ -188,7 +188,7 @@ export default function LoginPage() {
   const plexEnabled = methods.includes("plex");
   const localEnabled = methods.includes("local") || featuresLoading;
   const oidcEnabled = methods.includes("oidc");
-  const oidcProviderName = features?.auth?.oidc_provider_name || "SSO";
+  const oidcProviderName = features?.oidc_provider_name || features?.auth?.oidc_provider_name || "SSO";
   const noMethods = features != null && methods.length === 0;
   const accessRequestsOn = features?.features?.access_requests_enabled !== false;
   const lede = featuresLoading ? "Loading sign-in options…" : loginLede(methods);
