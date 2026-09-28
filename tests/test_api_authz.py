@@ -140,6 +140,24 @@ class ApiAuthzTests(unittest.TestCase):
         self.assertEqual(features.status_code, 200)
         self.assertTrue(features.json()["features"]["multi_user_enabled"])
         self.assertFalse(features.json()["authenticated"])
+        self.assertNotIn("household_domain", features.json())
+        self.assertNotIn("youth", features.json())
+
+    def test_setup_status_requires_owner(self) -> None:
+        self._enable_multi_user_via_api()
+        self.client.cookies.clear()
+        unauth = self.client.get("/api/setup/status")
+        self.assertIn(unauth.status_code, (401, 403))
+        self._login_as(1, "Owner")
+        self.client.post("/api/auth/logout")
+        self._login_as(2, "Member")
+        member = self.client.get("/api/setup/status")
+        self.assertEqual(member.status_code, 403)
+        self.client.post("/api/auth/logout")
+        self._login_as(1, "Owner")
+        owner = self.client.get("/api/setup/status")
+        self.assertEqual(owner.status_code, 200)
+        self.assertIn("onboarding_complete", owner.json())
 
     def test_library_csv_export_requires_auth_and_uses_requested_columns(self) -> None:
         self._enable_multi_user_via_api()
